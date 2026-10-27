@@ -1,0 +1,14 @@
+node_modules
+dist
+.env
+*.log
+uploads/*
+!uploads/.gitkeep
+dev.db-journal
+*.tsbuildinfo
+*.bak
+.DS_Store
+database.sqlite
+dev.db
+server.db
+

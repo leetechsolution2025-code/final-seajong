@@ -1,0 +1,3325 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model CompanyInfo {
+  id        String   @id @default(cuid())
+  name      String
+  shortName String
+  logoUrl   String?
+  slogan    String?
+  address   String?
+  phone     String?
+  email     String?
+  website   String?
+  taxCode   String?
+  legalRep          String?
+  maintenanceActive Boolean   @default(false)
+  maintenanceAt     DateTime?
+  maintenanceUntil  DateTime?
+  maintenanceReason String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model SeajongCategory {
+  id       Int              @id @default(autoincrement())
+  name     String
+  slug     String
+  count    Int              @default(0)
+  parent   Int              @default(0)
+  syncedAt DateTime         @default(now())
+  products SeajongProduct[] @relation("ProductCategories")
+}
+
+model SeajongProduct {
+  id             Int                       @id @default(autoincrement())
+  slug           String                    @unique
+  url            String
+  name           String
+  excerpt        String                    @default("")
+  description    String                    @default("")
+  images         String                    @default("[]")
+  specs          String                    @default("{}")
+  price          Float                     @default(0)
+  priceHtml      String?
+  promotions     String                    @default("[]")
+  policies       String                    @default("[]")
+  variations     String                    @default("[]")
+  variationData  String?
+  updatedAt      DateTime
+  syncedAt       DateTime                  @default(now())
+  imageUrl       String?
+  categories     SeajongCategory[]         @relation("ProductCategories")
+  variationsList SeajongProductVariation[]
+}
+
+model SeajongProductVariation {
+  id          Int     @id @default(autoincrement())
+  variationId Int     @unique // WooCommerce variation_id
+  productId   Int
+  sku         String?
+  price       Float   @default(0)
+  attributes  String  @default("{}") // JSON string of attributes
+  imageUrl    String?
+
+  product SeajongProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model SeajongSyncLog {
+  id          String    @id @default(cuid())
+  status      String
+  message     String    @default("")
+  totalSynced Int       @default(0)
+  startedAt   DateTime  @default(now())
+  finishedAt  DateTime?
+}
+
+model LogisticsSyncLog {
+  id         String    @id @default(cuid())
+  status     String
+  message    String    @default("")
+  current    Int       @default(0)
+  total      Int       @default(0)
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+}
+
+model Client {
+  id        String     @id @default(cuid())
+  name      String
+  shortName String     @unique
+  domain    String?    @unique
+  logoUrl   String?
+  config    String?
+  status    String     @default("active")
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  address   String?
+  slogan    String?
+  email     String?
+  legalRep  String?
+  phone     String?
+  taxCode   String?
+  employees Employee[]
+  users     User[]
+  modules   Module[]   @relation("ClientToModule")
+
+  industryId String?
+  industry   Industry? @relation(fields: [industryId], references: [id])
+}
+
+model Industry {
+  id               String   @id @default(cuid())
+  code             String   @unique
+  name             String
+  rootCategoryCode String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  clients          Client[]
+}
+
+model User {
+  id                   String                @id @default(cuid())
+  email                String                @unique
+  password             String
+  name                 String?
+  role                 String                @default("USER")
+  permissions          String                @default("[]")
+  deptAccess           String                @default("[]")
+  clientId             String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  employee             Employee?
+  scorecards           InterviewScorecard[]
+  mentoredProbations   EmployeeProbation[]   @relation("ProbationMentor")
+  approvedYearlyPlans  MarketingYearlyPlan[] @relation("PlanApprover")
+  marketingPlans       MarketingYearlyPlan[]
+  sentMessages         Message[]             @relation("MessageSender")
+  messageParticipants  MessageParticipant[]
+  createdNotifications Notification[]        @relation("NotificationCreator")
+  recruitmentRequests  RecruitmentRequest[]  @relation("UserRequests")
+  client               Client?               @relation(fields: [clientId], references: [id])
+  meetings             Meeting[]             @relation("UserMeetings")
+  reportedPayments     PaymentNotification[] @relation("ReportedPayments")
+  verifiedPayments     PaymentNotification[] @relation("VerifiedPayments")
+}
+
+model Employee {
+  id                       String                    @id @default(cuid())
+  branchCode               String?
+  code                     String                    @unique
+  fullName                 String
+  gender                   String                    @default("male")
+  birthDate                DateTime?
+  nationalId               String?
+  nationalIdDate           DateTime?
+  nationalIdPlace          String?
+  permanentAddress         String?
+  currentAddress           String?
+  phone                    String?
+  workEmail                String                    @unique
+  personalEmail            String?
+  emergencyName            String?
+  emergencyRelation        String?
+  emergencyPhone           String?
+  departmentCode           String
+  departmentName           String
+  position                 String
+  level                    String                    @default("staff")
+  manager                  String?
+  employeeType             String                    @default("official")
+  startDate                DateTime?
+  workLocation             String                    @default("main")
+  contractType             String                    @default("unsigned")
+  contractNumber           String?
+  contractSignDate         DateTime?
+  contractEndDate          DateTime?
+  profileStatus            String                    @default("pending")
+  socialInsuranceNumber    String?
+  taxCode                  String?
+  baseSalary               Float?
+  insuranceSalary          Float?
+  mealAllowance            Float?
+  fuelAllowance            Float?
+  phoneAllowance           Float?
+  seniorityAllowance       Float?
+  bankAccount              String?
+  bankName                 String?
+  bankBranch               String?
+  dependents               Int                       @default(0)
+  skills                   String?
+  softSkills               String?
+  education                String?
+  certifications           String?
+  annualLeave              Int                       @default(12)
+  workShift                String                    @default("standard")
+  notes                    String?
+  status                   String                    @default("active")
+  isInsuranceEnrolled      Boolean                   @default(false)
+  clientId                 String?
+  userId                   String?                   @unique
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  avatarUrl                String?
+  attendances              Attendance[]
+  contracts                Contract[]                @relation("ContractEmployee")
+  customers                Customer[]
+  careHistories            CustomerCareHistory[]     @relation("CareHistoryEmployee")
+  client                   Client?                   @relation(fields: [clientId], references: [id])
+  user                     User?                     @relation(fields: [userId], references: [id])
+  employmentHistory        EmploymentHistory[]       @relation("EmploymentHistory")
+  hrAssetHandovers         HrAssetHandover[]
+  hrSupplyRequests         HrSupplyRequest[]
+  insuranceBenefits        InsuranceBenefit[]
+  insuranceChanges         InsuranceChange[]
+  insuranceHistory         InsuranceHistory[]
+  laborContracts           LaborContract[]           @relation("LaborContracts")
+  payrolls                 Payroll[]
+  personalRequests         PersonalRequest[]         @relation("EmployeePersonalRequests")
+  promotionRequestsSent    PromotionRequest[]        @relation("PromotionRequester")
+  promotionRequests        PromotionRequest[]        @relation("PromotionRequests")
+  promotionInterviews      PromotionRequest[]        @relation("PromotionInterviewer")
+  quotations               Quotation[]               @relation("QuotationEmployee")
+  retailInvoices           RetailInvoice[]           @relation("RetailInvoiceEmployee")
+  salaryAdjustmentsSent    SalaryAdjustmentRequest[] @relation("SalaryAdjustmentRequester")
+  salaryAdjustmentRequests SalaryAdjustmentRequest[] @relation("SalaryAdjustmentRequests")
+  terminationRequests      TerminationRequest[]      @relation("TerminationRequests")
+  probation                EmployeeProbation?
+  attendanceConfirmations  AttendanceConfirmation[]
+  payrollConfirmations     PayrollConfirmation[]
+  logisticsTickets         LogisticsTicket[]
+  internalKpiReports       InternalKpiReport[]
+  internalIncomeReports    InternalIncomeReport[]
+  handledDealerTickets     DealerSupportTicket[]     @relation("DealerTicketHandler")
+}
+
+model LaborContract {
+  id             String    @id @default(cuid())
+  employeeId     String
+  contractNumber String    @unique
+  contractType   String
+  signDate       DateTime?
+  startDate      DateTime
+  endDate        DateTime?
+  baseSalary     Float?
+  allowances     String?
+  status         String    @default("active")
+  attachments    String?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  employee       Employee  @relation("LaborContracts", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([status])
+}
+
+model EmploymentHistory {
+  id             String   @id @default(cuid())
+  employeeId     String
+  type           String
+  oldPosition    String?
+  newPosition    String?
+  oldDept        String?
+  newDept        String?
+  oldLevel       String?
+  newLevel       String?
+  effectiveDate  DateTime
+  decisionNumber String?
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  employee       Employee @relation("EmploymentHistory", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+}
+
+model EmployeeProbation {
+  id         String   @id @default(cuid())
+  employeeId String   @unique
+  mentorId   String?
+  startDate  DateTime
+  endDate    DateTime
+  status     String   @default("ONBOARDING") // ONBOARDING, ON_TRACK, EVALUATING, PASSED, EXTENDED, FAILED
+  progress   Int      @default(0)
+
+  // Evaluation fields
+  midTermReview  String?
+  finalReview    String?
+  selfEvaluation String?
+
+  // Scoring
+  scoreKnowledge Int?
+  scoreSkill     Int?
+  scoreAttitude  Int?
+
+  notes     String?
+  clientId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee Employee                 @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  mentor   User?                    @relation("ProbationMentor", fields: [mentorId], references: [id])
+  events   EmployeeProbationEvent[]
+
+  @@index([employeeId])
+  @@index([mentorId])
+  @@index([status])
+}
+
+model EmployeeProbationEvent {
+  id          String   @id @default(cuid())
+  probationId String
+  title       String
+  description String?
+  type        String   @default("EVENT") // EVENT, EVALUATION, MILESTONE
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  probation EmployeeProbation @relation(fields: [probationId], references: [id], onDelete: Cascade)
+
+  @@index([probationId])
+}
+
+model Payroll {
+  id            String    @id @default(cuid())
+  nam           Int
+  thang         Int
+  employeeId    String
+  nguonChamCong String    @default("thu-cong")
+  ngayCong      Float     @default(0)
+  ngayNghiPhep  Float     @default(0)
+  ngayNghiKhac  Float     @default(0)
+  gioLamThem    Float     @default(0)
+  luongCoBan    Float     @default(0)
+  phuCap        Float     @default(0)
+  thuong        Float     @default(0)
+  luongLamThem  Float     @default(0)
+  khauTruBH     Float     @default(0)
+  thueTNCN      Float     @default(0)
+  khauTruKhac   Float     @default(0)
+  luongThucNhan Float     @default(0)
+  chiPhiCtyDong Float     @default(0)
+  tongChiPhiCty Float     @default(0)
+  trangThai     String    @default("chua-tra")
+  ngayTra       DateTime?
+  ghiChu        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, thang, nam])
+  @@index([nam, thang])
+  @@index([trangThai])
+  @@index([employeeId])
+}
+
+model Module {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  icon        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  clients     Client[] @relation("ClientToModule")
+}
+
+model DepartmentCategory {
+  id                String                        @id @default(cuid())
+  code              String                        @unique
+  nameVi            String
+  nameEn            String
+  group             String
+  icon              String?
+  description       String?
+  sortOrder         Int                           @default(0)
+  isActive          Boolean                       @default(true)
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
+  stationeryBudget  HrStationeryDepartmentBudget?
+  hrStationeryNorms HrStationeryNorm[]
+  hrSupplyRequests  HrSupplyRequest[]
+}
+
+model HrStationeryDepartmentBudget {
+  id            String             @id @default(cuid())
+  departmentId  String             @unique
+  monthlyBudget Float              @default(0)
+  updatedAt     DateTime           @updatedAt
+  department    DepartmentCategory @relation(fields: [departmentId], references: [id])
+}
+
+model Category {
+  id             String          @id @default(cuid())
+  type           String
+  code           String
+  name           String
+  color          String?
+  icon           String?
+  description    String?
+  sortOrder      Int             @default(0)
+  isActive       Boolean         @default(true)
+  hasBom         Boolean         @default(false)
+  clientId       String?
+  parentId       String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  parent         Category?       @relation("CategoryParent", fields: [parentId], references: [id])
+  children       Category[]      @relation("CategoryParent")
+  dinhMucVatTus  DinhMucVatTu[]
+  inventoryItems InventoryItem[]
+
+  @@unique([type, code])
+  @@index([type])
+  @@index([isActive])
+  @@index([clientId])
+  @@index([parentId])
+}
+
+model CategoryTypeDef {
+  id        String   @id @default(cuid())
+  value     String   @unique
+  label     String
+  icon      String   @default("bi-folder")
+  color     String   @default("#6366f1")
+  prefix    String   @default("CAT")
+  sortOrder Int      @default(0)
+  isSystem  Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([sortOrder])
+}
+
+model Branch {
+  id        String         @id @default(cuid())
+  code      String         @unique
+  name      String
+  shortName String?
+  address   String?
+  phone     String?
+  email     String?
+  taxCode   String?
+  legalRep  String?
+  status    String         @default("active")
+  sortOrder Int            @default(0)
+  clientId  String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  latitude  Float?
+  longitude Float?
+  radius    Int?           @default(200)
+  wifiIp    String?
+  subnets   BranchSubnet[]
+  wifis     BranchWifi[]
+  devices   BranchDevice[]
+}
+
+model Notification {
+  id            String                  @id @default(cuid())
+  title         String
+  content       String
+  type          String                  @default("info")
+  priority      String                  @default("normal")
+  audienceType  String                  @default("all")
+  audienceValue String?
+  attachments   String?
+  clientId      String?
+  createdById   String
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+  createdBy     User                    @relation("NotificationCreator", fields: [createdById], references: [id])
+  recipients    NotificationRecipient[]
+}
+
+model NotificationRecipient {
+  id             String       @id @default(cuid())
+  notificationId String
+  userId         String
+  isRead         Boolean      @default(false)
+  readAt         DateTime?
+  createdAt      DateTime     @default(now())
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id           String               @id @default(cuid())
+  content      String
+  senderId     String
+  clientId     String?
+  isDeleted    Boolean              @default(false)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  attachments  String?
+  sender       User                 @relation("MessageSender", fields: [senderId], references: [id])
+  participants MessageParticipant[]
+}
+
+model MessageParticipant {
+  id        String    @id @default(cuid())
+  messageId String
+  userId    String
+  isRead    Boolean   @default(false)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id])
+  message   Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([userId])
+}
+
+model Customer {
+  id             String                @id @default(cuid())
+  code           String?               @unique
+  name           String
+  address        String?
+  nguon          String?
+  nhom           String?
+  loai           String?
+  soTaiKhoan     String?
+  tenNganHang    String?
+  daiDien        String?
+  xungHo         String?               @default("Anh")
+  paymentNotifications PaymentNotification[]
+  debts          Debt[]
+  chucVu         String?
+  dienThoai      String?
+  email          String?
+  ghiChu         String?
+  nguoiChamSocId String?
+  hanMucCongNo   Float                 @default(0)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  contracts      Contract[]
+  nguoiChamSoc   Employee?             @relation(fields: [nguoiChamSocId], references: [id])
+  careHistories  CustomerCareHistory[]
+  quotations     Quotation[]
+  saleOrders     SaleOrder[]
+  formValues     String?
+  doanhSoCamKet      Float                 @default(0)
+  thuongThanhToan    String?
+  thuongDoanhSoNam   String?
+  thuongVuotDoanhSo  String?
+  dealerSupportTickets DealerSupportTicket[]
+
+  @@index([nguon])
+  @@index([nhom])
+  @@index([loai])
+}
+
+model CustomerCareHistory {
+  id             String    @id @default(cuid())
+  customerId     String
+  nguoiChamSocId String?
+  ngayChamSoc    DateTime
+  hinhThuc       String
+  thaiDo         String?
+  nhuCau         String?
+  nganSach       String?
+  thoiGianDauTu  String?
+  thanhToan      String?
+  nguoiDaiDien   String?
+  soDienThoai    String?
+  tomTat         String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  nguoiChamSoc   Employee? @relation("CareHistoryEmployee", fields: [nguoiChamSocId], references: [id])
+  customer       Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([nguoiChamSocId])
+  @@index([ngayChamSoc])
+}
+
+model Supplier {
+  id                   String                @id @default(cuid())
+  code                 String?               @unique
+  name                 String
+  taxCode              String?
+  address              String?
+  phone                String?
+  email                String?
+  website              String?
+  contactName          String?
+  xungHo               String?
+  hanMucNo             Float                 @default(0)
+  danhGia              Int                   @default(0)
+  trangThai            String                @default("active")
+  ghiChu               String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  purchaseOrders       PurchaseOrder[]
+  debts                Debt[]
+  purchaseRequestItems PurchaseRequestItem[]
+  categories           SupplierCategory[]
+  hrTransactions       HrSupplyTransaction[]
+
+  @@index([trangThai])
+}
+
+model SupplierCategory {
+  supplierId String
+  categoryId String
+  category   InventoryCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  supplier   Supplier          @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@id([supplierId, categoryId])
+  @@index([categoryId])
+}
+
+model Carrier {
+  id          String   @id @default(cuid())
+  code        String?  @unique // Mã VCH-YYYYMMDD-STT
+  name               String   // Tên đơn vị vận chuyển
+  transactionAddress String?  // Địa chỉ giao dịch / Trụ sở văn phòng
+  serviceType        String?  // Loại hình dịch vụ (Chuyển phát nhanh, Chành xe Bắc Nam, Xe tải nội bộ...)
+  contactName        String?  // Họ tên người điều phối / liên hệ
+  contactRole        String?  // Chức vụ / Vị trí
+  phone              String?  // Số điện thoại / Hotline
+  email              String?  // Email liên hệ
+  website            String?  // Website / Cổng tra mã vận đơn
+  address            String?  // Địa chỉ kho bãi / Bưu cục tiếp nhận hàng
+  routes      String?  // Tuyến đường vận chuyển
+  hanMucNo    Float    @default(0) // Hạn mức công nợ cước
+  danhGia     Int      @default(5) // Đánh giá sao (1-5)
+  trangThai   String   @default("active") // "active" | "paused" | "inactive"
+  ghiChu             String?  // Ghi chú thêm
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  purchaseOrders     PurchaseOrder[]
+  debts              Debt[]
+
+  @@index([trangThai])
+}
+
+model SaleOrder {
+  logisticsTickets     LogisticsTicket[]
+  id                   String               @id @default(cuid())
+  code                 String?              @unique
+  customerId           String?
+  ngayDat              DateTime?
+  ngayGiao             DateTime?
+  ngayHoanThanhSanXuat DateTime?
+  ngayYeuCauQC         DateTime?
+  trangThai            String               @default("draft")
+  tongTien             Float                @default(0)
+  daThanhToan          Float                @default(0)
+  keToanDuyet          String               @default("pending") // "pending" | "approved" | "rejected"
+  trangThaiKho         String               @default("in_stock") // "in_stock" | "out_of_stock"
+  discount             Float                @default(0)
+  vat                  Float                @default(0)
+  ghiChu               String?
+  nguoiPhuTrach        String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  customer             Customer?            @relation(fields: [customerId], references: [id])
+  paymentNotifications PaymentNotification[]
+  saleOrderItems       SaleOrderItem[]
+  incidents            ProductionIncident[]
+
+  @@index([trangThai])
+  @@index([customerId])
+}
+
+model SaleOrderItem {
+  id              String         @id @default(cuid())
+  saleOrderId     String
+  inventoryItemId String?
+  tenHang         String // Tên sản phẩm
+  soLuong         Float          @default(1)
+  donGia          Float          @default(0) // Giá bán đơn vị
+  thanhTien       Float          @default(0) // soLuong * donGia
+  dinhMucId       String?
+  ghiChu          String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  saleOrder       SaleOrder      @relation(fields: [saleOrderId], references: [id], onDelete: Cascade)
+
+  @@index([saleOrderId])
+  @@index([inventoryItemId])
+}
+
+model ProductionIncident {
+  id        String    @id @default(cuid())
+  orderId   String
+  message   String
+  createdAt DateTime  @default(now())
+  saleOrder SaleOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model PurchaseRequest {
+  id             String                @id @default(cuid())
+  code           String?               @unique
+  nguoiYeuCau    String
+  donVi          String
+  ngayTao        DateTime              @default(now())
+  ngayCanCo      DateTime?
+  lyDo           String?
+  trangThai      String                @default("chua-xu-ly")
+  ghiChu         String?
+  clientId       String?
+  createdById    String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  purchaseOrders PurchaseOrder[]
+  items          PurchaseRequestItem[]
+
+  @@index([trangThai])
+  @@index([donVi])
+  @@index([clientId])
+}
+
+model PurchaseRequestItem {
+  id                  String             @id @default(cuid())
+  purchaseRequestId   String
+  inventoryItemId     String?
+  tenHang             String
+  donVi               String?
+  soLuong             Float              @default(1)
+  donGiaDK            Float              @default(0)
+  ghiChu              String?
+  sortOrder           Int                @default(0)
+  trangThaiXuLy       String             @default("cho-xu-ly")
+  supplierId          String?
+  purchaseOrderItemId String?            @unique
+  purchaseOrderItem   PurchaseOrderItem? @relation(fields: [purchaseOrderItemId], references: [id])
+  supplier            Supplier?          @relation(fields: [supplierId], references: [id])
+  inventoryItem       InventoryItem?     @relation(fields: [inventoryItemId], references: [id])
+  purchaseRequest     PurchaseRequest    @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseRequestId])
+  @@index([inventoryItemId])
+  @@index([trangThaiXuLy])
+  @@index([supplierId])
+}
+
+model PurchaseOrder {
+  id                String                  @id @default(cuid())
+  code              String?                 @unique
+  supplierId        String?
+  purchaseRequestId String?
+  carrierId         String?
+  shippingFee       Float?                  @default(0)
+  shippingDepot     String?
+  carrierDebt       Float?                  @default(0)
+  ngayDat           DateTime?
+  ngayNhan          DateTime?
+  trangThai         String                  @default("draft")
+  tongTien          Float                   @default(0)
+  daThanhToan       Float                   @default(0)
+  ghiChu            String?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  purchaseRequest   PurchaseRequest?        @relation(fields: [purchaseRequestId], references: [id])
+  supplier          Supplier?               @relation(fields: [supplierId], references: [id])
+  carrier           Carrier?                @relation(fields: [carrierId], references: [id])
+  items             PurchaseOrderItem[]
+  stockMovements    StockMovement[]
+  activities        PurchaseOrderActivity[]
+
+  @@index([trangThai])
+  @@index([supplierId])
+  @@index([carrierId])
+  @@index([purchaseRequestId])
+}
+
+model PurchaseOrderItem {
+  id                  String               @id @default(cuid())
+  purchaseOrderId     String
+  inventoryItemId     String?
+  tenHang             String
+  donVi               String?
+  soLuong             Float                @default(1)
+  donGia              Float                @default(0)
+  thanhTien           Float                @default(0)
+  soLuongDaNhan       Float                @default(0)
+  dinhMucId           String?
+  dinhMuc             DinhMuc?             @relation(fields: [dinhMucId], references: [id])
+  ghiChu              String?
+  sortOrder           Int                  @default(0)
+  ngayGiao            DateTime?
+  inventoryItem       InventoryItem?       @relation(fields: [inventoryItemId], references: [id])
+  purchaseOrder       PurchaseOrder        @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  purchaseRequestItem PurchaseRequestItem?
+
+  @@index([purchaseOrderId])
+  @@index([inventoryItemId])
+}
+
+model PurchaseOrderActivity {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  loai            String        @default("system")
+  ngay            DateTime
+  nguoiThucHien   String
+  ketQua          String
+  createdAt       DateTime      @default(now())
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId])
+}
+
+model Expense {
+  id            String    @id @default(cuid())
+  tenChiPhi     String
+  loai          String?
+  soTien        Float     @default(0)
+  ngayChiTra    DateTime?
+  nguoiChiTra   String?
+  trangThai     String    @default("pending")
+  ghiChu        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  referenceType String?
+  referenceId   String?
+
+  @@index([loai])
+  @@index([trangThai])
+}
+
+model Debt {
+  customerId   String?
+  customer     Customer? @relation(fields: [customerId], references: [id])
+  supplierId   String?
+  supplier     Supplier? @relation(fields: [supplierId], references: [id])
+  carrierId    String?
+  carrier      Carrier?  @relation(fields: [carrierId], references: [id])
+
+  id           String    @id @default(cuid())
+  type         String
+  partnerName  String
+  amount       Float     @default(0)
+  paidAmount   Float     @default(0)
+  dueDate      DateTime?
+  interestRate Float?
+  status       String    @default("UNPAID")
+  description  String?
+  referenceId  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([type])
+  @@index([status])
+  @@index([carrierId])
+}
+
+model Asset {
+  id                   String            @id @default(cuid())
+  code                 String?           @unique
+  tenTaiSan            String
+  loai                 String?
+  ngayMua              DateTime?
+  giaTriMua            Float             @default(0)
+  giaTriConLai         Float             @default(0)
+  soThangKhauHao       Int?              @default(0)
+  ngayBatDauKhauHao    DateTime?
+  chuKyBaoDuong        Int?              @default(0)
+  ngayBaoDuongCuoi     DateTime?
+  ngayBaoDuongTiepTheo DateTime?
+  trangThai            String            @default("chua-su-dung")
+  viTri                String?
+  nguoiSuDungId        String?
+  donVi                String?
+  ghiChu               String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  model                String?
+  serialNumber         String?
+  hrAssetHandovers     HrAssetHandover[]
+
+  @@index([loai])
+  @@index([trangThai])
+}
+
+model InventoryCategory {
+  id        String              @id @default(cuid())
+  name      String              @unique
+  code      String?             @unique
+  sortOrder Int                 @default(0)
+  isActive  Boolean             @default(true)
+  parentId  String?
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+  parent    InventoryCategory?  @relation("InvCategoryParent", fields: [parentId], references: [id])
+  children  InventoryCategory[] @relation("InvCategoryParent")
+  suppliers SupplierCategory[]
+
+  inventoryItems InventoryItem[]
+}
+
+model Warehouse {
+  id         String           @id @default(cuid())
+  code       String?          @unique
+  name       String
+  address    String?
+  phone      String?
+  type       String           @default("PRODUCT")
+  managerId  String?
+  isVirtual  Boolean          @default(false)
+  isActive   Boolean          @default(true)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  layoutJson String?
+  stocks     InventoryStock[]
+
+  stockCounts   StockCount[]
+  movementsTo   StockMovement[] @relation("MovementTo")
+  movementsFrom StockMovement[] @relation("MovementFrom")
+
+  @@index([isActive])
+}
+
+model InventoryItem {
+  logisticsTicketItems LogisticsTicketItem[]
+  id                   String                @id @default(cuid())
+  code                 String?               @unique
+  maThayThe            String?
+  tenHang              String
+  loai                 String?               @default("hang-hoa")
+  brand                String?               @default("Seajong")
+  model                String?
+  version              String?
+  color                String?
+  categoryId           String?
+  donVi                String?               @default("cái")
+  soLuong              Float                 @default(0)
+  soLuongMin           Float                 @default(0)
+  giaNhap              Float                 @default(0)
+  giaVon               Float                 @default(0)
+  giaBan               Float                 @default(0)
+  loiNhuanKyVong       Float                 @default(30)
+  phuongPhapTinhLoiNhuan String              @default("cost")
+  nhaCungCap           String?
+  thongSoKyThuat       String?
+  chatLieu             String?
+  trangThai            String                @default("con-hang")
+  webProductId         Int?
+  webVariationId       Int?
+  ghiChu               String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  imageUrl             String?
+  chieuDai             Float?
+  chieuRong            Float?
+  chieuDay             Float?
+  dinhMucs             DinhMuc[]
+  category             InventoryCategory?    @relation(fields: [categoryId], references: [id])
+  erpCategoryId        String?
+  erpCategory          Category?             @relation(fields: [erpCategoryId], references: [id])
+  stocks               InventoryStock[]
+  purchaseOrderItems   PurchaseOrderItem[]
+  purchaseRequestItems PurchaseRequestItem[]
+  retailInvoiceItems   RetailInvoiceItem[]
+  movements            StockMovement[]
+  saleOrderItems       SaleOrderItem[]
+  qualityInspections   QualityInspection[]
+  dinhMucVatTus        DinhMucVatTu[]
+
+  @@index([loai])
+  @@index([trangThai])
+  @@index([categoryId])
+  @@index([nhaCungCap])
+}
+
+model DinhMuc {
+  id              String         @id @default(cuid())
+  code            String?        @unique
+  tenDinhMuc      String?
+  giaBan          Float          @default(0)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  vatTu           DinhMucVatTu[]
+  inventoryItemId String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  purchaseOrderItems PurchaseOrderItem[]
+
+  @@index([code])
+  @@index([inventoryItemId])
+}
+
+model DinhMucVatTu {
+  id        String @id @default(cuid())
+  dinhMucId String
+
+  maVatTu         String?
+  tenVatTu        String
+  soLuong         Float          @default(1)
+  donViTinh       String?
+  ghiChu          String?
+  categoryId      String?
+  category        Category?      @relation(fields: [categoryId], references: [id])
+  inventoryItemId String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+
+  dinhMuc DinhMuc @relation(fields: [dinhMucId], references: [id], onDelete: Cascade)
+
+  @@index([dinhMucId])
+  @@index([inventoryItemId])
+}
+
+model InventoryStock {
+  reservations    InventoryReservation[]
+  id              String                 @id @default(cuid())
+  inventoryItemId String
+  warehouseId     String
+  soLuong         Float                  @default(0)
+  soLuongMin      Float                  @default(0)
+  condition       String                 @default("new")
+  soLuongGiu      Float                  @default(0)
+  viTriHang       String?
+  viTriCot        String?
+  viTriTang       String?
+  ghiChu          String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  warehouse       Warehouse              @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  inventoryItem   InventoryItem          @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  @@unique([inventoryItemId, warehouseId])
+  @@index([warehouseId])
+  @@index([inventoryItemId])
+}
+
+model StockMovement {
+  id              String         @id @default(cuid())
+  inventoryItemId String
+  fromWarehouseId String?
+  toWarehouseId   String?
+  type            String
+  soLuong         Float          @default(0)
+  soLuongCT       Float?
+  soLuongTruoc    Float?
+  soLuongSau      Float?
+  donGia          Float?
+  lyDo            String?
+  soChungTu       String?
+  nguoiThucHien   String?
+  purchaseOrderId String?
+  createdAt       DateTime       @default(now())
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  toWarehouse     Warehouse?     @relation("MovementTo", fields: [toWarehouseId], references: [id])
+  fromWarehouse   Warehouse?     @relation("MovementFrom", fields: [fromWarehouseId], references: [id])
+  inventoryItem   InventoryItem  @relation(fields: [inventoryItemId], references: [id])
+
+  @@index([inventoryItemId])
+  @@index([fromWarehouseId])
+  @@index([toWarehouseId])
+  @@index([type])
+  @@index([soChungTu])
+  @@index([purchaseOrderId])
+  @@index([createdAt])
+}
+
+model StockCount {
+  id          String           @id @default(cuid())
+  soChungTu   String?          @unique
+  scope       String           @default("system")
+  warehouseId String?
+  nguoiKiem   String?
+  ngayKiem    DateTime         @default(now())
+  ghiChu      String?
+  trangThai   String           @default("nhap")
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  warehouse   Warehouse?       @relation(fields: [warehouseId], references: [id])
+  lines       StockCountLine[]
+
+  @@index([warehouseId])
+  @@index([trangThai])
+  @@index([ngayKiem])
+}
+
+model StockCountLine {
+  id              String     @id @default(cuid())
+  stockCountId    String
+  inventoryItemId String
+  warehouseId     String?
+  soLuongHeTong   Float      @default(0)
+  soLuongThucTe   Float?
+  chenh           Float?
+  ghiChu          String?
+  createdAt       DateTime   @default(now())
+  stockCount      StockCount @relation(fields: [stockCountId], references: [id], onDelete: Cascade)
+
+  @@index([stockCountId])
+  @@index([inventoryItemId])
+}
+
+model Quotation {
+  id              String                 @id @default(cuid())
+  code            String?                @unique
+  customerId      String?
+  nguoiPhuTrachId String?
+  ngayBaoGia      DateTime?
+  ngayHetHan      DateTime?
+  trangThai       String                 @default("draft")
+  uuTien          String                 @default("medium")
+  tongTien        Float                  @default(0)
+  discount        Float                  @default(0)
+  vat             Float                  @default(0)
+  chiPhiThiCong   Float                  @default(0)
+  thanhTien       Float                  @default(0)
+  ghiChu          String?
+  fileKhuVuc1     String?
+  fileKhuVuc2     String?
+  fileKhuVuc3     String?
+  fileKhuVuc4     String?
+  fileKhuVuc5     String?
+  type            String                 @default("retail")
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  contracts       Contract[]
+  nguoiPhuTrach   Employee?              @relation("QuotationEmployee", fields: [nguoiPhuTrachId], references: [id])
+  customer        Customer?              @relation(fields: [customerId], references: [id])
+  items           QuotationItem[]
+  negotiations    QuotationNegotiation[]
+
+  @@index([trangThai])
+  @@index([customerId])
+  @@index([nguoiPhuTrachId])
+  @@index([ngayBaoGia])
+  @@index([type])
+}
+
+model QuotationNegotiation {
+  id            String    @id @default(cuid())
+  quotationId   String
+  loai          String    @default("call")
+  ngay          DateTime
+  nguoiThucHien String
+  ketQua        String
+  createdAt     DateTime  @default(now())
+  quotation     Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId])
+}
+
+model QuotationItem {
+  id          String    @id @default(cuid())
+  quotationId String
+  tenHang     String
+  donVi       String?   @default("cái")
+  soLuong     Float     @default(1)
+  donGia      Float     @default(0)
+  thanhTien   Float     @default(0)
+  ghiChu      String?
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId])
+}
+
+model Contract {
+  id              String     @id @default(cuid())
+  code            String?    @unique
+  customerId      String?
+  nguoiPhuTrachId String?
+  quotationId     String?
+  ngayKy          DateTime?
+  ngayBatDau      DateTime?
+  ngayKetThuc     DateTime?
+  trangThai       String     @default("pending")
+  uuTien          String     @default("medium")
+  giaTriHopDong   Float      @default(0)
+  daThanhToan     Float      @default(0)
+  ghiChu          String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  quotation       Quotation? @relation(fields: [quotationId], references: [id])
+  nguoiPhuTrach   Employee?  @relation("ContractEmployee", fields: [nguoiPhuTrachId], references: [id])
+  customer        Customer?  @relation(fields: [customerId], references: [id])
+
+  @@index([trangThai])
+  @@index([customerId])
+  @@index([nguoiPhuTrachId])
+  @@index([quotationId])
+  @@index([ngayKetThuc])
+}
+
+model RetailInvoice {
+  id           String              @id @default(cuid())
+  code         String?             @unique
+  tenKhach     String?
+  dienThoai    String?
+  diaChi       String?
+  tongTien     Float               @default(0)
+  chietKhau    Float               @default(0)
+  vat          Float               @default(0)
+  tongCong     Float               @default(0)
+  hinhThucTT   String              @default("cash")
+  tienKhachDua Float               @default(0)
+  tienThua     Float               @default(0)
+  conNo        Float               @default(0)
+  ghiChu       String?
+  trangThai    String              @default("chua-xuat-hang")
+  nguoiBanId   String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  nguoiBan     Employee?           @relation("RetailInvoiceEmployee", fields: [nguoiBanId], references: [id])
+  items        RetailInvoiceItem[]
+
+  @@index([trangThai])
+  @@index([createdAt])
+  @@index([nguoiBanId])
+}
+
+model RetailInvoiceItem {
+  id              String         @id @default(cuid())
+  invoiceId       String
+  inventoryItemId String?
+  tenHang         String
+  dvt             String         @default("cái")
+  soLuong         Float          @default(1)
+  donGia          Float          @default(0)
+  thanhTien       Float          @default(0)
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  invoice         RetailInvoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([inventoryItemId])
+}
+
+model MonthlySalesSnapshot {
+  id              String   @id @default(cuid())
+  year            Int
+  month           Int
+  totalCustomers  Int      @default(0)
+  quotationCount  Int      @default(0)
+  quotationWon    Int      @default(0)
+  quotationLost   Int      @default(0)
+  contractCount   Int      @default(0)
+  contractActive  Int      @default(0)
+  contractDone    Int      @default(0)
+  contractOverdue Int      @default(0)
+  contractValue   Float    @default(0)
+  contractPaid    Float    @default(0)
+  retailCount     Int      @default(0)
+  retailRevenue   Float    @default(0)
+  retailDebt      Float    @default(0)
+  note            String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([year, month])
+  @@index([year])
+}
+
+model Task {
+  id           String        @id @default(cuid())
+  title        String
+  description  String?
+  status       String        @default("pending")
+  priority     String        @default("medium")
+  assigneeId   String
+  creatorId    String
+  deptCode     String?
+  dueDate      DateTime?
+  completedAt  DateTime?
+  actualResult String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  comments     TaskComment[]
+
+  @@index([assigneeId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([creatorId])
+}
+
+model TaskComment {
+  id        String   @id @default(cuid())
+  taskId    String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model Competitor {
+  id                  String    @id @default(cuid())
+  name                String
+  website             String
+  color               String?   @default("#6366f1")
+  threat              String?   @default("Normal")
+  status              String    @default("Đang theo dõi")
+  lastScan            DateTime?
+  tags                String?   @default("[]")
+  aiSummary           String?
+  swot                String?   @default("{}")
+  metrics             String?   @default("{}")
+  scores              String?   @default("{}")
+  newsHighlights      String?
+  dataSources         String?
+  address             String?
+  marketingActivity   String?
+  strategySuggestions String?
+
+  // Mức 1: Kênh theo dõi
+  facebookUrl  String?
+  tiktokUrl    String?
+  youtubeUrl   String?
+  instagramUrl String?
+  shopeeUrl    String?
+  lazadaUrl    String?
+
+  // Mức 2: Tự động hóa
+  webhookToken     String? @unique
+  automationStatus String  @default("IDLE")
+
+  clientId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MarketingAnnualPlan {
+  id             String           @id @default(cuid())
+  year           Int
+  title          String
+  objectives     String
+  budget         Float            @default(0)
+  targetSegment  String?
+  platforms      String           @default("[]")
+  jobOverview    String           @default("[]")
+  status         String           @default("draft")
+  rejectedReason String?
+  createdById    String
+  createdByName  String
+  approvedById   String?
+  approvedAt     DateTime?
+  clientId       String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  themes         MarketingTheme[]
+
+  @@index([year])
+  @@index([status])
+  @@index([createdById])
+}
+
+model MarketingTheme {
+  id           String              @id @default(cuid())
+  planId       String
+  title        String
+  description  String?
+  startMonth   Int
+  endMonth     Int
+  budget       Float               @default(0)
+  assignedTeam String              @default("all")
+  color        String              @default("#8b5cf6")
+  sortOrder    Int                 @default(0)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  contents     MarketingContent[]
+  plan         MarketingAnnualPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+}
+
+model MarketingContent {
+  id           String          @id @default(cuid())
+  themeId      String
+  title        String
+  channel      String?
+  format       String?
+  targetMonth  Int
+  budget       Float           @default(0)
+  kpi          String?
+  assignedTeam String?         @default("all")
+  notes        String?
+  sortOrder    Int             @default(0)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  theme        MarketingTheme  @relation(fields: [themeId], references: [id], onDelete: Cascade)
+  tasks        MarketingTask[]
+
+  @@index([themeId])
+  @@index([targetMonth])
+}
+
+model MarketingMonthlyPlan {
+  id             String          @id @default(cuid())
+  year           Int
+  month          Int
+  employeeId     String
+  employeeName   String
+  team           String?
+  summary        String?
+  status         String          @default("draft")
+  rejectedReason String?
+  reviewedById   String?
+  reviewedAt     DateTime?
+  clientId       String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  tasks          MarketingTask[]
+
+  @@unique([year, month, employeeId])
+  @@index([year, month])
+  @@index([employeeId])
+  @@index([status])
+}
+
+model MarketingTask {
+  id            String                 @id @default(cuid())
+  monthlyPlanId String
+  contentId     String?
+  title         String
+  description   String?
+  taskType      String?
+  category      String?
+  taskGroup     String?
+  taskSubGroup  String?
+  week1         Boolean                @default(false)
+  week2         Boolean                @default(false)
+  week3         Boolean                @default(false)
+  week4         Boolean                @default(false)
+  week1Content  String?
+  week2Content  String?
+  week3Content  String?
+  week4Content  String?
+  assigneeName  String?
+  channel       String?
+  format        String?
+  deadline      DateTime?
+  actualResult  String?
+  status        String                 @default("pending")
+  sortOrder     Int                    @default(0)
+  budget        Float                  @default(0)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  content       MarketingContent?      @relation(fields: [contentId], references: [id])
+  monthlyPlan   MarketingMonthlyPlan   @relation(fields: [monthlyPlanId], references: [id], onDelete: Cascade)
+  comments      MarketingTaskComment[]
+
+  @@index([monthlyPlanId])
+  @@index([contentId])
+  @@index([status])
+}
+
+model MarketingTaskComment {
+  id             String        @id @default(cuid())
+  taskId         String
+  userId         String
+  userName       String
+  content        String
+  attachmentUrl  String?
+  attachmentName String?
+  createdAt      DateTime      @default(now())
+  task           MarketingTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model MediaFolder {
+  id            String        @id @default(cuid())
+  name          String
+  ownerId       String?
+  ownerName     String?
+  parentId      String?
+  isPublic      Boolean       @default(false)
+  ownerIsActive Boolean       @default(true)
+  clientId      String?
+  createdAt     DateTime      @default(now())
+  assets        MediaAsset[]
+  parent        MediaFolder?  @relation("FolderTree", fields: [parentId], references: [id])
+  children      MediaFolder[] @relation("FolderTree")
+}
+
+model MediaAsset {
+  id          String      @id @default(cuid())
+  folderId    String
+  name        String
+  description String?
+  type        String
+  channel     String      @default("all")
+  fileUrl     String
+  fileSize    Int         @default(0)
+  fileType    String
+  thumbnail   String?
+  uploadedBy  String
+  downloads   Int         @default(0)
+  isPublic    Boolean     @default(true)
+  clientId    String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  folder      MediaFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+}
+
+model MarketingYearlyPlan {
+  id              String                    @id @default(cuid())
+  code            String                    @unique
+  year            Int
+  status          String                    @default("ban-nhap")
+  isCurrent       Boolean                   @default(false)
+  versionStatus   String                    @default("DRAFT")
+  authorId        String?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  revisionCount   Int                       @default(0)
+  revisionData    String?
+  financeApprovalStatus String?
+  directorApprovalStatus String?
+  financeApprovedAt  DateTime?
+  directorApprovedAt DateTime?
+  approvedAt      DateTime?
+  approvedById    String?
+  budgetPlan      MarketingBudgetPlan?
+  executionMonths MarketingExecutionMonth[]
+  generalPlan     MarketingGeneralPlan?
+  goals           MarketingYearlyGoal[]
+  approver        User?                     @relation("PlanApprover", fields: [approvedById], references: [id])
+  author          User?                     @relation(fields: [authorId], references: [id])
+  tasks           MarketingYearlyTask[]
+
+  @@index([year])
+  @@index([status])
+  @@index([isCurrent])
+}
+
+model MarketingGeneralPlan {
+  id             String              @id @default(cuid())
+  planId         String              @unique
+  primaryGoal    String?
+  totalBudget    Float?              @default(0)
+  targetAudience String?
+  platforms      String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  plan           MarketingYearlyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+}
+
+model MarketingYearlyGoal {
+  id          String              @id @default(cuid())
+  planId      String
+  label       String
+  description String?
+  icon        String?
+  color       String?
+  sortOrder   Int                 @default(0)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  plan        MarketingYearlyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+}
+
+model MarketingYearlyTask {
+  id              String                    @id @default(cuid())
+  planId          String
+  parentId        String?
+  name            String
+  description     String?
+  department      String?
+  assigneeId      String?
+  color           String?
+  isExpanded      Boolean                   @default(true)
+  status          String                    @default("pending")
+  sortOrder       Int                       @default(0)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  executionMonths MarketingExecutionMonth[]
+  parent          MarketingYearlyTask?      @relation("TaskTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children        MarketingYearlyTask[]     @relation("TaskTree")
+  plan            MarketingYearlyPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@index([parentId])
+  @@index([assigneeId])
+}
+
+model OutlineMarketingPlan {
+  id        String   @id @default(cuid())
+  year      Int
+  planId    String?  @unique
+  planData  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([year])
+}
+
+model MarketingExecutionMonth {
+  id     String                    @id @default(cuid())
+  planId String
+  taskId String
+  month  Int
+  groups MarketingExecutionGroup[]
+  task   MarketingYearlyTask       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  plan   MarketingYearlyPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, taskId, month])
+}
+
+model MarketingExecutionGroup {
+  id               String                     @id @default(cuid())
+  monthId          String
+  name             String
+  color            String?
+  orderIndex       Int                        @default(0)
+  strategyPillarId String?
+  tasks            MarketingExecutionDetail[]
+  monthPlan        MarketingExecutionMonth    @relation(fields: [monthId], references: [id], onDelete: Cascade)
+}
+
+model MarketingExecutionDetail {
+  id             String                     @id @default(cuid())
+  groupId        String
+  parentId       String?
+  isDetail       Boolean                    @default(false)
+  name           String
+  week           String?
+  orderIndex     Int                        @default(0)
+  visual         String?
+  quantity       String?
+  channel        String?
+  ads            Boolean                    @default(false)
+  targetAudience String?
+  recordTime     String?
+  location       String?
+  detailContent  String?
+  pic            String?
+  status         String                     @default("pending")
+  note           String?
+  parent         MarketingExecutionDetail?  @relation("DetailTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children       MarketingExecutionDetail[] @relation("DetailTree")
+  group          MarketingExecutionGroup    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+}
+
+model ApprovalRequest {
+  id              String            @id @default(cuid())
+  entityType      String
+  entityId        String
+  entityCode      String?
+  entityTitle     String
+  status          String            @default("pending")
+  priority        String            @default("normal")
+  dueDate         DateTime?
+  department      String?
+  metadata        String?
+  requestedById   String
+  requestedByName String
+  approverId      String?
+  approvedById    String?
+  approvedAt      DateTime?
+  note            String?
+  rejectedReason  String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  comments        ApprovalComment[]
+
+  @@index([entityType, entityId])
+  @@index([status, approverId])
+  @@index([requestedById])
+  @@index([department, status])
+  @@index([createdAt])
+}
+
+model ApprovalComment {
+  id          String            @id @default(cuid())
+  requestId   String
+  authorId    String
+  authorName  String
+  authorRole  String?
+  content     String
+  parentId    String?
+  attachments String?
+  isSystem    Boolean           @default(false)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  parent      ApprovalComment?  @relation("CommentThread", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies     ApprovalComment[] @relation("CommentThread")
+  request     ApprovalRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@index([authorId])
+  @@index([parentId])
+}
+
+model SocialConnection {
+  id            String    @id @default(cuid())
+  platform      String    @unique
+  pageId        String?
+  pageName      String?
+  pageToken     String?
+  userToken     String?
+  appId         String?
+  appSecret     String?
+  verifyToken   String?
+  webhookActive Boolean   @default(false)
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model MarketingCampaign {
+  id          String             @id @default(cuid())
+  externalId  String             @unique
+  name        String
+  platform    String
+  status      String
+  objective   String?
+  budget      Float              @default(0)
+  dailyBudget Float              @default(0)
+  spent       Float              @default(0)
+  currency    String             @default("VND")
+  startTime   DateTime?
+  stopTime    DateTime?
+  clientId    String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  insights    MarketingInsight[]
+  leads       MarketingLead[]
+
+  @@index([platform])
+  @@index([status])
+  @@index([clientId])
+}
+
+model MarketingLead {
+  id            String                @id @default(cuid())
+  campaignId    String
+  externalId    String?               @unique
+  fullName      String?
+  email         String?
+  phone         String?
+  formValues    String?
+  status        String                @default("new")
+  source        String?
+  medium        String?
+  adId          String?
+  notes         String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  campaign      MarketingCampaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  careHistories PartnerCareHistory[]
+  bonusFormulas PartnerBonusFormula[]
+
+  @@index([campaignId])
+  @@index([status])
+  @@index([email])
+  @@index([phone])
+}
+
+model PartnerCareHistory {
+  id                      String        @id @default(cuid())
+  partnerId               String
+  partner                 MarketingLead @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  fullName                String
+  role                    String?       @default("Ông chủ")
+  phone                   String
+  email                   String?
+  companyName             String
+  businessAddress         String
+  businessType            String?
+  premisesScale           String
+  collabNeeds             String
+  currentBrands           String?
+  deploymentPlan          String
+  expectedInvestment      String?
+  investmentTimeframe     String?
+  approachStep            String?       @default("Tiếp cận")
+  attitude                String?       @default("Bình thường")
+  interests               String?
+  painPoints              String?
+  premisesCondition       String?
+  otherRequirements       String?
+  stars                   Int?          @default(3)
+  executionDate           DateTime      @default(now())
+  executor                String
+  cabinetArea             String?
+  cabinetUnitPrice        String?
+  cabinetBrandSupportRate String?
+  cabinetOtherCosts       String?
+  cabinetNotes            String?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  @@index([partnerId])
+}
+
+model PartnerBonusFormula {
+  id          String        @id @default(cuid())
+  partnerId   String
+  partner     MarketingLead @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  formula     String
+  sortOrder   Int           @default(0)
+  savedAt     DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([partnerId])
+}
+
+model MarketingInsight {
+  id          String            @id @default(cuid())
+  campaignId  String
+  date        DateTime
+  platform    String
+  spend       Float             @default(0)
+  impressions Int               @default(0)
+  reach       Int               @default(0)
+  leads       Int               @default(0)
+  likes       Int               @default(0)
+  clicks      Int               @default(0)
+  unit        String?           @default("kết quả")
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  campaign    MarketingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, date, platform])
+  @@index([campaignId])
+  @@index([date])
+}
+
+model MarketingBudgetPlan {
+  id            String                        @id @default(cuid())
+  planId        String                        @unique
+  revenueGoal   Float                         @default(0)
+  mktRate       Float                         @default(0)
+  mktValue      Float                         @default(0)
+  agencyRate    Float                         @default(0)
+  agencyValue   Float                         @default(0)
+  brandingRate  Float                         @default(0)
+  brandingValue Float                         @default(0)
+  createdAt     DateTime                      @default(now())
+  updatedAt     DateTime                      @updatedAt
+  items         MarketingBudgetItem[]
+  plan          MarketingYearlyPlan           @relation(fields: [planId], references: [id], onDelete: Cascade)
+  monthlyTotals MarketingMonthlyBudgetTotal[]
+}
+
+model MarketingBudgetItem {
+  id             String                       @id @default(cuid())
+  budgetPlanId   String
+  type           String
+  name           String
+  rate           Float                        @default(0)
+  value          Float                        @default(0)
+  note           String?
+  sortOrder      Int                          @default(0)
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
+  budgetPlan     MarketingBudgetPlan          @relation(fields: [budgetPlanId], references: [id], onDelete: Cascade)
+  monthlyDetails MarketingMonthlyBudgetItem[]
+}
+
+model MarketingMonthlyBudgetTotal {
+  id           String              @id @default(cuid())
+  budgetPlanId String
+  month        Int
+  totalValue   Float               @default(0)
+  budgetPlan   MarketingBudgetPlan @relation(fields: [budgetPlanId], references: [id], onDelete: Cascade)
+
+  @@unique([budgetPlanId, month])
+}
+
+model MarketingMonthlyBudgetItem {
+  id     String              @id @default(cuid())
+  itemId String
+  month  Int
+  rate   Float               @default(0)
+  value  Float               @default(0)
+  note   String?
+  item   MarketingBudgetItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, month])
+}
+
+model MarketingEvent {
+  id                String                  @id @default(cuid())
+  code              String                  @unique
+  name              String
+  type              String                  @default("Workshop")
+  category          String                  @default("B2B")
+  isOnline          Boolean                 @default(false)
+  startDate         DateTime
+  endDate           DateTime
+  location          String?
+  address           String?
+  budget            Float?
+  expectedAttendees Int?
+  pic               String?
+  description       String?
+  status            String                  @default("draft")
+  managementFeeRate Float                   @default(5)
+  vatRate           Float                   @default(10)
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  contents          MarketingEventContent[]
+  tasks             MarketingEventTask[]
+}
+
+model MarketingEventContent {
+  id          String                  @id @default(cuid())
+  eventId     String
+  item        String
+  description String?
+  unit        String?
+  price       Float                   @default(0)
+  quantity    Float                   @default(0)
+  level       Int                     @default(0)
+  parentId    String?
+  sortOrder   Int                     @default(0)
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  parent      MarketingEventContent?  @relation("EventContentTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children    MarketingEventContent[] @relation("EventContentTree")
+  event       MarketingEvent          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([parentId])
+}
+
+model MarketingEventTask {
+  id          String               @id @default(cuid())
+  eventId     String
+  name        String
+  parentId    String?
+  pic         String?
+  startDate   DateTime?
+  endDate     DateTime?
+  weeks       String?
+  content     String?
+  sortOrder   Int                  @default(0)
+  hasChildren Boolean              @default(false)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  parent      MarketingEventTask?  @relation("EventTaskTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children    MarketingEventTask[] @relation("EventTaskTree")
+  event       MarketingEvent       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
+
+model RecruitmentRequest {
+  id           String      @id @default(cuid())
+  department   String
+  position     String
+  quantity     Int         @default(1)
+  requesterId  String?
+  date         DateTime    @default(now())
+  deadline     DateTime?
+  status       String      @default("Pending")
+  priority     String      @default("Normal")
+  description  String?
+  requirements String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  specialty    String?
+  requestedBy  String?
+  ageMax       String?
+  ageMin       String?
+  education    String?
+  experience   String?
+  gender       String?
+  level        String?
+  salaryMax    String?
+  salaryMin    String?
+  skills       String?
+  workType     String?
+  candidates   Candidate[]
+  requester    User?       @relation("UserRequests", fields: [requesterId], references: [id])
+
+  // Kế hoạch đào tạo
+  trainingTime         String?
+  trainingLocation     String?
+  trainingParticipants String?
+  trainingContent      String?
+}
+
+model Candidate {
+  id                    String               @id @default(cuid())
+  requestId             String
+  name                  String
+  position              String
+  source                String
+  experience            String?
+  status                String               @default("New")
+  matchScore            Int?
+  phone                 String?
+  email                 String?
+  profileUrl            String?
+  skills                String?
+  summary               String?
+  date                  DateTime             @default(now())
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  cvUrl                 String?
+  address               String?
+  interviewDate         DateTime?
+  interviewLocation     String?
+  interviewNotes        String?
+  interviewer           String?
+  interviewParticipants String?
+  birthDate             DateTime?
+  desiredSalary         String?
+  education             String?
+  gender                String?
+  expYears              String?
+  request               RecruitmentRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  scorecards            InterviewScorecard[]
+
+  @@index([requestId])
+  @@index([status])
+}
+
+model InterviewScorecard {
+  id               String    @id @default(cuid())
+  candidateId      String
+  interviewerId    String
+  interviewTime    DateTime
+  interviewMode    String
+  interviewLoc     String?
+  interviewerRole  String
+  interviewerDept  String
+  scoreKnowledge   Int
+  scoreExperience  Int
+  scoreComm        Int
+  scoreRespons     Int
+  scoreTeamwork    Int
+  totalScore       Int
+  decision         String
+  salarySuggest    Int?
+  probationSuggest String?
+  interviewerNote  String?
+  createdAt        DateTime  @default(now())
+  audioRecordUrl   String?
+  interviewer      User      @relation(fields: [interviewerId], references: [id])
+  candidate        Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+}
+
+model TrainingRequest {
+  id          String           @id @default(cuid())
+  topic       String
+  target      String
+  goal        String
+  duration    String
+  type        String           @default("PERIODIC")
+  status      String           @default("PENDING")
+  priority    String           @default("NORMAL")
+  description String?
+  requesterId String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  courses     TrainingCourse[]
+  plan        TrainingPlan?
+
+  // Các trường mới từ form đề xuất đào tạo
+  trainer          String?
+  startTime        DateTime?
+  endTime          DateTime?
+  location         String?
+  participants     String?
+  trainingContent  String?
+  equipment        String?
+  trainingSupplies String?
+  department       String?
+}
+
+model TrainingPlan {
+  id             String          @id @default(cuid())
+  requestId      String          @unique
+  startDate      DateTime?
+  endDate        DateTime?
+  cost           Float           @default(0)
+  location       String?
+  instructor     String?
+  approvalStatus String          @default("PENDING")
+  approvedById   String?
+  approvalNote   String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  course         TrainingCourse?
+  request        TrainingRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+}
+
+model TrainingCourse {
+  id           String                @id @default(cuid())
+  requestId    String?
+  planId       String?               @unique
+  status       String                @default("PLANNED")
+  materials    String?
+  startDate    DateTime?
+  endDate      DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  plan         TrainingPlan?         @relation(fields: [planId], references: [id])
+  request      TrainingRequest?      @relation(fields: [requestId], references: [id])
+  participants TrainingParticipant[]
+  questions    TrainingQuestion[]
+}
+
+model TrainingParticipant {
+  id         String         @id @default(cuid())
+  courseId   String
+  employeeId String
+  attendance String         @default("PENDING")
+  testScore  Float?
+  feedback   String?
+  rating     Int?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  course     TrainingCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, employeeId])
+}
+
+model TrainingQuestion {
+  id            String         @id @default(cuid())
+  courseId      String
+  question      String
+  options       String
+  correctAnswer Int
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  course        TrainingCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+model PromotionRequest {
+  id                String    @id @default(cuid())
+  employeeId        String
+  type              String
+  currentDept       String
+  currentPos        String
+  targetDept        String
+  targetPos         String
+  reason            String?
+  status            String    @default("RECEIVING")
+  hrApproved        Boolean   @default(false)
+  hrNote            String?
+  interviewDate     DateTime?
+  interviewLocation String?
+  interviewerId     String?
+  interviewNote     String?
+  competencyScore   Int?
+  suitabilityScore  Int?
+  directorApproved  Boolean   @default(false)
+  directorNote      String?
+  decisionNumber    String?
+  effectiveDate     DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  requesterId       String?
+  interviewResult   String?
+  requester         Employee? @relation("PromotionRequester", fields: [requesterId], references: [id])
+  employee          Employee  @relation("PromotionRequests", fields: [employeeId], references: [id], onDelete: Cascade)
+  interviewer       Employee? @relation("PromotionInterviewer", fields: [interviewerId], references: [id])
+
+  @@index([employeeId])
+  @@index([requesterId])
+  @@index([status])
+}
+
+model SalaryAdjustmentRequest {
+  id                 String    @id @default(cuid())
+  employeeId         String
+  adjustmentType     String
+  currentBaseSalary  Float?
+  proposedBaseSalary Float?
+  currentAllowances  String?
+  proposedAllowances String?
+  reason             String
+  effectiveDate      DateTime?
+  status             String    @default("PENDING")
+  hrNote             String?
+  requesterId        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  requester          Employee? @relation("SalaryAdjustmentRequester", fields: [requesterId], references: [id])
+  employee           Employee  @relation("SalaryAdjustmentRequests", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([requesterId])
+  @@index([status])
+}
+
+model PersonalRequest {
+  id               String    @id @default(cuid())
+  employeeId       String
+  type             String
+  status           String    @default("PENDING")
+  reason           String?
+  startDate        DateTime?
+  endDate          DateTime?
+  totalDays        Float?
+  totalHours       Float?
+  details          String?
+  hrApproved       Boolean   @default(false)
+  hrNote           String?
+  deptApproved     Boolean   @default(false)
+  deptNote         String?
+  directorApproved Boolean   @default(false)
+  directorNote     String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  employee         Employee  @relation("EmployeePersonalRequests", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([type])
+  @@index([status])
+}
+
+model Attendance {
+  id                String    @id @default(cuid())
+  employeeId        String
+  date              DateTime  @default(now())
+  checkInMorning    DateTime?
+  checkOutMorning   DateTime?
+  checkInAfternoon  DateTime?
+  checkOutAfternoon DateTime?
+  status            String    @default("present")
+  checkInIp         String?
+  checkOutIp        String?
+  checkInLoc        String?
+  checkOutLoc       String?
+  deviceId          String?
+  note              String?
+  registeredLunch   Boolean   @default(false)
+  registeredDinner  Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  employee          Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+  @@index([employeeId])
+  @@index([date])
+}
+
+model LaborPolicy {
+  id        String   @id @default(cuid())
+  clientId  String?
+  type      String
+  title     String?
+  content   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientId, type])
+}
+
+model BranchSubnet {
+  id        String   @id @default(cuid())
+  branchId  String
+  startIp   String
+  endIp     String
+  note      String?
+  createdAt DateTime @default(now())
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([branchId])
+}
+
+model BranchWifi {
+  id           String   @id @default(cuid())
+  branchId     String
+  ssid         String
+  bssid        String?
+  ipSubnet     String?
+  publicWanIp  String?
+  securityType String   @default("WPA2-Enterprise")
+  isActive     Boolean  @default(true)
+  note         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  branch       Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([branchId])
+}
+
+model BranchDevice {
+  id           String   @id @default(cuid())
+  branchId     String
+  deviceName   String
+  model        String?
+  lanIp        String?
+  port         Int      @default(4370)
+  serialNumber String?
+  status       String   @default("online")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  branch       Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([branchId])
+}
+
+model LaborShift {
+  id                       String   @id @default(cuid())
+  code                     String   @unique
+  name                     String
+  departmentScope          String?
+  morningStart             String   @default("08:00")
+  morningEnd               String   @default("12:00")
+  afternoonStart           String   @default("13:30")
+  afternoonEnd             String   @default("17:30")
+  workHours                Float    @default(8)
+  standardWorkdays         Int      @default(26)
+  checkInEarlyLimitMinutes Int      @default(60)
+  checkOutLateLimitMinutes Int      @default(120)
+  appliedDays              String   @default("T2,T3,T4,T5,T6,T7")
+  isDefault                Boolean  @default(false)
+  sortOrder                Int      @default(0)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+}
+
+model LaborLunchRule {
+  id                      String   @id @default(cuid())
+  lunchStart              String   @default("12:00")
+  lunchEnd                String   @default("13:30")
+  lunchDurationMinutes    Int      @default(90)
+  requireFingerprintPunch Boolean  @default(false)
+  autoDeductLunchDuration Boolean  @default(true)
+  lunchDeadlineMorning    String   @default("09:00")
+  dinnerDeadlineAfternoon String   @default("15:30")
+  mealAllowancePerMeal    Float    @default(35000)
+  missedMealPenalty       Float    @default(35000)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+model LaborViolationConfig {
+  id                       String                 @id @default(cuid())
+  gracePeriodMinutes       Int                    @default(30)
+  maxGraceTimesPerMonth    Int                    @default(3)
+  explanationDeadlineHours Int                    @default(48)
+  violationPenaltyMode     String                 @default("deduct_workday")
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  rules                    LaborViolationRule[]
+}
+
+model LaborViolationRule {
+  id               String                @id @default(cuid())
+  configId         String?
+  level            String
+  fromMinutes      Int
+  toMinutes        Int
+  penaltyAmount    Float                 @default(0)
+  deductWorkday    Float                 @default(0)
+  allowMakeupHours Boolean               @default(false)
+  note             String?
+  sortOrder        Int                   @default(0)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  config           LaborViolationConfig? @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  @@index([configId])
+}
+
+model LaborOvertimeRule {
+  id                          String   @id @default(cuid())
+  weekdayRatePercent          Float    @default(150)
+  weekendRatePercent          Float    @default(200)
+  holidayRatePercent          Float    @default(300)
+  nightBonusPercent           Float    @default(30)
+  nightStartHour              String   @default("22:00")
+  nightEndHour                String   @default("06:00")
+  requirePreApproval          Boolean  @default(true)
+  minOtMinutesRequired        Int      @default(30)
+  roundStepMinutes            Int      @default(30)
+  dinnerSupportThresholdHours Float    @default(2)
+  dinnerAllowanceAmount       Float    @default(35000)
+  nightTransportSupportAmount Float    @default(50000)
+  maxMonthlyOtHours           Float    @default(40)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+}
+
+model LaborHolidayRule {
+  id            String   @id @default(cuid())
+  code          String?
+  name          String
+  category      String   @default("national")
+  categoryLabel String?
+  year          Int      @default(2026)
+  startDate     String
+  endDate       String
+  totalDays     Int      @default(1)
+  totalPaidDays Int      @default(1)
+  description   String?
+  isStatutory   Boolean  @default(true)
+  daysJson      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model LaborLeavePolicy {
+  id                                String   @id @default(cuid())
+  standardLeaveDaysPerYear          Int      @default(12)
+  heavyHazardousLeaveDays           Int      @default(14)
+  specialHazardousLeaveDays         Int      @default(16)
+  seniorityBonusYears               Int      @default(5)
+  seniorityBonusDays                Int      @default(1)
+  marriageLeaveDays                 Int      @default(3)
+  childMarriageLeaveDays            Int      @default(1)
+  bereavementLeaveDays              Int      @default(3)
+  grandparentSiblingBereavementDays Int      @default(1)
+  parentRemarriageLeaveDays         Int      @default(1)
+  siblingMarriageLeaveDays          Int      @default(1)
+  allowTransferToNextYear           Boolean  @default(true)
+  maxTransferredDays                Int      @default(5)
+  transferExpiryMonth               Int      @default(3)
+  createdAt                         DateTime @default(now())
+  updatedAt                         DateTime @updatedAt
+}
+
+model TerminationRequest {
+  id                  String    @id @default(cuid())
+  employeeId          String
+  type                String
+  reason              String
+  requestDate         DateTime  @default(now())
+  lastWorkingDay      DateTime?
+  exitInterviewNotes  String?
+  isStayNegotiated    Boolean   @default(false)
+  violationEvidence   String?
+  disciplinaryMinutes String?
+  status              String    @default("Draft")
+  step                Int       @default(1)
+  directorNote        String?
+  handoverChecklist   String?
+  isAccountLocked     Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  employee            Employee  @relation("TerminationRequests", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([status])
+}
+
+model ChannelConnection {
+  id           String             @id @default(cuid())
+  platform     String
+  shopName     String
+  shopId       String?            @unique
+  partnerId    String?
+  partnerKey   String?
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+  status       String             @default("ACTIVE")
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  orders       OmnichannelOrder[]
+}
+
+model OmnichannelOrder {
+  id              String                 @id @default(cuid())
+  externalOrderId String                 @unique
+  channelId       String
+  customerName    String?
+  customerPhone   String?
+  customerAddress String?
+  totalAmount     Float                  @default(0)
+  orderStatus     String?
+  rawPayload      String?
+  syncStatus      String                 @default("PENDING")
+  internalOrderId String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  channel         ChannelConnection      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  items           OmnichannelOrderItem[]
+
+  @@index([channelId])
+  @@index([externalOrderId])
+  @@index([syncStatus])
+}
+
+model OmnichannelOrderItem {
+  id          String           @id @default(cuid())
+  orderId     String
+  sku         String?
+  productName String
+  quantity    Int              @default(1)
+  price       Float            @default(0)
+  variantName String?
+  imageUrl    String?
+  order       OmnichannelOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model InsuranceConfig {
+  id                 String   @id @default(cuid())
+  employerBhxh       Float    @default(17.5)
+  employerBhyt       Float    @default(3)
+  employerBhtn       Float    @default(1)
+  employeeBhxh       Float    @default(8)
+  employeeBhyt       Float    @default(1.5)
+  employeeBhtn       Float    @default(1)
+  baseReferenceWage  Float    @default(2340000)
+  sickLeaveDays      Int      @default(30)
+  sickLeaveHeavyDays Int      @default(40)
+  sickLeaveRate      Float    @default(75)
+  maternityDays      Int      @default(180)
+  paternityDays      Int      @default(5)
+  maternityRate      Float    @default(100)
+  maternityAllowance Float    @default(2)
+  recoveryDays       Int      @default(5)
+  recoveryRate       Float    @default(30)
+  funeralAllowance   Float    @default(10)
+  effectiveDate      DateTime @default(now())
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model InsuranceHistory {
+  id              String   @id @default(cuid())
+  employeeId      String
+  month           Int
+  year            Int
+  insuranceSalary Float
+  employerAmount  Float
+  employeeAmount  Float
+  totalAmount     Float
+  status          String   @default("active")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, month, year])
+  @@index([employeeId])
+  @@index([month, year])
+}
+
+model InsuranceChange {
+  id            String   @id @default(cuid())
+  employeeId    String
+  type          String
+  effectiveDate DateTime
+  oldSalary     Float?
+  newSalary     Float?
+  reason        String?
+  status        String   @default("pending")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([status])
+}
+
+model InsuranceBenefit {
+  id         String   @id @default(cuid())
+  employeeId String
+  regimeType String
+  startDate  DateTime
+  endDate    DateTime
+  amount     Float    @default(0)
+  status     String   @default("pending")
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([status])
+}
+
+model HrSupplyCategory {
+  id        String         @id @default(cuid())
+  name      String         @unique
+  code      String?        @unique
+  isActive  Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  items     HrSupplyItem[]
+}
+
+model HrSupplyItem {
+  id           String                @id @default(cuid())
+  categoryId   String
+  name         String
+  code         String?               @unique
+  unit         String?               @default("cái")
+  minStock     Float                 @default(0)
+  currentStock Float                 @default(0)
+  price        Float                 @default(0)
+  isAsset      Boolean               @default(false)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  isActive     Boolean               @default(true)
+  note         String?
+  handovers    HrAssetHandover[]
+  norms        HrStationeryNorm[]
+  category     HrSupplyCategory      @relation(fields: [categoryId], references: [id])
+  requestItems HrSupplyRequestItem[]
+  transactions HrSupplyTransaction[]
+}
+
+model HrSupplyTransaction {
+  id           String       @id @default(cuid())
+  itemId       String
+  type         String // "IMPORT" (Nhập kho) hoặc "EXPORT" (Xuất kho)
+  quantity     Float
+  price        Float        @default(0)
+  note         String?
+  invoiceNo    String? // Số chứng từ / Số hóa đơn
+  supplierId   String?
+  executorId   String? // Người thực hiện
+  executorName String? // Tên người thực hiện
+  createdAt    DateTime     @default(now())
+  item         HrSupplyItem @relation(fields: [itemId], references: [id])
+  supplier     Supplier?    @relation(fields: [supplierId], references: [id])
+}
+
+model HrStationeryNorm {
+  id           String             @id @default(cuid())
+  departmentId String
+  itemId       String
+  limitQty     Float              @default(0)
+  limitAmount  Float              @default(0)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  item         HrSupplyItem       @relation(fields: [itemId], references: [id])
+  department   DepartmentCategory @relation(fields: [departmentId], references: [id])
+
+  @@unique([departmentId, itemId])
+}
+
+model HrSupplyRequest {
+  id               String                @id @default(cuid())
+  code             String                @unique
+  requesterId      String
+  departmentId     String
+  type             String                @default("STATIONERY")
+  status           String                @default("PENDING")
+  totalAmount      Float                 @default(0)
+  note             String?
+  rejectionNote    String?
+  requiresDirector Boolean               @default(false)
+  supplierId       String?
+  invoiceNo        String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  department       DepartmentCategory    @relation(fields: [departmentId], references: [id])
+  requester        Employee              @relation(fields: [requesterId], references: [id])
+  items            HrSupplyRequestItem[]
+
+  @@index([status])
+  @@index([type])
+}
+
+model HrSupplyRequestItem {
+  id         String          @id @default(cuid())
+  requestId  String
+  itemId     String
+  quantity   Float
+  unitPrice  Float           @default(0)
+  totalPrice Float           @default(0)
+  isOverNorm Boolean         @default(false)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  item       HrSupplyItem    @relation(fields: [itemId], references: [id])
+  request    HrSupplyRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+}
+
+model HrAssetHandover {
+  id           String        @id @default(cuid())
+  assetId      String?
+  supplyItemId String?
+  employeeId   String
+  handoverDate DateTime      @default(now())
+  returnDate   DateTime?
+  status       String        @default("USING")
+  condition    String?
+  note         String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  employee     Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  supplyItem   HrSupplyItem? @relation(fields: [supplyItemId], references: [id])
+  asset        Asset?        @relation(fields: [assetId], references: [id])
+
+  @@index([assetId])
+  @@index([employeeId])
+}
+
+model EmailConfig {
+  id        String   @id @default(cuid())
+  host      String
+  port      Int
+  user      String
+  pass      String
+  secure    Boolean  @default(true)
+  fromEmail String
+  fromName  String
+  type      String   @default("SMTP")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AttendanceConfirmation {
+  id          String   @id @default(cuid())
+  employeeId  String
+  month       Int
+  year        Int
+  confirmedAt DateTime @default(now())
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, month, year])
+  @@index([employeeId])
+}
+
+model PayrollConfirmation {
+  id          String   @id @default(cuid())
+  employeeId  String
+  month       Int
+  year        Int
+  confirmedAt DateTime @default(now())
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, month, year])
+  @@index([employeeId])
+}
+
+model Meeting {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  startTime   DateTime
+  endTime     DateTime
+  location    String?
+  creatorId   String
+  attendees   String   @default("[]") // JSON string: [{"id": "...", "name": "...", "email": "..."}]
+  minutes     String?
+  actionItems String? // JSON string: [{"task": "...", "assignee": "...", "deadline": "..."}]
+  files       String   @default("[]") // JSON string of MediaAsset IDs: ["id1", "id2"]
+  host        String?
+  secretary   String?
+  clientId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  creator User @relation("UserMeetings", fields: [creatorId], references: [id])
+}
+
+model SalesYearlyPlan {
+  id             String   @id @default(cuid())
+  year           Int      @unique
+  status         String   @default("ban-nhap") // ban-nhap, cho-duyet, da-duyet
+  createdDate    String   @default("2026-06-15")
+  planRows       String // JSON string của PlanItemRow[]
+  staffRows      String // JSON string của StaffItemRow[]
+  monthlyTargets String? // JSON string của Record<number, MonthlyTargetData>
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([year])
+  @@index([status])
+}
+
+model SalesMonthlyPlan {
+  id          String   @id @default(cuid())
+  year        Int
+  month       Int
+  status      String   @default("ban-nhap") // ban-nhap, cho-duyet, da-duyet
+  createdDate String   @default("2026-06-15")
+  planRows    String // JSON string của PlanItemRow[]
+  staffRows   String // JSON string của StaffItemRow[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([year, month])
+  @@index([year])
+  @@index([month])
+  @@index([status])
+}
+
+model MasterYearlyPlan {
+  id        String   @id @default(cuid())
+  year      Int      @unique
+  status    String   @default("draft") // draft, pending_approval, approved, rejected
+  financeApprovalStatus  String?
+  directorApprovalStatus String?
+  financeApprovedAt  DateTime?
+  directorApprovedAt DateTime?
+  planData  String // JSON string of all planning state parameters
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([year])
+  @@index([status])
+}
+
+model CabinetCategoryItem {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  length      Float?
+  depth       Float?
+  height      Float?
+  unitPrice   Float    @default(0)
+  unit        String?  @default("cái")
+  imageUrl1   String?
+  imageUrl2   String?
+  imageUrl3   String?
+  imageUrl4   String?
+  imageUrl5   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([code])
+}
+
+// ==========================================
+// THÔNG TIN KHOẢN VAY NGÂN HÀNG
+// ==========================================
+model BankLoan {
+  id             String  @id @default(cuid())
+  contractNumber String? @unique
+  bankName       String
+
+  // Phân loại
+  loanType        String // vay_han_muc, vay_thau_chi, vay_tung_lan
+
+  // Thông tin Hạn mức
+  creditLimit      Float // Tổng hạn mức được cấp
+  startDate        DateTime? // Ngày bắt đầu hạn mức
+  maturityDate     DateTime? // Ngày hết hạn hạn mức
+
+  // Thông tin thêm cho Vay thế chấp
+  collateralType  String? // Bất động sản, máy móc...
+  collateralValue Float? // Giá trị định giá
+  ltvRatio        Float? // Tỷ lệ cho vay / Giá trị (%)
+
+  // Trạng thái theo dõi
+  status             String @default("ACTIVE") // ACTIVE, CLOSED, OVERDUE
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  disbursements BankDisbursement[]
+
+  @@index([bankName])
+  @@index([loanType])
+  @@index([status])
+}
+
+model BankDisbursement {
+  id                 String    @id @default(cuid())
+  bankLoanId         String
+  bankLoan           BankLoan  @relation(fields: [bankLoanId], references: [id], onDelete: Cascade)
+  
+  disbursementNumber String?   // Mã khế ước nhận nợ
+  amount             Float     // Số tiền rút vốn
+  disbursementDate   DateTime  // Ngày giải ngân
+  termMonths         Int       // Kỳ hạn (tháng)
+  maturityDate       DateTime? // Ngày đáo hạn
+  
+  interestRate       Float?    // Lãi suất %/năm
+  interestType       String?   // co_dinh, tha_noi
+  repaymentMethod    String?   // goc_deu_lai_giam, tra_gop_deu, lai_hang_thang_goc_cuoi_ky
+  purpose            String?   // Mục đích giải ngân
+  
+  status             String    @default("UNPAID") // UNPAID, PARTIAL, PAID
+  paidPrincipal      Float     @default(0) // Dư nợ gốc đã trả
+  paidInterest       Float     @default(0) // Lãi đã trả
+  
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([bankLoanId])
+  @@index([status])
+}
+
+model OemSalesYearlyPlan {
+  id             String   @id @default(cuid())
+  year           Int      @unique
+  status         String   @default("ban-nhap")
+  createdDate    String   @default("2026-06-15")
+  planRows       String
+  staffRows      String
+  monthlyTargets String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([year])
+  @@index([status])
+}
+
+model OemMasterYearlyPlan {
+  id        String   @id @default(cuid())
+  year      Int      @unique
+  status    String   @default("draft") // draft, approved
+  planData  String // JSON string of all planning state parameters
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([year])
+  @@index([status])
+}
+
+// --- MODULE ACCOUNTING (HẠCH TOÁN KẾ TOÁN) ---
+
+model AccountingAccount {
+  id       String  @id @default(cuid())
+  code     String  @unique // Mã TK: 111, 1111, 141.1
+  name     String // Tên TK: Tiền mặt, Tạm ứng Kinh doanh...
+  level    Int // Cấp: 1, 2, 3
+  isParent Boolean @default(false)
+  parentId String? // FK trỏ tới TK cha
+  type     String // Loại: ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
+  balance  Float   @default(0) // Số dư hiện tại
+
+  parent          AccountingAccount?  @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children        AccountingAccount[] @relation("AccountHierarchy")
+  journalLines    JournalLine[]
+  monthlyBalances MonthlyBalance[]
+}
+
+model MonthlyBalance {
+  id            String @id @default(cuid())
+  accountId     String
+  month         Int // 1-12
+  year          Int
+  openingDebit  Float  @default(0)
+  openingCredit Float  @default(0)
+  arisingDebit  Float  @default(0)
+  arisingCredit Float  @default(0)
+  closingDebit  Float  @default(0)
+  closingCredit Float  @default(0)
+
+  account AccountingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, month, year])
+}
+
+model JournalEntry {
+  id            String   @id @default(cuid())
+  entryDate     DateTime @default(now())
+  referenceCode String?
+  description   String
+  sourceModule  String // INVENTORY, SALES, MANUAL
+  totalAmount   Float
+  createdAt     DateTime @default(now())
+
+  lines JournalLine[]
+}
+
+model JournalLine {
+  id             String  @id @default(cuid())
+  journalEntryId String
+  accountId      String
+  type           String // DEBIT hoặc CREDIT
+  amount         Float
+  description    String?
+
+  journalEntry JournalEntry      @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  account      AccountingAccount @relation(fields: [accountId], references: [id])
+}
+
+// ==========================================
+// THÔNG TIN XỬ LÝ HÀNG LỖI (DEFECTS)
+// ==========================================
+model DefectRecord {
+  activities       DefectActivity[]
+  logisticsTickets LogisticsTicket[]
+  id               String           @id @default(cuid())
+  code             String           @unique
+  source           String // INTERNAL, WARRANTY
+  status           String           @default("NEW")
+
+  productName String
+  productCode String
+  quantity    Int
+  description String
+  mediaUrls   String @default("[]")
+
+  customerName    String?
+  customerId      String?
+  orderNumber     String?
+  customerPhone   String?
+  customerAddress String?
+  purchaseDate    DateTime?
+
+  isRepairable  Boolean?
+  repairPlan    String?
+  materialCosts Float?
+
+  reporterName       String
+  reporterDepartment String
+  assignedTo         String?
+  completionDate     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([source])
+  @@index([status])
+}
+
+model DefectActivity {
+  id          String   @id @default(cuid())
+  defectId    String
+  action      String // BÁO CÁO, CHẨN ĐOÁN, CHUYỂN TRẠNG THÁI...
+  description String? // Chi tiết thao tác
+  oldStatus   String?
+  newStatus   String?
+  performedBy String
+  createdAt   DateTime @default(now())
+
+  defect DefectRecord @relation(fields: [defectId], references: [id], onDelete: Cascade)
+
+  @@index([defectId])
+}
+
+model TaxPolicyNews {
+  id              String    @id @default(cuid())
+  title           String
+  link            String    @unique
+  publishDate     DateTime?
+  docType         String?
+  summary         String?
+  detailedSummary String?
+  createdAt       DateTime  @default(now())
+}
+
+model TaxQA {
+  id          String    @id @default(cuid())
+  question    String
+  answer      String
+  category    String?
+  sourceUrl   String?   @unique
+  publishDate DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model SoftSkillQA {
+  id        Int      @id @default(autoincrement())
+  question  String
+  answer    String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SalesPolicy {
+  id        String    @id @default(cuid())
+  name      String
+  docNo     String?
+  status    String    @default("Hiệu lực")
+  issueDate DateTime?
+  issuer    String?
+  summary   String?
+  pdfUrl    String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([status])
+}
+
+model SalesPromotion {
+  id        String    @id @default(cuid())
+  name      String
+  docNo     String?
+  status    String    @default("Hiệu lực")
+  startDate DateTime?
+  endDate   DateTime?
+  summary   String?
+  pdfUrl    String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([status])
+}
+
+model QualityInspection {
+  id     String @id @default(cuid())
+  code   String @unique // e.g., QC-20260717-107
+  type   String // "IQC" (Đầu vào), "OQC" (Đầu ra), "PQC" (Trong quy trình)
+  status String @default("Chưa thực hiện") // "Chưa thực hiện", "Đang thực hiện", "Đã hoàn thành", "Huỷ bỏ"
+
+  // Sản phẩm / Vật tư liên kết (tuỳ chọn nếu kiểm tra chung chung)
+  inventoryItemId String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  productName     String? // Tên sản phẩm/vật tư (fallback khi không chọn từ danh mục)
+
+  // Người yêu cầu
+  requesterName String?
+  requesterDept String?
+
+  // Thời gian
+  executionTime DateTime? // Thời gian thực hiện (kế hoạch/thực tế)
+
+  // Kết quả
+  notes         String?
+  result        String? // "Đạt" / "Không đạt" / "Lỗi một phần"
+  inspectorName String? // Tên người kiểm tra
+  metadata      String? // JSON string for extra data like order info
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([type])
+  @@index([inventoryItemId])
+}
+
+// --- LOGISTICS TICKET SYSTEM ---
+enum LogisticsTicketType {
+  BATCH_PACKING
+  MATERIAL_PICKING
+  WARRANTY_MATERIAL
+}
+
+enum LogisticsTicketStatus {
+  PENDING
+  PICKING
+  PACKED
+  COMPLETED
+  CANCELLED
+}
+
+model LogisticsTicket {
+  id     String                @id @default(cuid())
+  code   String                @unique // Mã phiếu (VD: PK-20260728-001)
+  type   LogisticsTicketType
+  status LogisticsTicketStatus @default(PENDING)
+
+  // Relations to source documents
+  saleOrderId    String?
+  saleOrder      SaleOrder?    @relation(fields: [saleOrderId], references: [id], onDelete: Cascade)
+  defectRecordId String?
+  defectRecord   DefectRecord? @relation(fields: [defectRecordId], references: [id], onDelete: SetNull)
+  // productionPlanId String? // Có thể thêm Lệnh sản xuất sau
+
+  // Assignments
+  assignedToId String?
+  assignedTo   Employee? @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  items LogisticsTicketItem[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  @@index([type])
+  @@index([status])
+  @@index([saleOrderId])
+  @@index([defectRecordId])
+  @@index([assignedToId])
+}
+
+model LogisticsTicketItem {
+  id String @id @default(cuid())
+
+  ticketId String
+  ticket   LogisticsTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  requestedQty Float @default(0) // Số lượng yêu cầu (Từ Đơn hàng/Định mức)
+  pickedQty    Float @default(0) // Số lượng thực tế nhân viên đã nhặt
+
+  reservations InventoryReservation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ticketId])
+  @@index([inventoryItemId])
+}
+
+model InventoryReservation {
+  id String @id @default(cuid())
+
+  ticketItemId String
+  ticketItem   LogisticsTicketItem @relation(fields: [ticketItemId], references: [id], onDelete: Cascade)
+
+  inventoryStockId String
+  inventoryStock   InventoryStock @relation(fields: [inventoryStockId], references: [id], onDelete: Cascade)
+
+  reservedQty Float @default(0) // Số lượng đang bị giữ
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ticketItemId])
+  @@index([inventoryStockId])
+}
+
+// Cấu hình danh mục tiêu chí KPI
+model InternalKpiCriteria {
+  id          String   @id @default(cuid())
+  month       Int
+  year        Int
+  code        String?  // Mã tiêu chí (nếu có)
+  name        String   // Tên tiêu chí đánh giá
+  type        String   // Loại: "MANAGER" (Lãnh đạo phòng) hoặc "STAFF" (Nhân viên)
+  targetValue Float    // Chỉ tiêu mục tiêu (VD: 8000000000)
+  weight      Float    // Trọng số (VD: 30)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  details     InternalKpiReportDetail[]
+}
+
+// Báo cáo tổng quan KPI hàng tháng
+model InternalKpiReport {
+  id          String   @id @default(cuid())
+  month       Int      // Tháng (1-12)
+  year        Int      // Năm
+  employeeId  String?  // Tham chiếu ID nhân viên (nếu có)
+  type        String   // "MANAGER" hoặc "STAFF"
+  totalScore  Float    // Tổng điểm hiệu suất
+  status      String   @default("DRAFT") // Trạng thái: DRAFT, PUBLISHED (Ban hành)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  details     InternalKpiReportDetail[]
+  
+  employee    Employee? @relation(fields: [employeeId], references: [id])
+}
+
+// Chi tiết điểm KPI từng tiêu chí trong tháng
+model InternalKpiReportDetail {
+  id             String      @id @default(cuid())
+  reportId       String
+  criteriaId     String
+  targetValue    Float       // Chỉ tiêu tại thời điểm làm báo cáo
+  actualValue    Float       // Thực tế đạt được
+  weight         Float       // Trọng số tại thời điểm làm báo cáo
+  score          Float       // Điểm số tính được
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  report         InternalKpiReport   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  criteria       InternalKpiCriteria @relation(fields: [criteriaId], references: [id], onDelete: Cascade)
+}
+
+// Báo cáo Khung thu nhập
+model InternalIncomeReport {
+  id               String   @id @default(cuid())
+  month            Int
+  year             Int
+  employeeId       String?  
+  type             String   // "MANAGER" hoặc "STAFF"
+  
+  baseSalary       Float    @default(0) // Lương cơ bản
+  performanceBonus Float    @default(0) // Lương hiệu suất
+  allowance        Float    @default(0) // Phụ cấp
+  salesCommission  Float    @default(0) // Hoa hồng bán hàng
+  totalIncome      Float    @default(0) // Tổng thu nhập
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  employee         Employee? @relation(fields: [employeeId], references: [id])
+}
+
+model PaymentNotification {
+  id              String      @id @default(cuid())
+  code            String?     @unique
+  amount          Float
+  paymentMethod   String      @default("transfer") // transfer, cash
+  note            String?
+  status          String      @default("pending") // pending, verified, rejected
+  saleOrderId     String?
+  saleOrder       SaleOrder?  @relation(fields: [saleOrderId], references: [id])
+  customerId      String?
+  customer        Customer?   @relation(fields: [customerId], references: [id])
+  reportedById    String?
+  reportedBy      User?       @relation("ReportedPayments", fields: [reportedById], references: [id])
+  verifiedById    String?
+  verifiedBy      User?       @relation("VerifiedPayments", fields: [verifiedById], references: [id])
+  verifiedAt      DateTime?
+  imageUrl        String?     // Screenshot
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model Revenue {
+  id          String   @id @default(cuid())
+  amount      Float
+  source      String?  // Nguồn doanh thu (VD: Bán hàng, Dịch vụ)
+  referenceId String?  // ID tham chiếu (VD: Mã đơn hàng)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model DealerSupportTicket {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  customerId  String?
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  dealerName  String?
+  type        String    // Cấp phát vật tư & phụ kiện, Yêu cầu đóng gói phân lô, Bảo hành & Linh kiện, Hỗ trợ catalog & POSM, Hỗ trợ kỹ thuật & chính sách
+  title       String
+  content     String?
+  status      String    @default("In Progress") // In Progress, Resolved, Pending, Cancelled
+  requestDate DateTime  @default(now())
+  handlerId   String?
+  handler     Employee? @relation("DealerTicketHandler", fields: [handlerId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([customerId])
+  @@index([handlerId])
+  @@index([status])
+}
