@@ -21,3 +21,4 @@ export * from './Badge';
 export * from './Modal';
 export * from './TaskManagementView';
 export * from './DeleteButton';
+export * from './CasioCalculator';

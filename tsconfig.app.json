@@ -17,7 +17,8 @@
     /* Paths */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "next-auth/react": ["src/lib/next-auth-shim.ts"]
     },
 
     /* Linting */

@@ -435,8 +435,11 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
     },
   ]);
 
-  // Checkbox lựa chọn xóa đơn hàng (Bước 1)
+  // Checkbox lựa chọn xóa dữ liệu cho các bước
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
+  const [selectedRequestIds, setSelectedRequestIds] = useState<Set<string>>(new Set());
+  const [selectedInflowIds, setSelectedInflowIds] = useState<Set<string>>(new Set());
+  const [selectedOutflowIds, setSelectedOutflowIds] = useState<Set<string>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
 
   // ── 2. DỮ LIỆU BƯỚC 2: DUYỆT YÊU CẦU ──
@@ -1034,12 +1037,16 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
     return groups;
   }, [filteredExpenseOps]);
 
-  // Khi chuyển bước: Reset filter & page
+  // Khi chuyển bước: Reset filter, page & các dòng được chọn
   useEffect(() => {
     setSearchTerm('');
     setFilter1('all');
     setFilter2('all');
     setCurrentPage(1);
+    setSelectedOrderIds(new Set());
+    setSelectedRequestIds(new Set());
+    setSelectedInflowIds(new Set());
+    setSelectedOutflowIds(new Set());
   }, [currentStep]);
 
   // Đồng bộ thời gian thực từ cơ sở dữ liệu
@@ -1166,13 +1173,43 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
     onShowToast?.('success', 'Đã duyệt đơn hàng', 'Đơn hàng đã được phê duyệt và chuyển sang bộ phận sản xuất.');
   };
 
-  const handleDeleteSelectedOrders = () => {
-    const count = selectedOrderIds.size;
-    setOrders((prev) => prev.filter((o) => !selectedOrderIds.has(o.id)));
-    setSelectedOrderIds(new Set());
-    setShowDeleteConfirm(false);
-    notifyFinanceUpdated();
-    onShowToast?.('success', 'Đã xóa đơn hàng', `Đã xóa thành công ${count} đơn hàng khỏi hệ thống.`);
+  const currentSelectedCount = useMemo(() => {
+    if (currentStep === 1) return selectedOrderIds.size;
+    if (currentStep === 2) return selectedRequestIds.size;
+    if (currentStep === 3) return selectedInflowIds.size;
+    return selectedOutflowIds.size;
+  }, [currentStep, selectedOrderIds, selectedRequestIds, selectedInflowIds, selectedOutflowIds]);
+
+  const handleDeleteSelectedItems = () => {
+    if (currentStep === 1) {
+      const count = selectedOrderIds.size;
+      setOrders((prev) => prev.filter((o) => !selectedOrderIds.has(o.id)));
+      setSelectedOrderIds(new Set());
+      setShowDeleteConfirm(false);
+      notifyFinanceUpdated();
+      onShowToast?.('success', 'Đã xóa đơn hàng', `Đã xóa thành công ${count} đơn hàng khỏi hệ thống.`);
+    } else if (currentStep === 2) {
+      const count = selectedRequestIds.size;
+      setRequests((prev) => prev.filter((r) => !selectedRequestIds.has(r.id)));
+      setSelectedRequestIds(new Set());
+      setShowDeleteConfirm(false);
+      notifyFinanceUpdated();
+      onShowToast?.('success', 'Đã xóa yêu cầu', `Đã xóa thành công ${count} yêu cầu đề xuất khỏi hệ thống.`);
+    } else if (currentStep === 3) {
+      const count = selectedInflowIds.size;
+      setInflows((prev) => prev.filter((inf) => !selectedInflowIds.has(inf.id)));
+      setSelectedInflowIds(new Set());
+      setShowDeleteConfirm(false);
+      notifyFinanceUpdated();
+      onShowToast?.('success', 'Đã xóa phiếu thu', `Đã xóa thành công ${count} giao dịch dòng vào khỏi hệ thống.`);
+    } else if (currentStep === 4) {
+      const count = selectedOutflowIds.size;
+      setOutflows((prev) => prev.filter((out) => !selectedOutflowIds.has(out.id)));
+      setSelectedOutflowIds(new Set());
+      setShowDeleteConfirm(false);
+      notifyFinanceUpdated();
+      onShowToast?.('success', 'Đã xóa lệnh chi', `Đã xóa thành công ${count} lệnh chi tiền khỏi hệ thống.`);
+    }
   };
 
   // ── XỬ LÝ HÀNH ĐỘNG BƯỚC 2: DUYỆT YÊU CẦU ──
@@ -1600,27 +1637,14 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
         filters={toolbarFilters}
         rightActions={
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {currentStep === 1 && (
-              <Button
-                variant="danger"
-                size="sm"
-                disabled={selectedOrderIds.size === 0}
-                onClick={() => setShowDeleteConfirm(true)}
-                leftIcon={<Trash size={14} />}
-              >
-                Xoá{selectedOrderIds.size > 0 ? ` (${selectedOrderIds.size})` : ''}
-              </Button>
-            )}
-            {currentStep !== 1 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onShowToast?.('info', 'Xuất Excel', 'Đang trích xuất dữ liệu dòng tiền ra file Excel.')}
-                leftIcon={<FileEarmarkExcel size={14} color="#16a34a" />}
-              >
-                Xuất Excel
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onShowToast?.('info', 'Xuất Excel', 'Đang trích xuất dữ liệu dòng tiền ra file Excel.')}
+              leftIcon={<FileEarmarkExcel size={14} color="#16a34a" />}
+            >
+              Xuất Excel
+            </Button>
             {currentStep === 3 && (
               <Button
                 variant="primary"
@@ -1642,6 +1666,15 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                 Tạo mới
               </Button>
             )}
+            <Button
+              variant="danger"
+              size="sm"
+              disabled={currentSelectedCount === 0}
+              onClick={() => setShowDeleteConfirm(true)}
+              leftIcon={<Trash size={14} />}
+            >
+              Xoá{currentSelectedCount > 0 ? ` (${currentSelectedCount})` : ''}
+            </Button>
           </div>
         }
         showMenu={false}
@@ -1783,7 +1816,24 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
           <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
             <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
               <tr className="text-slate-500 text-[11.5px] uppercase tracking-[0.06em] font-bold">
-                <th className="py-2.5 px-3.5 w-44">Mã yêu cầu</th>
+                <th className="py-2.5 px-3.5 w-56">
+                  <div className="flex items-center gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={filteredRequests.length > 0 && selectedRequestIds.size === filteredRequests.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedRequestIds(new Set(filteredRequests.map((r) => r.id)));
+                        } else {
+                          setSelectedRequestIds(new Set());
+                        }
+                      }}
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                      title="Chọn tất cả yêu cầu"
+                    />
+                    <span>Mã yêu cầu</span>
+                  </div>
+                </th>
                 <th className="py-2.5 px-3.5 w-52">Người yêu cầu</th>
                 <th className="py-2.5 px-3.5 min-w-[280px]">Nội dung</th>
                 <th className="py-2.5 px-3.5 w-36 text-center">Trạng thái</th>
@@ -1804,30 +1854,46 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                     className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 cursor-pointer"
                   >
                     <td className="py-2.5 px-3.5 align-top">
-                      <span className="font-bold text-slate-900 text-[13px] block">
-                        {req.code}
-                      </span>
-                      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                        <span
-                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10.5px] font-semibold ${
-                            req.type === 'vat_tu'
-                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                              : req.type === 'tam_ung'
-                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                              : req.type === 'cong_tac'
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                              : 'bg-slate-100 text-slate-700 border border-slate-200'
-                          }`}
-                        >
-                          {req.type === 'vat_tu'
-                            ? 'Mua vật tư'
-                            : req.type === 'tam_ung'
-                            ? 'Tạm ứng'
-                            : req.type === 'cong_tac'
-                            ? 'Công tác'
-                            : 'Hành chính'}
-                        </span>
-                        <span className="text-[11px] text-slate-400">{req.requestDate}</span>
+                      <div className="flex items-start gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={selectedRequestIds.has(req.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            const next = new Set(selectedRequestIds);
+                            if (e.target.checked) next.add(req.id);
+                            else next.delete(req.id);
+                            setSelectedRequestIds(next);
+                          }}
+                          className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="font-bold text-slate-900 text-[13px] block">
+                            {req.code}
+                          </span>
+                          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                            <span
+                              className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10.5px] font-semibold ${
+                                req.type === 'vat_tu'
+                                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                  : req.type === 'tam_ung'
+                                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                  : req.type === 'cong_tac'
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  : 'bg-slate-100 text-slate-700 border border-slate-200'
+                              }`}
+                            >
+                              {req.type === 'vat_tu'
+                                ? 'Mua vật tư'
+                                : req.type === 'tam_ung'
+                                ? 'Tạm ứng'
+                                : req.type === 'cong_tac'
+                                ? 'Công tác'
+                                : 'Hành chính'}
+                            </span>
+                            <span className="text-[11px] text-slate-400">{req.requestDate}</span>
+                          </div>
+                        </div>
                       </div>
                     </td>
                     <td className="py-2.5 px-3.5 align-top">
@@ -1877,7 +1943,24 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
           <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
             <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
               <tr className="text-slate-500 text-[11.5px] uppercase tracking-[0.06em] font-bold">
-                <th className="py-2.5 px-3.5 w-44">Mã hiệu</th>
+                <th className="py-2.5 px-3.5 w-56">
+                  <div className="flex items-center gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={filteredInflows.length > 0 && selectedInflowIds.size === filteredInflows.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedInflowIds(new Set(filteredInflows.map((inf) => inf.id)));
+                        } else {
+                          setSelectedInflowIds(new Set());
+                        }
+                      }}
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                      title="Chọn tất cả giao dịch dòng vào"
+                    />
+                    <span>Mã hiệu</span>
+                  </div>
+                </th>
                 <th className="py-2.5 px-3.5 min-w-[300px]">Nguồn vào</th>
                 <th className="py-2.5 px-3.5 w-48 text-right">Số tiền</th>
                 <th className="py-2.5 px-3.5 w-36 text-center">Trạng thái</th>
@@ -1898,25 +1981,41 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                     className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 cursor-pointer"
                   >
                     <td className="py-2.5 px-3.5 align-top">
-                      <span className="font-bold text-slate-900 text-[13px] block">
-                        {inf.code}
-                      </span>
-                      {inf.voucherCode && (
-                        <span className="text-[11px] text-emerald-700 font-semibold block mt-0.5">
-                          ✓ {inf.voucherCode}
-                        </span>
-                      )}
-                      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                        <span
-                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10.5px] font-semibold ${
-                            inf.method === 'ngan_hang'
-                              ? 'bg-sky-50 text-sky-700 border border-sky-200'
-                              : 'bg-amber-50 text-amber-700 border border-amber-200'
-                          }`}
-                        >
-                          {inf.method === 'ngan_hang' ? 'Chuyển khoản' : 'Tiền mặt'}
-                        </span>
-                        <span className="text-[11px] text-slate-400">{inf.date}</span>
+                      <div className="flex items-start gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={selectedInflowIds.has(inf.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            const next = new Set(selectedInflowIds);
+                            if (e.target.checked) next.add(inf.id);
+                            else next.delete(inf.id);
+                            setSelectedInflowIds(next);
+                          }}
+                          className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="font-bold text-slate-900 text-[13px] block">
+                            {inf.code}
+                          </span>
+                          {inf.voucherCode && (
+                            <span className="text-[11px] text-emerald-700 font-semibold block mt-0.5">
+                              ✓ {inf.voucherCode}
+                            </span>
+                          )}
+                          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                            <span
+                              className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10.5px] font-semibold ${
+                                inf.method === 'ngan_hang'
+                                  ? 'bg-sky-50 text-sky-700 border border-sky-200'
+                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}
+                            >
+                              {inf.method === 'ngan_hang' ? 'Chuyển khoản' : 'Tiền mặt'}
+                            </span>
+                            <span className="text-[11px] text-slate-400">{inf.date}</span>
+                          </div>
+                        </div>
                       </div>
                     </td>
                     <td className="py-2.5 px-3.5 align-top">
@@ -1980,7 +2079,24 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
           <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
             <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
               <tr className="text-slate-500 text-[11.5px] uppercase tracking-[0.06em] font-bold">
-                <th className="py-2.5 px-3.5 w-44">Mã hiệu</th>
+                <th className="py-2.5 px-3.5 w-56">
+                  <div className="flex items-center gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={filteredOutflows.length > 0 && selectedOutflowIds.size === filteredOutflows.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedOutflowIds(new Set(filteredOutflows.map((out) => out.id)));
+                        } else {
+                          setSelectedOutflowIds(new Set());
+                        }
+                      }}
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                      title="Chọn tất cả lệnh chi"
+                    />
+                    <span>Mã hiệu</span>
+                  </div>
+                </th>
                 <th className="py-2.5 px-3.5 min-w-[300px]">Thông tin chi phí</th>
                 <th className="py-2.5 px-3.5 w-48 text-right">Số tiền</th>
                 <th className="py-2.5 px-3.5 w-36 text-center">Trạng thái</th>
@@ -2001,25 +2117,41 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                     className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 cursor-pointer"
                   >
                     <td className="py-2.5 px-3.5 align-top">
-                      <span className="font-bold text-slate-900 text-[13px] block">
-                        {out.code}
-                      </span>
-                      {out.voucherCode && (
-                        <span className="text-[11px] text-emerald-700 font-semibold block mt-0.5">
-                          ✓ {out.voucherCode}
-                        </span>
-                      )}
-                      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                        <span
-                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10.5px] font-semibold ${
-                            out.method === 'unc_ngan_hang'
-                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                              : 'bg-amber-50 text-amber-700 border border-amber-200'
-                          }`}
-                        >
-                          {out.method === 'unc_ngan_hang' ? 'UNC Ngân hàng' : 'Tiền mặt'}
-                        </span>
-                        <span className="text-[11px] text-slate-400">Hạn: {out.dueDate}</span>
+                      <div className="flex items-start gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={selectedOutflowIds.has(out.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            const next = new Set(selectedOutflowIds);
+                            if (e.target.checked) next.add(out.id);
+                            else next.delete(out.id);
+                            setSelectedOutflowIds(next);
+                          }}
+                          className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="font-bold text-slate-900 text-[13px] block">
+                            {out.code}
+                          </span>
+                          {out.voucherCode && (
+                            <span className="text-[11px] text-emerald-700 font-semibold block mt-0.5">
+                              ✓ {out.voucherCode}
+                            </span>
+                          )}
+                          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                            <span
+                              className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10.5px] font-semibold ${
+                                out.method === 'unc_ngan_hang'
+                                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}
+                            >
+                              {out.method === 'unc_ngan_hang' ? 'UNC Ngân hàng' : 'Tiền mặt'}
+                            </span>
+                            <span className="text-[11px] text-slate-400">Hạn: {out.dueDate}</span>
+                          </div>
+                        </div>
                       </div>
                     </td>
                     <td className="py-2.5 px-3.5 align-top">
@@ -2232,15 +2364,31 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
         </Offcanvas>
       )}
 
-      {/* ── CONFIRM DIALOG XÁC NHẬN XÓA ĐƠN HÀNG ── */}
+      {/* ── CONFIRM DIALOG XÁC NHẬN XÓA DỮ LIỆU HÀNG LOẠT ── */}
       <ConfirmDialog
         isOpen={showDeleteConfirm}
-        title="Xác nhận xóa dữ liệu đơn hàng"
-        message={`Bạn có chắc chắn muốn xóa ${selectedOrderIds.size} đơn hàng đã chọn khỏi hệ thống? Dữ liệu sau khi xóa sẽ không thể phục hồi.`}
+        title={
+          currentStep === 1
+            ? 'Xác nhận xóa dữ liệu đơn hàng'
+            : currentStep === 2
+            ? 'Xác nhận xóa yêu cầu đề xuất'
+            : currentStep === 3
+            ? 'Xác nhận xóa giao dịch dòng vào'
+            : 'Xác nhận xóa lệnh chi tiền'
+        }
+        message={
+          currentStep === 1
+            ? `Bạn có chắc chắn muốn xóa ${selectedOrderIds.size} đơn hàng đã chọn khỏi hệ thống? Dữ liệu sau khi xóa sẽ không thể phục hồi.`
+            : currentStep === 2
+            ? `Bạn có chắc chắn muốn xóa ${selectedRequestIds.size} yêu cầu đề xuất đã chọn khỏi hệ thống? Dữ liệu sau khi xóa sẽ không thể phục hồi.`
+            : currentStep === 3
+            ? `Bạn có chắc chắn muốn xóa ${selectedInflowIds.size} giao dịch dòng vào đã chọn khỏi hệ thống? Dữ liệu sau khi xóa sẽ không thể phục hồi.`
+            : `Bạn có chắc chắn muốn xóa ${selectedOutflowIds.size} lệnh chi tiền đã chọn khỏi hệ thống? Dữ liệu sau khi xóa sẽ không thể phục hồi.`
+        }
         variant="danger"
         confirmText="Xác nhận xóa"
         cancelText="Hủy bỏ"
-        onConfirm={handleDeleteSelectedOrders}
+        onConfirm={handleDeleteSelectedItems}
         onClose={() => setShowDeleteConfirm(false)}
       />
 

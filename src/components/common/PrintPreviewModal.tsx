@@ -225,3 +225,32 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
 
   return createPortal(modalNode, document.body);
 };
+
+export const printStyles = {
+  secHead: {
+    border: '1px solid #94a3b8',
+    padding: '6px 10px',
+    fontWeight: 700,
+    fontSize: 12,
+    background: '#f1f5f9',
+    letterSpacing: '0.03em',
+  } as React.CSSProperties,
+
+  bodyCell: {
+    border: '1px solid #cbd5e1',
+    padding: '7px 10px',
+    fontSize: 13.5,
+  } as React.CSSProperties,
+
+  sidebarInput: {
+    width: '100%',
+    padding: '7px 9px',
+    border: '1px solid var(--border)',
+    borderRadius: 6,
+    background: 'var(--background)',
+    color: 'var(--foreground)',
+    fontSize: 12.5,
+    boxSizing: 'border-box' as const,
+    fontFamily: 'inherit',
+  } as React.CSSProperties,
+};

@@ -32,6 +32,7 @@ import { SalesOverviewPage } from './sales/SalesOverviewPage';
 import { FinanceOverviewPage } from './finance/FinanceOverviewPage';
 import { FinanceDebtsPage } from './finance/FinanceDebtsPage';
 import { FinanceAssetsPage } from './finance/FinanceAssetsPage';
+import { LogisticsOverviewPage } from './logistics/LogisticsOverviewPage';
 
 interface CustomerLead {
   id: string;
@@ -126,6 +127,11 @@ export const DepartmentPage: React.FC<{ deptCode?: string }> = ({ deptCode }) =>
   // ── PHÒNG TÀI CHÍNH – KẾ TOÁN (FINANCE) ──
   if (currentDept === 'finance' || currentDept === 'tai-chinh' || currentDept === 'ke-toan') {
     return <FinanceOverviewPage />;
+  }
+
+  // ── BỘ PHẬN KHO HÀNG (LOGISTICS / KHO VẬN) ──
+  if (currentDept === 'logistics' || currentDept === 'kho' || currentDept === 'kho-hang' || currentDept === 'warehouse') {
+    return <LogisticsOverviewPage />;
   }
 
   // === WORKFLOW STEP STATE ===

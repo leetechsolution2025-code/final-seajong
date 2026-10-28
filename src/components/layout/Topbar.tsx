@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useDepartment } from '../../context/DepartmentContext';
-import { CalculatorModal } from './CalculatorModal';
+import { CasioCalculator } from '../common/CasioCalculator';
 import { NotificationOffcanvas } from './NotificationOffcanvas';
 import { MessageOffcanvas } from './MessageOffcanvas';
 import { AccountSettingsModal } from './AccountSettingsModal';
@@ -385,8 +385,8 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
         </div>
       </header>
 
-      {/* Floating Calculator Modal (F2) */}
-      <CalculatorModal isOpen={calcOpen} onClose={() => setCalcOpen(false)} />
+      {/* Máy tính cầm tay Casio DX-120B Draggable (F2) */}
+      <CasioCalculator isOpen={calcOpen} onClose={() => setCalcOpen(false)} />
 
       {/* Notification Slide Drawer */}
       <NotificationOffcanvas isOpen={notifOpen} onClose={() => setNotifOpen(false)} />

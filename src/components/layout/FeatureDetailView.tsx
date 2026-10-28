@@ -398,7 +398,7 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
         };
       case 'material-picking':
         return {
-          title: 'Cấp phát vật tư phân xưởng',
+          title: 'Cấp phát vật tư',
           groupName: 'VẬN HÀNH KHO',
           icon: 'bi-tools',
           color: 'cyan',
@@ -407,7 +407,7 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
         };
       case 'batch-packing':
         return {
-          title: 'Gom hàng & Dán nhãn bao bì',
+          title: 'Gom hàng và dán nhãn',
           groupName: 'VẬN HÀNH KHO',
           icon: 'bi-box-seam-fill',
           color: 'cyan',

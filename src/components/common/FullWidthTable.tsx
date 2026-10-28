@@ -136,6 +136,11 @@ export const FullWidthTable: React.FC<FullWidthTableProps> = ({
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
+        .full-width-table-wrapper table {
+          width: 100% !important;
+          min-width: 100% !important;
+          border-collapse: collapse;
+        }
       `}</style>
     </div>
   );

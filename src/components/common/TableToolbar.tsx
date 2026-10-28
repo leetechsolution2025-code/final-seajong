@@ -30,10 +30,12 @@ export interface TableToolbarProps {
   onSearchChange?: (value: string) => void;
   searchPlaceholder?: string;
   searchMinWidth?: string;
-  filters?: TableToolbarFilter[];
+  searchWidth?: number | string;
+  filters?: TableToolbarFilter[] | React.ReactNode;
   customFilters?: React.ReactNode;
   actionsBeforeSearch?: React.ReactNode;
   actionsAfterSearch?: React.ReactNode;
+  actions?: React.ReactNode;
   rightActions?: React.ReactNode;
   wrap?: boolean;
   style?: React.CSSProperties;
@@ -54,10 +56,12 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
   onSearchChange,
   searchPlaceholder = 'Tìm kiếm dữ liệu...',
   searchMinWidth = '200px',
-  filters = [],
+  searchWidth,
+  filters,
   customFilters,
   actionsBeforeSearch,
   actionsAfterSearch,
+  actions,
   rightActions,
   wrap = false,
   style,
@@ -161,23 +165,31 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
         )}
 
         {/* 1. Dynamic Filter Selects (Lọc theo phòng ban, lọc theo trạng thái...) hiển thị trước */}
-        {filters.map((filter, idx) => (
-          <div
-            key={filter.id || idx}
-            style={{ minWidth: filter.minWidth || '180px', flex: '0 0 auto' }}
-          >
-            <Select
-              value={filter.value}
-              onChange={(e) => filter.onChange(e.target.value)}
-              options={filter.options}
-              leftIcon={filter.leftIcon}
-              aria-label={filter.ariaLabel}
-              style={{ marginBottom: 0 }}
+        {Array.isArray(filters) ? (
+          filters.map((filter, idx) => (
+            <div
+              key={filter.id || idx}
+              style={{ minWidth: filter.minWidth || '180px', flex: '0 0 auto' }}
             >
-              {filter.children}
-            </Select>
-          </div>
-        ))}
+              <Select
+                value={filter.value}
+                onChange={(e) => filter.onChange(e.target.value)}
+                options={filter.options}
+                leftIcon={filter.leftIcon}
+                aria-label={filter.ariaLabel}
+                style={{ marginBottom: 0 }}
+              >
+                {filter.children}
+              </Select>
+            </div>
+          ))
+        ) : (
+          filters && (
+            <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {filters}
+            </div>
+          )
+        )}
 
         {/* Custom Filters (Khoảng ngày, Toggle...) hiển thị liền kề các bộ lọc */}
         {customFilters && (
@@ -188,7 +200,7 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
 
         {/* 2. Hộp tìm kiếm (Search Box) hiển thị sau các bộ lọc */}
         {onSearchChange !== undefined && (
-          <div style={{ flex: `1 1 ${searchMinWidth}`, minWidth: '220px' }}>
+          <div style={{ flex: searchWidth ? `0 0 ${typeof searchWidth === 'number' ? `${searchWidth}px` : searchWidth}` : `1 1 ${searchMinWidth}`, minWidth: '220px' }}>
             <Input
               placeholder={searchPlaceholder}
               value={searchValue ?? ''}
@@ -209,7 +221,7 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
 
       {/* Khu vực hành động bên phải: luôn có icon ba chấm ở cuối bên phải */}
       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
-        {rightActions}
+        {rightActions || actions}
 
         {showMenu && (
           <div ref={menuRef} style={{ position: 'relative' }}>

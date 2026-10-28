@@ -25,6 +25,11 @@ import { FinanceReportsPage } from '../../pages/finance/FinanceReportsPage';
 import { FinanceJournalPage } from '../../pages/finance/FinanceJournalPage';
 import { FinanceDeclarationPage } from '../../pages/finance/FinanceDeclarationPage';
 import { FinanceAdvancesPage } from '../../pages/finance/FinanceAdvancesPage';
+import { LogisticsOverviewPage } from '../../pages/logistics/LogisticsOverviewPage';
+import { LogisticsInboundPage } from '../../pages/logistics/LogisticsInboundPage';
+import { LogisticsMaterialPickingPage } from '../../pages/logistics/LogisticsMaterialPickingPage';
+import { LogisticsBatchPackingPage } from '../../pages/logistics/LogisticsBatchPackingPage';
+import { WarehousesPage } from '../../pages/logistics/WarehousesPage';
 import { DocumentApprovalPage } from '../../pages/departments/bom/DocumentApprovalPage';
 import { CategoryManagementPage } from '../../pages/departments/bom/CategoryManagementPage';
 import { LaborRulesPage } from '../../pages/departments/bom/LaborRulesPage';
@@ -66,6 +71,39 @@ export const DashboardView: React.FC = () => {
     if (activeMenuKey === 'overview' || !activeMenuKey) {
       return <FinanceOverviewPage />;
     }
+  }
+
+  // ── BỘ PHẬN KHO HÀNG (LOGISTICS / KHO VẬN) ──
+  if (activeDeptCode === 'logistics' || activeDeptCode === 'kho' || activeDeptCode === 'kho-hang' || activeDeptCode === 'warehouse') {
+    if (activeMenuKey === 'system' || activeMenuKey === 'warehouses' || activeMenuKey === 'warehouse-system') {
+      return <WarehousesPage />;
+    }
+    if (activeMenuKey === 'inbound') {
+      return <LogisticsInboundPage />;
+    }
+    if (activeMenuKey === 'material-picking') {
+      return <LogisticsMaterialPickingPage />;
+    }
+    if (activeMenuKey === 'batch-packing') {
+      return <LogisticsBatchPackingPage />;
+    }
+    if (activeMenuKey === 'overview' || !activeMenuKey) {
+      return <LogisticsOverviewPage />;
+    }
+  }
+
+  // Khi người dùng chọn chức năng từ menu trực tiếp
+  if (activeMenuKey === 'inbound') {
+    return <LogisticsInboundPage />;
+  }
+  if (activeMenuKey === 'material-picking') {
+    return <LogisticsMaterialPickingPage />;
+  }
+  if (activeMenuKey === 'batch-packing') {
+    return <LogisticsBatchPackingPage />;
+  }
+  if (activeMenuKey === 'system' || activeMenuKey === 'warehouses' || activeMenuKey === 'warehouse-system') {
+    return <WarehousesPage />;
   }
 
   // ── PHÒNG KINH DOANH (SALES) ROUTES ──

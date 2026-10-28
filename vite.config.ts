@@ -69,6 +69,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      'next-auth/react': path.resolve(__dirname, './src/lib/next-auth-shim.ts'),
     },
   },
   server: {
