@@ -251,8 +251,7 @@ export const WarehousesPage: React.FC = () => {
       icon="bi-building"
       badge="HỆ THỐNG KHO BÃI"
       color="blue"
-      tickerContext="logistics"
-      customTickerNews={LOGISTICS_TICKER_ITEMS}
+      hideTicker={true}
     >
       {/* Toast thông báo */}
       {toastMsg && (

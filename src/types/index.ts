@@ -7,6 +7,22 @@ export interface EmployeeInfo {
   branchCode?: string | null;
 }
 
+export interface CustomerInfo {
+  id: string;
+  code: string;
+  name: string;
+  dienThoai?: string | null;
+  address?: string | null;
+  hanMucCongNo?: number;
+  doanhSoCamKet?: number;
+  loai?: string | null;
+  nguoiChamSoc?: {
+    id: string;
+    fullName: string;
+    phone?: string | null;
+  } | null;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -14,7 +30,10 @@ export interface User {
   role: string;
   permissions: string[];
   deptAccess?: string[];
+  departmentCode?: string;
+  position?: string;
   employee?: EmployeeInfo | null;
+  customer?: CustomerInfo | null;
 }
 
 export interface Department {

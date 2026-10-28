@@ -148,9 +148,9 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
           {/* Brand header in Topbar (Logo + Brand Text) */}
           <button
             type="button"
-            onClick={() => setActiveDeptCode('board')}
+            onClick={() => setActiveDeptCode(user?.role === 'DEALER' ? 'dealer' : 'board')}
             className="flex items-center gap-3 text-left cursor-pointer border-0 bg-transparent group p-0"
-            title="Về Ban Giám đốc (Trang chủ)"
+            title={user?.role === 'DEALER' ? "Về Cổng Đại lý (Trang chủ)" : "Về Ban Giám đốc (Trang chủ)"}
           >
             <div className="h-10 w-auto flex items-center justify-center shrink-0">
               <img src="/logo.png" alt="Seajong" className="h-9 w-auto object-contain" />
@@ -160,7 +160,7 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
                 CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM
               </span>
               <span className="text-[11px] text-slate-500 font-normal leading-none mt-0.5">
-                Kinh doanh thiết bị phòng tắm, nhà bếp
+                {user?.role === 'DEALER' ? 'Hệ thống đại lý và nhà phân phối' : 'Kinh doanh thiết bị phòng tắm, nhà bếp'}
               </span>
             </div>
           </button>
@@ -169,23 +169,30 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
         {/* ── RIGHT: Quick Actions with Bootstrap Icons & User Profile ── */}
         <div className="flex items-center gap-1 sm:gap-1.5">
           
-          {/* 1. App Switcher Grid (bi-grid-3x3-gap-fill) */}
-          <div className="relative" ref={switcherRef}>
-            <button
-              type="button"
-              onClick={() => {
-                setSwitcherOpen(!switcherOpen);
-                setUserMenuOpen(false);
-              }}
-              className={`w-[38px] h-[38px] flex items-center justify-center rounded-xl transition-all cursor-pointer border-0 ${
-                switcherOpen 
-                  ? 'bg-indigo-50 text-indigo-600' 
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 bg-transparent'
-              }`}
-              title="Quản lý trực tiếp (Chuyển bộ phận)"
-            >
-              <i className="bi bi-grid-3x3-gap-fill text-[18px]" />
-            </button>
+          {user?.role === 'DEALER' ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-sky-50 to-blue-50 border border-sky-200 text-sky-800 rounded-full text-xs font-semibold mr-1 shadow-2xs">
+              <i className="bi bi-shop text-sky-600 text-sm" />
+              <span className="hidden md:inline text-slate-600 font-medium">Đại lý:</span>
+              <span className="font-bold text-sky-900">{user?.customer?.code || user?.name}</span>
+            </div>
+          ) : (
+            /* 1. App Switcher Grid (bi-grid-3x3-gap-fill) */
+            <div className="relative" ref={switcherRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSwitcherOpen(!switcherOpen);
+                  setUserMenuOpen(false);
+                }}
+                className={`w-[38px] h-[38px] flex items-center justify-center rounded-xl transition-all cursor-pointer border-0 ${
+                  switcherOpen 
+                    ? 'bg-indigo-50 text-indigo-600' 
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 bg-transparent'
+                }`}
+                title="Quản lý trực tiếp (Chuyển bộ phận)"
+              >
+                <i className="bi bi-grid-3x3-gap-fill text-[19px]" />
+              </button>
 
             {/* Switcher Dropdown */}
             {switcherOpen && (
@@ -236,6 +243,7 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
               </div>
             )}
           </div>
+          )}
 
           {/* 2. Calculator (bi-calculator) */}
           <button

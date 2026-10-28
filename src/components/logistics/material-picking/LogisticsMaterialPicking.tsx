@@ -914,7 +914,7 @@ export function LogisticsMaterialPicking() {
                             onClick={() => handleToggleOrderItemPick(it.ticketItemId, it.soLuongYeuCau)}
                           >
                             <div 
-                              className={`w-4 h-4 mx-auto rounded border flex items-center justify-center cursor-pointer transition-all ${
+                              className={`w-3.5 h-3.5 mx-auto rounded-[3px] border flex items-center justify-center cursor-pointer transition-all ${
                                 isFullyPicked 
                                   ? "bg-emerald-600 border-emerald-600 text-white shadow-xs" 
                                   : isPicked 
@@ -923,7 +923,7 @@ export function LogisticsMaterialPicking() {
                               }`}
                               title={isFullyPicked ? "Bỏ chọn nhặt" : "Nhặt đủ số lượng"}
                             >
-                              <i className="bi bi-check text-[11px] font-bold" />
+                              <i className="bi bi-check text-[10px] font-bold" />
                             </div>
                           </td>
 
@@ -1160,7 +1160,7 @@ export function LogisticsMaterialPicking() {
                           onClick={() => handleTogglePick(item)}
                         >
                           <div 
-                            className={`w-4 h-4 mx-auto rounded border flex items-center justify-center cursor-pointer transition-all ${
+                            className={`w-3.5 h-3.5 mx-auto rounded-[3px] border flex items-center justify-center cursor-pointer transition-all ${
                               isFullyPicked 
                                 ? "bg-emerald-600 border-emerald-600 text-white shadow-xs" 
                                 : isPicked 
@@ -1169,7 +1169,7 @@ export function LogisticsMaterialPicking() {
                             }`}
                             title={isFullyPicked ? "Bỏ chọn nhặt" : "Nhặt đủ toàn bộ"}
                           >
-                            <i className="bi bi-check text-[11px] font-bold" />
+                            <i className="bi bi-check text-[10px] font-bold" />
                           </div>
                         </td>
 

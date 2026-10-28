@@ -34,7 +34,9 @@ export const DepartmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (!u) return;
 
     let targetDept = 'board';
-    if (u.employee?.departmentCode) {
+    if (u.role === 'DEALER' || u.departmentCode === 'dealer') {
+      targetDept = 'dealer';
+    } else if (u.employee?.departmentCode) {
       targetDept = u.employee.departmentCode.toLowerCase();
     } else if (u.role === 'ADMIN') {
       targetDept = 'board';
@@ -66,7 +68,10 @@ export const DepartmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const isNewLogin = !lastUserIdRef.current && (!storedUserId || storedUserId !== currentUserId);
     const isSwitchedUser = Boolean(lastUserIdRef.current && lastUserIdRef.current !== currentUserId);
 
-    if (isNewLogin || isSwitchedUser) {
+    if (user.role === 'DEALER') {
+      setActiveDeptCodeState('dealer');
+      localStorage.setItem('seajong_active_dept', 'dealer');
+    } else if (isNewLogin || isSwitchedUser) {
       // Khi phát hiện tài khoản đăng nhập mới hoặc tài khoản khác với tài khoản lưu trước đó:
       // Luôn điều hướng ngay lập tức về phòng ban của chính người dùng đó!
       navigateToUserDept(user);
@@ -92,6 +97,9 @@ export const DepartmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [activeDeptCode]);
 
   const setActiveDeptCode = (code: string) => {
+    if (user?.role === 'DEALER' && code !== 'dealer') {
+      return; // Cấm đại lý chuyển sang phòng ban nội bộ khác
+    }
     const cleanCode = code.toLowerCase().trim();
     setActiveDeptCodeState(cleanCode);
     localStorage.setItem('seajong_active_dept', cleanCode);

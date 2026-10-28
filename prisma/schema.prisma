@@ -147,6 +147,8 @@ model User {
   createdNotifications Notification[]        @relation("NotificationCreator")
   recruitmentRequests  RecruitmentRequest[]  @relation("UserRequests")
   client               Client?               @relation(fields: [clientId], references: [id])
+  customerId           String?               @unique
+  customer             Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
   meetings             Meeting[]             @relation("UserMeetings")
   reportedPayments     PaymentNotification[] @relation("ReportedPayments")
   verifiedPayments     PaymentNotification[] @relation("VerifiedPayments")
@@ -555,6 +557,7 @@ model Customer {
   thuongDoanhSoNam   String?
   thuongVuotDoanhSo  String?
   dealerSupportTickets DealerSupportTicket[]
+  user               User?
 
   @@index([nguon])
   @@index([nhom])

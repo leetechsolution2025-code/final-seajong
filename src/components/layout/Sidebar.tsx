@@ -26,6 +26,16 @@ interface NavSection {
  * của dự án client-seajong/src/app/(dashboard)/layout.tsx
  */
 const DEPT_SIDEBAR_CONFIGS: Record<string, { deptName: string; sections: NavSection[] }> = {
+  // 0. CỔNG THÔNG TIN ĐẠI LÝ (/dealer)
+  dealer: {
+    deptName: 'Hệ thống đại lý và nhà phân phối',
+    sections: [
+      { id: 'orders', label: 'Đơn hàng', icon: 'bi-bag-check', flat: true },
+      { id: 'debts', label: 'Công nợ và điểm thưởng', icon: 'bi-cash-coin', flat: true },
+      { id: 'support', label: 'Yêu cầu hỗ trợ', icon: 'bi-headset', flat: true },
+    ],
+  },
+
   // 1. BAN GIÁM ĐỐC (/board)
   board: {
     deptName: 'Ban Giám đốc',
@@ -535,22 +545,26 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
   const currentConfig = DEPT_SIDEBAR_CONFIGS[activeDeptCode] || DEPT_SIDEBAR_CONFIGS.board;
   const isOverview = activeMenuKey === 'overview';
 
-  // Kiểm tra hiển thị mục "Kho hàng" trực tiếp (chuẩn client-seajong: ẩn ở logistics, marketing, production, finance, qa, hr, board)
-  const isWarehouseHidden = ['board', 'hr', 'logistics', 'marketing', 'production', 'finance', 'qa'].includes(activeDeptCode);
+  const isDealer = activeDeptCode === 'dealer' || activeDeptCode === 'dai-ly';
 
+  // Kiểm tra hiển thị mục "Kho hàng" trực tiếp (chuẩn client-seajong: ẩn ở logistics, marketing, production, finance, qa, hr, board, dealer)
+  const isWarehouseHidden = isDealer || ['board', 'hr', 'logistics', 'marketing', 'production', 'finance', 'qa'].includes(activeDeptCode);
+
+  const isLogisticsDept = activeDeptCode === 'logistics' || activeDeptCode === 'kho' || activeDeptCode === 'kho-hang' || activeDeptCode === 'warehouse';
   const isSalesDept = activeDeptCode === 'sales' || activeDeptCode === 'kd' || activeDeptCode === 'kinh-doanh';
   const isFinanceDept = activeDeptCode === 'finance' || activeDeptCode === 'tai-chinh' || activeDeptCode === 'ke-toan';
 
-  // Nhóm Yêu cầu và duyệt yêu cầu (ẩn ở board, hr, marketing, sales và finance theo chuẩn component menu trang)
+  // Nhóm Yêu cầu và duyệt yêu cầu (ẩn ở board, hr, marketing, sales, finance và dealer)
   const showApprovalGroup =
+    !isDealer &&
     activeDeptCode !== 'board' &&
     activeDeptCode !== 'hr' &&
     activeDeptCode !== 'marketing' &&
     !isSalesDept &&
     !isFinanceDept;
 
-  // Ẩn nhóm "Lưu trữ" ở trang Marketing, Sales và Finance (đã có trong dropdown menu tiện ích của trang)
-  const isArchiveHidden = activeDeptCode === 'marketing' || isSalesDept || isFinanceDept;
+  // Ẩn nhóm "Lưu trữ" ở trang Marketing, Sales, Finance, Logistics và Dealer
+  const isArchiveHidden = isDealer || activeDeptCode === 'marketing' || isSalesDept || isFinanceDept || isLogisticsDept;
 
   return (
     <aside
@@ -881,75 +895,77 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
           )}
         </div>
 
-        {/* ── 3. Section CÔNG VIỆC CÁ NHÂN (được ghim xuống chân thanh bên bằng mt-auto chuẩn client-seajong) ── */}
-        <div className="mt-auto pt-4 pb-3">
-          {!collapsed ? (
-            <p className="px-3 pb-1 mb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest font-sans opacity-75">
-              CÔNG VIỆC CÁ NHÂN
-            </p>
-          ) : (
-            <div className="h-px bg-slate-200 my-2"></div>
-          )}
+        {/* ── 3. Section CÔNG VIỆC CÁ NHÂN (chỉ dành cho nhân viên nội bộ, ẩn đối với đại lý) ── */}
+        {!isDealer && (
+          <div className="mt-auto pt-4 pb-3">
+            {!collapsed ? (
+              <p className="px-3 pb-1 mb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest font-sans opacity-75">
+                CÔNG VIỆC CÁ NHÂN
+              </p>
+            ) : (
+              <div className="h-px bg-slate-200 my-2"></div>
+            )}
 
-          <div className="space-y-0.5">
-            {/* Danh sách công việc (không còn badge số) */}
-            <button
-              type="button"
-              onClick={() => setActiveMenuKey('my_tasks')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] font-normal transition-all cursor-pointer border-0 bg-transparent text-left ${
-                activeMenuKey === 'my_tasks'
-                  ? 'text-blue-600 font-semibold bg-blue-50/40'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              } ${collapsed ? 'justify-center px-2' : ''}`}
-              title={collapsed ? 'Danh sách công việc' : undefined}
-            >
-              <i
-                className={`bi bi-list-check text-[17px] shrink-0 ${
-                  activeMenuKey === 'my_tasks' ? 'text-blue-600' : 'text-slate-400'
-                }`}
-              />
-              {!collapsed && <span>Danh sách công việc</span>}
-            </button>
+            <div className="space-y-0.5">
+              {/* Danh sách công việc (không còn badge số) */}
+              <button
+                type="button"
+                onClick={() => setActiveMenuKey('my_tasks')}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] font-normal transition-all cursor-pointer border-0 bg-transparent text-left ${
+                  activeMenuKey === 'my_tasks'
+                    ? 'text-blue-600 font-semibold bg-blue-50/40'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                } ${collapsed ? 'justify-center px-2' : ''}`}
+                title={collapsed ? 'Danh sách công việc' : undefined}
+              >
+                <i
+                  className={`bi bi-list-check text-[17px] shrink-0 ${
+                    activeMenuKey === 'my_tasks' ? 'text-blue-600' : 'text-slate-400'
+                  }`}
+                />
+                {!collapsed && <span>Danh sách công việc</span>}
+              </button>
 
-            {/* Chấm công */}
-            <button
-              type="button"
-              onClick={() => setActiveMenuKey('my_attendance')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] font-normal transition-all cursor-pointer border-0 bg-transparent text-left ${
-                activeMenuKey === 'my_attendance'
-                  ? 'text-blue-600 font-semibold bg-blue-50/40'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              } ${collapsed ? 'justify-center px-2' : ''}`}
-              title={collapsed ? 'Chấm công' : undefined}
-            >
-              <i
-                className={`bi bi-clock-history text-[16px] shrink-0 ${
-                  activeMenuKey === 'my_attendance' ? 'text-blue-600' : 'text-slate-400'
-                }`}
-              />
-              {!collapsed && <span>Chấm công</span>}
-            </button>
+              {/* Chấm công */}
+              <button
+                type="button"
+                onClick={() => setActiveMenuKey('my_attendance')}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] font-normal transition-all cursor-pointer border-0 bg-transparent text-left ${
+                  activeMenuKey === 'my_attendance'
+                    ? 'text-blue-600 font-semibold bg-blue-50/40'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                } ${collapsed ? 'justify-center px-2' : ''}`}
+                title={collapsed ? 'Chấm công' : undefined}
+              >
+                <i
+                  className={`bi bi-clock-history text-[16px] shrink-0 ${
+                    activeMenuKey === 'my_attendance' ? 'text-blue-600' : 'text-slate-400'
+                  }`}
+                />
+                {!collapsed && <span>Chấm công</span>}
+              </button>
 
-            {/* Yêu cầu cá nhân */}
-            <button
-              type="button"
-              onClick={() => setActiveMenuKey('my_requests')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] font-normal transition-all cursor-pointer border-0 bg-transparent text-left ${
-                activeMenuKey === 'my_requests'
-                  ? 'text-blue-600 font-semibold bg-blue-50/40'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              } ${collapsed ? 'justify-center px-2' : ''}`}
-              title={collapsed ? 'Yêu cầu cá nhân' : undefined}
-            >
-              <i
-                className={`bi bi-file-earmark-plus text-[16px] shrink-0 ${
-                  activeMenuKey === 'my_requests' ? 'text-blue-600' : 'text-slate-400'
-                }`}
-              />
-              {!collapsed && <span>Yêu cầu cá nhân</span>}
-            </button>
+              {/* Yêu cầu cá nhân */}
+              <button
+                type="button"
+                onClick={() => setActiveMenuKey('my_requests')}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] font-normal transition-all cursor-pointer border-0 bg-transparent text-left ${
+                  activeMenuKey === 'my_requests'
+                    ? 'text-blue-600 font-semibold bg-blue-50/40'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                } ${collapsed ? 'justify-center px-2' : ''}`}
+                title={collapsed ? 'Yêu cầu cá nhân' : undefined}
+              >
+                <i
+                  className={`bi bi-file-earmark-plus text-[16px] shrink-0 ${
+                    activeMenuKey === 'my_requests' ? 'text-blue-600' : 'text-slate-400'
+                  }`}
+                />
+                {!collapsed && <span>Yêu cầu cá nhân</span>}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </aside>
   );

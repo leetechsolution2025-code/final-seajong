@@ -1,0 +1,8 @@
+{
+  "enabled": true,
+  "retentionDays": 90,
+  "keepStockCounts": true,
+  "runAtHour": 0,
+  "lastRunAt": null,
+  "lastDeletedCount": 0
+}

@@ -22,8 +22,10 @@ import {
   ChevronLeft,
   ChevronRight,
   FileEarmarkText,
+  CalendarEvent,
 } from 'react-bootstrap-icons';
 import { StepPage } from '../../components/common/StepPage';
+import { EventOffcanvas } from '../../components/common/EventOffcanvas';
 import { TableToolbar, type TableToolbarFilter } from '../../components/common/TableToolbar';
 import { FullWidthTable } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
@@ -111,6 +113,7 @@ export const LogisticsOverviewPage: React.FC = () => {
 
   const [confirmCompleteId, setConfirmCompleteId] = useState<string | null>(null);
   const [showToastMsg, setShowToastMsg] = useState<{ type: 'success' | 'info' | 'error'; message: string } | null>(null);
+  const [isEventCalendarOpen, setIsEventCalendarOpen] = useState<boolean>(false);
 
   // Vị trí ảnh đang xem trong slide hình ảnh Offcanvas
   const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
@@ -560,6 +563,20 @@ export const LogisticsOverviewPage: React.FC = () => {
       currentStep={currentStep}
       onStepChange={setCurrentStep}
       hideTicker={true}
+      stepperExtraRight={
+        <div className="flex items-center gap-2 pr-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsEventCalendarOpen(true)}
+            leftIcon={<CalendarEvent className="text-blue-600 shrink-0" size={15} />}
+            className="h-9 px-4 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-[13px] font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer hover:border-slate-300 select-none shrink-0"
+            title="Mở Lịch sự kiện Seajong"
+          >
+            <span className="font-bold text-slate-800 tracking-tight">Lịch sự kiện</span>
+          </Button>
+        </div>
+      }
     >
       {/* Toast thông báo */}
       {showToastMsg && (
@@ -1508,6 +1525,12 @@ export const LogisticsOverviewPage: React.FC = () => {
         variant="success"
         onConfirm={() => confirmCompleteId && handleCompleteTask(confirmCompleteId)}
         onClose={() => setConfirmCompleteId(null)}
+      />
+
+      {/* ── OFFCANVAS LỊCH SỰ KIỆN ĐA NĂNG ── */}
+      <EventOffcanvas
+        isOpen={isEventCalendarOpen}
+        onClose={() => setIsEventCalendarOpen(false)}
       />
     </StepPage>
   );

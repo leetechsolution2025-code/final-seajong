@@ -124,7 +124,7 @@ export const LoginPage: React.FC = () => {
   };
 
   const selectDemoUser = async (user: DemoUser, autoLogin: boolean = true) => {
-    const pw = user.email === 'admin@seajong.com' ? 'Admin@123' : 'Pass@123';
+    const pw = user.role === 'DEALER' ? '12345' : (user.email === 'admin@seajong.com' ? 'Admin@123' : 'Pass@123');
     setEmail(user.email);
     setPassword(pw);
     setError(null);
@@ -203,22 +203,22 @@ export const LoginPage: React.FC = () => {
 
           {/* Form */}
           <form onSubmit={handleSubmit} noValidate className="login-form">
-            {/* Email / Username */}
+            {/* Phone / Dealer Code / Email */}
             <div className="login-field">
               <label htmlFor="login-email" className="login-label">
-                Tên đăng nhập
+                Số điện thoại, Mã đại lý hoặc Email
               </label>
               <div className="login-input-wrap">
                 <span className="login-input-icon">
                   <User className="w-4 h-4" />
                 </span>
                 <input
-                  type="email"
+                  type="text"
                   id="login-email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@seajong.com"
-                  autoComplete="email"
+                  placeholder="SĐT (VD: 0969875581), Mã đại lý (KH0018) hoặc Email"
+                  autoComplete="username"
                   disabled={loading}
                   className="login-input"
                 />

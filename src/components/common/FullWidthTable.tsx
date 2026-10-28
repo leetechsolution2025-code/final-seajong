@@ -141,6 +141,13 @@ export const FullWidthTable: React.FC<FullWidthTableProps> = ({
           min-width: 100% !important;
           border-collapse: collapse;
         }
+        .full-width-table-wrapper input[type="checkbox"],
+        .full-width-table-wrapper .form-check-input {
+          width: 0.875rem !important;
+          height: 0.875rem !important;
+          min-width: 0.875rem !important;
+          min-height: 0.875rem !important;
+        }
       `}</style>
     </div>
   );

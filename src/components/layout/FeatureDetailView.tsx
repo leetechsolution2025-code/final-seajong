@@ -294,11 +294,11 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
         };
       case 'inventory-reports':
         return {
-          title: 'Báo cáo kho & Định mức tồn trữ',
+          title: 'Báo cáo kho',
           groupName: 'THEO DÕI KHO HÀNG',
           icon: 'bi-bar-chart-line',
-          color: 'emerald',
-          desc: 'Tốc độ quay vòng hàng tồn kho, cảnh báo chạm ngưỡng an toàn tối thiểu',
+          color: 'blue',
+          desc: 'Báo cáo tổng hợp xuất nhập tồn, biến động chi tiết thẻ kho và nhật ký đối soát kiểm kê kho',
           badge: 'BÁO CÁO KHO',
         };
       case 'journal-entries':

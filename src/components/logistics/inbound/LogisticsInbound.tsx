@@ -4,6 +4,7 @@ import { TableToolbar } from "@/components/common/TableToolbar";
 import { FullWidthTable } from "@/components/common/FullWidthTable";
 import { Pagination } from "@/components/common/Pagination";
 import { HoverImage } from "@/components/ui/HoverImage";
+import { WarehouseCategoryFilter } from "@/components/common/WarehouseCategoryFilter";
 
 // Import existing modals from plan-finance
 import { NhapKhoModal } from "@/components/plan-finance/kho_hang/NhapKhoModal";
@@ -108,9 +109,17 @@ export function LogisticsInbound({ onStatsChange }: { onStatsChange?: (stats: an
 
   // Load warehouses once on mount
   useEffect(() => {
-    fetch("/api/logistics/warehouses")
+    fetch("/api/logistics/warehouses?limit=100")
       .then((res) => res.json())
-      .then((data) => setWarehouses(Array.isArray(data) ? data : []))
+      .then((data) => {
+        if (data && Array.isArray(data.items)) {
+          setWarehouses(data.items);
+        } else if (Array.isArray(data)) {
+          setWarehouses(data);
+        } else {
+          setWarehouses([]);
+        }
+      })
       .catch((err) => console.error("Error fetching warehouses:", err));
   }, []);
 
@@ -314,32 +323,15 @@ export function LogisticsInbound({ onStatsChange }: { onStatsChange?: (stats: an
         onSearchChange={setSearch}
         searchPlaceholder="Tìm theo tên, mã hàng hóa..."
         searchMinWidth="220px"
+        customFilters={
+          <WarehouseCategoryFilter
+            warehouse={filterWarehouse}
+            onWarehouseChange={setFilterWarehouse}
+            category={filterCategory}
+            onCategoryChange={setFilterCategory}
+          />
+        }
         filters={[
-          {
-            id: "warehouse",
-            label: "Kho hàng",
-            value: filterWarehouse,
-            onChange: (val) => {
-              setFilterWarehouse(val);
-              setFilterCategory("");
-            },
-            minWidth: "170px",
-            options: [
-              { label: "Tất cả kho hàng", value: "" },
-              ...warehouses.map((w) => ({ label: w.name, value: w.id })),
-            ],
-          },
-          {
-            id: "category",
-            label: "Danh mục",
-            value: filterCategory,
-            onChange: setFilterCategory,
-            minWidth: "170px",
-            options: [
-              { label: "Tất cả danh mục", value: "" },
-              ...categories.map((c) => ({ label: c.name, value: c.id })),
-            ],
-          },
           {
             id: "status",
             label: "Trạng thái",

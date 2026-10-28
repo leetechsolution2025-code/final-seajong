@@ -117,7 +117,7 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
     // Mục In ấn / Báo cáo
     items.push({
       id: 'print-report',
-      label: printLabel || 'In báo giá',
+      label: printLabel || 'In báo cáo',
       icon: <Printer size={15} style={{ color: '#3b82f6', flexShrink: 0 }} />,
       onClick: onPrint || (() => window.print()),
     });

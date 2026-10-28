@@ -30,6 +30,8 @@ import { LogisticsInboundPage } from '../../pages/logistics/LogisticsInboundPage
 import { LogisticsMaterialPickingPage } from '../../pages/logistics/LogisticsMaterialPickingPage';
 import { LogisticsBatchPackingPage } from '../../pages/logistics/LogisticsBatchPackingPage';
 import { WarehousesPage } from '../../pages/logistics/WarehousesPage';
+import { LogisticsReportsPage } from '../../pages/logistics/LogisticsReportsPage';
+import { LogisticsAuditLogsPage } from '../../pages/logistics/LogisticsAuditLogsPage';
 import { DocumentApprovalPage } from '../../pages/departments/bom/DocumentApprovalPage';
 import { CategoryManagementPage } from '../../pages/departments/bom/CategoryManagementPage';
 import { LaborRulesPage } from '../../pages/departments/bom/LaborRulesPage';
@@ -38,9 +40,15 @@ import { DirectorPlanPage } from '../../pages/departments/bom/DirectorPlanPage';
 import { TaskManagementPage } from '../../pages/departments/bom/TaskManagementPage';
 import { MyTasksPage } from '../../pages/departments/bom/MyTasksPage';
 import { MyRequestsPage } from '../../pages/departments/bom/MyRequestsPage';
+import { DealerPortalPage } from '../../pages/dealer/DealerPortalPage';
 
 export const DashboardView: React.FC = () => {
   const { activeDeptCode, activeMenuKey } = useDepartment();
+
+  // ── CỔNG THÔNG TIN ĐẠI LÝ (DEALER PORTAL) ──
+  if (activeDeptCode === 'dealer' || activeDeptCode === 'dai-ly') {
+    return <DealerPortalPage />;
+  }
 
   // ── PHÒNG TÀI CHÍNH – KẾ TOÁN (FINANCE) ROUTES ──
   if (activeDeptCode === 'finance' || activeDeptCode === 'tai-chinh' || activeDeptCode === 'ke-toan') {
@@ -87,12 +95,24 @@ export const DashboardView: React.FC = () => {
     if (activeMenuKey === 'batch-packing') {
       return <LogisticsBatchPackingPage />;
     }
+    if (activeMenuKey === 'inventory-reports' || activeMenuKey === 'reports' || activeMenuKey === 'bao-cao-kho') {
+      return <LogisticsReportsPage />;
+    }
+    if (activeMenuKey === 'audit-logs' || activeMenuKey === 'nhat-ky-kho' || activeMenuKey === 'nhat-ky-hoat-dong-kho') {
+      return <LogisticsAuditLogsPage />;
+    }
     if (activeMenuKey === 'overview' || !activeMenuKey) {
       return <LogisticsOverviewPage />;
     }
   }
 
   // Khi người dùng chọn chức năng từ menu trực tiếp
+  if (activeMenuKey === 'inventory-reports' || activeMenuKey === 'bao-cao-kho') {
+    return <LogisticsReportsPage />;
+  }
+  if (activeMenuKey === 'audit-logs' || activeMenuKey === 'nhat-ky-kho' || activeMenuKey === 'nhat-ky-hoat-dong-kho') {
+    return <LogisticsAuditLogsPage />;
+  }
   if (activeMenuKey === 'inbound') {
     return <LogisticsInboundPage />;
   }
