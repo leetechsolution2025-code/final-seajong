@@ -126,14 +126,16 @@ const calculateBomPrice = (dm: any, baseGiaBan: number, margin: number, method: 
 };
 
 // ── Main TaoDonHangModal Component ──────────────────────────────────────────
-export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agency", editOrder }: {
+export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agency", editOrder, mode = "order" }: {
   open: boolean;
   onClose: () => void;
   customer: CustomerRow | null;
   onSaved?: () => void;
   type?: string;
   editOrder?: any;
+  mode?: "order" | "quotation";
 }) {
+  const isQuotation = mode === "quotation";
   const toast = useToast();
   const { user } = useAuth();
   const isAdmin = user?.role?.toUpperCase() === "ADMIN" || user?.role?.toUpperCase() === "SUPERADMIN";
@@ -148,7 +150,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
   const defaultNgayLap = fmtDate(today);
 
   const [info, setInfo] = React.useState({
-    soPhieu: "DBH-Tự động tạo",
+    soPhieu: isQuotation ? "BG-Tự động tạo" : "DBH-Tự động tạo",
     ngayLap: defaultNgayLap,
     ngayGiaoHang: defaultNgayLap,
     tenNguoiNhan: "",
@@ -189,12 +191,13 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
       });
       setInfo(prev => ({
         ...prev,
-        tenNguoiNhan: prev.tenNguoiNhan || customer.name || "",
-        sdtNguoiNhan: prev.sdtNguoiNhan || customer.dienThoai || "",
-        diaChiGiaoHang: prev.diaChiGiaoHang || customer.address || "",
+        soPhieu: isQuotation ? "BG-Tự động tạo" : "DBH-Tự động tạo",
+        tenNguoiNhan: customer.name || prev.tenNguoiNhan || "",
+        sdtNguoiNhan: customer.dienThoai || prev.sdtNguoiNhan || "",
+        diaChiGiaoHang: customer.address || prev.diaChiGiaoHang || "",
       }));
     }
-  }, [customer, editOrder]);
+  }, [customer, editOrder, isQuotation]);
 
   React.useEffect(() => {
     if (open && editOrder) {
@@ -242,9 +245,9 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
         ngayLap: editOrder.ngayDat ? new Date(editOrder.ngayDat).toISOString().split("T")[0] : prev.ngayLap,
         ngayGiaoHang: editOrder.ngayGiao ? new Date(editOrder.ngayGiao).toISOString().split("T")[0] : prev.ngayGiaoHang,
         ghiChu: rawGhiChu || prev.ghiChu || "",
-        tenNguoiNhan: tenNguoiNhan || prev.tenNguoiNhan || "",
-        sdtNguoiNhan: sdtNguoiNhan || prev.sdtNguoiNhan || "",
-        diaChiGiaoHang: diaChiGiaoHang || prev.diaChiGiaoHang || "",
+        tenNguoiNhan: tenNguoiNhan || editOrder.nguoiNhan || editOrder.customer?.name || prev.tenNguoiNhan || "",
+        sdtNguoiNhan: sdtNguoiNhan || editOrder.soDienThoai || editOrder.customer?.dienThoai || prev.sdtNguoiNhan || "",
+        diaChiGiaoHang: diaChiGiaoHang || editOrder.diaChiGiaoHang || editOrder.customer?.address || prev.diaChiGiaoHang || "",
         chiPhiKhac: editOrder.chiPhiKhac || chiPhiKhac || 0,
         chietKhauTong: editOrder.discount || 0,
         thue: editOrder.vat || 0,
@@ -939,7 +942,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
           ngayBaoGia: info.ngayLap,
           ngayHetHan: info.ngayGiaoHang,
           ngayGiaoHang: info.ngayGiaoHang,
-          trangThai: "won",
+          trangThai: isQuotation ? "sent" : "won",
           uuTien: "medium",
           tongTien: tamTinh,
           daThanhToan: info.daThanhToan,
@@ -976,11 +979,14 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
         });
 
         if (!res.ok) {
-          throw new Error((await res.json()).error ?? "Lỗi tạo đơn hàng");
+          throw new Error((await res.json()).error ?? (isQuotation ? "Lỗi tạo báo giá" : "Lỗi tạo đơn hàng"));
         }
         const createdOrder = await res.json().catch(() => ({}));
         const displayCode = createdOrder.code || createdOrder.order?.code || info.soPhieu;
-        toast.success("Tạo đơn hàng thành công", `Đơn hàng ${displayCode} đã được lưu.`);
+        toast.success(
+          isQuotation ? "Tạo báo giá thành công" : "Tạo đơn hàng thành công",
+          `${isQuotation ? "Báo giá" : "Đơn hàng"} ${displayCode} đã được lưu.`
+        );
       }
       if (onSaved) onSaved();
       onClose();
@@ -1392,8 +1398,16 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
           </div>
           <div>
             <p className="order-modal-header-title" style={{ margin: 0, fontWeight: 800, fontSize: 16, color: "#0f172a", letterSpacing: "-0.01em", display: "flex", alignItems: "center", gap: 8 }}>
-              <span className="hidden sm:inline">{editOrder ? "Cập nhật đơn bán hàng (SO)" : "Lập đơn bán hàng (SO)"}</span>
-              <span className="inline sm:hidden">{editOrder ? "Cập nhật đơn" : "Đơn bán hàng"}</span>
+              <span className="hidden sm:inline">
+                {isQuotation
+                  ? editOrder ? "Cập nhật báo giá (BG)" : "Lập báo giá (BG)"
+                  : editOrder ? "Cập nhật đơn bán hàng (SO)" : "Lập đơn bán hàng (SO)"}
+              </span>
+              <span className="inline sm:hidden">
+                {isQuotation
+                  ? editOrder ? "Cập nhật BG" : "Lập báo giá"
+                  : editOrder ? "Cập nhật đơn" : "Đơn bán hàng"}
+              </span>
               <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 font-bold border border-sky-200">
                 {type === "retail" ? "BÁN LẺ" : "ĐẠI LÝ"}
               </span>
@@ -1419,13 +1433,19 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
             variant="primary"
             size="sm"
             onClick={handleSave}
-            disabled={saving || isOutOfStock}
+            disabled={saving || (!isQuotation && isOutOfStock)}
             isLoading={saving}
             leftIcon={<i className="bi bi-check-circle-fill" />}
             style={{ padding: "0 18px", fontWeight: 700, fontSize: 13, borderRadius: 8, height: 36 }}
           >
-            <span className="hidden sm:inline">{editOrder ? "Cập nhật đơn" : "Tạo đơn hàng"}</span>
-            <span className="inline sm:hidden">{editOrder ? "Lưu" : "Tạo đơn"}</span>
+            <span className="hidden sm:inline">
+              {isQuotation
+                ? editOrder ? "Cập nhật báo giá" : "Tạo báo giá"
+                : editOrder ? "Cập nhật đơn" : "Tạo đơn hàng"}
+            </span>
+            <span className="inline sm:hidden">
+              {isQuotation ? "Tạo BG" : editOrder ? "Lưu" : "Tạo đơn"}
+            </span>
           </Button>
           <Button
             variant="outline"

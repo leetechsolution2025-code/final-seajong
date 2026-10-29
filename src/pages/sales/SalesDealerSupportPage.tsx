@@ -6,15 +6,11 @@ import { Pagination } from '../../components/common/Pagination';
 import { Button } from '../../components/common/Button';
 import { Offcanvas } from '../../components/common/Offcanvas';
 import { Select } from '../../components/common/Select';
-import { DepartmentActionMenu } from '../../components/common/DepartmentActionMenu';
-import { EventOffcanvas } from '../../components/common/EventOffcanvas';
 import type { ModernStepItem } from '../../types';
 import type { TickerItem } from '../../components/layout/DynamicTicker';
 import {
   Headset,
-  CheckCircle,
   Send,
-  CalendarEvent,
   PersonCheck,
   Shop,
 } from 'react-bootstrap-icons';
@@ -69,7 +65,6 @@ export const SalesDealerSupportPage: React.FC = () => {
   const [responseStatus, setResponseStatus] = useState<string>('In Progress');
   const [responseContent, setResponseContent] = useState<string>('');
   const [savingResponse, setSavingResponse] = useState<boolean>(false);
-  const [isEventCalendarOpen, setIsEventCalendarOpen] = useState<boolean>(false);
 
   const fetchTickets = async () => {
     setLoading(true);
@@ -255,21 +250,6 @@ export const SalesDealerSupportPage: React.FC = () => {
         setPage(1);
         setStatusFilter('all');
       }}
-      stepperExtraRight={
-        <div className="flex items-center gap-2 pr-1">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsEventCalendarOpen(true)}
-            leftIcon={<CalendarEvent className="text-blue-600 shrink-0" size={15} />}
-            className="h-9 px-4 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-[13px] font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer hover:border-slate-300 select-none shrink-0"
-            title="Mở Lịch sự kiện Seajong"
-          >
-            <span className="font-bold text-slate-800 tracking-tight">Lịch sự kiện</span>
-          </Button>
-          <DepartmentActionMenu />
-        </div>
-      }
       customTickerNews={tickerItems}
     >
       <div className="flex flex-col h-full flex-1 overflow-hidden bg-white">
@@ -351,8 +331,7 @@ export const SalesDealerSupportPage: React.FC = () => {
               <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 text-slate-800 text-[11px] font-extrabold uppercase">
                 <tr>
                   <th className="py-2.5 px-3.5 text-center w-[55px]">STT</th>
-                  <th className="py-2.5 px-3.5 w-[165px]">Mã yêu cầu</th>
-                  <th className="py-2.5 px-3.5 w-[220px]">Đại lý gửi</th>
+                  <th className="py-2.5 px-3.5 w-[270px]">Mã yêu cầu & Đại lý gửi</th>
                   <th className="py-2.5 px-3.5 w-[125px]">Ngày gửi</th>
                   <th className="py-2.5 px-3.5 w-[205px]">Phân loại yêu cầu</th>
                   <th className="py-2.5 px-3.5">Tiêu đề & Nội dung chi tiết</th>
@@ -384,7 +363,7 @@ export const SalesDealerSupportPage: React.FC = () => {
                         {(page - 1) * pageSize + idx + 1}
                       </td>
                       <td className="py-3 px-3.5 align-middle">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-mono font-bold text-xs text-sky-700 hover:underline">
                             {tk.code}
                           </span>
@@ -393,27 +372,30 @@ export const SalesDealerSupportPage: React.FC = () => {
                               Gấp
                             </span>
                           )}
-                        </div>
-                        {relatedOrderCode && (
-                          <span className="text-[10.5px] font-mono text-slate-400 block mt-0.5">
-                            Đơn: #{relatedOrderCode}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3.5 align-middle">
-                        <div className="font-bold text-slate-900 text-xs truncate max-w-[205px]">
-                          {tk.customer?.name || tk.dealerName}
-                        </div>
-                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-0.5">
-                          {tk.customer?.code && (
-                            <span className="font-mono font-semibold text-sky-700">
-                              {tk.customer.code}
+                          {relatedOrderCode && (
+                            <span className="text-[10.5px] font-mono text-slate-400">
+                              • Đơn: #{relatedOrderCode}
                             </span>
                           )}
-                          {tk.customer?.dienThoai && (
-                            <span className="font-mono">• {tk.customer.dienThoai}</span>
-                          )}
                         </div>
+                        <div className="font-bold text-slate-900 text-xs truncate max-w-[250px] mt-0.5">
+                          {tk.customer?.name || tk.dealerName}
+                        </div>
+                        {(tk.customer?.code || tk.customer?.dienThoai) && (
+                          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-0.5">
+                            {tk.customer?.code && (
+                              <span className="font-mono font-semibold text-sky-700">
+                                {tk.customer.code}
+                              </span>
+                            )}
+                            {tk.customer?.dienThoai && (
+                              <span className="font-mono">
+                                {tk.customer?.code ? '• ' : ''}
+                                {tk.customer.dienThoai}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-3.5 text-xs text-slate-600 align-middle whitespace-nowrap">
                         {new Date(tk.requestDate || tk.createdAt).toLocaleDateString('vi-VN')}
@@ -650,11 +632,6 @@ export const SalesDealerSupportPage: React.FC = () => {
             );
           })()}
       </Offcanvas>
-
-      <EventOffcanvas
-        isOpen={isEventCalendarOpen}
-        onClose={() => setIsEventCalendarOpen(false)}
-      />
     </StepPage>
   );
 };

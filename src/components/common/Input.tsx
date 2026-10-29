@@ -277,6 +277,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       if (!isNumeric) return (value as string) ?? '';
       return formatNumericDisplay(value, effectiveHideZero, effectiveNumberGroup);
     });
+    const userClearedRef = useRef(false);
+    const lastSyncedValueRef = useRef(value);
 
     // Đồng bộ khi value prop bên ngoài thay đổi
     useEffect(() => {
@@ -284,12 +286,24 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         return;
       }
 
+      if (isFocused) {
+        lastSyncedValueRef.current = value;
+        return;
+      }
+
+      if (userClearedRef.current && value === lastSyncedValueRef.current) {
+        return;
+      }
+
+      userClearedRef.current = false;
+      lastSyncedValueRef.current = value;
+
       const currentParsed = parseSmartNumber(displayValue) ?? 0;
       const incomingParsed = parseSmartNumber(value) ?? 0;
 
       // Nếu giá trị truyền vào là 0 (hoặc rỗng) và hideZero đang bật
       if (effectiveHideZero && (incomingParsed === 0 || value === '' || value === null || value === undefined)) {
-        if (!isFocused && displayValue !== '') {
+        if (displayValue !== '') {
           setDisplayValue('');
         }
         return;
@@ -329,6 +343,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
 
       // Nếu người dùng xóa rỗng ô input
       if (!raw || raw.trim() === '') {
+        userClearedRef.current = true;
         setDisplayValue('');
         if (onNumericChange) onNumericChange(0, '');
         if (onChange) {
@@ -338,6 +353,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         return;
       }
 
+      userClearedRef.current = false;
       const { display, numeric, cleanString } = formatTypingValue(
         raw,
         effectiveAllowDecimal,

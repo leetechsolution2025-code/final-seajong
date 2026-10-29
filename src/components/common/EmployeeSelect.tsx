@@ -30,6 +30,27 @@ export async function fetchEmployeesFromDb(): Promise<EmployeeItem[]> {
 
   isFetchingEmployees = true;
   try {
+    const boardRes = await fetch('/api/board/users');
+    if (boardRes.ok) {
+      const boardData = await boardRes.json();
+      if (Array.isArray(boardData) && boardData.length > 0) {
+        const realEmps = boardData.filter((u: any) => u.employee);
+        const listToUse = realEmps.length > 0 ? realEmps : boardData;
+        const mapped: EmployeeItem[] = listToUse.map((u: any) => ({
+          id: u.id,
+          name: u.employee?.fullName || u.name,
+          department: u.employee?.departmentName || u.department || 'Công ty',
+          position: u.employee?.position || u.position || '',
+          phone: u.employee?.phone || u.phone || '',
+          email: u.email || '',
+        }));
+        cachedEmployees = mapped;
+        listeners.forEach((fn) => fn(mapped));
+        listeners.length = 0;
+        return mapped;
+      }
+    }
+
     const res = await fetch('/api/users');
     if (res.ok) {
       const data = await res.json();
@@ -49,7 +70,7 @@ export async function fetchEmployeesFromDb(): Promise<EmployeeItem[]> {
       }
     }
   } catch (err) {
-    console.warn('Không thể tải danh sách nhân viên từ /api/users:', err);
+    console.warn('Không thể tải danh sách nhân viên:', err);
   } finally {
     isFetchingEmployees = false;
   }
@@ -303,7 +324,7 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
           <span
             style={{
               position: 'absolute',
-              right: '26px',
+              right: clearable && selectedNames.length > 0 && !disabled && !readOnly ? '42px' : '26px',
               top: '50%',
               transform: 'translateY(-50%)',
               fontSize: '0.6875rem',
@@ -595,7 +616,7 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
                         flexShrink: 0,
                       }}
                     >
-                      {staff.department}
+                      {departmentFilter ? (staff.position || staff.department) : staff.department}
                     </span>
                   </div>
                 );

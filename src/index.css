@@ -178,6 +178,17 @@ input, button, select, textarea, optgroup, table, th, td {
   font-family: inherit;
 }
 
+/* Ẩn chức năng spin tăng/giảm giá trị trong các ô input number */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

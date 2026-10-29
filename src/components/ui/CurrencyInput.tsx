@@ -34,6 +34,7 @@ export function CurrencyInput({
   readOnly,
   className,
 }: CurrencyInputProps) {
+  const [focused, setFocused] = React.useState(false);
   // Hiển thị nội bộ dạng string đã format
   const [display, setDisplay] = React.useState<string>(() =>
     value > 0 ? value.toLocaleString("vi-VN") : ""
@@ -41,8 +42,12 @@ export function CurrencyInput({
 
   // Đồng bộ khi value bên ngoài thay đổi (ví dụ reset form)
   React.useEffect(() => {
-    setDisplay(value > 0 ? value.toLocaleString("vi-VN") : "");
-  }, [value]);
+    if (focused) {
+      setDisplay(value > 0 ? String(value) : "");
+    } else {
+      setDisplay(value > 0 ? value.toLocaleString("vi-VN") : "");
+    }
+  }, [value, focused]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
@@ -54,22 +59,23 @@ export function CurrencyInput({
       return;
     }
     const num = parseInt(digits, 10);
-    // Format với dấu chấm phân cách hàng nghìn vi-VN
-    setDisplay(num.toLocaleString("vi-VN"));
+    setDisplay(focused ? String(num) : num.toLocaleString("vi-VN"));
     onChange(num);
   };
 
   const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    setFocused(true);
     // Khi focus: chỉ hiển thị số thuần (không có dấu chấm) để dễ sửa
     if (value > 0) {
       setDisplay(String(value));
-      // Di chuyển cursor về cuối
-      setTimeout(() => e.target.select(), 0);
+    } else {
+      setDisplay("");
     }
     onFocus?.(e);
   };
 
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    setFocused(false);
     // Khi blur: format lại với dấu chấm
     if (value > 0) {
       setDisplay(value.toLocaleString("vi-VN"));
@@ -86,7 +92,7 @@ export function CurrencyInput({
       name={name}
       className={className}
       value={display}
-      placeholder={placeholder}
+      placeholder={focused ? "" : placeholder}
       disabled={disabled}
       readOnly={readOnly}
       style={style}

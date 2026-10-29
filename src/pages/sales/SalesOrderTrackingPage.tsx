@@ -5,10 +5,10 @@ import { FullWidthTable } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
 import { Button } from '../../components/common/Button';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
-import { DepartmentActionMenu } from '../../components/common/DepartmentActionMenu';
 import { EventOffcanvas } from '../../components/common/EventOffcanvas';
 import { Offcanvas } from '../../components/common/Offcanvas';
 import { TaoDonHangModal } from '../../components/plan-finance/bao_gia/TaoDonHangModal';
+import { BaoGiaSanitaryModal } from '../../components/plan-finance/bao_gia/BaoGiaSanitaryModal';
 import { getCustomerGroupInfo } from '../../utils/customerGroupUtils';
 import type { ModernStepItem } from '../../types';
 import type { TickerItem } from '../../components/layout/DynamicTicker';
@@ -19,7 +19,6 @@ import {
   Trash,
   Camera,
   Printer,
-  CalendarEvent,
   ExclamationTriangle,
   ArrowRight,
   XLg,
@@ -77,6 +76,11 @@ interface SaleOrder {
   trangThaiKho?: string;
   ghiChu?: string;
   nguoiPhuTrach?: string;
+  nguoiDatHang?: string;
+  nguoiNhan?: string;
+  soDienThoai?: string;
+  diaChiGiaoHang?: string;
+  orderSource?: string;
   createdAt: string;
   saleOrderItems?: any[];
 }
@@ -145,13 +149,20 @@ const STEP_ITEMS: ModernStepItem[] = [
   },
   {
     num: 3,
+    id: 'DEALER_ORDER',
+    title: 'Đơn hàng từ đại lý',
+    desc: 'Đơn đại lý tự lập & gửi lên',
+    icon: 'bi-buildings',
+  },
+  {
+    num: 4,
     id: 'OMNICHANNEL',
     title: 'Bán hàng đa kênh',
     desc: 'Gom đơn từ các kênh bán hàng',
     icon: 'bi-shop',
   },
   {
-    num: 4,
+    num: 5,
     id: 'RETURN',
     title: 'Hàng trả về',
     desc: 'Xử lý hàng trả về & bảo hành',
@@ -229,7 +240,47 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// ── Main Sales Order Tracking Component (Chuyển từ trang Tổng quan hiện có) ─────
+// ── Dealer Order Status Badge (Chỉ 3 trạng thái: Chưa xử lý, Đã xử lý, Từ chối) ──
+function DealerOrderStatusBadge({ status }: { status: string }) {
+  const s = (status || '').toLowerCase();
+  if (s === 'rejected' || s === 'cancelled' || s === 'canceled') {
+    return (
+      <span
+        className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
+        style={{ backgroundColor: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}
+      >
+        Từ chối
+      </span>
+    );
+  }
+  if (
+    s === 'approved' ||
+    s === 'in_production' ||
+    s === 'active' ||
+    s === 'processing' ||
+    s === 'delivering' ||
+    s === 'delivered' ||
+    s === 'completed' ||
+    s === 'done'
+  ) {
+    return (
+      <span
+        className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
+        style={{ backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' }}
+      >
+        Đã xử lý
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
+      style={{ backgroundColor: '#fffbeb', color: '#b45309', border: '1px solid #fde68a' }}
+    >
+      Chưa xử lý
+    </span>
+  );
+}
 export const SalesOrderTrackingPage: React.FC = () => {
   // Step 2 is active by default in client-seajong
   const [currentStep, setCurrentStep] = useState<number>(2);
@@ -261,7 +312,20 @@ export const SalesOrderTrackingPage: React.FC = () => {
   const [orderMatchingCustomers, setOrderMatchingCustomers] = useState<CustomerOption[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<SaleOrder | null>(null);
 
-  // ── Step 3: Omnichannel State ──
+  // ── Step 3: Dealer Orders State (Đơn hàng từ đại lý) ──
+  const [dealerOrders, setDealerOrders] = useState<SaleOrder[]>([]);
+  const [dealerOrderLoading, setDealerOrderLoading] = useState<boolean>(false);
+  const [dealerOrderSearch, setDealerOrderSearch] = useState<string>('');
+  const [dealerOrderStatusFilter, setDealerOrderStatusFilter] = useState<string>('');
+  const [dealerOrderTimeFilter, setDealerOrderTimeFilter] = useState<string>('');
+  const [dealerOrderPage, setDealerOrderPage] = useState<number>(1);
+  const [dealerOrderPageSize, setDealerOrderPageSize] = useState<number>(10);
+  const [dealerOrderTotal, setDealerOrderTotal] = useState<number>(0);
+  const [selectedDealerOrderIds, setSelectedDealerOrderIds] = useState<Set<string>>(new Set());
+  const [confirmDeleteDealerOrder, setConfirmDeleteDealerOrder] = useState<boolean>(false);
+  const [updatingOrderStatus, setUpdatingOrderStatus] = useState<boolean>(false);
+
+  // ── Step 4: Omnichannel State ──
   const [omnichannelOrders, setOmnichannelOrders] = useState<OmnichannelOrder[]>([]);
   const [omnichannelLoading, setOmnichannelLoading] = useState<boolean>(false);
   const [omnichannelChannelFilter, setOmnichannelChannelFilter] = useState<string>('all');
@@ -272,7 +336,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
   const [selectedOmniIds, setSelectedOmniIds] = useState<string[]>([]);
   const [isSyncingChannels, setIsSyncingChannels] = useState<boolean>(false);
 
-  // ── Step 4: Returns / Defect State ──
+  // ── Step 5: Returns / Defect State ──
   const [defects, setDefects] = useState<DefectReturn[]>([]);
   const [defectLoading, setDefectLoading] = useState<boolean>(false);
   const [defectSearch, setDefectSearch] = useState<string>('');
@@ -293,6 +357,8 @@ export const SalesOrderTrackingPage: React.FC = () => {
 
   // ── Modals & Drawers ──
   const [showCreateOrderModal, setShowCreateOrderModal] = useState<boolean>(false);
+  const [showCreateQuotationModal, setShowCreateQuotationModal] = useState<boolean>(false);
+  const [editingOrderForModal, setEditingOrderForModal] = useState<any | null>(null);
   const [showOrderCameraScanner, setShowOrderCameraScanner] = useState<boolean>(false);
   const [showPrintOrderModal, setShowPrintOrderModal] = useState<boolean>(false);
   const [confirmDeleteOrder, setConfirmDeleteOrder] = useState<boolean>(false);
@@ -347,6 +413,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
       const params = new URLSearchParams({
         page: String(orderPage),
         pageSize: String(orderPageSize),
+        orderSource: 'system',
       });
       if (orderSearch) params.set('search', orderSearch);
       if (orderStatusFilter) params.set('trangThai', orderStatusFilter);
@@ -363,6 +430,37 @@ export const SalesOrderTrackingPage: React.FC = () => {
       console.error('Lỗi tải đơn hàng:', e);
     } finally {
       setOrderLoading(false);
+    }
+  };
+
+  // ── Fetch Dealer Orders (Đơn hàng từ đại lý) ────────────────────────────────
+  const fetchDealerOrders = async () => {
+    setDealerOrderLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(dealerOrderPage),
+        pageSize: String(dealerOrderPageSize),
+        orderSource: 'dealer_portal',
+      });
+      if (dealerOrderSearch) params.set('search', dealerOrderSearch);
+      if (dealerOrderStatusFilter) params.set('trangThai', dealerOrderStatusFilter);
+      if (dealerOrderTimeFilter) params.set('time', dealerOrderTimeFilter);
+
+      const res = await fetch(`/api/plan-finance/sales?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        const nonDraftItems = (data.items || []).filter(
+          (o: SaleOrder) =>
+            (o.orderSource === 'dealer_portal' || (o.code || '').startsWith('DH-DL-')) &&
+            o.trangThai !== 'draft'
+        );
+        setDealerOrders(nonDraftItems);
+        setDealerOrderTotal(nonDraftItems.length);
+      }
+    } catch (e) {
+      console.error('Lỗi tải đơn hàng đại lý:', e);
+    } finally {
+      setDealerOrderLoading(false);
     }
   };
 
@@ -439,8 +537,13 @@ export const SalesOrderTrackingPage: React.FC = () => {
   }, [orderPage, orderPageSize, orderSearch, orderStatusFilter, orderTimeFilter]);
 
   useEffect(() => {
-    if (currentStep === 3) fetchOmnichannelOrders();
-    if (currentStep === 4) fetchDefects();
+    fetchDealerOrders();
+  }, [dealerOrderPage, dealerOrderPageSize, dealerOrderSearch, dealerOrderStatusFilter, dealerOrderTimeFilter]);
+
+  useEffect(() => {
+    if (currentStep === 3) fetchDealerOrders();
+    if (currentStep === 4) fetchOmnichannelOrders();
+    if (currentStep === 5) fetchDefects();
   }, [currentStep]);
 
   useEffect(() => {
@@ -462,6 +565,41 @@ export const SalesOrderTrackingPage: React.FC = () => {
       fetchOrders();
     } catch (e) {
       console.error('Lỗi xoá đơn hàng:', e);
+    }
+  };
+
+  const handleDeleteSelectedDealerOrders = async () => {
+    try {
+      await Promise.all(
+        Array.from(selectedDealerOrderIds).map((id) =>
+          fetch(`/api/plan-finance/sales/${id}`, { method: 'DELETE' })
+        )
+      );
+      setSelectedDealerOrderIds(new Set());
+      setConfirmDeleteDealerOrder(false);
+      fetchDealerOrders();
+    } catch (e) {
+      console.error('Lỗi xoá đơn hàng đại lý:', e);
+    }
+  };
+
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
+    setUpdatingOrderStatus(true);
+    try {
+      const res = await fetch(`/api/plan-finance/sales/${orderId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trangThai: newStatus }),
+      });
+      if (res.ok) {
+        setSelectedOrder((prev) => (prev && prev.id === orderId ? { ...prev, trangThai: newStatus } : prev));
+        fetchDealerOrders();
+        fetchOrders();
+      }
+    } catch (e) {
+      console.error('Lỗi cập nhật trạng thái đơn hàng:', e);
+    } finally {
+      setUpdatingOrderStatus(false);
     }
   };
 
@@ -496,9 +634,14 @@ export const SalesOrderTrackingPage: React.FC = () => {
   };
 
   const handleSelectCustomerForAction = (customer: CustomerOption) => {
+    setEditingOrderForModal(null);
     setActiveCustomerForNew(customer);
     setShowCustomerSelect(false);
-    setShowCreateOrderModal(true);
+    if (customerDrawerMode === 'quotation') {
+      setShowCreateQuotationModal(true);
+    } else {
+      setShowCreateOrderModal(true);
+    }
   };
 
   const handleOrderScanned = (scannedOrder: any) => {
@@ -566,22 +709,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
       steps={STEP_ITEMS}
       currentStep={currentStep}
       onStepChange={setCurrentStep}
-      stepperExtraRight={
-        <div className="flex items-center gap-2 pr-1">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsEventCalendarOpen(true)}
-            leftIcon={<CalendarEvent className="text-blue-600 shrink-0" size={15} />}
-            className="h-9 px-4 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-[13px] font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer hover:border-slate-300 select-none shrink-0"
-            title="Mở Lịch sự kiện Seajong"
-          >
-            <span className="font-bold text-slate-800 tracking-tight">Lịch sự kiện</span>
-          </Button>
-
-          <DepartmentActionMenu />
-        </div>
-      }
+      hideTicker={true}
       customTickerNews={tickerItems}
     >
       <div className="flex-1 flex flex-col h-full overflow-hidden bg-white">
@@ -1027,65 +1155,220 @@ export const SalesOrderTrackingPage: React.FC = () => {
         )}
 
         {/* ══════════════════════════════════════════════════════════════════════
-            STEP 3: BÁN HÀNG ĐA KÊNH (OMNICHANNEL)
+            STEP 3: ĐƠN HÀNG TỪ ĐẠI LÝ (DEALER PORTAL ORDERS)
             ══════════════════════════════════════════════════════════════════════ */}
         {currentStep === 3 && (
-          <div className="flex-1 flex flex-col h-full overflow-hidden p-3 gap-3">
-            {/* Top 4 Channel KPI summary cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 flex-shrink-0">
-              <div className="p-3 bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-xl border border-orange-200/80 shadow-xs flex flex-col justify-between">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-orange-900 uppercase">Shopee Mall</span>
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">
-                    🟢 Đã kết nối API
-                  </span>
+          <div className="flex-1 flex flex-col h-full overflow-hidden">
+            <TableToolbar
+              showMenu={false}
+              searchPlaceholder="Tìm mã đơn đại lý, tên đại lý, mã ĐL, SĐT..."
+              searchValue={dealerOrderSearch}
+              onSearchChange={(v) => {
+                setDealerOrderSearch(v);
+                setDealerOrderPage(1);
+              }}
+              filters={[
+                {
+                  id: 'dealer-status',
+                  ariaLabel: 'Trạng thái',
+                  value: dealerOrderStatusFilter,
+                  onChange: (val) => {
+                    setDealerOrderStatusFilter(val);
+                    setDealerOrderPage(1);
+                  },
+                  options: [
+                    { value: '', label: 'Tất cả trạng thái' },
+                    { value: 'pending', label: 'Chưa xử lý' },
+                    { value: 'approved', label: 'Đã xử lý' },
+                    { value: 'rejected', label: 'Từ chối' },
+                  ],
+                },
+                {
+                  id: 'dealer-time',
+                  ariaLabel: 'Thời gian',
+                  value: dealerOrderTimeFilter,
+                  onChange: (val) => {
+                    setDealerOrderTimeFilter(val);
+                    setDealerOrderPage(1);
+                  },
+                  options: [
+                    { value: '', label: 'Tất cả thời gian' },
+                    { value: 'today', label: 'Hôm nay' },
+                    { value: 'yesterday', label: 'Hôm qua' },
+                    { value: 'this_week', label: 'Tuần này' },
+                    { value: 'this_month', label: 'Tháng này' },
+                    { value: 'this_year', label: 'Năm nay' },
+                  ],
+                },
+              ]}
+              rightActions={
+                <div className="flex items-center gap-2">
+                  {selectedDealerOrderIds.size > 0 && (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => setConfirmDeleteDealerOrder(true)}
+                    >
+                      <Trash className="w-3.5 h-3.5 mr-1" />
+                      Xoá ({selectedDealerOrderIds.size})
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-slate-300 text-slate-700 bg-white hover:bg-slate-50"
+                    onClick={() => fetchDealerOrders()}
+                  >
+                    <ArrowRepeat className={`w-3.5 h-3.5 mr-1 ${dealerOrderLoading ? 'animate-spin' : ''}`} />
+                    Làm mới
+                  </Button>
                 </div>
-                <div className="mt-2">
-                  <div className="text-xl font-black text-slate-900">84.500.000 đ</div>
-                  <div className="text-[11px] text-slate-500">156 đơn hàng đồng bộ tháng này</div>
-                </div>
-              </div>
+              }
+            />
 
-              <div className="p-3 bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-900 uppercase">TikTok Shop</span>
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">
-                    🟢 Đã kết nối API
-                  </span>
-                </div>
-                <div className="mt-2">
-                  <div className="text-xl font-black text-slate-900">52.800.000 đ</div>
-                  <div className="text-[11px] text-slate-500">94 đơn hàng trực tuyến</div>
-                </div>
-              </div>
-
-              <div className="p-3 bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl border border-blue-200/80 shadow-xs flex flex-col justify-between">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-blue-900 uppercase">Website Seajong.vn</span>
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">
-                    🟢 Tự động đồng bộ
-                  </span>
-                </div>
-                <div className="mt-2">
-                  <div className="text-xl font-black text-slate-900">118.200.000 đ</div>
-                  <div className="text-[11px] text-slate-500">68 đơn hàng trực tiếp</div>
-                </div>
-              </div>
-
-              <div className="p-3 bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-xl border border-purple-200/80 shadow-xs flex flex-col justify-between">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-purple-900 uppercase">Lazada / Sàn khác</span>
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800">
-                    🟡 Sẵn sàng đồng bộ
-                  </span>
-                </div>
-                <div className="mt-2">
-                  <div className="text-xl font-black text-slate-900">14.600.000 đ</div>
-                  <div className="text-[11px] text-slate-500">24 đơn hàng đang chờ xác nhận</div>
-                </div>
-              </div>
+            {/* Dealer Orders Table */}
+            <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+              <FullWidthTable loading={dealerOrderLoading}>
+                <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+                  <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
+                    <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
+                      <th className="py-2.5 px-3.5 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={dealerOrders.length > 0 && dealerOrders.every((o) => selectedDealerOrderIds.has(o.id))}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedDealerOrderIds(new Set(dealerOrders.map((o) => o.id)));
+                            } else {
+                              setSelectedDealerOrderIds(new Set());
+                            }
+                          }}
+                          className="rounded border-slate-300 text-sky-600 cursor-pointer"
+                        />
+                      </th>
+                      <th className="py-2.5 px-3.5 w-48">Mã đơn đại lý</th>
+                      <th className="py-2.5 px-3.5">Đại lý & Thông tin nhận hàng</th>
+                      <th className="py-2.5 px-3.5">Nội dung yêu cầu</th>
+                      <th className="py-2.5 px-3.5 w-32">Ngày gửi</th>
+                      <th className="py-2.5 px-3.5 w-32">Ngày giao</th>
+                      <th className="py-2.5 px-3.5 text-right w-40">Giá trị (đ)</th>
+                      <th className="py-2.5 px-3.5 text-center w-36">Trạng thái</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {dealerOrders.filter((o) => o.trangThai !== 'draft').length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-12 text-center text-slate-400">
+                          <i className="bi bi-inbox text-2xl block mb-2 opacity-30" />
+                          Chưa có đơn hàng nào từ đại lý gửi lên hệ thống
+                        </td>
+                      </tr>
+                    ) : (
+                      dealerOrders
+                        .filter((o) => o.trangThai !== 'draft')
+                        .map((o) => {
+                          const itemsList = o.saleOrderItems || [];
+                          const totalQty = itemsList.reduce((s: number, it: any) => s + (Number(it.soLuong) || 1), 0);
+                          const requestContent =
+                            (o.ghiChu && o.ghiChu.trim()) ||
+                            (itemsList[0]?.tenHang
+                              ? `Đặt mua ${itemsList[0].tenHang}${itemsList.length > 1 ? ` (+${itemsList.length - 1} SP)` : ''}`
+                              : 'Đặt hàng theo danh mục đại lý');
+                          return (
+                            <tr
+                              key={o.id}
+                              className="hover:bg-slate-50/80 transition-colors cursor-pointer border-b border-slate-100"
+                              onClick={() => setSelectedOrder(o)}
+                            >
+                              <td className="py-2.5 px-3.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedDealerOrderIds.has(o.id)}
+                                  onChange={(e) => {
+                                    const next = new Set(selectedDealerOrderIds);
+                                    if (e.target.checked) next.add(o.id);
+                                    else next.delete(o.id);
+                                    setSelectedDealerOrderIds(next);
+                                  }}
+                                  className="rounded border-slate-300 text-sky-600 cursor-pointer"
+                                />
+                              </td>
+                              <td className="py-2.5 px-3.5">
+                                <div className="font-bold text-[#003087] hover:underline cursor-pointer text-[13px] whitespace-nowrap">
+                                  {o.code}
+                                </div>
+                                <div className="text-slate-400 text-[11px] mt-0.5 truncate">
+                                  Người lập: {o.nguoiDatHang || o.customer?.name || 'Đại lý'}
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3.5">
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-semibold text-slate-900 text-[13px]">
+                                      {o.customer?.name || o.nguoiNhan || 'Đại lý Seajong'}
+                                    </span>
+                                    {o.customer?.code && (
+                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                                        {o.customer.code}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-slate-400 text-[11px] mt-0.5 truncate max-w-xs">
+                                    {o.diaChiGiaoHang || o.customer?.address || (o.soDienThoai || o.customer?.dienThoai ? `SĐT: ${o.soDienThoai || o.customer?.dienThoai}` : 'Chưa cập nhật địa chỉ')}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3.5">
+                                <div className="font-medium text-slate-800 text-[12.5px] truncate max-w-xs" title={requestContent}>
+                                  {requestContent}
+                                </div>
+                                <div className="text-slate-400 text-[11px] mt-0.5">
+                                  {itemsList.length} mặt hàng · Tổng SL: <strong>{totalQty}</strong>
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3.5 text-slate-600 text-[13px]">
+                                {o.ngayDat ? new Date(o.ngayDat).toLocaleDateString('vi-VN') : (o.createdAt ? new Date(o.createdAt).toLocaleDateString('vi-VN') : '—')}
+                              </td>
+                              <td className="py-2.5 px-3.5 text-slate-600 text-[13px]">
+                                {o.ngayGiao ? new Date(o.ngayGiao).toLocaleDateString('vi-VN') : '—'}
+                              </td>
+                              <td className="py-2.5 px-3.5 text-right font-bold text-slate-900 text-[13px]">
+                                {Number(o.tongTien || 0).toLocaleString('vi-VN')}
+                              </td>
+                              <td className="py-2.5 px-3.5 text-center">
+                                <DealerOrderStatusBadge status={o.trangThai} />
+                              </td>
+                            </tr>
+                          );
+                        })
+                    )}
+                  </tbody>
+                </table>
+              </FullWidthTable>
             </div>
 
+            {/* Dealer Order Footer Pagination */}
+            <Pagination
+              currentPage={dealerOrderPage}
+              totalPages={Math.max(1, Math.ceil((dealerOrderTotal || dealerOrders.length) / dealerOrderPageSize))}
+              totalItems={dealerOrderTotal || dealerOrders.length}
+              pageSize={dealerOrderPageSize}
+              itemName="đơn đại lý"
+              onPageChange={setDealerOrderPage}
+              onPageSizeChange={(sz) => {
+                setDealerOrderPageSize(sz);
+                setDealerOrderPage(1);
+              }}
+              pageSizeOptions={[5, 10, 20, 50]}
+            />
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            STEP 4: BÁN HÀNG ĐA KÊNH (OMNICHANNEL)
+            ══════════════════════════════════════════════════════════════════════ */}
+        {currentStep === 4 && (
+          <div className="flex-1 flex flex-col h-full overflow-hidden">
             {/* Omnichannel Orders Toolbar */}
             <TableToolbar
               showMenu={false}
@@ -1167,8 +1450,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
                           }}
                         />
                       </th>
-                      <th className="py-2.5 px-3.5 w-32">Kênh</th>
-                      <th className="py-2.5 px-3.5 w-40">Mã đơn Shopee</th>
+                      <th className="py-2.5 px-3.5 w-60">Kênh & Mã đơn</th>
                       <th className="py-2.5 px-3.5">Khách hàng</th>
                       <th className="py-2.5 px-3.5 text-right w-36">Tổng tiền</th>
                       <th className="py-2.5 px-3.5 text-center w-36">Trạng thái</th>
@@ -1194,7 +1476,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
                       if (pageSlice.length === 0) {
                         return (
                           <tr>
-                            <td colSpan={8} className="py-12 text-center text-slate-400">
+                            <td colSpan={7} className="py-12 text-center text-slate-400">
                               <i className="bi bi-inbox text-2xl block mb-2 opacity-30" />
                               Không tìm thấy đơn hàng đa kênh nào phù hợp
                             </td>
@@ -1220,25 +1502,25 @@ export const SalesOrderTrackingPage: React.FC = () => {
                               />
                             </td>
                             <td className="py-2.5 px-3.5">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2.5">
                                 <div
                                   className="rounded-full flex items-center justify-center flex-shrink-0"
                                   style={{
-                                    width: 22,
-                                    height: 22,
+                                    width: 26,
+                                    height: 26,
                                     background: isShopee ? '#ee4d2d' : isTikTok ? '#000000' : '#003087',
                                     color: 'white',
                                   }}
                                 >
-                                  <Shop style={{ fontSize: 11 }} />
+                                  <Shop style={{ fontSize: 12 }} />
                                 </div>
-                                <span className="font-semibold text-slate-800 text-[12px]">{row.channel}</span>
+                                <div className="flex flex-col">
+                                  <code className="text-[#003087] font-bold text-[13px] whitespace-nowrap">
+                                    {row.externalId}
+                                  </code>
+                                  <span className="text-slate-500 text-[11px] font-medium mt-0.5">{row.channel}</span>
+                                </div>
                               </div>
-                            </td>
-                            <td className="py-2.5 px-3.5">
-                              <code className="text-[#003087] font-bold text-[12px] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
-                                {row.externalId}
-                              </code>
                             </td>
                             <td className="py-2.5 px-3.5">
                               <div className="flex flex-col">
@@ -1304,9 +1586,9 @@ export const SalesOrderTrackingPage: React.FC = () => {
         )}
 
         {/* ══════════════════════════════════════════════════════════════════════
-            STEP 4: HÀNG TRẢ VỀ (RETURN & WARRANTY)
+            STEP 5: HÀNG TRẢ VỀ (RETURN & WARRANTY)
             ══════════════════════════════════════════════════════════════════════ */}
-        {currentStep === 4 && (
+        {currentStep === 5 && (
           <div className="flex-1 flex flex-col h-full overflow-hidden">
             <TableToolbar
               showMenu={false}
@@ -1360,7 +1642,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
                     onClick={() => alert('Mở phiếu tạo hồ sơ đổi trả / hàng bảo hành mới')}
                   >
                     <Plus className="w-4 h-4 mr-1" />
-                    Báo lỗi / Trả hàng
+                    Tạo mới
                   </Button>
                 </div>
               }
@@ -1644,15 +1926,36 @@ export const SalesOrderTrackingPage: React.FC = () => {
       </Offcanvas>
 
       {/* ══════════════════════════════════════════════════════════════════════
+          MODAL: LẬP BÁO GIÁ (BAO GIA SANITARY MODAL - TỪ CLIENT-SEAJONG)
+          ══════════════════════════════════════════════════════════════════════ */}
+      <BaoGiaSanitaryModal
+        open={showCreateQuotationModal}
+        onClose={() => {
+          setShowCreateQuotationModal(false);
+        }}
+        customer={activeCustomerForNew as any}
+        type={customerTab === 'vang_lai' ? 'retail' : 'agency'}
+        onSaved={() => {
+          fetchQuotations();
+          fetchOrders();
+        }}
+      />
+
+      {/* ══════════════════════════════════════════════════════════════════════
           MODAL: TẠO ĐƠN HÀNG MỚI (LẬP ĐƠN BÁN HÀNG SO - TỪ CLIENT-SEAJONG)
           ══════════════════════════════════════════════════════════════════════ */}
       <TaoDonHangModal
         open={showCreateOrderModal}
-        onClose={() => setShowCreateOrderModal(false)}
+        onClose={() => {
+          setShowCreateOrderModal(false);
+          setEditingOrderForModal(null);
+        }}
         customer={activeCustomerForNew as any}
-        type={customerTab === 'vang_lai' ? 'retail' : 'agency'}
+        editOrder={editingOrderForModal}
+        type={editingOrderForModal ? 'agency' : customerTab === 'vang_lai' ? 'retail' : 'agency'}
         onSaved={() => {
           fetchOrders();
+          fetchDealerOrders();
           fetchQuotations();
         }}
       />
@@ -1663,39 +1966,57 @@ export const SalesOrderTrackingPage: React.FC = () => {
       <Offcanvas
         isOpen={Boolean(selectedOrder)}
         onClose={() => setSelectedOrder(null)}
-        title={
-          selectedOrder ? (
-            <div className="flex items-center gap-2.5">
-              <span className="font-mono font-bold text-lg text-sky-800">{selectedOrder.code}</span>
-              <StatusBadge status={selectedOrder.trangThai} />
-            </div>
-          ) : 'Chi tiết đơn hàng'
-        }
+        title="Thông tin đơn hàng"
         description={
           selectedOrder
-            ? `Ngày đặt: ${selectedOrder.ngayDat ? new Date(selectedOrder.ngayDat).toLocaleDateString('vi-VN') : '—'}`
+            ? `${selectedOrder.code} • Ngày đặt: ${selectedOrder.ngayDat ? new Date(selectedOrder.ngayDat).toLocaleDateString('vi-VN') : '—'}`
             : undefined
         }
-        icon={null}
         width="400px"
         bodyClassName="p-4 space-y-4"
         footer={
-          <div className="w-full flex items-center justify-between">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowPrintOrderModal(true)}
-              className="text-[13px] font-semibold"
-            >
-              <Printer className="w-4 h-4 mr-1.5" /> In phiếu
-            </Button>
+          <div className="w-full flex items-center justify-end gap-2">
+            {selectedOrder && (selectedOrder.trangThai === 'pending' || selectedOrder.trangThai === 'draft') && (
+              <>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  disabled={updatingOrderStatus}
+                  onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'rejected')}
+                  className="text-[13px] font-semibold"
+                >
+                  Từ chối
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={updatingOrderStatus}
+                  onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'approved')}
+                  className="bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white text-[13px] font-semibold"
+                >
+                  Xác nhận xử lý
+                </Button>
+              </>
+            )}
             <Button
               variant="primary"
               size="sm"
-              className="bg-[#003087] text-white text-[13px] font-semibold"
-              onClick={() => setSelectedOrder(null)}
+              className="bg-[#003087] hover:bg-[#00256c] border-[#003087] text-white text-[13px] font-semibold"
+              onClick={() => {
+                if (!selectedOrder) return;
+                setActiveCustomerForNew((selectedOrder.customer as any) || null);
+                setEditingOrderForModal({
+                  ...selectedOrder,
+                  items: (selectedOrder.saleOrderItems || []).map((it: any) => ({
+                    ...it,
+                    donVi: it.donViTinh || it.donVi || 'Bộ',
+                  })),
+                });
+                setSelectedOrder(null);
+                setShowCreateOrderModal(true);
+              }}
             >
-              Đóng
+              Chi tiết
             </Button>
           </div>
         }
@@ -1703,7 +2024,14 @@ export const SalesOrderTrackingPage: React.FC = () => {
         {selectedOrder && (
           <div className="space-y-4 text-[13.5px]">
             <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-              <span className="text-[11px] uppercase font-bold text-slate-400">Khách hàng / Đại lý</span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] uppercase font-bold text-slate-400">Khách hàng / Đại lý</span>
+                {selectedOrder.orderSource === 'dealer_portal' || (selectedOrder.code || '').startsWith('DH-DL-') ? (
+                  <DealerOrderStatusBadge status={selectedOrder.trangThai} />
+                ) : (
+                  <StatusBadge status={selectedOrder.trangThai} />
+                )}
+              </div>
               <div className="font-bold text-[15px] text-slate-900">{selectedOrder.customer?.name || 'Khách vãng lai'}</div>
               {selectedOrder.customer?.dienThoai && <div className="text-slate-600 text-xs">📞 {selectedOrder.customer.dienThoai}</div>}
               {selectedOrder.customer?.address && <div className="text-slate-500 text-xs">📍 {selectedOrder.customer.address}</div>}
@@ -1719,19 +2047,6 @@ export const SalesOrderTrackingPage: React.FC = () => {
               <div>
                 <span className="text-[11px] uppercase font-bold text-slate-400 block">Nhân viên phụ trách</span>
                 <span className="font-semibold text-slate-800 text-[13px]">{selectedOrder.nguoiPhuTrach || 'Phạm Quang Việt'}</span>
-              </div>
-            </div>
-
-            <div className="border border-slate-200 rounded-xl overflow-hidden">
-              <div className="p-3 bg-slate-100 font-bold text-slate-800 text-[13.5px]">Chi tiết mặt hàng</div>
-              <div className="p-3.5 space-y-2">
-                <div className="flex justify-between items-center border-b pb-2">
-                  <div>
-                    <div className="font-semibold text-slate-900 text-[14px]">Sen cây phím đàn LED Seajong SJ-9900</div>
-                    <div className="text-xs text-slate-400">SL: 1 bộ · Chiết khấu: 35%</div>
-                  </div>
-                  <span className="font-bold text-slate-800 text-[14px]">{formatVND(selectedOrder.tongTien)}</span>
-                </div>
               </div>
             </div>
 
@@ -1756,6 +2071,59 @@ export const SalesOrderTrackingPage: React.FC = () => {
                 {selectedOrder.ghiChu}
               </div>
             )}
+
+            <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <div className="p-3 bg-slate-100 font-bold text-slate-800 text-[13.5px] flex items-center justify-between">
+                <span>Chi tiết mặt hàng</span>
+                <span className="text-xs font-semibold text-slate-500">
+                  {(selectedOrder.saleOrderItems || []).length} mặt hàng
+                </span>
+              </div>
+              <div className="p-3.5 space-y-2.5">
+                {(selectedOrder.saleOrderItems || []).length === 0 ? (
+                  <div className="text-xs text-slate-400 italic py-2 text-center">
+                    Chưa có danh sách mặt hàng chi tiết
+                  </div>
+                ) : (
+                  (selectedOrder.saleOrderItems || []).map((item: any, idx: number) => {
+                    let extraNote = '';
+                    if (item.ghiChu) {
+                      try {
+                        const parsed = JSON.parse(item.ghiChu);
+                        const parts = [parsed.code, parsed.khoTen, parsed.dinhMucTen].filter(Boolean);
+                        extraNote = parts.join(' · ');
+                      } catch {
+                        extraNote = item.ghiChu;
+                      }
+                    }
+                    const lineTotal = item.thanhTien ?? (Number(item.soLuong || 0) * Number(item.donGia || 0));
+                    return (
+                      <div
+                        key={item.id || idx}
+                        className="flex justify-between items-start gap-3 border-b border-slate-100 last:border-b-0 pb-2.5 last:pb-0"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-slate-900 text-[13.5px] leading-snug">
+                            {item.tenHang || 'Sản phẩm Seajong'}
+                          </div>
+                          <div className="text-xs text-slate-500 mt-0.5">
+                            SL: <strong>{item.soLuong || 1} {item.donViTinh || 'Bộ'}</strong> · Đơn giá: {formatVND(item.donGia || 0)}
+                          </div>
+                          {extraNote && (
+                            <div className="text-[11px] text-slate-400 mt-0.5 truncate" title={extraNote}>
+                              {extraNote}
+                            </div>
+                          )}
+                        </div>
+                        <span className="font-bold text-slate-800 text-[13.5px] whitespace-nowrap">
+                          {formatVND(lineTotal)}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
           </div>
         )}
       </Offcanvas>
@@ -1861,6 +2229,16 @@ export const SalesOrderTrackingPage: React.FC = () => {
       />
 
       <ConfirmDialog
+        isOpen={confirmDeleteDealerOrder}
+        title="Xác nhận xoá đơn hàng đại lý"
+        message={`Bạn có chắc chắn muốn xoá ${selectedDealerOrderIds.size} đơn hàng đại lý đã chọn không? Thao tác này không thể hoàn tác.`}
+        confirmText="Xoá vĩnh viễn"
+        variant="danger"
+        onConfirm={handleDeleteSelectedDealerOrders}
+        onClose={() => setConfirmDeleteDealerOrder(false)}
+      />
+
+      <ConfirmDialog
         isOpen={confirmDeleteQuotation}
         title="Xác nhận xoá báo giá"
         message={`Bạn có chắc chắn muốn xoá ${selectedQuotationIds.size} báo giá đã chọn không?`}
@@ -1921,14 +2299,27 @@ export const SalesOrderTrackingPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td className="p-2 border text-center">1</td>
-                  <td className="p-2 border font-medium">Sen cây phím đàn LED Seajong SJ-9900</td>
-                  <td className="p-2 border text-center">Bộ</td>
-                  <td className="p-2 border text-center font-bold">1</td>
-                  <td className="p-2 border text-right">{formatVND(selectedOrder.tongTien)}</td>
-                  <td className="p-2 border text-right font-bold">{formatVND(selectedOrder.tongTien)}</td>
-                </tr>
+                {(selectedOrder.saleOrderItems || []).length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-3 border text-center text-slate-400 italic">
+                      Chưa có danh sách mặt hàng chi tiết
+                    </td>
+                  </tr>
+                ) : (
+                  (selectedOrder.saleOrderItems || []).map((item: any, idx: number) => {
+                    const lineTotal = item.thanhTien ?? (Number(item.soLuong || 0) * Number(item.donGia || 0));
+                    return (
+                      <tr key={item.id || idx}>
+                        <td className="p-2 border text-center">{idx + 1}</td>
+                        <td className="p-2 border font-medium">{item.tenHang || 'Sản phẩm Seajong'}</td>
+                        <td className="p-2 border text-center">{item.donViTinh || 'Bộ'}</td>
+                        <td className="p-2 border text-center font-bold">{item.soLuong || 1}</td>
+                        <td className="p-2 border text-right">{formatVND(item.donGia || 0)}</td>
+                        <td className="p-2 border text-right font-bold">{formatVND(lineTotal)}</td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
 

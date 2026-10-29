@@ -17,6 +17,7 @@ export * from './DepartmentActionMenu';
 export * from './TablePagination';
 export * from './TableFooter';
 export * from './TaoDonHangModal';
+export * from './BaoGiaSanitaryModal';
 export * from './KPICard';
 export * from './Badge';
 export * from './Modal';

@@ -4193,13 +4193,35 @@ app.get('/api/bom/overview-stats', async (req, res) => {
 // ── GET & POST /api/sales/partners ────────────────────────────────────────────
 app.get('/api/sales/partners', async (req, res) => {
   try {
-    const leads = await prisma.marketingLead.findMany({
-      include: {
-        careHistories: {
-          orderBy: { executionDate: 'desc' },
+    const [leads, employees, quotations] = await Promise.all([
+      prisma.marketingLead.findMany({
+        include: {
+          careHistories: {
+            orderBy: { executionDate: 'desc' },
+          },
         },
-      },
-      orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.employee.findMany({
+        select: { fullName: true, phone: true, workEmail: true, personalEmail: true },
+      }),
+      prisma.quotation.findMany({
+        include: {
+          customer: true,
+          items: true,
+          negotiations: {
+            orderBy: { ngay: 'desc' },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    const empMap = new Map();
+    employees.forEach((emp) => {
+      if (emp.fullName) {
+        empMap.set(emp.fullName.trim().toLowerCase(), emp);
+      }
     });
 
     const formatted = leads.map((l) => {
@@ -4210,32 +4232,121 @@ app.get('/api/sales/partners', async (req, res) => {
         } catch (e) {}
       }
 
+      const leadCode = formValues.code || `DL-${l.id.slice(-6).toUpperCase()}`;
+      const leadPhone = (l.phone || formValues.detailPhone || formValues.phone || '').trim();
+      const compName =
+        formValues.companyName ||
+        formValues.detailCompanyName ||
+        l.fullName ||
+        formValues.detailFullName ||
+        formValues.fullName ||
+        formValues.name ||
+        'Đối tác';
+
+      const matchingQuotation = quotations.find((q) => {
+        if (formValues.quoteId && q.id === formValues.quoteId) return true;
+        if (formValues.quoteCode && q.code === formValues.quoteCode) return true;
+        if (q.customerId === l.id) return true;
+        if (q.customer?.code && q.customer.code === leadCode) return true;
+        if (leadPhone && q.customer?.dienThoai && q.customer.dienThoai.trim() === leadPhone) return true;
+        if (compName && q.customer?.name && q.customer.name.trim().toLowerCase() === compName.trim().toLowerCase()) return true;
+        return false;
+      });
+
       let stepNum = 1;
-      if (l.status === 'step_2' || l.status === 'care') stepNum = 2;
-      else if (l.status === 'step_3' || l.status === 'quote') stepNum = 3;
-      else if (l.status === 'step_4' || l.status === 'contract') stepNum = 4;
-      else if (l.status === 'step_5' || l.status === 'construction' || l.status === 'completed') stepNum = 5;
-      else if (formValues.step) stepNum = Number(formValues.step);
+      if (l.status === 'care' || l.status === 'step_1' || l.status === 'new') stepNum = 1;
+      else if (l.status === 'quote' || l.status === 'step_2' || (l.status === 'step_3' && formValues.quoteCode && !formValues.contractNo)) stepNum = 2;
+      else if (l.status === 'contract' || l.status === 'step_3' || l.status === 'step_4') stepNum = 3;
+      else if (l.status === 'construction' || l.status === 'completed' || l.status === 'step_5') stepNum = 4;
+      else if (formValues.step) stepNum = Math.min(4, Math.max(1, Number(formValues.step)));
+
+      if ((matchingQuotation || formValues.quoteCode || formValues.quoteId) && stepNum < 2) {
+        stepNum = 2;
+      }
+
+      const repName =
+        l.fullName ||
+        formValues.detailFullName ||
+        formValues.fullName ||
+        formValues.name ||
+        'Đối tác';
+      const collabNeedText =
+        formValues.collabNeeds ||
+        formValues.detailCollabNeeds ||
+        formValues.notes ||
+        formValues.needs ||
+        l.notes ||
+        (l.careHistories && l.careHistories[0]?.collabNeeds) ||
+        'Tư vấn chính sách đại lý & trưng bày mẫu';
+
+      const ownerName = formValues.executor || formValues.detailExecutor || formValues.careStaff || 'Phạm Quang Việt';
+      const matchedEmp = empMap.get(String(ownerName).trim().toLowerCase());
+      const ownerPhone = matchedEmp?.phone || formValues.ownerPhone || '0981183234';
+      const ownerEmail = matchedEmp?.workEmail || matchedEmp?.personalEmail || formValues.ownerEmail || '';
+
+      const rawQuoteStatus = matchingQuotation ? matchingQuotation.trangThai : (formValues.quoteRawStatus || '');
+      const mappedQuoteStatus = matchingQuotation
+        ? (matchingQuotation.trangThai === 'approved' || matchingQuotation.trangThai === 'won'
+            ? 'Approved'
+            : matchingQuotation.trangThai === 'pending_approval' || matchingQuotation.trangThai === 'sent'
+              ? 'Sent'
+              : 'Draft')
+        : (formValues.quoteStatus || '');
+
+      let resolvedQuoteType = formValues.quoteType || '';
+      if (!resolvedQuoteType && matchingQuotation) {
+        const hasKhuVuc = (matchingQuotation.items || []).some((it) => {
+          try {
+            const gc = JSON.parse(it.ghiChu || '{}');
+            return Boolean(gc.khuVuc);
+          } catch {
+            return false;
+          }
+        });
+        resolvedQuoteType = hasKhuVuc ? 'Có quầy kệ' : 'Không có quầy kệ';
+      }
 
       return {
         id: l.id,
-        code: formValues.code || `DL-${l.id.slice(-6).toUpperCase()}`,
-        name: l.name,
-        companyName: formValues.companyName || l.notes || l.name,
-        phone: l.phone,
-        email: l.email || '',
-        area: formValues.area || formValues.businessAddress || 'Miền Bắc',
-        businessType: formValues.businessType || 'Showroom TBVS',
+        code: leadCode,
+        name: repName,
+        salutation: formValues.salutation || '',
+        companyName: compName,
+        address: formValues.address || formValues.detailBusinessAddress || formValues.businessAddress || '',
+        phone: leadPhone,
+        email: l.email || formValues.detailEmail || formValues.email || '',
+        area: formValues.area || formValues.detailBusinessAddress || formValues.businessAddress || formValues.ctit || 'Miền Bắc',
+        businessType: formValues.businessType || formValues.detailBusinessType || 'Showroom TBVS',
         step: stepNum,
         stars: formValues.stars || (stepNum >= 4 ? 5 : stepNum >= 2 ? 4 : 3),
         status: l.status,
-        owner: formValues.executor || 'Phạm Quang Việt',
-        notes: l.notes || formValues.collabNeeds || '',
-        source: l.source || 'Tự khai thác',
+        careStatus:
+          formValues.careStatus ||
+          (l.careHistories && l.careHistories.length > 0 ? 'cared' : 'new'),
+        owner: ownerName,
+        ownerPhone,
+        ownerEmail,
+        notes: collabNeedText,
+        source: l.source || formValues.source || 'Tự khai thác',
         contractValue: formValues.contractValue || 0,
-        expectedInvestment: formValues.expectedInvestment || '50 - 100 triệu',
+        expectedInvestment: formValues.expectedInvestment || formValues.detailExpectedInvestment || '50 - 100 triệu',
+        receivedDate: formValues.receivedDate || (l.createdAt ? new Date(l.createdAt).toISOString().split('T')[0] : ''),
         careHistories: l.careHistories || [],
         createdAt: l.createdAt,
+        quoteId: matchingQuotation ? matchingQuotation.id : (formValues.quoteId || ''),
+        quoteCode: matchingQuotation ? matchingQuotation.code : (formValues.quoteCode || ''),
+        quoteValue: matchingQuotation
+          ? (matchingQuotation.thanhTien || matchingQuotation.tongTien || 0)
+          : (Number(formValues.quoteValue) || 0),
+        discountRate: matchingQuotation
+          ? (matchingQuotation.discount || 0)
+          : (Number(formValues.discountRate) || 0),
+        quoteStatus: mappedQuoteStatus,
+        quoteRawStatus: rawQuoteStatus,
+        quoteType: resolvedQuoteType || 'Có quầy kệ',
+        quoteCreatedAt: matchingQuotation ? matchingQuotation.createdAt : null,
+        quoteData: matchingQuotation || null,
+        quoteNegotiations: matchingQuotation ? (matchingQuotation.negotiations || []) : [],
       };
     });
 
@@ -4249,23 +4360,99 @@ app.get('/api/sales/partners', async (req, res) => {
 app.post('/api/sales/partners', async (req, res) => {
   try {
     const body = req.body;
+    let campaign = await prisma.marketingCampaign.findFirst();
+    if (!campaign) {
+      campaign = await prisma.marketingCampaign.create({
+        data: {
+          name: 'Phát triển đại lý Seajong',
+          platform: 'Direct',
+          status: 'ACTIVE',
+        },
+      });
+    }
+    const stepStatusMap = { 1: 'care', 2: 'quote', 3: 'contract', 4: 'construction' };
+    const stepNum = Number(body.step) || 1;
+    const generatedCode = body.code || `DL-${Date.now().toString(36).slice(-6).toUpperCase()}`;
+    const collabNotes = body.notes || body.collabNeeds || '';
+
     const lead = await prisma.marketingLead.create({
       data: {
-        name: body.name,
-        phone: body.phone,
+        campaignId: campaign.id,
+        fullName: body.name || body.companyName || 'Đối tác mới',
+        phone: body.phone || '',
         email: body.email || null,
         source: body.source || 'Kinh doanh tự khai thác',
-        status: body.step ? `step_${body.step}` : 'step_1',
-        notes: body.notes || body.companyName || '',
+        status: stepStatusMap[stepNum] || 'care',
+        notes: collabNotes,
         formValues: JSON.stringify({
           ...body,
-          step: body.step || 1,
+          code: generatedCode,
+          collabNeeds: collabNotes,
+          notes: collabNotes,
+          step: stepNum,
         }),
       },
     });
+
+    // Đồng bộ lưu vào bảng Customer chuẩn DB
+    try {
+      let careEmp = null;
+      if (body.executor) {
+        careEmp = await prisma.employee.findFirst({
+          where: { fullName: { contains: String(body.executor).trim() } },
+        });
+      }
+      const fullAddr = [body.address, body.area].filter(Boolean).join(', ');
+      await prisma.customer.create({
+        data: {
+          code: generatedCode,
+          name: body.companyName || body.name || 'Đại lý mới',
+          address: fullAddr || null,
+          nguon: body.source || 'Kinh doanh tự khai thác',
+          nhom: 'dai-ly-tiem-nang',
+          loai: body.businessType || 'Showroom TBVS',
+          daiDien: body.rawName || body.name || null,
+          xungHo: body.salutation || 'Anh',
+          dienThoai: body.phone || null,
+          email: body.email || null,
+          ghiChu: collabNotes || null,
+          nguoiChamSocId: careEmp ? careEmp.id : null,
+        },
+      });
+    } catch (custErr) {
+      console.warn('Lưu đồng bộ bảng Customer:', custErr.message);
+    }
+
     res.json({ success: true, partner: lead });
   } catch (err) {
     console.error('Lỗi POST /api/sales/partners:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/sales/partners/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.partnerCareHistory.deleteMany({ where: { partnerId: id } }).catch(() => {});
+    await prisma.marketingLead.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Lỗi DELETE /api/sales/partners/:id:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/sales/partners/bulk-delete', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Danh sách ID trống' });
+    }
+    await prisma.partnerCareHistory.deleteMany({ where: { partnerId: { in: ids } } }).catch(() => {});
+    await prisma.marketingLead.deleteMany({ where: { id: { in: ids } } });
+    res.json({ success: true, deletedCount: ids.length });
+  } catch (err) {
+    console.error('Lỗi POST /api/sales/partners/bulk-delete:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -4291,12 +4478,13 @@ app.put('/api/sales/partners/:id', async (req, res) => {
       step: body.step !== undefined ? body.step : formValues.step,
     };
 
-    const statusVal = body.step ? `step_${body.step}` : existing.status;
+    const stepStatusMap = { 1: 'care', 2: 'quote', 3: 'contract', 4: 'construction' };
+    const statusVal = body.step ? (stepStatusMap[body.step] || `step_${body.step}`) : existing.status;
 
     const updated = await prisma.marketingLead.update({
       where: { id },
       data: {
-        name: body.name || existing.name,
+        fullName: body.name || existing.fullName,
         phone: body.phone || existing.phone,
         email: body.email || existing.email,
         status: statusVal,
@@ -4307,20 +4495,31 @@ app.put('/api/sales/partners/:id', async (req, res) => {
 
     // Nếu có thêm chăm sóc mới
     if (body.newCare) {
+      const execDate = body.newCare.executionTime ? new Date(body.newCare.executionTime) : new Date();
       await prisma.partnerCareHistory.create({
         data: {
           partnerId: id,
-          fullName: body.newCare.fullName || body.name || existing.name,
-          role: body.newCare.role || 'Chủ showroom',
-          phone: body.newCare.phone || existing.phone,
+          fullName: body.newCare.fullName || body.name || existing.fullName || 'Khách hàng',
+          role: body.newCare.role || 'Đại diện',
+          phone: body.newCare.phone || existing.phone || '',
           companyName: body.newCare.companyName || updatedFormValues.companyName || '',
           businessAddress: body.newCare.businessAddress || updatedFormValues.area || '',
-          approachStep: body.newCare.approachStep || 'Tiếp cận',
+          premisesScale: body.newCare.premisesScale || 'Tiêu chuẩn',
+          deploymentPlan: body.newCare.nextTaskDesc || body.newCare.deploymentPlan || '',
+          approachStep: body.newCare.approachStep || body.newCare.hinhThuc || 'Gọi điện',
           attitude: body.newCare.attitude || 'Tích cực',
           collabNeeds: body.newCare.collabNeeds || '',
+          otherRequirements: body.newCare.nextTaskDesc
+            ? JSON.stringify({
+                nextDate: body.newCare.nextDate || '',
+                nextPriority: body.newCare.nextPriority || 'Trung bình',
+                addToSchedule: Boolean(body.newCare.addToSchedule),
+                nextTaskDesc: body.newCare.nextTaskDesc || '',
+              })
+            : '',
           stars: body.newCare.stars || 4,
           executor: body.newCare.executor || 'Phạm Quang Việt',
-          executionDate: new Date(),
+          executionDate: isNaN(execDate.getTime()) ? new Date() : execDate,
         },
       });
     }
@@ -4715,6 +4914,108 @@ app.post('/api/sales/orders', async (req, res) => {
   }
 });
 
+// ── POST /api/upload ────────────────────────────────────────────────────────
+app.post('/api/upload', async (req, res) => {
+  try {
+    const { fileName, dataUrl } = req.body || {};
+    if (dataUrl && typeof dataUrl === 'string' && dataUrl.startsWith('data:')) {
+      const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+      if (matches) {
+        const base64Data = matches[2];
+        const safeName = String(fileName || 'drawing.png').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const storedName = `${Date.now()}-${safeName}`;
+        const filePath = path.join(uploadDir, storedName);
+        fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+        return res.json({ success: true, url: `/uploads/${storedName}`, fileName: safeName });
+      }
+    }
+    res.status(400).json({ error: 'Dữ liệu file tải lên không hợp lệ' });
+  } catch (err) {
+    console.error('Lỗi POST /api/upload:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/plan-finance/quotations/next-code ──────────────────────────────
+app.get('/api/plan-finance/quotations/next-code', async (req, res) => {
+  try {
+    const type = req.query.type || 'agency';
+    const now = new Date();
+    const utcTime = now.getTime() + now.getTimezoneOffset() * 60000;
+    const ICTTime = new Date(utcTime + 3600000 * 7);
+    const yyyy = ICTTime.getFullYear();
+    const mm = String(ICTTime.getMonth() + 1).padStart(2, '0');
+    const dd = String(ICTTime.getDate()).padStart(2, '0');
+    const todayStr = `${yyyy}${mm}${dd}`;
+    const prefix = (type === 'agency' ? 'QUO-' : 'BG-') + `${todayStr}-`;
+
+    const todayQuotes = await prisma.quotation.findMany({
+      where: { code: { startsWith: prefix } },
+      select: { code: true },
+    });
+    let maxSTT = 0;
+    for (const q of todayQuotes) {
+      if (q.code) {
+        const parts = q.code.split('-');
+        const sttVal = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(sttVal) && sttVal > maxSTT) maxSTT = sttVal;
+      }
+    }
+    const nextCode = `${prefix}${String(maxSTT + 1).padStart(3, '0')}`;
+    res.json({ nextCode });
+  } catch (err) {
+    console.error('Lỗi GET /api/plan-finance/quotations/next-code:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/plan-finance/approvers ─────────────────────────────────────────
+app.get('/api/plan-finance/approvers', async (req, res) => {
+  try {
+    const [employees, posCategories] = await Promise.all([
+      prisma.employee.findMany({
+        include: { user: true },
+        orderBy: { fullName: 'asc' },
+      }),
+      prisma.category.findMany({
+        where: { type: 'position' },
+      }),
+    ]);
+    const posMap = {};
+    for (const c of posCategories) {
+      if (c.code) posMap[c.code] = c.name;
+      if (c.id) posMap[c.id] = c.name;
+    }
+    const boardEmployees = employees.filter((e) => {
+      const deptName = (e.departmentName || e.department || '').toLowerCase();
+      return e.departmentCode === 'board' || deptName.includes('ban giám đốc') || deptName.includes('giám đốc');
+    });
+    const listToMap = boardEmployees.length > 0 ? boardEmployees : employees;
+    const approvers = listToMap
+      .map((e) => {
+        const resolvedPos = posMap[e.position] || e.position || 'Ban Giám đốc';
+        return {
+          id: e.userId || e.id,
+          employeeId: e.id,
+          name: e.fullName,
+          position: resolvedPos,
+          role: resolvedPos,
+          department: e.departmentName || e.department || 'Ban Giám đốc',
+          email: e.email || e.user?.email || '',
+        };
+      })
+      .sort((a, b) => {
+        const aIsDirector = a.position.toLowerCase() === 'giám đốc' ? 0 : 1;
+        const bIsDirector = b.position.toLowerCase() === 'giám đốc' ? 0 : 1;
+        if (aIsDirector !== bIsDirector) return aIsDirector - bIsDirector;
+        return a.name.localeCompare(b.name, 'vi');
+      });
+    res.json({ approvers });
+  } catch (err) {
+    res.json({ approvers: [] });
+  }
+});
+
 // ── GET, POST, DELETE /api/plan-finance/quotations ──────────────────────────
 app.get('/api/plan-finance/quotations', async (req, res) => {
   try {
@@ -4732,6 +5033,9 @@ app.get('/api/plan-finance/quotations', async (req, res) => {
         customer: true,
         nguoiPhuTrach: true,
         items: true,
+        negotiations: {
+          orderBy: { ngay: 'desc' },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -4778,6 +5082,29 @@ app.get('/api/plan-finance/quotations', async (req, res) => {
     });
   } catch (err) {
     console.error('Lỗi GET /api/plan-finance/quotations:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/plan-finance/quotations/:id', async (req, res, next) => {
+  if (req.params.id === 'next-code') return next();
+  try {
+    const { id } = req.params;
+    const quotation = await prisma.quotation.findUnique({
+      where: { id },
+      include: {
+        customer: true,
+        nguoiPhuTrach: true,
+        items: true,
+        negotiations: {
+          orderBy: { ngay: 'desc' },
+        },
+      },
+    });
+    if (!quotation) return res.status(404).json({ error: 'Không tìm thấy báo giá' });
+    res.json(quotation);
+  } catch (err) {
+    console.error('Lỗi GET /api/plan-finance/quotations/:id:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -4836,7 +5163,7 @@ app.post('/api/plan-finance/quotations', async (req, res) => {
     const isDirectOrder = finalCode.startsWith('DH') || finalCode.startsWith('DBH') || finalCode === 'DBH-Tự động tạo' || body.trangThai === 'won';
 
     // Auto-generate order / quotation code
-    if (!finalCode || finalCode === 'Đang tải...' || finalCode === 'DBH-Tự động tạo') {
+    if (!finalCode || finalCode === 'Đang tải...' || finalCode === 'DBH-Tự động tạo' || finalCode === 'BG-Tự động tạo') {
       if (isDirectOrder) {
         const prefix = `DBH-${todayStr}-`;
         const todayOrders = await prisma.saleOrder.findMany({
@@ -4871,22 +5198,56 @@ app.post('/api/plan-finance/quotations', async (req, res) => {
     }
 
     // Customer handling (auto-create if linked to marketingLead)
-    let customerId = body.customerId || null;
+    const originalCustomerId = body.customerId || null;
+    const explicitPartnerId = body.partnerId || null;
+    let customerId = originalCustomerId;
+    let matchedLead = null;
+    if (explicitPartnerId) {
+      matchedLead = await prisma.marketingLead.findUnique({ where: { id: explicitPartnerId } });
+    }
     if (customerId) {
       const customer = await prisma.customer.findUnique({ where: { id: customerId } });
       if (!customer) {
-        const lead = await prisma.marketingLead.findUnique({ where: { id: customerId } });
+        const lead = matchedLead || (await prisma.marketingLead.findUnique({ where: { id: customerId } }));
         if (lead) {
-          await prisma.customer.create({
-            data: {
-              id: customerId,
-              name: lead.fullName || 'Đại lý chưa đặt tên',
-              dienThoai: lead.phone || '',
-              email: lead.email || null,
-              nguon: lead.source || 'marketing',
-              address: lead.address || '',
+          matchedLead = lead;
+          let leadForm = {};
+          try {
+            leadForm = lead.formValues ? JSON.parse(lead.formValues) : {};
+          } catch (e) {}
+          const existingCust = lead.phone
+            ? await prisma.customer.findFirst({ where: { dienThoai: lead.phone } })
+            : null;
+          if (existingCust) {
+            customerId = existingCust.id;
+          } else {
+            await prisma.customer.create({
+              data: {
+                id: customerId,
+                code: leadForm.code || null,
+                name: leadForm.companyName || lead.fullName || 'Đại lý chưa đặt tên',
+                dienThoai: lead.phone || '',
+                email: lead.email || null,
+                nhom: 'dai-ly',
+                nguon: lead.source || 'marketing',
+                address: leadForm.address || leadForm.area || '',
+              }
+            });
+          }
+        }
+      } else if (!matchedLead) {
+        if (customer.dienThoai) {
+          matchedLead = await prisma.marketingLead.findFirst({ where: { phone: customer.dienThoai } });
+        }
+        if (!matchedLead && customer.code) {
+          const allLeads = await prisma.marketingLead.findMany();
+          matchedLead = allLeads.find((l) => {
+            try {
+              return JSON.parse(l.formValues || '{}').code === customer.code;
+            } catch {
+              return false;
             }
-          });
+          }) || null;
         }
       }
     }
@@ -4952,6 +5313,11 @@ app.post('/api/plan-finance/quotations', async (req, res) => {
           thanhTien: Number(body.thanhTien) || Number(body.tongTien) || 0,
           ghiChu: body.ghiChu || '',
           type: body.type || 'retail',
+          fileKhuVuc1: body.fileKhuVuc1 || null,
+          fileKhuVuc2: body.fileKhuVuc2 || null,
+          fileKhuVuc3: body.fileKhuVuc3 || null,
+          fileKhuVuc4: body.fileKhuVuc4 || null,
+          fileKhuVuc5: body.fileKhuVuc5 || null,
           items: {
             create: resolvedItems.map(it => ({
               tenHang: it.tenHang,
@@ -4965,6 +5331,45 @@ app.post('/api/plan-finance/quotations', async (req, res) => {
           }
         }
       });
+
+      // Đồng bộ trạng thái báo giá sang MarketingLead (Bước 2: Quản lý báo giá)
+      if (matchedLead && quotation) {
+        try {
+          let currentFv = {};
+          try {
+            currentFv = matchedLead.formValues ? JSON.parse(matchedLead.formValues) : {};
+          } catch (e) {}
+          const statusMap = {
+            draft: 'Draft',
+            pending_approval: 'Sent',
+            sent: 'Sent',
+            approved: 'Approved',
+            won: 'Approved',
+          };
+          const nextStep = Math.max(2, Number(currentFv.step) || 2);
+          const nextFv = {
+            ...currentFv,
+            step: nextStep,
+            careStatus: 'cared',
+            quoteId: quotation.id,
+            quoteCode: quotation.code,
+            quoteValue: Number(quotation.thanhTien || quotation.tongTien || 0),
+            discountRate: Number(quotation.discount || 0),
+            quoteStatus: statusMap[quotation.trangThai || 'draft'] || 'Draft',
+            quoteRawStatus: quotation.trangThai || 'draft',
+            quoteType: body.quoteType || currentFv.quoteType || 'Có quầy kệ',
+          };
+          await prisma.marketingLead.update({
+            where: { id: matchedLead.id },
+            data: {
+              status: nextStep === 2 ? 'quote' : matchedLead.status,
+              formValues: JSON.stringify(nextFv),
+            },
+          });
+        } catch (syncErr) {
+          console.warn('Không thể đồng bộ MarketingLead sau khi lưu báo giá:', syncErr.message);
+        }
+      }
     }
 
     let saleOrder = null;
@@ -5107,6 +5512,137 @@ app.post('/api/plan-finance/quotations', async (req, res) => {
   }
 });
 
+app.patch('/api/plan-finance/quotations/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const body = req.body || {};
+    const updateData = {};
+    if (body.ngayBaoGia) updateData.ngayBaoGia = new Date(body.ngayBaoGia);
+    if (body.ngayHetHan) updateData.ngayHetHan = new Date(body.ngayHetHan);
+    if (body.trangThai !== undefined) updateData.trangThai = body.trangThai;
+    if (body.uuTien !== undefined) updateData.uuTien = body.uuTien;
+    if (body.tongTien !== undefined) updateData.tongTien = Number(body.tongTien) || 0;
+    if (body.discount !== undefined) updateData.discount = Number(body.discount) || 0;
+    if (body.vat !== undefined) updateData.vat = Number(body.vat) || 0;
+    if (body.chiPhiThiCong !== undefined) updateData.chiPhiThiCong = Number(body.chiPhiThiCong) || 0;
+    if (body.thanhTien !== undefined) updateData.thanhTien = Number(body.thanhTien) || 0;
+    if (body.ghiChu !== undefined) updateData.ghiChu = body.ghiChu;
+    if (body.type !== undefined) updateData.type = body.type;
+    if (body.fileKhuVuc1 !== undefined) updateData.fileKhuVuc1 = body.fileKhuVuc1 || null;
+    if (body.fileKhuVuc2 !== undefined) updateData.fileKhuVuc2 = body.fileKhuVuc2 || null;
+    if (body.fileKhuVuc3 !== undefined) updateData.fileKhuVuc3 = body.fileKhuVuc3 || null;
+    if (body.fileKhuVuc4 !== undefined) updateData.fileKhuVuc4 = body.fileKhuVuc4 || null;
+    if (body.fileKhuVuc5 !== undefined) updateData.fileKhuVuc5 = body.fileKhuVuc5 || null;
+
+    if (Array.isArray(body.items)) {
+      await prisma.quotationItem.deleteMany({ where: { quotationId: id } });
+      updateData.items = {
+        create: body.items.map((it, idx) => ({
+          tenHang: it.tenHang || '',
+          donVi: it.donVi || 'cái',
+          soLuong: Number(it.soLuong) || 1,
+          donGia: Number(it.donGia) || 0,
+          thanhTien: Number(it.thanhTien) || 0,
+          ghiChu: typeof it.ghiChu === 'string' ? it.ghiChu : JSON.stringify(it.ghiChu || {}),
+          sortOrder: it.sortOrder !== undefined ? it.sortOrder : idx,
+        })),
+      };
+    }
+
+    const updated = await prisma.quotation.update({
+      where: { id },
+      data: updateData,
+      include: { items: true, customer: true, negotiations: true },
+    });
+
+    // Đồng bộ cập nhật báo giá sang MarketingLead (Bước 2: Quản lý báo giá)
+    try {
+      let matchedLead = null;
+      if (body.partnerId) {
+        matchedLead = await prisma.marketingLead.findUnique({ where: { id: body.partnerId } });
+      }
+      if (!matchedLead && updated.customerId) {
+        matchedLead = await prisma.marketingLead.findUnique({ where: { id: updated.customerId } });
+      }
+      if (!matchedLead && updated.customer?.dienThoai) {
+        matchedLead = await prisma.marketingLead.findFirst({ where: { phone: updated.customer.dienThoai } });
+      }
+      if (!matchedLead) {
+        const allLeads = await prisma.marketingLead.findMany();
+        matchedLead = allLeads.find((l) => {
+          try {
+            const fv = JSON.parse(l.formValues || '{}');
+            return fv.quoteId === updated.id || fv.quoteCode === updated.code || (updated.customer?.code && fv.code === updated.customer.code);
+          } catch {
+            return false;
+          }
+        }) || null;
+      }
+
+      if (matchedLead) {
+        let currentFv = {};
+        try {
+          currentFv = matchedLead.formValues ? JSON.parse(matchedLead.formValues) : {};
+        } catch (e) {}
+        const statusMap = {
+          draft: 'Draft',
+          pending_approval: 'Sent',
+          sent: 'Sent',
+          approved: 'Approved',
+          won: 'Approved',
+        };
+        const nextStep = Math.max(2, Number(currentFv.step) || 2);
+        const nextFv = {
+          ...currentFv,
+          step: nextStep,
+          careStatus: 'cared',
+          quoteId: updated.id,
+          quoteCode: updated.code,
+          quoteValue: Number(updated.thanhTien || updated.tongTien || 0),
+          discountRate: Number(updated.discount || 0),
+          quoteStatus: statusMap[updated.trangThai || 'draft'] || 'Draft',
+          quoteRawStatus: updated.trangThai || 'draft',
+          quoteType: body.quoteType || currentFv.quoteType || 'Có quầy kệ',
+        };
+        await prisma.marketingLead.update({
+          where: { id: matchedLead.id },
+          data: {
+            status: nextStep === 2 ? 'quote' : matchedLead.status,
+            formValues: JSON.stringify(nextFv),
+          },
+        });
+      }
+    } catch (syncErr) {
+      console.warn('Không thể đồng bộ MarketingLead khi PATCH báo giá:', syncErr.message);
+    }
+
+    res.json(updated);
+  } catch (err) {
+    console.error('Lỗi PATCH /api/plan-finance/quotations/:id:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/plan-finance/quotations/:id/negotiations', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const body = req.body || {};
+    const neg = await prisma.quotationNegotiation.create({
+      data: {
+        quotationId: id,
+        loai: body.loai || 'call',
+        ngay: body.ngay ? new Date(body.ngay) : new Date(),
+        nguoiThucHien: body.nguoiThucHien || 'Hệ thống',
+        ketQua: body.ketQua || '',
+      },
+    });
+    res.status(201).json(neg);
+  } catch (err) {
+    console.error('Lỗi POST /api/plan-finance/quotations/:id/negotiations:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GET, POST, PUT, PATCH, DELETE /api/plan-finance/sales ─────────────────────
 app.get('/api/plan-finance/sales', async (req, res) => {
   try {
@@ -5115,11 +5651,12 @@ app.get('/api/plan-finance/sales', async (req, res) => {
     const search = (req.query.search || '').trim().toLowerCase();
     const trangThai = req.query.trangThai;
 
+    const isDealerPortalQuery = req.query.orderSource === 'dealer_portal';
     const where = {};
-    if (trangThai) where.trangThai = trangThai;
+    if (trangThai && !isDealerPortalQuery) where.trangThai = trangThai;
     if (req.query.keToanDuyet) where.keToanDuyet = req.query.keToanDuyet;
 
-    const allOrders = await prisma.saleOrder.findMany({
+    const allOrdersRaw = await prisma.saleOrder.findMany({
       where,
       include: {
         customer: true,
@@ -5128,10 +5665,42 @@ app.get('/api/plan-finance/sales', async (req, res) => {
       orderBy: { createdAt: 'desc' },
     });
 
+    const employees = await prisma.employee.findMany({
+      select: { id: true, fullName: true },
+    });
+    const empMap = new Map(employees.map((e) => [e.id, e.fullName]));
+
+    const allOrders = allOrdersRaw.map((o) => ({
+      ...o,
+      nguoiPhuTrach: (o.nguoiPhuTrach && empMap.get(o.nguoiPhuTrach)) || o.nguoiPhuTrach,
+    }));
+
     let filtered = allOrders;
+    if (isDealerPortalQuery) {
+      filtered = filtered.filter(
+        (o) =>
+          (o.orderSource === 'dealer_portal' || (o.code || '').startsWith('DH-DL-')) &&
+          o.trangThai !== 'draft'
+      );
+      if (trangThai === 'pending') {
+        filtered = filtered.filter((o) => o.trangThai === 'pending' || o.trangThai === 'pending_approval');
+      } else if (trangThai === 'approved') {
+        filtered = filtered.filter((o) =>
+          ['approved', 'in_production', 'active', 'processing', 'delivering', 'delivered', 'completed', 'done'].includes(o.trangThai)
+        );
+      } else if (trangThai === 'rejected') {
+        filtered = filtered.filter((o) => ['rejected', 'cancelled', 'canceled'].includes(o.trangThai));
+      } else if (trangThai) {
+        filtered = filtered.filter((o) => o.trangThai === trangThai);
+      }
+    } else if (req.query.orderSource === 'system') {
+      filtered = filtered.filter(
+        (o) => o.orderSource !== 'dealer_portal' && !(o.code || '').startsWith('DH-DL-')
+      );
+    }
     if (search) {
       const searchNorm = removeAccents(search);
-      filtered = allOrders.filter((o) => {
+      filtered = filtered.filter((o) => {
         const matchCode = removeAccents(o.code).includes(searchNorm);
         const matchCust = removeAccents(o.customer?.name).includes(searchNorm);
         const matchCustCode = removeAccents(o.customer?.code).includes(searchNorm);
@@ -8404,20 +8973,30 @@ app.post('/api/intranet/station-heartbeat', (req, res) => {
 // API Danh sách người dùng hệ thống phục vụ chỉ định máy trạm
 app.get('/api/users', async (req, res) => {
   try {
-    const users = await prisma.user.findMany({
-      include: {
-        employee: true,
-      },
-      orderBy: {
-        email: 'asc',
-      },
-    });
-    const result = users.map((u) => ({
-      id: u.id,
-      name: u.employee?.fullName || u.email.split('@')[0],
-      email: u.email,
-      position: u.employee?.position || u.role || 'Nhân viên',
-      department: u.employee?.departmentName || u.employee?.department || 'Khối văn phòng',
+    const [employees, posCategories] = await Promise.all([
+      prisma.employee.findMany({
+        include: {
+          user: true,
+        },
+        orderBy: {
+          fullName: 'asc',
+        },
+      }),
+      prisma.category.findMany({
+        where: { type: 'position' },
+      }),
+    ]);
+    const posMap = {};
+    for (const c of posCategories) {
+      if (c.code) posMap[c.code] = c.name;
+      if (c.id) posMap[c.id] = c.name;
+    }
+    const result = employees.map((e) => ({
+      id: e.userId || e.id,
+      name: e.fullName,
+      email: e.email || e.user?.email || '',
+      position: posMap[e.position] || e.position || e.user?.role || 'Nhân viên',
+      department: e.departmentName || e.department || 'Khối văn phòng',
     }));
     res.json(result);
   } catch (err) {
