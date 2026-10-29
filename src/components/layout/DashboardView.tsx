@@ -16,6 +16,8 @@ import { SalesPlanPage } from '../../pages/sales/SalesPlanPage';
 import { SalesBusinessResultsPage } from '../../pages/sales/SalesBusinessResultsPage';
 import { SalesInternalReportsPage } from '../../pages/sales/SalesInternalReportsPage';
 import { SalesOrdersPage } from '../../pages/sales/SalesOrdersPage';
+import { SalesOrderTrackingPage } from '../../pages/sales/SalesOrderTrackingPage';
+import { SalesDealerSupportPage } from '../../pages/sales/SalesDealerSupportPage';
 import { SalesInventoryPage } from '../../pages/sales/SalesInventoryPage';
 import { FinanceOverviewPage } from '../../pages/finance/FinanceOverviewPage';
 import { FinanceCashflowPage } from '../../pages/finance/FinanceCashflowPage';
@@ -127,6 +129,12 @@ export const DashboardView: React.FC = () => {
   }
 
   // ── PHÒNG KINH DOANH (SALES) ROUTES ──
+  if (activeMenuKey === 'order-tracking' || activeMenuKey === 'order_tracking') {
+    return <SalesOrderTrackingPage />;
+  }
+  if (activeMenuKey === 'dealer-support' || activeMenuKey === 'dealer_support') {
+    return <SalesDealerSupportPage />;
+  }
   if (activeMenuKey === 'partners') {
     return <SalesPartnersPage />;
   }

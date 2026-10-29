@@ -1,6 +1,7 @@
 export * from './TableToolbar';
 export * from './Input';
 export * from './Select';
+export * from './DatePicker';
 export * from './FullWidthTable';
 export * from './Pagination';
 export * from './Avatar';

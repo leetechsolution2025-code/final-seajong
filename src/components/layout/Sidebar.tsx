@@ -155,6 +155,15 @@ const DEPT_SIDEBAR_CONFIGS: Record<string, { deptName: string; sections: NavSect
     deptName: 'Kinh doanh',
     sections: [
       {
+        id: 'sales_ops',
+        label: 'Bán hàng',
+        icon: 'bi-cart3',
+        items: [
+          { id: 'order-tracking', name: 'Theo dõi đơn hàng' },
+          { id: 'dealer-support', name: 'Hỗ trợ đại lý' },
+        ],
+      },
+      {
         id: 'customers_dealers',
         label: 'Khách hàng và đại lý',
         icon: 'bi-people',

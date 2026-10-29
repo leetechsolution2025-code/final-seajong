@@ -1,5 +1,6 @@
 import React, { forwardRef, useState, useEffect, useRef } from 'react';
 import { Eye, EyeSlash } from 'react-bootstrap-icons';
+import { DatePicker } from './DatePicker';
 
 export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'prefix'> {
   label?: string;
@@ -391,6 +392,42 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     // Hiển thị phần đuôi (suffix hoặc rightIcon hoặc password toggle)
     const effectivePrefix = prefix !== undefined ? prefix : leftIcon;
     const effectiveSuffix = suffix !== undefined ? suffix : rightIcon;
+
+    if (type === 'date' || type === 'datetime-local') {
+      return (
+        <DatePicker
+          label={label}
+          required={props.required}
+          value={value !== undefined && value !== null ? String(value) : ''}
+          placeholder={props.placeholder}
+          prefix={effectivePrefix}
+          showTime={type === 'datetime-local'}
+          disabled={props.disabled}
+          className={className}
+          style={style}
+          title={props.title}
+          onChange={(nextVal) => {
+            if (onChange) {
+              const syntheticEvent = {
+                target: {
+                  value: nextVal,
+                  name: props.name || '',
+                  id: inputId || '',
+                },
+                currentTarget: {
+                  value: nextVal,
+                  name: props.name || '',
+                  id: inputId || '',
+                },
+                preventDefault: () => {},
+                stopPropagation: () => {},
+              } as unknown as React.ChangeEvent<HTMLInputElement>;
+              onChange(syntheticEvent);
+            }
+          }}
+        />
+      );
+    }
 
     return (
       <div className={`form-group ${className}`}>

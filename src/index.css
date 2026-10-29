@@ -1374,6 +1374,15 @@ input, button, select, textarea, optgroup, table, th, td {
   line-height: 1.5;
 }
 
+.offcanvas-body .form-label {
+  font-size: 0.8125rem;
+}
+
+.offcanvas-body .form-select,
+.offcanvas-body .form-input {
+  font-size: 0.84375rem;
+}
+
 .offcanvas-footer {
   padding: 14px 20px;
   padding-bottom: max(14px, calc(10px + env(safe-area-inset-bottom, 0px)));

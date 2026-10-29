@@ -10,6 +10,13 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import * as cheerio from 'cheerio';
 import financeAccountingRouter from './server/financeAccountingRouter.js';
+import {
+  computeSalesOverviewStats,
+  getCalendarEvents,
+  createCalendarEvent,
+  updateCalendarEvent,
+  deleteCalendarEvent,
+} from './server/salesOverviewHelper.js';
 
 dotenv.config();
 
@@ -1466,6 +1473,518 @@ app.post('/api/dealer/orders/:id/submit', authenticateToken, async (req, res) =>
     });
   } catch (error) {
     console.error('Lỗi POST /api/dealer/orders/:id/submit:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// -------------------------------------------------------------
+// API YÊU CẦU HỖ TRỢ ĐẠI LÝ (DealerSupportTicket <-> Phòng Kinh doanh)
+// -------------------------------------------------------------
+app.get('/api/dealer/support-tickets', authenticateToken, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { id: true, customerId: true, role: true }
+    });
+
+    const isSalesScope = req.query.scope === 'sales' || (!user?.customerId && req.query.scope !== 'dealer');
+
+    if (isSalesScope) {
+      const tickets = await prisma.dealerSupportTicket.findMany({
+        where: {
+          status: { not: 'Draft' }
+        },
+        include: {
+          handler: {
+            select: { id: true, code: true, fullName: true, phone: true, workEmail: true, position: true }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+
+      const customerIds = [...new Set(tickets.map((t) => t.customerId).filter(Boolean))];
+      const customers = customerIds.length
+        ? await prisma.customer.findMany({
+            where: { id: { in: customerIds } },
+            include: {
+              nguoiChamSoc: {
+                select: { id: true, code: true, fullName: true, phone: true, workEmail: true, position: true }
+              }
+            }
+          })
+        : [];
+      const customerMap = new Map(customers.map((c) => [c.id, c]));
+
+      const enrichedAll = tickets.map((t) => {
+        const cust = t.customerId ? customerMap.get(t.customerId) : null;
+        const rawContent = String(t.content || '');
+        const orderMatch = rawContent.match(/\[Đơn hàng:\s*([^\]]+)\]/);
+        const urgentMatch = /\[Ưu tiên:\s*Khẩn cấp\]/.test(rawContent);
+        const cleanContent = rawContent
+          .replace(/\[Đơn hàng:\s*[^\]]+\]\s*/g, '')
+          .replace(/\[Ưu tiên:\s*[^\]]+\]\s*/g, '')
+          .trim();
+
+        return {
+          ...t,
+          orderCode: t.orderCode || (orderMatch ? orderMatch[1].trim() : null),
+          priority: t.priority && t.priority !== 'normal' ? t.priority : (urgentMatch ? 'urgent' : (t.priority || 'normal')),
+          content: cleanContent,
+          customer: cust
+            ? {
+                id: cust.id,
+                code: cust.code,
+                name: cust.name,
+                dienThoai: cust.dienThoai,
+                address: cust.address,
+                loai: cust.loai,
+                nhom: cust.nhom
+              }
+            : null,
+          handler: t.handler || cust?.nguoiChamSoc || null
+        };
+      });
+
+      return res.json({ success: true, data: enrichedAll });
+    }
+
+    let targetCustomerId = user?.customerId || null;
+    if (!targetCustomerId && user?.role === 'ADMIN') {
+      const firstDealer = await prisma.customer.findFirst({
+        orderBy: { createdAt: 'desc' },
+        select: { id: true }
+      });
+      targetCustomerId = firstDealer?.id || null;
+    }
+
+    if (!targetCustomerId) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const customer = await prisma.customer.findUnique({
+      where: { id: targetCustomerId },
+      include: {
+        nguoiChamSoc: {
+          select: { id: true, code: true, fullName: true, phone: true, workEmail: true, position: true }
+        }
+      }
+    });
+
+    const tickets = await prisma.dealerSupportTicket.findMany({
+      where: {
+        OR: [
+          { customerId: targetCustomerId },
+          ...(customer?.name ? [{ dealerName: customer.name }] : [])
+        ]
+      },
+      include: {
+        handler: {
+          select: { id: true, code: true, fullName: true, phone: true, workEmail: true, position: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const enriched = tickets.map((t) => {
+      const rawContent = String(t.content || '');
+      const orderMatch = rawContent.match(/\[Đơn hàng:\s*([^\]]+)\]/);
+      const urgentMatch = /\[Ưu tiên:\s*Khẩn cấp\]/.test(rawContent);
+      const cleanContent = rawContent
+        .replace(/\[Đơn hàng:\s*[^\]]+\]\s*/g, '')
+        .replace(/\[Ưu tiên:\s*[^\]]+\]\s*/g, '')
+        .trim();
+
+      return {
+        ...t,
+        orderCode: t.orderCode || (orderMatch ? orderMatch[1].trim() : null),
+        priority: t.priority && t.priority !== 'normal' ? t.priority : (urgentMatch ? 'urgent' : (t.priority || 'normal')),
+        content: cleanContent,
+        handler: t.handler || customer?.nguoiChamSoc || null
+      };
+    });
+
+    res.json({ success: true, data: enriched });
+  } catch (error) {
+    console.error('Lỗi GET /api/dealer/support-tickets:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.get('/api/sales/dealer-support-tickets', authenticateToken, async (req, res) => {
+  try {
+    const tickets = await prisma.dealerSupportTicket.findMany({
+      where: {
+        status: { not: 'Draft' }
+      },
+      include: {
+        handler: {
+          select: { id: true, code: true, fullName: true, phone: true, workEmail: true, position: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const customerIds = [...new Set(tickets.map((t) => t.customerId).filter(Boolean))];
+    const customers = customerIds.length
+      ? await prisma.customer.findMany({
+          where: { id: { in: customerIds } },
+          include: {
+            nguoiChamSoc: {
+              select: { id: true, code: true, fullName: true, phone: true, workEmail: true, position: true }
+            }
+          }
+        })
+      : [];
+    const customerMap = new Map(customers.map((c) => [c.id, c]));
+
+    const enrichedAll = tickets.map((t) => {
+      const cust = t.customerId ? customerMap.get(t.customerId) : null;
+      const rawContent = String(t.content || '');
+      const orderMatch = rawContent.match(/\[Đơn hàng:\s*([^\]]+)\]/);
+      const urgentMatch = /\[Ưu tiên:\s*Khẩn cấp\]/.test(rawContent);
+      const cleanContent = rawContent
+        .replace(/\[Đơn hàng:\s*[^\]]+\]\s*/g, '')
+        .replace(/\[Ưu tiên:\s*[^\]]+\]\s*/g, '')
+        .trim();
+
+      return {
+        ...t,
+        orderCode: t.orderCode || (orderMatch ? orderMatch[1].trim() : null),
+        priority: t.priority && t.priority !== 'normal' ? t.priority : (urgentMatch ? 'urgent' : (t.priority || 'normal')),
+        content: cleanContent,
+        customer: cust
+          ? {
+              id: cust.id,
+              code: cust.code,
+              name: cust.name,
+              dienThoai: cust.dienThoai,
+              address: cust.address,
+              loai: cust.loai,
+              nhom: cust.nhom
+            }
+          : null,
+        handler: t.handler || cust?.nguoiChamSoc || null
+      };
+    });
+
+    res.json({ success: true, data: enrichedAll });
+  } catch (error) {
+    console.error('Lỗi GET /api/sales/dealer-support-tickets:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/dealer/support-tickets', authenticateToken, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { id: true, name: true, customerId: true }
+    });
+
+    if (!user || !user.customerId) {
+      return res.status(403).json({ success: false, message: 'Chỉ đại lý mới có quyền tạo yêu cầu hỗ trợ' });
+    }
+
+    const { type, title, content, orderCode, priority, isDraft } = req.body;
+    if (!title || !String(title).trim()) {
+      return res.status(400).json({ success: false, message: 'Vui lòng nhập tiêu đề yêu cầu' });
+    }
+
+    const customer = await prisma.customer.findUnique({
+      where: { id: user.customerId },
+      include: {
+        nguoiChamSoc: {
+          select: { id: true, code: true, fullName: true, phone: true, workEmail: true, userId: true }
+        }
+      }
+    });
+
+    const now = new Date();
+    const vnDateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(now).replace(/-/g, '');
+
+    // Tự sinh mã yêu cầu theo cấu trúc: YCDL-YYYYmmdd-STT
+    const codePrefix = `YCDL-${vnDateStr}-`;
+
+    const sameDayTickets = await prisma.dealerSupportTicket.findMany({
+      where: { code: { startsWith: codePrefix } },
+      select: { code: true }
+    });
+
+    let maxSeq = 0;
+    for (const tk of sameDayTickets) {
+      const parts = tk.code.split('-');
+      const seqNum = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(seqNum) && seqNum > maxSeq) maxSeq = seqNum;
+    }
+
+    let nextSeq = maxSeq + 1;
+    let ticketCode = `${codePrefix}${String(nextSeq).padStart(2, '0')}`;
+    while (sameDayTickets.some(t => t.code === ticketCode)) {
+      nextSeq++;
+      ticketCode = `${codePrefix}${String(nextSeq).padStart(2, '0')}`;
+    }
+
+    const cleanOrderCode = orderCode ? String(orderCode).trim() : null;
+    const normalizedPriority = priority === 'urgent' ? 'urgent' : 'normal';
+    const cleanContent = String(content || '')
+      .replace(/\[Đơn hàng:\s*[^\]]+\]\s*/g, '')
+      .replace(/\[Ưu tiên:\s*[^\]]+\]\s*/g, '')
+      .trim();
+
+    const ticketStatus = isDraft ? 'Draft' : 'Pending';
+
+    const created = await prisma.dealerSupportTicket.create({
+      data: {
+        code: ticketCode,
+        customerId: user.customerId,
+        dealerName: customer?.name || user.name || 'Đại lý Seajong',
+        type: type || 'Bảo hành & Linh kiện',
+        orderCode: cleanOrderCode,
+        priority: normalizedPriority,
+        title: String(title).trim(),
+        content: cleanContent,
+        status: ticketStatus,
+        requestDate: now,
+        handlerId: customer?.nguoiChamSoc?.id || null
+      },
+      include: {
+        handler: {
+          select: { id: true, code: true, fullName: true, phone: true, workEmail: true, position: true }
+        }
+      }
+    });
+
+    if (!isDraft) {
+      try {
+        const salesUsers = await prisma.user.findMany({
+          where: {
+            OR: [
+              ...(customer?.nguoiChamSoc?.userId ? [{ id: customer.nguoiChamSoc.userId }] : []),
+              { role: 'ADMIN' },
+              { deptAccess: { contains: 'sales' } }
+            ]
+          },
+          take: 6
+        });
+
+        for (const su of salesUsers) {
+          await prisma.notification.create({
+            data: {
+              title: `🎧 Yêu cầu hỗ trợ mới từ ${customer?.name || ticketCode}`,
+              content: `[${created.type}] ${created.title} (${ticketCode}). Chuyên viên phụ trách: ${customer?.nguoiChamSoc?.fullName || 'Phòng Kinh doanh'}.`,
+              type: 'info',
+              priority: normalizedPriority === 'urgent' ? 'high' : 'normal',
+              audienceType: 'individual',
+              audienceValue: su.id,
+              createdById: user.id
+            }
+          });
+        }
+      } catch (notifErr) {
+        console.warn('Không thể gửi thông báo yêu cầu hỗ trợ:', notifErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: isDraft
+        ? 'Đã lưu nháp yêu cầu hỗ trợ!'
+        : 'Đã gửi yêu cầu hỗ trợ tới Phòng Kinh doanh!',
+      ticket: {
+        ...created,
+        handler: created.handler || customer?.nguoiChamSoc || null
+      }
+    });
+  } catch (error) {
+    console.error('Lỗi POST /api/dealer/support-tickets:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.put('/api/dealer/support-tickets/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { id: true, customerId: true, role: true, employee: { select: { id: true, fullName: true } } }
+    });
+
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Chưa xác thực người dùng' });
+    }
+
+    const { id } = req.params;
+    const existing = await prisma.dealerSupportTicket.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy yêu cầu hỗ trợ' });
+    }
+
+    const isSalesStaff = !user.customerId || user.role === 'ADMIN';
+    if (!isSalesStaff && existing.customerId !== user.customerId) {
+      return res.status(403).json({ success: false, message: 'Không có quyền thao tác trên yêu cầu này' });
+    }
+
+    const { type, title, content, orderCode, priority, isDraft, status, responseContent, handlerId } = req.body;
+    const cleanOrderCode = orderCode !== undefined ? (orderCode ? String(orderCode).trim() : null) : existing.orderCode;
+    const normalizedPriority = priority !== undefined ? (priority === 'urgent' ? 'urgent' : 'normal') : (existing.priority || 'normal');
+    const cleanContent = content !== undefined
+      ? String(content)
+          .replace(/\[Đơn hàng:\s*[^\]]+\]\s*/g, '')
+          .replace(/\[Ưu tiên:\s*[^\]]+\]\s*/g, '')
+          .trim()
+      : existing.content;
+
+    let newStatus = existing.status;
+    if (status !== undefined) {
+      newStatus = status;
+    } else if (isDraft === true) {
+      newStatus = 'Draft';
+    } else if (isDraft === false) {
+      newStatus = 'Pending';
+    }
+
+    const isResolvedStatus = newStatus === 'Resolved' || newStatus === 'Completed';
+
+    const updated = await prisma.dealerSupportTicket.update({
+      where: { id },
+      data: {
+        type: type || existing.type,
+        orderCode: cleanOrderCode,
+        priority: normalizedPriority,
+        title: title ? String(title).trim() : existing.title,
+        content: cleanContent,
+        status: newStatus,
+        ...(responseContent !== undefined ? { responseContent: String(responseContent).trim() } : {}),
+        ...(handlerId !== undefined ? { handlerId: handlerId || null } : (isSalesStaff && !existing.handlerId && user.employee?.id ? { handlerId: user.employee.id } : {})),
+        ...(status !== undefined ? { resolvedAt: isResolvedStatus ? new Date() : null } : {})
+      },
+      include: {
+        handler: {
+          select: { id: true, code: true, fullName: true, phone: true, workEmail: true, position: true }
+        }
+      }
+    });
+
+    res.json({
+      success: true,
+      message: isSalesStaff && (status !== undefined || responseContent !== undefined)
+        ? 'Đã cập nhật xử lý và phản hồi yêu cầu hỗ trợ đại lý!'
+        : newStatus === 'Draft'
+        ? 'Đã cập nhật bản nháp yêu cầu!'
+        : 'Đã cập nhật và gửi yêu cầu tới Phòng Kinh doanh!',
+      ticket: updated
+    });
+  } catch (error) {
+    console.error('Lỗi PUT /api/dealer/support-tickets/:id:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.put('/api/sales/dealer-support-tickets/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { id: true, name: true, customerId: true, role: true, employee: { select: { id: true, fullName: true } } }
+    });
+
+    const { id } = req.params;
+    const existing = await prisma.dealerSupportTicket.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy yêu cầu hỗ trợ' });
+    }
+
+    const { status, responseContent, handlerId } = req.body;
+    const newStatus = status || existing.status;
+    const isResolvedStatus = newStatus === 'Resolved' || newStatus === 'Completed';
+
+    const updated = await prisma.dealerSupportTicket.update({
+      where: { id },
+      data: {
+        status: newStatus,
+        ...(responseContent !== undefined ? { responseContent: String(responseContent).trim() } : {}),
+        ...(handlerId !== undefined
+          ? { handlerId: handlerId || null }
+          : !existing.handlerId && user?.employee?.id
+          ? { handlerId: user.employee.id }
+          : {}),
+        resolvedAt: isResolvedStatus ? new Date() : null
+      },
+      include: {
+        handler: {
+          select: { id: true, code: true, fullName: true, phone: true, workEmail: true, position: true }
+        }
+      }
+    });
+
+    // Gửi thông báo về cho tài khoản Đại lý nếu có customerId
+    if (existing.customerId) {
+      try {
+        const dealerUsers = await prisma.user.findMany({
+          where: { customerId: existing.customerId },
+          select: { id: true }
+        });
+        for (const du of dealerUsers) {
+          await prisma.notification.create({
+            data: {
+              title: isResolvedStatus
+                ? `✅ Yêu cầu hỗ trợ ${existing.code} đã được xử lý`
+                : `🔄 Phòng Kinh doanh đang xử lý yêu cầu ${existing.code}`,
+              content: responseContent
+                ? `[${existing.title}] Phản hồi: ${String(responseContent).trim()}`
+                : `Yêu cầu "${existing.title}" đã được chuyển sang trạng thái: ${isResolvedStatus ? 'Đã xử lý' : 'Đang xử lý'}.`,
+              type: isResolvedStatus ? 'success' : 'info',
+              priority: 'normal',
+              audienceType: 'individual',
+              audienceValue: du.id,
+              createdById: user?.id || null
+            }
+          });
+        }
+      } catch (notifErr) {
+        console.warn('Không thể gửi thông báo phản hồi cho đại lý:', notifErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Đã cập nhật xử lý & phản hồi yêu cầu hỗ trợ đại lý!',
+      ticket: updated
+    });
+  } catch (error) {
+    console.error('Lỗi PUT /api/sales/dealer-support-tickets/:id:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.delete('/api/dealer/support-tickets/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { id: true, customerId: true }
+    });
+
+    if (!user || !user.customerId) {
+      return res.status(403).json({ success: false, message: 'Chỉ đại lý mới có quyền thao tác' });
+    }
+
+    const { id } = req.params;
+    const existing = await prisma.dealerSupportTicket.findUnique({ where: { id } });
+    if (!existing || existing.customerId !== user.customerId) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy yêu cầu hỗ trợ' });
+    }
+
+    if (existing.status === 'Resolved' || existing.status === 'Completed') {
+      return res.status(400).json({ success: false, message: 'Không thể xoá yêu cầu đã được xử lý hoàn tất' });
+    }
+
+    await prisma.dealerSupportTicket.delete({ where: { id } });
+    res.json({ success: true, message: 'Đã xoá yêu cầu hỗ trợ thành công' });
+  } catch (error) {
+    console.error('Lỗi DELETE /api/dealer/support-tickets/:id:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -9242,6 +9761,62 @@ app.post('/api/plan-finance/stock-counts', async (req, res) => {
     res.json({ success: true, stockCount });
   } catch (err) {
     console.error('Lỗi POST /api/plan-finance/stock-counts:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── 7. API Thống kê Tổng quan Phòng Kinh doanh (/api/sales/overview-stats) & Lịch sự kiện (/api/calendar-events) ──
+app.get('/api/sales/overview-stats', async (req, res) => {
+  try {
+    const period = String(req.query.period || 'month');
+    const selectedMonth = parseInt(String(req.query.month || '10'), 10) || 10;
+    const freshMod = await import(`./server/salesOverviewHelper.js?t=${Date.now()}`);
+    const stats = await freshMod.computeSalesOverviewStats(prisma, period, selectedMonth);
+    res.json(stats);
+  } catch (err) {
+    console.error('Lỗi GET /api/sales/overview-stats:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/calendar-events', async (req, res) => {
+  try {
+    const userEmail = String(req.query.userEmail || '');
+    const userId = String(req.query.userId || '');
+    const events = await getCalendarEvents(prisma, { userEmail, userId });
+    res.json(events);
+  } catch (err) {
+    console.error('Lỗi GET /api/calendar-events:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/calendar-events', async (req, res) => {
+  try {
+    const created = await createCalendarEvent(prisma, req.body || {});
+    res.status(201).json(created);
+  } catch (err) {
+    console.error('Lỗi POST /api/calendar-events:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/calendar-events/:id', async (req, res) => {
+  try {
+    const updated = await updateCalendarEvent(prisma, req.params.id, req.body || {});
+    res.json(updated);
+  } catch (err) {
+    console.error('Lỗi PUT /api/calendar-events/:id:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/calendar-events/:id', async (req, res) => {
+  try {
+    const deleted = await deleteCalendarEvent(prisma, req.params.id);
+    res.json(deleted);
+  } catch (err) {
+    console.error('Lỗi DELETE /api/calendar-events/:id:', err);
     res.status(500).json({ error: err.message });
   }
 });

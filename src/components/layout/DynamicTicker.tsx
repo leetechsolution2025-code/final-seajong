@@ -463,39 +463,29 @@ export const STANDARDS_TICKER_ITEMS: TickerItem[] = [
 // ── 18. KINH DOANH, ĐẠI LÝ & BÁO GIÁ (SALES / PARTNERS / PRICING) ─────────────
 export const SALES_TICKER_ITEMS: TickerItem[] = [
   {
-    badge: '🏆 DẪN ĐẦU NĂM 2026',
-    badgeColor: 'bg-amber-100 text-amber-900 border-amber-300 font-bold',
-    text: 'Vinh danh <strong>Showroom Thiên Thuận Lạng Sơn (KH0014)</strong> xuất sắc dẫn đầu doanh số toàn quốc năm 2026 👑',
+    badge: 'TỔNG DOANH SỐ',
+    badgeColor: 'bg-blue-50 text-blue-700 border-blue-200 font-bold',
+    text: 'Tháng 10/2026: Tổng doanh số đạt <strong>0,15 tỷ đồng</strong> (Seajong: <strong>0,14 tỷ</strong> • OEM: <strong>0,01 tỷ</strong>) — Đạt <strong>9.7%</strong> chỉ tiêu (1,55 tỷ, tăng trưởng <strong>+275%</strong>)',
   },
   {
-    badge: '🌟 DẪN ĐẦU THÁNG 10',
-    badgeColor: 'bg-emerald-100 text-emerald-900 border-emerald-300 font-bold',
-    text: 'Chúc mừng <strong>Showroom Thiên Thuận Lạng Sơn (KH0014)</strong> xuất sắc dẫn đầu doanh số tháng 10/2026 trên toàn hệ thống Seajong 🌟',
+    badge: 'TỔNG DOANH THU',
+    badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold',
+    text: 'Tháng 10/2026: Tổng doanh thu đạt <strong>0,07 tỷ đồng</strong> (Seajong: <strong>0,06 tỷ</strong> • OEM: <strong>0,01 tỷ</strong>) — Đạt <strong>5.3%</strong> kế hoạch (1,32 tỷ)',
   },
   {
-    badge: 'MẠNG LƯỚI ĐẠI LÝ',
-    badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
-    text: 'Hệ thống phân phối chính hãng Seajong mở rộng với hơn 150 đại lý cấp 1 và showroom tại 63 tỉnh thành',
+    badge: 'PHÁT TRIỂN ĐẠI LÝ',
+    badgeColor: 'bg-amber-50 text-amber-800 border-amber-200 font-bold',
+    text: 'Tháng 10/2026: Phát triển <strong>8/11 đại lý</strong> (Đạt <strong>72.7%</strong> mục tiêu) • Đang theo dõi <strong>4 đối tác tiềm năng</strong> (3 chăm sóc, 1 báo giá/HĐ)',
   },
   {
-    badge: 'CHÍNH SÁCH BÁN HÀNG',
-    badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
-    text: 'Áp dụng chính sách chiết khấu bậc thang hấp dẫn và chương trình thưởng tích lũy doanh số quý 4/2026',
+    badge: 'HỖ TRỢ ĐẠI LÝ',
+    badgeColor: 'bg-purple-50 text-purple-700 border-purple-200 font-bold',
+    text: 'Hỗ trợ đại lý: Tiếp nhận <strong>2 yêu cầu</strong> (1 đang xử lý, 1 chờ tiếp nhận — Tiếp nhận <strong>50%</strong>) • Mới nhất: <strong>Showroom Thiên Thuận Lạng Sơn (YCDL-202610-0001)</strong>',
   },
   {
-    badge: 'MỤC TIÊU DOANH SỐ',
-    badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    text: 'Doanh số thiết bị vệ sinh và sen vòi cao cấp tháng này đạt 118% kế hoạch kinh doanh đề ra',
-  },
-  {
-    badge: 'HỖ TRỢ SHOWROOM',
-    badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
-    text: 'Tài trợ 100% kệ trưng bày thương hiệu, biển bảng nhận diện và bộ mẫu sản phẩm trải nghiệm cho đại lý mới',
-  },
-  {
-    badge: 'HỒ SƠ DỰ ÁN LỚN',
-    badgeColor: 'bg-teal-50 text-teal-800 border-teal-200',
-    text: 'Cung ứng gói thiết bị vệ sinh sen vòi cao cấp Seajong cho 5 dự án khách sạn 4 sao và khu đô thị cao cấp',
+    badge: 'DIỄN BIẾN 6 THÁNG',
+    badgeColor: 'bg-teal-50 text-teal-800 border-teal-200 font-bold',
+    text: 'Lũy kế 6 tháng trên biểu đồ (T05–T10/2026): Tổng doanh số đạt <strong>1,29 tỷ đồng</strong> • Tổng doanh thu thực thu đạt <strong>0,30 tỷ đồng</strong>',
   },
 ];
 

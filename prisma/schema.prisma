@@ -3316,20 +3316,24 @@ model Revenue {
 }
 
 model DealerSupportTicket {
-  id          String    @id @default(cuid())
-  code        String    @unique
-  customerId  String?
-  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  dealerName  String?
-  type        String    // Cấp phát vật tư & phụ kiện, Yêu cầu đóng gói phân lô, Bảo hành & Linh kiện, Hỗ trợ catalog & POSM, Hỗ trợ kỹ thuật & chính sách
-  title       String
-  content     String?
-  status      String    @default("In Progress") // In Progress, Resolved, Pending, Cancelled
-  requestDate DateTime  @default(now())
-  handlerId   String?
-  handler     Employee? @relation("DealerTicketHandler", fields: [handlerId], references: [id], onDelete: SetNull)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  code            String    @unique
+  customerId      String?
+  customer        Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  dealerName      String?
+  type            String    // Bảo hành & Linh kiện, Hỗ trợ catalog & POSM, Cấp phát vật tư & phụ kiện, Hỗ trợ đơn hàng & giao nhận, Đối soát công nợ & điểm thưởng, Xin cơ chế giá dự án / công trình
+  orderCode       String?   // Mã đơn hàng liên quan
+  priority        String    @default("normal") // normal, urgent
+  title           String
+  content         String?
+  responseContent String?   // Nội dung phản hồi từ Phòng Kinh doanh
+  status          String    @default("Pending") // Draft, Pending, In Progress, Resolved, Cancelled
+  requestDate     DateTime  @default(now())
+  resolvedAt      DateTime? // Thời điểm Phòng Kinh doanh xử lý hoàn tất
+  handlerId       String?
+  handler         Employee? @relation("DealerTicketHandler", fields: [handlerId], references: [id], onDelete: SetNull)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([customerId])
   @@index([handlerId])

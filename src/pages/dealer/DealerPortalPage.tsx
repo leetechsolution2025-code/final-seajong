@@ -10,6 +10,7 @@ import { FullWidthTable } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
 import { Button } from '../../components/common/Button';
 import { Select } from '../../components/common/Select';
+import { DatePicker } from '../../components/common/DatePicker';
 import {
   Shop,
   CartPlus,
@@ -248,6 +249,27 @@ export const DealerPortalPage: React.FC = () => {
   const [debtPage, setDebtPage] = useState<number>(1);
   const [debtPageSize, setDebtPageSize] = useState<number>(10);
 
+  // StepPage state cho Yêu cầu hỗ trợ: 1 = Danh sách yêu cầu, 2 = Đã xử lý
+  const [supportTickets, setSupportTickets] = useState<any[]>([]);
+  const [supportLoading, setSupportLoading] = useState<boolean>(false);
+  const [supportStep, setSupportStep] = useState<number>(1);
+  const [searchSupport, setSupportSearch] = useState<string>('');
+  const [supportTypeFilter, setSupportTypeFilter] = useState<string>('all');
+  const [supportStatusFilter, setSupportStatusFilter] = useState<string>('all');
+  const [supportPage, setSupportPage] = useState<number>(1);
+  const [supportPageSize, setSupportPageSize] = useState<number>(10);
+  const [selectedSupportTicket, setSelectedSupportTicket] = useState<any | null>(null);
+  const [showSupportFormDrawer, setShowSupportFormDrawer] = useState<boolean>(false);
+  const [editingSupportTicketId, setEditingSupportTicketId] = useState<string | null>(null);
+  const [supportFormType, setSupportFormType] = useState<string>('Bảo hành & Linh kiện');
+  const [supportFormTitle, setSupportFormTitle] = useState<string>('');
+  const [supportFormContent, setSupportFormContent] = useState<string>('');
+  const [supportFormOrderCode, setSupportFormOrderCode] = useState<string>('');
+  const [supportFormPriority, setSupportFormPriority] = useState<string>('normal');
+  const [isSavingSupportTicket, setIsSavingSupportTicket] = useState<boolean>(false);
+  const [supportTicketToDelete, setSupportTicketToDelete] = useState<any | null>(null);
+  const [isDeletingSupportTicket, setIsDeletingSupportTicket] = useState<boolean>(false);
+
   // 1. Fetch overview data
   const fetchOverview = async () => {
     try {
@@ -326,6 +348,166 @@ export const DealerPortalPage: React.FC = () => {
     }
   };
 
+  // 4. Fetch support tickets (Yêu cầu hỗ trợ gửi Phòng Kinh doanh)
+  const fetchSupportTickets = async () => {
+    try {
+      setSupportLoading(true);
+      const token = localStorage.getItem('seajong_token');
+      const res = await fetch('/api/dealer/support-tickets', {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          setSupportTickets(json.data);
+        }
+      }
+    } catch (err) {
+      console.error('Lỗi tải danh sách yêu cầu hỗ trợ:', err);
+    } finally {
+      setSupportLoading(false);
+    }
+  };
+
+  const handleOpenCreateSupportTicket = () => {
+    setEditingSupportTicketId(null);
+    setSupportFormType('Bảo hành & Linh kiện');
+    setSupportFormTitle('');
+    setSupportFormContent('');
+    setSupportFormOrderCode('');
+    setSupportFormPriority('normal');
+    setShowSupportFormDrawer(true);
+  };
+
+  const handleOpenEditSupportTicket = (ticket: any) => {
+    const rawContent = String(ticket.content || '');
+    const orderMatch = rawContent.match(/\[Đơn hàng:\s*([^\]]+)\]/);
+    const urgentMatch = /\[Ưu tiên:\s*Khẩn cấp\]/.test(rawContent);
+    const cleanBody = rawContent
+      .replace(/\[Đơn hàng:\s*[^\]]+\]\s*/g, '')
+      .replace(/\[Ưu tiên:\s*[^\]]+\]\s*/g, '')
+      .trim();
+
+    setEditingSupportTicketId(ticket.id);
+    setSupportFormType(ticket.type || 'Bảo hành & Linh kiện');
+    setSupportFormTitle(ticket.title || '');
+    setSupportFormContent(cleanBody);
+    setSupportFormOrderCode(ticket.orderCode || (orderMatch ? orderMatch[1].trim() : ''));
+    setSupportFormPriority(ticket.priority === 'urgent' || urgentMatch ? 'urgent' : 'normal');
+    setSelectedSupportTicket(null);
+    setShowSupportFormDrawer(true);
+  };
+
+  const handleSaveSupportTicket = async (isDraft = false) => {
+    if (!supportFormTitle.trim()) {
+      alert('Vui lòng nhập tiêu đề yêu cầu hỗ trợ!');
+      return;
+    }
+    setIsSavingSupportTicket(true);
+    try {
+      const token = localStorage.getItem('seajong_token');
+      const isEditing = Boolean(editingSupportTicketId);
+      const url = isEditing
+        ? `/api/dealer/support-tickets/${editingSupportTicketId}`
+        : '/api/dealer/support-tickets';
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          type: supportFormType,
+          title: supportFormTitle.trim(),
+          content: supportFormContent.trim(),
+          orderCode: supportFormOrderCode,
+          priority: supportFormPriority,
+          isDraft,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setShowSupportFormDrawer(false);
+        setEditingSupportTicketId(null);
+        await fetchSupportTickets();
+      } else {
+        alert(json.message || 'Không thể lưu yêu cầu hỗ trợ');
+      }
+    } catch (err) {
+      console.error('Lỗi lưu yêu cầu hỗ trợ:', err);
+      alert('Lỗi kết nối máy chủ');
+    } finally {
+      setIsSavingSupportTicket(false);
+    }
+  };
+
+  const handleSubmitDraftSupportTicket = async (ticket: any) => {
+    try {
+      setIsSavingSupportTicket(true);
+      const token = localStorage.getItem('seajong_token');
+      const res = await fetch(`/api/dealer/support-tickets/${ticket.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          type: ticket.type,
+          title: ticket.title,
+          content: ticket.content,
+          orderCode: ticket.orderCode,
+          priority: ticket.priority,
+          isDraft: false,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setSelectedSupportTicket((prev: any) =>
+          prev && prev.id === ticket.id ? { ...prev, status: 'Pending' } : prev
+        );
+        await fetchSupportTickets();
+      }
+    } catch (err) {
+      console.error('Lỗi gửi yêu cầu:', err);
+    } finally {
+      setIsSavingSupportTicket(false);
+    }
+  };
+
+  const handleConfirmDeleteSupportTicket = async () => {
+    if (!supportTicketToDelete) return;
+    setIsDeletingSupportTicket(true);
+    try {
+      const token = localStorage.getItem('seajong_token');
+      const res = await fetch(`/api/dealer/support-tickets/${supportTicketToDelete.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      const json = await res.json();
+      if (json.success) {
+        if (selectedSupportTicket?.id === supportTicketToDelete.id) {
+          setSelectedSupportTicket(null);
+        }
+        setSupportTicketToDelete(null);
+        await fetchSupportTickets();
+      } else {
+        alert(json.message || 'Không thể xoá yêu cầu');
+      }
+    } catch (err) {
+      console.error('Lỗi xoá yêu cầu hỗ trợ:', err);
+    } finally {
+      setIsDeletingSupportTicket(false);
+    }
+  };
+
   // Keyboard navigation cho Lightbox Gallery Modal
   useEffect(() => {
     if (!galleryItem) return;
@@ -352,6 +534,7 @@ export const DealerPortalPage: React.FC = () => {
     fetchOverview();
     fetchOrders();
     fetchProducts();
+    fetchSupportTickets();
     fetch('/api/seajong/categories')
       .then((res) => res.json())
       .then((data) => {
@@ -756,6 +939,71 @@ export const DealerPortalPage: React.FC = () => {
     },
   ], []);
 
+  // Phân loại yêu cầu hỗ trợ theo bước của StepPage: 1 = Danh sách yêu cầu, 2 = Đã xử lý
+  const activeSupportTickets = useMemo(() => {
+    return supportTickets.filter(
+      (t) => t.status !== 'Resolved' && t.status !== 'Completed'
+    );
+  }, [supportTickets]);
+
+  const resolvedSupportTickets = useMemo(() => {
+    return supportTickets.filter(
+      (t) => t.status === 'Resolved' || t.status === 'Completed'
+    );
+  }, [supportTickets]);
+
+  const supportSteps: ModernStepItem[] = useMemo(() => [
+    {
+      num: 1,
+      id: 'support_list',
+      title: 'Danh sách yêu cầu',
+      desc: 'Yêu cầu chờ tiếp nhận & đang xử lý',
+      badge: activeSupportTickets.length > 0 ? `${activeSupportTickets.length} yêu cầu` : undefined,
+      badgeVariant: 'warning',
+      icon: <Headset className="w-4 h-4" />,
+    },
+    {
+      num: 2,
+      id: 'support_resolved',
+      title: 'Đã xử lý',
+      desc: 'Yêu cầu đã được Phòng Kinh doanh phản hồi',
+      badge: resolvedSupportTickets.length > 0 ? `${resolvedSupportTickets.length} yêu cầu` : undefined,
+      badgeVariant: 'success',
+      icon: <CheckCircle className="w-4 h-4" />,
+    },
+  ], [activeSupportTickets.length, resolvedSupportTickets.length]);
+
+  const filteredSupportTickets = useMemo(() => {
+    return supportTickets.filter((t) => {
+      const isResolved = t.status === 'Resolved' || t.status === 'Completed';
+      const matchStep = supportStep === 1 ? !isResolved : isResolved;
+      if (!matchStep) return false;
+
+      if (supportTypeFilter !== 'all' && t.type !== supportTypeFilter) {
+        return false;
+      }
+
+      if (supportStatusFilter !== 'all' && t.status !== supportStatusFilter) {
+        return false;
+      }
+
+      if (searchSupport.trim()) {
+        const kw = searchSupport.toLowerCase().trim();
+        const matchCode = String(t.code || '').toLowerCase().includes(kw);
+        const matchTitle = String(t.title || '').toLowerCase().includes(kw);
+        const matchContent = String(t.content || '').toLowerCase().includes(kw);
+        const matchType = String(t.type || '').toLowerCase().includes(kw);
+        return matchCode || matchTitle || matchContent || matchType;
+      }
+      return true;
+    });
+  }, [supportTickets, supportStep, supportTypeFilter, supportStatusFilter, searchSupport]);
+
+  const pagedSupportTickets = useMemo(() => {
+    const start = (supportPage - 1) * supportPageSize;
+    return filteredSupportTickets.slice(start, start + supportPageSize);
+  }, [filteredSupportTickets, supportPage, supportPageSize]);
+
   // Filtered orders theo Bước hiện tại của StepPage
   const filteredOrders = useMemo(() => {
     return orders.filter(ord => {
@@ -878,8 +1126,16 @@ export const DealerPortalPage: React.FC = () => {
       return a.seq - b.seq;
     });
 
-    const startMs = debtStartDate ? new Date(debtStartDate).getTime() : null;
-    const endMs = debtEndDate ? new Date(debtEndDate).getTime() : null;
+    const startMs = debtStartDate
+      ? new Date(
+          debtStartDate.includes('T') ? debtStartDate : `${debtStartDate}T00:00:00`
+        ).getTime()
+      : null;
+    const endMs = debtEndDate
+      ? new Date(
+          debtEndDate.includes('T') ? debtEndDate : `${debtEndDate}T23:59:59.999`
+        ).getTime()
+      : null;
 
     let openingBalance = 0;
     let periodIncrease = 0;
@@ -2531,6 +2787,340 @@ export const DealerPortalPage: React.FC = () => {
         onCancel={() => !isDeletingOrder && setOrderToDelete(null)}
         onClose={() => !isDeletingOrder && setOrderToDelete(null)}
       />
+
+      {/* ── OFFCANVAS XEM CHI TIẾT YÊU CẦU HỖ TRỢ ĐẠI LÝ (400PX) ── */}
+      <Offcanvas
+        isOpen={Boolean(selectedSupportTicket)}
+        onClose={() => setSelectedSupportTicket(null)}
+        title="Chi tiết yêu cầu hỗ trợ"
+        description={selectedSupportTicket ? `#${selectedSupportTicket.code}` : undefined}
+        icon={<Headset size={18} />}
+        width="400px"
+        footer={
+          selectedSupportTicket &&
+          selectedSupportTicket.status !== 'Resolved' &&
+          selectedSupportTicket.status !== 'Completed' ? (
+            <div className="flex items-center gap-2 w-full">
+              <button
+                type="button"
+                onClick={() => handleOpenEditSupportTicket(selectedSupportTicket)}
+                className="flex-1 py-2 px-3 rounded-lg border border-sky-200 bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold text-[13px] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <PencilSquare className="w-4 h-4" />
+                <span>Chỉnh sửa</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSupportTicketToDelete(selectedSupportTicket)}
+                className="py-2 px-3 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-[13px] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <Trash className="w-4 h-4" />
+                <span>Xoá</span>
+              </button>
+              {selectedSupportTicket.status === 'Draft' && (
+                <button
+                  type="button"
+                  disabled={isSavingSupportTicket}
+                  onClick={() => handleSubmitDraftSupportTicket(selectedSupportTicket)}
+                  className="flex-1 py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[13px] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>Gửi yêu cầu</span>
+                </button>
+              )}
+            </div>
+          ) : undefined
+        }
+      >
+        {selectedSupportTicket && (() => {
+          const rawContent = String(selectedSupportTicket.content || '');
+          const orderMatch = rawContent.match(/\[Đơn hàng:\s*([^\]]+)\]/);
+          const relatedOrderCode =
+            selectedSupportTicket.orderCode || (orderMatch ? orderMatch[1].trim() : '');
+          const isUrgent =
+            selectedSupportTicket.priority === 'urgent' ||
+            /\[Ưu tiên:\s*Khẩn cấp\]/.test(rawContent);
+          const cleanBody = rawContent
+            .replace(/\[Đơn hàng:\s*[^\]]+\]\s*/g, '')
+            .replace(/\[Ưu tiên:\s*[^\]]+\]\s*/g, '')
+            .trim();
+          const handlerInfo =
+            selectedSupportTicket.handler || overviewData?.customer?.nguoiChamSoc || null;
+          const isResolved =
+            selectedSupportTicket.status === 'Resolved' ||
+            selectedSupportTicket.status === 'Completed';
+          const isDraft = selectedSupportTicket.status === 'Draft';
+
+          return (
+            <div className="space-y-3.5 text-[13.5px]">
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Trạng thái:</span>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                      isResolved
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : isDraft
+                        ? 'bg-slate-200 text-slate-700'
+                        : selectedSupportTicket.status === 'In Progress'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-amber-100 text-amber-700'
+                    }`}
+                  >
+                    {isResolved
+                      ? 'Đã xử lý'
+                      : isDraft
+                      ? 'Bản nháp'
+                      : selectedSupportTicket.status === 'In Progress'
+                      ? 'Đang xử lý'
+                      : 'Chờ tiếp nhận'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Mã yêu cầu:</span>
+                  <strong className="font-mono text-slate-900">{selectedSupportTicket.code}</strong>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Ngày gửi:</span>
+                  <strong className="text-slate-800">
+                    {new Date(selectedSupportTicket.requestDate || selectedSupportTicket.createdAt).toLocaleString('vi-VN')}
+                  </strong>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Phân loại:</span>
+                  <span className="px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200 font-semibold text-xs">
+                    {selectedSupportTicket.type}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Mức độ ưu tiên:</span>
+                  <span
+                    className={`font-bold ${
+                      isUrgent ? 'text-rose-600' : 'text-slate-700'
+                    }`}
+                  >
+                    {isUrgent ? 'Khẩn cấp' : 'Bình thường'}
+                  </span>
+                </div>
+                {relatedOrderCode && (
+                  <div className="flex justify-between items-center pt-1.5 border-t border-slate-200/80">
+                    <span className="text-slate-500">Đơn hàng liên quan:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const foundOrd = orders.find((o) => o.code === relatedOrderCode);
+                        if (foundOrd) {
+                          setSelectedSupportTicket(null);
+                          setSelectedOrder(foundOrd);
+                        }
+                      }}
+                      className="font-mono font-bold text-sky-700 hover:underline cursor-pointer"
+                    >
+                      #{relatedOrderCode}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Thông tin Chuyên viên Phòng Kinh doanh tiếp nhận */}
+              <div className="p-3.5 rounded-xl bg-sky-50/70 border border-sky-100 space-y-2">
+                <div className="font-bold text-sky-900 text-xs uppercase tracking-wide flex items-center gap-1.5">
+                  <PersonCheck className="w-4 h-4 text-sky-600" />
+                  <span>Người tiếp nhận yêu cầu</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Họ tên:</span>
+                  <strong className="text-slate-900">
+                    {handlerInfo?.fullName || 'Bộ phận Kinh doanh Seajong'}
+                  </strong>
+                </div>
+                {handlerInfo?.phone && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Số điện thoại / Zalo:</span>
+                    <strong className="text-sky-700 font-mono">{handlerInfo.phone}</strong>
+                  </div>
+                )}
+              </div>
+
+              {/* Nội dung chi tiết yêu cầu */}
+              <div className="p-3.5 rounded-xl bg-white border border-slate-200 space-y-2">
+                <div className="font-bold text-slate-900 text-sm">
+                  {selectedSupportTicket.title}
+                </div>
+                <div className="text-slate-700 leading-relaxed whitespace-pre-line pt-1.5 border-t border-slate-100">
+                  {cleanBody || 'Không có mô tả chi tiết bổ sung.'}
+                </div>
+              </div>
+
+              {/* Phản hồi từ Phòng Kinh doanh (nếu đã phản hồi) */}
+              {selectedSupportTicket.responseContent && (
+                <div className="p-3.5 rounded-xl bg-emerald-50/80 border border-emerald-200 space-y-2">
+                  <div className="font-bold text-emerald-900 text-xs uppercase tracking-wide flex items-center gap-1.5">
+                    <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    <span>Phản hồi từ Phòng Kinh doanh</span>
+                  </div>
+                  <div className="text-emerald-800 leading-relaxed whitespace-pre-line">
+                    {selectedSupportTicket.responseContent}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </Offcanvas>
+
+      {/* ── OFFCANVAS TẠO / CHỈNH SỬA YÊU CẦU HỖ TRỢ GỬI PHÒNG KINH DOANH ── */}
+      <Offcanvas
+        isOpen={showSupportFormDrawer}
+        onClose={() => !isSavingSupportTicket && setShowSupportFormDrawer(false)}
+        title={editingSupportTicketId ? 'Chỉnh sửa yêu cầu hỗ trợ' : 'Tạo yêu cầu mới'}
+        description={overviewData?.customer?.code ? `Đại lý: ${overviewData.customer.code} - ${overviewData.customer.name}` : undefined}
+        icon={<Headset size={18} />}
+        width="420px"
+        bodyStyle={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}
+        footer={
+          <div className="flex items-center gap-2 w-full">
+            <Button
+              variant="secondary"
+              size="md"
+              disabled={isSavingSupportTicket}
+              onClick={() => handleSaveSupportTicket(true)}
+              className="w-1/3 justify-center gap-1.5 font-semibold text-[13.5px]"
+            >
+              <FileEarmarkText className="w-4 h-4" />
+              <span>Lưu nháp</span>
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              disabled={isSavingSupportTicket}
+              onClick={() => handleSaveSupportTicket(false)}
+              className="flex-1 justify-center gap-1.5 font-bold text-[13.5px]"
+            >
+              <Send className="w-4 h-4" />
+              <span>{isSavingSupportTicket ? 'Đang gửi...' : 'Gửi yêu cầu'}</span>
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex-1 flex flex-col min-h-0 gap-3.5 text-[13.5px] h-full">
+          {/* Thông tin Chuyên viên Kinh doanh phụ trách trực tiếp */}
+          <div className="p-3 rounded-xl bg-sky-50/80 border border-sky-200/70 flex items-center justify-between gap-2 shrink-0">
+            <div>
+              <div className="text-xs font-bold uppercase text-sky-800">
+                Người tiếp nhận yêu cầu
+              </div>
+              <div className="font-bold text-slate-900 text-sm mt-0.5">
+                {overviewData?.customer?.nguoiChamSoc?.fullName || 'Bộ phận Kinh doanh Seajong'}
+              </div>
+            </div>
+            {overviewData?.customer?.nguoiChamSoc?.phone && (
+              <span className="px-2.5 py-1 rounded-lg bg-white border border-sky-200 text-sky-700 font-mono font-bold text-[13px]">
+                {overviewData.customer.nguoiChamSoc.phone}
+              </span>
+            )}
+          </div>
+
+          <div className="shrink-0">
+            <Select
+              label="Phân loại yêu cầu hỗ trợ"
+              required
+              value={supportFormType}
+              onChange={(e) => setSupportFormType(e.target.value)}
+              options={[
+                { value: 'Bảo hành & Linh kiện', label: 'Bảo hành & Cấp phát linh kiện' },
+                { value: 'Hỗ trợ catalog & POSM', label: 'Hỗ trợ Biển bảng, Kệ trưng bày (POSM) & Catalogue' },
+                { value: 'Cấp phát vật tư & phụ kiện', label: 'Cấp phát vật tư & phụ kiện lắp đặt' },
+                { value: 'Hỗ trợ đơn hàng & giao nhận', label: 'Hỗ trợ Đơn hàng & Giao nhận vận chuyển' },
+                { value: 'Đối soát công nợ & điểm thưởng', label: 'Đối soát Công nợ, Hạn mức & Điểm thưởng' },
+                { value: 'Xin cơ chế giá dự án / công trình', label: 'Xin cơ chế giá Dự án / Công trình' },
+              ]}
+            />
+          </div>
+
+          <div className="grid grid-cols-[1fr_132px] gap-2.5 shrink-0">
+            <div className="min-w-0">
+              <Select
+                label="Đơn hàng liên quan"
+                value={supportFormOrderCode}
+                onChange={(e) => setSupportFormOrderCode(e.target.value)}
+                options={[
+                  { value: '', label: '-- Không chọn --' },
+                  ...orders.map((o) => ({
+                    value: o.code,
+                    label: o.code,
+                    rightLabel: formatVND(o.tongTien),
+                  })),
+                ]}
+              />
+            </div>
+            <div className="min-w-0">
+              <Select
+                label="Mức độ ưu tiên"
+                value={supportFormPriority}
+                onChange={(e) => setSupportFormPriority(e.target.value)}
+                options={[
+                  { value: 'normal', label: 'Bình thường' },
+                  { value: 'urgent', label: 'Khẩn cấp' },
+                ]}
+              />
+            </div>
+          </div>
+
+          <div className="shrink-0">
+            <label className="form-label block">
+              Tiêu đề yêu cầu <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={supportFormTitle}
+              onChange={(e) => setSupportFormTitle(e.target.value)}
+              placeholder="VD: Xin cấp bổ sung kệ trưng bày sen cây & lõi van bảo hành..."
+              className="form-input"
+            />
+          </div>
+
+          <div className="flex-1 flex flex-col min-h-0">
+            <label className="form-label block shrink-0">
+              Nội dung chi tiết
+            </label>
+            <textarea
+              value={supportFormContent}
+              onChange={(e) => setSupportFormContent(e.target.value)}
+              placeholder="Mô tả rõ mã sản phẩm, số lượng cần hỗ trợ, tình trạng thực tế hoặc đề xuất của đại lý..."
+              className="flex-1 w-full h-full min-h-[120px] px-3.5 py-2.5 text-[13.5px] leading-relaxed text-slate-900 rounded-lg border border-slate-300 bg-white focus:outline-hidden focus:border-sky-600 resize-none"
+            />
+          </div>
+        </div>
+      </Offcanvas>
+
+      {/* ── CONFIRM DIALOG XÁC NHẬN XOÁ YÊU CẦU HỖ TRỢ ── */}
+      <ConfirmDialog
+        isOpen={Boolean(supportTicketToDelete)}
+        title="Xác nhận xoá yêu cầu hỗ trợ"
+        variant="danger"
+        message={
+          supportTicketToDelete ? (
+            <div className="space-y-2 text-left text-xs">
+              <p className="text-slate-700">
+                Bạn có chắc chắn muốn xoá yêu cầu hỗ trợ{' '}
+                <strong className="text-slate-900 font-bold">#{supportTicketToDelete.code}</strong>?
+              </p>
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                <div className="font-bold text-slate-900">{supportTicketToDelete.title}</div>
+                <div className="text-slate-500">Phân loại: {supportTicketToDelete.type}</div>
+              </div>
+            </div>
+          ) : null
+        }
+        warningNote="Hành động này sẽ xoá yêu cầu khỏi danh sách và không thể hoàn tác."
+        confirmText="Xoá yêu cầu"
+        cancelText="Huỷ bỏ"
+        isLoading={isDeletingSupportTicket}
+        onConfirm={handleConfirmDeleteSupportTicket}
+        onCancel={() => !isDeletingSupportTicket && setSupportTicketToDelete(null)}
+        onClose={() => !isDeletingSupportTicket && setSupportTicketToDelete(null)}
+      />
     </>
   );
 
@@ -2696,41 +3286,43 @@ export const DealerPortalPage: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
-                      <input
-                        type="datetime-local"
-                        step="1"
+                      <DatePicker
+                        prefix="Từ:"
                         value={debtStartDate}
-                        onChange={(e) => {
-                          setDebtStartDate(e.target.value);
+                        onChange={(val) => {
+                          setDebtStartDate(val);
                           setDebtPage(1);
                         }}
-                        className="px-3 py-1 rounded-full border border-slate-300 text-xs text-slate-800 bg-white focus:outline-hidden focus:border-blue-500"
+                        placeholder="Chọn ngày bắt đầu"
                         title="Từ ngày"
+                        style={{ height: '34px', minWidth: '150px', marginBottom: 0 }}
                       />
-                      <span className="text-xs text-slate-500">đến</span>
-                      <input
-                        type="datetime-local"
-                        step="1"
+                      <span className="text-xs text-slate-400 font-medium">đến</span>
+                      <DatePicker
+                        prefix="Đến:"
+                        defaultEndOfDayTime
                         value={debtEndDate}
-                        onChange={(e) => {
-                          setDebtEndDate(e.target.value);
+                        onChange={(val) => {
+                          setDebtEndDate(val);
                           setDebtPage(1);
                         }}
-                        className="px-3 py-1 rounded-full border border-slate-300 text-xs text-slate-800 bg-white focus:outline-hidden focus:border-blue-500"
+                        placeholder="Chọn ngày kết thúc"
                         title="Đến ngày"
+                        style={{ height: '34px', minWidth: '155px', marginBottom: 0 }}
                       />
                       {(debtStartDate || debtEndDate) && (
-                        <button
-                          type="button"
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => {
                             setDebtStartDate('');
                             setDebtEndDate('');
                             setDebtPage(1);
                           }}
-                          className="text-xs font-semibold text-red-600 underline hover:text-red-700 cursor-pointer ml-1"
+                          className="h-[34px] px-2.5 text-xs font-semibold text-rose-600 border-rose-200 hover:bg-rose-50"
                         >
                           Xóa lọc
-                        </button>
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -3246,6 +3838,231 @@ export const DealerPortalPage: React.FC = () => {
     );
   }
 
+  // Khi đang ở tab Yêu cầu hỗ trợ -> DÙNG STEPPAGE GỒM: DANH SÁCH YÊU CẦU & ĐÃ XỬ LÝ
+  if (currentTab === 'support') {
+    const careRep = overviewData?.customer?.nguoiChamSoc;
+    return (
+      <>
+        <StepPage
+          title="Hệ thống đại lý và nhà phân phối"
+          icon="bi-shop"
+          color="blue"
+          description="Cổng thông tin hoạt động, tra cứu công nợ và tự động lên đơn hàng gửi Bộ phận Kinh doanh"
+          badge={overviewData?.customer?.code || (user as any)?.customer?.code || 'ĐẠI LÝ SEAJONG'}
+          tickerContext="dealers"
+          steps={supportSteps}
+          currentStep={supportStep}
+          onStepChange={(stepNum) => {
+            setSupportStep(stepNum);
+            setSupportPage(1);
+            setSupportStatusFilter('all');
+          }}
+        >
+          <div className="flex flex-col h-full flex-1 overflow-hidden bg-white">
+            <TableToolbar
+              searchPlaceholder="Tìm mã phiếu, tiêu đề, nội dung yêu cầu..."
+              searchValue={searchSupport}
+              onSearchChange={(val) => {
+                setSupportSearch(val);
+                setSupportPage(1);
+              }}
+              filters={[
+                {
+                  id: 'support-type-filter',
+                  value: supportTypeFilter,
+                  onChange: (val) => {
+                    setSupportTypeFilter(val);
+                    setSupportPage(1);
+                  },
+                  minWidth: '215px',
+                  options: [
+                    { value: 'all', label: 'Tất cả phân loại yêu cầu' },
+                    { value: 'Bảo hành & Linh kiện', label: 'Bảo hành & Linh kiện' },
+                    { value: 'Hỗ trợ catalog & POSM', label: 'Hỗ trợ catalog & POSM' },
+                    { value: 'Cấp phát vật tư & phụ kiện', label: 'Cấp phát vật tư & phụ kiện' },
+                    { value: 'Hỗ trợ đơn hàng & giao nhận', label: 'Hỗ trợ đơn hàng & giao nhận' },
+                    { value: 'Đối soát công nợ & điểm thưởng', label: 'Đối soát công nợ & điểm thưởng' },
+                    { value: 'Xin cơ chế giá dự án / công trình', label: 'Xin cơ chế giá dự án / công trình' },
+                  ],
+                },
+                {
+                  id: 'support-status-filter',
+                  value: supportStatusFilter,
+                  onChange: (val) => {
+                    setSupportStatusFilter(val);
+                    setSupportPage(1);
+                  },
+                  minWidth: '175px',
+                  options:
+                    supportStep === 1
+                      ? [
+                          { value: 'all', label: 'Tất cả đang thực hiện' },
+                          { value: 'Draft', label: 'Bản nháp' },
+                          { value: 'Pending', label: 'Chờ tiếp nhận' },
+                          { value: 'In Progress', label: 'Đang xử lý' },
+                        ]
+                      : [
+                          { value: 'all', label: 'Tất cả đã xử lý' },
+                          { value: 'Resolved', label: 'Đã xử lý' },
+                        ],
+                },
+              ]}
+              customFilters={
+                careRep ? (
+                  <div className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-50 border border-sky-200/80 text-xs text-slate-700">
+                    <PersonCheck className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                    <span className="text-slate-500">Chuyên viên KD:</span>
+                    <strong className="text-slate-900">{careRep.fullName}</strong>
+                    {careRep.phone && (
+                      <span className="font-mono text-sky-700 font-bold">({careRep.phone})</span>
+                    )}
+                  </div>
+                ) : undefined
+              }
+              rightActions={
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={<Headset className="w-4 h-4" />}
+                  onClick={handleOpenCreateSupportTicket}
+                >
+                  Gửi yêu cầu mới
+                </Button>
+              }
+              showMenu={false}
+              onRefresh={fetchSupportTickets}
+            />
+
+            <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+              <FullWidthTable
+                loading={supportLoading}
+                emptyText={
+                  supportStep === 1
+                    ? 'Chưa có yêu cầu hỗ trợ nào đang chờ xử lý. Nhấn "Gửi yêu cầu mới" để gửi Phòng Kinh doanh.'
+                    : 'Chưa có yêu cầu hỗ trợ nào đã xử lý.'
+                }
+              >
+                <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+                  <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 text-slate-800 text-[11px] font-extrabold uppercase">
+                    <tr>
+                      <th className="py-2.5 px-3.5 text-center w-[55px]">STT</th>
+                      <th className="py-2.5 px-3.5 w-[165px]">Mã yêu cầu</th>
+                      <th className="py-2.5 px-3.5 w-[135px]">Ngày gửi</th>
+                      <th className="py-2.5 px-3.5 w-[210px]">Phân loại yêu cầu</th>
+                      <th className="py-2.5 px-3.5">Tiêu đề & Nội dung chi tiết</th>
+                      <th className="py-2.5 px-3.5 w-[190px]">Chuyên viên tiếp nhận</th>
+                      <th className="py-2.5 px-3.5 text-center w-[135px]">Trạng thái</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedSupportTickets.map((tk, idx) => {
+                      const rawContent = String(tk.content || '');
+                      const orderMatch = rawContent.match(/\[Đơn hàng:\s*([^\]]+)\]/);
+                      const relatedOrderCode =
+                        tk.orderCode || (orderMatch ? orderMatch[1].trim() : '');
+                      const isUrgent =
+                        tk.priority === 'urgent' || /\[Ưu tiên:\s*Khẩn cấp\]/.test(rawContent);
+                      const cleanBody = rawContent
+                        .replace(/\[Đơn hàng:\s*[^\]]+\]\s*/g, '')
+                        .replace(/\[Ưu tiên:\s*[^\]]+\]\s*/g, '')
+                        .trim();
+                      const handler = tk.handler || careRep || null;
+                      const isResolved = tk.status === 'Resolved' || tk.status === 'Completed';
+                      const isDraft = tk.status === 'Draft';
+
+                      return (
+                        <tr
+                          key={tk.id}
+                          onClick={() => setSelectedSupportTicket(tk)}
+                          className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer"
+                        >
+                          <td className="py-3 px-3.5 text-center font-mono text-xs text-slate-400 align-middle">
+                            {(supportPage - 1) * supportPageSize + idx + 1}
+                          </td>
+                          <td className="py-3 px-3.5 align-middle">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono font-bold text-xs text-sky-700 hover:underline">
+                                {tk.code}
+                              </span>
+                              {isUrgent && (
+                                <span className="px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 text-[9.5px] font-extrabold">
+                                  Gấp
+                                </span>
+                              )}
+                            </div>
+                            {relatedOrderCode && (
+                              <span className="text-[10.5px] font-mono text-slate-400 block mt-0.5">
+                                Đơn: #{relatedOrderCode}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3.5 text-xs text-slate-600 align-middle whitespace-nowrap">
+                            {new Date(tk.requestDate || tk.createdAt).toLocaleDateString('vi-VN')}
+                          </td>
+                          <td className="py-3 px-3.5 align-middle">
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                              {tk.type}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3.5 align-middle">
+                            <div className="font-bold text-slate-900 text-xs">{tk.title}</div>
+                            {cleanBody && (
+                              <div className="text-slate-500 text-xs mt-0.5 line-clamp-1">
+                                {cleanBody}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-3.5 align-middle">
+                            <div className="font-semibold text-slate-800 text-xs">
+                              {handler?.fullName || 'Phòng Kinh doanh'}
+                            </div>
+                            {handler?.phone && (
+                              <div className="text-[11px] font-mono text-sky-700">{handler.phone}</div>
+                            )}
+                          </td>
+                          <td className="py-3 px-3.5 text-center align-middle">
+                            <span
+                              className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                                isResolved
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : isDraft
+                                  ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                                  : tk.status === 'In Progress'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-amber-100 text-amber-700'
+                              }`}
+                            >
+                              {isResolved
+                                ? 'Đã xử lý'
+                                : isDraft
+                                ? 'Bản nháp'
+                                : tk.status === 'In Progress'
+                                ? 'Đang xử lý'
+                                : 'Chờ tiếp nhận'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </FullWidthTable>
+            </div>
+
+            <Pagination
+              page={supportPage}
+              pageSize={supportPageSize}
+              totalItems={filteredSupportTickets.length}
+              onPageChange={setSupportPage}
+              onPageSizeChange={setSupportPageSize}
+            />
+          </div>
+        </StepPage>
+        {renderModals()}
+      </>
+    );
+  }
+
   return (
     <StandardPage
       title="Hệ thống đại lý và nhà phân phối"
@@ -3724,11 +4541,11 @@ export const DealerPortalPage: React.FC = () => {
                           <label className="block text-[10.5px] font-semibold text-slate-600 mb-0.5">
                             Ngày mong muốn nhận hàng
                           </label>
-                          <input
-                            type="date"
+                          <DatePicker
                             value={deliveryDate}
-                            onChange={(e) => setDeliveryDate(e.target.value)}
-                            className="w-full px-2 py-1.5 text-xs rounded-lg border border-slate-200 bg-white"
+                            onChange={(val) => setDeliveryDate(val)}
+                            placeholder="Chọn ngày nhận"
+                            style={{ height: '32px', fontSize: '0.75rem', marginBottom: 0 }}
                           />
                         </div>
                         <div>
@@ -3798,33 +4615,6 @@ export const DealerPortalPage: React.FC = () => {
                   </div>
                 </div>
               </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 5: YÊU CẦU HỖ TRỢ */}
-      {currentTab === 'support' && (
-        <div className="flex-1 overflow-y-auto space-y-3 max-w-2xl bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
-          <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-2 pb-2 border-b border-slate-100">
-            <Headset className="w-4 h-4 text-sky-600" />
-            <span>Gửi yêu cầu hỗ trợ đến Seajong</span>
-          </h4>
-          <p className="text-xs text-slate-500">
-            Quý đại lý cần bảo hành linh kiện, cấp phát bảng biển POSM, Catalogue hoặc phản ánh giao hàng, vui lòng liên hệ trực tiếp:
-          </p>
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-2">
-            <div>
-              <span className="text-slate-500">Chuyên viên phụ trách:</span>
-              <strong className="text-slate-900 ml-2">{overviewData?.customer?.nguoiChamSoc?.fullName || 'Phạm Quang Việt'}</strong>
-            </div>
-            <div>
-              <span className="text-slate-500">Số điện thoại / Zalo:</span>
-              <strong className="text-sky-700 ml-2">{overviewData?.customer?.nguoiChamSoc?.phone || '0981.183.234'}</strong>
-            </div>
-            <div>
-              <span className="text-slate-500">Tổng đài Chăm sóc khách hàng Seajong:</span>
-              <strong className="text-slate-900 ml-2">1900 888 666</strong>
-            </div>
           </div>
         </div>
       )}
