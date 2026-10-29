@@ -213,6 +213,16 @@ export const EVENTS_TICKER_ITEMS: TickerItem[] = [
 // ── 8. PHÁT TRIỂN ĐẠI LÝ & ĐỐI TÁC (DEALERS / PARTNERS) ──────────────────────
 export const DEALERS_TICKER_ITEMS: TickerItem[] = [
   {
+    badge: '🏆 DẪN ĐẦU NĂM 2026',
+    badgeColor: 'bg-amber-100 text-amber-900 border-amber-300 font-bold',
+    text: 'Vinh danh <strong>Showroom Thiên Thuận Lạng Sơn (KH0014)</strong> xuất sắc dẫn đầu doanh số toàn quốc năm 2026 👑',
+  },
+  {
+    badge: '🌟 DẪN ĐẦU THÁNG 10',
+    badgeColor: 'bg-emerald-100 text-emerald-900 border-emerald-300 font-bold',
+    text: 'Chúc mừng <strong>Showroom Thiên Thuận Lạng Sơn (KH0014)</strong> xuất sắc dẫn đầu doanh số tháng 10/2026 trên toàn hệ thống Seajong 🌟',
+  },
+  {
     badge: 'MẠNG LƯỚI ĐẠI LÝ',
     badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
     text: 'Hơn 150 đại lý cấp 1 và showroom chính hãng Seajong phủ sóng tại 63 tỉnh thành trên toàn quốc',
@@ -452,6 +462,16 @@ export const STANDARDS_TICKER_ITEMS: TickerItem[] = [
 
 // ── 18. KINH DOANH, ĐẠI LÝ & BÁO GIÁ (SALES / PARTNERS / PRICING) ─────────────
 export const SALES_TICKER_ITEMS: TickerItem[] = [
+  {
+    badge: '🏆 DẪN ĐẦU NĂM 2026',
+    badgeColor: 'bg-amber-100 text-amber-900 border-amber-300 font-bold',
+    text: 'Vinh danh <strong>Showroom Thiên Thuận Lạng Sơn (KH0014)</strong> xuất sắc dẫn đầu doanh số toàn quốc năm 2026 👑',
+  },
+  {
+    badge: '🌟 DẪN ĐẦU THÁNG 10',
+    badgeColor: 'bg-emerald-100 text-emerald-900 border-emerald-300 font-bold',
+    text: 'Chúc mừng <strong>Showroom Thiên Thuận Lạng Sơn (KH0014)</strong> xuất sắc dẫn đầu doanh số tháng 10/2026 trên toàn hệ thống Seajong 🌟',
+  },
   {
     badge: 'MẠNG LƯỚI ĐẠI LÝ',
     badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',

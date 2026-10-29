@@ -667,6 +667,11 @@ model SaleOrder {
   vat                  Float                @default(0)
   ghiChu               String?
   nguoiPhuTrach        String?
+  nguoiNhan            String?              // Người nhận hàng
+  soDienThoai          String?              // Số điện thoại nhận hàng
+  diaChiGiaoHang       String?              // Địa chỉ giao nhận hàng
+  nguoiDatHang         String?              // Đại diện đại lý thực hiện đặt đơn
+  orderSource          String?              @default("system") // "dealer_portal" | "system" | "sales_admin"
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
   customer             Customer?            @relation(fields: [customerId], references: [id])
@@ -679,20 +684,24 @@ model SaleOrder {
 }
 
 model SaleOrderItem {
-  id              String         @id @default(cuid())
-  saleOrderId     String
-  inventoryItemId String?
-  tenHang         String // Tên sản phẩm
-  soLuong         Float          @default(1)
-  donGia          Float          @default(0) // Giá bán đơn vị
-  thanhTien       Float          @default(0) // soLuong * donGia
-  dinhMucId       String?
-  ghiChu          String?
-  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
-  saleOrder       SaleOrder      @relation(fields: [saleOrderId], references: [id], onDelete: Cascade)
+  id               String         @id @default(cuid())
+  saleOrderId      String
+  inventoryItemId  String?
+  seajongProductId Int?           // ID liên kết với bảng SeajongProduct
+  hinhAnh          String?        // Ảnh sản phẩm lúc đặt hàng
+  donViTinh        String?        @default("Bộ") // Đơn vị tính
+  tenHang          String // Tên sản phẩm
+  soLuong          Float          @default(1)
+  donGia           Float          @default(0) // Giá bán đơn vị
+  thanhTien        Float          @default(0) // soLuong * donGia
+  dinhMucId        String?
+  ghiChu           String?
+  inventoryItem    InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  saleOrder        SaleOrder      @relation(fields: [saleOrderId], references: [id], onDelete: Cascade)
 
   @@index([saleOrderId])
   @@index([inventoryItemId])
+  @@index([seajongProductId])
 }
 
 model ProductionIncident {

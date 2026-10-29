@@ -4,6 +4,7 @@ import {
   ChevronRight,
   ChevronDoubleLeft,
   ChevronDoubleRight,
+  ChevronDown,
 } from 'react-bootstrap-icons';
 
 export interface PaginationProps {
@@ -134,6 +135,15 @@ export const Pagination: React.FC<PaginationProps> = ({
                   </option>
                 ))}
               </select>
+              <ChevronDown
+                size={11}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  color: 'var(--text-muted, #94a3b8)',
+                  pointerEvents: 'none',
+                }}
+              />
             </div>
           </div>
         )}

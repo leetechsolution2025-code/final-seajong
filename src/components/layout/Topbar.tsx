@@ -123,8 +123,17 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
     'vtr-20260603-2034-jjbl': 'Trưởng bộ phận',
   };
 
-  const rawPosition = user?.employee?.position || '';
-  const userPosition = POSITION_MAP[rawPosition] || rawPosition || (user?.role === 'ADMIN' ? 'Giám đốc' : 'Nhân viên');
+  // Nhận diện tài khoản Đại lý / Nhà phân phối
+  const isDealer = user?.role === 'DEALER' || !!user?.customer || !!(user as any)?.customerId || user?.departmentCode === 'dealer' || user?.email?.includes('@dealer.');
+
+  const rawPosition = user?.employee?.position || user?.position || '';
+  const userPosition = isDealer
+    ? (user?.customer?.loai ? `Đại lý ${user.customer.loai}` : 'Đại lý chính thức')
+    : (POSITION_MAP[rawPosition] || rawPosition || (user?.role === 'ADMIN' ? 'Giám đốc' : 'Nhân viên'));
+
+  const userSubtitle = isDealer
+    ? (user?.customer?.code ? `Đại lý • ${user.customer.code}` : 'Đại lý chính thức')
+    : userPosition;
 
   return (
     <>
@@ -314,7 +323,7 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
                   <i className="bi bi-chevron-down text-[11px] text-slate-400 ms-0.5" />
                 </div>
                 <span className="text-[11px] text-slate-500 font-normal leading-none mt-0.5">
-                  {userPosition}
+                  {userSubtitle}
                 </span>
               </div>
             </button>
@@ -326,25 +335,58 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 mb-2">
                   <div className="font-bold text-slate-900 text-sm">{userName}</div>
                   <div className="text-xs text-slate-400 font-mono mt-0.5">{user?.email || 'admin@seajong.com'}</div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigateToUserDept();
-                      setUserMenuOpen(false);
-                    }}
-                    className="w-full mt-2 pt-2 border-t border-slate-200 flex items-center justify-between text-[11px] hover:bg-indigo-50/60 p-1.5 rounded-lg transition-colors text-left border-0 bg-transparent cursor-pointer group"
-                    title="Bấm để chuyển về phòng ban trực thuộc của bạn"
-                  >
-                    <span className="font-medium text-slate-600">Phòng ban:</span>
-                    <span className="font-bold text-indigo-600 group-hover:underline flex items-center gap-1">
-                      {user?.employee?.departmentName || 'Ban Giám đốc'}
-                      <i className="bi bi-box-arrow-in-right text-xs" />
-                    </span>
-                  </button>
-                  <div className="mt-1 flex items-center justify-between text-[11px] px-1.5">
-                    <span className="font-medium text-slate-600">Chức vụ:</span>
-                    <span className="font-bold text-slate-800">{userPosition}</span>
-                  </div>
+
+                  {isDealer ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveDeptCode('dealer');
+                          setUserMenuOpen(false);
+                        }}
+                        className="w-full mt-2 pt-2 border-t border-slate-200 flex items-center justify-between text-[11px] hover:bg-indigo-50/60 p-1.5 rounded-lg transition-colors text-left border-0 bg-transparent cursor-pointer group"
+                        title="Bấm để chuyển về Cổng thông tin Đại lý & Nhà phân phối"
+                      >
+                        <span className="font-medium text-slate-600">Kênh đối tác:</span>
+                        <span className="font-bold text-indigo-600 group-hover:underline flex items-center gap-1">
+                          Đại lý &amp; Nhà phân phối
+                          <i className="bi bi-box-arrow-in-right text-xs" />
+                        </span>
+                      </button>
+                      <div className="mt-1 flex items-center justify-between text-[11px] px-1.5">
+                        <span className="font-medium text-slate-600">Mã đại lý:</span>
+                        <span className="font-bold font-mono text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                          {user?.customer?.code || 'KH0003'}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between text-[11px] px-1.5">
+                        <span className="font-medium text-slate-600">Vai trò:</span>
+                        <span className="font-bold text-slate-800">{userPosition}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigateToUserDept();
+                          setUserMenuOpen(false);
+                        }}
+                        className="w-full mt-2 pt-2 border-t border-slate-200 flex items-center justify-between text-[11px] hover:bg-indigo-50/60 p-1.5 rounded-lg transition-colors text-left border-0 bg-transparent cursor-pointer group"
+                        title="Bấm để chuyển về phòng ban trực thuộc của bạn"
+                      >
+                        <span className="font-medium text-slate-600">Phòng ban:</span>
+                        <span className="font-bold text-indigo-600 group-hover:underline flex items-center gap-1">
+                          {user?.employee?.departmentName || 'Ban Giám đốc'}
+                          <i className="bi bi-box-arrow-in-right text-xs" />
+                        </span>
+                      </button>
+                      <div className="mt-1 flex items-center justify-between text-[11px] px-1.5">
+                        <span className="font-medium text-slate-600">Chức vụ:</span>
+                        <span className="font-bold text-slate-800">{userPosition}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="space-y-1">
@@ -368,7 +410,7 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 transition-colors text-decoration-none"
                   >
                     <i className="bi bi-people text-slate-500 text-[14px]" />
-                    <span>Đổi tài khoản nhân viên Demo</span>
+                    <span>{isDealer ? 'Đổi tài khoản đại lý Demo' : 'Đổi tài khoản nhân viên Demo'}</span>
                   </Link>
 
                   <div className="h-px bg-slate-100 my-1"></div>

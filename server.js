@@ -364,6 +364,7 @@ app.get('/api/dealer/overview', authenticateToken, async (req, res) => {
       where: { id: user.customerId },
       include: {
         nguoiChamSoc: { select: { id: true, fullName: true, phone: true } },
+        contracts: { orderBy: { createdAt: 'desc' } },
         saleOrders: {
           include: { saleOrderItems: true },
           orderBy: { createdAt: 'desc' },
@@ -377,6 +378,30 @@ app.get('/api/dealer/overview', authenticateToken, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Không tìm thấy thông tin đại lý' });
     }
 
+    let parsedFormValues = {};
+    if (customer.formValues) {
+      try {
+        parsedFormValues = JSON.parse(customer.formValues);
+      } catch (_) {}
+    }
+
+    const parseDbMoney = (val) => {
+      if (val === null || val === undefined || val === '') return 0;
+      if (typeof val === 'number') {
+        if (val > 0 && val < 1000) return Math.round(val * 1000000000);
+        return Math.round(val);
+      }
+      const str = String(val).trim();
+      if (!str) return 0;
+      if (/^\d+(\.\d+)?$/.test(str)) {
+        const num = Number(str);
+        if (num > 0 && num < 1000) return Math.round(num * 1000000000);
+        return Math.round(num);
+      }
+      const digits = str.replace(/\D/g, '');
+      return digits ? Number(digits) : 0;
+    };
+
     // 1. Lấy dữ liệu công nợ & đơn hàng thực tế từ bảng debt_receivables trong SQLite
     const debtRows = await prisma.$queryRawUnsafe(`
       SELECT * FROM debt_receivables 
@@ -385,6 +410,7 @@ app.get('/api/dealer/overview', authenticateToken, async (req, res) => {
 
     // Trích xuất đơn hàng từ debt_receivables
     const receivablesOrders = [];
+    const receivablesByCode = new Map();
     let debtReceivableTotal = 0;
     let debtReceivablePaid = 0;
     let debtReceivableRemaining = 0;
@@ -406,7 +432,7 @@ app.get('/api/dealer/overview', authenticateToken, async (req, res) => {
               orderDate = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
             }
           }
-          receivablesOrders.push({
+          const recOrd = {
             id: e.id || e.code,
             code: e.code,
             title: e.title || `Đơn hàng ${e.code}`,
@@ -416,17 +442,30 @@ app.get('/api/dealer/overview', authenticateToken, async (req, res) => {
             keToanDuyet: 'approved',
             createdAt: orderDate,
             rawDate: e.date,
+            dueDate: e.dueDate || dr.due_date || null,
+            debtStatus: e.status || dr.status || 'ontime',
             itemsCount: 25,
             source: 'receivables'
-          });
+          };
+          receivablesOrders.push(recOrd);
+          if (recOrd.code) receivablesByCode.set(recOrd.code, recOrd);
         });
       } catch (err) {
         console.error('Error parsing entries_json:', err);
       }
     });
 
+    // Bóc thêm lịch sử thanh toán thực tế từ bảng Debt (nếu có)
+    let debtTablePaidTotal = 0;
+    (customer.debts || []).forEach(d => {
+      const desc = d.description || '';
+      if (!desc.includes('Trả lại hàng') && Number(d.paidAmount) > 0) {
+        debtTablePaidTotal += Number(d.paidAmount);
+      }
+    });
+
     // 2. Lấy đơn hàng tạo trực tuyến từ bảng saleOrder
-    const directSaleOrders = await prisma.saleOrder.findMany({
+    const directSaleOrdersRaw = await prisma.saleOrder.findMany({
       where: { customerId: customer.id },
       select: {
         id: true,
@@ -449,6 +488,31 @@ app.get('/api/dealer/overview', authenticateToken, async (req, res) => {
       orderBy: { createdAt: 'desc' }
     });
 
+    const directSaleOrders = directSaleOrdersRaw.map(o => {
+      const matchedRec = receivablesByCode.get(o.code);
+      return {
+        ...o,
+        tongTien: o.tongTien || matchedRec?.tongTien || 0,
+        daThanhToan: Math.max(Number(o.daThanhToan) || 0, Number(matchedRec?.daThanhToan) || 0),
+        dueDate: matchedRec?.dueDate || null,
+        debtStatus: matchedRec?.debtStatus || 'ontime'
+      };
+    });
+
+    // Nếu bảng Debt có ghi nhận thanh toán nhưng đơn hàng chưa cập nhật daThanhToan
+    if (debtTablePaidTotal > 0 && directSaleOrders.length > 0) {
+      const currentDirectPaid = directSaleOrders.reduce((s, o) => s + (o.daThanhToan || 0), 0);
+      if (currentDirectPaid === 0) {
+        let remainToAllocate = debtTablePaidTotal;
+        directSaleOrders.forEach(o => {
+          if (remainToAllocate <= 0) return;
+          const alloc = Math.min(o.tongTien || 0, remainToAllocate);
+          o.daThanhToan = alloc;
+          remainToAllocate -= alloc;
+        });
+      }
+    }
+
     // 3. Kết hợp đơn hàng từ cả 2 nguồn (không trùng mã đơn)
     const existingCodes = new Set(directSaleOrders.map(o => o.code));
     const allOrders = [
@@ -464,22 +528,40 @@ app.get('/api/dealer/overview', authenticateToken, async (req, res) => {
     );
     const totalPaid = Math.max(
       debtReceivablePaid,
+      debtTablePaidTotal,
       allOrders.reduce((sum, o) => sum + (o.daThanhToan || 0), 0)
     );
     const currentDebt = debtReceivableRemaining > 0
       ? debtReceivableRemaining
       : Math.max(0, totalOrderValue - totalPaid);
 
-    // Hạn mức tín dụng thực tế từ DB
-    const hanMucCongNo = customer.hanMucCongNo > 0 ? customer.hanMucCongNo : 100000000;
+    // Hạn mức tín dụng thực tế từ DB (Customer.hanMucCongNo hoặc formValues.creditLimit)
+    const hanMucCongNo =
+      Number(customer.hanMucCongNo) ||
+      parseDbMoney(parsedFormValues.hanMucCongNo) ||
+      parseDbMoney(parsedFormValues.creditLimit) ||
+      0;
     const remainingCredit = Math.max(0, hanMucCongNo - currentDebt);
     
-    // Doanh số cam kết năm (chuẩn từ DB, không tự tạo kế hoạch giả lập)
-    const doanhSoCamKetNam = customer.doanhSoCamKet || 0;
+    // Doanh số cam kết năm (chuẩn từ DB: Customer.doanhSoCamKet / formValues / Contract)
+    const activeContractVal = Array.isArray(customer.contracts) && customer.contracts.length > 0
+      ? parseDbMoney(customer.contracts[0].giaTriHopDong)
+      : 0;
+    const doanhSoCamKetNam =
+      Number(customer.doanhSoCamKet) ||
+      parseDbMoney(parsedFormValues.doanhSoCamKet) ||
+      parseDbMoney(parsedFormValues.plRevenueCommit) ||
+      parseDbMoney(parsedFormValues.hdAnnualRevenue) ||
+      parseDbMoney(parsedFormValues.contractValue) ||
+      activeContractVal ||
+      0;
 
     // 5. Diễn biến nhập hàng 12 tháng năm 2026 (T01 - T12)
     const currentMonthNum = new Date().getMonth() + 1; // 10
-    const monthlyPlanBase = doanhSoCamKetNam > 0 ? Math.round(doanhSoCamKetNam / 12) : 0;
+    const explicitMonthlyTarget = parseDbMoney(parsedFormValues.hdMonthlyRevenue);
+    const monthlyPlanBase = explicitMonthlyTarget > 0
+      ? explicitMonthlyTarget
+      : (doanhSoCamKetNam > 0 ? Math.round(doanhSoCamKetNam / 12) : 0);
 
     const monthlyPerformance = Array.from({ length: 12 }, (_, i) => {
       const monthNum = i + 1;
@@ -581,18 +663,67 @@ app.get('/api/dealer/overview', authenticateToken, async (req, res) => {
     const targetAchievedRate = doanhSoCamKetNam > 0 ? Number(((totalOrderValue / doanhSoCamKetNam) * 100).toFixed(1)) : 0;
     const rewardPoints = Math.floor(totalPaid / 100000); // 100k = 1 điểm
 
-    let tier = 'Đại lý Đồng';
+    let dbLoaiName = null;
+    if (customer.loai) {
+      const loaiCat = await prisma.category.findFirst({
+        where: { code: customer.loai }
+      }).catch(() => null);
+      if (loaiCat?.name) {
+        dbLoaiName = loaiCat.name;
+      } else if (customer.loai.toLowerCase() === 'bac') {
+        dbLoaiName = 'Bạc';
+      } else if (customer.loai.toLowerCase() === 'vang') {
+        dbLoaiName = 'Vàng';
+      } else if (customer.loai.toLowerCase() === 'dong') {
+        dbLoaiName = 'Đồng';
+      } else if (customer.loai.toLowerCase().includes('kim')) {
+        dbLoaiName = 'Kim cương';
+      }
+    }
+
+    let tier = dbLoaiName ? `Đại lý ${dbLoaiName}` : 'Đại lý Đồng';
     let discountPercent = 25;
-    if (totalOrderValue >= 1000000000) {
-      tier = 'Đại lý Kim Cương';
+    if (dbLoaiName === 'Kim cương' || totalOrderValue >= 1000000000) {
+      if (!dbLoaiName) tier = 'Đại lý Kim Cương';
       discountPercent = 38;
-    } else if (totalOrderValue >= 500000000) {
-      tier = 'Đại lý Vàng';
+    } else if (dbLoaiName === 'Vàng' || totalOrderValue >= 500000000) {
+      if (!dbLoaiName) tier = 'Đại lý Vàng';
       discountPercent = 33;
-    } else if (totalOrderValue >= 200000000) {
-      tier = 'Đại lý Bạc';
+    } else if (dbLoaiName === 'Bạc' || totalOrderValue >= 200000000) {
+      if (!dbLoaiName) tier = 'Đại lý Bạc';
       discountPercent = 28;
     }
+
+    const bbBonuses = Array.isArray(parsedFormValues.bbBonuses) ? parsedFormValues.bbBonuses : [];
+    const bbPaymentRule = bbBonuses.find(
+      b => String(b.id) === '1' || /tháng|thanh\s*toán/i.test(b.title || '')
+    );
+    const bbAnnualRule = bbBonuses.find(
+      b => String(b.id) === '2' || (/doanh\s*số\s*năm/i.test(b.title || '') && !/vượt/i.test(b.title || ''))
+    );
+    const bbExceedRule = bbBonuses.find(
+      b => String(b.id) === '3' || /vượt/i.test(b.title || '')
+    );
+
+    const effectiveThuongThanhToan =
+      customer.thuongThanhToan ||
+      parsedFormValues.thuongThanhToan ||
+      bbPaymentRule?.formula ||
+      bbPaymentRule?.desc ||
+      '';
+    const effectiveThuongDoanhSoNam =
+      customer.thuongDoanhSoNam ||
+      parsedFormValues.thuongDoanhSoNam ||
+      bbAnnualRule?.formula ||
+      bbAnnualRule?.desc ||
+      '';
+    const effectiveThuongVuotDoanhSo =
+      customer.thuongVuotDoanhSo ||
+      parsedFormValues.thuongVuotDoanhSo ||
+      bbExceedRule?.formula ||
+      bbExceedRule?.desc ||
+      '';
+    const coCamKet = Boolean(parsedFormValues.coCamKet || doanhSoCamKetNam > 0);
 
     res.json({
       success: true,
@@ -606,11 +737,15 @@ app.get('/api/dealer/overview', authenticateToken, async (req, res) => {
           daiDien: customer.daiDien,
           nhom: customer.nhom,
           loai: customer.loai,
+          loaiName: dbLoaiName || 'Đồng',
+          coCamKet,
           hanMucCongNo,
           doanhSoCamKet: doanhSoCamKetNam,
-          thuongDoanhSoNam: customer.thuongDoanhSoNam,
-          thuongThanhToan: customer.thuongThanhToan,
-          thuongVuotDoanhSo: customer.thuongVuotDoanhSo,
+          doanhSoCamKetThang: monthlyPlanBase,
+          thuongDoanhSoNam: effectiveThuongDoanhSoNam,
+          thuongThanhToan: effectiveThuongThanhToan,
+          thuongVuotDoanhSo: effectiveThuongVuotDoanhSo,
+          formValues: customer.formValues || null,
           nguoiChamSoc: customer.nguoiChamSoc || {
             fullName: 'Phạm Quang Việt',
             phone: '0981.183.234',
@@ -655,21 +790,170 @@ app.get('/api/dealer/overview', authenticateToken, async (req, res) => {
 
 app.get('/api/dealer/products', authenticateToken, async (req, res) => {
   try {
-    const products = await prisma.seajongProduct.findMany({
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+
+    // 1. Thành phẩm từ SeajongProduct (toàn bộ 226 sản phẩm)
+    const tpList = await prisma.seajongProduct.findMany({
       select: {
         id: true,
         name: true,
         price: true,
         imageUrl: true,
+        images: true,
         excerpt: true,
+        description: true,
+        specs: true,
+        url: true,
+        promotions: true,
+        policies: true,
         slug: true,
+        updatedAt: true,
         categories: { select: { id: true, name: true } }
       },
-      orderBy: { id: 'asc' },
-      take: 100
+      orderBy: { id: 'asc' }
     });
 
-    res.json({ success: true, data: products });
+    // Tạo bản đồ tra cứu ảnh từ SeajongProduct cho linh kiện
+    const spLookupMap = new Map();
+    tpList.forEach(p => {
+      let imgs = [];
+      try {
+        const parsed = JSON.parse(p.images || '[]');
+        if (Array.isArray(parsed) && parsed.length > 0) imgs = parsed;
+      } catch (_) {}
+      if (p.imageUrl && !imgs.includes(p.imageUrl)) imgs.unshift(p.imageUrl);
+
+      if (imgs.length > 0) {
+        if (p.slug) spLookupMap.set(p.slug.toLowerCase().trim(), imgs);
+        if (p.name) spLookupMap.set(p.name.toLowerCase().trim(), imgs);
+      }
+    });
+
+    const formattedTP = tpList.map(p => {
+      let firstImg = p.imageUrl || null;
+      let parsedImages = [];
+      if (p.images) {
+        try {
+          const parsed = JSON.parse(p.images);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            parsedImages = parsed;
+            if (!firstImg) firstImg = parsed[0];
+          }
+        } catch (e) {}
+      }
+      if (firstImg && !parsedImages.includes(firstImg)) {
+        parsedImages.unshift(firstImg);
+      }
+      let parsedSpecs = {};
+      try {
+        parsedSpecs = typeof p.specs === 'string' ? JSON.parse(p.specs || '{}') : (p.specs || {});
+      } catch (_) {}
+
+      return {
+        id: p.id,
+        code: `TP-${p.id}`,
+        name: p.name,
+        price: p.price || 0,
+        imageUrl: firstImg,
+        images: parsedImages,
+        excerpt: p.excerpt || '',
+        description: p.description || '',
+        specs: parsedSpecs,
+        url: p.url || '',
+        slug: p.slug || '',
+        updatedAt: p.updatedAt ? p.updatedAt.toISOString() : new Date().toISOString(),
+        promotions: p.promotions || '[]',
+        policies: p.policies || '[]',
+        categories: (p.categories || []).map(c => c.id),
+        categoryNames: (p.categories || []).map(c => c.name),
+        categoryName: p.categories && p.categories.length > 0 ? p.categories[0].name : 'Thành phẩm Seajong',
+        itemType: 'thanh-pham',
+        unit: 'Bộ'
+      };
+    });
+
+    // 2. Linh kiện từ InventoryItem (loai = 'vat-tu', 764 sản phẩm)
+    const lkList = await prisma.inventoryItem.findMany({
+      where: { loai: 'vat-tu' },
+      select: {
+        id: true,
+        code: true,
+        tenHang: true,
+        giaBan: true,
+        giaVon: true,
+        donVi: true,
+        imageUrl: true,
+        thongSoKyThuat: true,
+        chatLieu: true,
+        ghiChu: true,
+        webProductId: true
+      },
+      orderBy: { tenHang: 'asc' }
+    });
+
+    const formattedLK = lkList.map(item => {
+      let lkImages = [];
+      // Tra cứu xem có ảnh từ SeajongProduct không
+      const itemCodeNorm = (item.code || '').toLowerCase().trim();
+      const itemNameNorm = (item.tenHang || '').toLowerCase().trim();
+
+      for (const [key, imgs] of spLookupMap.entries()) {
+        if ((itemCodeNorm.length > 4 && key.includes(itemCodeNorm)) || 
+            (itemNameNorm.length > 8 && key.includes(itemNameNorm))) {
+          lkImages = [...imgs];
+          break;
+        }
+      }
+
+      if (lkImages.length === 0 && item.imageUrl) {
+        lkImages = [item.imageUrl];
+      } else if (item.imageUrl && !lkImages.includes(item.imageUrl)) {
+        lkImages.unshift(item.imageUrl);
+      }
+
+      return {
+        id: item.id,
+        code: item.code || `LK-${item.id.slice(-6)}`,
+        name: item.tenHang,
+        price: item.giaBan > 0 ? item.giaBan : (item.giaVon > 0 ? Math.round(item.giaVon * 1.25) : 85000),
+        imageUrl: lkImages[0] || item.imageUrl || null,
+        images: lkImages,
+        excerpt: item.thongSoKyThuat ? item.thongSoKyThuat.slice(0, 120) : 'Linh kiện chính hãng Seajong',
+        description: item.thongSoKyThuat || item.ghiChu || 'Linh kiện, phụ tùng thay thế chính hãng Seajong tiêu chuẩn Hàn Quốc.',
+        specs: {
+          'Mã linh kiện': item.code || '',
+          'Đơn vị tính': item.donVi || 'Cái',
+          'Chất liệu': item.chatLieu || 'Đồng mạ Chrome / Thép không gỉ / Nhựa ABS',
+          'Quy cách & Thông số': item.thongSoKyThuat || 'Tiêu chuẩn nhà máy Seajong',
+        },
+        url: '',
+        slug: (item.code || `lk-${item.id.slice(-6)}`).toLowerCase(),
+        updatedAt: new Date().toISOString(),
+        promotions: '[]',
+        policies: '[]',
+        categories: [999],
+        categoryNames: ['Linh kiện / Phụ tùng'],
+        categoryName: 'Linh kiện / Phụ tùng',
+        itemType: 'linh-kien',
+        unit: item.donVi || 'Cái'
+      };
+    });
+
+    const allProducts = [...formattedTP, ...formattedLK];
+
+    res.json({
+      success: true,
+      data: allProducts,
+      summary: {
+        thanhPhamCount: formattedTP.length,
+        linhKienCount: formattedLK.length,
+        totalCount: allProducts.length
+      }
+    });
   } catch (error) {
     console.error('Lỗi GET /api/dealer/products:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -708,6 +992,7 @@ app.get('/api/dealer/orders', authenticateToken, async (req, res) => {
     `, user.customerId, `CNPT-${customer?.code}`, customer?.name);
 
     const receivablesOrders = [];
+    const receivablesByCode = new Map();
     debtRows.forEach(dr => {
       try {
         const entries = JSON.parse(dr.entries_json || '[]');
@@ -719,33 +1004,116 @@ app.get('/api/dealer/orders', authenticateToken, async (req, res) => {
               orderDate = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
             }
           }
-          receivablesOrders.push({
+          const rawTitle = (e.title || '').trim();
+          const cleanedProductStr = rawTitle
+            .replace(/^(?:Đơn\s+(?:bán\s+|mua\s+)?hàng\s*[^:]*:\s*)/i, '')
+            .trim();
+          const totalOrderAmt = e.contractValue || e.amount || 0;
+          let itemQty = 1;
+          let itemName = cleanedProductStr || `Sản phẩm Seajong`;
+          const qtyMatch = itemName.match(/\((\d+)\s*(?:bộ|chiếc|cái|sp|sản phẩm)\)\s*$/i);
+          if (qtyMatch) {
+            itemQty = Math.max(1, Number(qtyMatch[1]) || 1);
+            itemName = itemName.replace(/\s*\(\d+\s*(?:bộ|chiếc|cái|sp|sản phẩm)\)\s*$/i, '').trim();
+          }
+          const unitPrice = itemQty > 1 ? Math.round(totalOrderAmt / itemQty) : totalOrderAmt;
+
+          const recOrd = {
             id: e.id || e.code,
             code: e.code,
-            tongTien: e.contractValue || e.amount || 0,
+            ngayDat: orderDate,
+            tongTien: totalOrderAmt,
             daThanhToan: e.paidAmount || 0,
             trangThai: e.status === 'ontime' ? 'completed' : e.status === 'due' ? 'approved' : 'completed',
             keToanDuyet: 'approved',
             createdAt: orderDate,
-            ghiChu: e.title,
+            ghiChu: cleanedProductStr || e.title,
+            dueDate: e.dueDate || dr.due_date || null,
+            debtStatus: e.status || dr.status || 'ontime',
+            statusLabel: e.statusLabel || dr.status_label || 'Trong hạn thanh toán',
+            payments: Array.isArray(e.payments) ? e.payments : [],
             saleOrderItems: [
               {
                 id: 1,
-                tenHang: e.title || `Sản phẩm đơn ${e.code}`,
-                soLuong: 1,
-                donGia: e.contractValue || e.amount || 0,
-                thanhTien: e.contractValue || e.amount || 0
+                tenHang: itemName,
+                soLuong: itemQty,
+                donGia: unitPrice,
+                thanhTien: totalOrderAmt
               }
             ]
-          });
+          };
+          receivablesOrders.push(recOrd);
+          if (recOrd.code) receivablesByCode.set(recOrd.code, recOrd);
         });
       } catch (err) {}
     });
 
+    // 3. Lịch sử phiếu thu/chi từ bảng Debt (nếu có)
+    const customerDebts = await prisma.debt.findMany({
+      where: { customerId: user.customerId },
+      orderBy: { createdAt: 'asc' }
+    });
+    const debtPaymentLogs = [];
+    let debtPaidTotal = 0;
+    const debtDueByOrderCode = new Map();
+
+    customerDebts.forEach(d => {
+      const desc = d.description || '';
+      const orderMatch = desc.match(/(DBH-[\w-]+)/i);
+      if (orderMatch && d.dueDate) {
+        debtDueByOrderCode.set(orderMatch[1], new Date(d.dueDate).toLocaleDateString('vi-VN'));
+      }
+      if (!desc.includes('Trả lại hàng') && Number(d.paidAmount) > 0) {
+        debtPaidTotal += Number(d.paidAmount);
+        const logIdx = desc.indexOf('[PAYMENT_LOGS]:');
+        if (logIdx >= 0) {
+          try {
+            const logs = JSON.parse(desc.slice(logIdx + 15).trim());
+            if (Array.isArray(logs)) {
+              logs.forEach(lg => {
+                debtPaymentLogs.push({
+                  code: lg.ref || lg.id,
+                  amount: Number(lg.amount) || Number(d.paidAmount) || 0,
+                  date: lg.date,
+                  method: lg.method || 'Chuyển khoản ngân hàng',
+                  note: lg.note || 'Thanh toán công nợ'
+                });
+              });
+            }
+          } catch (_) {}
+        }
+      }
+    });
+
+    const enrichedDirectOrders = directOrders.map((o, idx) => {
+      const matchedRec = receivablesByCode.get(o.code);
+      const mergedPaid = Math.max(Number(o.daThanhToan) || 0, Number(matchedRec?.daThanhToan) || 0);
+      const mergedPayments =
+        Array.isArray(matchedRec?.payments) && matchedRec.payments.length > 0
+          ? matchedRec.payments
+          : idx === 0 && debtPaymentLogs.length > 0
+          ? debtPaymentLogs
+          : [];
+      return {
+        ...o,
+        tongTien: o.tongTien || matchedRec?.tongTien || 0,
+        daThanhToan:
+          mergedPaid > 0
+            ? mergedPaid
+            : idx === 0 && debtPaidTotal > 0
+            ? Math.min(o.tongTien || 0, debtPaidTotal)
+            : 0,
+        dueDate: matchedRec?.dueDate || debtDueByOrderCode.get(o.code) || null,
+        debtStatus: matchedRec?.debtStatus || 'ontime',
+        statusLabel: matchedRec?.statusLabel || 'Trong hạn thanh toán',
+        payments: mergedPayments
+      };
+    });
+
     // Trộn và loại bỏ trùng lặp mã đơn
-    const existingCodes = new Set(directOrders.map(o => o.code));
+    const existingCodes = new Set(enrichedDirectOrders.map(o => o.code));
     const merged = [
-      ...directOrders,
+      ...enrichedDirectOrders,
       ...receivablesOrders.filter(ro => !existingCodes.has(ro.code))
     ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
@@ -767,7 +1135,7 @@ app.post('/api/dealer/orders', authenticateToken, async (req, res) => {
       return res.status(403).json({ success: false, message: 'Chỉ đại lý mới có quyền đặt hàng' });
     }
 
-    const { items, ghiChu, ngayGiao } = req.body;
+    const { items, ghiChu, ngayGiao, nguoiNhan, soDienThoai, diaChiGiaoHang, nguoiDatHang } = req.body;
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Vui lòng chọn ít nhất một sản phẩm' });
     }
@@ -787,11 +1155,57 @@ app.post('/api/dealer/orders', authenticateToken, async (req, res) => {
         soLuong: Number(item.soLuong) || 1,
         donGia: Number(item.donGia) || 0,
         thanhTien: lineTotal,
-        ghiChu: item.ghiChu || ''
+        ghiChu: item.ghiChu || '',
+        seajongProductId: typeof item.productId === 'number' || (typeof item.productId === 'string' && /^\d+$/.test(item.productId)) ? Number(item.productId) : null,
+        inventoryItemId: typeof item.productId === 'string' && !/^\d+$/.test(item.productId) ? item.productId : null,
+        hinhAnh: item.hinhAnh || item.imageUrl || null,
+        donViTinh: item.donViTinh || item.unit || 'Bộ'
       };
     });
 
-    const orderCode = `DH-DL-${Date.now().toString().slice(-6)}`;
+    const isDraft = req.body.isDraft === true || req.body.trangThai === 'draft';
+    const orderStatus = isDraft ? 'draft' : 'pending';
+
+    // Tạo mã đơn hàng theo quy tắc: {Mã đại lý}-{YYYYmmdd}-{STT}
+    // STT bắt đầu từ 01, 02... tăng dần và tự động quay lại 01 khi bắt đầu ngày mới (không thay đổi sau khi tạo)
+    const now = new Date();
+    const vnDateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(now).replace(/-/g, ''); // e.g. "20261028"
+
+    const dealerCode = customer?.code || user.customerId || 'DL';
+    const codePrefix = `${dealerCode}-${vnDateStr}-`;
+
+    // Tìm các đơn hàng hiện có của đại lý trong ngày có tiền tố codePrefix
+    const sameDayOrders = await prisma.saleOrder.findMany({
+      where: {
+        code: {
+          startsWith: codePrefix
+        }
+      },
+      select: { code: true }
+    });
+
+    let maxSeq = 0;
+    for (const ord of sameDayOrders) {
+      const parts = ord.code.split('-');
+      const seqStr = parts[parts.length - 1];
+      const seqNum = parseInt(seqStr, 10);
+      if (!isNaN(seqNum) && seqNum > maxSeq) {
+        maxSeq = seqNum;
+      }
+    }
+
+    let nextSeq = maxSeq + 1;
+    let orderCode = `${codePrefix}${String(nextSeq).padStart(2, '0')}`;
+    while (sameDayOrders.some(o => o.code === orderCode)) {
+      nextSeq++;
+      orderCode = `${codePrefix}${String(nextSeq).padStart(2, '0')}`;
+    }
+
     const saleOrder = await prisma.saleOrder.create({
       data: {
         code: orderCode,
@@ -799,11 +1213,16 @@ app.post('/api/dealer/orders', authenticateToken, async (req, res) => {
         ngayDat: new Date(),
         ngayGiao: ngayGiao ? new Date(ngayGiao) : null,
         tongTien: total,
-        daThanhToan: 0,
-        trangThai: 'pending', // Chờ bộ phận kinh doanh duyệt
+        daThanhToan: Math.max(0, Number(req.body.daThanhToan) || 0),
+        trangThai: orderStatus, // 'draft' hoặc 'pending' (chờ kinh doanh duyệt)
         keToanDuyet: 'pending',
-        ghiChu: ghiChu || `Đại lý ${customer?.name || ''} tự lên đơn trực tuyến`,
+        ghiChu: ghiChu || (isDraft ? `Đại lý ${customer?.name || ''} lưu đơn nháp` : `Đại lý ${customer?.name || ''} tự lên đơn trực tuyến`),
         nguoiPhuTrach: customer?.nguoiChamSoc?.fullName || 'Bộ phận Kinh doanh',
+        nguoiNhan: nguoiNhan || customer?.daiDien || customer?.name || '',
+        soDienThoai: soDienThoai || customer?.dienThoai || '',
+        diaChiGiaoHang: diaChiGiaoHang || customer?.address || '',
+        nguoiDatHang: nguoiDatHang || req.user?.name || customer?.name || '',
+        orderSource: 'dealer_portal',
         saleOrderItems: {
           create: orderItemsData
         }
@@ -814,7 +1233,204 @@ app.post('/api/dealer/orders', authenticateToken, async (req, res) => {
       }
     });
 
-    // Gửi thông báo đến người chăm sóc hoặc bộ phận kinh doanh
+    if (!isDraft) {
+      // Gửi thông báo đến người chăm sóc hoặc bộ phận kinh doanh
+      try {
+        const salesAdmins = await prisma.user.findMany({
+          where: {
+            OR: [
+              { role: 'ADMIN' },
+              { deptAccess: { contains: 'sales' } }
+            ]
+          },
+          take: 5
+        });
+
+        for (const sa of salesAdmins) {
+          await prisma.notification.create({
+            data: {
+              title: `🛒 Đơn hàng mới từ đại lý: ${customer?.name || orderCode}`,
+              content: `Đại lý ${customer?.name || 'Khách hàng'} vừa gửi đơn hàng ${orderCode} trị giá ${total.toLocaleString('vi-VN')} đ. Vui lòng kiểm tra và phê duyệt.`,
+              type: 'info',
+              priority: 'high',
+              audienceType: 'individual',
+              audienceValue: sa.id,
+              createdById: user.id
+            }
+          });
+        }
+      } catch (notifErr) {
+        console.warn('Không thể gửi notification:', notifErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: isDraft 
+        ? 'Đơn hàng đã được lưu nháp thành công!' 
+        : 'Đơn hàng đã được gửi thành công đến Bộ phận Kinh doanh!',
+      order: saleOrder
+    });
+  } catch (error) {
+    console.error('Lỗi POST /api/dealer/orders:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Cập nhật đơn hàng (đặc biệt là đơn nháp)
+app.put('/api/dealer/orders/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { customerId: true }
+    });
+
+    if (!user || !user.customerId) {
+      return res.status(403).json({ success: false, message: 'Chỉ đại lý mới có quyền thao tác' });
+    }
+
+    const { id } = req.params;
+    const existing = await prisma.saleOrder.findUnique({
+      where: { id }
+    });
+
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
+    }
+
+    if (existing.customerId !== user.customerId) {
+      return res.status(403).json({ success: false, message: 'Bạn không có quyền sửa đơn hàng này' });
+    }
+
+    const { items, ghiChu, ngayGiao, nguoiNhan, soDienThoai, diaChiGiaoHang, isDraft } = req.body;
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'Vui lòng chọn ít nhất một sản phẩm' });
+    }
+
+    let total = 0;
+    const orderItemsData = items.map(item => {
+      const lineTotal = (Number(item.donGia) || 0) * (Number(item.soLuong) || 1);
+      total += lineTotal;
+      return {
+        saleOrderId: id,
+        tenHang: item.tenHang,
+        soLuong: Number(item.soLuong) || 1,
+        donGia: Number(item.donGia) || 0,
+        thanhTien: lineTotal,
+        ghiChu: item.ghiChu || '',
+        seajongProductId: typeof item.productId === 'number' || (typeof item.productId === 'string' && /^\d+$/.test(item.productId)) ? Number(item.productId) : null,
+        inventoryItemId: typeof item.productId === 'string' && !/^\d+$/.test(item.productId) ? item.productId : null,
+        hinhAnh: item.hinhAnh || item.imageUrl || null,
+        donViTinh: item.donViTinh || item.unit || 'Bộ'
+      };
+    });
+
+    const newStatus = isDraft ? 'draft' : 'pending';
+
+    await prisma.saleOrderItem.deleteMany({ where: { saleOrderId: id } });
+    await prisma.saleOrderItem.createMany({ data: orderItemsData });
+
+    const updated = await prisma.saleOrder.update({
+      where: { id },
+      data: {
+        tongTien: total,
+        daThanhToan: req.body.daThanhToan !== undefined ? Math.max(0, Number(req.body.daThanhToan) || 0) : existing.daThanhToan,
+        trangThai: newStatus,
+        ngayGiao: ngayGiao ? new Date(ngayGiao) : null,
+        ghiChu: ghiChu || '',
+        nguoiNhan: nguoiNhan || '',
+        soDienThoai: soDienThoai || '',
+        diaChiGiaoHang: diaChiGiaoHang || ''
+      },
+      include: { saleOrderItems: true, customer: true }
+    });
+
+    res.json({
+      success: true,
+      message: isDraft ? 'Đã cập nhật đơn nháp thành công!' : 'Đã gửi đơn hàng đến Bộ phận Kinh doanh!',
+      order: updated
+    });
+  } catch (error) {
+    console.error('Lỗi PUT /api/dealer/orders/:id:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Xoá đơn hàng (chỉ cho phép xoá đơn nháp)
+app.delete('/api/dealer/orders/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { customerId: true }
+    });
+
+    if (!user || !user.customerId) {
+      return res.status(403).json({ success: false, message: 'Chỉ đại lý mới có quyền thao tác' });
+    }
+
+    const { id } = req.params;
+    const existing = await prisma.saleOrder.findUnique({
+      where: { id }
+    });
+
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
+    }
+
+    if (existing.customerId !== user.customerId) {
+      return res.status(403).json({ success: false, message: 'Bạn không có quyền xoá đơn hàng này' });
+    }
+
+    // Nút xoá chỉ mở với các đơn có trạng thái bản nháp
+    if (existing.trangThai !== 'draft') {
+      return res.status(400).json({ success: false, message: 'Chỉ có thể xoá đơn hàng ở trạng thái bản nháp' });
+    }
+
+    await prisma.saleOrderItem.deleteMany({ where: { saleOrderId: id } });
+    await prisma.saleOrder.delete({ where: { id } });
+
+    res.json({ success: true, message: 'Đã xoá đơn hàng bản nháp thành công' });
+  } catch (error) {
+    console.error('Lỗi DELETE /api/dealer/orders/:id:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Gửi đơn hàng bản nháp đến Bộ phận Kinh doanh để duyệt
+app.post('/api/dealer/orders/:id/submit', authenticateToken, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { customerId: true }
+    });
+
+    if (!user || !user.customerId) {
+      return res.status(403).json({ success: false, message: 'Chỉ đại lý mới có quyền thao tác' });
+    }
+
+    const { id } = req.params;
+    const existing = await prisma.saleOrder.findUnique({
+      where: { id },
+      include: { customer: true }
+    });
+
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
+    }
+
+    if (existing.customerId !== user.customerId) {
+      return res.status(403).json({ success: false, message: 'Bạn không có quyền gửi đơn hàng này' });
+    }
+
+    const updated = await prisma.saleOrder.update({
+      where: { id },
+      data: {
+        trangThai: 'pending'
+      },
+      include: { saleOrderItems: true, customer: true }
+    });
+
+    // Gửi thông báo đến sales
     try {
       const salesAdmins = await prisma.user.findMany({
         where: {
@@ -829,8 +1445,8 @@ app.post('/api/dealer/orders', authenticateToken, async (req, res) => {
       for (const sa of salesAdmins) {
         await prisma.notification.create({
           data: {
-            title: `🛒 Đơn hàng mới từ đại lý: ${customer?.name || orderCode}`,
-            content: `Đại lý ${customer?.name || 'Khách hàng'} vừa gửi đơn hàng ${orderCode} trị giá ${total.toLocaleString('vi-VN')} đ. Vui lòng kiểm tra và phê duyệt.`,
+            title: `🛒 Đơn hàng mới từ đại lý: ${existing.customer?.name || existing.code}`,
+            content: `Đại lý ${existing.customer?.name || 'Khách hàng'} vừa gửi đơn hàng ${existing.code} trị giá ${existing.tongTien.toLocaleString('vi-VN')} đ. Vui lòng kiểm tra và phê duyệt.`,
             type: 'info',
             priority: 'high',
             audienceType: 'individual',
@@ -846,10 +1462,10 @@ app.post('/api/dealer/orders', authenticateToken, async (req, res) => {
     res.json({
       success: true,
       message: 'Đơn hàng đã được gửi thành công đến Bộ phận Kinh doanh!',
-      order: saleOrder
+      order: updated
     });
   } catch (error) {
-    console.error('Lỗi POST /api/dealer/orders:', error);
+    console.error('Lỗi POST /api/dealer/orders/:id/submit:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

@@ -48,50 +48,82 @@ export const DealerOverviewView: React.FC<DealerOverviewViewProps> = ({
   const monthlyTarget = hasAnnualTarget ? Math.round(annualTarget / 12) : 0;
 
   // Danh mục chính sách ưu đãi lấy chuẩn 100% theo hợp đồng thực tế của từng Đại lý từ DB
-  const dealerPolicies = useMemo(() => [
-    {
+  const dealerPolicies = useMemo(() => {
+    const policies = [];
+
+    // 1. Chiết khấu thương mại
+    policies.push({
       title: 'Chiết khấu thương mại theo hợp đồng',
       badge: `${customer?.discountPercent || 25}% trực tiếp`,
       badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
       desc: 'Áp dụng chiết khấu trực tiếp trên giá niêm yết theo Hợp đồng đại lý ủy quyền Seajong.',
-    },
-    {
-      title: 'Tín dụng & Hạn mức công nợ gối đầu',
-      badge: formatVND(customer?.hanMucCongNo || 20000000),
-      badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
-      desc: 'Hạn mức mua hàng gối đầu được phê duyệt trong hệ thống, chu kỳ thanh toán linh hoạt 30 ngày.',
-    },
-    {
-      title: 'Thưởng thanh toán đúng hạn (Thưởng nóng)',
-      badge: customer?.thuongThanhToan?.includes('2%') ? 'Thưởng 2.0%' : '+1.5% chiết khấu',
-      badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-      desc: customer?.thuongThanhToan || 'Mức thưởng = 2% * Doanh số thanh toán đúng hạn (Chưa VAT)',
-    },
-    {
-      title: 'Thưởng cam kết doanh số năm',
-      badge: customer?.thuongDoanhSoNam?.includes('1.5%') ? 'Thưởng 1.5%' : 'Thưởng 2% - 3.5%',
-      badgeColor: 'bg-amber-50 text-amber-700 border-amber-200',
-      desc: customer?.thuongDoanhSoNam || `Căn cứ doanh số cam kết năm ${formatVND(customer?.doanhSoCamKet || 1200000000)}, xét thưởng chiết khấu kỳ tổng kết năm.`,
-    },
-    ...(customer?.thuongVuotDoanhSo ? [{
-      title: 'Thưởng vượt chỉ tiêu cam kết',
-      badge: 'Vượt chỉ tiêu 3%',
-      badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-      desc: customer.thuongVuotDoanhSo,
-    }] : []),
-    {
+    });
+
+    // 2. Tín dụng & Hạn mức công nợ gối đầu
+    if (customer?.hanMucCongNo && customer.hanMucCongNo > 0) {
+      policies.push({
+        title: 'Tín dụng & Hạn mức công nợ gối đầu',
+        badge: formatVND(customer.hanMucCongNo),
+        badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
+        desc: 'Hạn mức mua hàng gối đầu được phê duyệt trong hệ thống, chu kỳ thanh toán linh hoạt 30 ngày.',
+      });
+    } else {
+      policies.push({
+        title: 'Chính sách công nợ & Thanh toán',
+        badge: 'Thanh toán từng đơn',
+        badgeColor: 'bg-slate-100 text-slate-600 border-slate-200',
+        desc: 'Chưa cấp hạn mức nợ gối đầu. Đơn hàng áp dụng thanh toán theo từng đơn phát sinh trước khi xuất kho.',
+      });
+    }
+
+    // 3. Thưởng thanh toán đúng hạn
+    if (customer?.thuongThanhToan && customer.thuongThanhToan.trim()) {
+      policies.push({
+        title: 'Thưởng thanh toán đúng hạn (Thưởng nóng)',
+        badge: customer.thuongThanhToan.includes('2%') ? 'Thưởng 2.0%' : '+1.5% chiết khấu',
+        badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        desc: customer.thuongThanhToan,
+      });
+    }
+
+    // 4. Thưởng cam kết doanh số năm (Chỉ hiển thị nếu đại lý có cam kết doanh số năm > 0)
+    if (customer?.doanhSoCamKet && customer.doanhSoCamKet > 0) {
+      policies.push({
+        title: 'Thưởng cam kết doanh số năm',
+        badge: customer?.thuongDoanhSoNam?.includes('1.5%') ? 'Thưởng 1.5%' : 'Thưởng cam kết',
+        badgeColor: 'bg-amber-50 text-amber-700 border-amber-200',
+        desc: customer?.thuongDoanhSoNam || `Căn cứ doanh số cam kết năm ${formatVND(customer.doanhSoCamKet)}, xét thưởng chiết khấu kỳ tổng kết năm.`,
+      });
+    }
+
+    // 5. Thưởng vượt chỉ tiêu cam kết (Chỉ hiển thị nếu có trong hợp đồng)
+    if (customer?.thuongVuotDoanhSo && customer.thuongVuotDoanhSo.trim()) {
+      policies.push({
+        title: 'Thưởng vượt chỉ tiêu cam kết',
+        badge: 'Vượt chỉ tiêu 3%',
+        badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+        desc: customer.thuongVuotDoanhSo,
+      });
+    }
+
+    // 6. Bảo hành chính hãng
+    policies.push({
       title: 'Bảo hành chính hãng & Đổi mới 1:1',
       badge: 'Đổi mới 30 ngày',
       badgeColor: 'bg-cyan-50 text-cyan-700 border-cyan-200',
       desc: 'Bảo hành 5 năm sen vòi & thân vỏ, đổi mới 1:1 lỗi kỹ thuật, cấp linh kiện thay thế chính hãng.',
-    },
-    {
+    });
+
+    // 7. Hỗ trợ Showroom & Nhận diện Marketing
+    policies.push({
       title: 'Hỗ trợ Showroom & Nhận diện Marketing',
-      badge: 'Tài trợ 100%',
+      badge: ((customer?.hanMucCongNo || 0) > 0 || (customer?.doanhSoCamKet || 0) > 0) ? 'Tài trợ 100%' : 'Theo phê duyệt',
       badgeColor: 'bg-rose-50 text-rose-700 border-rose-200',
       desc: 'Hỗ trợ biển bạt đại lý ủy quyền, kệ mẫu trưng bày trải nghiệm và tài liệu catalogue Seajong.',
-    },
-  ], [customer]);
+    });
+
+    return policies;
+  }, [customer]);
 
   // ── ĐỒ THỊ LUÔN HIỂN THỊ ĐẦY ĐỦ 12 THÁNG TRONG NĂM 2026 ──
   const fullYearMonthlyData = useMemo(() => {
@@ -245,8 +277,8 @@ export const DealerOverviewView: React.FC<DealerOverviewViewProps> = ({
   return (
     <div className="flex-1 flex flex-col h-full min-h-0 p-2 sm:p-2.5 gap-2 select-none overflow-hidden">
       
-      {/* ── 1. THANH ĐIỀU KHIỂN & LỌC KỲ BÁO CÁO (CHIP THỜI GIAN THỰC) ── */}
-      <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 bg-white py-1.5 px-3 rounded-lg border border-slate-200/90 shadow-2xs">
+      {/* ── 1. THANH ĐIỀU KHIỂN & LỌC KỲ BÁO CÁO (CHIP THỜI GIAN THỰC - KHÔNG VIỀN) ── */}
+      <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 bg-transparent py-1 px-1">
         <div className="flex items-center gap-2.5">
           <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold border border-emerald-200">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-xs" />
@@ -619,16 +651,14 @@ export const DealerOverviewView: React.FC<DealerOverviewViewProps> = ({
 
                 return (
                   <g key={idx}>
-                    {/* Vệt sáng highlight nếu là kỳ đang chọn hoặc tháng hiện tại */}
+                    {/* Vệt sáng highlight nếu là kỳ đang chọn hoặc tháng hiện tại (không viền) */}
                     {(d.isCurrent || (periodType !== 'year' && isInSelectedPeriod)) && (
                       <rect
                         x={x - stepX / 2 + 1}
                         y={15}
                         width={stepX - 2}
                         height={baselineY - 13}
-                        fill={d.isCurrent ? '#eff6ff' : '#f8fafc'}
-                        stroke={d.isCurrent ? '#bfdbfe' : '#e2e8f0'}
-                        strokeWidth="1"
+                        fill={d.isCurrent ? '#f0f7ff' : '#f8fafc'}
                         rx="4"
                       />
                     )}
@@ -843,7 +873,7 @@ export const DealerOverviewView: React.FC<DealerOverviewViewProps> = ({
               Đường xu hướng
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#eff6ff] border border-blue-400" />
+              <span className="w-2.5 h-2.5 rounded-xs bg-[#f0f7ff] border border-blue-200/50" />
               Tháng hiện hành
             </span>
           </div>

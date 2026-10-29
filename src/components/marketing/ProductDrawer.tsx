@@ -36,6 +36,11 @@ interface ProductDrawerProps {
   onClose: () => void;
   onEdit?: () => void;
   isSalesMode?: boolean;
+  onAddToCart?: () => void;
+  addToCartLabel?: string;
+  hideMarketingActions?: boolean;
+  hidePrintLabel?: boolean;
+  isDealerMode?: boolean;
 }
 
 // ── Background Music Tracks ───────────────────────────────────────────────────
@@ -84,8 +89,16 @@ export const ProductDrawer: React.FC<ProductDrawerProps> = ({
   onClose,
   onEdit,
   isSalesMode,
+  onAddToCart,
+  addToCartLabel,
+  hideMarketingActions,
+  hidePrintLabel,
+  isDealerMode,
 }) => {
   if (!p) return null;
+
+  const shouldHideMarketingActions = hideMarketingActions || isDealerMode;
+  const shouldHidePrintLabel = hidePrintLabel || isDealerMode;
 
   // ── Parse promotions & policies ──
   const defaultPromotions = [
@@ -1927,82 +1940,84 @@ export const ProductDrawer: React.FC<ProductDrawerProps> = ({
           </div>
 
           {/* Nút thao tác: Tin nhắn Zalo + Viết bài quảng cáo */}
-          <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            {/* Nút Tin nhắn Zalo */}
-            <button
-              type="button"
-              onClick={() => {
-                const specs = Object.entries(p.specs || {})
-                  .slice(0, 3)
-                  .map(([k, v]) => `- ${k}: ${v}`)
-                  .join('\n');
-                const priceText = p.priceHtml
-                  ? `💰 Giá tham khảo: ${p.priceHtml}`
-                  : p.price > 0
-                  ? `💰 Giá tham khảo: ${p.price.toLocaleString('vi-VN')} đ`
-                  : '💰 Giá: Liên hệ';
-                const promoText =
-                  activePromotions.length > 0
-                    ? `\n🎁 Khuyến mãi:\n${activePromotions.map((x) => `- ${x}`).join('\n')}\n`
-                    : '';
-                const policyText =
-                  activePolicies.length > 0
-                    ? `\n🛡️ Chính sách bán hàng:\n${activePolicies.map((x) => `- ${x}`).join('\n')}\n`
-                    : '';
-                const varsText =
-                  activeVariations.length > 0
-                    ? `\n🎨 Tùy chọn có sẵn:\n${activeVariations
-                        .map((v) => `- ${v.name}: ${(v.options || []).join(', ')}`)
-                        .join('\n')}\n`
-                    : '';
-                const text = `Kính gửi anh/chị,\nEm gửi anh/chị thông tin sản phẩm:\n\n✨ ${p.name}\n${priceText}\n${varsText}\n📌 Thông số nổi bật:\n${specs}\n${promoText}${policyText}\n🌐 Xem chi tiết tại: ${
-                  p.url || 'https://seajong.com'
-                }\n\nAnh/chị cần thêm thông tin báo giá chi tiết, vui lòng phản hồi lại giúp em nhé!`;
-                navigator.clipboard.writeText(text);
-                showToast('Tin nhắn Zalo đã được lưu vào bộ nhớ tạm!');
-              }}
-              style={{
-                padding: '6px 14px',
-                borderRadius: 8,
-                background: 'linear-gradient(135deg, #0088FF, #0055FF)',
-                color: '#fff',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: 12,
-                fontWeight: 600,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 5,
-                boxShadow: '0 2px 8px rgba(0,136,255,0.3)',
-              }}
-            >
-              <i className="bi bi-chat-dots" style={{ fontSize: 12 }} />
-              Tin nhắn Zalo
-            </button>
+          {!shouldHideMarketingActions && (
+            <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {/* Nút Tin nhắn Zalo */}
+              <button
+                type="button"
+                onClick={() => {
+                  const specs = Object.entries(p.specs || {})
+                    .slice(0, 3)
+                    .map(([k, v]) => `- ${k}: ${v}`)
+                    .join('\n');
+                  const priceText = p.priceHtml
+                    ? `💰 Giá tham khảo: ${p.priceHtml}`
+                    : p.price > 0
+                    ? `💰 Giá tham khảo: ${p.price.toLocaleString('vi-VN')} đ`
+                    : '💰 Giá: Liên hệ';
+                  const promoText =
+                    activePromotions.length > 0
+                      ? `\n🎁 Khuyến mãi:\n${activePromotions.map((x) => `- ${x}`).join('\n')}\n`
+                      : '';
+                  const policyText =
+                    activePolicies.length > 0
+                      ? `\n🛡️ Chính sách bán hàng:\n${activePolicies.map((x) => `- ${x}`).join('\n')}\n`
+                      : '';
+                  const varsText =
+                    activeVariations.length > 0
+                      ? `\n🎨 Tùy chọn có sẵn:\n${activeVariations
+                          .map((v) => `- ${v.name}: ${(v.options || []).join(', ')}`)
+                          .join('\n')}\n`
+                      : '';
+                  const text = `Kính gửi anh/chị,\nEm gửi anh/chị thông tin sản phẩm:\n\n✨ ${p.name}\n${priceText}\n${varsText}\n📌 Thông số nổi bật:\n${specs}\n${promoText}${policyText}\n🌐 Xem chi tiết tại: ${
+                    p.url || 'https://seajong.com'
+                  }\n\nAnh/chị cần thêm thông tin báo giá chi tiết, vui lòng phản hồi lại giúp em nhé!`;
+                  navigator.clipboard.writeText(text);
+                  showToast('Tin nhắn Zalo đã được lưu vào bộ nhớ tạm!');
+                }}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 8,
+                  background: 'linear-gradient(135deg, #0088FF, #0055FF)',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  boxShadow: '0 2px 8px rgba(0,136,255,0.3)',
+                }}
+              >
+                <i className="bi bi-chat-dots" style={{ fontSize: 12 }} />
+                Tin nhắn Zalo
+              </button>
 
-            {/* Nút Viết bài quảng cáo bằng AI */}
-            <button
-              type="button"
-              onClick={() => setShowAdModal(true)}
-              style={{
-                padding: '6px 14px',
-                borderRadius: 8,
-                background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
-                color: '#fff',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: 12,
-                fontWeight: 600,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 5,
-                boxShadow: '0 2px 8px rgba(79,70,229,0.3)',
-              }}
-            >
-              <i className="bi bi-stars" style={{ fontSize: 12 }} />
-              Viết bài quảng cáo
-            </button>
-          </div>
+              {/* Nút Viết bài quảng cáo bằng AI */}
+              <button
+                type="button"
+                onClick={() => setShowAdModal(true)}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 8,
+                  background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  boxShadow: '0 2px 8px rgba(79,70,229,0.3)',
+                }}
+              >
+                <i className="bi bi-stars" style={{ fontSize: 12 }} />
+                Viết bài quảng cáo
+              </button>
+            </div>
+          )}
 
           {/* ── Gallery Slideshow ── */}
           {images.length > 0 && (
@@ -2418,28 +2433,30 @@ export const ProductDrawer: React.FC<ProductDrawerProps> = ({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button
-              type="button"
-              onClick={() => setShowPrintLabel(true)}
-              style={{
-                height: 34,
-                borderRadius: 8,
-                padding: '0 14px',
-                border: '1px solid var(--border, #e2e8f0)',
-                background: 'var(--card, #ffffff)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--foreground, #0f172a)',
-                fontSize: 12,
-                fontWeight: 600,
-                gap: 6,
-              }}
-            >
-              <i className="bi bi-printer" style={{ fontSize: 13 }} />
-              In tem nhãn
-            </button>
+            {!shouldHidePrintLabel && (
+              <button
+                type="button"
+                onClick={() => setShowPrintLabel(true)}
+                style={{
+                  height: 34,
+                  borderRadius: 8,
+                  padding: '0 14px',
+                  border: '1px solid var(--border, #e2e8f0)',
+                  background: 'var(--card, #ffffff)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--foreground, #0f172a)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  gap: 6,
+                }}
+              >
+                <i className="bi bi-printer" style={{ fontSize: 13 }} />
+                In tem nhãn
+              </button>
+            )}
             {onEdit && (
               <button
                 type="button"
@@ -2462,6 +2479,34 @@ export const ProductDrawer: React.FC<ProductDrawerProps> = ({
               >
                 <i className="bi bi-pencil-square" style={{ fontSize: 13 }} />
                 Sửa
+              </button>
+            )}
+            {onAddToCart && (
+              <button
+                type="button"
+                onClick={() => {
+                  onAddToCart();
+                  onClose();
+                }}
+                style={{
+                  height: 34,
+                  borderRadius: 8,
+                  padding: '0 16px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  gap: 6,
+                  boxShadow: '0 2px 8px rgba(2,132,199,0.35)',
+                }}
+              >
+                <i className="bi bi-cart-plus" style={{ fontSize: 14 }} />
+                {addToCartLabel || 'Chọn mua vào đơn'}
               </button>
             )}
             <button
