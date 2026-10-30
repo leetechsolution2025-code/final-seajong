@@ -1,416 +1,463 @@
-import React, { useState, useEffect } from 'react';
-import { StepPage } from '../../components/common/StepPage';
-import { TableToolbar } from '../../components/common/TableToolbar';
-import { FullWidthTable } from '../../components/common/FullWidthTable';
-import { Pagination } from '../../components/common/Pagination';
-import { Button } from '../../components/common/Button';
-import type { ModernStepItem } from '../../types';
-import {
-  CalendarRange,
-  Calendar3,
-  DatabaseFillCheck,
-  CheckCircle,
-  Save,
-  Pencil,
-  GraphUp,
-  People,
-  CashStack,
-} from 'react-bootstrap-icons';
+"use client";
 
-const PLAN_STEPS: ModernStepItem[] = [
-  { num: 1, id: 'yearly', title: 'Kế hoạch năm', desc: 'Chỉ tiêu doanh thu năm 2026', icon: 'bi-calendar-range' },
-  { num: 2, id: 'monthly', title: 'Kế hoạch tháng', desc: 'Phân bổ 12 tháng', icon: 'bi-calendar3' },
-  { num: 3, id: 'data', title: 'Dữ liệu & Kịch bản', desc: 'Tổng hợp & Dự báo', icon: 'bi-database-fill-check' },
-];
+import React, { useState } from "react";
+import { StepPage } from "@/components/common/StepPage";
+import { Button } from "@/components/common/Button";
+import type { ModernStepItem } from "@/types";
+import { SeajongPlanTab } from "@/components/sales/plan/SeajongPlanTab";
+import { OemPlanTab } from "@/components/sales/plan/OemPlanTab";
 
-export const SalesPlanPage: React.FC = () => {
+export function SalesPlanPage() {
   const [currentStep, setCurrentStep] = useState<number>(1);
-  const [activeTab, setActiveTab] = useState<'seajong' | 'oem'>('seajong');
-  const [loading, setLoading] = useState<boolean>(true);
-  const [saving, setSaving] = useState<boolean>(false);
-  const [monthlyPage, setMonthlyPage] = useState<number>(1);
-  const [monthlyPageSize, setMonthlyPageSize] = useState<number>(6);
+  const [activeTab, setActiveTab] = useState<string>("seajong");
 
-  // Kế hoạch năm
-  const [yearlyTargets, setYearlyTargets] = useState([
-    { stt: '1', item: 'Doanh thu từ đại lý lắp kệ mới', target: 2100000000, share: '46.7%', note: '20 showroom mới x 105 triệu' },
-    { stt: '2', item: 'Doanh thu từ đại lý chính thức (gối đầu)', target: 1600000000, share: '35.6%', note: 'Duy trì đơn hàng định kỳ hàng tháng' },
-    { stt: '3', item: 'Doanh thu từ kênh Shopee Mall & Ecom', target: 300000000, share: '6.7%', note: 'Kênh bán lẻ thương hiệu trực tiếp' },
-    { stt: '4', item: 'Doanh thu từ dự án & nhà thầu B2B', target: 500000000, share: '11.0%', note: 'Cung cấp công trình biệt thự, khách sạn' },
-  ]);
-
-  // Quỹ lương phòng kinh doanh
-  const staffSalaryRows = [
-    { stt: '1', role: 'Phó trưởng phòng Kinh doanh', salary: 21000000, qty: 1, total: 252000000 },
-    { stt: '2', role: 'NVKD Ecom + CSKH', salary: 10000000, qty: 1, total: 120000000 },
-    { stt: '3', role: 'NVKD Thị trường Miền Bắc (Seajong)', salary: 9000000, qty: 2, total: 216000000 },
-    { stt: '4', role: 'NVKD Thị trường Miền Trung & Nam', salary: 9000000, qty: 1, total: 108000000 },
-  ];
-
-  // Kế hoạch tháng (12 tháng)
-  const [monthlyTargets, setMonthlyTargets] = useState([
-    { month: 'Tháng 1', lapKe: 1, chinhThuc: 0, target: 714000000, ecom: 10000000, b2b: 50000000 },
-    { month: 'Tháng 2', lapKe: 0, chinhThuc: 0, target: 84000000, ecom: 5000000, b2b: 20000000 },
-    { month: 'Tháng 3', lapKe: 1, chinhThuc: 0, target: 1070000000, ecom: 15000000, b2b: 100000000 },
-    { month: 'Tháng 4', lapKe: 0, chinhThuc: 0, target: 800000000, ecom: 20000000, b2b: 80000000 },
-    { month: 'Tháng 5', lapKe: 0, chinhThuc: 0, target: 181000000, ecom: 15000000, b2b: 30000000 },
-    { month: 'Tháng 6', lapKe: 0, chinhThuc: 0, target: 51000000, ecom: 10000000, b2b: 20000000 },
-    { month: 'Tháng 7', lapKe: 2, chinhThuc: 0, target: 430000000, ecom: 15000000, b2b: 50000000 },
-    { month: 'Tháng 8', lapKe: 2, chinhThuc: 0, target: 555000000, ecom: 20000000, b2b: 70000000 },
-    { month: 'Tháng 9', lapKe: 2, chinhThuc: 8, target: 1600000000, ecom: 20000000, b2b: 380000000 },
-    { month: 'Tháng 10', lapKe: 1, chinhThuc: 10, target: 1550000000, ecom: 25000000, b2b: 380000000 },
-    { month: 'Tháng 11', lapKe: 1, chinhThuc: 11, target: 1630000000, ecom: 30000000, b2b: 400000000 },
-    { month: 'Tháng 12', lapKe: 1, chinhThuc: 12, target: 1610000000, ecom: 30000000, b2b: 380000000 },
-  ]);
-
-  useEffect(() => {
-    fetch('/api/sales/plan')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.plan) {
-          // Parse if present
-        }
-      })
-      .catch((err) => console.error(err))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const formatVND = (num: number) => num.toLocaleString('vi-VN') + ' đ';
-
-  const handleSavePlan = async () => {
-    setSaving(true);
-    try {
-      await fetch('/api/sales/plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          year: 2026,
-          planRows: yearlyTargets,
-          monthlyTargets,
-        }),
-      });
-      alert('Đã lưu thành công Kế hoạch Kinh doanh 2026!');
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const totalYearTarget = yearlyTargets.reduce((s, r) => s + r.target, 0);
-
-  const tickerNews = [
+  const steps: ModernStepItem[] = [
     {
-      badge: 'CHỈ TIÊU NĂM',
-      badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
-      text: 'Tổng chỉ tiêu doanh thu năm 2026: <b>4.500.000.000 đ</b> (4.5 Tỷ VNĐ) trên toàn quốc',
+      num: 1,
+      id: "yearly",
+      title: "Kế hoạch năm",
+      desc: "Kế hoạch năm",
+      icon: "bi-calendar-range",
     },
     {
-      badge: 'MỞ MỚI SHOWROOM',
-      badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-      text: 'Kế hoạch mở mới 20 đại lý showroom lắp quầy kệ trưng bày đạt chuẩn Seajong',
-    },
-    {
-      badge: 'CHIẾN LƯỢC QUÝ IV',
-      badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
-      text: 'Đẩy mạnh doanh thu Quý IV phục vụ mùa cao điểm hoàn thiện nhà công trình cuối năm',
+      num: 2,
+      id: "monthly",
+      title: "Kế hoạch tháng",
+      desc: "Kế hoạch tháng",
+      icon: "bi-calendar3",
     },
   ];
+
+  const stepperExtraRight = (
+    <div className="d-flex align-items-center gap-2">
+      <Button
+        variant={activeTab === "seajong" ? "primary" : "outline"}
+        size="sm"
+        onClick={() => setActiveTab("seajong")}
+      >
+        SEAJONG
+      </Button>
+      <Button
+        variant={activeTab === "oem" ? "primary" : "outline"}
+        size="sm"
+        onClick={() => setActiveTab("oem")}
+      >
+        OEM
+      </Button>
+    </div>
+  );
 
   return (
-    <StepPage
-      title="Lập kế hoạch sale"
-      badge="SALES PLAN"
-      description="Quản lý và thiết lập chỉ tiêu doanh số năm, phân bổ tháng và dự báo tăng trưởng"
-      icon="bi-calendar-check"
-      color="blue"
-      steps={PLAN_STEPS}
-      currentStep={currentStep}
-      onStepChange={setCurrentStep}
-      customTickerNews={tickerNews}
-    >
-      <div className="flex flex-col h-full flex-1 overflow-hidden">
-        {/* ── TableToolbar chuẩn theo AGENTS.MD ── */}
-        <TableToolbar
-          searchPlaceholder="Tìm kiếm dòng chỉ tiêu kế hoạch..."
-          customFilters={
-            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg">
-              <button
-                onClick={() => setActiveTab('seajong')}
-                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
-                  activeTab === 'seajong'
-                    ? 'bg-white text-blue-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                SEAJONG FAUCET
-              </button>
-              <button
-                onClick={() => setActiveTab('oem')}
-                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
-                  activeTab === 'oem'
-                    ? 'bg-white text-indigo-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                GIA CÔNG OEM
-              </button>
-            </div>
-          }
-          rightActions={
-            <Button
-              variant="primary"
-              size="sm"
-              icon={<Save className="w-4 h-4" />}
-              onClick={handleSavePlan}
-              disabled={saving}
-            >
-              {saving ? 'Đang lưu...' : 'Lưu kế hoạch'}
-            </Button>
-          }
-          onRefresh={() => setLoading(true)}
-          onExportExcel={() => alert('Xuất kế hoạch kinh doanh ra Excel')}
-        />
-
-        {/* ── Nội dung từng bước ── */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
-          {/* BƯỚC 1: KẾ HOẠCH NĂM */}
-          {currentStep === 1 && (
-            <div className="space-y-3">
-              {/* Thống kê nhanh */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl">
-                  <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wide block">
-                    Tổng mục tiêu doanh số 2026
-                  </span>
-                  <span className="text-xl font-black text-blue-900 font-mono mt-1 block">
-                    {formatVND(totalYearTarget)}
-                  </span>
-                  <span className="text-[11px] text-blue-600 mt-1 block">
-                    Tăng trưởng 35% so với cùng kỳ năm 2025
-                  </span>
-                </div>
-
-                <div className="p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-xl">
-                  <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wide block">
-                    Chỉ tiêu đại lý lắp kệ mới
-                  </span>
-                  <span className="text-xl font-black text-emerald-900 font-mono mt-1 block">
-                    20 Showroom
-                  </span>
-                  <span className="text-[11px] text-emerald-600 mt-1 block">
-                    Doanh thu dự kiến: 2.100.000.000 đ
-                  </span>
-                </div>
-
-                <div className="p-3 bg-purple-50/70 border border-purple-200/80 rounded-xl">
-                  <span className="text-[11px] font-bold text-purple-700 uppercase tracking-wide block">
-                    Tổng ngân sách lương NVKD
-                  </span>
-                  <span className="text-xl font-black text-purple-900 font-mono mt-1 block">
-                    696.000.000 đ
-                  </span>
-                  <span className="text-[11px] text-purple-600 mt-1 block">
-                    Định biên 5 nhân sự kinh doanh thị trường
-                  </span>
-                </div>
-              </div>
-
-              {/* Bảng mục tiêu doanh số năm */}
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-                <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                  <h4 className="font-bold text-xs uppercase text-slate-700 tracking-wide">
-                    I. Phân bổ mục tiêu doanh số theo nhóm kênh bán hàng (Năm 2026)
-                  </h4>
-                </div>
-                <table className="w-full text-xs text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50/60 text-slate-600 border-b border-slate-200 text-[11px] uppercase font-semibold">
-                      <th className="py-2.5 px-3 w-12 text-center">STT</th>
-                      <th className="py-2.5 px-3">Hạng mục chỉ tiêu kinh doanh</th>
-                      <th className="py-2.5 px-3 text-right">Doanh số mục tiêu</th>
-                      <th className="py-2.5 px-3 text-center w-24">Tỷ trọng</th>
-                      <th className="py-2.5 px-3">Ghi chú & Thuyết minh kế hoạch</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {yearlyTargets.map((row) => (
-                      <tr key={row.stt} className="hover:bg-slate-50/60">
-                        <td className="py-2.5 px-3 text-center font-mono text-slate-500">{row.stt}</td>
-                        <td className="py-2.5 px-3 font-semibold text-slate-800">{row.item}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-blue-700">
-                          {formatVND(row.target)}
-                        </td>
-                        <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-700">
-                          {row.share}
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-600">{row.note}</td>
-                      </tr>
-                    ))}
-                    <tr className="bg-blue-50/40 font-bold border-t-2 border-blue-200">
-                      <td colSpan={2} className="py-2.5 px-3 text-blue-900 text-right uppercase">
-                        Tổng cộng kế hoạch năm 2026:
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-blue-900 text-sm">
-                        {formatVND(totalYearTarget)}
-                      </td>
-                      <td className="py-2.5 px-3 text-center font-mono text-blue-900">100%</td>
-                      <td></td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div className="border-t border-slate-200">
-                  <Pagination
-                    currentPage={1}
-                    totalItems={yearlyTargets.length}
-                    pageSize={10}
-                    itemName="kênh"
-                  />
-                </div>
-              </div>
-
-              {/* Bảng quỹ lương nhân sự */}
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-                <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                  <h4 className="font-bold text-xs uppercase text-slate-700 tracking-wide">
-                    II. Quỹ lương định biên nhân sự phòng kinh doanh
-                  </h4>
-                </div>
-                <table className="w-full text-xs text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50/60 text-slate-600 border-b border-slate-200 text-[11px] uppercase font-semibold">
-                      <th className="py-2.5 px-3 w-12 text-center">STT</th>
-                      <th className="py-2.5 px-3">Vị trí nhân sự</th>
-                      <th className="py-2.5 px-3 text-right">Lương cơ bản / tháng</th>
-                      <th className="py-2.5 px-3 text-center w-24">Số lượng</th>
-                      <th className="py-2.5 px-3 text-right">Tổng ngân sách năm</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {staffSalaryRows.map((s) => (
-                      <tr key={s.stt} className="hover:bg-slate-50/60">
-                        <td className="py-2.5 px-3 text-center font-mono text-slate-500">{s.stt}</td>
-                        <td className="py-2.5 px-3 font-semibold text-slate-800">{s.role}</td>
-                        <td className="py-2.5 px-3 text-right font-mono text-slate-700">
-                          {formatVND(s.salary)}
-                        </td>
-                        <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-800">
-                          {s.qty}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">
-                          {formatVND(s.total)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="border-t border-slate-200">
-                  <Pagination
-                    currentPage={1}
-                    totalItems={staffSalaryRows.length}
-                    pageSize={10}
-                    itemName="vị trí"
-                  />
-                </div>
-              </div>
-            </div>
+    <div className="sales-plan-scope h-full w-full flex flex-col min-h-0" style={{ height: "100%" }}>
+      <StepPage
+        title="Lập kế hoạch"
+        description="Quản lý và thiết lập các chỉ tiêu kinh doanh"
+        color="blue"
+        icon="bi-calendar-check"
+        hideTicker={true}
+        steps={steps}
+        currentStep={currentStep}
+        onStepChange={setCurrentStep}
+        stepperExtraRight={stepperExtraRight}
+      >
+        <div className="flex-1 overflow-y-auto custom-scrollbar" style={{ minHeight: 0 }}>
+          {activeTab === "seajong" && (
+            <SeajongPlanTab currentStep={currentStep} />
           )}
 
-          {/* BƯỚC 2: KẾ HOẠCH THÁNG */}
-          {currentStep === 2 && (
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-              <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                <h4 className="font-bold text-xs uppercase text-slate-700 tracking-wide">
-                  Phân bổ chỉ tiêu doanh thu & đại lý mới theo 12 tháng (Năm 2026)
-                </h4>
-              </div>
-              <table className="w-full text-xs text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/60 text-slate-600 border-b border-slate-200 text-[11px] uppercase font-semibold">
-                    <th className="py-2.5 px-3 w-28">Tháng</th>
-                    <th className="py-2.5 px-3 text-center">ĐL lắp kệ mới</th>
-                    <th className="py-2.5 px-3 text-center">ĐL chính thức</th>
-                    <th className="py-2.5 px-3 text-right">Chỉ tiêu tổng (VNĐ)</th>
-                    <th className="py-2.5 px-3 text-right">Kênh Shopee</th>
-                    <th className="py-2.5 px-3 text-right">Kênh Dự án B2B</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {monthlyTargets
-                    .slice((monthlyPage - 1) * monthlyPageSize, monthlyPage * monthlyPageSize)
-                    .map((m, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/60">
-                        <td className="py-2.5 px-3 font-bold text-blue-700">{m.month}</td>
-                        <td className="py-2.5 px-3 text-center font-mono font-bold text-emerald-700">
-                          {m.lapKe > 0 ? `+${m.lapKe} ĐL` : '—'}
-                        </td>
-                        <td className="py-2.5 px-3 text-center font-mono text-slate-700">
-                          {m.chinhThuc > 0 ? `${m.chinhThuc} ĐL` : '—'}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">
-                          {formatVND(m.target)}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-slate-600">
-                          {formatVND(m.ecom)}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-slate-600">
-                          {formatVND(m.b2b)}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-              <div className="border-t border-slate-200">
-                <Pagination
-                  currentPage={monthlyPage}
-                  totalItems={monthlyTargets.length}
-                  pageSize={monthlyPageSize}
-                  onPageChange={setMonthlyPage}
-                  onPageSizeChange={(sz) => {
-                    setMonthlyPageSize(sz);
-                    setMonthlyPage(1);
-                  }}
-                  pageSizeOptions={[6, 12]}
-                  itemName="tháng"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* BƯỚC 3: DỮ LIỆU & KỊCH BẢN */}
-          {currentStep === 3 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs space-y-2.5">
-                <h4 className="font-bold text-xs uppercase text-blue-900 tracking-wide flex items-center gap-1.5">
-                  <GraphUp className="w-4 h-4 text-blue-600" />
-                  Kịch bản tăng trưởng cơ bản (Base Case)
-                </h4>
-                <p className="text-slate-600 leading-relaxed text-xs">
-                  - Đạt doanh thu 4.5 tỷ đồng với 20 đại lý showroom mới tại các đô thị trọng điểm: Hà Nội, Hải Phòng, Bắc Ninh, Quảng Ninh, Thanh Hoá, Đà Nẵng, Bình Dương và TP.HCM.
-                  <br />
-                  - Tỷ lệ giữ chân và tái đặt hàng của đại lý cũ đạt trên 85%.
-                  <br />
-                  - Sản phẩm sen cây phím đàn mạ PVD tiếp tục là đầu tàu kéo doanh số các dòng phụ kiện.
-                </p>
-              </div>
-
-              <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs space-y-2.5">
-                <h4 className="font-bold text-xs uppercase text-emerald-900 tracking-wide flex items-center gap-1.5">
-                  <CheckCircle className="w-4 h-4 text-emerald-600" />
-                  Kịch bản bứt phá (Best Case)
-                </h4>
-                <p className="text-slate-600 leading-relaxed text-xs">
-                  - Vượt kế hoạch 20%, đạt doanh thu 5.4 tỷ đồng nếu chốt thành công 2 gói dự án căn hộ cao cấp tại Hà Nội và TP.HCM trong Quý 4.
-                  <br />
-                  - Kênh TikTok Shop & Shopee Mall phát triển mạnh mảng vòi lavabo cảm ứng và phụ kiện phòng tắm thông minh.
-                </p>
-              </div>
-            </div>
+          {activeTab === "oem" && (
+            <OemPlanTab currentStep={currentStep} />
           )}
         </div>
-      </div>
-    </StepPage>
+      </StepPage>
+
+      <style>{`
+        @keyframes pulse-danger {
+          0% {
+            transform: scale(0.85);
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+          }
+          70% {
+            transform: scale(1);
+            box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+          }
+          100% {
+            transform: scale(0.85);
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+          }
+        }
+        .pulse-danger-dot {
+          animation: pulse-danger 1.5s infinite;
+        }
+
+        .plan-left-panel {
+          background-color: transparent;
+        }
+        .plan-right-panel {
+          background-color: transparent;
+        }
+
+        .sales-plan-scope .plan-subcard {
+          background-color: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 0.75rem;
+          box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+          overflow: hidden;
+        }
+
+        .sales-plan-scope .plan-subcard-header {
+          padding: 0.65rem 1rem;
+          background-color: #f8fafc;
+          border-bottom: 1px solid #e2e8f0;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          min-height: 44px;
+        }
+
+        .sales-plan-scope .plan-subcard-body {
+          padding: 1rem;
+        }
+
+        .sales-plan-scope .plan-subcard thead tr:first-child th {
+          border-top: none !important;
+        }
+
+        .sales-plan-scope .plan-subcard tbody tr:last-child td {
+          border-bottom: none !important;
+        }
+
+        @media (max-width: 1200px) {
+          .plan-left-panel {
+            height: auto !important;
+          }
+          .plan-right-panel {
+            height: auto !important;
+          }
+          .plan-row {
+            flex-direction: column;
+          }
+        }
+
+        /* Bootstrap 5 Grid & Layout Compatibility for SalesPlanPage */
+        .sales-plan-scope .row {
+          --bs-gutter-x: 1.5rem;
+          --bs-gutter-y: 0;
+          display: flex;
+          flex-wrap: wrap;
+          margin-top: calc(-1 * var(--bs-gutter-y));
+          margin-right: calc(-0.5 * var(--bs-gutter-x));
+          margin-left: calc(-0.5 * var(--bs-gutter-x));
+        }
+        .sales-plan-scope .row > * {
+          box-sizing: border-box;
+          flex-shrink: 0;
+          width: 100%;
+          max-width: 100%;
+          padding-right: calc(var(--bs-gutter-x) * 0.5);
+          padding-left: calc(var(--bs-gutter-x) * 0.5);
+          margin-top: var(--bs-gutter-y);
+        }
+        .sales-plan-scope .g-0 { --bs-gutter-x: 0rem; --bs-gutter-y: 0rem; }
+        .sales-plan-scope .g-1 { --bs-gutter-x: 0.25rem; --bs-gutter-y: 0.25rem; }
+        .sales-plan-scope .g-2 { --bs-gutter-x: 0.5rem; --bs-gutter-y: 0.5rem; }
+        .sales-plan-scope .g-3 { --bs-gutter-x: 1rem; --bs-gutter-y: 1rem; }
+        .sales-plan-scope .g-4 { --bs-gutter-x: 1.5rem; --bs-gutter-y: 1.5rem; }
+
+        .sales-plan-scope .col-4 { flex: 0 0 auto; width: 33.33333333%; }
+        .sales-plan-scope .col-6 { flex: 0 0 auto; width: 50%; }
+        .sales-plan-scope .col-8 { flex: 0 0 auto; width: 66.66666667%; }
+        .sales-plan-scope .col-12 { flex: 0 0 auto; width: 100%; }
+
+        @media (min-width: 768px) {
+          .sales-plan-scope .col-md-4 { flex: 0 0 auto; width: 33.33333333%; }
+          .sales-plan-scope .col-md-5 { flex: 0 0 auto; width: 41.66666667%; }
+          .sales-plan-scope .col-md-6 { flex: 0 0 auto; width: 50%; }
+          .sales-plan-scope .col-md-7 { flex: 0 0 auto; width: 58.33333333%; }
+          .sales-plan-scope .col-md-8 { flex: 0 0 auto; width: 66.66666667%; }
+          .sales-plan-scope .col-md-12 { flex: 0 0 auto; width: 100%; }
+        }
+        @media (min-width: 992px) {
+          .sales-plan-scope .col-lg-3 { flex: 0 0 auto; width: 25%; }
+          .sales-plan-scope .col-lg-4 { flex: 0 0 auto; width: 33.33333333%; }
+          .sales-plan-scope .col-lg-6 { flex: 0 0 auto; width: 50%; }
+          .sales-plan-scope .col-lg-8 { flex: 0 0 auto; width: 66.66666667%; }
+          .sales-plan-scope .col-lg-12 { flex: 0 0 auto; width: 100%; }
+          .sales-plan-scope .d-lg-block { display: block !important; }
+        }
+        @media (max-width: 1199.98px) {
+          .sales-plan-scope .d-none.d-xl-block { display: none !important; }
+        }
+        @media (min-width: 1200px) {
+          .sales-plan-scope .col-xl-3 { flex: 0 0 auto; width: 25%; }
+          .sales-plan-scope .col-xl-4 { flex: 0 0 auto; width: 33.33333333%; }
+          .sales-plan-scope .col-xl-5 { flex: 0 0 auto; width: 41.66666667%; }
+          .sales-plan-scope .col-xl-6 { flex: 0 0 auto; width: 50%; }
+          .sales-plan-scope .col-xl-7 { flex: 0 0 auto; width: 58.33333333%; }
+          .sales-plan-scope .col-xl-8 { flex: 0 0 auto; width: 66.66666667%; }
+          .sales-plan-scope .col-xl-9 { flex: 0 0 auto; width: 75%; }
+          .sales-plan-scope .col-xl-12 { flex: 0 0 auto; width: 100%; }
+          .sales-plan-scope .d-xl-block { display: block !important; }
+          .sales-plan-scope .d-xl-flex { display: flex !important; }
+        }
+
+        /* Flex, sizing, spacing helpers */
+        .sales-plan-scope .w-100 { width: 100% !important; }
+        .sales-plan-scope .h-100 { height: 100% !important; }
+        .sales-plan-scope .position-relative { position: relative !important; }
+        .sales-plan-scope .position-absolute { position: absolute !important; }
+        .sales-plan-scope .position-sticky { position: sticky !important; }
+        .sales-plan-scope .top-0 { top: 0 !important; }
+        .sales-plan-scope .top-50 { top: 50% !important; }
+        .sales-plan-scope .bottom-0 { bottom: 0 !important; }
+        .sales-plan-scope .start-0 { left: 0 !important; }
+        .sales-plan-scope .end-0 { right: 0 !important; }
+        .sales-plan-scope .translate-middle-y { transform: translateY(-50%) !important; }
+        .sales-plan-scope .overflow-auto { overflow: auto !important; }
+        .sales-plan-scope .overflow-hidden { overflow: hidden !important; }
+        .sales-plan-scope .align-items-start { align-items: flex-start !important; }
+        .sales-plan-scope .align-items-end { align-items: flex-end !important; }
+        .sales-plan-scope .align-items-baseline { align-items: baseline !important; }
+        .sales-plan-scope .align-items-stretch { align-items: stretch !important; }
+        .sales-plan-scope .justify-content-end { justify-content: flex-end !important; }
+        .sales-plan-scope .justify-content-start { justify-content: flex-start !important; }
+        .sales-plan-scope .justify-content-around { justify-content: space-around !important; }
+
+        .sales-plan-scope .m-0 { margin: 0 !important; }
+        .sales-plan-scope .mt-0 { margin-top: 0 !important; }
+        .sales-plan-scope .mt-1 { margin-top: 0.25rem !important; }
+        .sales-plan-scope .mt-2 { margin-top: 0.5rem !important; }
+        .sales-plan-scope .mt-3 { margin-top: 1rem !important; }
+        .sales-plan-scope .mt-4 { margin-top: 1.5rem !important; }
+        .sales-plan-scope .mt-auto { margin-top: auto !important; }
+        .sales-plan-scope .mb-0 { margin-bottom: 0 !important; }
+        .sales-plan-scope .mb-1 { margin-bottom: 0.25rem !important; }
+        .sales-plan-scope .mb-2 { margin-bottom: 0.5rem !important; }
+        .sales-plan-scope .mb-3 { margin-bottom: 1rem !important; }
+        .sales-plan-scope .mb-4 { margin-bottom: 1.5rem !important; }
+        .sales-plan-scope .ms-1 { margin-left: 0.25rem !important; }
+        .sales-plan-scope .ms-2 { margin-left: 0.5rem !important; }
+        .sales-plan-scope .ms-3 { margin-left: 1rem !important; }
+        .sales-plan-scope .ms-auto { margin-left: auto !important; }
+        .sales-plan-scope .me-1 { margin-right: 0.25rem !important; }
+        .sales-plan-scope .me-2 { margin-right: 0.5rem !important; }
+        .sales-plan-scope .me-3 { margin-right: 1rem !important; }
+        .sales-plan-scope .mx-auto { margin-left: auto !important; margin-right: auto !important; }
+
+        .sales-plan-scope .p-0 { padding: 0 !important; }
+        .sales-plan-scope .p-1 { padding: 0.25rem !important; }
+        .sales-plan-scope .p-2 { padding: 0.5rem !important; }
+        .sales-plan-scope .p-3 { padding: 1rem !important; }
+        .sales-plan-scope .p-4 { padding: 1.5rem !important; }
+        .sales-plan-scope .pt-0 { padding-top: 0 !important; }
+        .sales-plan-scope .pt-1 { padding-top: 0.25rem !important; }
+        .sales-plan-scope .pt-2 { padding-top: 0.5rem !important; }
+        .sales-plan-scope .pt-3 { padding-top: 1rem !important; }
+        .sales-plan-scope .pb-0 { padding-bottom: 0 !important; }
+        .sales-plan-scope .pb-1 { padding-bottom: 0.25rem !important; }
+        .sales-plan-scope .pb-2 { padding-bottom: 0.5rem !important; }
+        .sales-plan-scope .pb-3 { padding-bottom: 1rem !important; }
+        .sales-plan-scope .ps-0 { padding-left: 0 !important; }
+        .sales-plan-scope .ps-1 { padding-left: 0.25rem !important; }
+        .sales-plan-scope .ps-2 { padding-left: 0.5rem !important; }
+        .sales-plan-scope .ps-3 { padding-left: 1rem !important; }
+        .sales-plan-scope .pe-0 { padding-right: 0 !important; }
+        .sales-plan-scope .pe-2 { padding-right: 0.5rem !important; }
+        .sales-plan-scope .pe-3 { padding-right: 1rem !important; }
+        .sales-plan-scope .pe-4 { padding-right: 1.5rem !important; }
+        .sales-plan-scope .px-0 { padding-left: 0 !important; padding-right: 0 !important; }
+        .sales-plan-scope .px-1 { padding-left: 0.25rem !important; padding-right: 0.25rem !important; }
+        .sales-plan-scope .px-2 { padding-left: 0.5rem !important; padding-right: 0.5rem !important; }
+        .sales-plan-scope .px-3 { padding-left: 1rem !important; padding-right: 1rem !important; }
+        .sales-plan-scope .px-4 { padding-left: 1.5rem !important; padding-right: 1.5rem !important; }
+        .sales-plan-scope .py-0 { padding-top: 0 !important; padding-bottom: 0 !important; }
+        .sales-plan-scope .py-1 { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
+        .sales-plan-scope .py-2 { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
+        .sales-plan-scope .py-3 { padding-top: 1rem !important; padding-bottom: 1rem !important; }
+        .sales-plan-scope .py-4 { padding-top: 1.5rem !important; padding-bottom: 1.5rem !important; }
+
+        .sales-plan-scope .gap-1 { gap: 0.25rem !important; }
+        .sales-plan-scope .gap-2 { gap: 0.5rem !important; }
+        .sales-plan-scope .gap-3 { gap: 1rem !important; }
+        .sales-plan-scope .gap-4 { gap: 1.5rem !important; }
+
+        /* Typography & Colors */
+        .sales-plan-scope .fw-normal { font-weight: 400 !important; }
+        .sales-plan-scope .fw-medium { font-weight: 500 !important; }
+        .sales-plan-scope .fw-semibold { font-weight: 600 !important; }
+        .sales-plan-scope .fw-bold { font-weight: 700 !important; }
+        .sales-plan-scope .fw-bolder { font-weight: 800 !important; }
+        .sales-plan-scope .fst-italic { font-style: italic !important; }
+        .sales-plan-scope .small { font-size: 0.875em !important; }
+        .sales-plan-scope .text-start { text-align: left !important; }
+        .sales-plan-scope .text-center { text-align: center !important; }
+        .sales-plan-scope .text-end { text-align: right !important; }
+        .sales-plan-scope .text-nowrap { white-space: nowrap !important; }
+        .sales-plan-scope .text-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sales-plan-scope .text-uppercase { text-transform: uppercase !important; }
+
+        .sales-plan-scope .text-primary { color: #0d6efd !important; }
+        .sales-plan-scope .text-secondary { color: #6c757d !important; }
+        .sales-plan-scope .text-success { color: #198754 !important; }
+        .sales-plan-scope .text-danger { color: #dc3545 !important; }
+        .sales-plan-scope .text-warning { color: #d97706 !important; }
+        .sales-plan-scope .text-info { color: #0dcaf0 !important; }
+        .sales-plan-scope .text-dark { color: #212529 !important; }
+        .sales-plan-scope .text-muted { color: #64748b !important; }
+        .sales-plan-scope .text-white { color: #ffffff !important; }
+
+        .sales-plan-scope .bg-white { background-color: #ffffff !important; }
+        .sales-plan-scope .bg-card { background-color: #ffffff !important; }
+        .sales-plan-scope .bg-light { background-color: #f8f9fa !important; }
+        .sales-plan-scope .bg-primary { background-color: #0d6efd !important; }
+        .sales-plan-scope .bg-secondary { background-color: #6c757d !important; }
+        .sales-plan-scope .bg-success { background-color: #198754 !important; }
+        .sales-plan-scope .bg-danger { background-color: #dc3545 !important; }
+        .sales-plan-scope .bg-warning { background-color: #ffc107 !important; }
+        .sales-plan-scope .bg-info { background-color: #0dcaf0 !important; }
+        .sales-plan-scope .bg-transparent { background-color: transparent !important; }
+
+        /* Borders & Rounded & Shadows */
+        .sales-plan-scope .border { border: 1px solid #dee2e6 !important; }
+        .sales-plan-scope .border-0 { border: 0 !important; }
+        .sales-plan-scope .border-top { border-top: 1px solid #dee2e6 !important; }
+        .sales-plan-scope .border-bottom { border-bottom: 1px solid #dee2e6 !important; }
+        .sales-plan-scope .border-start { border-left: 1px solid #dee2e6 !important; }
+        .sales-plan-scope .border-end { border-right: 1px solid #dee2e6 !important; }
+        .sales-plan-scope .border-light-subtle { border-color: #e2e8f0 !important; }
+
+        .sales-plan-scope .rounded { border-radius: 0.375rem !important; }
+        .sales-plan-scope .rounded-0 { border-radius: 0 !important; }
+        .sales-plan-scope .rounded-1 { border-radius: 0.25rem !important; }
+        .sales-plan-scope .rounded-2 { border-radius: 0.375rem !important; }
+        .sales-plan-scope .rounded-3 { border-radius: 0.5rem !important; }
+        .sales-plan-scope .rounded-4 { border-radius: 0.75rem !important; }
+        .sales-plan-scope .rounded-circle { border-radius: 50% !important; }
+        .sales-plan-scope .rounded-pill { border-radius: 50rem !important; }
+
+        .sales-plan-scope .shadow-none { box-shadow: none !important; }
+        .sales-plan-scope .shadow-sm { box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important; }
+        .sales-plan-scope .shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important; }
+
+        /* Cards & Badges */
+        .sales-plan-scope .card {
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          min-width: 0;
+          word-wrap: break-word;
+          background-color: #fff;
+          background-clip: border-box;
+          border: 1px solid #dee2e6;
+          border-radius: 0.5rem;
+        }
+        .sales-plan-scope .card-body {
+          flex: 1 1 auto;
+          padding: 1rem;
+        }
+        .sales-plan-scope .badge {
+          display: inline-block;
+          padding: 0.25em 0.6em;
+          font-size: 0.75em;
+          font-weight: 700;
+          line-height: 1;
+          text-align: center;
+          white-space: nowrap;
+          vertical-align: baseline;
+          border-radius: 0.375rem;
+        }
+
+        /* Table inline inputs & Input groups */
+        .sales-plan-scope .form-control {
+          display: block;
+          width: 100%;
+          padding: 0.375rem 0.75rem;
+          font-size: 0.875rem;
+          font-weight: 500;
+          line-height: 1.5;
+          color: #0f172a;
+          background-color: #fff;
+          border: 1px solid #cbd5e1;
+          border-radius: 0.375rem;
+          box-sizing: border-box;
+        }
+        .sales-plan-scope .form-control-sm {
+          min-height: calc(1.5em + 0.5rem + 2px);
+          padding: 0.25rem 0.5rem;
+          font-size: 0.8125rem;
+          border-radius: 0.25rem;
+        }
+        .sales-plan-scope .form-control:focus {
+          border-color: #86b7fe;
+          outline: 0;
+          box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.2);
+        }
+        .sales-plan-scope .input-group {
+          position: relative;
+          display: flex;
+          flex-wrap: nowrap;
+          align-items: stretch;
+          width: 100%;
+        }
+        .sales-plan-scope .input-group > .form-control {
+          position: relative;
+          flex: 1 1 auto;
+          width: 1%;
+          min-width: 0;
+        }
+        .sales-plan-scope .input-group > :not(:first-child) {
+          margin-left: -1px;
+          border-top-left-radius: 0 !important;
+          border-bottom-left-radius: 0 !important;
+        }
+        .sales-plan-scope .input-group > :not(:last-child) {
+          border-top-right-radius: 0 !important;
+          border-bottom-right-radius: 0 !important;
+        }
+        .sales-plan-scope .input-group-text {
+          display: flex;
+          align-items: center;
+          padding: 0.25rem 0.5rem;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          line-height: 1.5;
+          color: #475569;
+          text-align: center;
+          white-space: nowrap;
+          background-color: #f8fafc;
+          border: 1px solid #cbd5e1;
+          border-radius: 0.375rem;
+        }
+        .sales-plan-scope .input-group-sm > .form-control,
+        .sales-plan-scope .input-group-sm > .input-group-text {
+          padding: 0.2rem 0.45rem;
+          font-size: 0.8125rem;
+          border-radius: 0.25rem;
+        }
+
+        /* Progress Bars */
+        .sales-plan-scope .progress {
+          display: flex;
+          height: 0.5rem;
+          overflow: hidden;
+          font-size: 0.75rem;
+          background-color: #e9ecef;
+          border-radius: 0.375rem;
+        }
+        .sales-plan-scope .progress-bar {
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          overflow: hidden;
+          color: #fff;
+          text-align: center;
+          white-space: nowrap;
+          background-color: #0d6efd;
+          transition: width 0.6s ease;
+        }
+      `}</style>
+    </div>
   );
-};
+}
 
 export default SalesPlanPage;

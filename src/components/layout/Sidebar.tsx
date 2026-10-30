@@ -169,11 +169,11 @@ const DEPT_SIDEBAR_CONFIGS: Record<string, { deptName: string; sections: NavSect
         icon: 'bi-people',
         items: [
           { id: 'partners', name: 'Phát triển đại lý' },
-          { id: 'customers', name: 'Danh sách đại lý' },
+          { id: 'customers', name: 'Khách hàng và đại lý' },
           { id: 'pricing', name: 'Chính sách bán hàng' },
         ],
       },
-      { id: 'sales_plan', label: 'Lập kế hoạch sale', icon: 'bi-calendar-check', flat: true },
+      { id: 'sales_plan', label: 'Lập kế hoạch', icon: 'bi-calendar-check', flat: true },
       {
         id: 'reports_analytics',
         label: 'Báo cáo và phân tích',

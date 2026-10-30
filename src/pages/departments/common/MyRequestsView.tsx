@@ -97,19 +97,24 @@ export const APPROVER_GROUPS = [
   {
     group: 'Ban Giám đốc',
     options: [
-      { label: 'Hà Hải Lâm - Ban Giám đốc', value: 'Hà Hải Lâm - Ban Giám đốc' },
+      { label: 'Lê Công Vụ - Ban Giám đốc', value: 'Lê Công Vụ - Ban Giám đốc' },
+      { label: 'Đoàn Thị Yến - Ban Giám đốc', value: 'Đoàn Thị Yến - Ban Giám đốc' },
     ],
   },
   {
     group: 'Trưởng các phòng ban',
     options: [
-      { label: 'Mai Thị Ngọc - Trưởng phòng Tài chính', value: 'Mai Thị Ngọc - Trưởng phòng Tài chính' },
+      { label: 'Cao Thị Phương - Phòng Nhân sự', value: 'Cao Thị Phương - Phòng Nhân sự' },
+      { label: 'Trần Thị Linh - Phòng Tài chính – Kế toán', value: 'Trần Thị Linh - Phòng Tài chính – Kế toán' },
+      { label: 'Nguyễn Thu Huyền - Phòng Marketing', value: 'Nguyễn Thu Huyền - Phòng Marketing' },
+      { label: 'Lê Anh Vân - Phòng Đảm bảo chất lượng', value: 'Lê Anh Vân - Phòng Đảm bảo chất lượng' },
     ],
   },
   {
     group: 'Quản đốc phân xưởng và Điều phối',
     options: [
-      { label: 'Nguyễn Quý Dương - Quản đốc phân xưởng sản xuất', value: 'Nguyễn Quý Dương - Quản đốc phân xưởng' },
+      { label: 'Hà Thị Bích Ngọc - Phòng Sản xuất', value: 'Hà Thị Bích Ngọc - Phòng Sản xuất' },
+      { label: 'Nguyễn Văn Tiền - Phòng Kho vận', value: 'Nguyễn Văn Tiền - Phòng Kho vận' },
     ],
   },
 ];

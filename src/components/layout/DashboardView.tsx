@@ -42,7 +42,16 @@ import { DirectorPlanPage } from '../../pages/departments/bom/DirectorPlanPage';
 import { TaskManagementPage } from '../../pages/departments/bom/TaskManagementPage';
 import { MyTasksPage } from '../../pages/departments/bom/MyTasksPage';
 import { MyRequestsPage } from '../../pages/departments/bom/MyRequestsPage';
+import { MyAttendancePage } from '../../pages/departments/bom/MyAttendancePage';
 import { DealerPortalPage } from '../../pages/dealer/DealerPortalPage';
+import { ProductionOverviewPage } from '../../pages/production/ProductionOverviewPage';
+import { ProductionDefectsPage } from '../../pages/production/ProductionDefectsPage';
+import { ProductionBomPage } from '../../pages/production/ProductionBomPage';
+import { QaOverviewPage } from '../../pages/qa/QaOverviewPage';
+import { QaStandardsPage } from '../../pages/qa/QaStandardsPage';
+import { QaDefectsSummaryPage } from '../../pages/qa/QaDefectsSummaryPage';
+import { PurchaseOverviewPage } from '../../pages/purchase/PurchaseOverviewPage';
+import { PurchaseSuppliersPage } from '../../pages/purchase/PurchaseSuppliersPage';
 
 export const DashboardView: React.FC = () => {
   const { activeDeptCode, activeMenuKey } = useDepartment();
@@ -108,6 +117,73 @@ export const DashboardView: React.FC = () => {
     }
   }
 
+  // ── BỘ PHẬN SẢN XUẤT (PRODUCTION) ──
+  if (activeDeptCode === 'production' || activeDeptCode === 'san-xuat' || activeDeptCode === 'sx') {
+    if (activeMenuKey === 'defects') {
+      return <ProductionDefectsPage />;
+    }
+    if (activeMenuKey === 'bom') {
+      return <ProductionBomPage />;
+    }
+    if (activeMenuKey === 'inventory') {
+      return <SalesInventoryPage />;
+    }
+    if (activeMenuKey === 'overview' || !activeMenuKey) {
+      return <ProductionOverviewPage />;
+    }
+  }
+
+  // ── BỘ PHẬN QUẢN LÝ CHẤT LƯỢNG (QA / QC) ──
+  if (activeDeptCode === 'qa' || activeDeptCode === 'qc' || activeDeptCode === 'quality' || activeDeptCode === 'quan-ly-chat-luong') {
+    if (activeMenuKey === 'standards' || activeMenuKey === 'qa_standards') {
+      return <QaStandardsPage />;
+    }
+    if (activeMenuKey === 'defects-summary' || activeMenuKey === 'defects_summary') {
+      return <QaDefectsSummaryPage />;
+    }
+    if (activeMenuKey === 'overview' || !activeMenuKey) {
+      return <QaOverviewPage />;
+    }
+  }
+
+  // ── BỘ PHẬN MUA HÀNG (PURCHASE / PROCUREMENT) ──
+  if (
+    activeDeptCode === 'purchase' ||
+    activeDeptCode === 'procurement' ||
+    activeDeptCode === 'mua-hang' ||
+    activeDeptCode === 'purchasing'
+  ) {
+    if (activeMenuKey === 'suppliers' || activeMenuKey === 'carriers') {
+      return <PurchaseSuppliersPage />;
+    }
+    if (activeMenuKey === 'inventory') {
+      return <SalesInventoryPage />;
+    }
+    if (activeMenuKey === 'overview' || !activeMenuKey) {
+      return <PurchaseOverviewPage />;
+    }
+  }
+
+  if (activeMenuKey === 'suppliers' || activeMenuKey === 'carriers') {
+    return <PurchaseSuppliersPage />;
+  }
+  if (activeMenuKey === 'purchasing') {
+    return <PurchaseOverviewPage />;
+  }
+
+  if (activeMenuKey === 'standards' || activeMenuKey === 'qa_standards') {
+    return <QaStandardsPage />;
+  }
+  if (activeMenuKey === 'defects-summary' || activeMenuKey === 'defects_summary') {
+    return <QaDefectsSummaryPage />;
+  }
+  if (activeMenuKey === 'defects') {
+    return <ProductionDefectsPage />;
+  }
+  if (activeMenuKey === 'bom') {
+    return <ProductionBomPage />;
+  }
+
   // Khi người dùng chọn chức năng từ menu trực tiếp
   if (activeMenuKey === 'inventory-reports' || activeMenuKey === 'bao-cao-kho') {
     return <LogisticsReportsPage />;
@@ -153,7 +229,7 @@ export const DashboardView: React.FC = () => {
   if (activeMenuKey === 'internal-reports') {
     return <SalesInternalReportsPage />;
   }
-  if (activeMenuKey === 'inventory' && activeDeptCode === 'sales') {
+  if (activeMenuKey === 'inventory') {
     return <SalesInventoryPage />;
   }
   if (activeMenuKey === 'orders' || activeMenuKey === 'sale_orders') {
@@ -234,6 +310,17 @@ export const DashboardView: React.FC = () => {
     activeMenuKey === 'personal-tasks'
   ) {
     return <MyTasksPage />;
+  }
+
+  // Khi người dùng chọn Chấm công cá nhân / Quản lý chấm công
+  if (
+    activeMenuKey === 'my_attendance' ||
+    activeMenuKey === 'my-attendance' ||
+    activeMenuKey === 'attendance' ||
+    activeMenuKey === 'attendance-payroll' ||
+    activeMenuKey === 'payroll'
+  ) {
+    return <MyAttendancePage />;
   }
 
   // Khi người dùng chọn Yêu cầu cá nhân (chuẩn client-skydoor với MyRequestsView)

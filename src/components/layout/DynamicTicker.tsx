@@ -891,8 +891,101 @@ export const DynamicTicker: React.FC<DynamicTickerProps> = ({
   // Giải quyết context liên quan mật thiết đến nội dung trang
   const resolvedContext = resolveContext(context, pageTitle, activeMenu, activeDept);
 
-  // Dữ liệu thời gian thực từ cơ sở dữ liệu SQLite cho Ban Giám đốc
+  // Dữ liệu thời gian thực từ cơ sở dữ liệu SQLite cho Ban Giám đốc, Bộ phận QC & Bộ phận Mua hàng
   const [liveBoardItems, setLiveBoardItems] = useState<TickerItem[] | null>(null);
+  const [liveQaItems, setLiveQaItems] = useState<TickerItem[] | null>(null);
+  const [liveSuppliersItems, setLiveSuppliersItems] = useState<TickerItem[] | null>(null);
+
+  useEffect(() => {
+    if (resolvedContext === 'suppliers' && (!items || items.length === 0) && (!customNews || customNews.length === 0)) {
+      Promise.all([
+        fetch('/api/plan-finance/purchase-requests?page=1&limit=100').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        fetch('/api/plan-finance/purchasing?page=1&limit=100').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        fetch('/api/plan-finance/suppliers?page=1&limit=100').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        fetch('/api/plan-finance/carriers?page=1&limit=100').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      ]).then(([prRes, poRes, supRes, carRes]) => {
+        const prs = Array.isArray(prRes?.items) ? prRes.items : [];
+        const pos = Array.isArray(poRes?.items) ? poRes.items : [];
+        const sups = Array.isArray(supRes?.items) ? supRes.items : [];
+        const cars = Array.isArray(carRes?.items) ? carRes.items : [];
+        if (prs.length === 0 && pos.length === 0 && sups.length === 0 && cars.length === 0) return;
+
+        const pendingPrs = prs.filter((r: any) => r.trangThai === 'chua-xu-ly' || r.trangThai === 'dang-xu-ly').length;
+        const donePrs = prs.filter((r: any) => r.trangThai === 'da-xu-ly').length;
+        const activePos = pos.filter((o: any) => o.trangThai !== 'cancelled');
+        const completedPos = pos.filter((o: any) => o.trangThai === 'completed' || o.trangThai === 'received').length;
+        const totalPoValue = activePos.reduce((s: number, o: any) => s + (Number(o.tongTien) || 0), 0);
+        const activeSups = sups.filter((s: any) => s.trangThai === 'active').length;
+        const activeCars = cars.filter((c: any) => c.trangThai === 'active').length;
+
+        setLiveSuppliersItems([
+          {
+            badge: 'YÊU CẦU MUA HÀNG',
+            badgeColor: 'bg-amber-50 text-amber-800 border-amber-200 font-bold',
+            text: `Tổng cộng <strong>${prs.length} phiếu yêu cầu mua hàng</strong> — Chờ xử lý &amp; đang đặt hàng: <strong>${pendingPrs} phiếu</strong> • Đã xử lý hoàn tất: <strong>${donePrs} phiếu</strong>`,
+          },
+          {
+            badge: 'ĐƠN MUA HÀNG (PO)',
+            badgeColor: 'bg-blue-50 text-blue-700 border-blue-200 font-bold',
+            text: `Quản lý <strong>${activePos.length} đơn mua hàng</strong> với tổng giá trị <strong>${totalPoValue.toLocaleString('vi-VN')} ₫</strong> — Đã nhận hàng / hoàn tất: <strong>${completedPos} đơn</strong>`,
+          },
+          {
+            badge: 'CHUỖI CUNG ỨNG & VẬN TẢI',
+            badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold',
+            text: `Hệ thống đối tác chiến lược: <strong>${activeSups}/${sups.length} nhà cung cấp</strong> đang hợp tác • <strong>${activeCars}/${cars.length} đơn vị vận chuyển</strong> hoạt động ổn định`,
+          },
+        ]);
+      });
+    }
+  }, [resolvedContext, items, customNews]);
+
+  useEffect(() => {
+    if (resolvedContext === 'qa' && (!items || items.length === 0) && (!customNews || customNews.length === 0)) {
+      Promise.all([
+        fetch('/api/qa/inspections').then((r) => (r.ok ? r.json() : [])).catch(() => []),
+        fetch('/api/production/defects').then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      ]).then(([insData, defData]) => {
+        const inspections = Array.isArray(insData) ? insData : [];
+        const defects = Array.isArray(defData) ? defData : [];
+        if (inspections.length === 0 && defects.length === 0) return;
+
+        const total = inspections.length;
+        const iqcCount = inspections.filter((i: any) => i.type === 'IQC').length;
+        const oqcCount = inspections.filter((i: any) => i.type === 'OQC').length;
+        const pendingList = inspections.filter((i: any) => i.status === 'Chưa thực hiện');
+        const completedList = inspections.filter((i: any) => i.status !== 'Chưa thực hiện');
+        const passCount = completedList.filter((i: any) => i.result === 'Đạt').length;
+        const partialCount = completedList.filter((i: any) => i.result === 'Lỗi một phần').length;
+        const failCount = completedList.filter(
+          (i: any) => i.result && i.result !== 'Đạt' && i.result !== 'Lỗi một phần'
+        ).length;
+        const passRate = completedList.length > 0 ? Math.round((passCount / completedList.length) * 100) : 100;
+
+        const qaDefects = defects.filter((d: any) => (d.reporterDepartment || '').toLowerCase() === 'qa');
+        const targetDefects = qaDefects.length > 0 ? qaDefects : defects;
+        const pendingDefects = targetDefects.filter((d: any) => d.status !== 'COMPLETED').length;
+        const resolvedDefects = targetDefects.filter((d: any) => d.status === 'COMPLETED').length;
+
+        setLiveQaItems([
+          {
+            badge: 'YÊU CẦU KIỂM ĐỊNH',
+            badgeColor: 'bg-amber-50 text-amber-800 border-amber-200 font-bold',
+            text: `Đang có <strong>${pendingList.length} phiếu yêu cầu</strong> chờ kiểm định chất lượng — Phân bổ: <strong>${iqcCount} phiếu IQC</strong> &amp; <strong>${oqcCount} phiếu OQC</strong>`,
+          },
+          {
+            badge: 'KẾT QUẢ THẨM ĐỊNH',
+            badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold',
+            text: `Đã hoàn thành <strong>${completedList.length}/${total} phiếu kiểm định</strong> — Đạt chuẩn QC: <strong>${passCount} phiếu</strong>, Tỷ lệ đạt: <strong>${passRate}%</strong> • Lỗi một phần: <strong>${partialCount} phiếu</strong> • Không đạt: <strong>${failCount} phiếu</strong>`,
+          },
+          {
+            badge: 'HỒ SƠ HÀNG LỖI QC',
+            badgeColor: 'bg-rose-50 text-rose-700 border-rose-200 font-bold',
+            text: `Tổng hợp biên bản hàng lỗi: <strong>${targetDefects.length} hồ sơ</strong> — Đang chờ xử lý: <strong>${pendingDefects} hồ sơ</strong> • Đã xử lý hoàn tất: <strong>${resolvedDefects} hồ sơ</strong>`,
+          },
+        ]);
+      });
+    }
+  }, [resolvedContext, items, customNews]);
 
   useEffect(() => {
     if (resolvedContext === 'board' && (!items || items.length === 0) && (!customNews || customNews.length === 0)) {
@@ -1002,13 +1095,13 @@ export const DynamicTicker: React.FC<DynamicTickerProps> = ({
         displayItems = STANDARDS_TICKER_ITEMS;
         break;
       case 'qa':
-        displayItems = QA_TICKER_ITEMS;
+        displayItems = liveQaItems || QA_TICKER_ITEMS;
         break;
       case 'crm':
         displayItems = CRM_TICKER_ITEMS;
         break;
       case 'suppliers':
-        displayItems = SUPPLIERS_TICKER_ITEMS;
+        displayItems = liveSuppliersItems || SUPPLIERS_TICKER_ITEMS;
         break;
       case 'sales':
         displayItems = SALES_TICKER_ITEMS;

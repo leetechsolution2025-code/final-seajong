@@ -67,3 +67,116 @@ export const getSourceLabel = (source?: string): string => {
   const trimmed = source.trim().toLowerCase();
   return SOURCE_MAP[trimmed] || source;
 };
+
+/**
+ * Tải tệp scan/PDF lên server (/api/upload nhận JSON { fileName, dataUrl })
+ */
+export const uploadPartnerScanFile = async (file: File): Promise<string> => {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(new Error('Không đọc được tệp'));
+      }
+    };
+    reader.onerror = () => reject(reader.error || new Error('Lỗi đọc tệp'));
+    reader.readAsDataURL(file);
+  });
+
+  try {
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileName: file.name,
+        dataUrl,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.url) {
+        return String(data.url);
+      }
+    }
+  } catch (err) {
+    console.error('Lỗi tải tệp lên server:', err);
+  }
+
+  return dataUrl;
+};
+
+/**
+ * Lấy tên hiển thị gọn sạch của tệp đính kèm (xử lý cả URL /uploads/... lẫn chuỗi data:base64)
+ */
+export const getAttachmentDisplayName = (
+  fileUrl?: string | null,
+  fallbackName = 'Tai_lieu_dinh_kem.pdf'
+): string => {
+  if (!fileUrl) return '';
+  const trimmed = fileUrl.trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('data:')) {
+    return fallbackName;
+  }
+  const rawSegment = trimmed.split('?')[0].split('/').pop() || fallbackName;
+  let decoded = rawSegment;
+  try {
+    decoded = decodeURIComponent(rawSegment);
+  } catch {
+    decoded = rawSegment;
+  }
+  // Bỏ tiền tố timestamp (VD: 1793280116483-BienBan.pdf -> BienBan.pdf)
+  return decoded.replace(/^\d{10,14}-/, '') || fallbackName;
+};
+
+/**
+ * Mở xem nội dung tệp đính kèm (hỗ trợ cả đường dẫn /uploads/... và chuỗi data:application/pdf;base64,...)
+ */
+export const openAttachmentFile = (fileUrl?: string | null): void => {
+  if (!fileUrl) return;
+  const trimmed = fileUrl.trim();
+  if (!trimmed) return;
+
+  if (trimmed.startsWith('data:')) {
+    try {
+      const commaIdx = trimmed.indexOf(',');
+      if (commaIdx !== -1) {
+        const header = trimmed.slice(0, commaIdx);
+        const base64 = trimmed.slice(commaIdx + 1);
+        const mimeMatch = header.match(/data:([^;]+)/i);
+        const mimeType = mimeMatch ? mimeMatch[1] : 'application/pdf';
+        const binaryStr = window.atob(base64);
+        const len = binaryStr.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: mimeType });
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, '_blank', 'noopener,noreferrer');
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+        return;
+      }
+    } catch (err) {
+      console.error('Không thể giải mã tệp đính kèm:', err);
+    }
+  }
+
+  window.open(trimmed, '_blank', 'noopener,noreferrer');
+};
+
+/**
+ * Định dạng số tiền VNĐ từ số hoặc chuỗi có dấu chấm (VD: "1.200.000.000" -> "1.200.000.000 đ")
+ */
+export const formatPartnerVnd = (val?: string | number | null): string => {
+  if (val === null || val === undefined || val === '') return '—';
+  if (typeof val === 'number') {
+    return val > 0 ? `${val.toLocaleString('vi-VN')} đ` : '—';
+  }
+  const digits = String(val).replace(/[^\d]/g, '');
+  const num = Number(digits);
+  return num > 0 ? `${num.toLocaleString('vi-VN')} đ` : '—';
+};
+

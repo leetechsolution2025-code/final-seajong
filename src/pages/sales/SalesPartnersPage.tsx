@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { StepPage } from '../../components/common/StepPage';
+import { TaskManagementView } from '../../components/common/TaskManagementView';
 import { TableToolbar } from '../../components/common/TableToolbar';
 import { FullWidthTable } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
@@ -34,10 +35,23 @@ import {
   ThreeDots,
   Check2Square,
   Check2,
+  FileEarmarkCheck,
+  FileEarmarkPlus,
+  FileEarmarkPdfFill,
+  Trash,
 } from 'react-bootstrap-icons';
 import { Button } from '../../components/common/Button';
 import { BaoGiaSanitaryModal, type CustomerRow } from '../../components/plan-finance/bao_gia/BaoGiaSanitaryModal';
-import { calculateLeadStars, getSourceLabel } from '../../utils/partnerUtils';
+import { BienBanModal } from '../../components/sales/partners/BienBanModal';
+import { HopDongModal } from '../../components/sales/partners/HopDongModal';
+import { PhuLucModal } from '../../components/sales/partners/PhuLucModal';
+import {
+  calculateLeadStars,
+  getSourceLabel,
+  getAttachmentDisplayName,
+  openAttachmentFile,
+  formatPartnerVnd,
+} from '../../utils/partnerUtils';
 
 export interface PartnerItem {
   id: string;
@@ -58,7 +72,79 @@ export interface PartnerItem {
   ownerEmail?: string;
   notes: string;
   source: string;
+  contractNo?: string;
   contractValue?: number;
+  hdCode?: string;
+  hdDate?: string;
+  hdDiaDiem?: string;
+  hdANguoiKy?: string;
+  hdAChucVu?: string;
+  hdB_Ten?: string;
+  hdB_DiaChi?: string;
+  hdB_MST?: string;
+  hdB_DaiDien?: string;
+  hdB_ChucVu?: string;
+  hdB_DienThoai?: string;
+  hdB_Email?: string;
+  hdShowroomAddress?: string;
+  hdShowroomArea?: string;
+  hdAnnualRevenue?: string;
+  hdMonthlyRevenue?: string;
+  hdDurationYears?: string;
+  hdExclusiveRadius?: string;
+  hdExclusiveMonths?: string;
+  creditLimit?: number;
+  signDate?: string;
+  contractStatus?: string;
+  contractPdf?: string;
+  bbQuoteCode?: string;
+  bbCode?: string;
+  bbDate?: string;
+  bbDiaDiem?: string;
+  bbANguoiKy?: string;
+  bbAChucVu?: string;
+  bbA_DienThoai?: string;
+  bbB_Ten?: string;
+  bbB_DiaChi?: string;
+  bbB_MST?: string;
+  bbB_DaiDien?: string;
+  bbB_ChucVu?: string;
+  bbB_DienThoai?: string;
+  bbB_Email?: string;
+  bbSupports?: any;
+  bbBonuses?: any[];
+  bbPdf?: string;
+  plNo?: string;
+  plDate?: string;
+  plAddress?: string;
+  plCptc?: string;
+  plCptcText?: string;
+  plRevenueMkt?: string;
+  plRevenueMktText?: string;
+  plRevenueCommit?: string;
+  plRevenueCommitText?: string;
+  plDurationDays?: string;
+  plMaxDelayDays?: string;
+  plTimeline1?: string;
+  plTimeline2?: string;
+  plTimeline3?: string;
+  plTimeline4?: string;
+  plTimeline5?: string;
+  plPhase1Date?: string;
+  plPhase1Rate?: string;
+  plPhase1Amount?: string;
+  plPhase1AmountText?: string;
+  plPhase2Date?: string;
+  plPhase2Rate?: string;
+  plPhase2Amount?: string;
+  plPhase2AmountText?: string;
+  plPhase3Date?: string;
+  plPhase3Rate?: string;
+  plPhase3Amount?: string;
+  plPhase3AmountText?: string;
+  plPenaltyMaxDelay?: string;
+  plCustomClauses?: any[];
+  plPdf?: string;
   expectedInvestment?: string;
   careHistories?: any[];
   createdAt: string;
@@ -87,7 +173,7 @@ export const SalesPartnersPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [areaFilter, setAreaFilter] = useState<string>('all');
-  const [starFilter, setStarFilter] = useState<string>('all');
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
 
   // Pagination & Selection
   const [page, setPage] = useState<number>(1);
@@ -101,7 +187,10 @@ export const SalesPartnersPage: React.FC = () => {
   const [showAddCareForm, setShowAddCareForm] = useState<boolean>(false);
   const [editingPartnerId, setEditingPartnerId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
+  const [showBienBanModal, setShowBienBanModal] = useState<boolean>(false);
   const [showContractModal, setShowContractModal] = useState<boolean>(false);
+  const [showPhuLucModal, setShowPhuLucModal] = useState<boolean>(false);
+  const [showDeleteContractModal, setShowDeleteContractModal] = useState<boolean>(false);
   const [showQuoteModal, setShowQuoteModal] = useState<boolean>(false);
   const [quoteCustomer, setQuoteCustomer] = useState<CustomerRow | null>(null);
   const [quotationEditData, setQuotationEditData] = useState<any | null>(null);
@@ -119,10 +208,17 @@ export const SalesPartnersPage: React.FC = () => {
     receivedDate: new Date().toISOString().split('T')[0],
     executor: 'Phạm Quang Việt',
     notes: '',
-    source: 'Kinh doanh tự khai thác',
+    source: 'Tự khai thác',
   });
 
   // Danh sách gợi ý từ DB & Hằng số
+  const [customerSources, setCustomerSources] = useState<string[]>([
+    'Tự nhiên',
+    'Quảng cáo',
+    'Giới thiệu',
+    'Loại khác',
+    'Tự khai thác',
+  ]);
   const [salutationSuggestions, setSalutationSuggestions] = useState<string[]>([
     'Ông',
     'Bà',
@@ -160,15 +256,6 @@ export const SalesPartnersPage: React.FC = () => {
     nextPriority: 'Trung bình',
     addToSchedule: false,
     nextTaskDesc: '',
-  });
-
-  // Contract form
-  const [contractForm, setContractForm] = useState({
-    contractNo: `HD-SJ2026-${Date.now().toString().slice(-4)}`,
-    commitment: 300000000,
-    creditLimit: 50000000,
-    signer: '',
-    signedDate: new Date().toISOString().split('T')[0],
   });
 
   const fetchPartners = async () => {
@@ -209,18 +296,20 @@ export const SalesPartnersPage: React.FC = () => {
 
           const rawQuoteStatus = matchedQuote?.trangThai || p.quoteRawStatus || '';
           const mappedQuoteStatus =
-            p.quoteStatus ||
-            (rawQuoteStatus === 'approved'
-              ? 'Accepted'
-              : rawQuoteStatus === 'rejected'
-              ? 'Declined'
-              : rawQuoteStatus === 'pending_approval'
-              ? 'Pending'
-              : rawQuoteStatus === 'sent'
-              ? 'Sent'
-              : rawQuoteStatus
-              ? 'Draft'
-              : undefined);
+            p.quoteStatus === 'ContractSigning' || Number(p.step) >= 3
+              ? 'ContractSigning'
+              : p.quoteStatus ||
+                (rawQuoteStatus === 'approved'
+                  ? 'Accepted'
+                  : rawQuoteStatus === 'rejected'
+                  ? 'Declined'
+                  : rawQuoteStatus === 'pending_approval'
+                  ? 'Pending'
+                  : rawQuoteStatus === 'sent'
+                  ? 'Sent'
+                  : rawQuoteStatus
+                  ? 'Draft'
+                  : undefined);
 
           const hasQuote = Boolean(matchedQuote || p.quoteId || p.quoteCode || Number(p.quoteValue) > 0);
           const resolvedStep = hasQuote && Number(p.step) < 2 ? 2 : Number(p.step) || 1;
@@ -255,6 +344,22 @@ export const SalesPartnersPage: React.FC = () => {
 
   useEffect(() => {
     fetchPartners();
+
+    // Tải danh sách Nguồn khách hàng từ DB (/api/categories/items?typeId=customer_source)
+    fetch('/api/categories/items?typeId=customer_source')
+      .then((res) => res.json())
+      .then((items) => {
+        if (Array.isArray(items) && items.length > 0) {
+          const names = items
+            .filter((it: any) => it.status !== 'hidden' && it.name)
+            .map((it: any) => String(it.name).trim())
+            .filter(Boolean);
+          if (names.length > 0) {
+            setCustomerSources(Array.from(new Set(names)));
+          }
+        }
+      })
+      .catch(() => {});
 
     // Tải danh sách Xưng hô từ DB (/api/categories/items?typeId=x_ng_h_)
     fetch('/api/categories/items?typeId=x_ng_h_')
@@ -293,7 +398,16 @@ export const SalesPartnersPage: React.FC = () => {
   // Filter partners according to current step and search
   const filteredPartners = useMemo(() => {
     return partners.filter((p) => {
-      const matchStep = Number(p.step) === currentStep;
+      const pStep = Number(p.step) || 1;
+      const hasQuote = Boolean(p.quoteId || p.quoteCode || Number(p.quoteValue) > 0);
+      const matchStep =
+        currentStep === 1
+          ? pStep >= 1
+          : currentStep === 2
+          ? pStep >= 2 || hasQuote
+          : currentStep === 3
+          ? pStep >= 3
+          : pStep === currentStep;
       const matchSearch =
         !searchTerm ||
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -302,11 +416,15 @@ export const SalesPartnersPage: React.FC = () => {
         p.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.area.toLowerCase().includes(searchTerm.toLowerCase());
       const matchArea = areaFilter === 'all' || p.area.includes(areaFilter);
-      const matchStar = starFilter === 'all' || Number(p.stars) === Number(starFilter);
+      const partnerSourceLabel = getSourceLabel(p.source);
+      const matchSource =
+        sourceFilter === 'all' ||
+        partnerSourceLabel.toLowerCase() === sourceFilter.toLowerCase() ||
+        (p.source || '').toLowerCase().includes(sourceFilter.toLowerCase());
 
-      return matchStep && matchSearch && matchArea && matchStar;
+      return matchStep && matchSearch && matchArea && matchSource;
     });
-  }, [partners, currentStep, searchTerm, areaFilter, starFilter]);
+  }, [partners, currentStep, searchTerm, areaFilter, sourceFilter]);
 
   const paginatedPartners = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -315,22 +433,29 @@ export const SalesPartnersPage: React.FC = () => {
 
   const totalPages = Math.ceil(filteredPartners.length / pageSize) || 1;
 
-  // Move partner to next step
-  const handleAdvanceStep = async (partner: PartnerItem) => {
-    const nextStep = Math.min(4, Number(partner.step) + 1);
+  // Chốt báo giá ở Bước 2: Giữ thông tin báo giá ở Bước 2, chuyển trạng thái sang "Đang ký hợp đồng" (và mở sang Bước 3)
+  const handleFinalizeQuote = async (partner: PartnerItem) => {
+    const nextStep = Math.max(3, Number(partner.step) || 3);
+    const updatedFields = {
+      step: nextStep,
+      quoteStatus: 'ContractSigning',
+    };
+
+    setPartners((prev) =>
+      prev.map((p) => (p.id === partner.id ? { ...p, ...updatedFields } : p))
+    );
+    setSelectedPartner((prev) =>
+      prev && prev.id === partner.id ? { ...prev, ...updatedFields } : prev
+    );
+
     try {
-      const res = await fetch(`/api/sales/partners/${partner.id}`, {
+      await fetch(`/api/sales/partners/${partner.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step: nextStep }),
+        body: JSON.stringify(updatedFields),
       });
-      if (res.ok) {
-        setPartners((prev) =>
-          prev.map((p) => (p.id === partner.id ? { ...p, step: nextStep } : p))
-        );
-      }
     } catch (e) {
-      console.error(e);
+      console.error('Lỗi chốt báo giá:', e);
     }
   };
 
@@ -586,27 +711,72 @@ export const SalesPartnersPage: React.FC = () => {
     }
   };
 
-  // Sign contract
-  const handleSignContract = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // 1. Mở Biên bản ghi nhớ fullscreen (Bước 3)
+  const handleOpenBienBanModal = (partner: PartnerItem) => {
+    setSelectedPartner(partner);
+    setShowDetailDrawer(false);
+    setShowBienBanModal(true);
+  };
+
+  // 2. Mở Hợp đồng đại lý fullscreen (Bước 3)
+  const handleOpenContractModal = (partner: PartnerItem) => {
+    setSelectedPartner(partner);
+    setShowDetailDrawer(false);
+    setShowContractModal(true);
+  };
+
+  // 3. Mở Phụ lục hợp đồng fullscreen (Bước 3)
+  const handleOpenPhuLucModal = (partner: PartnerItem) => {
+    setSelectedPartner(partner);
+    setShowDetailDrawer(false);
+    setShowPhuLucModal(true);
+  };
+
+  // 4. Xoá thông tin bộ hợp đồng (Biên bản, Hợp đồng, Phụ lục) của đại lý ở Bước 3
+  const handleDeleteContractDocs = async () => {
     if (!selectedPartner) return;
 
+    const clearedFields = {
+      step: 2,
+      quoteStatus: 'Sent',
+      contractNo: '',
+      contractValue: 0,
+      hdAnnualRevenue: '',
+      hdMonthlyRevenue: '',
+      creditLimit: 0,
+      signDate: '',
+      contractStatus: 'Pending Signature',
+      contractPdf: '',
+      bbQuoteCode: '',
+      bbCode: '',
+      bbDate: '',
+      bbDiaDiem: '',
+      bbPdf: '',
+      plNo: '',
+      plDate: '',
+      plAddress: '',
+      plCptc: '',
+      plCptcText: '',
+      plRevenueCommit: '',
+      plRevenueCommitText: '',
+      plPdf: '',
+    };
+
+    setPartners((prev) =>
+      prev.map((p) => (p.id === selectedPartner.id ? { ...p, ...clearedFields } : p))
+    );
+    setShowDeleteContractModal(false);
+    setShowDetailDrawer(false);
+    setSelectedPartner(null);
+
     try {
-      const res = await fetch(`/api/sales/partners/${selectedPartner.id}`, {
+      await fetch(`/api/sales/partners/${selectedPartner.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          step: 4,
-          contractValue: contractForm.commitment,
-          contractNo: contractForm.contractNo,
-        }),
+        body: JSON.stringify(clearedFields),
       });
-      if (res.ok) {
-        setShowContractModal(false);
-        fetchPartners();
-      }
-    } catch (e) {
-      console.error(e);
+    } catch (err) {
+      console.error('Lỗi xoá hợp đồng:', err);
     }
   };
 
@@ -641,11 +811,24 @@ export const SalesPartnersPage: React.FC = () => {
         setCurrentStep(step);
         setPage(1);
         setSelectedIds(new Set());
+        if (step === 4) {
+          setShowDetailDrawer(false);
+        }
       }}
       customTickerNews={tickerItems}
     >
-      <div className="flex flex-col h-full flex-1 overflow-hidden">
-        {/* ── TableToolbar trong thẻ card chính theo đúng AGENTS.MD ── */}
+      {currentStep === 4 ? (
+        <div className="flex flex-col h-full flex-1 overflow-hidden">
+          <TaskManagementView
+            hideTitle={true}
+            department="all"
+            showCategoryTabs={true}
+            allowAdd={true}
+          />
+        </div>
+      ) : (
+        <div className="flex flex-col h-full flex-1 overflow-hidden">
+          {/* ── TableToolbar trong thẻ card chính theo đúng AGENTS.MD ── */}
         <TableToolbar
           showMenu={false}
           searchValue={searchTerm}
@@ -665,13 +848,11 @@ export const SalesPartnersPage: React.FC = () => {
               ],
             },
             {
-              value: starFilter,
-              onChange: setStarFilter,
+              value: sourceFilter,
+              onChange: setSourceFilter,
               options: [
-                { label: 'Tất cả mức sao', value: 'all' },
-                { label: '5 Sao (Rất tiềm năng)', value: '5' },
-                { label: '4 Sao (Tiềm năng)', value: '4' },
-                { label: '3 Sao (Bình thường)', value: '3' },
+                { label: 'Tất cả nguồn tiếp cận', value: 'all' },
+                ...customerSources.map((src) => ({ label: src, value: src })),
               ],
             },
           ]}
@@ -702,7 +883,7 @@ export const SalesPartnersPage: React.FC = () => {
                     receivedDate: new Date().toISOString().split('T')[0],
                     executor: 'Phạm Quang Việt',
                     notes: '',
-                    source: 'Kinh doanh tự khai thác',
+                    source: customerSources[0] || 'Tự khai thác',
                   });
                   setShowAddModal(true);
                 }}
@@ -772,11 +953,21 @@ export const SalesPartnersPage: React.FC = () => {
                 if (currentStep === 2) {
                   const qStatus = p.quoteStatus || 'Sent';
                   const rawStatus = p.quoteRawStatus || '';
-                  const isPendingApproval = rawStatus === 'pending_approval' || qStatus === 'Pending';
-                  const isAccepted = rawStatus === 'approved' || qStatus === 'Accepted';
-                  const isDeclined = rawStatus === 'rejected' || qStatus === 'Declined';
+                  const isContractSigning =
+                    qStatus === 'ContractSigning' || Number(p.step) >= 3;
+                  const isPendingApproval =
+                    !isContractSigning &&
+                    (rawStatus === 'pending_approval' || qStatus === 'Pending');
+                  const isAccepted =
+                    !isContractSigning &&
+                    (rawStatus === 'approved' || qStatus === 'Accepted');
+                  const isDeclined =
+                    !isContractSigning &&
+                    (rawStatus === 'rejected' || qStatus === 'Declined');
 
-                  const statusLabel = isAccepted
+                  const statusLabel = isContractSigning
+                    ? 'Đang ký hợp đồng'
+                    : isAccepted
                     ? 'Đã duyệt'
                     : isDeclined
                     ? 'Từ chối'
@@ -786,7 +977,9 @@ export const SalesPartnersPage: React.FC = () => {
                     ? 'Đã lập báo giá'
                     : 'Bản nháp';
 
-                  const statusClass = isAccepted
+                  const statusClass = isContractSigning
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : isAccepted
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                     : isDeclined
                     ? 'bg-rose-50 text-rose-700 border-rose-200'
@@ -794,13 +987,19 @@ export const SalesPartnersPage: React.FC = () => {
                     ? 'bg-amber-50 text-amber-700 border-amber-200'
                     : 'bg-blue-50 text-blue-700 border-blue-200';
 
-                  const dotClass = isAccepted
+                  const dotClass = isContractSigning
+                    ? 'bg-emerald-500'
+                    : isAccepted
                     ? 'bg-emerald-500'
                     : isDeclined
                     ? 'bg-rose-500'
                     : isPendingApproval
                     ? 'bg-amber-500'
                     : 'bg-blue-500';
+
+                  const subStatusLabel = isContractSigning
+                    ? 'Đã chốt báo giá'
+                    : 'Đang thoả thuận';
 
                   return (
                     <tr
@@ -897,8 +1096,12 @@ export const SalesPartnersPage: React.FC = () => {
                             <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
                             {statusLabel}
                           </span>
-                          <span className="text-[10.5px] text-emerald-600 font-medium">
-                            Đang thoả thuận
+                          <span
+                            className={`text-[10.5px] font-medium ${
+                              isContractSigning ? 'text-blue-600' : 'text-emerald-600'
+                            }`}
+                          >
+                            {subStatusLabel}
                           </span>
                         </div>
                       </td>
@@ -1046,6 +1249,7 @@ export const SalesPartnersPage: React.FC = () => {
           itemName="đối tác"
         />
       </div>
+      )}
 
       {/* ── DRAWER CHI TIẾT ĐỐI TÁC & NHẬT KÝ CHĂM SÓC (ÁP DỤNG OFFCANVAS CHUẨN CRM) ── */}
       <Offcanvas
@@ -1093,7 +1297,7 @@ export const SalesPartnersPage: React.FC = () => {
             </div>
           ) : (
             <div className="w-full flex items-center gap-2">
-              {selectedPartner && (
+              {selectedPartner && currentStep !== 3 && (
                 <button
                   type="button"
                   onClick={() => handleOpenEditPartner(selectedPartner)}
@@ -1113,39 +1317,82 @@ export const SalesPartnersPage: React.FC = () => {
                   <span>Xem báo giá</span>
                 </button>
               )}
-              {selectedPartner && currentStep < 3 && (
+              {selectedPartner && currentStep === 1 && (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (currentStep === 1) {
-                      handleCreateQuoteForPartner(selectedPartner);
-                    } else {
-                      handleAdvanceStep(selectedPartner);
-                      setShowDetailDrawer(false);
-                    }
-                  }}
+                  onClick={() => handleCreateQuoteForPartner(selectedPartner)}
                   className="btn btn-primary flex-1 py-2 rounded-lg text-white text-[13px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <FileEarmarkText className="w-3.5 h-3.5" />
-                  <span>{currentStep === 1 ? 'Tạo báo giá' : 'Chuyển bước →'}</span>
+                  <span>Tạo báo giá</span>
+                </button>
+              )}
+              {selectedPartner && currentStep === 2 && (
+                <button
+                  type="button"
+                  onClick={() => handleFinalizeQuote(selectedPartner)}
+                  disabled={
+                    selectedPartner.quoteStatus === 'ContractSigning' ||
+                    Number(selectedPartner.step) >= 3
+                  }
+                  className={`flex-1 py-2 rounded-lg text-[13px] font-bold flex items-center justify-center gap-1.5 transition-colors ${
+                    selectedPartner.quoteStatus === 'ContractSigning' ||
+                    Number(selectedPartner.step) >= 3
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default'
+                      : 'btn btn-primary text-white cursor-pointer'
+                  }`}
+                >
+                  <Check2 className="w-4 h-4" />
+                  <span>
+                    {selectedPartner.quoteStatus === 'ContractSigning' ||
+                    Number(selectedPartner.step) >= 3
+                      ? 'Đang ký hợp đồng'
+                      : 'Chốt báo giá'}
+                  </span>
                 </button>
               )}
               {selectedPartner && currentStep === 3 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setContractForm((prev) => ({
-                      ...prev,
-                      signer: selectedPartner.name,
-                    }));
-                    setShowDetailDrawer(false);
-                    setShowContractModal(true);
-                  }}
-                  className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[13px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <FileEarmarkText className="w-3.5 h-3.5" />
-                  <span>Ký hợp đồng</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenBienBanModal(selectedPartner)}
+                    className="btn btn-primary flex-1 h-9 rounded-lg text-white text-[12px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                    title="Lập / Ký biên bản ghi nhớ"
+                  >
+                    <FileEarmarkText className="w-3.5 h-3.5 shrink-0" />
+                    <span>Biên bản</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenContractModal(selectedPartner)}
+                    className="btn btn-primary flex-1 h-9 rounded-lg text-white text-[12px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                    title="Ký hợp đồng đại lý"
+                  >
+                    <FileEarmarkCheck className="w-3.5 h-3.5 shrink-0" />
+                    <span>Hợp đồng</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenPhuLucModal(selectedPartner)}
+                    className="btn btn-primary flex-1 h-9 rounded-lg text-white text-[12px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                    title="Lập / Ký phụ lục hợp đồng"
+                  >
+                    <FileEarmarkPlus className="w-3.5 h-3.5 shrink-0" />
+                    <span>Phụ lục</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDetailDrawer(false);
+                      setShowDeleteContractModal(true);
+                    }}
+                    className="h-9 px-2.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 text-[12px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer shrink-0"
+                    title="Xoá thông tin văn bản hợp đồng"
+                  >
+                    <Trash className="w-3.5 h-3.5 shrink-0" />
+                    <span>Xoá</span>
+                  </button>
+                </>
               )}
             </div>
           )
@@ -1454,11 +1701,27 @@ export const SalesPartnersPage: React.FC = () => {
                       {selectedPartner.quoteCode || 'Mở báo giá →'}
                     </button>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
+                  <div className="grid grid-cols-3 gap-2 pt-1 text-xs items-end">
                     <div>
                       <span className="text-[11px] text-slate-500 block">Loại báo giá</span>
                       <span className="font-semibold text-slate-800">
                         {selectedPartner.quoteType || 'Có quầy kệ'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-slate-500 block">Trạng thái</span>
+                      <span
+                        className={`inline-flex items-center gap-1 font-bold text-[11px] ${
+                          selectedPartner.quoteStatus === 'ContractSigning' ||
+                          Number(selectedPartner.step) >= 3
+                            ? 'text-emerald-700'
+                            : 'text-blue-700'
+                        }`}
+                      >
+                        {selectedPartner.quoteStatus === 'ContractSigning' ||
+                        Number(selectedPartner.step) >= 3
+                          ? 'Đang ký hợp đồng'
+                          : 'Đang thoả thuận'}
                       </span>
                     </div>
                     <div className="text-right">
@@ -1471,107 +1734,444 @@ export const SalesPartnersPage: React.FC = () => {
                 </div>
               )}
 
-              {/* 3. QUÁ TRÌNH CHĂM SÓC KHÁCH HÀNG */}
-              <div className="space-y-3 pt-1">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-[11.5px] font-extrabold uppercase text-slate-800 tracking-wider">
-                    <ClockHistory className="w-3.5 h-3.5 text-blue-600" />
-                    <span>QUÁ TRÌNH CHĂM SÓC KHÁCH HÀNG</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCareForm({
-                        executionTime: getCurrentDateTimeLocal(),
-                        hinhThuc: 'Gọi điện',
-                        attitude: 'Tích cực',
-                        collabNeeds: '',
-                        notes: '',
-                        executor: selectedPartner.owner || 'Phạm Quang Việt',
-                        nextDate: '',
-                        nextPriority: 'Trung bình',
-                        addToSchedule: false,
-                        nextTaskDesc: '',
-                      });
-                      setShowAddCareForm(true);
-                    }}
-                    className="btn btn-primary btn-sm px-2.5 py-1 rounded-lg text-white text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Thêm</span>
-                  </button>
-                </div>
+              {/* 3. NỘI DUNG BƯỚC 3 (BIÊN BẢN, HỢP ĐỒNG, PHỤ LỤC HỢP ĐỒNG) HOẶC QUÁ TRÌNH CHĂM SÓC KHÁCH HÀNG */}
+              {currentStep === 3 ? (
+                <div className="space-y-3 pt-1">
+                  {/* MỤC 1: BIÊN BẢN GHI NHỚ */}
+                  <div className="bg-white rounded-xl p-3.5 border border-slate-200 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                      <div className="flex items-center gap-1.5 text-[11.5px] font-extrabold uppercase text-slate-800 tracking-wider">
+                        <FileEarmarkText className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Biên bản ghi nhớ</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenBienBanModal(selectedPartner)}
+                        className="h-7 px-2.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <FileEarmarkText className="w-3 h-3" />
+                        <span>{selectedPartner.bbCode ? 'Cập nhật' : 'Ký biên bản'}</span>
+                      </button>
+                    </div>
 
-                {/* Dòng thời gian (Timeline) quá trình chăm sóc */}
-                <div className="relative pl-6 space-y-3 before:content-[''] before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[1.5px] before:bg-slate-200">
-                  {selectedPartner.careHistories &&
-                    selectedPartner.careHistories.map((h: any, i: number) => {
-                      const dObj = new Date(h.executionDate || h.createdAt);
-                      const dStr = dObj.toLocaleDateString('vi-VN');
-                      const tStr = dObj.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-                      return (
-                        <div key={h.id || i} className="relative">
-                          <span className="absolute -left-6 top-1 w-5 h-5 rounded-full bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center">
-                            <ChatDots size={11} />
-                          </span>
-                          <div className="p-3 rounded-xl border border-slate-200/90 bg-slate-50/60 space-y-1">
-                            <div className="flex items-center justify-between text-[11px]">
-                              <span className="font-extrabold uppercase text-blue-600 tracking-wide">
-                                {h.approachStep || h.hinhThuc || 'CHĂM SÓC KHÁCH HÀNG'}
-                              </span>
-                              <span className="text-slate-400 font-mono">
-                                {dStr} • {tStr}
-                              </span>
-                            </div>
-                            <div className="font-bold text-slate-900 text-[12.5px]">
-                              Tư vấn khách hàng ({h.attitude || 'Tích cực'})
-                            </div>
-                            <p className="text-slate-600 text-xs leading-relaxed">
-                              {h.collabNeeds || h.notes || 'Đã liên hệ tư vấn sản phẩm và chính sách đại lý.'}
-                            </p>
-                            {h.deploymentPlan && (
-                              <div className="mt-1.5 pt-1.5 border-t border-dashed border-slate-200 text-[11.5px] text-blue-700">
-                                <strong>Công việc tiếp theo:</strong> {h.deploymentPlan}
-                              </div>
+                    <div className="grid grid-cols-2 gap-y-2.5 gap-x-3 text-xs">
+                      <div>
+                        <span className="text-[11px] text-slate-400 block mb-0.5">
+                          Số báo giá liên quan
+                        </span>
+                        <span className="font-mono font-bold text-slate-800">
+                          {selectedPartner.bbQuoteCode || selectedPartner.quoteCode || '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[11px] text-slate-400 block mb-0.5">
+                          Số biên bản
+                        </span>
+                        <span className="font-mono font-bold text-blue-600">
+                          {selectedPartner.bbCode || '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[11px] text-slate-400 block mb-0.5">
+                          Ngày lập biên bản
+                        </span>
+                        <span className="font-medium text-slate-700">
+                          {selectedPartner.bbDate
+                            ? new Date(selectedPartner.bbDate).toLocaleDateString('vi-VN')
+                            : '—'}
+                        </span>
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-[11px] text-slate-400 block mb-0.5">
+                          Tệp đính kèm
+                        </span>
+                        {selectedPartner.bbPdf ? (
+                          <button
+                            type="button"
+                            onClick={() => openAttachmentFile(selectedPartner.bbPdf)}
+                            title={getAttachmentDisplayName(
+                              selectedPartner.bbPdf,
+                              `Bien_ban_${selectedPartner.bbCode || selectedPartner.code}.pdf`
                             )}
-                            <div className="text-[11px] text-slate-400 text-right pt-1">
-                              Thực hiện: <strong className="text-slate-700">{h.executor || selectedPartner.owner}</strong>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[11px] font-semibold transition-colors max-w-[145px] min-w-0 overflow-hidden cursor-pointer"
+                          >
+                            <FileEarmarkPdfFill className="w-3 h-3 text-rose-500 shrink-0" />
+                            <span className="truncate block">
+                              {getAttachmentDisplayName(
+                                selectedPartner.bbPdf,
+                                `Bien_ban_${selectedPartner.bbCode || selectedPartner.code}.pdf`
+                              )}
+                            </span>
+                          </button>
+                        ) : (
+                          <span className="text-[11px] italic text-slate-400">Chưa có tệp</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
 
-                  {/* Mốc khởi tạo hồ sơ ban đầu */}
-                  <div className="relative">
-                    <span className="absolute -left-6 top-1 w-5 h-5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center">
-                      <People size={11} />
-                    </span>
-                    <div className="p-3 rounded-xl border border-slate-200/90 bg-slate-50/60 space-y-1">
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="font-extrabold uppercase text-blue-600 tracking-wide">
-                          TIẾP NHẬN MỚI
+                  {/* MỤC 2: HỢP ĐỒNG */}
+                  <div className="bg-white rounded-xl p-3.5 border border-slate-200 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                      <div className="flex items-center gap-1.5 text-[11.5px] font-extrabold uppercase text-slate-800 tracking-wider">
+                        <FileEarmarkCheck className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Hợp đồng</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenContractModal(selectedPartner)}
+                        className="h-7 px-2.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <FileEarmarkCheck className="w-3 h-3" />
+                        <span>{selectedPartner.contractNo ? 'Cập nhật' : 'Ký hợp đồng'}</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-y-2.5 gap-x-3 text-xs">
+                      <div>
+                        <span className="text-[11px] text-slate-400 block mb-0.5">
+                          Số hợp đồng đại lý
                         </span>
-                        <span className="text-slate-400 font-mono">
-                          {createdDateStr} • {createdTimeStr}
+                        <span className="font-mono font-bold text-blue-600">
+                          {selectedPartner.contractNo || '—'}
                         </span>
                       </div>
-                      <div className="font-bold text-slate-900 text-[12.5px]">
-                        Tạo mới hồ sơ khách hàng vào hệ thống CRM
+                      <div>
+                        <span className="text-[11px] text-slate-400 block mb-0.5">
+                          Trạng thái ký kết
+                        </span>
+                        {(() => {
+                          const cStatus =
+                            selectedPartner.contractStatus ||
+                            (selectedPartner.contractNo ? 'Signed' : 'Pending');
+                          const isSigned = cStatus === 'Signed' || cStatus === 'Active';
+                          return (
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold border ${
+                                isSigned
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200'
+                              }`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  isSigned ? 'bg-emerald-500' : 'bg-amber-500'
+                                }`}
+                              />
+                              {cStatus === 'Active'
+                                ? 'Đang hiệu lực'
+                                : cStatus === 'Signed'
+                                ? 'Đã ký kết'
+                                : 'Chờ ký kết'}
+                            </span>
+                          );
+                        })()}
                       </div>
-                      <p className="text-slate-600 text-xs leading-relaxed">
-                        Khởi tạo hồ sơ khách hàng {selectedPartner.companyName || selectedPartner.name}.{' '}
-                        <strong className="text-slate-700">
-                          Nguồn tiếp cận: {getSourceLabel(selectedPartner.source)}.
-                        </strong>
-                      </p>
-                      <div className="text-[11px] text-slate-400 text-right pt-1">
-                        Thực hiện: <strong className="text-slate-700">{selectedPartner.owner}</strong>
+                      <div>
+                        <span className="text-[11px] text-slate-400 block mb-0.5">
+                          Giá trị cam kết năm
+                        </span>
+                        <span className="font-mono font-bold text-slate-800">
+                          {formatPartnerVnd(
+                            selectedPartner.hdAnnualRevenue || selectedPartner.contractValue
+                          )}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[11px] text-slate-400 block mb-0.5">
+                          Giá trị cam kết tháng
+                        </span>
+                        <span className="font-mono font-bold text-slate-800">
+                          {formatPartnerVnd(
+                            selectedPartner.hdMonthlyRevenue ||
+                              (selectedPartner.contractValue
+                                ? Math.round(Number(selectedPartner.contractValue) / 12)
+                                : undefined)
+                          )}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[11px] text-slate-400 block mb-0.5">
+                          Ngày ký hợp đồng
+                        </span>
+                        <span className="font-medium text-slate-700">
+                          {selectedPartner.signDate || selectedPartner.hdDate
+                            ? new Date(
+                                (selectedPartner.signDate || selectedPartner.hdDate) as string
+                              ).toLocaleDateString('vi-VN')
+                            : '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[11px] text-slate-400 block mb-0.5">
+                          Hạn mức công nợ
+                        </span>
+                        <span className="font-mono font-bold text-blue-700">
+                          {formatPartnerVnd(selectedPartner.creditLimit)}
+                        </span>
+                      </div>
+                      {(selectedPartner.hdDurationYears ||
+                        selectedPartner.hdExclusiveRadius ||
+                        selectedPartner.hdShowroomArea) && (
+                        <>
+                          <div>
+                            <span className="text-[11px] text-slate-400 block mb-0.5">
+                              Thời hạn hợp đồng
+                            </span>
+                            <span className="font-medium text-slate-700">
+                              {selectedPartner.hdDurationYears
+                                ? `${selectedPartner.hdDurationYears} năm`
+                                : '—'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[11px] text-slate-400 block mb-0.5">
+                              Bảo hộ độc quyền
+                            </span>
+                            <span className="font-medium text-slate-700">
+                              {selectedPartner.hdExclusiveRadius
+                                ? `Bán kính ${selectedPartner.hdExclusiveRadius}km (${selectedPartner.hdExclusiveMonths || '06'} tháng)`
+                                : selectedPartner.hdShowroomArea
+                                ? `Showroom ${selectedPartner.hdShowroomArea} m²`
+                                : '—'}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                      <div className="col-span-2 pt-1 border-t border-dashed border-slate-100 flex items-center justify-between gap-2 min-w-0">
+                        <span className="text-[11px] text-slate-400 shrink-0">Tệp đính kèm</span>
+                        {selectedPartner.contractPdf ? (
+                          <button
+                            type="button"
+                            onClick={() => openAttachmentFile(selectedPartner.contractPdf)}
+                            title={getAttachmentDisplayName(
+                              selectedPartner.contractPdf,
+                              `Hop_dong_${selectedPartner.contractNo || selectedPartner.code}.pdf`
+                            )}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[11px] font-semibold transition-colors max-w-[200px] min-w-0 overflow-hidden cursor-pointer"
+                          >
+                            <FileEarmarkPdfFill className="w-3 h-3 text-rose-500 shrink-0" />
+                            <span className="truncate block">
+                              {getAttachmentDisplayName(
+                                selectedPartner.contractPdf,
+                                `Hop_dong_${selectedPartner.contractNo || selectedPartner.code}.pdf`
+                              )}
+                            </span>
+                          </button>
+                        ) : (
+                          <span className="text-[11px] italic text-slate-400">Chưa có tệp</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* MỤC 3: PHỤ LỤC HỢP ĐỒNG */}
+                  <div className="bg-white rounded-xl p-3.5 border border-slate-200 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                      <div className="flex items-center gap-1.5 text-[11.5px] font-extrabold uppercase text-slate-800 tracking-wider">
+                        <FileEarmarkPlus className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Phụ lục hợp đồng</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenPhuLucModal(selectedPartner)}
+                        className="h-7 px-2.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <FileEarmarkPlus className="w-3 h-3" />
+                        <span>{selectedPartner.plNo ? 'Cập nhật' : 'Ký phụ lục'}</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-y-2.5 gap-x-3 text-xs">
+                      <div>
+                        <span className="text-[11px] text-slate-400 block mb-0.5">
+                          Số phụ lục
+                        </span>
+                        <span className="font-mono font-bold text-blue-600">
+                          {selectedPartner.plNo
+                            ? selectedPartner.plNo.includes('/')
+                              ? selectedPartner.plNo
+                              : `${selectedPartner.plNo}/HĐĐL-SEAJONG`
+                            : '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[11px] text-slate-400 block mb-0.5">
+                          Ngày lập phụ lục
+                        </span>
+                        <span className="font-medium text-slate-700">
+                          {selectedPartner.plDate
+                            ? new Date(selectedPartner.plDate).toLocaleDateString('vi-VN')
+                            : '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[11px] text-slate-400 block mb-0.5">
+                          Chi phí thi công (CPTC)
+                        </span>
+                        <span className="font-mono font-bold text-slate-800">
+                          {formatPartnerVnd(selectedPartner.plCptc)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[11px] text-slate-400 block mb-0.5">
+                          Doanh thu cam kết
+                        </span>
+                        <span className="font-mono font-bold text-blue-700">
+                          {formatPartnerVnd(selectedPartner.plRevenueCommit)}
+                        </span>
+                      </div>
+                      {(selectedPartner.plRevenueMkt || selectedPartner.plDurationDays) && (
+                        <>
+                          <div>
+                            <span className="text-[11px] text-slate-400 block mb-0.5">
+                              Doanh số nhận gói MKT
+                            </span>
+                            <span className="font-mono font-bold text-slate-800">
+                              {formatPartnerVnd(selectedPartner.plRevenueMkt)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[11px] text-slate-400 block mb-0.5">
+                              Thời gian thi công
+                            </span>
+                            <span className="font-medium text-slate-700">
+                              {selectedPartner.plDurationDays
+                                ? `${selectedPartner.plDurationDays} ngày (tối đa ${selectedPartner.plMaxDelayDays || '19'} ngày)`
+                                : '—'}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                      <div className="col-span-2 pt-1 border-t border-dashed border-slate-100 flex items-center justify-between gap-2 min-w-0">
+                        <span className="text-[11px] text-slate-400 shrink-0">Tệp đính kèm</span>
+                        {selectedPartner.plPdf ? (
+                          <button
+                            type="button"
+                            onClick={() => openAttachmentFile(selectedPartner.plPdf)}
+                            title={getAttachmentDisplayName(
+                              selectedPartner.plPdf,
+                              `Phu_luc_${selectedPartner.plNo || selectedPartner.code}.pdf`
+                            )}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[11px] font-semibold transition-colors max-w-[200px] min-w-0 overflow-hidden cursor-pointer"
+                          >
+                            <FileEarmarkPdfFill className="w-3 h-3 text-rose-500 shrink-0" />
+                            <span className="truncate block">
+                              {getAttachmentDisplayName(
+                                selectedPartner.plPdf,
+                                `Phu_luc_${selectedPartner.plNo || selectedPartner.code}.pdf`
+                              )}
+                            </span>
+                          </button>
+                        ) : (
+                          <span className="text-[11px] italic text-slate-400">Chưa có tệp</span>
+                        )}
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-3 pt-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-[11.5px] font-extrabold uppercase text-slate-800 tracking-wider">
+                      <ClockHistory className="w-3.5 h-3.5 text-blue-600" />
+                      <span>QUÁ TRÌNH CHĂM SÓC KHÁCH HÀNG</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCareForm({
+                          executionTime: getCurrentDateTimeLocal(),
+                          hinhThuc: 'Gọi điện',
+                          attitude: 'Tích cực',
+                          collabNeeds: '',
+                          notes: '',
+                          executor: selectedPartner.owner || 'Phạm Quang Việt',
+                          nextDate: '',
+                          nextPriority: 'Trung bình',
+                          addToSchedule: false,
+                          nextTaskDesc: '',
+                        });
+                        setShowAddCareForm(true);
+                      }}
+                      className="btn btn-primary btn-sm px-2.5 py-1 rounded-lg text-white text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Thêm</span>
+                    </button>
+                  </div>
+
+                  {/* Dòng thời gian (Timeline) quá trình chăm sóc */}
+                  <div className="relative pl-6 space-y-3 before:content-[''] before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[1.5px] before:bg-slate-200">
+                    {selectedPartner.careHistories &&
+                      selectedPartner.careHistories.map((h: any, i: number) => {
+                        const dObj = new Date(h.executionDate || h.createdAt);
+                        const dStr = dObj.toLocaleDateString('vi-VN');
+                        const tStr = dObj.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                        return (
+                          <div key={h.id || i} className="relative">
+                            <span className="absolute -left-6 top-1 w-5 h-5 rounded-full bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center">
+                              <ChatDots size={11} />
+                            </span>
+                            <div className="p-3 rounded-xl border border-slate-200/90 bg-slate-50/60 space-y-1">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="font-extrabold uppercase text-blue-600 tracking-wide">
+                                  {h.approachStep || h.hinhThuc || 'CHĂM SÓC KHÁCH HÀNG'}
+                                </span>
+                                <span className="text-slate-400 font-mono">
+                                  {dStr} • {tStr}
+                                </span>
+                              </div>
+                              <div className="font-bold text-slate-900 text-[12.5px]">
+                                Tư vấn khách hàng ({h.attitude || 'Tích cực'})
+                              </div>
+                              <p className="text-slate-600 text-xs leading-relaxed">
+                                {h.collabNeeds || h.notes || 'Đã liên hệ tư vấn sản phẩm và chính sách đại lý.'}
+                              </p>
+                              {h.deploymentPlan && (
+                                <div className="mt-1.5 pt-1.5 border-t border-dashed border-slate-200 text-[11.5px] text-blue-700">
+                                  <strong>Công việc tiếp theo:</strong> {h.deploymentPlan}
+                                </div>
+                              )}
+                              <div className="text-[11px] text-slate-400 text-right pt-1">
+                                Thực hiện: <strong className="text-slate-700">{h.executor || selectedPartner.owner}</strong>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                    {/* Mốc khởi tạo hồ sơ ban đầu */}
+                    <div className="relative">
+                      <span className="absolute -left-6 top-1 w-5 h-5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center">
+                        <People size={11} />
+                      </span>
+                      <div className="p-3 rounded-xl border border-slate-200/90 bg-slate-50/60 space-y-1">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-extrabold uppercase text-blue-600 tracking-wide">
+                            TIẾP NHẬN MỚI
+                          </span>
+                          <span className="text-slate-400 font-mono">
+                            {createdDateStr} • {createdTimeStr}
+                          </span>
+                        </div>
+                        <div className="font-bold text-slate-900 text-[12.5px]">
+                          Tạo mới hồ sơ khách hàng vào hệ thống CRM
+                        </div>
+                        <p className="text-slate-600 text-xs leading-relaxed">
+                          Khởi tạo hồ sơ khách hàng {selectedPartner.companyName || selectedPartner.name}.{' '}
+                          <strong className="text-slate-700">
+                            Nguồn tiếp cận: {getSourceLabel(selectedPartner.source)}.
+                          </strong>
+                        </p>
+                        <div className="text-[11px] text-slate-400 text-right pt-1">
+                          Thực hiện: <strong className="text-slate-700">{selectedPartner.owner}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })()}
@@ -1693,12 +2293,7 @@ export const SalesPartnersPage: React.FC = () => {
                 label="Nguồn tiếp cận"
                 value={newPartner.source}
                 onChange={(e) => setNewPartner({ ...newPartner, source: e.target.value })}
-                options={[
-                  { value: 'Kinh doanh tự khai thác', label: 'Kinh doanh tự khai thác' },
-                  { value: 'Facebook Ads', label: 'Facebook Ads' },
-                  { value: 'Showroom', label: 'Khách vãng lai Showroom' },
-                  { value: 'Triển lãm Vietbuild', label: 'Triển lãm Vietbuild' },
-                ]}
+                options={customerSources.map((src) => ({ value: src, label: src }))}
               />
             </div>
           </div>
@@ -1738,83 +2333,121 @@ export const SalesPartnersPage: React.FC = () => {
         </form>
       </Offcanvas>
 
-      {/* ── MODAL KÝ HỢP ĐỒNG ĐẠI LÝ ── */}
-      {showContractModal && selectedPartner && (
+      {/* ── MODAL 1: LẬP & KÝ BIÊN BẢN GHI NHỚ (FULLSCREEN) ── */}
+      <BienBanModal
+        open={showBienBanModal}
+        partner={selectedPartner}
+        onClose={() => {
+          setShowBienBanModal(false);
+          setShowDetailDrawer(true);
+        }}
+        onSaved={(updatedFields) => {
+          if (!selectedPartner) return;
+          setPartners((prev) =>
+            prev.map((p) =>
+              p.id === selectedPartner.id ? { ...p, ...updatedFields } : p
+            )
+          );
+          setSelectedPartner((prev) =>
+            prev && prev.id === selectedPartner.id
+              ? { ...prev, ...updatedFields }
+              : prev
+          );
+          setShowDetailDrawer(true);
+        }}
+      />
+
+      {/* ── MODAL 2: LẬP & KÝ HỢP ĐỒNG ĐẠI LÝ (FULLSCREEN) ── */}
+      <HopDongModal
+        open={showContractModal}
+        partner={selectedPartner}
+        onClose={() => {
+          setShowContractModal(false);
+          setShowDetailDrawer(true);
+        }}
+        onSaved={(updatedFields) => {
+          if (!selectedPartner) return;
+          setPartners((prev) =>
+            prev.map((p) =>
+              p.id === selectedPartner.id ? { ...p, ...updatedFields } : p
+            )
+          );
+          setSelectedPartner((prev) =>
+            prev && prev.id === selectedPartner.id
+              ? { ...prev, ...updatedFields }
+              : prev
+          );
+          window.dispatchEvent(new Event('decodoor_contracts_updated'));
+          setShowDetailDrawer(true);
+        }}
+      />
+
+      {/* ── MODAL 3: LẬP & KÝ PHỤ LỤC HỢP ĐỒNG (FULLSCREEN) ── */}
+      <PhuLucModal
+        open={showPhuLucModal}
+        partner={selectedPartner}
+        onClose={() => {
+          setShowPhuLucModal(false);
+          setShowDetailDrawer(true);
+        }}
+        onSaved={(updatedFields) => {
+          if (!selectedPartner) return;
+          setPartners((prev) =>
+            prev.map((p) =>
+              p.id === selectedPartner.id ? { ...p, ...updatedFields } : p
+            )
+          );
+          setSelectedPartner((prev) =>
+            prev && prev.id === selectedPartner.id
+              ? { ...prev, ...updatedFields }
+              : prev
+          );
+          window.dispatchEvent(new Event('decodoor_contracts_updated'));
+          setShowDetailDrawer(true);
+        }}
+      />
+
+      {/* ── MODAL 4: XÁC NHẬN XOÁ THÔNG TIN HỢP ĐỒNG ── */}
+      {showDeleteContractModal && selectedPartner && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden animate-scale-up">
-            <div className="p-4 border-b border-slate-200 bg-emerald-50 flex items-center justify-between">
-              <h3 className="font-bold text-emerald-900 text-sm flex items-center gap-2">
-                <FileEarmarkText className="w-5 h-5 text-emerald-600" />
-                Ký hợp đồng phân phối thiết bị vệ sinh Seajong
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden animate-scale-up">
+            <div className="p-4 border-b border-slate-200 bg-rose-50 flex items-center justify-between">
+              <h3 className="font-bold text-rose-900 text-sm flex items-center gap-2">
+                <Trash className="w-4 h-4 text-rose-600" />
+                Xác nhận xoá văn bản hợp đồng
               </h3>
-              <button onClick={() => setShowContractModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+              <button
+                type="button"
+                onClick={() => setShowDeleteContractModal(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                ✕
+              </button>
             </div>
-
-            <form onSubmit={handleSignContract} className="p-4 space-y-3 text-xs">
-              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
-                <div className="font-bold text-slate-800 text-sm">{selectedPartner.companyName}</div>
-                <div className="text-slate-500">Đại diện: {selectedPartner.name} - SĐT: {selectedPartner.phone}</div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Số hợp đồng</label>
-                  <input
-                    type="text"
-                    required
-                    value={contractForm.contractNo}
-                    onChange={(e) => setContractForm({ ...contractForm, contractNo: e.target.value })}
-                    className="w-full p-2 rounded-lg border border-slate-300 text-xs font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Ngày ký</label>
-                  <input
-                    type="date"
-                    required
-                    value={contractForm.signedDate}
-                    onChange={(e) => setContractForm({ ...contractForm, signedDate: e.target.value })}
-                    className="w-full p-2 rounded-lg border border-slate-300 text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Cam kết doanh số năm (VNĐ)</label>
-                  <input
-                    type="number"
-                    step="10000000"
-                    value={contractForm.commitment}
-                    onChange={(e) => setContractForm({ ...contractForm, commitment: Number(e.target.value) })}
-                    className="w-full p-2 rounded-lg border border-slate-300 text-xs font-mono font-bold text-blue-700"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Hạn mức công nợ (VNĐ)</label>
-                  <input
-                    type="number"
-                    step="10000000"
-                    value={contractForm.creditLimit}
-                    onChange={(e) => setContractForm({ ...contractForm, creditLimit: Number(e.target.value) })}
-                    className="w-full p-2 rounded-lg border border-slate-300 text-xs font-mono font-bold text-emerald-700"
-                  />
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-emerald-50/70 border border-emerald-200 text-emerald-800 text-[11px]">
-                ✓ Khi xác nhận ký hợp đồng, đối tác sẽ tự động chuyển sang <strong>Bước 4: Kế hoạch thi công & Lắp đặt quầy kệ showroom</strong>.
-              </div>
-
+            <div className="p-4 space-y-3 text-xs text-slate-600">
+              <p>
+                Bạn có chắc chắn muốn xoá toàn bộ thông tin{' '}
+                <strong className="text-slate-800">Biên bản ghi nhớ, Hợp đồng và Phụ lục hợp đồng</strong>{' '}
+                của đối tác <strong className="text-slate-900">{selectedPartner.companyName || selectedPartner.name}</strong>?
+              </p>
               <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
-                <Button variant="outline" size="sm" onClick={() => setShowContractModal(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowDeleteContractModal(false)}
+                >
                   Hủy bỏ
                 </Button>
-                <Button type="submit" variant="primary" size="sm">
-                  Xác nhận ký kết
-                </Button>
+                <button
+                  type="button"
+                  onClick={handleDeleteContractDocs}
+                  className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Xác nhận xoá
+                </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}

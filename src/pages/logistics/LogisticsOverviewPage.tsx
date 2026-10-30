@@ -29,6 +29,12 @@ import { EventOffcanvas } from '../../components/common/EventOffcanvas';
 import { TableToolbar, type TableToolbarFilter } from '../../components/common/TableToolbar';
 import { FullWidthTable } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
+import {
+  InventoryToolbar,
+  InventoryTable,
+  InventoryPagination,
+  InventoryDetailOffcanvas,
+} from '../../components/common/InventoryTable';
 import { Button } from '../../components/common/Button';
 import { Modal } from '../../components/common/Modal';
 import { Offcanvas } from '../../components/common/Offcanvas';
@@ -594,638 +600,256 @@ export const LogisticsOverviewPage: React.FC = () => {
       )}
 
 
-      {/* ── THANH CÔNG CỤ TABLETOOLBAR CHUẨN DOANH NGHIỆP ── */}
-      <TableToolbar
-        searchValue={searchTerm}
-        onSearchChange={(val) => {
-          setSearchTerm(val);
-          setCurrentPage(1);
-        }}
-        searchPlaceholder={
-          currentStep === 1
-            ? 'Tìm mã công việc, tên việc, người phụ trách, số chứng từ...'
-            : currentStep === 2
-            ? 'Tìm theo mã SKU, tên hàng hoá, model, quy cách, chất liệu...'
-            : 'Tìm mã chứng từ, tên hàng, kho hàng, người thực hiện...'
-        }
-        filters={toolbarFilters}
-        rightActions={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      {currentStep === 2 ? (
+        <>
+          {/* ── BƯỚC 2: THANH CÔNG CỤ, BẢNG DANH SÁCH HÀNG HOÁ & PAGINATION RIÊNG ── */}
+          <InventoryToolbar
+            warehouses={warehouses}
+            filterWarehouse={filterWarehouse}
+            onWarehouseChange={(val) => {
+              setFilterWarehouse(val);
+              setCurrentPage(1);
+            }}
+            filterStatus={filterStatus}
+            onStatusChange={(val) => {
+              setFilterStatus(val);
+              setCurrentPage(1);
+            }}
+            categories={categories}
+            filterCategory={filterType}
+            onCategoryChange={(val) => {
+              setFilterType(val);
+              setCurrentPage(1);
+            }}
+            searchValue={searchTerm}
+            onSearchChange={(val) => {
+              setSearchTerm(val);
+              setCurrentPage(1);
+            }}
+            onExportExcel={() =>
+              showToast('info', 'Đang trích xuất dữ liệu kho hàng ra file Excel...')
+            }
+          />
+
+          <InventoryTable
+            items={inventory}
+            loading={loading}
+            onSelectItem={(item) => setSelectedDetailItem({ ...item, itemCategory: 'inventory' })}
+          />
+
+          <InventoryPagination
+            currentPage={currentPage}
+            totalItems={totalInventory}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setCurrentPage(1);
+            }}
+          />
+        </>
+      ) : (
+        <>
+          {/* ── THANH CÔNG CỤ TABLETOOLBAR CHUẨN DOANH NGHIỆP (BƯỚC 1 & 3) ── */}
+          <TableToolbar
+            searchValue={searchTerm}
+            onSearchChange={(val) => {
+              setSearchTerm(val);
+              setCurrentPage(1);
+            }}
+            searchPlaceholder={
+              currentStep === 1
+                ? 'Tìm mã công việc, tên việc, người phụ trách, số chứng từ...'
+                : 'Tìm mã chứng từ, tên hàng, kho hàng, người thực hiện...'
+            }
+            filters={toolbarFilters}
+            rightActions={
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {currentStep === 1 && (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setIsCreateTaskOpen(true)}
+                    leftIcon={<PlusLg size={14} />}
+                    className="!bg-emerald-600 hover:!bg-emerald-700 !text-white"
+                  >
+                    Tạo công việc
+                  </Button>
+                )}
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    showToast('info', 'Đang trích xuất dữ liệu kho hàng ra file Excel...')
+                  }
+                  leftIcon={<FileEarmarkExcel size={14} color="#16a34a" />}
+                >
+                  Xuất Excel
+                </Button>
+
+                {currentStep === 3 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.print()}
+                    leftIcon={<Printer size={14} />}
+                  >
+                    In báo cáo
+                  </Button>
+                )}
+              </div>
+            }
+            showMenu={false}
+            menuItems={[]}
+          />
+
+          {/* ── BẢNG FULLWIDTHTABLE CHO BƯỚC 1 & 3 ── */}
+          <FullWidthTable loading={loading}>
+            {/* ══════════════════════════════════════════════════════════════════
+                BƯỚC 1: DANH SÁCH CÔNG VIỆC KHO HÀNG
+                ══════════════════════════════════════════════════════════════════ */}
             {currentStep === 1 && (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => setIsCreateTaskOpen(true)}
-                leftIcon={<PlusLg size={14} />}
-                className="!bg-emerald-600 hover:!bg-emerald-700 !text-white"
-              >
-                Tạo công việc
-              </Button>
+              <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+                <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
+                  <tr className="text-slate-500 text-[11.5px] uppercase tracking-[0.06em] font-bold">
+                    <th className="py-2.5 px-3.5 w-72">Mã lệnh</th>
+                    <th className="py-2.5 px-3.5">Loại công việc</th>
+                    <th className="py-2.5 px-3.5 w-48 text-center">Trạng thái</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {tasks.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="text-center py-10 px-4 text-slate-400">
+                        Không có công việc kho nào khớp với điều kiện tìm kiếm
+                      </td>
+                    </tr>
+                  ) : (
+                    tasks.map((tsk) => (
+                      <tr
+                        key={tsk.id}
+                        onClick={() => setSelectedDetailItem({ ...tsk, itemCategory: 'task' })}
+                        className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 cursor-pointer"
+                      >
+                        <td className="py-2.5 px-3.5 align-middle">
+                          <span className="font-bold text-slate-900 text-[13px] block">
+                            {tsk.code}
+                          </span>
+                          {tsk.title && (
+                            <span className="text-[11.5px] text-slate-500 block mt-0.5 line-clamp-1">
+                              {tsk.title}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3.5 align-middle">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11.5px] font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+                            {tsk.typeLabel}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3.5 align-middle text-center">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap ${
+                              tsk.status === 'cho_xu_ly'
+                                ? 'bg-amber-50 text-amber-700 border border-amber-300'
+                                : 'bg-sky-50 text-sky-700 border border-sky-300'
+                            }`}
+                          >
+                            {tsk.statusLabel}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             )}
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => showToast('info', 'Đang trích xuất dữ liệu kho hàng ra file Excel...')}
-              leftIcon={<FileEarmarkExcel size={14} color="#16a34a" />}
-            >
-              Xuất Excel
-            </Button>
-
+            {/* ══════════════════════════════════════════════════════════════════
+                BƯỚC 3: ĐÃ HOÀN THÀNH (CÔNG VIỆC XUẤT, NHẬP KHO ĐÃ HOÀN THÀNH)
+                ══════════════════════════════════════════════════════════════════ */}
             {currentStep === 3 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.print()}
-                leftIcon={<Printer size={14} />}
-              >
-                In báo cáo
-              </Button>
+              <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+                <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
+                  <tr className="text-slate-500 text-[11.5px] uppercase tracking-[0.06em] font-bold">
+                    <th className="py-2.5 px-3.5 w-60">Số chứng từ / Mã</th>
+                    <th className="py-2.5 px-3.5 w-48">Nghiệp vụ kho</th>
+                    <th className="py-2.5 px-3.5">Kho hàng</th>
+                    <th className="py-2.5 px-3.5 w-48">Người thực hiện</th>
+                    <th className="py-2.5 px-3.5 w-48">Thời gian hoàn thành</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {completedList.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="text-center py-10 px-4 text-slate-400">
+                        Không có phiếu xuất, nhập kho hoàn tất nào khớp điều kiện tìm kiếm
+                      </td>
+                    </tr>
+                  ) : (
+                    completedList.map((item) => (
+                      <tr
+                        key={item.id}
+                        onClick={() => setSelectedDetailItem({ ...item, itemCategory: 'completed' })}
+                        className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 cursor-pointer"
+                      >
+                        <td className="py-2.5 px-3.5 align-middle">
+                          <span className="font-bold text-slate-900 text-[13px] block">
+                            {item.code}
+                          </span>
+                          {item.referenceDoc && item.referenceDoc !== item.code && (
+                            <span className="text-[11px] text-slate-400 block mt-0.5">
+                              TC: {item.referenceDoc}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3.5 align-middle">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded text-[11.5px] font-semibold border ${
+                              item.type === 'INBOUND'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-blue-50 text-blue-700 border-blue-200'
+                            }`}
+                          >
+                            {item.typeLabel}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3.5 align-middle text-xs font-medium text-slate-700">
+                          {item.warehouseName}
+                        </td>
+                        <td className="py-2.5 px-3.5 align-middle text-xs font-medium text-slate-800">
+                          {item.executor}
+                        </td>
+                        <td className="py-2.5 px-3.5 align-middle text-xs text-slate-500">
+                          {item.completedAt}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             )}
-          </div>
-        }
-        showMenu={false}
-        menuItems={[]}
-      />
+          </FullWidthTable>
 
-      {/* ── BẢNG FULLWIDTHTABLE CHO TỪNG BƯỚC ── */}
-      <FullWidthTable loading={loading}>
-        {/* ══════════════════════════════════════════════════════════════════
-            BƯỚC 1: DANH SÁCH CÔNG VIỆC KHO HÀNG
-            ══════════════════════════════════════════════════════════════════ */}
-        {currentStep === 1 && (
-          <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
-            <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
-              <tr className="text-slate-500 text-[11.5px] uppercase tracking-[0.06em] font-bold">
-                <th className="py-2.5 px-3.5 w-72">Mã lệnh</th>
-                <th className="py-2.5 px-3.5">Loại công việc</th>
-                <th className="py-2.5 px-3.5 w-48 text-center">Trạng thái</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {tasks.length === 0 ? (
-                <tr>
-                  <td colSpan={3} className="text-center py-10 px-4 text-slate-400">
-                    Không có công việc kho nào khớp với điều kiện tìm kiếm
-                  </td>
-                </tr>
-              ) : (
-                tasks.map((tsk) => (
-                  <tr
-                    key={tsk.id}
-                    onClick={() => setSelectedDetailItem({ ...tsk, itemCategory: 'task' })}
-                    className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 cursor-pointer"
-                  >
-                    <td className="py-2.5 px-3.5 align-middle">
-                      <span className="font-bold text-slate-900 text-[13px] block">
-                        {tsk.code}
-                      </span>
-                      {tsk.title && (
-                        <span className="text-[11.5px] text-slate-500 block mt-0.5 line-clamp-1">
-                          {tsk.title}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-3.5 align-middle">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11.5px] font-semibold bg-sky-50 text-sky-700 border border-sky-200">
-                        {tsk.typeLabel}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3.5 align-middle text-center">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap ${
-                          tsk.status === 'cho_xu_ly'
-                            ? 'bg-amber-50 text-amber-700 border border-amber-300'
-                            : 'bg-sky-50 text-sky-700 border border-sky-300'
-                        }`}
-                      >
-                        {tsk.statusLabel}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        )}
-
-        {/* ══════════════════════════════════════════════════════════════════
-            BƯỚC 2: DANH SÁCH HÀNG HOÁ TỒN KHO THỰC TẾ (989 MẶT HÀNG)
-            ══════════════════════════════════════════════════════════════════ */}
-        {currentStep === 2 && (
-          <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
-            <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
-              <tr className="text-slate-500 text-[11.5px] uppercase tracking-[0.06em] font-bold">
-                <th className="py-2.5 px-3.5 min-w-[320px]">Hàng hoá & Quy cách</th>
-                <th className="py-2.5 px-3.5 w-20 text-center">ĐVT</th>
-                <th className="py-2.5 px-3.5 w-32 text-right">Tồn hệ thống</th>
-                <th className="py-2.5 px-3.5 w-28 text-right">Đã giữ</th>
-                <th className="py-2.5 px-3.5 w-32 text-right">Tồn thực tế</th>
-                <th className="py-2.5 px-3.5 w-32 text-right">Giá niêm yết</th>
-                <th className="py-2.5 px-3.5 w-28 text-center">Trạng thái</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {inventory.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-10 px-4 text-slate-400">
-                    Không tìm thấy mặt hàng nào trong kho khớp điều kiện
-                  </td>
-                </tr>
-              ) : (
-                inventory.map((item) => (
-                  <tr
-                    key={item.id}
-                    onClick={() => setSelectedDetailItem({ ...item, itemCategory: 'inventory' })}
-                    className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 cursor-pointer"
-                  >
-                    <td className="py-2.5 px-3.5 align-top">
-                      <div className="flex items-start gap-3">
-                        {/* Ảnh sản phẩm */}
-                        {item.imageUrl ? (
-                          <img
-                            src={item.imageUrl}
-                            alt={item.tenHang}
-                            className="w-11 h-11 object-cover rounded-lg border border-slate-200 bg-white shrink-0 shadow-xs"
-                            onError={(e) => {
-                              (e.currentTarget as HTMLElement).style.display = 'none';
-                              if (e.currentTarget.nextElementSibling) {
-                                (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'flex';
-                              }
-                            }}
-                          />
-                        ) : null}
-                        <div
-                          className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 text-slate-400"
-                          style={{ display: item.imageUrl ? 'none' : 'flex' }}
-                        >
-                          <BoxSeam size={18} />
-                        </div>
-
-                        {/* Tên hàng hoá, mã SKU, mã phụ và model */}
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-slate-900 text-[13px] leading-snug line-clamp-2" title={item.tenHang}>
-                            {item.tenHang}
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
-                            {item.code && (
-                              <span className="font-bold text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded text-[11px] font-mono border border-sky-200 shrink-0">
-                                {item.code}
-                              </span>
-                            )}
-                            {item.maThayThe && (
-                              <span className="text-[11px] text-slate-500 font-mono bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200 shrink-0">
-                                Mã phụ: {item.maThayThe}
-                              </span>
-                            )}
-                            {(item.model || item.chatLieu) && (
-                              <span
-                                className="text-[11px] text-slate-400 max-w-[200px] sm:max-w-[300px] md:max-w-[400px] truncate"
-                                title={[item.model ? `Model: ${item.model}` : '', item.chatLieu ? `Chất liệu: ${item.chatLieu}` : ''].filter(Boolean).join(' • ')}
-                              >
-                                {item.model ? `Model: ${item.model}` : ''}
-                                {item.chatLieu ? (item.model ? ` • ${item.chatLieu}` : item.chatLieu) : ''}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-3.5 align-top text-center text-xs text-slate-600">
-                      {item.donVi || 'Bộ'}
-                    </td>
-                    <td className="py-2.5 px-3.5 align-top text-right font-medium text-slate-800 text-xs font-mono">
-                      {(item.soLuong || 0).toLocaleString('vi-VN')}
-                    </td>
-                    <td className="py-2.5 px-3.5 align-top text-right text-xs font-mono font-medium">
-                      {(item.soLuongGiu || 0) > 0 ? (
-                        <span className="text-amber-600 font-semibold">
-                          {(item.soLuongGiu || 0).toLocaleString('vi-VN')}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">0</span>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-3.5 align-top text-right">
-                      <div className="font-bold text-slate-900 text-[13.5px] font-mono">
-                        {(item.thucTon ?? item.soLuong ?? 0).toLocaleString('vi-VN')}
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-3.5 align-top text-right font-medium text-slate-400 text-xs font-mono">
-                      <span className="tracking-widest font-semibold text-slate-400 select-none">****** ₫</span>
-                    </td>
-                    <td className="py-2.5 px-3.5 align-top text-center">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap ${
-                          item.trangThai === 'con-hang'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
-                            : item.trangThai === 'sap-het'
-                            ? 'bg-amber-50 text-amber-700 border border-amber-300'
-                            : 'bg-rose-50 text-rose-700 border border-rose-300'
-                        }`}
-                      >
-                        {item.trangThai === 'con-hang'
-                          ? 'Còn hàng'
-                          : item.trangThai === 'sap-het'
-                          ? 'Sắp hết'
-                          : 'Hết hàng'}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        )}
-
-        {/* ══════════════════════════════════════════════════════════════════
-            BƯỚC 3: ĐÃ HOÀN THÀNH (CÔNG VIỆC XUẤT, NHẬP KHO ĐÃ HOÀN THÀNH)
-            ══════════════════════════════════════════════════════════════════ */}
-        {currentStep === 3 && (
-          <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
-            <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
-              <tr className="text-slate-500 text-[11.5px] uppercase tracking-[0.06em] font-bold">
-                <th className="py-2.5 px-3.5 w-60">Số chứng từ / Mã</th>
-                <th className="py-2.5 px-3.5 w-48">Nghiệp vụ kho</th>
-                <th className="py-2.5 px-3.5">Kho hàng</th>
-                <th className="py-2.5 px-3.5 w-48">Người thực hiện</th>
-                <th className="py-2.5 px-3.5 w-48">Thời gian hoàn thành</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {completedList.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="text-center py-10 px-4 text-slate-400">
-                    Không có phiếu xuất, nhập kho hoàn tất nào khớp điều kiện tìm kiếm
-                  </td>
-                </tr>
-              ) : (
-                completedList.map((item) => (
-                  <tr
-                    key={item.id}
-                    onClick={() => setSelectedDetailItem({ ...item, itemCategory: 'completed' })}
-                    className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 cursor-pointer"
-                  >
-                    <td className="py-2.5 px-3.5 align-middle">
-                      <span className="font-bold text-slate-900 text-[13px] block">
-                        {item.code}
-                      </span>
-                      {item.referenceDoc && item.referenceDoc !== item.code && (
-                        <span className="text-[11px] text-slate-400 block mt-0.5">
-                          TC: {item.referenceDoc}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-3.5 align-middle">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded text-[11.5px] font-semibold border ${
-                          item.type === 'INBOUND'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : 'bg-blue-50 text-blue-700 border-blue-200'
-                        }`}
-                      >
-                        {item.typeLabel}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3.5 align-middle text-xs font-medium text-slate-700">
-                      {item.warehouseName}
-                    </td>
-                    <td className="py-2.5 px-3.5 align-middle text-xs font-medium text-slate-800">
-                      {item.executor}
-                    </td>
-                    <td className="py-2.5 px-3.5 align-middle text-xs text-slate-500">
-                      {item.completedAt}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        )}
-      </FullWidthTable>
-
-      {/* ── PHÂN TRANG PAGINATION CHUẨN ENTERPRISE ── */}
-      <Pagination
-        currentPage={currentPage}
-        totalItems={
-          currentStep === 1
-            ? totalTasks
-            : currentStep === 2
-            ? totalInventory
-            : totalCompleted
-        }
-        pageSize={pageSize}
-        onPageChange={setCurrentPage}
-        onPageSizeChange={(newSize) => {
-          setPageSize(newSize);
-          setCurrentPage(1);
-        }}
-      />
+          {/* ── PHÂN TRANG PAGINATION CHUẨN ENTERPRISE (BƯỚC 1 & 3) ── */}
+          <Pagination
+            currentPage={currentPage}
+            totalItems={currentStep === 1 ? totalTasks : totalCompleted}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setCurrentPage(1);
+            }}
+          />
+        </>
+      )}
 
       {/* ── OFFCANVAS XEM CHI TIẾT HÀNG HOÁ KHO (STEP 2) ── */}
-      {selectedDetailItem && selectedDetailItem.itemCategory === 'inventory' && (
-        <Offcanvas
-          isOpen={true}
-          onClose={() => setSelectedDetailItem(null)}
-          title={
-            <div className="flex items-center gap-2">
-              <BoxSeam size={18} className="text-blue-600" />
-              <span className="font-bold text-slate-900 text-sm">Thông tin hàng hoá</span>
-            </div>
-          }
-          description={`Mã SKU: ${selectedDetailItem.code || 'Chưa cập nhật'}`}
-          width="400px"
-          position="right"
-          footer={
-            <div className="flex justify-between items-center w-full">
-              <div className="text-xs text-slate-400 font-mono">
-                {selectedDetailItem.brand || 'Seajong'} • Kho vận
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedDetailItem(null)}
-              >
-                Đóng
-              </Button>
-            </div>
-          }
-        >
-          <div className="space-y-4 text-xs sm:text-[13px] text-slate-700">
-            {/* Header sản phẩm: Tên + Mã hàng hoá, sau đó là VÙNG HIỂN THỊ ẢNH ở phía dưới */}
-            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-              <div>
-                <div className="font-bold text-slate-900 text-[14px] leading-snug">
-                  {selectedDetailItem.tenHang}
-                </div>
-
-                {/* Dòng mã hàng hoá */}
-                <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                  <span className="font-mono font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded text-xs border border-sky-200">
-                    {selectedDetailItem.code}
-                  </span>
-                  {selectedDetailItem.maThayThe && (
-                    <span className="font-mono text-slate-600 bg-white px-2 py-0.5 rounded text-xs border border-slate-200">
-                      Mã phụ: {selectedDetailItem.maThayThe}
-                    </span>
-                  )}
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                      selectedDetailItem.trangThai === 'con-hang'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
-                        : selectedDetailItem.trangThai === 'sap-het'
-                        ? 'bg-amber-50 text-amber-700 border border-amber-300'
-                        : 'bg-rose-50 text-rose-700 border border-rose-300'
-                    }`}
-                  >
-                    {selectedDetailItem.trangThai === 'con-hang'
-                      ? 'Còn hàng'
-                      : selectedDetailItem.trangThai === 'sap-het'
-                      ? 'Sắp hết'
-                      : 'Hết hàng'}
-                  </span>
-                </div>
-              </div>
-
-              {/* VÙNG HIỂN THỊ ẢNH (HỖ TRỢ SLIDE KHI CÓ NHIỀU HÌNH ẢNH) */}
-              {(() => {
-                const rawImages: string[] = Array.isArray(selectedDetailItem.images) && selectedDetailItem.images.length > 0
-                  ? selectedDetailItem.images
-                  : selectedDetailItem.imageUrl
-                  ? [selectedDetailItem.imageUrl]
-                  : [];
-                // Tự động loại bỏ các liên kết ảnh 404 hoặc bị hỏng
-                const images = rawImages.filter((u: string) => !failedImages.has(u));
-
-                if (images.length === 0) {
-                  return (
-                    <div className="w-full h-48 bg-white border border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-300 py-6 shadow-xs">
-                      <BoxSeam size={44} className="mb-1 text-slate-300 stroke-[1.2]" />
-                      <span className="text-[11px] text-slate-400 font-medium">Chưa có ảnh sản phẩm</span>
-                    </div>
-                  );
-                }
-
-                if (images.length === 1) {
-                  return (
-                    <div className="w-full h-52 bg-white border border-slate-200 rounded-lg flex items-center justify-center overflow-hidden p-2 relative shadow-xs">
-                      <img
-                        src={images[0]}
-                        alt={selectedDetailItem.tenHang}
-                        className="w-full h-full object-contain"
-                        onError={() => {
-                          setFailedImages((prev) => new Set(prev).add(images[0]));
-                        }}
-                      />
-                    </div>
-                  );
-                }
-
-                // Khi có nhiều hình ảnh hợp lệ => Hiển thị Slide hình ảnh tự động chạy
-                const safeIndex = Math.min(Math.max(0, activeImageIndex), images.length - 1);
-                return (
-                  <div
-                    className="space-y-2"
-                    onMouseEnter={() => setIsSlidePaused(true)}
-                    onMouseLeave={() => setIsSlidePaused(false)}
-                  >
-                    <div className="w-full h-52 bg-white border border-slate-200 rounded-lg flex items-center justify-center overflow-hidden p-2 relative shadow-xs group">
-                      <img
-                        src={images[safeIndex]}
-                        alt={`${selectedDetailItem.tenHang} - ảnh ${safeIndex + 1}`}
-                        className="w-full h-full object-contain transition-all duration-300"
-                        onError={() => {
-                          setFailedImages((prev) => new Set(prev).add(images[safeIndex]));
-                        }}
-                      />
-
-                      {/* Nút lùi về ảnh trước */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
-                        }}
-                        className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/95 hover:bg-white shadow-md border border-slate-200 flex items-center justify-center text-slate-700 transition-all hover:scale-105 active:scale-95 cursor-pointer z-10"
-                        title="Ảnh trước"
-                      >
-                        <ChevronLeft size={14} />
-                      </button>
-
-                      {/* Nút sang ảnh tiếp theo */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
-                        }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/95 hover:bg-white shadow-md border border-slate-200 flex items-center justify-center text-slate-700 transition-all hover:scale-105 active:scale-95 cursor-pointer z-10"
-                        title="Ảnh tiếp theo"
-                      >
-                        <ChevronRight size={14} />
-                      </button>
-
-                      {/* Chỉ số ảnh (1 / n) */}
-                      <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-slate-900/70 text-white text-[10.5px] font-mono font-medium backdrop-blur-xs select-none">
-                        {safeIndex + 1} / {images.length}
-                      </div>
-                    </div>
-
-                    {/* Dải ảnh thu nhỏ (Thumbnails) bấm để chọn trực tiếp */}
-                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 px-0.5">
-                      {images.map((imgUrl: string, idx: number) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => setActiveImageIndex(idx)}
-                          className={`w-11 h-11 rounded-lg border-2 overflow-hidden shrink-0 transition-all p-0.5 bg-white cursor-pointer ${
-                            safeIndex === idx
-                              ? 'border-blue-600 ring-2 ring-blue-100 shadow-xs'
-                              : 'border-slate-200 opacity-60 hover:opacity-100'
-                          }`}
-                          title={`Xem ảnh ${idx + 1}`}
-                        >
-                          <img
-                            src={imgUrl}
-                            alt=""
-                            className="w-full h-full object-contain"
-                            onError={() => {
-                              setFailedImages((prev) => new Set(prev).add(imgUrl));
-                            }}
-                          />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Chỉ số Tồn kho thực tế (3 thẻ số) */}
-            <div>
-              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
-                Hiện trạng tồn kho
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                  <div className="text-[11px] text-slate-500 font-medium">Tồn hệ thống</div>
-                  <div className="text-base font-bold text-slate-900 font-mono mt-1">
-                    {(selectedDetailItem.soLuong || 0).toLocaleString('vi-VN')}
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">{selectedDetailItem.donVi || 'đơn vị'}</div>
-                </div>
-
-                <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl">
-                  <div className="text-[11px] text-amber-700 font-medium">Đang giữ chỗ</div>
-                  <div className="text-base font-bold text-amber-700 font-mono mt-1">
-                    {(selectedDetailItem.soLuongGiu || 0).toLocaleString('vi-VN')}
-                  </div>
-                  <div className="text-[10px] text-amber-600 mt-0.5">cam kết đơn</div>
-                </div>
-
-                <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl">
-                  <div className="text-[11px] text-emerald-700 font-medium">Khả dụng (Thực tế)</div>
-                  <div className="text-base font-bold text-emerald-700 font-mono mt-1">
-                    {(selectedDetailItem.thucTon ?? selectedDetailItem.soLuong ?? 0).toLocaleString('vi-VN')}
-                  </div>
-                  <div className="text-[10px] text-emerald-600 mt-0.5">sẵn sàng xuất</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Thông tin quy cách & Phân loại */}
-            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                Quy cách & Phân loại
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <span className="text-slate-400 text-[11px] block">Danh mục hàng:</span>
-                  <span className="font-semibold text-slate-800">
-                    {selectedDetailItem.categoryName || 'Thiết bị vệ sinh'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 text-[11px] block">Thương hiệu:</span>
-                  <span className="font-semibold text-slate-800">
-                    {selectedDetailItem.brand || 'Seajong'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 text-[11px] block">Đơn vị tính (ĐVT):</span>
-                  <span className="font-semibold text-slate-800">
-                    {selectedDetailItem.donVi || 'Bộ / Cái'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 text-[11px] block">Định mức an toàn min:</span>
-                  <span className="font-mono font-semibold text-slate-800">
-                    {selectedDetailItem.soLuongMin || 0} {selectedDetailItem.donVi || ''}
-                  </span>
-                </div>
-              </div>
-
-              {(selectedDetailItem.model || selectedDetailItem.chatLieu) && (
-                <div className="pt-2 border-t border-slate-200 text-xs">
-                  {selectedDetailItem.model && (
-                    <div className="mb-1">
-                      <span className="text-slate-400 text-[11px]">Model: </span>
-                      <span className="font-medium text-slate-800">{selectedDetailItem.model}</span>
-                    </div>
-                  )}
-                  {selectedDetailItem.chatLieu && (
-                    <div>
-                      <span className="text-slate-400 text-[11px]">Chất liệu: </span>
-                      <span className="font-medium text-slate-800">{selectedDetailItem.chatLieu}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Chi tiết vị trí kho lưu trữ */}
-            {selectedDetailItem.stocks && selectedDetailItem.stocks.length > 0 && (
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                  Vị trí kệ & Kho lưu trữ
-                </div>
-                {selectedDetailItem.stocks.map((stk: any) => (
-                  <div key={stk.id} className="p-2.5 bg-white rounded-lg border border-slate-200 flex justify-between items-center text-xs">
-                    <div>
-                      <div className="font-semibold text-slate-800">
-                        {stk.warehouse?.name || 'Kho Seajong'}
-                      </div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">
-                        Dãy/Hàng: <span className="font-mono text-slate-600">{stk.viTriHang || 'Chờ sắp xếp'}</span>
-                        {stk.viTriCot && ` • Cột: ${stk.viTriCot}`}
-                        {stk.viTriTang && ` • Tầng: ${stk.viTriTang}`}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-bold text-slate-900 font-mono">
-                        {stk.soLuong} {selectedDetailItem.donVi || 'cái'}
-                      </div>
-                      <div className="text-[10px] text-slate-400">
-                        Mã kho: {stk.warehouse?.code || 'KHO'}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Ghi chú lưu kho */}
-            {selectedDetailItem.ghiChu && (
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
-                <span className="text-slate-400 text-[11px] block font-semibold mb-0.5">Ghi chú lưu kho:</span>
-                <p className="text-slate-700 whitespace-pre-wrap">{selectedDetailItem.ghiChu}</p>
-              </div>
-            )}
-          </div>
-        </Offcanvas>
-      )}
+      <InventoryDetailOffcanvas
+        item={selectedDetailItem?.itemCategory === 'inventory' ? selectedDetailItem : null}
+        onClose={() => setSelectedDetailItem(null)}
+      />
 
       {/* ── MODAL XEM CHI TIẾT CÔNG VIỆC (STEP 1 & 3) ── */}
       {/* ── OFFCANVAS HIỂN THỊ DANH SÁCH HÀNG HOÁ ĐÃ XỬ LÝ (STEP 3) ── */}

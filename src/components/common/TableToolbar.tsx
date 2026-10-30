@@ -146,6 +146,7 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
       className="table-toolbar"
       style={{
         display: 'flex',
+        width: '100%',
         gap: '8px',
         padding: '8px',
         marginBottom: '8px',

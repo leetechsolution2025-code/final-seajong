@@ -838,6 +838,11 @@ input[type="number"] {
   padding-left: 32px !important;
 }
 
+.table-toolbar .form-input.form-control,
+.table-toolbar-compact .form-input.form-control {
+  padding-right: 42px !important;
+}
+
 .table-toolbar .input-icon-prefix,
 .table-toolbar-compact .input-icon-prefix {
   left: 10px !important;
@@ -2976,4 +2981,71 @@ input[type="checkbox"]:focus,
 .form-check-input:focus {
   outline: none;
   box-shadow: 0 0 0 1.5px rgba(0, 48, 135, 0.25) !important;
+}
+
+/* ==========================================================================
+   TIMEKEEPING COMPONENT RESPONSIVE UTILITIES
+   ========================================================================== */
+.timekeeping-lock-text {
+  display: inline;
+}
+
+.meal-register-full-text {
+  display: inline;
+}
+
+.meal-register-short-text {
+  display: none;
+}
+
+.timekeeping-date-full {
+  display: inline;
+}
+
+.timekeeping-date-short {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .timekeeping-lock-text {
+    display: none !important;
+  }
+
+  .meal-register-full-text {
+    display: none !important;
+  }
+
+  .meal-register-short-text {
+    display: inline !important;
+  }
+
+  .timekeeping-date-full {
+    display: none !important;
+  }
+
+  .timekeeping-date-short {
+    display: inline !important;
+  }
+}
+
+@keyframes rotateSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.rotate-spin {
+  animation: rotateSpin 1s linear infinite;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }

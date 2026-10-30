@@ -57,7 +57,7 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
         };
       case 'my_attendance':
         return {
-          title: 'Chấm công & Điểm danh',
+          title: 'Chấm công và điểm danh',
           groupName: 'CÔNG VIỆC CÁ NHÂN',
           icon: 'bi-clock-history',
           color: 'blue',

@@ -33,6 +33,9 @@ import { FinanceOverviewPage } from './finance/FinanceOverviewPage';
 import { FinanceDebtsPage } from './finance/FinanceDebtsPage';
 import { FinanceAssetsPage } from './finance/FinanceAssetsPage';
 import { LogisticsOverviewPage } from './logistics/LogisticsOverviewPage';
+import { ProductionOverviewPage } from './production/ProductionOverviewPage';
+import { QaOverviewPage } from './qa/QaOverviewPage';
+import { PurchaseOverviewPage } from './purchase/PurchaseOverviewPage';
 
 interface CustomerLead {
   id: string;
@@ -132,6 +135,21 @@ export const DepartmentPage: React.FC<{ deptCode?: string }> = ({ deptCode }) =>
   // ── BỘ PHẬN KHO HÀNG (LOGISTICS / KHO VẬN) ──
   if (currentDept === 'logistics' || currentDept === 'kho' || currentDept === 'kho-hang' || currentDept === 'warehouse') {
     return <LogisticsOverviewPage />;
+  }
+
+  // ── BỘ PHẬN SẢN XUẤT (PRODUCTION) ──
+  if (currentDept === 'production' || currentDept === 'san-xuat' || currentDept === 'sx') {
+    return <ProductionOverviewPage />;
+  }
+
+  // ── BỘ PHẬN QUẢN LÝ CHẤT LƯỢNG (QA / QC) ──
+  if (currentDept === 'qa' || currentDept === 'qc' || currentDept === 'quality' || currentDept === 'quan-ly-chat-luong') {
+    return <QaOverviewPage />;
+  }
+
+  // ── BỘ PHẬN MUA HÀNG (PURCHASE / PROCUREMENT) ──
+  if (currentDept === 'purchase' || currentDept === 'procurement' || currentDept === 'mua-hang' || currentDept === 'purchasing') {
+    return <PurchaseOverviewPage />;
   }
 
   // === WORKFLOW STEP STATE ===

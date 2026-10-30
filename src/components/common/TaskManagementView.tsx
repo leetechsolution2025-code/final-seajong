@@ -11,6 +11,7 @@ import {
 } from 'react-bootstrap-icons';
 import { Pagination } from './Pagination';
 import { Offcanvas } from './Offcanvas';
+import { Select } from './Select';
 
 export interface TaskManagementViewProps {
   title?: string;
@@ -64,6 +65,7 @@ export interface UserTaskItem {
   customerName?: string;
   customerAddress?: string;
   description?: string;
+  isContractOnly?: boolean;
 }
 
 export interface ContractGroupItem {
@@ -559,13 +561,19 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
   // Bộ lọc dữ liệu tìm kiếm và phân loại
   const filteredTasks = useMemo(() => {
     return myTasksBase.filter((t) => {
-      // 1. Lọc theo Phân loại công tác
-      if (selectedCategory !== 'all') {
-        const cat = t.category || 'production';
-        if (cat !== selectedCategory) return false;
+      if (t.isContractOnly) {
+        if (statusFilter !== 'all' || executionStatusFilter !== 'all') return false;
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase().trim();
+          const matchContract = t.contractCode?.toLowerCase().includes(q);
+          const matchCustomer = t.customerName?.toLowerCase().includes(q);
+          const matchProject = t.project?.toLowerCase().includes(q);
+          if (!matchContract && !matchCustomer && !matchProject) return false;
+        }
+        return true;
       }
 
-      // 2. Lọc theo Tình trạng tiến độ: all | overdue | delayed | on_track
+      // 1. Lọc theo Tình trạng tiến độ: all | overdue | delayed | on_track
       if (statusFilter !== 'all') {
         const scheduleStatus = getTaskScheduleStatus(t);
         if (scheduleStatus !== statusFilter) {
@@ -573,7 +581,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
         }
       }
 
-      // 3. Lọc theo Người thực hiện (chỉ áp dụng khi không ở chế độ "Công việc của tôi")
+      // 2. Lọc theo Người thực hiện (chỉ áp dụng khi không ở chế độ "Công việc của tôi")
       if (!isOnlyMyTasks && assigneeSearch.trim()) {
         const q = assigneeSearch.toLowerCase().trim();
         const rawAssignee = (t.assignee || '').toLowerCase();
@@ -583,7 +591,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
         }
       }
 
-      // 4. Lọc theo Nhãn trạng thái thực hiện (Chưa thực hiện, Đang thực hiện, Đã hoàn thành, Tạm dừng, Huỷ bỏ)
+      // 3. Lọc theo Nhãn trạng thái thực hiện (Chưa thực hiện, Đang thực hiện, Đã hoàn thành, Tạm dừng, Huỷ bỏ)
       if (executionStatusFilter !== 'all') {
         const st = getStatusDisplay(t).label;
         if (executionStatusFilter === 'not_started' && st !== 'CHƯA THỰC HIỆN') return false;
@@ -593,20 +601,22 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
         if (executionStatusFilter === 'cancelled' && st !== 'HUỶ BỎ') return false;
       }
 
-      // 5. Lọc theo Từ khóa tìm kiếm
+      // 4. Lọc theo Từ khóa tìm kiếm
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const matchCode = t.code.toLowerCase().includes(q);
-        const matchTitle = t.title.toLowerCase().includes(q);
-        const matchProject = t.project.toLowerCase().includes(q);
+        const matchCode = (t.code || '').toLowerCase().includes(q);
+        const matchTitle = (t.title || '').toLowerCase().includes(q);
+        const matchProject = (t.project || '').toLowerCase().includes(q);
         const matchAssignee = t.assignee?.toLowerCase().includes(q);
-        if (!matchCode && !matchTitle && !matchProject && !matchAssignee) {
+        const matchContract = t.contractCode?.toLowerCase().includes(q);
+        const matchCustomer = t.customerName?.toLowerCase().includes(q);
+        if (!matchCode && !matchTitle && !matchProject && !matchAssignee && !matchContract && !matchCustomer) {
           return false;
         }
       }
       return true;
     });
-  }, [myTasksBase, selectedCategory, statusFilter, isOnlyMyTasks, assigneeSearch, executionStatusFilter, searchQuery]);
+  }, [myTasksBase, statusFilter, isOnlyMyTasks, assigneeSearch, executionStatusFilter, searchQuery]);
 
 
   // Trạng thái thu gọn/mở rộng từng hợp đồng
@@ -640,40 +650,42 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
           customerName: cCust,
           customerAddress: cAddr,
           tasks: [],
-          earliestStart: task.startDate || '2026-10-01',
-          latestEnd: task.endDate || '2026-10-31',
+          earliestStart: task.isContractOnly ? '' : (task.startDate || '2026-10-01'),
+          latestEnd: task.isContractOnly ? '' : (task.endDate || '2026-10-31'),
         });
       }
 
-      const grp = map.get(cCode)!;
-      grp.tasks.push(task);
-      if (task.startDate && task.startDate < grp.earliestStart) grp.earliestStart = task.startDate;
-      if (task.endDate && task.endDate > grp.latestEnd) grp.latestEnd = task.endDate;
+      if (!task.isContractOnly) {
+        const grp = map.get(cCode)!;
+        grp.tasks.push(task);
+        if (!grp.earliestStart || (task.startDate && task.startDate < grp.earliestStart)) {
+          grp.earliestStart = task.startDate;
+        }
+        if (!grp.latestEnd || (task.endDate && task.endDate > grp.latestEnd)) {
+          grp.latestEnd = task.endDate;
+        }
+      }
     });
 
     return Array.from(map.values()).map((grp) => {
       const totalProg = grp.tasks.reduce((sum, t) => sum + (t.progress || 0), 0);
-      const avgProgress = Math.round(totalProg / (grp.tasks.length || 1));
-      const isBiddingGroup = grp.tasks.some((t) => t.category === 'bidding') || selectedCategory === 'bidding';
-      const isOtherGroup = !isBiddingGroup && (grp.tasks.some((t) => t.category === 'other') || selectedCategory === 'other');
-      const isProductionGroup = !isBiddingGroup && !isOtherGroup && grp.tasks.some((t) => t.category === 'production');
-      const isOrderGroup = !isBiddingGroup && !isOtherGroup && !isProductionGroup && (grp.contractCode.startsWith('ĐH-') || grp.contractCode.startsWith('DH-') || grp.tasks.some((t) => t.category === 'order'));
-      const groupPrefix = isBiddingGroup ? 'GÓI THẦU' : isProductionGroup ? 'KẾ HOẠCH SX' : isOrderGroup ? 'ĐƠN HÀNG' : isOtherGroup ? 'CÔNG VIỆC KHÁC' : 'HỢP ĐỒNG';
-      const displayCode = isBiddingGroup
-        ? grp.contractCode.replace(/^HĐ-/i, 'GT-').replace(/^HD-/i, 'GT-')
-        : isOtherGroup
-        ? grp.contractCode.replace(/^HĐ-/i, 'KH-').replace(/^HD-/i, 'KH-')
-        : grp.contractCode;
+      const avgProgress = grp.tasks.length > 0 ? Math.round(totalProg / grp.tasks.length) : 0;
+      const isOrderGroup =
+        grp.contractCode.startsWith('ĐH-') ||
+        grp.contractCode.startsWith('DH-') ||
+        grp.tasks.some((t) => t.category === 'order');
+      const groupPrefix = isOrderGroup ? 'ĐƠN HÀNG' : 'HỢP ĐỒNG';
+      const displayCode = grp.contractCode;
 
       return {
         ...grp,
         avgProgress,
-        isBidding: isBiddingGroup,
+        isBidding: false,
         groupPrefix,
         displayCode,
       };
     });
-  }, [filteredTasks, selectedCategory]);
+  }, [filteredTasks]);
 
   // Phân trang cho danh mục hợp đồng dạng bảng
   const paginatedContractGroups = useMemo(() => {
@@ -785,18 +797,21 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
     const dueMonth = end.month;
     const dueLabel = `${dueDay}/${dueMonth}`;
 
+    const dueDateMs = new Date(end.year, end.month - 1, end.day).setHours(0, 0, 0, 0);
+    const todayDateMs = new Date(realCurrentYear, realCurrentMonth - 1, todayDay).setHours(0, 0, 0, 0);
+    const diffDays = Math.round((todayDateMs - dueDateMs) / (1000 * 60 * 60 * 24));
+
     let subText = '';
     let color = '#64748b';
 
     if (task.status === 'completed') {
       color = '#10b981';
-      const diff = todayDay - dueDay;
-      if (diff > 0) {
-        subText = `trễ ${diff}`;
-      } else if (diff === 0) {
+      if (diffDays > 0) {
+        subText = `trễ ${diffDays}`;
+      } else if (diffDays === 0) {
         subText = 'hôm nay';
       } else {
-        subText = `còn ${Math.abs(diff)} ngày`;
+        subText = `còn ${Math.abs(diffDays)} ngày`;
       }
     } else if (task.status === 'cancelled') {
       color = '#ef4444';
@@ -804,17 +819,15 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
     } else if (task.status === 'paused') {
       color = '#f59e0b';
       subText = 'tạm dừng';
-    } else if (dueDay < todayDay) {
+    } else if (diffDays > 0) {
       color = '#ef4444';
-      const diff = todayDay - dueDay;
-      subText = `trễ ${diff > 0 ? diff : 1}`;
-    } else if (dueDay === todayDay) {
+      subText = `trễ ${diffDays}`;
+    } else if (diffDays === 0) {
       color = '#f97316';
       subText = 'hôm nay';
     } else {
       color = task.progress > 0 ? '#10b981' : '#f97316';
-      const remaining = dueDay - todayDay;
-      subText = `còn ${remaining} ngày`;
+      subText = `còn ${Math.abs(diffDays)} ngày`;
     }
 
     return { dueLabel, subText, color };
@@ -1751,33 +1764,30 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
             </div>
           )}
 
-          {/* Dropdown Bộ lọc tiến độ: Quá hạn, Chậm tiến độ, Đúng tiến độ */}
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            style={{
-              padding: '0 10px',
-              backgroundColor: '#ffffff',
-              border: '1px solid #cbd5e1',
-              borderRadius: '7px',
-              fontSize: '0.78rem',
-              fontWeight: 600,
-              fontFamily: "'Roboto Condensed', sans-serif",
-              color: '#334155',
-              cursor: 'pointer',
-              outline: 'none',
-              height: '32px',
-              boxSizing: 'border-box',
-            }}
-          >
-            <option value="all">Tất cả</option>
-            <option value="overdue">Quá hạn</option>
-            <option value="delayed">Chậm tiến độ</option>
-            <option value="on_track">Đúng tiến độ</option>
-          </select>
+          {/* Dropdown Bộ lọc tiến độ chuẩn component Select: Tất cả, Quá hạn, Chậm tiến độ, Đúng tiến độ */}
+          <div style={{ width: '145px', flexShrink: 0 }}>
+            <Select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              style={{
+                height: '32px',
+                minHeight: '32px',
+                padding: '0 28px 0 10px',
+                borderRadius: '7px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+              }}
+              options={[
+                { value: 'all', label: 'Tất cả' },
+                { value: 'overdue', label: 'Quá hạn' },
+                { value: 'delayed', label: 'Chậm tiến độ' },
+                { value: 'on_track', label: 'Đúng tiến độ' },
+              ]}
+            />
+          </div>
 
           {extraActions}
         </div>
@@ -1785,231 +1795,9 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
       )}
 
       {/* ========================================================
-          1.5. THANH PHÂN LOẠI CÔNG TÁC: TẤT CẢ | ĐẤU THẦU | SẢN XUẤT
+          2. THANH CHÚ THÍCH TRẠNG THÁI THỰC HIỆN
           ======================================================== */}
-      {showCategoryTabs && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '8px 16px',
-            backgroundColor: '#ffffff',
-            borderBottom: '1px solid #e2e8f0',
-            flexShrink: 0,
-            gap: '12px',
-            flexWrap: 'wrap',
-          }}
-        >
-          {/* Tabs chuyển đổi phân loại nghiệp vụ: Tất cả, Đấu thầu, Sản xuất, Khác */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            {/* 1. Tất cả */}
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedCategory('all');
-                setCurrentPage(1);
-              }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '5px 14px',
-                borderRadius: '20px',
-                border: selectedCategory === 'all' ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
-                backgroundColor: selectedCategory === 'all' ? '#eff6ff' : '#ffffff',
-                color: selectedCategory === 'all' ? '#1d4ed8' : '#475569',
-                fontWeight: selectedCategory === 'all' ? 700 : 500,
-                fontSize: '0.78rem',
-                cursor: 'pointer',
-                boxShadow: selectedCategory === 'all' ? '0 1px 2px rgba(37,99,235,0.1)' : 'none',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <span>Tất cả</span>
-              <span
-                style={{
-                  padding: '1px 6px',
-                  borderRadius: '10px',
-                  backgroundColor: selectedCategory === 'all' ? '#2563eb' : '#e2e8f0',
-                  color: selectedCategory === 'all' ? '#ffffff' : '#475569',
-                  fontSize: '0.68rem',
-                  fontWeight: 700,
-                }}
-              >
-                {categoryCounts.all}
-              </span>
-            </button>
-
-            {/* 2. Đấu thầu */}
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedCategory('bidding');
-                setCurrentPage(1);
-              }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '5px 14px',
-                borderRadius: '20px',
-                border: selectedCategory === 'bidding' ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
-                backgroundColor: selectedCategory === 'bidding' ? '#dbeafe' : '#ffffff',
-                color: selectedCategory === 'bidding' ? '#1e40af' : '#475569',
-                fontWeight: selectedCategory === 'bidding' ? 700 : 500,
-                fontSize: '0.78rem',
-                cursor: 'pointer',
-                boxShadow: selectedCategory === 'bidding' ? '0 1px 2px rgba(37,99,235,0.15)' : 'none',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <span>Đấu thầu</span>
-              <span
-                style={{
-                  padding: '1px 6px',
-                  borderRadius: '10px',
-                  backgroundColor: selectedCategory === 'bidding' ? '#1d4ed8' : '#e2e8f0',
-                  color: selectedCategory === 'bidding' ? '#ffffff' : '#475569',
-                  fontSize: '0.68rem',
-                  fontWeight: 700,
-                }}
-              >
-                {categoryCounts.bidding}
-              </span>
-            </button>
-
-            {/* 3. Sản xuất */}
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedCategory('production');
-                setCurrentPage(1);
-              }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '5px 14px',
-                borderRadius: '20px',
-                border: selectedCategory === 'production' ? '1.5px solid #d97706' : '1px solid #cbd5e1',
-                backgroundColor: selectedCategory === 'production' ? '#fef3c7' : '#ffffff',
-                color: selectedCategory === 'production' ? '#92400e' : '#475569',
-                fontWeight: selectedCategory === 'production' ? 700 : 500,
-                fontSize: '0.78rem',
-                cursor: 'pointer',
-                boxShadow: selectedCategory === 'production' ? '0 1px 2px rgba(217,119,6,0.15)' : 'none',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <span>Sản xuất</span>
-              <span
-                style={{
-                  padding: '1px 6px',
-                  borderRadius: '10px',
-                  backgroundColor: selectedCategory === 'production' ? '#d97706' : '#e2e8f0',
-                  color: selectedCategory === 'production' ? '#ffffff' : '#475569',
-                  fontSize: '0.68rem',
-                  fontWeight: 700,
-                }}
-              >
-                {categoryCounts.production}
-              </span>
-            </button>
-
-            {/* 4. Khác */}
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedCategory('other');
-                setCurrentPage(1);
-              }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '5px 14px',
-                borderRadius: '20px',
-                border: selectedCategory === 'other' ? '1.5px solid #7c3aed' : '1px solid #cbd5e1',
-                backgroundColor: selectedCategory === 'other' ? '#ede9fe' : '#ffffff',
-                color: selectedCategory === 'other' ? '#6d28d9' : '#475569',
-                fontWeight: selectedCategory === 'other' ? 700 : 500,
-                fontSize: '0.78rem',
-                cursor: 'pointer',
-                boxShadow: selectedCategory === 'other' ? '0 1px 2px rgba(124,58,237,0.15)' : 'none',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <span>Khác</span>
-              <span
-                style={{
-                  padding: '1px 6px',
-                  borderRadius: '10px',
-                  backgroundColor: selectedCategory === 'other' ? '#7c3aed' : '#e2e8f0',
-                  color: selectedCategory === 'other' ? '#ffffff' : '#475569',
-                  fontSize: '0.68rem',
-                  fontWeight: 700,
-                }}
-              >
-                {categoryCounts.other}
-              </span>
-            </button>
-          </div>
-
-          {/* Chú thích trạng thái màu sắc nằm cùng hàng với Tất cả - Nhấn để lọc dữ liệu */}
-          {!hideStatusLegend && !isScheduleStatusMode && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', fontSize: '0.72rem', fontWeight: 600, color: '#334155' }}>
-            {executionStatusItems.map((item) => {
-              const isSelected = executionStatusFilter === item.key;
-              return (
-                <div
-                  key={item.key}
-                  onClick={() => {
-                    setExecutionStatusFilter((prev) => (prev === item.key ? 'all' : item.key));
-                    setCurrentPage(1);
-                  }}
-                  title={isSelected ? `Đang lọc: ${item.label} (nhấn để bỏ lọc)` : `Nhấn để lọc theo: ${item.label}`}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    padding: '3px 8px',
-                    borderRadius: '6px',
-                    backgroundColor: isSelected ? 'rgba(0, 0, 0, 0.08)' : 'transparent',
-                    border: isSelected ? `1px solid ${item.color}` : '1px solid transparent',
-                    opacity: executionStatusFilter === 'all' || isSelected ? 1 : 0.45,
-                    transition: 'all 0.15s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isSelected) e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
-                  }}
-                >
-                  <span style={{ width: '14px', height: '3.5px', borderRadius: '2px', backgroundColor: item.color, flexShrink: 0 }} />
-                  <span style={{ fontWeight: isSelected ? 700 : 600, color: isSelected ? '#0f172a' : '#334155' }}>
-                    {item.label}
-                  </span>
-                  {isSelected && (
-                    <span style={{ fontSize: '0.65rem', color: '#64748b', marginLeft: '2px', fontWeight: 700 }}>
-                      ✕
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ========================================================
-          2. THANH CHÚ THÍCH TRẠNG THÁI (KHI KHÔNG HIỆN THANH PHÂN LOẠI)
-          ======================================================== */}
-      {!showCategoryTabs && !hideStatusLegend && !isScheduleStatusMode && (
+      {!hideStatusLegend && !isScheduleStatusMode && (
         <div
           style={{
             display: 'flex',
@@ -2022,8 +1810,19 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
             fontWeight: 600,
             color: '#334155',
             flexShrink: 0,
+            gap: '12px',
+            flexWrap: 'wrap',
           }}
         >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: '#475569' }}>
+            <span style={{ fontWeight: 700, color: '#0f172a' }}>
+              Tổng hợp đồng triển khai: <span style={{ color: '#2563eb' }}>{contractGroups.length}</span> hợp đồng
+            </span>
+            <span style={{ color: '#cbd5e1' }}>•</span>
+            <span>
+              Tổng đầu việc: <strong style={{ color: '#0f172a' }}>{contractGroups.reduce((sum, g) => sum + g.tasks.length, 0)}</strong> hạng mục
+            </span>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
             {executionStatusItems.map((item) => {
               const isSelected = executionStatusFilter === item.key;
@@ -2366,8 +2165,11 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
               ) : (
                 contractGroups.map((group) => {
                   const isCollapsed = !!collapsedContracts[group.contractCode];
-                  const endParts = group.latestEnd.split('-');
-                  const dueLabel = `${parseInt(endParts[2], 10) || 1}/${parseInt(endParts[1], 10) || 10}`;
+                  const endParts = group.latestEnd ? group.latestEnd.split('-') : [];
+                  const dueLabel =
+                    group.tasks.length > 0 && endParts.length === 3
+                      ? `${parseInt(endParts[2], 10) || 1}/${parseInt(endParts[1], 10) || 10}`
+                      : '—';
                   const groupPrefix = group.groupPrefix;
                   const displayCode = group.displayCode;
 
@@ -2661,23 +2463,6 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                                     overflow: 'hidden',
                                   }}
                                 >
-                                  {!hideCategoryBadge && (
-                                    <span
-                                      style={{
-                                        fontSize: '0.62rem',
-                                        fontWeight: 700,
-                                        padding: '1px 5px',
-                                        borderRadius: '3px',
-                                        backgroundColor: (task.category || 'production') === 'bidding' ? '#eff6ff' : '#fef3c7',
-                                        color: (task.category || 'production') === 'bidding' ? '#1d4ed8' : '#92400e',
-                                        border: `1px solid ${(task.category || 'production') === 'bidding' ? '#bfdbfe' : '#fde68a'}`,
-                                        flexShrink: 0,
-                                        lineHeight: 1.2,
-                                      }}
-                                    >
-                                      {(task.category || 'production') === 'bidding' ? 'Đấu thầu' : 'Sản xuất'}
-                                    </span>
-                                  )}
                                   <div
                                     style={{
                                       display: 'flex',
@@ -2999,9 +2784,6 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                 >
                   <th style={{ padding: '8px 10px', width: '45px', textAlign: 'center' }}>STT</th>
                   <th style={{ padding: '8px 10px', width: '120px', whiteSpace: 'nowrap' }}>MÃ VIỆC</th>
-                  {!hideCategoryBadge && (
-                    <th style={{ padding: '8px 10px', width: '100px' }}>PHÂN LOẠI</th>
-                  )}
                   <th style={{ padding: '8px 10px' }}>CÔNG VIỆC VÀ DỰ ÁN</th>
                   <th style={{ padding: '8px 10px', width: '170px' }}>
                     {isScheduleStatusMode ? 'TÌNH TRẠNG TIẾN ĐỘ' : 'ĐƠN VỊ PHỤ TRÁCH'}
@@ -3168,27 +2950,6 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                                     </div>
                                   )}
                                 </td>
-
-                                {/* Cột 3: PHÂN LOẠI */}
-                                {!hideCategoryBadge && (
-                                  <td style={{ padding: '8px 10px' }}>
-                                    <span
-                                      style={{
-                                        fontSize: '0.68rem',
-                                        fontWeight: 700,
-                                        padding: '2px 8px',
-                                        borderRadius: '4px',
-                                        backgroundColor: (task.category || 'production') === 'bidding' ? '#eff6ff' : '#fef3c7',
-                                        color: (task.category || 'production') === 'bidding' ? '#1d4ed8' : '#92400e',
-                                        border: `1px solid ${(task.category || 'production') === 'bidding' ? '#bfdbfe' : '#fde68a'}`,
-                                        display: 'inline-block',
-                                        whiteSpace: 'nowrap',
-                                      }}
-                                    >
-                                      {(task.category || 'production') === 'bidding' ? 'Đấu thầu' : 'Sản xuất'}
-                                    </span>
-                                  </td>
-                                )}
 
                                 {/* Cột 4: CÔNG VIỆC VÀ DỰ ÁN */}
                                 <td style={{ padding: '8px 10px', maxWidth: '320px' }}>
@@ -3564,29 +3325,18 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                     • {getStatusDisplay(selectedTask).label}
                   </span>
                 </div>
-                <select
+                <Select
                   disabled={readOnly}
                   value={selectedTask.status}
                   onChange={(e) => handleUpdateStatus(selectedTask, e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '6px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
-                    backgroundColor: '#ffffff',
-                    color: '#0f172a',
-                    fontSize: '0.78rem',
-                    fontWeight: 600,
-                    cursor: readOnly ? 'default' : 'pointer',
-                    fontFamily: "'Roboto Condensed', sans-serif",
-                  }}
-                >
-                  <option value="not_started">Chưa thực hiện</option>
-                  <option value="in_progress">Đang thực hiện</option>
-                  <option value="completed">Đã hoàn thành</option>
-                  <option value="paused">Tạm dừng</option>
-                  <option value="cancelled">Huỷ bỏ</option>
-                </select>
+                  options={[
+                    { value: 'not_started', label: 'Chưa thực hiện' },
+                    { value: 'in_progress', label: 'Đang thực hiện' },
+                    { value: 'completed', label: 'Đã hoàn thành' },
+                    { value: 'paused', label: 'Tạm dừng' },
+                    { value: 'cancelled', label: 'Huỷ bỏ' },
+                  ]}
+                />
               </div>
 
               <div
@@ -3671,27 +3421,6 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                 border: '1px solid #e2e8f0',
               }}
             >
-              <div style={{ gridColumn: 'span 2' }}>
-                <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '3px' }}>
-                  Phân loại nghiệp vụ
-                </div>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                  <span
-                    style={{
-                      fontSize: '0.72rem',
-                      fontWeight: 700,
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      backgroundColor: (selectedTask.category || 'production') === 'bidding' ? '#eff6ff' : '#fef3c7',
-                      color: (selectedTask.category || 'production') === 'bidding' ? '#1d4ed8' : '#92400e',
-                      border: `1px solid ${(selectedTask.category || 'production') === 'bidding' ? '#bfdbfe' : '#fde68a'}`,
-                    }}
-                  >
-                    {(selectedTask.category || 'production') === 'bidding' ? 'Công tác đấu thầu' : 'Công tác sản xuất'}
-                  </span>
-                </div>
-              </div>
-
               <div>
                 <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '2px' }}>
                   Ngày bắt đầu
@@ -3876,12 +3605,12 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                     borderRadius: '4px',
                     fontSize: '0.72rem',
                     fontWeight: 700,
-                    color: selectedContractGroup.isBidding ? '#1d4ed8' : '#047857',
-                    backgroundColor: selectedContractGroup.isBidding ? '#eff6ff' : '#ecfdf5',
-                    border: selectedContractGroup.isBidding ? '1px solid #bfdbfe' : '1px solid #a7f3d0',
+                    color: '#047857',
+                    backgroundColor: '#ecfdf5',
+                    border: '1px solid #a7f3d0',
                   }}
                 >
-                  {selectedContractGroup.isBidding ? 'Công tác đấu thầu' : 'Sản xuất - Thi công'}
+                  Thi công & Trưng bày
                 </span>
               </div>
               <div
@@ -4134,71 +3863,6 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
             <form onSubmit={handleCreateTask} style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
-                  Phân loại nghiệp vụ *
-                </label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setNewTaskCategory('bidding')}
-                    style={{
-                      padding: '7px 10px',
-                      borderRadius: '6px',
-                      border: newTaskCategory === 'bidding' ? '2px solid #2563eb' : '1px solid #cbd5e1',
-                      backgroundColor: newTaskCategory === 'bidding' ? '#eff6ff' : '#f8fafc',
-                      color: newTaskCategory === 'bidding' ? '#1d4ed8' : '#64748b',
-                      fontWeight: newTaskCategory === 'bidding' ? 700 : 500,
-                      fontSize: '0.78rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <span>Đấu thầu</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNewTaskCategory('production')}
-                    style={{
-                      padding: '7px 10px',
-                      borderRadius: '6px',
-                      border: newTaskCategory === 'production' ? '2px solid #d97706' : '1px solid #cbd5e1',
-                      backgroundColor: newTaskCategory === 'production' ? '#fef3c7' : '#f8fafc',
-                      color: newTaskCategory === 'production' ? '#92400e' : '#64748b',
-                      fontWeight: newTaskCategory === 'production' ? 700 : 500,
-                      fontSize: '0.78rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <span>Sản xuất</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNewTaskCategory('other')}
-                    style={{
-                      padding: '7px 10px',
-                      borderRadius: '6px',
-                      border: newTaskCategory === 'other' ? '2px solid #7c3aed' : '1px solid #cbd5e1',
-                      backgroundColor: newTaskCategory === 'other' ? '#ede9fe' : '#f8fafc',
-                      color: newTaskCategory === 'other' ? '#6d28d9' : '#64748b',
-                      fontWeight: newTaskCategory === 'other' ? 700 : 500,
-                      fontSize: '0.78rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <span>Khác</span>
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
                   Tiêu đề công việc *
                 </label>
                 <input
@@ -4227,7 +3891,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                 </label>
                 <input
                   type="text"
-                  placeholder={newTaskCategory === 'bidding' ? 'Ví dụ: Phòng Kỹ thuật R&D, KS. Trần Quốc Bảo...' : 'Ví dụ: Quản đốc Vũ Hải Long, Xưởng Mộc 1...'}
+                  placeholder="Ví dụ: Nguyễn Văn Thành, Đội thi công Showroom..."
                   value={newTaskAssignee}
                   onChange={(e) => setNewTaskAssignee(e.target.value)}
                   style={{
@@ -4250,7 +3914,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                 </label>
                 <input
                   type="text"
-                  placeholder="Ví dụ: Dự án Cửa chống cháy Aqua City..."
+                  placeholder="Ví dụ: Thi công quầy kệ & trưng bày showroom Seajong..."
                   value={newTaskProject}
                   onChange={(e) => setNewTaskProject(e.target.value)}
                   style={{
@@ -4270,11 +3934,11 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
-                    Mã Gói thầu / Hợp đồng (Tùy chọn)
+                    Mã Hợp đồng (Tùy chọn)
                   </label>
                   <input
                     type="text"
-                    placeholder={newTaskCategory === 'bidding' ? 'Ví dụ: GT-2026/02-PSTW' : 'Ví dụ: HĐ-2026/07-AQU'}
+                    placeholder="Ví dụ: 0261029-003/HDDL-SEAJONG"
                     value={newTaskContractCode}
                     onChange={(e) => setNewTaskContractCode(e.target.value)}
                     style={{
@@ -4293,11 +3957,11 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
-                    Khách hàng / CĐT (Tùy chọn)
+                    Khách hàng / Đại lý (Tùy chọn)
                   </label>
                   <input
                     type="text"
-                    placeholder="Ví dụ: Tập đoàn Novaland Group..."
+                    placeholder="Ví dụ: Cửa hàng thiết bị vệ sinh Hoàng Hải..."
                     value={newTaskCustomerName}
                     onChange={(e) => setNewTaskCustomerName(e.target.value)}
                     style={{
@@ -4365,26 +4029,16 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
                   Mức độ ưu tiên
                 </label>
-                <select
+                <Select
                   value={newTaskPriority}
                   onChange={(e) => setNewTaskPriority(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '7px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
-                    backgroundColor: '#ffffff',
-                    color: '#0f172a',
-                    fontSize: '0.78rem',
-                    boxSizing: 'border-box',
-                    fontFamily: "'Roboto Condensed', sans-serif",
-                  }}
-                >
-                  <option value="urgent">Khẩn cấp</option>
-                  <option value="high">Ưu tiên cao</option>
-                  <option value="medium">Trung bình</option>
-                  <option value="low">Thấp</option>
-                </select>
+                  options={[
+                    { value: 'urgent', label: 'Khẩn cấp' },
+                    { value: 'high', label: 'Ưu tiên cao' },
+                    { value: 'medium', label: 'Trung bình' },
+                    { value: 'low', label: 'Thấp' },
+                  ]}
+                />
               </div>
 
               <div>

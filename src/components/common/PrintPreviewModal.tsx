@@ -210,10 +210,10 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
         )}
 
         {/* DOCUMENT PREVIEW CONTAINER */}
-        <main className="flex-1 overflow-y-auto bg-slate-200/80 p-6 flex justify-center">
+        <main className="flex-1 overflow-y-auto bg-slate-200/80 p-6 flex justify-center items-start">
           <div
             id={documentId}
-            className="preview-scale-wrapper flex flex-col gap-6"
+            className="preview-scale-wrapper flex flex-col gap-6 h-fit pb-8"
             style={{ width: pageWidth, maxWidth: '100%' }}
           >
             {documentContent}

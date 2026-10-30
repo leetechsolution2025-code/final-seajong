@@ -140,6 +140,36 @@ export const FullWidthTable: React.FC<FullWidthTableProps> = ({
           width: 100% !important;
           min-width: 100% !important;
           border-collapse: collapse;
+          text-align: left;
+          font-size: 0.8125rem;
+        }
+        .full-width-table-wrapper table thead th {
+          position: sticky;
+          top: 0;
+          z-index: 10;
+          padding: 10px 16px;
+          font-size: 0.6875rem;
+          font-weight: 700;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--text-secondary, #475569);
+          background-color: var(--bg-surface-2, #f8fafc);
+          border-top: 1px solid var(--border-subtle, #e2e8f0);
+          border-bottom: 1px solid var(--border-default, #e2e8f0);
+          white-space: nowrap;
+        }
+        .full-width-table-wrapper table tbody td {
+          padding: 10px 16px;
+          border-bottom: 1px solid var(--border-subtle, #f1f5f9);
+          color: var(--text-primary, #1e293b);
+          vertical-align: middle;
+        }
+        .full-width-table-wrapper table tbody tr {
+          background-color: #ffffff;
+          transition: background-color 0.15s ease;
+        }
+        .full-width-table-wrapper table tbody tr:hover {
+          background-color: rgba(248, 250, 252, 0.9);
         }
         .full-width-table-wrapper input[type="checkbox"],
         .full-width-table-wrapper .form-check-input {

@@ -315,7 +315,7 @@ export function Table<T>({
                                   e.stopPropagation();
                                   onFullWidthActionClick(row, idx);
                                 }}
-                                className="btn btn-sm btn-link p-0 text-emerald d-inline-flex align-items-center justify-content-center transition"
+                                className="btn btn-sm btn-link p-0 text-primary d-inline-flex align-items-center justify-content-center transition"
                                 style={{ textDecoration: "none", width: "20px", height: "20px" }}
                                 title="Thêm mục con"
                               >
