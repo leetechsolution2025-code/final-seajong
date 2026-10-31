@@ -17,7 +17,12 @@ function extractTitleAndIcon(
 
     if (children.length >= 2) {
       const firstChild = children[0];
-      if (React.isValidElement(firstChild)) {
+      if (
+        React.isValidElement(firstChild) &&
+        (typeof firstChild.type !== 'string' ||
+          firstChild.type === 'i' ||
+          firstChild.type === 'svg')
+      ) {
         let clonedIcon = firstChild;
         try {
           clonedIcon = React.cloneElement(firstChild as React.ReactElement<any>, {
@@ -209,7 +214,7 @@ export const Offcanvas: React.FC<OffcanvasProps> = ({
             ) : null}
             <div className="offcanvas-header-text">
               <h3 className="offcanvas-title">{finalTitle}</h3>
-              {description && <p className="offcanvas-description">{description}</p>}
+              {description && <div className="offcanvas-description">{description}</div>}
             </div>
           </div>
           {showCloseButton && (

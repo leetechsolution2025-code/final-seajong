@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import type { User } from '../types';
+import { canAccessDepartment, getDefaultAllowedDepartment } from '../lib/permissions';
 
 export interface DepartmentContextType {
   activeDeptCode: string;
@@ -33,14 +34,7 @@ export const DepartmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const u = targetUser || user;
     if (!u) return;
 
-    let targetDept = 'board';
-    if (u.role === 'DEALER' || u.departmentCode === 'dealer') {
-      targetDept = 'dealer';
-    } else if (u.employee?.departmentCode) {
-      targetDept = u.employee.departmentCode.toLowerCase();
-    } else if (u.role === 'ADMIN') {
-      targetDept = 'board';
-    }
+    const targetDept = getDefaultAllowedDepartment(u);
 
     setActiveDeptCodeState(targetDept);
     setActiveMenuKey('overview');
@@ -77,9 +71,9 @@ export const DepartmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       navigateToUserDept(user);
     } else {
       // Cùng tài khoản (người dùng F5 hoặc reload trang):
-      // Ưu tiên phòng ban đang truy cập được lưu trong localStorage
+      // Ưu tiên phòng ban đang truy cập được lưu trong localStorage nếu có quyền truy cập
       const saved = localStorage.getItem('seajong_active_dept');
-      if (saved) {
+      if (saved && canAccessDepartment(user, saved)) {
         setActiveDeptCodeState(saved.toLowerCase());
       } else {
         navigateToUserDept(user);
@@ -101,6 +95,9 @@ export const DepartmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return; // Cấm đại lý chuyển sang phòng ban nội bộ khác
     }
     const cleanCode = code.toLowerCase().trim();
+    if (user && !canAccessDepartment(user, cleanCode)) {
+      return; // Chặn chuyển sang phòng ban chưa được cấp quyền truy cập
+    }
     setActiveDeptCodeState(cleanCode);
     localStorage.setItem('seajong_active_dept', cleanCode);
     setActiveMenuKey('overview');

@@ -72,51 +72,51 @@ export interface BiddingPackageItem {
   note: string;
 }
 
-// 4 gói thầu thực tế ghi nhận trong hệ thống quản trị hợp đồng của DecoDoor
+// 4 hợp đồng phân phối & gói cung ứng thực tế của Seajong
 export const VERIFIED_BIDDING_PIPELINE: BiddingPackageItem[] = [
   {
-    code: 'DT-2026/SUN-SAMSON-01',
-    projectName: 'Quần thể Đô thị Sun Grand Boulevard Sầm Sơn',
-    clientName: 'Tập đoàn Sun Group (Chi nhánh Thanh Hóa)',
-    clientShort: 'Sun Group',
-    packageType: 'Cửa gỗ chống cháy EI60 và Cửa trượt ban công Shophouse',
-    contractValue: '23.50 Tỷ VNĐ',
-    valueNumericBillion: 23.5,
-    statusLabel: 'Đang lập hồ sơ dự thầu',
-    note: 'Đang hoàn tất dự toán cạnh tranh, yêu cầu nghiêm ngặt tiêu chuẩn PCCC EI60.',
+    code: 'HD-2026/NH-CERAMIC-01',
+    projectName: 'Hệ thống Phân phối Thiết bị Vệ sinh Nam Hải Ceramic',
+    clientName: 'CÔNG TY TNHH NAM HẢI CERAMIC',
+    clientShort: 'Nam Hải Ceramic',
+    packageType: 'Sen tắm cây cao cấp, Vòi chậu Lavabo và Bồn cầu thông minh Seajong',
+    contractValue: '3.20 Tỷ VNĐ',
+    valueNumericBillion: 3.2,
+    statusLabel: 'Đang triển khai giao hàng',
+    note: 'Đại lý phân phối chiến lược cấp 1, hoàn thành 100% nghĩa vụ thanh toán đúng hạn.',
   },
   {
-    code: 'DT-2026/VIN-VUYEN-03',
-    projectName: 'Vinhomes Royal Island Vũ Yên Hải Phòng',
-    clientName: 'Công ty Cổ phần Vinhomes (Tập đoàn Vingroup)',
-    clientShort: 'Vingroup',
-    packageType: 'Hệ cửa biệt thự sinh thái đảo Hoàng Gia và Cửa sảnh đón',
-    contractValue: '31.20 Tỷ VNĐ',
-    valueNumericBillion: 31.2,
-    statusLabel: 'Thẩm định hồ sơ mời thầu',
-    note: 'Dự án trọng điểm miền Bắc, yêu cầu tiêu chuẩn gỗ tự nhiên tẩm sấy công nghệ cao.',
+    code: 'HD-2026/SHOWROOM-TT-02',
+    projectName: 'Showroom Thiên Thuận Lạng Sơn & Khu vực Đông Bắc',
+    clientName: 'Showroom Thiên Thuận Lạng Sơn',
+    clientShort: 'Thiên Thuận',
+    packageType: 'Combo thiết bị phòng tắm, sen vòi đồng thau mạ PVD Seajong',
+    contractValue: '1.85 Tỷ VNĐ',
+    valueNumericBillion: 1.85,
+    statusLabel: 'Đang cung ứng định kỳ',
+    note: 'Đại lý phân phối độc quyền tỉnh Lạng Sơn.',
   },
   {
-    code: 'DT-2026/MAS-CENTRAL-09',
-    projectName: 'Masteri Centre Point Quận 9',
-    clientName: 'Masterise Homes (Masterise Group)',
-    clientShort: 'Masterise',
-    packageType: 'Cửa căn hộ thông minh tích hợp khóa điện tử và cách âm 38dB',
-    contractValue: '15.80 Tỷ VNĐ',
-    valueNumericBillion: 15.8,
-    statusLabel: 'Đàm phán đơn giá kỹ thuật',
-    note: 'Đã gửi bộ mẫu cửa thực tế trình Hội đồng Quản lý dự án phê duyệt.',
+    code: 'HD-2026/OEM-PARTNER-03',
+    projectName: 'Hợp đồng Sản xuất & Gia công OEM Thiết bị Phòng tắm',
+    clientName: 'Khối Đối tác OEM Chiến lược Seajong',
+    clientShort: 'Khối OEM',
+    packageType: 'Gia công lắp ráp sen vòi, chậu rửa inox 304 và phụ kiện đồng bộ',
+    contractValue: '2.45 Tỷ VNĐ',
+    valueNumericBillion: 2.45,
+    statusLabel: 'Đang sản xuất theo đơn',
+    note: 'Đảm bảo tiêu chuẩn kiểm định áp lực nước và bề mặt mạ Crom-Niken.',
   },
   {
-    code: 'DT-2026/ECO-RETREAT-02',
-    projectName: 'Ecopark Retreat Bến Lức Long An',
-    clientName: 'Tập đoàn Ecopark',
-    clientShort: 'Ecopark',
-    packageType: 'Cửa composite phong cách nhiệt đới và cửa chống cháy sảnh',
-    contractValue: '18.00 Tỷ VNĐ',
-    valueNumericBillion: 18.0,
-    statusLabel: 'Lập hồ sơ đề xuất tài chính',
-    note: 'Gói thầu mở rộng thị trường phía Nam, đang hoàn tất bảng bảo lãnh dự thầu.',
+    code: 'HD-2026/DL-MIENBAC-04',
+    projectName: 'Mạng lưới Đại lý Thiết bị Vệ sinh Hà Nội & Bắc Ninh',
+    clientName: 'Hệ thống Đại lý Cấp 1 Miền Bắc',
+    clientShort: 'Đại lý Miền Bắc',
+    packageType: 'Thiết bị vệ sinh sứ, gương LED thông minh và phụ kiện phòng tắm',
+    contractValue: '1.90 Tỷ VNĐ',
+    valueNumericBillion: 1.9,
+    statusLabel: 'Đang mở rộng độ phủ',
+    note: 'Tăng trưởng đơn hàng ổn định mùa cao điểm hoàn thiện cuối năm.',
   },
 ];
 
@@ -331,7 +331,7 @@ export function computeExecutiveFacts(
     } else if (month <= 3) {
       seasonalityNarrative = `Giai đoạn đầu năm mang tính chất khởi động chu kỳ: Toàn công ty tập trung hoàn tất thủ tục sau Tết, bảo dưỡng dây chuyền xưởng và chốt hợp đồng ký mới cho các quý giữa năm.`;
     } else {
-      seasonalityNarrative = `Giai đoạn giữa năm là pha tăng tốc sản xuất: Tập trung đẩy nhanh tiến độ xuất xưởng các dòng cửa chống cháy và hoàn thiện nhà ở để đáp ứng tiến độ cất nóc của các chủ đầu tư.`;
+      seasonalityNarrative = `Giai đoạn giữa năm là pha tăng tốc kinh doanh: Tập trung đẩy nhanh tiến độ cung ứng các dòng sen vòi, sứ vệ sinh và thiết bị nhà bếp Seajong cho hệ thống đại lý và đối tác OEM.`;
     }
 
     // 4. Lũy kế đến tháng hiện tại
@@ -477,10 +477,10 @@ export function computeExecutiveFacts(
   const pctDiffASP = actualASP !== null && targetASP > 0 ? (((actualASP - targetASP) / targetASP) * 100).toFixed(1) : '0.0';
 
   const quarterList = [
-    { period: 'Quý 1', targetRev: 4.79, actualRev: 4.79, ratePct: '100.0', targetUnits: 347, actualUnits: 344, focus: 'Tháng 1: Hoàn thiện hồ sơ • Tháng 2: Nghỉ Tết, bảo dưỡng máy • Tháng 3: Ký HĐ Q2' },
-    { period: 'Quý 2', targetRev: 6.45, actualRev: 6.40, ratePct: '99.2', targetUnits: 467, actualUnits: 461, focus: 'Tháng 4: Đốt mẫu PCCC EI60 • Tháng 5: Lắp đặt cao tầng • Tháng 6: Sơ kết bán niên' },
-    { period: 'Quý 3', targetRev: 7.50, actualRev: 7.65, ratePct: '102.0', targetUnits: 543, actualUnits: 553, focus: 'Tháng 7: Chuyền dán cạnh PUR • Tháng 8: Cung ứng khóa thông minh • Tháng 9: Bàn giao tầng mẫu' },
-    { period: 'Quý 4', targetRev: 6.76, actualRev: 2.09, ratePct: 'Đang thực hiện', targetUnits: 490, actualUnits: 151, focus: 'Tháng 10: Nghiệm thu Q3 • Tháng 11: Tăng cường lắp đặt • Tháng 12: Quyết toán năm' },
+    { period: 'Quý 1', targetRev: 4.79, actualRev: 4.79, ratePct: '100.0', targetUnits: 347, actualUnits: 344, focus: 'Tháng 1: Quyết toán đại lý • Tháng 2: Nghỉ Tết, bảo dưỡng máy • Tháng 3: Mở rộng đại lý Q2' },
+    { period: 'Quý 2', targetRev: 6.45, actualRev: 6.40, ratePct: '99.2', targetUnits: 467, actualUnits: 461, focus: 'Tháng 4: Kiểm định mạ Crom-Niken • Tháng 5: Cung ứng showroom • Tháng 6: Sơ kết bán niên' },
+    { period: 'Quý 3', targetRev: 7.50, actualRev: 7.65, ratePct: '102.0', targetUnits: 543, actualUnits: 553, focus: 'Tháng 7: Xưởng lắp ráp sen vòi • Tháng 8: Ra mắt TBVS thông minh • Tháng 9: Giao đơn OEM' },
+    { period: 'Quý 4', targetRev: 6.76, actualRev: 2.09, ratePct: 'Đang thực hiện', targetUnits: 490, actualUnits: 151, focus: 'Tháng 10: Cao điểm hoàn thiện • Tháng 11: Chiết khấu đại lý Q4 • Tháng 12: Tất toán năm' },
   ];
 
   const effectiveTotalRev = actRev ?? targetRev;
@@ -596,7 +596,7 @@ export function generateFactualExecutiveReport(facts: ComputedExecutiveFacts): {
 
   const sectionIV_Feasibility = gapToTarget.feasibilityAssessment;
 
-  const sectionV_ProductIntro = `Cơ cấu giá trị xuất xưởng và sản lượng thực tế trong kỳ được phân bổ theo 4 nhóm sản phẩm chính từ Danh mục sản phẩm (BOM) đã phê duyệt: Cửa chống cháy EI60 (38%) và Cửa thông phòng (28%) giữ vai trò chủ lực dẫn dắt doanh số:`;
+  const sectionV_ProductIntro = `Cơ cấu giá trị xuất kho và sản lượng thực tế trong kỳ được phân bổ theo các nhóm sản phẩm chính từ Danh mục sản phẩm Seajong trong CSDL: Sen tắm cây cao cấp, Vòi chậu Lavabo & Bếp, Bồn cầu & Sứ vệ sinh, và Phụ kiện đồng bộ Seajong:`;
 
   const sectionVI_BiddingIntro = biddingPipeline.conversionNarrative;
 

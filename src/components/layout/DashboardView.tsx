@@ -57,9 +57,71 @@ import { QaDefectsSummaryPage } from '../../pages/qa/QaDefectsSummaryPage';
 import { PurchaseOverviewPage } from '../../pages/purchase/PurchaseOverviewPage';
 import { PurchaseSuppliersPage } from '../../pages/purchase/PurchaseSuppliersPage';
 import { DataManagementPage } from '../../pages/departments/bom/DataManagementPage';
+import { useAuth } from '../../context/AuthContext';
+import { canAccessDepartment, isMenuLocked, getMenuLockReason } from '../../lib/permissions';
 
 export const DashboardView: React.FC = () => {
-  const { activeDeptCode, activeMenuKey } = useDepartment();
+  const { activeDeptCode, activeMenuKey, setActiveMenuKey, navigateToUserDept } = useDepartment();
+  const { user } = useAuth();
+
+  // ── KIỂM TRA QUYỀN TRUY CẬP PHÒNG BAN & CHỨC NĂNG NGHIỆP VỤ ──
+  if (user && !canAccessDepartment(user, activeDeptCode)) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-50/50 h-full">
+        <div className="max-w-md bg-white rounded-2xl border border-slate-200 p-8 shadow-sm flex flex-col items-center gap-3">
+          <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
+            <i className="bi bi-shield-lock-fill text-2xl" />
+          </div>
+          <h3 className="text-base font-extrabold text-slate-900 m-0">
+            Chưa được cấp quyền truy cập phòng ban
+          </h3>
+          <p className="text-xs text-slate-500 leading-relaxed m-0">
+            Tài khoản <b>{user.name || user.email}</b> chưa được cấp quyền truy cập bộ phận này. Vui lòng liên hệ Quản trị viên để được phân quyền.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigateToUserDept(user)}
+            className="mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all cursor-pointer border-0"
+          >
+            <i className="bi bi-arrow-left" />
+            <span>Về phòng ban trực thuộc</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (user && isMenuLocked(user, activeDeptCode, activeMenuKey)) {
+    const lockReason = getMenuLockReason(user, activeDeptCode, activeMenuKey);
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-50/50 h-full">
+        <div className="max-w-md bg-white rounded-2xl border border-slate-200 p-8 shadow-sm flex flex-col items-center gap-3">
+          <div className="w-14 h-14 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600">
+            <i className="bi bi-lock-fill text-2xl" />
+          </div>
+          <h3 className="text-base font-extrabold text-slate-900 m-0">
+            Chức năng đã bị khóa
+          </h3>
+          <p className="text-xs text-slate-500 leading-relaxed m-0">
+            Tài khoản <b>{user.name || user.email}</b> chưa được cấp quyền sử dụng chức năng nghiệp vụ này.
+          </p>
+          {lockReason && (
+            <div className="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-[11px] font-bold text-slate-700">
+              {lockReason}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setActiveMenuKey('overview')}
+            className="mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all cursor-pointer border-0"
+          >
+            <i className="bi bi-speedometer2" />
+            <span>Quay về Tổng quan</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // ── QUẢN TRỊ DỮ LIỆU HỆ THỐNG (ADMIN / BAN GIÁM ĐỐC) ──
   if (activeMenuKey === 'data-management' || activeMenuKey === 'board_data' || activeMenuKey === 'data') {

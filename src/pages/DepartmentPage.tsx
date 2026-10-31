@@ -19,10 +19,6 @@ import {
   Envelope,
   GeoAlt,
   CalendarEvent,
-  ThreeDotsVertical,
-  ArrowClockwise,
-  Upload,
-  Gear,
 } from 'react-bootstrap-icons';
 import { Button } from '../components/common/Button';
 import { DepartmentActionMenu } from '../components/common/DepartmentActionMenu';
@@ -30,8 +26,6 @@ import { useDepartment } from '../context/DepartmentContext';
 import { EventOffcanvas } from '../components/common/EventOffcanvas';
 import { SalesOverviewPage } from './sales/SalesOverviewPage';
 import { FinanceOverviewPage } from './finance/FinanceOverviewPage';
-import { FinanceDebtsPage } from './finance/FinanceDebtsPage';
-import { FinanceAssetsPage } from './finance/FinanceAssetsPage';
 import { LogisticsOverviewPage } from './logistics/LogisticsOverviewPage';
 import { ProductionOverviewPage } from './production/ProductionOverviewPage';
 import { QaOverviewPage } from './qa/QaOverviewPage';
@@ -52,76 +46,8 @@ interface CustomerLead {
   statusLabel: string;
 }
 
-const INITIAL_CUSTOMERS: CustomerLead[] = [
-  {
-    id: 'cust-1',
-    code: 'KH-2026-081',
-    name: 'Công ty Cổ phần Xây dựng & Nội thất An Gia Phát',
-    phone: '0912 345 678',
-    email: 'angia.decor@gmail.com',
-    area: 'Hà Nội',
-    group: 'contractor',
-    groupLabel: 'Nhà thầu dự án',
-    source: 'Showroom & Sự kiện',
-    status: 'signed',
-    statusLabel: 'Đã ký hợp đồng',
-  },
-  {
-    id: 'cust-2',
-    code: 'KH-2026-082',
-    name: 'Tổng Đại lý Thiết bị Vệ sinh Minh Long Khánh',
-    phone: '0988 765 432',
-    email: 'minhlong.faucet@yahoo.com',
-    area: 'Hải Phòng',
-    group: 'agency',
-    groupLabel: 'Đại lý cấp 1',
-    source: 'Website & Google Search',
-    status: 'quoted',
-    statusLabel: 'Đã gửi báo giá',
-  },
-  {
-    id: 'cust-3',
-    code: 'KH-2026-083',
-    name: 'Kiến trúc sư Đoàn Văn Thái (Thiết kế Villa Flamingo)',
-    phone: '0904 888 999',
-    email: 'thaidoan.arch@gmail.com',
-    area: 'Vĩnh Phúc',
-    group: 'contractor',
-    groupLabel: 'Nhà thầu dự án',
-    source: 'Triển lãm Vietbuild',
-    status: 'negotiating',
-    statusLabel: 'Đang thương thảo',
-  },
-  {
-    id: 'cust-4',
-    code: 'KH-2026-084',
-    name: 'Anh Trần Hùng Dũng (Căn hộ Penthouse Ciputra)',
-    phone: '0977 123 987',
-    email: 'dungtran.invest@gmail.com',
-    area: 'Hà Nội',
-    group: 'retail',
-    groupLabel: 'Khách bán lẻ cao cấp',
-    source: 'Facebook Ads',
-    status: 'consulting',
-    statusLabel: 'Đang tư vấn',
-  },
-  {
-    id: 'cust-5',
-    code: 'KH-2026-085',
-    name: 'Đại lý Thiết bị Sen Vòi & Bếp Hải Đăng',
-    phone: '0936 555 777',
-    email: 'haidang.vattu@gmail.com',
-    area: 'Quảng Ninh',
-    group: 'agency',
-    groupLabel: 'Đại lý cấp 1',
-    source: 'Đội ngũ Sales thị trường',
-    status: 'signed',
-    statusLabel: 'Đã ký hợp đồng',
-  },
-];
-
 export const DepartmentPage: React.FC<{ deptCode?: string }> = ({ deptCode }) => {
-  const { activeDeptCode, setActiveMenuKey } = useDepartment();
+  const { activeDeptCode } = useDepartment();
   const currentDept = (deptCode || activeDeptCode || '').toLowerCase();
 
   if (currentDept === 'sales' || currentDept === 'kd' || currentDept === 'kinh-doanh') {
@@ -301,13 +227,68 @@ export const DepartmentPage: React.FC<{ deptCode?: string }> = ({ deptCode }) =>
     }
   };
 
-  // === STEP 2: CUSTOMERS STATE ===
-  const [customers] = useState<CustomerLead[]>(INITIAL_CUSTOMERS);
+  // === STEP 2: CUSTOMERS STATE (ĐỒNG BỘ TỪ DB THỰC TẾ) ===
+  const [customers, setCustomers] = useState<CustomerLead[]>([]);
   const [custSearch, setCustSearch] = useState('');
   const [custGroup, setCustGroup] = useState('all');
   const [custStatus, setCustStatus] = useState('all');
   const [custPage, setCustPage] = useState(1);
   const [custPageSize, setCustPageSize] = useState(10);
+
+  useEffect(() => {
+    fetch('/api/plan-finance/customers?page=1&pageSize=200')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.customers && Array.isArray(data.customers)) {
+          const mapped: CustomerLead[] = data.customers.map((c: any, idx: number) => {
+            const nhomStr = String(c.nhom || '').toLowerCase();
+            const group: CustomerLead['group'] = nhomStr.includes('dai-ly')
+              ? 'agency'
+              : nhomStr.includes('du-an') || nhomStr.includes('nha-thau')
+              ? 'contractor'
+              : 'retail';
+            const groupLabel =
+              c.groupLabel ||
+              (group === 'agency'
+                ? 'Đại lý phân phối'
+                : group === 'contractor'
+                ? 'Nhà thầu dự án'
+                : 'Khách bán lẻ');
+            const hasOrders = Number(c.orderCount || 0) > 0 || Number(c.totalRevenue || 0) > 0;
+            const status: CustomerLead['status'] = hasOrders
+              ? 'signed'
+              : c.trangThai === 'quoted'
+              ? 'quoted'
+              : c.trangThai === 'negotiating'
+              ? 'negotiating'
+              : 'consulting';
+            const statusLabel =
+              status === 'signed'
+                ? 'Đã phát sinh đơn'
+                : status === 'quoted'
+                ? 'Đã gửi báo giá'
+                : status === 'negotiating'
+                ? 'Đang thương thảo'
+                : 'Đang tư vấn';
+            return {
+              id: c.id || `cust-${idx}`,
+              code: c.code || `KH-${String(idx + 1).padStart(4, '0')}`,
+              name: c.name || 'Khách hàng Seajong',
+              phone: c.dienThoai || c.phone || '—',
+              email: c.email || '—',
+              area: c.address || c.tinhThanh || 'Việt Nam',
+              group,
+              groupLabel,
+              source: c.sourceLabel || c.nguon || 'Thị trường & Marketing',
+              status,
+              statusLabel,
+            };
+          });
+          setCustomers(mapped);
+        }
+      })
+      .catch((err) => console.error('Lỗi tải danh sách khách hàng Marketing:', err));
+  }, []);
 
   const filteredCustomers = customers.filter((item) => {
     const matchSearch =

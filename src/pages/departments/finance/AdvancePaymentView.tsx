@@ -937,7 +937,7 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
                 <option value="Masteri Centre Point Quận 9">Masteri Centre Point Quận 9</option>
                 <option value="Khu Đô Thị Sinh Thái Aqua City">Khu Đô Thị Sinh Thái Aqua City</option>
                 <option value="Ecopark Retreat Bến Lức Long An">Ecopark Retreat Bến Lức Long An</option>
-                <option value="Nhà máy Deco Door">Nhà máy Deco Door</option>
+                <option value="Nhà máy Seajong">Nhà máy Seajong</option>
                 <option value="Nội bộ công ty">Nội bộ công ty</option>
               </select>
             </div>

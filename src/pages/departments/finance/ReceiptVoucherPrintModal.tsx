@@ -652,7 +652,7 @@ export const ReceiptVoucherPrintModal: React.FC<ReceiptVoucherPrintModalProps> =
             {/* Thông tin doanh nghiệp: Tên, địa chỉ, mã số thuế và điện thoại cùng dòng */}
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 'bold', fontSize: '11.5pt', textTransform: 'uppercase', lineHeight: 1.3 }}>
-                {company.company_name || 'CÔNG TY CỔ PHẦN CỬA DECO DOOR'}
+                {company.company_name || 'CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM'}
               </div>
               <div style={{ fontSize: '10pt', marginTop: '3px', lineHeight: 1.35 }}>
                 <strong>Địa chỉ:</strong> {company.address || 'KCN Phùng Xá, Thạch Thất, TP. Hà Nội'}

@@ -2187,7 +2187,7 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #334155', paddingBottom: '12px' }}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: '14px', textTransform: 'uppercase' }}>
-                  CÔNG TY CỔ PHẦN SẢN XUẤT DECO DOOR
+                  CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM
                 </div>
                 <div style={{ fontSize: '12px', color: '#475569' }}>
                   KCN Yên Phong mở rộng, Huyện Yên Phong, Tỉnh Bắc Ninh

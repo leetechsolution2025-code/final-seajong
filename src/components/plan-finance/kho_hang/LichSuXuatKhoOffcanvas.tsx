@@ -1,6 +1,8 @@
 "use client";
 import React from "react";
 import { PhieuXuatKhoPreview } from "./PhieuXuatKhoPreview";
+import { Offcanvas } from "@/components/common/Offcanvas";
+import { ClockHistory } from "react-bootstrap-icons";
 
 interface MovementItem {
   id: string;
@@ -111,119 +113,28 @@ export function LichSuXuatKhoOffcanvas({ onClose }: LichSuXuatKhoOffcanvasProps)
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .xuat-history-oc { transition: transform 0.27s cubic-bezier(.4,0,.2,1); }
-      `}} />
-
-      {/* Backdrop */}
-      <div
-        onClick={handleClose}
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 5100,
-          background: visible ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0)",
-          transition: "background 0.27s",
-        }}
-      />
-
-      {/* Offcanvas Body */}
-      <div
-        className="xuat-history-oc app-custom-drawer"
-        style={{
-          position: "fixed",
-          top: 0,
-          right: 0,
-          bottom: 0,
-          width: 400,
-          zIndex: 5200,
-          background: "var(--card)",
-          borderLeft: "1px solid var(--border)",
-          boxShadow: "-6px 0 28px rgba(0,0,0,0.15)",
-          display: "flex",
-          flexDirection: "column",
-          transform: visible ? "translateX(0)" : "translateX(100%)",
-          overflow: "hidden",
-        }}
-      >
-        {/* Header */}
-        <div
-          style={{
-            padding: "14px 16px",
-            borderBottom: "1px solid var(--border)",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            flexShrink: 0,
-          }}
-        >
-          {selectedGroup ? (
+      <Offcanvas
+        isOpen={true}
+        onClose={onClose}
+        icon={<ClockHistory size={20} />}
+        title={selectedGroup ? `Phiếu xuất: ${selectedGroup.soChungTu}` : "Lịch sử xuất hàng"}
+        description={
+          selectedGroup ? (
             <button
+              type="button"
               onClick={() => setSelectedGroup(null)}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                padding: "4px 8px 4px 0",
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                color: "var(--foreground)",
-                fontWeight: 700,
-                fontSize: 13.5,
-                outline: "none",
-              }}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
             >
-              <i className="bi bi-chevron-left" style={{ fontSize: 14 }} />
-              Quay lại
+              <i className="bi bi-chevron-left text-[11px]" /> Quay lại danh sách
             </button>
           ) : (
-            <>
-              <div
-                style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: 8,
-                  background: "rgba(245,158,11,0.12)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                }}
-              >
-                <i className="bi bi-clock-history" style={{ fontSize: 14, color: "#f59e0b" }} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>Lịch sử xuất hàng</p>
-                <p style={{ margin: 0, fontSize: 11, color: "var(--muted-foreground)" }}>
-                  Danh sách phiếu xuất kho đã thực hiện
-                </p>
-              </div>
-            </>
-          )}
-
-          {selectedGroup && <div style={{ flex: 1 }} />}
-
-          <button
-            onClick={handleClose}
-            style={{
-              width: 28,
-              height: 28,
-              border: "1px solid var(--border)",
-              background: "var(--muted)",
-              borderRadius: 7,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "var(--muted-foreground)",
-            }}
-          >
-            <i className="bi bi-x" style={{ fontSize: 16 }} />
-          </button>
-        </div>
-
+            "Danh sách phiếu xuất kho đã thực hiện"
+          )
+        }
+        width="400px"
+        position="right"
+        bodyStyle={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}
+      >
         {/* 2-Slide container */}
         <div
           style={{
@@ -502,7 +413,7 @@ export function LichSuXuatKhoOffcanvas({ onClose }: LichSuXuatKhoOffcanvasProps)
             )}
           </div>
         </div>
-      </div>
+      </Offcanvas>
 
       {showPreview && selectedGroup && (
         <PhieuXuatKhoPreview

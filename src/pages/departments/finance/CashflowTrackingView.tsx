@@ -351,89 +351,8 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
   onStepChange,
   onShowToast,
 }) => {
-  // ── 1. DỮ LIỆU BƯỚC 1: DUYỆT ĐƠN HÀNG ──
-  const [orders, setOrders] = useState<OrderApprovalItem[]>([
-    {
-      id: 'ord-1',
-      code: 'DBH-20261027-01',
-      customerName: 'Công ty Cổ phần Xây dựng An Gia Phát',
-      customerPhone: '0912 345 678',
-      customerAddress: 'KĐT Sala, TP. Thủ Đức, TP. Hồ Chí Minh',
-      customerGroup: 'du-an',
-      orderDate: '27/10/2026',
-      deliveryDate: '02/11/2026',
-      totalAmount: 148500000,
-      paidAmount: 50000000,
-      remainingAmount: 98500000,
-      status: 'cho_duyet',
-      itemsSummary: '',
-      salesPerson: 'Nguyễn Văn Minh (Sales Dự Án)',
-    },
-    {
-      id: 'ord-2',
-      code: 'DBH-20261026-03',
-      customerName: 'Tổng kho Thiết bị Vệ sinh Minh Châu',
-      customerPhone: '0988 776 554',
-      customerAddress: 'Số 45 Cầu Giấy, P. Quan Hoa, Cầu Giấy, Hà Nội',
-      customerGroup: 'dai-ly',
-      orderDate: '26/10/2026',
-      deliveryDate: '29/10/2026',
-      totalAmount: 92300000,
-      paidAmount: 92300000,
-      remainingAmount: 0,
-      status: 'da_duyet',
-      itemsSummary: '',
-      salesPerson: 'Trần Thị Mai (Sales Đại Lý)',
-    },
-    {
-      id: 'ord-3',
-      code: 'DBH-20261025-08',
-      customerName: 'Khách lẻ - Showroom Nguyễn Thị Thảo',
-      customerPhone: '0903 214 567',
-      customerAddress: '128 Nguyễn Trãi, Thanh Xuân, Hà Nội',
-      customerGroup: 'ca-nhan',
-      orderDate: '25/10/2026',
-      deliveryDate: '26/10/2026',
-      totalAmount: 18600000,
-      paidAmount: 18600000,
-      remainingAmount: 0,
-      status: 'hoan_tat',
-      itemsSummary: '',
-      salesPerson: 'Lê Hoàng Nam (Showroom)',
-    },
-    {
-      id: 'ord-4',
-      code: 'DBH-20261024-02',
-      customerName: 'Đại lý VLXD & Nội thất Hoàng Long',
-      customerPhone: '0975 889 123',
-      customerAddress: 'Phố Nối, Mỹ Hào, Hưng Yên',
-      customerGroup: 'dai-ly',
-      orderDate: '24/10/2026',
-      deliveryDate: '30/10/2026',
-      totalAmount: 64200000,
-      paidAmount: 20000000,
-      remainingAmount: 44200000,
-      status: 'dang_san_xuat',
-      itemsSummary: '',
-      salesPerson: 'Nguyễn Văn Minh (Sales Đại Lý)',
-    },
-    {
-      id: 'ord-5',
-      code: 'DBH-20261027-04',
-      customerName: 'Dự án Căn hộ Nghỉ dưỡng Blue Sea Phú Quốc',
-      customerPhone: '0938 998 776',
-      customerAddress: 'Bãi Trường, Dương Tơ, TP. Phú Quốc, Kiên Giang',
-      customerGroup: 'du-an',
-      orderDate: '27/10/2026',
-      deliveryDate: '10/11/2026',
-      totalAmount: 320000000,
-      paidAmount: 100000000,
-      remainingAmount: 220000000,
-      status: 'cho_duyet',
-      itemsSummary: '',
-      salesPerson: 'Lê Công Vụ (Giám Đốc Dự Án)',
-    },
-  ]);
+  // ── 1. DỮ LIỆU BƯỚC 1: DUYỆT ĐƠN HÀNG (NẠP TỪ SQLITE DB) ──
+  const [orders, setOrders] = useState<OrderApprovalItem[]>([]);
 
   // Checkbox lựa chọn xóa dữ liệu cho các bước
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
@@ -442,205 +361,14 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
   const [selectedOutflowIds, setSelectedOutflowIds] = useState<Set<string>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
 
-  // ── 2. DỮ LIỆU BƯỚC 2: DUYỆT YÊU CẦU ──
-  const [requests, setRequests] = useState<RequestApprovalItem[]>([
-    {
-      id: 'req-1',
-      code: 'YCD-20261027-01',
-      type: 'vat_tu',
-      title: 'Mua nguyên liệu phôi đồng thau thỏi tiêu chuẩn 59-1 đúc thân vòi',
-      department: 'Phòng Sản xuất – Gia công',
-      proposer: 'Kỹ sư trưởng Vũ Mạnh Cường',
-      requestDate: '27/10/2026',
-      amount: 185000000,
-      priority: 'urgent',
-      status: 'cho_duyet',
-      reason: 'Bổ sung khẩn cấp 5 tấn phôi đồng thau 59-1 để hoàn thành đơn hàng xuất khẩu Quý 4',
-    },
-    {
-      id: 'req-2',
-      code: 'YCD-20261026-05',
-      type: 'tam_ung',
-      title: 'Tạm ứng chi phí công tác giám sát lắp đặt showroom Đà Nẵng',
-      department: 'Phòng Kinh doanh & Marketing',
-      proposer: 'Phạm Hồng Quân',
-      requestDate: '26/10/2026',
-      amount: 15000000,
-      priority: 'high',
-      status: 'da_duyet',
-      reason: 'Vé máy bay, lưu trú và tiếp khách đối tác phân phối khu vực Miền Trung',
-    },
-    {
-      id: 'req-3',
-      code: 'YCD-20261025-02',
-      type: 'hanh_chinh',
-      title: 'Thanh toán phí bảo trì định kỳ hệ thống máy nén khí và lò đúc',
-      department: 'Phòng Kỹ thuật – Bảo trì',
-      proposer: 'Nguyễn Đình Trọng',
-      requestDate: '25/10/2026',
-      amount: 28500000,
-      priority: 'normal',
-      status: 'da_giai_ngan',
-      reason: 'Bảo dưỡng buồng mạ PVD chân không và hiệu chuẩn robot mài đánh bóng',
-    },
-    {
-      id: 'req-4',
-      code: 'YCD-20261024-03',
-      type: 'vat_tu',
-      title: 'Đề xuất mua lõi chia nước gốm sứ Sedal (Tây Ban Nha) cho sen vòi',
-      department: 'Phòng Quản lý Kho vận & Vật tư',
-      proposer: 'Đào Thu Hương',
-      requestDate: '24/10/2026',
-      amount: 72000000,
-      priority: 'high',
-      status: 'cho_duyet',
-      reason: 'Nhập khẩu lô 2.000 van đĩa sứ cao cấp chống rò rỉ đạt chuẩn 500.000 lần đóng mở',
-    },
-  ]);
+  // ── 2. DỮ LIỆU BƯỚC 2: DUYỆT YÊU CẦU (NẠP TỪ SQLITE DB) ──
+  const [requests, setRequests] = useState<RequestApprovalItem[]>([]);
 
-  // ── 3. DỮ LIỆU BƯỚC 3: TIỀN VÀO (INFLOW) ──
-  const [inflows, setInflows] = useState<CashInflowItem[]>([
-    {
-      id: 'in-1',
-      code: 'PT-20261027-01',
-      source: 'thu_no_khach',
-      sourceTitle: 'Thu hồi công nợ đại lý phân phối',
-      payerName: 'Tổng kho Thiết bị Vệ sinh Minh Châu',
-      method: 'ngan_hang',
-      accountDebit: 'TK 1121 (Vietcombank CN Hà Nội)',
-      accountCredit: 'TK 131 (Phải thu khách hàng)',
-      date: '27/10/2026 14:15',
-      amount: 92300000,
-      status: 'cho_thu',
-      bankAccountId: 'vcb',
-      note: 'Thanh toán trọn gói đơn hàng số DBH-20261026-03 qua cổng ngân hàng',
-    },
-    {
-      id: 'in-2',
-      code: 'PT-20261027-02',
-      source: 'thu_no_khach',
-      sourceTitle: 'Đặt cọc tạm ứng hợp đồng dự án',
-      payerName: 'Công ty Cổ phần Xây dựng An Gia Phát',
-      method: 'ngan_hang',
-      accountDebit: 'TK 1121 (BIDV Thăng Long)',
-      accountCredit: 'TK 131 (Phải thu khách hàng)',
-      date: '27/10/2026 10:30',
-      amount: 50000000,
-      status: 'cho_thu',
-      bankAccountId: 'bidv',
-      note: 'Tạm ứng đợt 1 theo điều khoản hợp đồng cung cấp thiết bị vệ sinh cao cấp Seajong',
-    },
-    {
-      id: 'in-3',
-      code: 'PT-20261026-04',
-      source: 'ban_le',
-      sourceTitle: 'Thu tiền mặt bán lẻ trực tiếp tại Showroom',
-      payerName: 'Khách lẻ - Chị Nguyễn Thị Thảo',
-      method: 'tien_mat',
-      accountDebit: 'TK 1111 (Quỹ tiền mặt Seajong)',
-      accountCredit: 'TK 511 (Doanh thu bán hàng)',
-      date: '26/10/2026 16:45',
-      amount: 18600000,
-      status: 'da_doi_soat',
-      voucherCode: 'PT-20261026-04',
-      bankAccountId: 'cash_fund',
-      note: 'Khách hàng thanh toán tiền mặt trực tiếp tại quầy thanh toán Showroom',
-    },
-    {
-      id: 'in-4',
-      code: 'PT-20261025-01',
-      source: 'hoan_ung',
-      sourceTitle: 'Hoàn ứng công tác phí thị trường Miền Nam',
-      payerName: 'Chuyên viên Lê Văn Dũng (Sales)',
-      method: 'tien_mat',
-      accountDebit: 'TK 1111 (Quỹ tiền mặt Seajong)',
-      accountCredit: 'TK 141 (Tạm ứng nhân viên)',
-      date: '25/10/2026 09:20',
-      amount: 4200000,
-      status: 'da_doi_soat',
-      voucherCode: 'PT-20261025-01',
-      bankAccountId: 'cash_fund',
-      note: 'Hoàn trả phần kinh phí tạm ứng chưa sử dụng hết sau chuyến công tác hội chợ',
-    },
-    {
-      id: 'in-5',
-      code: 'PT-20261024-03',
-      source: 'vay_ngan_hang',
-      sourceTitle: 'Rút vốn vay hạn mức tín dụng tài trợ sản xuất',
-      payerName: 'Ngân hàng TMCP Ngoại thương Việt Nam (VCB)',
-      method: 'ngan_hang',
-      accountDebit: 'TK 1121 (Vietcombank CN Hà Nội)',
-      accountCredit: 'TK 341 (Vay và nợ thuê tài chính)',
-      date: '24/10/2026 11:00',
-      amount: 300000000,
-      status: 'da_doi_soat',
-      voucherCode: 'BC-20261024-03',
-      bankAccountId: 'vcb',
-      note: 'Giải ngân khế ước nhận nợ theo Hợp đồng tín dụng tài trợ vốn lưu động Seajong',
-    },
-  ]);
+  // ── 3. DỮ LIỆU BƯỚC 3: TIỀN VÀO - INFLOW (NẠP TỪ SQLITE DB) ──
+  const [inflows, setInflows] = useState<CashInflowItem[]>([]);
 
-  // ── 4. DỮ LIỆU BƯỚC 4: TIỀN RA (OUTFLOW) ──
-  const [outflows, setOutflows] = useState<CashOutflowItem[]>([
-    {
-      id: 'out-1',
-      code: 'LC-20261027-01',
-      category: 'dong_thau',
-      categoryTitle: 'Mua nguyên liệu phôi đồng thau 59-1',
-      beneficiary: 'Công ty Cổ phần Kim loại Màu & Hợp kim Hải Phòng',
-      method: 'unc_ngan_hang',
-      accountDebit: 'TK 331 (Phải trả nhà cung cấp)',
-      accountCredit: 'TK 1121 (Vietcombank CN Hà Nội)',
-      dueDate: '27/10/2026',
-      amount: 185000000,
-      status: 'cho_chi',
-      note: 'Giải ngân thanh toán tiền hàng đợt 1 theo hợp đồng cung ứng 5 tấn đồng thau thỏi',
-    },
-    {
-      id: 'out-2',
-      code: 'LC-20261026-02',
-      category: 'ma_pvd',
-      categoryTitle: 'Gia công xi mạ PVD công nghệ cao',
-      beneficiary: 'Công ty TNHH Kỹ thuật Xi mạ Chân không NanoTech',
-      method: 'unc_ngan_hang',
-      accountDebit: 'TK 627 (Chi phí sản xuất chung)',
-      accountCredit: 'TK 1122 (BIDV Thăng Long)',
-      dueDate: '26/10/2026',
-      amount: 45000000,
-      status: 'da_chi',
-      voucherCode: 'PC-20261026-02',
-      note: 'Thanh toán chi phí xi mạ màu xám xước titan PVD cho 500 củ sen Seajong',
-    },
-    {
-      id: 'out-3',
-      code: 'LC-20261025-01',
-      category: 'tam_ung',
-      categoryTitle: 'Chi tạm ứng công tác thị trường',
-      beneficiary: 'Phạm Hồng Quân (Phòng Kinh doanh)',
-      method: 'tien_mat',
-      accountDebit: 'TK 141 (Tạm ứng nhân viên)',
-      accountCredit: 'TK 1111 (Quỹ tiền mặt Seajong)',
-      dueDate: '25/10/2026',
-      amount: 15000000,
-      status: 'da_chi',
-      voucherCode: 'PC-20261025-01',
-      note: 'Xuất quỹ tiền mặt tạm ứng công tác theo Phiếu yêu cầu đã được phê duyệt',
-    },
-    {
-      id: 'out-4',
-      code: 'LC-20261027-03',
-      category: 'no_ncc',
-      categoryTitle: 'Thanh toán tiền vỏ hộp bao bì & tem nhãn Seajong',
-      beneficiary: 'Nhà máy In & Bao bì Carton Đại Đồng Tiến',
-      method: 'unc_ngan_hang',
-      accountDebit: 'TK 331 (Phải trả nhà cung cấp)',
-      accountCredit: 'TK 1121 (Vietcombank CN Hà Nội)',
-      dueDate: '28/10/2026',
-      amount: 32000000,
-      status: 'cho_chi',
-      note: 'Thanh toán đợt cuối lô 10.000 vỏ hộp củ sen và tem bảo hành điện tử QR-code',
-    },
-  ]);
+  // ── 4. DỮ LIỆU BƯỚC 4: TIỀN RA - OUTFLOW (NẠP TỪ SQLITE DB) ──
+  const [outflows, setOutflows] = useState<CashOutflowItem[]>([]);
 
   // ── FILTER VÀ TÌM KIẾM TRÊN TỪNG BƯỚC ──
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -1057,7 +785,7 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
     fetch('/api/sales/orders')
       .then((res) => res.json())
       .then((data) => {
-        if (data?.orders && Array.isArray(data.orders) && data.orders.length > 0) {
+        if (data?.orders && Array.isArray(data.orders)) {
           const mappedOrders: OrderApprovalItem[] = data.orders.map((o: any) => {
             const rawGroup = o.customer?.nhom || 'dai-ly';
             const total = Number(o.tongTien) || 0;
@@ -1071,11 +799,11 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
               id: o.id,
               code: o.code || `DBH-${o.id}`,
               customerName: o.customer?.name || (o.code ? `Khách hàng ${o.code}` : 'Khách hàng'),
-              customerPhone: o.customer?.dienThoai || '0988 776 554',
+              customerPhone: o.customer?.dienThoai || '',
               customerAddress: o.customer?.address || '',
               customerGroup: rawGroup,
-              orderDate: o.ngayDat ? new Date(o.ngayDat).toLocaleDateString('vi-VN') : '27/10/2026',
-              deliveryDate: o.ngayGiao ? new Date(o.ngayGiao).toLocaleDateString('vi-VN') : '02/11/2026',
+              orderDate: o.ngayDat ? new Date(o.ngayDat).toLocaleDateString('vi-VN') : '',
+              deliveryDate: o.ngayGiao ? new Date(o.ngayGiao).toLocaleDateString('vi-VN') : '',
               totalAmount: total,
               paidAmount: paid,
               remainingAmount: Math.max(0, total - paid),
@@ -1087,13 +815,115 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
           setOrders(mappedOrders);
         }
       })
-      .catch((err) => console.log('Dùng dữ liệu fallback cho đơn hàng:', err));
+      .catch((err) => console.error('Lỗi tải danh sách đơn hàng từ DB:', err));
 
-    // 2. Tải dữ liệu các lệnh chi tiền thực tế
+    // 2. Tải danh sách yêu cầu đề xuất thực tế từ DB (/api/approval-requests)
+    fetch('/api/approval-requests')
+      .then((res) => res.json())
+      .then((json) => {
+        const rows = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+        const mappedReqs: RequestApprovalItem[] = rows.map((r: any, idx: number) => {
+          let meta: any = {};
+          try {
+            meta = typeof r.metadata === 'string' ? JSON.parse(r.metadata) : r.metadata || {};
+          } catch {}
+          const ent = String(r.entityType || '').toLowerCase();
+          let reqType: RequestApprovalItem['type'] = 'hanh_chinh';
+          if (ent.includes('purchase') || ent.includes('vat_tu')) reqType = 'vat_tu';
+          else if (ent.includes('advance') || meta?.type?.includes('advance')) reqType = 'tam_ung';
+          else if (ent.includes('business_trip') || meta?.type?.includes('trip')) reqType = 'cong_tac';
+
+          const amt = Number(meta?.totalAmount || meta?.soTien || meta?.details?.amount || meta?.amount || 0);
+          const rawSt = String(r.status || 'pending').toLowerCase();
+          const st: RequestApprovalItem['status'] =
+            rawSt === 'completed'
+              ? 'da_giai_ngan'
+              : rawSt === 'approved'
+              ? 'da_duyet'
+              : rawSt === 'rejected'
+              ? 'tu_choi'
+              : 'cho_duyet';
+
+          const rawPr = String(r.priority || 'normal').toLowerCase();
+          const pr: RequestApprovalItem['priority'] =
+            rawPr === 'urgent' ? 'urgent' : rawPr === 'high' ? 'high' : 'normal';
+
+          return {
+            id: String(r.id || `req-${idx + 1}`),
+            code: String(r.entityCode || meta?.personalRequestId || `YCD-${String(idx + 1).padStart(4, '0')}`),
+            type: reqType,
+            title: String(r.entityTitle || 'Yêu cầu phê duyệt'),
+            department: String(r.department || meta?.departmentName || (ent.includes('purchase') ? 'Phòng Mua hàng' : 'Phòng ban Seajong')),
+            proposer: String(r.requestedByName || meta?.employeeName || 'Cán bộ Seajong'),
+            requestDate: r.createdAt ? new Date(r.createdAt).toLocaleDateString('vi-VN') : '',
+            amount: amt,
+            priority: pr,
+            status: st,
+            reason: String(meta?.reason || meta?.details?.reason || r.note || r.entityTitle || ''),
+          };
+        });
+        setRequests(mappedReqs);
+      })
+      .catch((err) => console.error('Lỗi tải danh sách yêu cầu từ DB:', err));
+
+    // 3. Tải dữ liệu dòng tiền vào thực tế từ DB (/api/finance/payment-notifications & /api/debts/receivables)
+    Promise.all([
+      fetch('/api/finance/payment-notifications?limit=100').then((r) => (r.ok ? r.json() : { items: [] })).catch(() => ({ items: [] })),
+      fetch('/api/debts/receivables').then((r) => (r.ok ? r.json() : [])).catch(() => []),
+    ])
+      .then(([notifData, recData]) => {
+        const notifItems = Array.isArray(notifData?.items) ? notifData.items : Array.isArray(notifData?.data) ? notifData.data : [];
+        const mappedFromNotifs: CashInflowItem[] = notifItems.map((n: any) => ({
+          id: String(n.id),
+          code: n.code || `PT-${n.id}`,
+          source: 'thu_no_khach',
+          sourceTitle: n.saleOrder?.code ? `Thu tiền đơn hàng ${n.saleOrder.code}` : 'Thu hồi công nợ bán hàng',
+          payerName: n.customer?.name || 'Khách hàng Seajong',
+          method: n.paymentMethod === 'cash' ? 'tien_mat' : 'ngan_hang',
+          accountDebit: n.paymentMethod === 'cash' ? 'TK 1111 (Quỹ tiền mặt Seajong)' : 'TK 1121 (Ngân hàng Seajong)',
+          accountCredit: 'TK 131 (Phải thu khách hàng)',
+          date: n.createdAt ? new Date(n.createdAt).toLocaleDateString('vi-VN') : '',
+          amount: Number(n.amount) || 0,
+          status: n.status === 'verified' ? 'da_doi_soat' : 'cho_thu',
+          voucherCode: n.code,
+          bankAccountId: n.paymentMethod === 'cash' ? 'cash_fund' : 'vcb',
+          note: n.note || '',
+        }));
+
+        const recRows = Array.isArray(recData) ? recData : [];
+        const mappedFromRecs: CashInflowItem[] = recRows
+          .filter((r: any) => Number(r.paidAmount || r.remainingAmount) > 0)
+          .slice(0, 60)
+          .map((r: any) => {
+            const isPaid = Number(r.paidAmount) > 0 && Number(r.remainingAmount) <= 0;
+            const amt = isPaid ? Number(r.paidAmount) : Number(r.remainingAmount) || Number(r.paidAmount) || 0;
+            return {
+              id: `rec-${r.id}`,
+              code: r.code || `PT-${r.id}`,
+              source: 'thu_no_khach',
+              sourceTitle: r.projectName || 'Thu hồi công nợ đại lý phân phối',
+              payerName: r.customerName || 'Khách hàng Seajong',
+              method: 'ngan_hang',
+              accountDebit: 'TK 1121 (Vietcombank CN Hà Nội)',
+              accountCredit: 'TK 131 (Phải thu khách hàng)',
+              date: r.dueDate || '',
+              amount: amt,
+              status: isPaid ? 'da_doi_soat' : 'cho_thu',
+              voucherCode: isPaid ? r.code : undefined,
+              bankAccountId: 'vcb',
+              note: r.notes || r.projectName || '',
+            };
+          });
+
+        setInflows(mappedFromNotifs.length > 0 ? [...mappedFromNotifs, ...mappedFromRecs] : mappedFromRecs);
+      })
+      .catch((err) => console.error('Lỗi tải dữ liệu tiền vào từ DB:', err));
+
+    // 4. Tải dữ liệu các lệnh chi tiền thực tế từ DB
     fetch('/api/finance/payment-orders')
       .then((res) => res.json())
       .then((data) => {
-        if (data?.orders && Array.isArray(data.orders) && data.orders.length > 0) {
+        if (data?.orders && Array.isArray(data.orders)) {
           const mapped: CashOutflowItem[] = data.orders.map((o: any) => ({
             id: String(o.id),
             code: o.orderCode || `LC-${o.id}`,
@@ -1109,14 +939,10 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
             voucherCode: o.voucherCode,
             note: o.description || '',
           }));
-          setOutflows((prev) => {
-            const ids = new Set(mapped.map((m) => m.id));
-            const remain = prev.filter((p) => !ids.has(p.id));
-            return [...mapped, ...remain];
-          });
+          setOutflows(mapped);
         }
       })
-      .catch((err) => console.log('Dùng dữ liệu fallback cho cashflow:', err))
+      .catch((err) => console.error('Lỗi tải lệnh chi từ DB:', err))
       .finally(() => setIsLoading(false));
 
     // 3. Tải danh sách nhân viên thực tế từ Database (bảng Employee)

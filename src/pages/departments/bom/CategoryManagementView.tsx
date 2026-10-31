@@ -1238,7 +1238,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
         isOpen={isTypeModalOpen}
         onClose={() => setIsTypeModalOpen(false)}
         title="Thêm loại danh mục mới"
-        description="Định nghĩa loại danh mục dùng chung mới cho toàn hệ thống Deco Door"
+        description="Định nghĩa loại danh mục dùng chung mới cho toàn hệ thống Seajong"
         maxWidth="480px"
         isStatic={true}
       >

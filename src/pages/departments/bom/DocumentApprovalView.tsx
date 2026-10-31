@@ -573,7 +573,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
           .trim();
         const formattedCol1 = cleanedTitle.toLowerCase().startsWith('hồ sơ')
           ? cleanedTitle
-          : `Hồ sơ dự thầu Gói thầu ${cleanedTitle || 'Cung cấp, lắp đặt cửa gỗ'}`;
+          : `Hồ sơ dự thầu Gói thầu ${cleanedTitle || 'Cung cấp thiết bị vệ sinh Seajong'}`;
 
         const tenderCode = targetDoc.code ? targetDoc.code.replace('TT-', 'HSDT-') : `HSDT-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
 
@@ -816,7 +816,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
           .trim();
         const formattedCol1 = cleanedTitle.toLowerCase().startsWith('hồ sơ')
           ? cleanedTitle
-          : `Hồ sơ dự thầu Gói thầu ${cleanedTitle || 'Cung cấp, lắp đặt cửa gỗ'}`;
+          : `Hồ sơ dự thầu Gói thầu ${cleanedTitle || 'Cung cấp thiết bị vệ sinh Seajong'}`;
 
         const tenderCode = doc.code ? doc.code.replace('TT-', 'HSDT-') : `HSDT-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
 

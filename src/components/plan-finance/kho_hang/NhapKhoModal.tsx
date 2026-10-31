@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { useSession } from "next-auth/react";
-import { isLogisticsAdmin } from "@/lib/logistics-permissions";
+import { canExecuteInOut } from "@/lib/logistics-permissions";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -98,7 +98,7 @@ export function NhapKhoModal({
   initialShippingFee,
 }: NhapKhoModalProps) {
   const { data: session } = useSession();
-  const isThuKho = isLogisticsAdmin(session?.user);
+  const isThuKho = canExecuteInOut(session?.user);
 
   const isInitialReturn = (
     initialMode === "return" ||

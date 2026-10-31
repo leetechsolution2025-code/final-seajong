@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { isProductionAdmin } from '@/lib/production-permissions';
+import { canManageProdDefects } from '@/lib/production-permissions';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Button } from '@/components/common/Button';
 import { Offcanvas } from '@/components/common/Offcanvas';
@@ -24,7 +24,7 @@ export function DefectSummaryOffcanvas({
   onOpenProcess,
 }: DefectSummaryOffcanvasProps) {
   const { data: session } = useSession();
-  const isProdAdmin = isProductionAdmin(session?.user);
+  const isProdAdmin = canManageProdDefects(session?.user);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [fetchedDefect, setFetchedDefect] = useState<any>(null);

@@ -5,7 +5,7 @@ import { Offcanvas } from '@/components/common/Offcanvas';
 import { Button } from '@/components/common/Button';
 import { DatePicker } from '@/components/common/DatePicker';
 import { FullWidthTable } from '@/components/common/FullWidthTable';
-import { isProductionAdmin } from '@/lib/production-permissions';
+import { canManageProdOrders } from '@/lib/production-permissions';
 import {
   BoxSeam,
   Layers,
@@ -41,7 +41,7 @@ export function ProductionOrderDetailOffcanvas({
   const effectiveOrderId = show === false ? null : orderId;
 
   const { data: session } = useSession();
-  const isProdAdmin = isProductionAdmin(session?.user);
+  const isProdAdmin = canManageProdOrders(session?.user);
   const { success: toastSuccess, error: toastError } = useToast();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);

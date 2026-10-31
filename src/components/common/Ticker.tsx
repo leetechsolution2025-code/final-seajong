@@ -98,7 +98,7 @@ export const Ticker: React.FC<TickerProps> = ({
     if (items && items.length > 0) return items;
     if (text) return [text];
     return [
-      'Hệ thống quản trị Deco Door Enterprise - Chúc quý cán bộ nhân viên một ngày làm việc hiệu quả và thành công!',
+      'Hệ thống quản trị Seajong Enterprise - Chúc quý cán bộ nhân viên một ngày làm việc hiệu quả và thành công!',
     ];
   }, [items, text]);
 

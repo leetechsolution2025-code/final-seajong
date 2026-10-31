@@ -1,41 +1,59 @@
+import { hasPermission } from './permissions';
+
 /**
  * Logistics Permission Helper
- * Quy định phân quyền trong hệ thống Quản lý kho:
- * - Chỉ Thủ kho, Quản lý kho, Trưởng kho hoặc Quản trị viên (ADMIN/SUPERADMIN/GIÁM ĐỐC) mới có quyền:
- *   + Giao việc gom hàng / phân công việc (chọn checkbox, nút Giao việc)
- *   + Tạo, lưu, xác nhận phiếu Xuất kho, Nhập kho, Luân chuyển kho
- *   + Nhập kiểm kê số lượng thực tế trong Kiểm kho, cân bằng kho, tạo yêu cầu mua hàng
- *   + In báo cáo, xuất Excel dữ liệu kho
- *   + Thêm, sửa, xoá hàng hoá / danh mục tồn kho
- * - Các tài khoản Nhân viên kho, Phụ kho... chỉ có quyền xem dữ liệu (Read-only).
+ * Căn cứ theo quyền hạn đã cấp cho tài khoản trên trang Phân quyền người dùng:
+ * - logistics_assign: Điều phối & giao việc kho (Thủ kho / Quản trị)
+ * - logistics_in_out: Thực hiện xuất / nhập & kiểm kho
+ * - logistics_picking: Cấp phát vật tư & gom hàng
+ * - logistics_print: In phiếu kho & in tem nhiệt
  */
 
-export function isLogisticsAdmin(user?: {
+export type LogisticsUserLike = {
   role?: string | null;
+  permissions?: string[] | string | null;
   positionName?: string | null;
   position?: string | null;
   levelOrder?: number | null;
-} | null): boolean {
+  employee?: {
+    position?: string | null;
+    positionName?: string | null;
+  } | null;
+} | null;
+
+export function isLogisticsAdmin(user?: LogisticsUserLike): boolean {
   if (!user) return false;
 
-  const role = (user.role || "").toUpperCase();
-  if (role === "SUPERADMIN" || role === "ADMIN" || role === "DIRECTOR") {
+  const role = (user.role || '').toUpperCase();
+  if (role === 'SUPERADMIN' || role === 'ADMIN' || role === 'DIRECTOR') {
     return true;
   }
 
-  const posName = (user.positionName || "").trim().toLowerCase();
+  if (hasPermission(user as any, 'logistics_assign')) {
+    return true;
+  }
+
+  const posName = (
+    user.positionName ||
+    user.position ||
+    user.employee?.positionName ||
+    user.employee?.position ||
+    ''
+  )
+    .trim()
+    .toLowerCase();
 
   // Ban giám đốc
-  if (posName.includes("giám đốc")) {
+  if (posName.includes('giám đốc')) {
     return true;
   }
 
   // Thủ kho chính thức: có chữ "thủ kho", "trưởng kho", "quản lý kho"
   // VÀ KHÔNG CHỨA "phụ", "nhân viên"
   if (
-    (posName.includes("thủ kho") || posName.includes("trưởng kho") || posName.includes("quản lý kho")) &&
-    !posName.includes("phụ") &&
-    !posName.includes("nhân viên")
+    (posName.includes('thủ kho') || posName.includes('trưởng kho') || posName.includes('quản lý kho')) &&
+    !posName.includes('phụ') &&
+    !posName.includes('nhân viên')
   ) {
     return true;
   }
@@ -46,4 +64,36 @@ export function isLogisticsAdmin(user?: {
   }
 
   return false;
+}
+
+/**
+ * Quyền điều phối & giao việc kho (logistics_assign)
+ */
+export function canAssignLogistics(user?: LogisticsUserLike): boolean {
+  if (!user) return false;
+  return isLogisticsAdmin(user) || hasPermission(user as any, 'logistics_assign');
+}
+
+/**
+ * Quyền thực hiện xuất / nhập & kiểm kho (logistics_in_out)
+ */
+export function canExecuteInOut(user?: LogisticsUserLike): boolean {
+  if (!user) return false;
+  return isLogisticsAdmin(user) || hasPermission(user as any, 'logistics_in_out');
+}
+
+/**
+ * Quyền cấp phát vật tư & gom hàng (logistics_picking)
+ */
+export function canPickAndPack(user?: LogisticsUserLike): boolean {
+  if (!user) return false;
+  return isLogisticsAdmin(user) || hasPermission(user as any, 'logistics_picking');
+}
+
+/**
+ * Quyền in phiếu kho & in tem nhiệt (logistics_print)
+ */
+export function canPrintLogistics(user?: LogisticsUserLike): boolean {
+  if (!user) return false;
+  return isLogisticsAdmin(user) || hasPermission(user as any, 'logistics_print');
 }

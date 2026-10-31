@@ -7,6 +7,7 @@ import { NotificationOffcanvas } from './NotificationOffcanvas';
 import { MessageOffcanvas } from './MessageOffcanvas';
 import { AccountSettingsModal } from './AccountSettingsModal';
 import { getAvatarInitials } from '../../utils/avatar';
+import { canAccessDepartment, hasPermission, isAdminUser } from '../../lib/permissions';
 
 interface TopbarProps {
   collapsed: boolean;
@@ -135,13 +136,9 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
     ? (user?.customer?.code ? `Đại lý • ${user.customer.code}` : 'Đại lý chính thức')
     : userPosition;
 
-  const isAdminAccount =
-    !isDealer &&
-    (user?.role === 'ADMIN' ||
-      user?.role === 'SUPERADMIN' ||
-      userPosition.toLowerCase().includes('giám đốc') ||
-      user?.departmentCode?.toLowerCase() === 'board' ||
-      user?.employee?.departmentCode?.toLowerCase() === 'board');
+  const isAdminAccount = !isDealer && isAdminUser(user);
+  const canUseNotify = hasPermission(user, 'notify');
+  const canUseChat = hasPermission(user, 'chat');
 
   return (
     <>
@@ -165,9 +162,17 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
           {/* Brand header in Topbar (Logo + Brand Text) */}
           <button
             type="button"
-            onClick={() => setActiveDeptCode(user?.role === 'DEALER' ? 'dealer' : 'board')}
+            onClick={() => {
+              if (user?.role === 'DEALER') {
+                setActiveDeptCode('dealer');
+              } else if (canAccessDepartment(user, 'board')) {
+                setActiveDeptCode('board');
+              } else {
+                navigateToUserDept();
+              }
+            }}
             className="flex items-center gap-3 text-left cursor-pointer border-0 bg-transparent group p-0"
-            title={user?.role === 'DEALER' ? "Về Cổng Đại lý (Trang chủ)" : "Về Ban Giám đốc (Trang chủ)"}
+            title={user?.role === 'DEALER' ? "Về Cổng Đại lý (Trang chủ)" : "Về Trang chủ bộ phận"}
           >
             <div className="h-10 w-auto flex items-center justify-center shrink-0">
               <img src="/logo.png" alt="Seajong" className="h-9 w-auto object-contain" />
@@ -217,7 +222,7 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
                 <div className="pb-2.5 mb-2.5 border-b border-slate-100 flex items-center justify-between px-1">
                   <div>
                     <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                      Quản lý 13 Phòng Ban
+                      Quản lý Phòng Ban
                     </h4>
                     <p className="text-[11px] text-slate-400">Chuyển nhanh sang các bộ phận được cấp quyền</p>
                   </div>
@@ -229,27 +234,42 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-80 overflow-y-auto pr-1">
                   {departments.map((dept) => {
                     const isSelected = activeDeptCode === dept.code.toLowerCase();
+                    const hasAccess = canAccessDepartment(user, dept.code);
                     return (
                       <button
                         key={dept.code}
                         type="button"
+                        disabled={!hasAccess}
                         onClick={() => {
+                          if (!hasAccess) return;
                           setActiveDeptCode(dept.code);
                           setSwitcherOpen(false);
                         }}
-                        className={`p-2.5 rounded-xl border flex flex-col items-center text-center transition-all cursor-pointer ${
-                          isSelected
-                            ? 'border-indigo-500 bg-indigo-50/70 text-indigo-700 font-bold'
-                            : 'border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/40 text-slate-800 bg-transparent'
+                        title={
+                          hasAccess
+                            ? `Chuyển sang ${dept.nameVi}`
+                            : `Chưa được cấp quyền truy cập ${dept.nameVi}`
+                        }
+                        className={`p-2.5 rounded-xl border flex flex-col items-center text-center transition-all ${
+                          !hasAccess
+                            ? 'border-slate-100 bg-slate-50/70 text-slate-400 opacity-55 cursor-not-allowed'
+                            : isSelected
+                            ? 'border-indigo-500 bg-indigo-50/70 text-indigo-700 font-bold cursor-pointer'
+                            : 'border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/40 text-slate-800 bg-transparent cursor-pointer'
                         }`}
                       >
-                        <span
-                          className={`text-[10px] font-mono font-bold uppercase ${
-                            isSelected ? 'text-indigo-600' : 'text-slate-400'
-                          }`}
-                        >
-                          {dept.code}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <span
+                            className={`text-[10px] font-mono font-bold uppercase ${
+                              isSelected ? 'text-indigo-600' : 'text-slate-400'
+                            }`}
+                          >
+                            {dept.code}
+                          </span>
+                          {!hasAccess && (
+                            <i className="bi bi-lock-fill text-[10px] text-slate-400" />
+                          )}
+                        </div>
                         <span className="text-xs font-semibold mt-1 line-clamp-1">
                           {dept.nameVi}
                         </span>
@@ -275,33 +295,53 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
           {/* 3. Notifications (bi-bell) */}
           <button
             type="button"
+            disabled={!canUseNotify}
             onClick={() => {
+              if (!canUseNotify) return;
               setNotifOpen(true);
               setMsgOpen(false);
               setSwitcherOpen(false);
               setUserMenuOpen(false);
             }}
-            className="w-[38px] h-[38px] flex items-center justify-center rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all cursor-pointer border-0 bg-transparent relative"
-            title="Thông báo"
+            className={`w-[38px] h-[38px] flex items-center justify-center rounded-xl transition-all border-0 bg-transparent relative ${
+              canUseNotify
+                ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 cursor-pointer'
+                : 'text-slate-300 opacity-60 cursor-not-allowed'
+            }`}
+            title={canUseNotify ? 'Thông báo' : 'Thông báo hệ thống (Chưa được cấp quyền)'}
           >
             <i className="bi bi-bell text-[18px]" />
-            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white"></span>
+            {canUseNotify ? (
+              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white"></span>
+            ) : (
+              <i className="bi bi-lock-fill text-[9px] text-slate-400 absolute bottom-1.5 right-1.5" />
+            )}
           </button>
 
           {/* 4. Messages (bi-chat-dots) */}
           <button
             type="button"
+            disabled={!canUseChat}
             onClick={() => {
+              if (!canUseChat) return;
               setMsgOpen(true);
               setNotifOpen(false);
               setSwitcherOpen(false);
               setUserMenuOpen(false);
             }}
-            className="w-[38px] h-[38px] flex items-center justify-center rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all cursor-pointer border-0 bg-transparent relative"
-            title="Tin nhắn nội bộ"
+            className={`w-[38px] h-[38px] flex items-center justify-center rounded-xl transition-all border-0 bg-transparent relative ${
+              canUseChat
+                ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 cursor-pointer'
+                : 'text-slate-300 opacity-60 cursor-not-allowed'
+            }`}
+            title={canUseChat ? 'Tin nhắn nội bộ' : 'Nhắn tin nội bộ (Chưa được cấp quyền)'}
           >
             <i className="bi bi-chat-dots text-[17px]" />
-            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-indigo-600 ring-2 ring-white"></span>
+            {canUseChat ? (
+              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-indigo-600 ring-2 ring-white"></span>
+            ) : (
+              <i className="bi bi-lock-fill text-[9px] text-slate-400 absolute bottom-1.5 right-1.5" />
+            )}
           </button>
 
           {/* Divider */}

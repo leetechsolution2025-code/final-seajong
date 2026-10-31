@@ -12,7 +12,7 @@ import { EventOffcanvas } from "@/components/common/EventOffcanvas";
 import UpdatePriceOffcanvas from "@/components/ui/UpdatePriceOffcanvas";
 import { useToast } from "@/components/ui/Toast";
 import { useSession } from "next-auth/react";
-import { isProductionAdmin } from "@/lib/production-permissions";
+import { canManageProdBom } from "@/lib/production-permissions";
 import BomDiffOffcanvas from "@/components/production/BomDiffOffcanvas";
 import BOMPriceDetailsOffcanvas from "@/components/production/BOMPriceDetailsOffcanvas";
 import {
@@ -29,7 +29,7 @@ import {
 
 export function ProductionBomPage() {
   const { data: session } = useSession();
-  const isProdAdmin = isProductionAdmin(session?.user);
+  const isProdAdmin = canManageProdBom(session?.user);
   const { success: toastSuccess, error: toastError, info: toastInfo } = useToast();
   const [products, setProducts] = useState<any[]>([]);
   const [totalItems, setTotalItems] = useState(0);

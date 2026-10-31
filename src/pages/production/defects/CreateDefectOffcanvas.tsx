@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { isProductionAdmin } from '@/lib/production-permissions';
+import { canManageProdDefects } from '@/lib/production-permissions';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { Select } from '@/components/common/Select';
@@ -103,7 +103,7 @@ export function CreateDefectOffcanvas({
   const [orders, setOrders] = useState<any[]>([]);
 
   const { data: session } = useSession();
-  const isProdAdmin = isProductionAdmin(session?.user);
+  const isProdAdmin = canManageProdDefects(session?.user);
 
   useEffect(() => {
     if (session?.user) {

@@ -984,7 +984,7 @@ export const PrintPreview: React.FC<PrintPreviewProps> = ({
                   {/* Header trang bìa: Thông tin công ty */}
                   <div className="cover-header">
                     <div style={{ textTransform: 'uppercase', fontWeight: 800, fontSize: '0.9375rem', color: '#0f172a', letterSpacing: '0.5px' }}>
-                      {company.company_name || 'CÔNG TY CỔ PHẦN SẢN XUẤT DECO DOOR'}
+                      {company.company_name || 'CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM'}
                     </div>
                     <div style={{ fontSize: '0.75rem', color: '#000000', marginTop: '3px' }}>
                       {company.address || 'Cụm 4, Xã Sơn Đồng, Huyện Hoài Đức, TP. Hà Nội, Việt Nam'}
@@ -1051,7 +1051,7 @@ export const PrintPreview: React.FC<PrintPreviewProps> = ({
                           marginTop: '4px',
                         }}
                       >
-                        Công trình: <span style={{ color: '#1e293b' }}>{workName || (projectName ? `Cung cấp và thi công lắp đặt cửa gỗ - ${projectName}` : 'Cung cấp và thi công lắp đặt cửa gỗ công nghiệp')}</span>
+                        Công trình: <span style={{ color: '#1e293b' }}>{workName || (projectName ? `Cung cấp thiết bị vệ sinh và phòng bếp Seajong - ${projectName}` : 'Cung cấp thiết bị vệ sinh và phòng bếp Seajong')}</span>
                       </div>
                     )}
                   </div>

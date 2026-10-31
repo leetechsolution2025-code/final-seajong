@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { isProductionAdmin } from '@/lib/production-permissions';
+import { canManageProdOrders } from '@/lib/production-permissions';
 import { StandardPage } from '@/components/layout/StandardPage';
 import { TableToolbar } from '@/components/common/TableToolbar';
 import { FullWidthTable } from '@/components/common/FullWidthTable';
@@ -53,7 +53,7 @@ function StatusBadge({ status }: { status: string }) {
 
 export function ProductionOverviewPage() {
   const { data: session } = useSession();
-  const isProdAdmin = isProductionAdmin(session?.user);
+  const isProdAdmin = canManageProdOrders(session?.user);
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 

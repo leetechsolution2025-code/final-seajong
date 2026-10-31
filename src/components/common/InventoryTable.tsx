@@ -395,12 +395,8 @@ export const InventoryDetailOffcanvas: React.FC<InventoryDetailOffcanvasProps> =
     <Offcanvas
       isOpen={true}
       onClose={onClose}
-      title={
-        <div className="flex items-center gap-2">
-          <BoxSeam size={18} className="text-blue-600" />
-          <span className="font-bold text-slate-900 text-sm">Thông tin hàng hoá</span>
-        </div>
-      }
+      icon={<BoxSeam size={20} />}
+      title="Thông tin hàng hoá"
       description={`Mã SKU: ${item.code || 'Chưa cập nhật'}`}
       width="400px"
       position="right"

@@ -9,13 +9,13 @@ import { DefectSummaryOffcanvas } from "./defects/DefectSummaryOffcanvas";
 import { DefectProcessModal } from "./defects/DefectProcessModal";
 import { CreateDefectOffcanvas } from "./defects/CreateDefectOffcanvas";
 import { useSession } from "next-auth/react";
-import { isProductionAdmin } from "@/lib/production-permissions";
+import { canManageProdDefects } from "@/lib/production-permissions";
 import { EventOffcanvas } from "@/components/common/EventOffcanvas";
 import { CalendarEvent, PlusLg, ArrowRepeat } from "react-bootstrap-icons";
 
 export function ProductionDefectsPage() {
   const { data: session } = useSession();
-  const isProdAdmin = isProductionAdmin(session?.user);
+  const isProdAdmin = canManageProdDefects(session?.user);
   const [selectedDefectId, setSelectedDefectId] = useState<string | null>(null);
   const [isProcessModalOpen, setIsProcessModalOpen] = useState(false);
   const [isCreateOffcanvasOpen, setIsCreateOffcanvasOpen] = useState(false);

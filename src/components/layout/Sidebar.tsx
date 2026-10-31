@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDepartment } from '../../context/DepartmentContext';
+import { useAuth } from '../../context/AuthContext';
+import { isMenuLocked, getMenuLockReason } from '../../lib/permissions';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -524,6 +526,7 @@ const DEPT_SIDEBAR_CONFIGS: Record<string, { deptName: string; sections: NavSect
 
 export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
   const { activeDeptCode, activeMenuKey, setActiveMenuKey } = useDepartment();
+  const { user } = useAuth();
 
   // Trạng thái mở accordion của các section: chỉ duy nhất 1 section mở tại 1 thời điểm
   const [openSectionId, setOpenSectionId] = useState<string | null>(null);
@@ -692,25 +695,44 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
           )}
 
           {/* Mục Trực Tiếp: Kho hàng (nếu không thuộc nhóm bị ẩn) */}
-          {!isWarehouseHidden && (
-            <button
-              type="button"
-              onClick={() => setActiveMenuKey('inventory')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-all cursor-pointer border-0 bg-transparent text-left ${
-                activeMenuKey === 'inventory'
-                  ? 'text-blue-600 font-bold bg-blue-50/50'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-normal'
-              } ${collapsed ? 'justify-center px-2' : ''}`}
-              title={collapsed ? 'Kho hàng' : undefined}
-            >
-              <i
-                className={`bi bi-boxes text-[16px] shrink-0 ${
-                  activeMenuKey === 'inventory' ? 'text-blue-600' : 'text-slate-400'
-                }`}
-              />
-              {!collapsed && <span>Kho hàng</span>}
-            </button>
-          )}
+          {!isWarehouseHidden && (() => {
+            const warehouseLocked = isMenuLocked(user, activeDeptCode, 'inventory');
+            return (
+              <button
+                type="button"
+                disabled={warehouseLocked}
+                onClick={() => {
+                  if (!warehouseLocked) setActiveMenuKey('inventory');
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[13.5px] transition-all border-0 bg-transparent text-left ${
+                  warehouseLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                } ${
+                  activeMenuKey === 'inventory'
+                    ? 'text-blue-600 font-bold bg-blue-50/50'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-normal'
+                } ${collapsed ? 'justify-center px-2' : ''}`}
+                title={
+                  warehouseLocked
+                    ? getMenuLockReason(user, activeDeptCode, 'inventory') || 'Chưa được cấp quyền'
+                    : collapsed
+                    ? 'Kho hàng'
+                    : undefined
+                }
+              >
+                <div className="flex items-center gap-2.5">
+                  <i
+                    className={`bi bi-boxes text-[16px] shrink-0 ${
+                      activeMenuKey === 'inventory' ? 'text-blue-600' : 'text-slate-400'
+                    }`}
+                  />
+                  {!collapsed && <span>Kho hàng</span>}
+                </div>
+                {warehouseLocked && !collapsed && (
+                  <i className="bi bi-lock-fill text-slate-400 text-[13px] shrink-0" />
+                )}
+              </button>
+            );
+          })()}
 
           {/* ── Các nhóm chức năng đặc thù của phòng ban hiện tại ── */}
           {currentConfig.sections.map((sec) => {
@@ -719,21 +741,29 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
 
             // Flat section (hàng đơn không có menu con)
             if (sec.flat) {
+              const secLocked = Boolean(sec.isLocked || isMenuLocked(user, activeDeptCode, sec.id));
               return (
                 <button
                   key={sec.id}
                   type="button"
+                  disabled={secLocked}
                   onClick={() => {
-                    if (!sec.isLocked) setActiveMenuKey(sec.id);
+                    if (!secLocked) setActiveMenuKey(sec.id);
                   }}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[13.5px] transition-all border-0 bg-transparent text-left ${
-                    sec.isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                    secLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
                   } ${
                     isSecActive
                       ? 'text-blue-600 font-bold bg-blue-50/50'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-normal'
                   } ${collapsed ? 'justify-center px-2' : ''}`}
-                  title={collapsed ? sec.label : undefined}
+                  title={
+                    secLocked
+                      ? getMenuLockReason(user, activeDeptCode, sec.id) || 'Chưa được cấp quyền'
+                      : collapsed
+                      ? sec.label
+                      : undefined
+                  }
                 >
                   <div className="flex items-center gap-2.5">
                     <i
@@ -743,7 +773,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
                     />
                     {!collapsed && <span>{sec.label}</span>}
                   </div>
-                  {sec.isLocked && !collapsed && (
+                  {secLocked && !collapsed && (
                     <i className="bi bi-lock-fill text-slate-400 text-[13px] shrink-0" />
                   )}
                 </button>
@@ -752,6 +782,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
 
             // Accordion section
             const isAnySubActive = sec.items?.some((i) => activeMenuKey === i.id);
+            const allSubsLocked = Boolean(
+              sec.items &&
+                sec.items.length > 0 &&
+                sec.items.every((sub) => Boolean(sub.isLocked || isMenuLocked(user, activeDeptCode, sub.id)))
+            );
 
             return (
               <div key={sec.id}>
@@ -774,11 +809,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
                     {!collapsed && <span>{sec.label}</span>}
                   </div>
                   {!collapsed && (
-                    <i
-                      className={`bi bi-chevron-down text-[11px] text-slate-400 transition-transform ${
-                        isOpen ? 'rotate-180' : ''
-                      }`}
-                    />
+                    <div className="flex items-center gap-1.5">
+                      {allSubsLocked && (
+                        <i className="bi bi-lock-fill text-slate-400 text-[11px]" />
+                      )}
+                      <i
+                        className={`bi bi-chevron-down text-[11px] text-slate-400 transition-transform ${
+                          isOpen ? 'rotate-180' : ''
+                        }`}
+                      />
+                    </div>
                   )}
                 </button>
 
@@ -786,15 +826,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
                   <div className="pl-6 pr-1 space-y-0.5 py-1">
                     {sec.items.map((sub) => {
                       const isSubActive = activeMenuKey === sub.id;
+                      const subLocked = Boolean(sub.isLocked || isMenuLocked(user, activeDeptCode, sub.id));
                       return (
                         <button
                           key={sub.id}
                           type="button"
+                          disabled={subLocked}
                           onClick={() => {
-                            if (!sub.isLocked) setActiveMenuKey(sub.id);
+                            if (!subLocked) setActiveMenuKey(sub.id);
                           }}
+                          title={
+                            subLocked
+                              ? getMenuLockReason(user, activeDeptCode, sub.id) || 'Chưa được cấp quyền'
+                              : undefined
+                          }
                           className={`w-full flex items-center justify-between px-3 py-1.5 rounded-md text-[13px] transition-colors border-0 bg-transparent text-left ${
-                            sub.isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                            subLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
                           } ${
                             isSubActive
                               ? 'text-blue-600 font-semibold bg-blue-50/40'
@@ -811,7 +858,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
                             ></span>
                             <span className="truncate">{sub.name}</span>
                           </div>
-                          {sub.isLocked && (
+                          {subLocked && (
                             <i className="bi bi-lock-fill text-slate-400 text-[12px] shrink-0" />
                           )}
                         </button>
@@ -824,83 +871,98 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
           })}
 
           {/* ── Nhóm bổ sung: Yêu cầu và duyệt yêu cầu (chuẩn client-seajong tự động gắn vào các phòng ban khác) ── */}
-          {showApprovalGroup && (
-            <div>
-              <button
-                type="button"
-                onClick={() => toggleSection('hr_requests_approvals')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[13.5px] font-normal transition-all cursor-pointer border-0 bg-transparent ${
-                  activeMenuKey === 'recruitment_req' || activeMenuKey === 'approvals'
-                    ? 'text-slate-900 font-semibold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                } ${collapsed ? 'justify-center px-2' : ''}`}
-                title={collapsed ? 'Yêu cầu và duyệt yêu cầu' : undefined}
-              >
-                <div className="flex items-center gap-2.5">
-                  <i
-                    className={`bi bi-clipboard2-check text-[16px] shrink-0 ${
-                      activeMenuKey === 'recruitment_req' || activeMenuKey === 'approvals'
-                        ? 'text-blue-600'
-                        : 'text-slate-400'
-                    }`}
-                  />
-                  {!collapsed && <span>Yêu cầu và duyệt yêu cầu</span>}
-                </div>
-                {!collapsed && (
-                  <i
-                    className={`bi bi-chevron-down text-[11px] text-slate-400 transition-transform ${
-                      openSectionId === 'hr_requests_approvals' ? 'rotate-180' : ''
-                    }`}
-                  />
-                )}
-              </button>
-
-              {!collapsed && openSectionId === 'hr_requests_approvals' && (
-                <div className="pl-6 pr-1 space-y-0.5 py-1">
-                  <button
-                    type="button"
-                    onClick={() => setActiveMenuKey('recruitment_req')}
-                    className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-[13px] transition-colors cursor-pointer border-0 bg-transparent text-left ${
-                      activeMenuKey === 'recruitment_req'
-                        ? 'text-blue-600 font-semibold bg-blue-50/40'
-                        : 'text-slate-500 hover:text-blue-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                        activeMenuKey === 'recruitment_req'
-                          ? 'bg-blue-600 border border-blue-600'
-                          : 'border border-slate-400'
+          {showApprovalGroup && (() => {
+            const approvalLocked = isMenuLocked(user, activeDeptCode, 'approvals');
+            return (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => toggleSection('hr_requests_approvals')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[13.5px] font-normal transition-all cursor-pointer border-0 bg-transparent ${
+                    activeMenuKey === 'recruitment_req' || activeMenuKey === 'approvals'
+                      ? 'text-slate-900 font-semibold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  } ${collapsed ? 'justify-center px-2' : ''}`}
+                  title={collapsed ? 'Yêu cầu và duyệt yêu cầu' : undefined}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <i
+                      className={`bi bi-clipboard2-check text-[16px] shrink-0 ${
+                        activeMenuKey === 'recruitment_req' || activeMenuKey === 'approvals'
+                          ? 'text-blue-600'
+                          : 'text-slate-400'
                       }`}
-                    ></span>
-                    <span className="truncate">Yêu cầu</span>
-                  </button>
+                    />
+                    {!collapsed && <span>Yêu cầu và duyệt yêu cầu</span>}
+                  </div>
+                  {!collapsed && (
+                    <i
+                      className={`bi bi-chevron-down text-[11px] text-slate-400 transition-transform ${
+                        openSectionId === 'hr_requests_approvals' ? 'rotate-180' : ''
+                      }`}
+                    />
+                  )}
+                </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setActiveMenuKey('approvals')}
-                    className={`w-full flex items-center justify-between px-3 py-1.5 rounded-md text-[13px] transition-colors border-0 bg-transparent text-left opacity-75 cursor-pointer ${
-                      activeMenuKey === 'approvals'
-                        ? 'text-blue-600 font-semibold bg-blue-50/40'
-                        : 'text-slate-500 hover:text-blue-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 truncate">
+                {!collapsed && openSectionId === 'hr_requests_approvals' && (
+                  <div className="pl-6 pr-1 space-y-0.5 py-1">
+                    <button
+                      type="button"
+                      onClick={() => setActiveMenuKey('recruitment_req')}
+                      className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-[13px] transition-colors cursor-pointer border-0 bg-transparent text-left ${
+                        activeMenuKey === 'recruitment_req'
+                          ? 'text-blue-600 font-semibold bg-blue-50/40'
+                          : 'text-slate-500 hover:text-blue-600 hover:bg-slate-50'
+                      }`}
+                    >
                       <span
                         className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                          activeMenuKey === 'approvals'
+                          activeMenuKey === 'recruitment_req'
                             ? 'bg-blue-600 border border-blue-600'
                             : 'border border-slate-400'
                         }`}
                       ></span>
-                      <span className="truncate">Duyệt yêu cầu</span>
-                    </div>
-                    <i className="bi bi-lock-fill text-slate-400 text-[12px] shrink-0" />
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+                      <span className="truncate">Yêu cầu</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={approvalLocked}
+                      onClick={() => {
+                        if (!approvalLocked) setActiveMenuKey('approvals');
+                      }}
+                      title={
+                        approvalLocked
+                          ? getMenuLockReason(user, activeDeptCode, 'approvals') || 'Chưa được cấp quyền'
+                          : undefined
+                      }
+                      className={`w-full flex items-center justify-between px-3 py-1.5 rounded-md text-[13px] transition-colors border-0 bg-transparent text-left ${
+                        approvalLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                      } ${
+                        activeMenuKey === 'approvals'
+                          ? 'text-blue-600 font-semibold bg-blue-50/40'
+                          : 'text-slate-500 hover:text-blue-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                            activeMenuKey === 'approvals'
+                              ? 'bg-blue-600 border border-blue-600'
+                              : 'border border-slate-400'
+                          }`}
+                        ></span>
+                        <span className="truncate">Duyệt yêu cầu</span>
+                      </div>
+                      {approvalLocked && (
+                        <i className="bi bi-lock-fill text-slate-400 text-[12px] shrink-0" />
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* ── 3. Section CÔNG VIỆC CÁ NHÂN (chỉ dành cho nhân viên nội bộ, ẩn đối với đại lý) ── */}

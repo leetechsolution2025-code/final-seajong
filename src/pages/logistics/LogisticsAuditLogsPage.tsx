@@ -48,6 +48,10 @@ export interface AuditLogItem {
   nguoiThucHien: string;
   lyDo: string;
   ghiChu: string;
+  orderCode?: string | null;
+  customerName?: string | null;
+  customerAddress?: string | null;
+  partnerType?: 'customer' | 'supplier' | null;
   tongSoLuong?: number;
   linesCount?: number;
   lines?: AuditLogLine[];
@@ -386,7 +390,7 @@ export const LogisticsAuditLogsPage: React.FC = () => {
             setSearch(val);
             setPage(1);
           }}
-          searchPlaceholder="Tìm mã chứng từ, mặt hàng, mã hàng, người thực hiện..."
+          searchPlaceholder="Tìm mã chứng từ, đơn hàng, khách hàng, mặt hàng, người thực hiện..."
           searchMinWidth="240px"
           customFilters={
             <div className="flex items-center gap-2 flex-wrap">
@@ -768,11 +772,50 @@ export const LogisticsAuditLogsPage: React.FC = () => {
                       <td className="py-3 px-4 align-top">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
-                            <div className="text-xs text-slate-800 font-medium leading-relaxed mb-1">
+                            <div className="text-xs text-slate-800 font-medium leading-relaxed">
                               {item.lyDo}
                             </div>
+
+                            {(item.orderCode || item.customerName || item.customerAddress) && (
+                              <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-600">
+                                {item.orderCode && (
+                                  <span className="inline-flex items-center gap-1">
+                                    <i className="bi bi-receipt text-slate-400 text-[11px]" />
+                                    <span>Đơn hàng:</span>
+                                    <b className="font-mono font-semibold text-blue-600">
+                                      {item.orderCode}
+                                    </b>
+                                  </span>
+                                )}
+                                {item.orderCode && (item.customerName || item.customerAddress) && (
+                                  <span className="text-slate-300">•</span>
+                                )}
+                                {item.customerName && (
+                                  <span className="inline-flex items-center gap-1">
+                                    <i className="bi bi-person text-slate-400 text-[11px]" />
+                                    <span>
+                                      {item.partnerType === 'supplier' ? 'Nhà cung cấp:' : 'Khách hàng:'}
+                                    </span>
+                                    <b className="font-semibold text-slate-800">
+                                      {item.customerName}
+                                    </b>
+                                  </span>
+                                )}
+                                {item.customerName && item.customerAddress && (
+                                  <span className="text-slate-300">•</span>
+                                )}
+                                {item.customerAddress && (
+                                  <span className="inline-flex items-center gap-1">
+                                    <i className="bi bi-geo-alt text-slate-400 text-[11px]" />
+                                    <span>Địa chỉ:</span>
+                                    <span className="text-slate-700">{item.customerAddress}</span>
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
                             {item.ghiChu && item.ghiChu !== item.lyDo && (
-                              <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                              <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-1">
                                 <i className="bi bi-info-circle text-slate-400 text-[10px]" />
                                 <span>{item.ghiChu}</span>
                               </div>

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { PageTitle } from '../../components/ui/PageTitle';
-import { DynamicTicker } from '../../components/layout/DynamicTicker';
+import { StandardPage } from '../../components/layout/StandardPage';
 import { Pagination } from '../../components/common/Pagination';
 import { FullWidthTable } from '../../components/common/FullWidthTable';
 import { ProductDrawer, type Product } from '../../components/marketing/ProductDrawer';
@@ -198,50 +197,18 @@ export const MarketingProductsPage: React.FC = () => {
   };
 
   return (
-    <div
-      className="flex flex-col h-full flex-1 overflow-hidden"
-      style={{
-        background: '#EBF0F5',
-        height: '100%',
-        minHeight: 0,
-        maxHeight: '100%',
-      }}
+    <StandardPage
+      title="Sản phẩm Seajong"
+      description={
+        pagination?.total
+          ? `${pagination.total} sản phẩm — cơ sở dữ liệu nội bộ Seajong`
+          : 'Dữ liệu sản phẩm sen vòi, thiết bị vệ sinh cao cấp Seajong'
+      }
+      icon="bi-box-seam"
+      color="blue"
+      badge="CATALOGUE"
+      tickerContext="products"
     >
-      {/* ── 1. PageTitle Chuẩn (Tuyệt đối không có nút bấm theo AGENTS.md) ── */}
-      <div style={{ flexShrink: 0 }}>
-        <PageTitle
-          title="Sản phẩm Seajong"
-          description={
-            pagination?.total
-              ? `${pagination.total} sản phẩm — cơ sở dữ liệu nội bộ Seajong`
-              : 'Dữ liệu sản phẩm sen vòi, thiết bị vệ sinh cao cấp Seajong'
-          }
-          icon="bi-box-seam"
-          color="blue"
-          badge="CATALOGUE"
-        />
-
-        <DynamicTicker context="products" pageTitle="Sản phẩm & Catalogue" />
-      </div>
-
-      {/* ── 2. Card Chính bo góc rounded-xl, padding ngoài 8px chuẩn Enterprise Seajong ── */}
-      <div
-        className="flex-1 flex flex-col overflow-hidden"
-        style={{
-          padding: 8,
-          flex: '1 1 0%',
-          minHeight: 0,
-          height: '100%',
-        }}
-      >
-        <div
-          className="bg-white rounded-xl shadow-xs border border-slate-200/80 p-0 flex flex-col flex-1 overflow-hidden"
-          style={{
-            flex: '1 1 0%',
-            minHeight: 0,
-            height: '100%',
-          }}
-        >
           {/* ── 3. Unified Sticky Toolbar ── */}
           <div className="shrink-0 bg-white border-b border-slate-200 p-2.5 space-y-2">
             {/* Hàng 1: Search, Toggle groups, View mode, Sync */}
@@ -619,8 +586,6 @@ export const MarketingProductsPage: React.FC = () => {
               />
             </div>
           )}
-        </div>
-      </div>
 
       {/* ── 6. Product Detail Drawer ── */}
       <ProductDrawer
@@ -795,14 +760,6 @@ export const MarketingProductsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Ghi chú giải thích chi tiết */}
-              <div className="p-2.5 rounded-xl bg-blue-50/70 border border-blue-100 text-[11.5px] text-slate-600 flex items-start gap-2">
-                <i className="bi bi-info-circle-fill text-blue-600 text-xs shrink-0 mt-0.5" />
-                <span className="leading-relaxed">
-                  Website <strong>seajong.com</strong> hiện có <strong>196 sản phẩm đang mở bán công khai</strong>. Cơ sở dữ liệu nội bộ đang quản lý <strong>{pagination?.total || 226} sản phẩm</strong> (bao gồm 30 model đã ngừng mở bán trên website nhưng vẫn được lưu trữ để theo dõi kho vận & bảo hành).
-                </span>
-              </div>
-
               {/* Terminal Log Console */}
               <div className="rounded-xl bg-slate-900 border border-slate-800 p-3 space-y-1.5 text-xs font-mono shadow-inner">
                 <div className="flex items-center justify-between text-slate-400 text-[11px] pb-1 border-b border-slate-800">
@@ -884,7 +841,7 @@ export const MarketingProductsPage: React.FC = () => {
           </div>
         </>
       )}
-    </div>
+    </StandardPage>
   );
 };
 

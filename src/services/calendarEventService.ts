@@ -68,14 +68,54 @@ export function getUserEventsStorageKey(userEmail: string): string {
 }
 
 /**
- * Đọc dữ liệu sự kiện đã lưu trong Cache cục bộ của người dùng
+ * Kiểm tra và loại bỏ các sự kiện mẫu / dữ liệu mô phỏng cũ còn sót trong localStorage
+ */
+export function isLegacyMockCalendarEvent(item: Partial<PlannerItem> | null | undefined): boolean {
+  if (!item) return true;
+  const id = String(item.id || '').trim();
+  if (
+    id.startsWith('ev-seed-') ||
+    id.startsWith('bom-pl-') ||
+    id.startsWith('pl-init-')
+  ) {
+    return true;
+  }
+  const title = String(item.title || '');
+  const legacyPhrases = [
+    'Hateco',
+    'EI90',
+    'EI60',
+    'The Zei',
+    'Vinhomes Smart City',
+    'Showroom Phương Nga',
+    'Showroom Thiên Thuận',
+    'duyệt cơ chế đại lý',
+    'đơn hàng Anh Thạo',
+    'đại lý Anh Tính',
+    'DBH-20261007-02',
+    'Duyệt ngân sách Marketing & POSM hỗ trợ đại lý mở mới',
+  ];
+  return legacyPhrases.some((phrase) => title.includes(phrase));
+}
+
+/**
+ * Đọc dữ liệu sự kiện đã lưu trong Cache cục bộ của người dùng (đã lọc sạch dữ liệu mẫu cũ)
  */
 export function getLocalCachedEvents(userEmail: string): PlannerItem[] {
   try {
+    localStorage.removeItem('decodoor_bom_events_planner');
+    localStorage.removeItem('seajong_events_planner');
     const key = getUserEventsStorageKey(userEmail);
     const raw = localStorage.getItem(key);
     if (raw) {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const cleaned = parsed.filter((it) => !isLegacyMockCalendarEvent(it));
+        if (cleaned.length !== parsed.length) {
+          localStorage.setItem(key, JSON.stringify(cleaned));
+        }
+        return cleaned;
+      }
     }
   } catch (e) {
     console.error('Lỗi đọc cache sự kiện:', e);
@@ -89,7 +129,8 @@ export function getLocalCachedEvents(userEmail: string): PlannerItem[] {
 export function setLocalCachedEvents(userEmail: string, items: PlannerItem[]): void {
   try {
     const key = getUserEventsStorageKey(userEmail);
-    localStorage.setItem(key, JSON.stringify(items));
+    const cleaned = (Array.isArray(items) ? items : []).filter((it) => !isLegacyMockCalendarEvent(it));
+    localStorage.setItem(key, JSON.stringify(cleaned));
   } catch (e) {
     console.error('Lỗi ghi cache sự kiện:', e);
   }

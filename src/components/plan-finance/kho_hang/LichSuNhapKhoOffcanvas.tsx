@@ -1,5 +1,7 @@
 "use client";
 import React from "react";
+import { Offcanvas } from "@/components/common/Offcanvas";
+import { ClockHistory } from "react-bootstrap-icons";
 
 interface MovementItem {
   id: string;
@@ -108,131 +110,39 @@ export function LichSuNhapKhoOffcanvas({ onClose }: LichSuNhapKhoOffcanvasProps)
   }, [movements]);
 
   return (
-    <>
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .nhap-history-oc { transition: transform 0.27s cubic-bezier(.4,0,.2,1); }
-      `}} />
-
-      {/* Backdrop */}
+    <Offcanvas
+      isOpen={true}
+      onClose={onClose}
+      icon={<ClockHistory size={20} />}
+      title={selectedGroup ? `Phiếu nhập: ${selectedGroup.soChungTu}` : "Lịch sử nhập hàng"}
+      description={
+        selectedGroup ? (
+          <button
+            type="button"
+            onClick={() => setSelectedGroup(null)}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
+          >
+            <i className="bi bi-chevron-left text-[11px]" /> Quay lại danh sách
+          </button>
+        ) : (
+          "Danh sách phiếu nhập kho đã thực hiện"
+        )
+      }
+      width="400px"
+      position="right"
+      bodyStyle={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}
+    >
+      {/* 2-Slide container */}
       <div
-        onClick={handleClose}
         style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 5100,
-          background: visible ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0)",
-          transition: "background 0.27s",
-        }}
-      />
-
-      {/* Offcanvas Body */}
-      <div
-        className="nhap-history-oc app-custom-drawer"
-        style={{
-          position: "fixed",
-          top: 0,
-          right: 0,
-          bottom: 0,
-          width: 400,
-          zIndex: 5200,
-          background: "var(--card)",
-          borderLeft: "1px solid var(--border)",
-          boxShadow: "-6px 0 28px rgba(0,0,0,0.15)",
+          flex: 1,
           display: "flex",
-          flexDirection: "column",
-          transform: visible ? "translateX(0)" : "translateX(100%)",
-          overflow: "hidden",
+          width: "200%",
+          transition: "transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+          transform: selectedGroup ? "translateX(-50%)" : "translateX(0)",
+          minHeight: 0,
         }}
       >
-        {/* Header */}
-        <div
-          style={{
-            padding: "14px 16px",
-            borderBottom: "1px solid var(--border)",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            flexShrink: 0,
-          }}
-        >
-          {selectedGroup ? (
-            <button
-              onClick={() => setSelectedGroup(null)}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                padding: "4px 8px 4px 0",
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                color: "var(--foreground)",
-                fontWeight: 700,
-                fontSize: 13.5,
-                outline: "none",
-              }}
-            >
-              <i className="bi bi-chevron-left" style={{ fontSize: 14 }} />
-              Quay lại
-            </button>
-          ) : (
-            <>
-              <div
-                style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: 8,
-                  background: "rgba(16,185,129,0.12)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                }}
-              >
-                <i className="bi bi-clock-history" style={{ fontSize: 14, color: "#10b981" }} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>Lịch sử nhập hàng</p>
-                <p style={{ margin: 0, fontSize: 11, color: "var(--muted-foreground)" }}>
-                  Danh sách phiếu nhập kho đã thực hiện
-                </p>
-              </div>
-            </>
-          )}
-
-          {selectedGroup && <div style={{ flex: 1 }} />}
-
-          <button
-            onClick={handleClose}
-            style={{
-              width: 28,
-              height: 28,
-              border: "1px solid var(--border)",
-              background: "var(--muted)",
-              borderRadius: 7,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "var(--muted-foreground)",
-            }}
-          >
-            <i className="bi bi-x" style={{ fontSize: 16 }} />
-          </button>
-        </div>
-
-        {/* 2-Slide container */}
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            width: "200%",
-            transition: "transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
-            transform: selectedGroup ? "translateX(-50%)" : "translateX(0)",
-            minHeight: 0,
-          }}
-        >
           {/* Slide 1: List (width: 50%) */}
           <div
             style={{
@@ -476,7 +386,6 @@ export function LichSuNhapKhoOffcanvas({ onClose }: LichSuNhapKhoOffcanvasProps)
             )}
           </div>
         </div>
-      </div>
-    </>
+    </Offcanvas>
   );
 }

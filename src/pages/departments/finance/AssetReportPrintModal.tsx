@@ -293,7 +293,7 @@ export const AssetReportPrintModal: React.FC<AssetReportPrintModalProps> = ({
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {company.company_name || 'CÔNG TY CỔ PHẦN SẢN XUẤT DECO DOOR'}
+                  {company.company_name || 'CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM'}
                 </div>
                 <div
                   className="print-company-branch"

@@ -1226,7 +1226,7 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
                   <div style={{ maxWidth: '58%' }}>
                     <div style={{ fontWeight: 'bold', fontSize: '10pt', textTransform: 'uppercase' }}>
-                      CÔNG TY CỔ PHẦN SẢN XUẤT DECO DOOR
+                      CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM
                     </div>
                     <div style={{ fontSize: '9pt', color: '#334155', marginTop: '2px' }}>
                       Địa chỉ: Lô CN-08, KCN Thạch Thất - Quốc Oai, Hà Nội

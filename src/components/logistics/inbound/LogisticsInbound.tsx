@@ -14,7 +14,7 @@ import { LuanChuyenKhoModal } from "@/components/plan-finance/kho_hang/LuanChuye
 import { ConfirmDialogModal } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useSession } from "next-auth/react";
-import { isLogisticsAdmin } from "@/lib/logistics-permissions";
+import { canExecuteInOut } from "@/lib/logistics-permissions";
 
 interface Warehouse {
   id: string;
@@ -50,7 +50,7 @@ interface InventoryItem {
 
 export function LogisticsInbound({ onStatsChange }: { onStatsChange?: (stats: any) => void }) {
   const { data: session } = useSession();
-  const isThuKho = !session?.user || isLogisticsAdmin(session?.user);
+  const isThuKho = canExecuteInOut(session?.user);
 
   const [activeModal, setActiveModal] = useState<"nhap" | "xuat" | "luan-chuyen" | "kiem" | null>(null);
   const [search, setSearch] = useState("");

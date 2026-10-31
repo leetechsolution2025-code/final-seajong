@@ -270,11 +270,11 @@ export const EventOffcanvas: React.FC<EventOffcanvasProps> = ({
     return [];
   });
 
-  // Tải danh sách sự kiện từ SQLite Database
+  // Tải danh sách sự kiện thực tế từ SQLite Database
   useEffect(() => {
     let isMounted = true;
     calendarEventService.getMyEvents(sessionUser).then((items) => {
-      if (isMounted && items && items.length > 0) {
+      if (isMounted && Array.isArray(items)) {
         setPlannerItems(items);
         onEventsChange?.(items);
       }
@@ -282,7 +282,7 @@ export const EventOffcanvas: React.FC<EventOffcanvasProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [sessionUser, onEventsChange]);
+  }, [isOpen, sessionUser, onEventsChange]);
 
   const savePlannerItems = useCallback((newItems: PlannerItem[]) => {
     setPlannerItems(newItems);
@@ -291,21 +291,13 @@ export const EventOffcanvas: React.FC<EventOffcanvasProps> = ({
       const userKey = sessionUser.email || sessionUser.id;
       localStorage.setItem(`seajong_calendar_events_${userKey.toLowerCase().replace(/[^a-z0-9]/g, '_')}`, JSON.stringify(newItems));
       localStorage.setItem(`decodoor_calendar_events_${userKey.toLowerCase().replace(/[^a-z0-9]/g, '_')}`, JSON.stringify(newItems));
-      localStorage.setItem('seajong_events_planner', JSON.stringify(newItems));
     } catch (e) {
       console.error(e);
     }
   }, [sessionUser, onEventsChange]);
 
-  // Danh sách nhân sự công ty để chọn khách mời
-  const [companyUsers, setCompanyUsers] = useState<Array<{ id: number | string; name: string; department?: string; position?: string; avatarColor?: string; avatarText?: string }>>([
-    { id: 2063, name: 'Lê Anh Văn', department: 'Phòng kinh doanh', position: 'Trưởng phòng', avatarText: 'AV', avatarColor: '#ca8a04' },
-    { id: 101, name: 'Trần Văn Bảo', department: 'Ban Giám Đốc', position: 'Phó Giám Đốc', avatarText: 'TB', avatarColor: '#0284c7' },
-    { id: 102, name: 'Nguyễn Thị Mai', department: 'Phòng Kế toán', position: 'Kế toán trưởng', avatarText: 'NM', avatarColor: '#8b5cf6' },
-    { id: 103, name: 'Phạm Tuấn Hưng', department: 'Phòng Kỹ thuật và BOM', position: 'Trưởng phòng', avatarText: 'TH', avatarColor: '#10b981' },
-    { id: 104, name: 'Đỗ Thị Lan', department: 'Hành chính nhân sự', position: 'Chuyên viên', avatarText: 'DL', avatarColor: '#ec4899' },
-    { id: 105, name: 'Hoàng Quốc Việt', department: 'Nhà máy sản xuất', position: 'Quản đốc xưởng', avatarText: 'HV', avatarColor: '#f59e0b' },
-  ]);
+  // Danh sách nhân sự công ty thực tế từ DB để chọn khách mời
+  const [companyUsers, setCompanyUsers] = useState<Array<{ id: number | string; name: string; department?: string; position?: string; avatarColor?: string; avatarText?: string }>>([]);
 
   useEffect(() => {
     fetch('/api/users')

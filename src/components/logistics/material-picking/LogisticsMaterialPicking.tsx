@@ -6,6 +6,8 @@ import { FullWidthTable } from "@/components/common/FullWidthTable";
 import { TableToolbar } from "@/components/common/TableToolbar";
 import { Pagination } from "@/components/common/Pagination";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { useAuth } from "@/context/AuthContext";
+import { isLogisticsAdmin, canPickAndPack } from "@/lib/logistics-permissions";
 import { toast } from "react-toastify";
 
 interface BatchItemOrder {
@@ -67,6 +69,10 @@ interface Employee {
 }
 
 export function LogisticsMaterialPicking() {
+  const { user, loading: authLoading } = useAuth();
+  const isThuKho = isLogisticsAdmin(user);
+  const canPick = canPickAndPack(user);
+
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<BatchItem[]>([]);
   const [, setTotalOrders] = useState(0);
@@ -128,6 +134,14 @@ export function LogisticsMaterialPicking() {
 
   const fetchEmployees = async () => {
     try {
+      const staffRes = await fetch("/api/logistics/staff");
+      if (staffRes.ok) {
+        const staffData = await staffRes.json();
+        if (Array.isArray(staffData) && staffData.length > 0) {
+          setEmployees(staffData.map((e: any) => ({ id: e.id, fullName: e.fullName || e.name })));
+          return;
+        }
+      }
       const res = await fetch("/api/hr/employees?department=logistics&pageSize=100");
       const data = await res.json();
       if (data && Array.isArray(data.employees)) {
@@ -141,12 +155,16 @@ export function LogisticsMaterialPicking() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/logistics/material-picking");
+      const token = typeof window !== "undefined" ? localStorage.getItem("seajong_token") : null;
+      const query = user?.id ? `?userId=${encodeURIComponent(user.id)}` : "";
+      const res = await fetch(`/api/logistics/material-picking${query}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
       const data = await res.json();
       if (data.success) {
-        setItems(data.items);
-        setTotalOrders(data.totalOrders);
-        setIsManager(data.isManager || false);
+        setItems(data.items || []);
+        setTotalOrders(data.totalOrders || 0);
+        setIsManager(Boolean(data.isManager && isThuKho));
       }
     } catch (e) {
       console.error(e);
@@ -156,8 +174,10 @@ export function LogisticsMaterialPicking() {
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (!authLoading) {
+      fetchData();
+    }
+  }, [authLoading, user?.id, isThuKho]);
 
   useEffect(() => {
     if (isManager && employees.length === 0) {
@@ -730,7 +750,11 @@ export function LogisticsMaterialPicking() {
             <i className="bi bi-clipboard2-check position-relative" style={{ fontSize: 38, color: "#3b82f6" }} />
           </div>
           <h5 className="fw-bold" style={{ color: "#1e293b" }}>Tuyệt vời!</h5>
-          <p className="text-muted">Không có mặt hàng hay lệnh cấp phát vật tư nào cần xử lý với bộ lọc hiện tại.</p>
+          <p className="text-muted">
+            {isManager
+              ? "Không có mặt hàng hay lệnh cấp phát vật tư nào cần xử lý với bộ lọc hiện tại."
+              : "Hiện tại bạn chưa có công việc cấp phát vật tư nào được giao."}
+          </p>
         </div>
       ) : (
         <table className="w-full text-left border-collapse" style={{ width: "100%", minWidth: "100%", fontSize: "13px" }}>
@@ -744,7 +768,7 @@ export function LogisticsMaterialPicking() {
                 Mặt hàng
               </th>
               <th className="py-2.5 px-3.5 whitespace-nowrap min-w-[150px] text-center border-0 align-middle">
-                Yêu cầu | Thực tồn
+                {isManager ? "Yêu cầu | Thực tồn" : "Số lượng yêu cầu"}
               </th>
               <th className="py-2.5 px-3.5 w-28 text-center border-0 align-middle">
                 Đã nhặt
@@ -807,7 +831,7 @@ export function LogisticsMaterialPicking() {
                               </span>
                             )}
 
-                            {order.customerName && (
+                            {isManager && order.customerName && (
                               <span className="text-slate-500 text-xs font-normal">
                                 Khách hàng: <b className="text-slate-800 font-medium">{order.customerName}</b>
                               </span>
@@ -838,23 +862,21 @@ export function LogisticsMaterialPicking() {
                               </span>
                             )}
 
-                            {/* Phân công */}
-                            {order.assignedTo ? (
-                              <span 
-                                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer"
-                                onClick={(e) => {
-                                  if (isManager) {
+                            {/* Phân công (chỉ hiển thị cho Thủ kho) */}
+                            {isManager && (
+                              order.assignedTo ? (
+                                <span 
+                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer"
+                                  onClick={(e) => {
                                     e.stopPropagation();
                                     openAssignModal(order.id);
-                                  }
-                                }}
-                                title={isManager ? "Nhấn để phân công lại" : ""}
-                              >
-                                <i className="bi bi-person-fill text-[11px]" />
-                                {order.assignedTo}
-                              </span>
-                            ) : (
-                              isManager && (
+                                  }}
+                                  title="Nhấn để phân công lại"
+                                >
+                                  <i className="bi bi-person-fill text-[11px]" />
+                                  {order.assignedTo}
+                                </span>
+                              ) : (
                                 <button 
                                   type="button"
                                   className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-white text-blue-600 border border-blue-200 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer shadow-2xs"
@@ -878,14 +900,14 @@ export function LogisticsMaterialPicking() {
 
                             <button 
                               type="button"
-                              onClick={(e) => { e.stopPropagation(); handleOrderCompleteClick(order); }} 
+                              onClick={(e) => { e.stopPropagation(); if (canPick) handleOrderCompleteClick(order); }} 
                               className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold shadow-xs transition-all ${
-                                hasPendingInput 
+                                hasPendingInput && canPick
                                   ? "bg-blue-600 text-white hover:bg-blue-700 active:scale-95 cursor-pointer shadow-blue-500/20" 
                                   : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-75"
                               }`}
-                              disabled={!hasPendingInput}
-                              title={hasPendingInput ? "Báo cáo hoàn tất nhặt vật tư cho lệnh này" : "Chưa có thay đổi số lượng để báo cáo"}
+                              disabled={!hasPendingInput || !canPick}
+                              title={!canPick ? "Chưa được cấp quyền Cấp phát vật tư & gom hàng" : hasPendingInput ? "Báo cáo hoàn tất nhặt vật tư cho lệnh này" : "Chưa có thay đổi số lượng để báo cáo"}
                             >
                               <i className="bi bi-send text-[11px]" /> Báo cáo
                             </button>
@@ -968,15 +990,19 @@ export function LogisticsMaterialPicking() {
                             </div>
                           </td>
 
-                          {/* Yêu cầu | Thực tồn */}
+                          {/* Yêu cầu (và Thực tồn nếu là Thủ kho) */}
                           <td className="text-center py-2.5 px-3.5 align-middle whitespace-nowrap">
                             <span className="inline-block min-w-[28px] px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-mono font-bold text-sm">
                               {it.soLuongYeuCau}
                             </span>
-                            <span className="text-slate-300 mx-1.5">/</span>
-                            <span className="inline-block min-w-[28px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-mono font-bold text-xs" title="Số lượng thực tồn kho">
-                              {it.thucTon ?? 0}
-                            </span>
+                            {isManager && (
+                              <>
+                                <span className="text-slate-300 mx-1.5">/</span>
+                                <span className="inline-block min-w-[28px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-mono font-bold text-xs" title="Số lượng thực tồn kho">
+                                  {it.thucTon ?? 0}
+                                </span>
+                              </>
+                            )}
                           </td>
 
                           {/* Ô nhập số lượng Đã nhặt */}
@@ -1045,9 +1071,10 @@ export function LogisticsMaterialPicking() {
                               <span className="text-slate-300">|</span>
 
                               <span 
-                                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/80 cursor-pointer hover:bg-rose-100 transition-colors" 
-                                title="Nhấn để thay đổi Hạn hoàn thành"
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/80 transition-colors ${isManager ? "cursor-pointer hover:bg-rose-100" : ""}`} 
+                                title={isManager ? "Nhấn để thay đổi Hạn hoàn thành" : undefined}
                                 onClick={(e) => {
+                                  if (!isManager) return;
                                   e.stopPropagation();
                                   const picker = document.getElementById(`date-picker-${dateStr}`) as HTMLInputElement;
                                   if (picker) {
@@ -1056,12 +1083,14 @@ export function LogisticsMaterialPicking() {
                                 }}
                               >
                                 <span>{getRelativeDateText(dateStr)}</span>
-                                <input 
-                                  type="date" 
-                                  id={`date-picker-${dateStr}`}
-                                  style={{ opacity: 0, position: 'absolute', width: 0, height: 0, left: 0, top: 0 }}
-                                  onChange={(e) => handleUpdateDeadline(dateStr, e.target.value)}
-                                />
+                                {isManager && (
+                                  <input 
+                                    type="date" 
+                                    id={`date-picker-${dateStr}`}
+                                    style={{ opacity: 0, position: 'absolute', width: 0, height: 0, left: 0, top: 0 }}
+                                    onChange={(e) => handleUpdateDeadline(dateStr, e.target.value)}
+                                  />
+                                )}
                               </span>
 
                               <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-white text-slate-700 border border-slate-200 shadow-2xs">
@@ -1098,22 +1127,20 @@ export function LogisticsMaterialPicking() {
                                 );
                               })()}
 
-                              {dateAssignees.length > 0 ? (
-                                <span 
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors"
-                                  onClick={(e) => {
-                                    if (isManager) {
+                              {isManager && (
+                                dateAssignees.length > 0 ? (
+                                  <span 
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors"
+                                    onClick={(e) => {
                                       e.stopPropagation();
                                       openAssignModal(ticketIdsForDate);
-                                    }
-                                  }}
-                                  title={isManager ? "Nhấn để phân công lại" : ""}
-                                >
-                                  <i className="bi bi-person-fill" />
-                                  {dateAssignees.join(", ")}
-                                </span>
-                              ) : (
-                                isManager && (
+                                    }}
+                                    title="Nhấn để phân công lại"
+                                  >
+                                    <i className="bi bi-person-fill" />
+                                    {dateAssignees.join(", ")}
+                                  </span>
+                                ) : (
                                   <button 
                                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold text-blue-600 border border-blue-200 bg-white hover:bg-blue-50 transition-colors"
                                     onClick={(e) => {
@@ -1129,9 +1156,10 @@ export function LogisticsMaterialPicking() {
                             </div>
                             <div>
                               <button 
-                                onClick={(e) => { e.stopPropagation(); handleCompleteClick(dateStr); }} 
+                                onClick={(e) => { e.stopPropagation(); if (canPick) handleCompleteClick(dateStr); }} 
                                 className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-40 disabled:cursor-not-allowed shadow-xs transition-colors"
-                                disabled={!groupedItems[dateStr]?.some(item => isBatchItemEdited(item))}
+                                disabled={!canPick || !groupedItems[dateStr]?.some(item => isBatchItemEdited(item))}
+                                title={!canPick ? "Chưa được cấp quyền Cấp phát vật tư & gom hàng" : undefined}
                               >
                                 <i className="bi bi-send" /> Báo cáo
                               </button>
@@ -1222,15 +1250,19 @@ export function LogisticsMaterialPicking() {
                           </div>
                         </td>
 
-                        {/* Yêu cầu | Thực tồn */}
+                        {/* Yêu cầu (và Thực tồn nếu là Thủ kho) */}
                         <td className="text-center py-2.5 px-3.5 align-middle whitespace-nowrap">
                           <span className="inline-block min-w-[28px] px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-mono font-bold text-sm">
                             {item.tongSoLuong}
                           </span>
-                          <span className="text-slate-300 mx-1.5">/</span>
-                          <span className="inline-block min-w-[28px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-mono font-bold text-xs" title="Số lượng thực tồn kho">
-                            {item.thucTon ?? 0}
-                          </span>
+                          {isManager && (
+                            <>
+                              <span className="text-slate-300 mx-1.5">/</span>
+                              <span className="inline-block min-w-[28px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-mono font-bold text-xs" title="Số lượng thực tồn kho">
+                                {item.thucTon ?? 0}
+                              </span>
+                            </>
+                          )}
                         </td>
 
                         {/* Đã nhặt */}

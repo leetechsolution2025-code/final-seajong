@@ -450,7 +450,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
         type: isReceivable ? 'Bán hàng' : 'Mua hàng',
         increase: totalAmount,
         decrease: 0,
-        note: debt.projectName || debt.notes || 'Hợp đồng kinh tế cung ứng cửa gỗ và phụ kiện',
+        note: debt.projectName || debt.notes || 'Hợp đồng kinh tế cung ứng thiết bị vệ sinh và phụ kiện Seajong',
         orderIdx: orderSeq++,
       };
       timelineList.push(rootMainTx);
@@ -1631,7 +1631,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
               <div className="print-sidebar-section">
                 <div className="print-sidebar-section-title">
                   <Building size={14} />
-                  <span>Đại diện Bên A (Deco Door)</span>
+                  <span>Đại diện Bên A (Seajong)</span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <Input
@@ -1757,7 +1757,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {company.company_name || 'CÔNG TY CỔ PHẦN SẢN XUẤT DECO DOOR'}
+                      {company.company_name || 'CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM'}
                     </div>
                     <div
                       className="print-company-branch"
@@ -1893,7 +1893,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    BÊN A (BÊN BÁN / ĐƠN VỊ CUNG CẤP): {company.company_name || 'CÔNG TY CỔ PHẦN SẢN XUẤT DECO DOOR'}
+                    BÊN A (BÊN BÁN / ĐƠN VỊ CUNG CẤP): {company.company_name || 'CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM'}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr', gap: '8px', fontSize: '0.78rem' }}>
                     <div style={{ whiteSpace: 'nowrap' }}>

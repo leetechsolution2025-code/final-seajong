@@ -254,7 +254,7 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
                 paddingTop: '6px',
               }}
             >
-              <span>Nguồn: Dự án DecoDoor</span>
+              <span>Nguồn: Hệ thống Seajong</span>
               <span style={{ color: '#059669', fontWeight: 600 }}>Đã kiểm tra định mức</span>
             </div>
           </div>

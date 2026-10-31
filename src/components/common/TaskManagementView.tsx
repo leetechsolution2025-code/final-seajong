@@ -441,7 +441,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
         }
       }
 
-      if (!finalDept) finalDept = 'Công ty Cổ phần Deco Door';
+      if (!finalDept) finalDept = 'Công ty Cổ phần Seajong Việt Nam';
       if (!finalPos) finalPos = 'Nhân viên';
 
       return {

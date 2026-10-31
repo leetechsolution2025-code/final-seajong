@@ -57,7 +57,7 @@ export const CHART_OF_ACCOUNTS = [
   { code: '1521', name: 'Nguyên liệu, vật liệu chính (Gỗ sấy, phôi)' },
   { code: '1522', name: 'Vật liệu phụ, phụ kiện khoá và bản lề' },
   { code: '154', name: 'Chi phí sản xuất kinh doanh dở dang' },
-  { code: '155', name: 'Thành phẩm cửa gỗ xây dựng' },
+  { code: '155', name: 'Thành phẩm thiết bị vệ sinh & nhà bếp Seajong' },
   { code: '211', name: 'Tài sản cố định hữu hình (Máy móc CNC)' },
   { code: '2141', name: 'Hao mòn tài sản cố định hữu hình' },
   { code: '331', name: 'Phải trả cho người bán (Nhà cung cấp)' },
@@ -1344,7 +1344,7 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
                   <tbody>
                     <tr>
                       <td style={{ verticalAlign: 'top', width: '60%' }}>
-                        <div style={{ fontWeight: 'bold', fontSize: '11pt' }}>CÔNG TY CỔ PHẦN SẢN XUẤT DECO DOOR</div>
+                        <div style={{ fontWeight: 'bold', fontSize: '11pt' }}>CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM</div>
                         <div style={{ fontSize: '9.5pt', color: '#334155' }}>Sản xuất đồ gỗ xây dựng và Cửa chống cháy</div>
                         <div style={{ fontSize: '9pt', color: '#64748b' }}>KCN Bình Xuyên, Tỉnh Vĩnh Phúc / TP. Hà Nội</div>
                       </td>

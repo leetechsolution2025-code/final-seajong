@@ -3,6 +3,8 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useToast } from "@/components/ui/Toast";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Offcanvas } from "@/components/common/Offcanvas";
+import { BoxSeam } from "react-bootstrap-icons";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface InventoryItemDetail {
@@ -301,11 +303,334 @@ export function ChiTietHangHoaOffcanvas({ open, item, onClose, onDeleted, onUpda
 
   return (
     <>
-      {/* Backdrop */}
-      <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 4000, background: open ? "rgba(0,0,0,0.35)" : "transparent", pointerEvents: open ? "auto" : "none", transition: "background 0.25s" }} />
+      <Offcanvas
+        isOpen={open}
+        onClose={onClose}
+        icon={<BoxSeam size={20} />}
+        title={displayItem?.tenHang ?? "Chi tiết hàng hoá"}
+        description={
+          displayItem ? (
+            <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+              {displayItem.code && (
+                <span className="font-mono text-[11px] text-slate-500">{displayItem.code}</span>
+              )}
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "1px 8px",
+                  borderRadius: 9999,
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  background: sc.bg,
+                  color: sc.color,
+                }}
+              >
+                <i className={`bi ${sc.icon}`} style={{ fontSize: 9 }} />
+                {sc.label}
+              </span>
+              {displayItem.category?.name && (
+                <span
+                  style={{
+                    padding: "1px 8px",
+                    borderRadius: 9999,
+                    fontSize: 10.5,
+                    fontWeight: 600,
+                    background: "color-mix(in srgb, var(--primary) 10%, transparent)",
+                    color: "var(--primary)",
+                  }}
+                >
+                  {displayItem.category.name}
+                </span>
+              )}
+              {displayItem.dinhMuc && (
+                <span
+                  style={{
+                    padding: "1px 8px",
+                    borderRadius: 9999,
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    background: "rgba(139,92,246,0.1)",
+                    color: "#8b5cf6",
+                  }}
+                >
+                  <i className="bi bi-diagram-3 me-1" style={{ fontSize: 9 }} />
+                  Có định mức
+                </span>
+              )}
+            </div>
+          ) : undefined
+        }
+        width="400px"
+        position="right"
+        subHeader={
+          displayItem ? (
+            <div style={{ display: "flex", gap: 4, padding: "8px 16px" }}>
+              {([
+                { key: "info", label: "Thông tin", icon: "bi-info-circle" },
+                { key: "bom", label: "Định mức", icon: "bi-diagram-3" },
+              ] as const).map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setActiveTab(t.key)}
+                  style={{
+                    flex: 1,
+                    padding: "6px 0",
+                    border: "none",
+                    borderRadius: 7,
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    background: activeTab === t.key ? "var(--primary)" : "var(--muted)",
+                    color: activeTab === t.key ? "#fff" : "var(--muted-foreground)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 5,
+                    transition: "all 0.15s",
+                  }}
+                >
+                  <i className={`bi ${t.icon}`} style={{ fontSize: 11 }} />
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          ) : undefined
+        }
+        footer={
+          displayItem ? (
+            <div style={{ display: "flex", gap: 7, width: "100%" }}>
+              {activeTab === "info" &&
+                (editMode ? (
+                  <>
+                    <button
+                      onClick={() => {
+                        setEditMode(false);
+                        setEditErrors({});
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: "8px 0",
+                        border: "1.5px solid var(--border)",
+                        background: "transparent",
+                        color: "var(--foreground)",
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                        borderRadius: 8,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Huỷ
+                    </button>
+                    <button
+                      onClick={handleSaveEdit}
+                      disabled={editSaving}
+                      style={{
+                        flex: 2,
+                        padding: "8px 0",
+                        border: "none",
+                        background: editSaving ? "var(--muted)" : "var(--primary)",
+                        color: editSaving ? "var(--muted-foreground)" : "#fff",
+                        fontSize: 12.5,
+                        fontWeight: 700,
+                        borderRadius: 8,
+                        cursor: editSaving ? "not-allowed" : "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 5,
+                      }}
+                    >
+                      {editSaving ? (
+                        <i className="bi bi-arrow-repeat" style={{ animation: "spin 1s linear infinite" }} />
+                      ) : (
+                        <i className="bi bi-check-lg" />
+                      )}
+                      {editSaving ? "Đang lưu..." : "Lưu thay đổi"}
+                    </button>
+                  </>
+                ) : nhapMode ? (
+                  <>
+                    <button
+                      onClick={() => setNhapMode(false)}
+                      style={{
+                        flex: 1,
+                        padding: "8px 0",
+                        border: "1.5px solid var(--border)",
+                        background: "transparent",
+                        color: "var(--muted-foreground)",
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                        borderRadius: 8,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Huỷ
+                    </button>
+                    <button
+                      onClick={handleNhapHang}
+                      disabled={!nhapWh || nhapSL <= 0 || nhapSaving}
+                      style={{
+                        flex: 2,
+                        padding: "8px 0",
+                        border: "none",
+                        background: !nhapWh || nhapSaving ? "var(--muted)" : "#10b981",
+                        color: !nhapWh || nhapSaving ? "var(--muted-foreground)" : "#fff",
+                        fontSize: 12.5,
+                        fontWeight: 700,
+                        borderRadius: 8,
+                        cursor: !nhapWh || nhapSaving ? "not-allowed" : "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 5,
+                      }}
+                    >
+                      {nhapSaving ? (
+                        <i className="bi bi-arrow-repeat" style={{ animation: "spin 1s linear infinite" }} />
+                      ) : (
+                        <i className="bi bi-check2-all" />
+                      )}
+                      {nhapSaving ? "Đang nhập..." : "Xác nhận nhập kho"}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setConfirmDel(true)}
+                      style={{
+                        width: 36,
+                        height: 36,
+                        border: "1.5px solid #f43f5e22",
+                        background: "rgba(244,63,94,0.06)",
+                        borderRadius: 8,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#f43f5e",
+                        flexShrink: 0,
+                      }}
+                      title="Xóa hàng hoá"
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(244,63,94,0.14)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(244,63,94,0.06)")}
+                    >
+                      <i className="bi bi-trash" style={{ fontSize: 13 }} />
+                    </button>
+                    <button
+                      onClick={() => setNhapMode(true)}
+                      style={{
+                        flex: 1,
+                        padding: "8px 0",
+                        border: "1.5px solid var(--border)",
+                        background: "transparent",
+                        color: "var(--foreground)",
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                        borderRadius: 8,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 5,
+                      }}
+                    >
+                      <i className="bi bi-box-arrow-in-down" style={{ fontSize: 12 }} />
+                      Nhập hàng
+                    </button>
+                    <button
+                      onClick={openEditMode}
+                      style={{
+                        flex: 1,
+                        padding: "8px 0",
+                        border: "none",
+                        background: "var(--primary)",
+                        color: "#fff",
+                        fontSize: 12.5,
+                        fontWeight: 700,
+                        borderRadius: 8,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 5,
+                      }}
+                    >
+                      <i className="bi bi-pencil" style={{ fontSize: 11 }} />
+                      Chỉnh sửa
+                    </button>
+                  </>
+                ))}
 
-      {/* Panel */}
-      <div className="app-custom-drawer" style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: 420, background: "var(--card)", boxShadow: "-8px 0 40px rgba(0,0,0,0.18)", zIndex: 4001, display: "flex", flexDirection: "column", transform: open ? "translateX(0)" : "translateX(100%)", transition: "transform 0.3s cubic-bezier(0.4,0,0.2,1)" }}>
+              {activeTab === "bom" &&
+                (bomMode ? (
+                  <>
+                    <button
+                      onClick={() => setBomMode(false)}
+                      style={{
+                        flex: 1,
+                        padding: "8px 0",
+                        border: "1.5px solid var(--border)",
+                        background: "transparent",
+                        color: "var(--foreground)",
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                        borderRadius: 8,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Huỷ
+                    </button>
+                    <button
+                      onClick={saveBom}
+                      disabled={bomSaving}
+                      style={{
+                        flex: 2,
+                        padding: "8px 0",
+                        border: "none",
+                        background: bomSaving ? "var(--muted)" : "var(--primary)",
+                        color: bomSaving ? "var(--muted-foreground)" : "#fff",
+                        fontSize: 12.5,
+                        fontWeight: 700,
+                        borderRadius: 8,
+                        cursor: bomSaving ? "not-allowed" : "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 5,
+                      }}
+                    >
+                      {bomSaving ? (
+                        <i className="bi bi-arrow-repeat" style={{ animation: "spin 1s linear infinite" }} />
+                      ) : (
+                        <i className="bi bi-check-lg" />
+                      )}
+                      {bomSaving ? "Đang lưu..." : "Lưu định mức"}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={onClose}
+                    style={{
+                      flex: 1,
+                      padding: "8px 0",
+                      border: "1.5px solid var(--border)",
+                      background: "transparent",
+                      color: "var(--foreground)",
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      borderRadius: 8,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Đóng
+                  </button>
+                ))}
+            </div>
+          ) : undefined
+        }
+      >
         {!displayItem ? (
           detailLoading ? (
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted-foreground)" }}>
@@ -313,50 +638,7 @@ export function ChiTietHangHoaOffcanvas({ open, item, onClose, onDeleted, onUpda
             </div>
           ) : null
         ) : (
-          <>
-            {/* Header */}
-            <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
-                <div style={{ width: 42, height: 42, borderRadius: 11, flexShrink: 0, background: "color-mix(in srgb, var(--primary) 12%, transparent)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <i className="bi bi-box-seam" style={{ fontSize: 19, color: "var(--primary)" }} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontWeight: 800, fontSize: 14.5, color: "var(--foreground)", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayItem.tenHang}</p>
-                  {displayItem.code && <p style={{ margin: "3px 0 0", fontSize: 11, color: "var(--muted-foreground)", fontFamily: "monospace" }}>{displayItem.code}</p>}
-                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 9999, fontSize: 11, fontWeight: 700, background: sc.bg, color: sc.color }}>
-                      <i className={`bi ${sc.icon}`} style={{ fontSize: 9 }} />{sc.label}
-                    </span>
-                    {displayItem.category?.name && (
-                      <span style={{ padding: "2px 8px", borderRadius: 9999, fontSize: 11, fontWeight: 600, background: "color-mix(in srgb, var(--primary) 10%, transparent)", color: "var(--primary)" }}>{displayItem.category.name}</span>
-                    )}
-                    {displayItem.dinhMuc && (
-                      <span style={{ padding: "2px 8px", borderRadius: 9999, fontSize: 11, fontWeight: 700, background: "rgba(139,92,246,0.1)", color: "#8b5cf6" }}>
-                        <i className="bi bi-diagram-3 me-1" style={{ fontSize: 9 }} />Có định mức
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <button onClick={onClose} style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 8, border: "1px solid var(--border)", background: "var(--muted)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted-foreground)" }}>
-                  <i className="bi bi-x" style={{ fontSize: 16 }} />
-                </button>
-              </div>
-
-              {/* Tabs */}
-              <div style={{ display: "flex", gap: 4 }}>
-                {([
-                  { key: "info", label: "Thông tin", icon: "bi-info-circle" },
-                  { key: "bom",  label: "Định mức",  icon: "bi-diagram-3" },
-                ] as const).map(t => (
-                  <button key={t.key} onClick={() => setActiveTab(t.key)} style={{ flex: 1, padding: "6px 0", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 12, fontWeight: 700, background: activeTab === t.key ? "var(--primary)" : "var(--muted)", color: activeTab === t.key ? "#fff" : "var(--muted-foreground)", display: "flex", alignItems: "center", justifyContent: "center", gap: 5, transition: "all 0.15s" }}>
-                    <i className={`bi ${t.icon}`} style={{ fontSize: 11 }} />{t.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Body */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "4px 18px 18px" }}>
+          <div>
 
               {/* ── TAB INFO ── */}
               {activeTab === "info" && (
@@ -599,58 +881,8 @@ export function ChiTietHangHoaOffcanvas({ open, item, onClose, onDeleted, onUpda
                 </div>
               )}
             </div>
-
-            {/* Footer */}
-            <div style={{ padding: "12px 18px", borderTop: "1px solid var(--border)", display: "flex", gap: 7, flexShrink: 0 }}>
-              {activeTab === "info" && (
-                editMode ? (
-                  <>
-                    <button onClick={() => { setEditMode(false); setEditErrors({}); }} style={{ flex: 1, padding: "8px 0", border: "1.5px solid var(--border)", background: "transparent", color: "var(--foreground)", fontSize: 12.5, fontWeight: 600, borderRadius: 8, cursor: "pointer" }}>Huỷ</button>
-                    <button onClick={handleSaveEdit} disabled={editSaving} style={{ flex: 2, padding: "8px 0", border: "none", background: editSaving ? "var(--muted)" : "var(--primary)", color: editSaving ? "var(--muted-foreground)" : "#fff", fontSize: 12.5, fontWeight: 700, borderRadius: 8, cursor: editSaving ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
-                      {editSaving ? <i className="bi bi-arrow-repeat" style={{ animation: "spin 1s linear infinite" }} /> : <i className="bi bi-check-lg" />}
-                      {editSaving ? "Đang lưu..." : "Lưu thay đổi"}
-                    </button>
-                  </>
-                ) : nhapMode ? (
-                  <>
-                    <button onClick={() => setNhapMode(false)} style={{ flex: 1, padding: "8px 0", border: "1.5px solid var(--border)", background: "transparent", color: "var(--muted-foreground)", fontSize: 12.5, fontWeight: 600, borderRadius: 8, cursor: "pointer" }}>Huỷ</button>
-                    <button onClick={handleNhapHang} disabled={!nhapWh || nhapSL <= 0 || nhapSaving} style={{ flex: 2, padding: "8px 0", border: "none", background: !nhapWh || nhapSaving ? "var(--muted)" : "#10b981", color: !nhapWh || nhapSaving ? "var(--muted-foreground)" : "#fff", fontSize: 12.5, fontWeight: 700, borderRadius: 8, cursor: !nhapWh || nhapSaving ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
-                      {nhapSaving ? <i className="bi bi-arrow-repeat" style={{ animation: "spin 1s linear infinite" }} /> : <i className="bi bi-check2-all" />}
-                      {nhapSaving ? "Đang nhập..." : "Xác nhận nhập kho"}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button onClick={() => setConfirmDel(true)} style={{ width: 36, height: 36, border: "1.5px solid #f43f5e22", background: "rgba(244,63,94,0.06)", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#f43f5e", flexShrink: 0 }} title="Xóa hàng hoá" onMouseEnter={e => e.currentTarget.style.background = "rgba(244,63,94,0.14)"} onMouseLeave={e => e.currentTarget.style.background = "rgba(244,63,94,0.06)"}>
-                      <i className="bi bi-trash" style={{ fontSize: 13 }} />
-                    </button>
-                    <button onClick={() => setNhapMode(true)} style={{ flex: 1, padding: "8px 0", border: "1.5px solid var(--border)", background: "transparent", color: "var(--foreground)", fontSize: 12.5, fontWeight: 600, borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
-                      <i className="bi bi-box-arrow-in-down" style={{ fontSize: 12 }} />Nhập hàng
-                    </button>
-                    <button onClick={openEditMode} style={{ flex: 1, padding: "8px 0", border: "none", background: "var(--primary)", color: "#fff", fontSize: 12.5, fontWeight: 700, borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
-                      <i className="bi bi-pencil" style={{ fontSize: 11 }} />Chỉnh sửa
-                    </button>
-                  </>
-                )
-              )}
-
-              {activeTab === "bom" && (
-                bomMode ? (
-                  <>
-                    <button onClick={() => setBomMode(false)} style={{ flex: 1, padding: "8px 0", border: "1.5px solid var(--border)", background: "transparent", color: "var(--foreground)", fontSize: 12.5, fontWeight: 600, borderRadius: 8, cursor: "pointer" }}>Huỷ</button>
-                    <button onClick={saveBom} disabled={bomSaving} style={{ flex: 2, padding: "8px 0", border: "none", background: bomSaving ? "var(--muted)" : "var(--primary)", color: bomSaving ? "var(--muted-foreground)" : "#fff", fontSize: 12.5, fontWeight: 700, borderRadius: 8, cursor: bomSaving ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
-                      {bomSaving ? <i className="bi bi-arrow-repeat" style={{ animation: "spin 1s linear infinite" }} /> : <i className="bi bi-check-lg" />}
-                      {bomSaving ? "Đang lưu..." : "Lưu định mức"}
-                    </button>
-                  </>
-                ) : (
-                  <button onClick={onClose} style={{ flex: 1, padding: "8px 0", border: "1.5px solid var(--border)", background: "transparent", color: "var(--foreground)", fontSize: 12.5, fontWeight: 600, borderRadius: 8, cursor: "pointer" }}>Đóng</button>
-                )
-              )}
-            </div>
-          </>
         )}
-      </div>
+      </Offcanvas>
 
       <ConfirmDialog open={confirmDel} variant="danger" title={`Xóa "${item?.tenHang}"?`} message="Hàng hoá này sẽ bị xóa vĩnh viễn cùng toàn bộ dữ liệu tồn kho liên quan." confirmLabel="Xóa hàng hoá" loading={deleting} onConfirm={handleDelete} onCancel={() => setConfirmDel(false)} />
       <ConfirmDialog open={confirmDelBom} variant="danger" title="Xoá định mức?" message={`Toàn bộ định mức vật tư của "${item?.tenHang}" sẽ bị xóa.`} confirmLabel="Xoá định mức" onConfirm={deleteBom} onCancel={() => setConfirmDelBom(false)} />

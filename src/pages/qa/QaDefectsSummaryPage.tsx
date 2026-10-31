@@ -10,62 +10,9 @@ import { DefectProcessModal } from '../production/defects/DefectProcessModal';
 import { CreateDefectOffcanvas } from '../production/defects/CreateDefectOffcanvas';
 import { CalendarEvent, ArrowRepeat, PlusLg } from 'react-bootstrap-icons';
 
-const FALLBACK_QA_DEFECTS = [
-  {
-    id: 'qa-def-seed-1',
-    code: 'DEF-QA-261001',
-    source: 'INTERNAL',
-    status: 'NEW',
-    productName: 'Vòi chậu lavabo nóng lạnh Seajong Titan Gray',
-    productCode: 'SJ-LAV-305TG',
-    quantity: 4,
-    orderNumber: 'LSX-20261006-05',
-    description:
-      '[Lỗi OQC - LSX-20261006-05] - Vòi chậu lavabo nóng lạnh Seajong Titan Gray (x4 Bộ): Rò rỉ nhẹ tại khớp nối ren G1/2 khi thử áp lực nước tĩnh 5.5 bar, bề mặt mạ PVD xước mặt tiền 3mm.',
-    reporterName: 'Trưởng bộ phận QA/QC',
-    reporterDepartment: 'qa',
-    assignedTo: 'Tổ lắp ráp số 1',
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: 'qa-def-seed-2',
-    code: 'DEF-QA-261002',
-    source: 'INTERNAL',
-    status: 'TECH_EVALUATING',
-    productName: 'Thân vòi đồng thau đúc áp lực SJ-8800-BODY',
-    productCode: 'LK-BODY-8800',
-    quantity: 12,
-    orderNumber: 'PO-202610-089',
-    description:
-      '[Lỗi IQC - PO-202610-089] - Thân vòi đồng thau đúc áp lực SJ-8800-BODY (x12 Cái): Phát hiện rỗ khí ngầm và sứt bước ren trong khi kiểm tra bằng dưỡng đo ren chuẩn.',
-    reporterName: 'Kỹ sư IQC Nguyễn Hoàng Nam',
-    reporterDepartment: 'qa',
-    assignedTo: 'Phòng Mua hàng & NCC',
-    createdAt: new Date(Date.now() - 172800000).toISOString(),
-  },
-  {
-    id: 'qa-def-seed-3',
-    code: 'DEF-QA-261003',
-    source: 'INTERNAL',
-    status: 'COMPLETED',
-    productName: 'Bồn cầu thông minh Seajong Smart Luxury',
-    productCode: 'SJ-209S',
-    quantity: 2,
-    orderNumber: 'LSX-20261002-01',
-    description:
-      '[Lỗi OQC - LSX-20261002-01] - Bồn cầu thông minh Seajong Smart Luxury (x2 Bộ): Nắp rơi êm đóng hơi nhanh, đã hiệu chỉnh lại bản lề thủy lực và tái kiểm đạt 100%.',
-    reporterName: 'Kỹ sư OQC Lê Minh Tuấn',
-    reporterDepartment: 'qa',
-    assignedTo: 'Tổ hoàn thiện sứ',
-    isRepairable: true,
-    repairPlan: 'Thay thế cụm giảm chấn bản lề rơi êm và test lại 20 chu kỳ đóng mở.',
-    createdAt: new Date(Date.now() - 259200000).toISOString(),
-  },
-];
-
 export function QaDefectsSummaryPage() {
   const [filterStatus, setFilterStatus] = useState('ALL');
-  const [filterScope, setFilterScope] = useState<'QA' | 'ALL'>('QA');
+  const [filterScope, setFilterScope] = useState<'QA' | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [defects, setDefects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,21 +30,14 @@ export function QaDefectsSummaryPage() {
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
-          const hasQaDefects = data.some(
-            (d) => (d.reporterDepartment || '').toLowerCase() === 'qa'
-          );
-          if (hasQaDefects) {
-            setDefects(data);
-          } else {
-            setDefects([...FALLBACK_QA_DEFECTS, ...data]);
-          }
+          setDefects(data);
         } else {
-          setDefects(FALLBACK_QA_DEFECTS);
+          setDefects([]);
         }
       })
       .catch((err) => {
         console.error('Lỗi tải danh sách hàng lỗi:', err);
-        setDefects(FALLBACK_QA_DEFECTS);
+        setDefects([]);
       })
       .finally(() => setLoading(false));
   }, []);

@@ -23,13 +23,18 @@ export interface CustomerInfo {
   } | null;
 }
 
+export interface DeptAccessEntry {
+  code: string;
+  level: 'none' | 'view' | 'full';
+}
+
 export interface User {
   id: string;
   email: string;
   name: string;
   role: string;
   permissions: string[];
-  deptAccess?: string[];
+  deptAccess?: Array<string | DeptAccessEntry>;
   departmentCode?: string;
   position?: string;
   employee?: EmployeeInfo | null;

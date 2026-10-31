@@ -279,26 +279,44 @@ export async function syncPrismaFinanceToAccountingTables(db) {
     const realBank112Balance = Math.max(0, Math.round(opening112 + debit112 - credit112));
 
     if (realCash111Balance > 0 || realBank112Balance > 0) {
+      const existingCashRows = await dbAll(db, 'SELECT * FROM cash_and_bank_assets WHERE id IN (?, ?)', ['cba-1111', 'cba-1121']);
+      const existingById = new Map();
+      (existingCashRows || []).forEach((r) => existingById.set(r.id, r));
+
+      const acc1111 = accountByCode.get('1111');
+      const acc111 = accountByCode.get('111');
+      const acc1121 = accountByCode.get('1121');
+      const acc112 = accountByCode.get('112');
+
+      const ex111 = existingById.get('cba-1111');
       await dbRun(
         db,
         `INSERT OR REPLACE INTO cash_and_bank_assets (
           id, code, name, type, account_number, bank_name, branch, balance,
           currency, term_months, interest_rate, start_date, maturity_date,
           manager_name, status, notes, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'VND', 0, 0, '01/07/2026', '', ?, 'active', ?, CURRENT_TIMESTAMP)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'VND', 0, ?, ?, ?, ?, 'active', ?, CURRENT_TIMESTAMP)`,
         [
           'cba-1111',
-          'TM-1111',
-          'Quỹ tiền mặt Việt Nam (TK 1111)',
+          ex111?.code || 'TM-1111',
+          ex111?.name || `${acc111?.name || 'Tiền mặt'} - ${acc1111?.name || 'Tiền Việt Nam'}`,
           'cash',
-          'TK-1111',
-          'Quỹ tiền mặt tại Công ty CP Seajong Việt Nam',
-          'Trụ sở Hà Nội',
+          ex111?.account_number || 'TK-1111',
+          ex111?.bank_name || 'Quỹ tiền mặt Công ty CP Seajong Việt Nam',
+          ex111?.branch || '',
           realCash111Balance,
-          'Lê Công Vụ',
+          Number(ex111?.interest_rate) || 0,
+          ex111?.start_date || '01/07/2026',
+          ex111?.maturity_date || '',
+          ex111?.manager_name || 'Lê Công Vụ',
           `Số dư đầu kỳ: ${opening111.toLocaleString('vi-VN')} đ | Tổng thu: ${debit111.toLocaleString('vi-VN')} đ | Tổng chi: ${credit111.toLocaleString('vi-VN')} đ`,
         ]
       );
+
+      const ex112 = existingById.get('cba-1121');
+      const isMockBankNum = !ex112?.account_number || ex112.account_number === '19038899686868';
+      const isMockBankName = !ex112?.bank_name || ex112.bank_name.includes('Ngoại Thương / MB / PJBank');
+      const realBankNameFromLoan = prismaBankLoans[0]?.bankName || 'Tài khoản Tiền gửi Ngân hàng (TK 1121)';
 
       await dbRun(
         db,
@@ -306,17 +324,22 @@ export async function syncPrismaFinanceToAccountingTables(db) {
           id, code, name, type, account_number, bank_name, branch, balance,
           currency, term_months, interest_rate, start_date, maturity_date,
           manager_name, status, notes, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'VND', 0, 0.5, '01/07/2026', '', ?, 'active', ?, CURRENT_TIMESTAMP)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'VND', 0, ?, ?, ?, ?, 'active', ?, CURRENT_TIMESTAMP)`,
         [
           'cba-1121',
-          'NH-1121',
-          'Tiền gửi thanh toán Ngân hàng (TK 1121)',
+          ex112?.code || 'NH-1121',
+          ex112?.name && !ex112.name.includes('(TK 1121)')
+            ? ex112.name
+            : `${acc112?.name || 'Tiền gửi ngân hàng'} - ${acc1121?.name || 'Tiền Việt Nam'}`,
           'bank',
-          '19038899686868',
-          'Ngân hàng TMCP Ngoại Thương / MB / PJBank',
-          'CN Hà Nội',
+          isMockBankNum ? 'TK-1121' : ex112.account_number,
+          isMockBankName ? realBankNameFromLoan : ex112.bank_name,
+          isMockBankName ? '' : (ex112?.branch || ''),
           realBank112Balance,
-          'Lê Công Vụ',
+          isMockBankName ? 0 : (Number(ex112?.interest_rate) || 0),
+          ex112?.start_date || '01/07/2026',
+          ex112?.maturity_date || '',
+          ex112?.manager_name || 'Lê Công Vụ',
           `Tổng thu qua NH: ${Math.round(debit112).toLocaleString('vi-VN')} đ | Tổng chi qua NH: ${Math.round(credit112).toLocaleString('vi-VN')} đ`,
         ]
       );
@@ -1106,13 +1129,11 @@ export async function syncPrismaFinanceToAccountingTables(db) {
       await dbRun(db, 'DELETE FROM monthly_payrolls');
       let pIdx = 1;
       for (const emp of prismaEmployees) {
-        const isDirector = String(emp.departmentName || '').toLowerCase().includes('giám đốc');
-        const isManager = String(emp.position || '').toLowerCase().includes('trưởng') || isDirector;
-        const baseSal = Number(emp.baseSalary) > 0 ? Number(emp.baseSalary) : isDirector ? 25000000 : isManager ? 15000000 : 9500000;
-        const insSal = Number(emp.insuranceSalary) > 0 ? Number(emp.insuranceSalary) : Math.min(baseSal, 6500000);
-        const meal = Number(emp.mealAllowance) || 730000;
-        const fuel = Number(emp.fuelAllowance) || 500000;
-        const phone = Number(emp.phoneAllowance) || 300000;
+        const baseSal = Number(emp.baseSalary) || 0;
+        const insSal = Number(emp.insuranceSalary) || 0;
+        const meal = Number(emp.mealAllowance) || 0;
+        const fuel = Number(emp.fuelAllowance) || 0;
+        const phone = Number(emp.phoneAllowance) || 0;
         const sen = Number(emp.seniorityAllowance) || 0;
         const totalAllow = meal + fuel + phone + sen;
         const insDed = Math.round(insSal * 0.105);
@@ -1213,15 +1234,15 @@ export async function syncPrismaFinanceToAccountingTables(db) {
         longLoanOpen += Math.max(0, rem - shortPart);
       });
 
-      const cashOpen = Math.round(opening111 || 17010994);
+      const cashOpen = Math.round(opening111 || 0);
       const bankOpen = Math.round(opening112 || 0);
       const invOpen = Math.round(totalRealInventoryValue);
       const totalOpenAssets = cashOpen + bankOpen + openCustTotal + invOpen + faNetTotal;
       const totalOpenLiabilities = openSuppTotal + shortLoanOpen + longLoanOpen;
       const netOpenEquity = Math.max(0, totalOpenAssets - totalOpenLiabilities);
-      const ownerEq = Math.min(netOpenEquity, 12000000000);
-      const devFund = Math.min(Math.max(0, netOpenEquity - ownerEq), 1000000000);
-      const retainedOpen = Math.max(0, netOpenEquity - ownerEq - devFund);
+      const ownerEq = netOpenEquity;
+      const devFund = 0;
+      const retainedOpen = 0;
 
       const declarationPayload = {
         cashAndInvestments: {
@@ -1230,8 +1251,8 @@ export async function syncPrismaFinanceToAccountingTables(db) {
           bankAccounts: [
             {
               id: 'BA-1121',
-              bankName: 'Ngân hàng TMCP Ngoại Thương / MB / PJBank',
-              accountNumber: '19038899686868',
+              bankName: prismaBankLoans[0]?.bankName || 'Tiền gửi ngân hàng (TK 1121)',
+              accountNumber: 'TK-1121',
               balance: bankOpen,
             },
           ],
@@ -1317,73 +1338,6 @@ export async function syncPrismaFinanceToAccountingTables(db) {
         );
       }
       await dbRun(db, 'COMMIT');
-    }
-
-    // ============================================================================
-    // N. ĐỒNG BỘ HỒ SƠ PHÁT TRIỂN ĐẠI LÝ (MarketingLead) TỪ Customer & Quotation KHI TRỐNG
-    // ============================================================================
-    if (prismaMarketingLeads.length === 0 && prismaCustomers.length > 0) {
-      const defaultCampId = prismaMarketingCampaigns[0]?.id || 'camp-default-seajong';
-      const quoteByCustId = new Map();
-      (prismaQuotations || []).forEach((q) => {
-        if (q.customerId && !quoteByCustId.has(q.customerId)) {
-          quoteByCustId.set(q.customerId, q);
-        }
-      });
-
-      const dealerCustomers = prismaCustomers
-        .filter((c) => c.nhom === 'dai-ly' || quoteByCustId.has(c.id))
-        .sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0))
-        .slice(0, 25);
-
-      if (dealerCustomers.length > 0) {
-        await dbRun(db, 'BEGIN TRANSACTION');
-        for (let idx = 0; idx < dealerCustomers.length; idx++) {
-          const c = dealerCustomers[idx];
-          const q = quoteByCustId.get(c.id);
-          const emp = c.nguoiChamSocId ? employeeById.get(c.nguoiChamSocId) : null;
-          const stepNum = q ? (q.trangThai === 'approved' ? 3 : 2) : idx < 8 ? 3 : idx < 15 ? 2 : 1;
-          const statusStr = stepNum === 3 ? 'contract' : stepNum === 2 ? 'quote' : 'care';
-          const qVal = q ? Number(q.thanhTien || q.tongTien) || 0 : 0;
-
-          const fv = {
-            code: c.code || `DL-${String(idx + 1).padStart(3, '0')}`,
-            companyName: c.name || 'Đại lý Seajong',
-            detailCompanyName: c.name || 'Đại lý Seajong',
-            fullName: c.daiDien || c.name || 'Đại diện đại lý',
-            phone: c.dienThoai || '',
-            address: c.address || 'Hà Nội',
-            executor: emp?.fullName || (idx % 2 === 0 ? 'Lê Vụ' : 'Nguyên Văn Thành'),
-            step: stepNum,
-            quoteId: q?.id || '',
-            quoteCode: q?.code || '',
-            quoteValue: qVal,
-            collabNeeds: 'Hợp tác phân phối thiết bị phòng tắm & sen vòi cao cấp Seajong',
-          };
-
-          await dbRun(
-            db,
-            `INSERT OR REPLACE INTO "MarketingLead" (
-              id, campaignId, externalId, fullName, email, phone,
-              formValues, status, source, medium, notes, createdAt, updatedAt
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Thị trường / Showroom', 'Trực tiếp', ?, ?, ?)`,
-            [
-              c.id,
-              defaultCampId,
-              c.code || `LEAD-${idx + 1}`,
-              c.name || 'Đại lý Seajong',
-              c.email || '',
-              c.dienThoai || '',
-              JSON.stringify(fv),
-              statusStr,
-              c.ghiChu || 'Khách hàng đại lý tiềm năng phát triển từ thị trường',
-              c.createdAt || Date.now(),
-              c.updatedAt || Date.now(),
-            ]
-          );
-        }
-        await dbRun(db, 'COMMIT');
-      }
     }
 
     return {

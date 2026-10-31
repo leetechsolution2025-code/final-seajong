@@ -231,7 +231,7 @@ export const RejectedDocumentOffcanvas: React.FC<RejectedDocumentOffcanvasProps>
                 paddingTop: '6px',
               }}
             >
-              <span>Nguồn: Dự án DecoDoor</span>
+              <span>Nguồn: Hệ thống Seajong</span>
               <span style={{ color: '#ef4444', fontWeight: 600 }}>Tạm ngừng duyệt</span>
             </div>
           </div>

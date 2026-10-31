@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { useSession } from "next-auth/react";
-import { isLogisticsAdmin } from "@/lib/logistics-permissions";
+import { canExecuteInOut, canPrintLogistics } from "@/lib/logistics-permissions";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -10,10 +10,11 @@ import { PhieuXuatKhoPreview } from "./PhieuXuatKhoPreview";
 import { TrangThaiTonKhoBadge } from "@/components/plan-finance/dung_chung/TrangThaiTonKhoBadge";
 import { genDocCode } from "@/lib/genDocCode";
 import { LichSuXuatKhoOffcanvas } from "./LichSuXuatKhoOffcanvas";
+import { PrintLabelModal } from "@/components/common/PrintLabelModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Warehouse { id: string; code: string | null; name: string; isActive: boolean; }
-interface ItemSuggestion { id: string; code: string | null; tenHang: string; donVi: string | null; giaNhap: number; soLuongTon?: number; viTriHang?: string | null; viTriCot?: string | null; viTriTang?: string | null; }
+interface ItemSuggestion { id: string; code: string | null; model?: string | null; chatLieu?: string | null; tenHang: string; donVi: string | null; giaNhap: number; giaBan?: number | null; color?: string | null; imageUrl?: string | null; soLuongTon?: number; viTriHang?: string | null; viTriCot?: string | null; viTriTang?: string | null; }
 interface SaleOrderOption {
   id: string; code: string | null;
   type: "contract" | "sale-order" | "retail-invoice";
@@ -70,6 +71,14 @@ interface StockLine {
   viTriTang: string;
   ghiChu: string;
   error?: string;
+  labelMeta?: {
+    code?: string | null;
+    model?: string | null;
+    chatLieu?: string | null;
+    color?: string | null;
+    giaBan?: number | null;
+    imageUrl?: string | null;
+  };
 }
 
 interface XuatKhoModalProps {
@@ -107,7 +116,8 @@ const GRID = "28px 1fr 60px 80px 80px 60px 60px 60px 110px 110px 32px";
 // ── Main Component ─────────────────────────────────────────────────────────────
 export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initialWoId, initialDefectId, initialTicketId }: XuatKhoModalProps) {
   const { data: session } = useSession();
-  const isThuKho = isLogisticsAdmin(session?.user);
+  const isThuKho = canExecuteInOut(session?.user);
+  const canPrint = canPrintLogistics(session?.user);
   const toast = useToast();
 
   const [mode, setMode] = React.useState<"manual" | "so" | "wo" | "defect">(initialMode || "manual");
@@ -122,7 +132,13 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
   const [warehouses, setWarehouses] = React.useState<Warehouse[]>([]);
   const [lockDate, setLockDate] = React.useState(true);
   const [lyDo, setLyDo] = React.useState("Xuất kho hàng hoá");
-  const [loaiXuatKho, setLoaiXuatKho] = React.useState("Xuất bán hàng");
+  const [loaiXuatKho, setLoaiXuatKho] = React.useState(
+    initialMode === "wo"
+      ? "Xuất sản xuất"
+      : initialMode === "defect"
+      ? "Cấp phát linh kiện thay thế"
+      : "Xuất bán hàng"
+  );
   const [ghiChu, setGhiChu] = React.useState("");
   const [nguoiThucHien, setNguoiThucHien] = React.useState("");
 
@@ -137,6 +153,7 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
   const [success, setSuccess] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [showPreview, setShowPreview] = React.useState(false);
+  const [showPrintLabelModal, setShowPrintLabelModal] = React.useState(false);
   const [showLichSu, setShowLichSu] = React.useState(false);
   const [insufficientItems, setInsufficient] = React.useState<{ inventoryItemId: string; tenHang: string; soLuong: number; soLuongTon: number }[]>([]);
   const [allowExportShortage, setAllowExportShortage] = React.useState(false);
@@ -277,6 +294,7 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
     if (so) {
       const prefix = so.typeLabel ?? "Đơn bán hàng";
       setLyDo(`Xuất hàng theo ${prefix.toLowerCase()} ${so.code ?? so.id}`);
+      setLoaiXuatKho("Xuất bán hàng");
       loadItemsFromOrder(so);
     }
   };
@@ -357,12 +375,22 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
       }
 
       // Map thành StockLine, rồi nếu có inventoryItem → tìm tồn kho theo kho đã chọn
-      const newLines: StockLine[] = rawLines.map(raw => {
+      const newLines: StockLine[] = rawLines.map((raw: any) => {
         const l = emptyLine();
         l.itemSearch = raw.tenHang;
         l.soLuongYC = raw.soLuong;
         l.soLuong = raw.soLuong;
         l.donGia = raw.donGia;
+        if (raw.inventoryItem) {
+          l.labelMeta = {
+            code: raw.inventoryItem.code ?? null,
+            model: raw.inventoryItem.model ?? null,
+            chatLieu: raw.inventoryItem.chatLieu ?? null,
+            color: raw.inventoryItem.color ?? null,
+            giaBan: raw.inventoryItem.giaBan ?? raw.donGia ?? null,
+            imageUrl: raw.inventoryItem.imageUrl ?? null,
+          };
+        }
         return l;
       });
 
@@ -410,6 +438,7 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
     setSelectedWo(wo);
     if (wo) {
       setLyDo(`Xuất nguyên vật liệu theo lệnh sản xuất ${wo.code ?? wo.id}`);
+      setLoaiXuatKho("Xuất sản xuất");
       loadItemsFromWorkOrder(wo);
     }
   };
@@ -609,10 +638,10 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
 
   // ESC close
   React.useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape" && !showPreview) onClose(); };
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape" && !showPreview && !showPrintLabelModal) onClose(); };
     document.addEventListener("keydown", h);
     return () => document.removeEventListener("keydown", h);
-  }, [onClose, showPreview]);
+  }, [onClose, showPreview, showPrintLabelModal]);
 
   // ── Item search — debounce 250ms ────────────────────────────────────────────
   const searchTimers = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -890,7 +919,13 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
               { val: "wo" as const, label: "Theo lệnh sản xuất", icon: "bi-gear" },
               { val: "defect" as const, label: "Theo hồ sơ lỗi", icon: "bi-tools" },
             ]).map(m => (
-              <button key={m.val} onClick={() => !locked && setMode(m.val)} style={{
+              <button key={m.val} onClick={() => {
+                if (locked) return;
+                setMode(m.val);
+                if (m.val === "so") setLoaiXuatKho("Xuất bán hàng");
+                else if (m.val === "wo") setLoaiXuatKho("Xuất sản xuất");
+                else if (m.val === "defect") setLoaiXuatKho("Cấp phát linh kiện thay thế");
+              }} style={{
                 display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center",
                 padding: "6px 14px", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600,
                 cursor: locked ? "not-allowed" : "pointer", transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
@@ -1355,6 +1390,51 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
             <i className="bi bi-clock-history" style={{ fontSize: 14 }} /> Lịch sử
           </button>
 
+          {(() => {
+            const isCapPhatVatTu =
+              mode === "wo" ||
+              mode === "defect" ||
+              loaiXuatKho === "Xuất sản xuất" ||
+              loaiXuatKho === "Cấp phát linh kiện thay thế" ||
+              loaiXuatKho === "Xuất vật tư bảo hành";
+            const printDisabled = isCapPhatVatTu || !canPrint;
+            return (
+              <button
+                type="button"
+                disabled={printDisabled}
+                onClick={() => {
+                  if (!printDisabled) setShowPrintLabelModal(true);
+                }}
+                title={
+                  !canPrint
+                    ? "Chưa được cấp quyền In phiếu kho & in tem nhiệt"
+                    : isCapPhatVatTu
+                    ? "Đã khoá khi cấp phát vật tư — chỉ mở khi xuất thành phẩm"
+                    : "In tem sản phẩm"
+                }
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "8px 18px",
+                  borderWidth: "1.5px",
+                  borderStyle: "solid",
+                  borderColor: printDisabled ? "var(--border)" : "#2563eb",
+                  background: printDisabled ? "var(--muted)" : "rgba(37, 99, 235, 0.08)",
+                  color: printDisabled ? "var(--muted-foreground)" : "#2563eb",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  borderRadius: 8,
+                  cursor: printDisabled ? "not-allowed" : "pointer",
+                  opacity: printDisabled ? 0.6 : 1,
+                  transition: "all 0.15s",
+                }}
+              >
+                <i className="bi bi-qr-code" style={{ fontSize: 14 }} /> In tem
+              </button>
+            );
+          })()}
+
           {success && (
             <button onClick={() => setShowPreview(true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 18px", borderWidth: "1.5px", borderStyle: "solid", borderColor: "#f59e0b", background: "rgba(245,158,11,0.1)", color: "#f59e0b", fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: "pointer" }}>
               <i className="bi bi-printer" style={{ fontSize: 14 }} /> In phiếu xuất kho
@@ -1468,6 +1548,21 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
         />
       )}
 
+
+      <PrintLabelModal
+        open={showPrintLabelModal}
+        onClose={() => setShowPrintLabelModal(false)}
+        variant="stamp"
+        items={validLines.map((l) => ({
+          name: l.item?.tenHang || l.itemSearch,
+          code: l.item?.code || l.labelMeta?.code || null,
+          model: l.item?.model || l.labelMeta?.model || null,
+          chatLieu: l.item?.chatLieu || l.labelMeta?.chatLieu || null,
+          color: l.item?.color || l.labelMeta?.color || null,
+          giaBan: l.item?.giaBan || l.labelMeta?.giaBan || l.donGia || null,
+          imageUrl: l.item?.imageUrl || l.labelMeta?.imageUrl || null,
+        }))}
+      />
 
       {showLichSu && (
         <LichSuXuatKhoOffcanvas onClose={() => setShowLichSu(false)} />

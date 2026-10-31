@@ -67,197 +67,61 @@ export interface JournalEntry {
   subMeetings?: SubMeetingItem[];
 }
 
-// Danh sách ảnh mẫu thực tế của Deco Door để người dùng bấm chọn nhanh 1 chạm
+// Danh sách ảnh mẫu thực tế của Seajong để người dùng bấm chọn nhanh 1 chạm
 const PRESET_SAMPLE_PHOTOS = [
-  { url: '/fac_01.jpg', title: 'Mẫu hoàn thiện cửa gỗ chống cháy EI60 trình thực tế' },
-  { url: '/cover_01.webp', title: 'Phối cảnh lắp dựng tại phân khu Aqua Marina' },
-  { url: '/cover_02.webp', title: 'Kiểm tra hiện trạng ô chờ tầng 15' },
-  { url: '/enterprise-hero.jpg', title: 'Mẫu khóa từ Hafele lắp thử trên cánh cửa mẫu' },
-  { url: '/5.jpg', title: 'Mẫu vân gỗ tự nhiên tuyển chọn cho Biệt thự Ecopark' },
+  { url: '/fac_01.jpg', title: 'Mẫu hoàn thiện bộ sen tắm cây phím đàn Seajong thực tế' },
+  { url: '/cover_01.webp', title: 'Phối cảnh trưng bày kệ mẫu tại Showroom Đại lý' },
+  { url: '/cover_02.webp', title: 'Kiểm tra hiện trạng lắp đặt thiết bị phòng tắm' },
+  { url: '/enterprise-hero.jpg', title: 'Mẫu bồn cầu thông minh Seajong lắp thử tại Showroom' },
+  { url: '/5.jpg', title: 'Mẫu vòi chậu Lavabo mạ PVD tuyển chọn' },
 ];
 
 const PRESET_LOCATIONS = [
-  'VP Tập đoàn Novaland, 65 Nguyễn Du, P. Bến Nghé, Q.1',
-  'Công trường Dự án Aqua City, Đồng Nai',
-  'Đại đô thị Vinhomes Grand Park, TP. Thủ Đức, TP. HCM',
-  'Tòa nhà Đất Xanh Group, 2W Ung Văn Khiêm, Q. Bình Thạnh',
-  'Văn phòng Ecopark Grand, Văn Giang, Hưng Yên',
-  'Nhà máy Sản xuất Deco Door, KCN Nam Tân Uyên, Bình Dương',
+  'Showroom Nam Hải Ceramic, Hà Nội',
+  'Showroom Thiên Thuận Lạng Sơn',
+  'Tổng kho Thiết bị Vệ sinh Seajong, Hà Nội',
+  'Hệ thống Đại lý Thiết bị Phòng tắm Miền Bắc',
+  'Văn phòng Điều hành Seajong Việt Nam',
+  'Xưởng Lắp ráp & Kiểm định Seajong',
 ];
 
 const PRESET_CLIENTS = [
-  'Anh Vũ Đức Thịnh (Trưởng ban QLDA Novaland)',
-  'Anh Lê Hoàng Nam (Giám đốc PTDA Đất Xanh)',
-  'Ban QLDA Masterise Homes và Tổng thầu Coteccons',
-  'Anh Lê Minh Thành (Ban Điều hành Dự án Ecopark)',
-  'Anh Đặng Quốc Huy (Chuyên viên Quản lý Thầu)',
+  'CÔNG TY TNHH NAM HẢI CERAMIC',
+  'Showroom Thiên Thuận Lạng Sơn',
+  'Đại lý Hiền Dân - Thanh Oai',
+  'Chị Lê Nha Trang - Đại lý Khánh Hòa',
+  'Anh Quang - Đại lý Nam Trực, Ninh Bình',
 ];
 
 const PRESET_PROJECTS = [
-  'Khu Đô thị Sinh thái Aqua City',
-  'Masteri Centre Point',
-  'Khu căn hộ cao cấp Opal Boulevard',
-  'Khu Đô thị Ecopark Grand The Island',
-  'Khu căn hộ Moonlight Centre Point',
-  'Nhà máy Dược phẩm và Bệnh viện Quốc tế Vinmec',
+  'Hợp đồng phân phối đại lý cấp 1 Seajong',
+  'Gói cung ứng thiết bị phòng tắm Showroom mới',
+  'Đơn hàng OEM sen vòi đồng thau cao cấp',
+  'Chiến dịch trưng bày kệ mẫu Seajong Quý 4',
 ];
 
-const INITIAL_ENTRIES: JournalEntry[] = [
-  {
-    id: 'entry-1',
-    dateStr: 'THỨ SÁU, 2 THÁNG 10, 2026',
-    timeStr: '16:45',
-    title: 'Gặp gỡ Trưởng ban QLDA Novaland - Đàm phán gói cửa gỗ chống cháy Aqua City',
-    content:
-      'Cuộc làm việc trực tiếp tại VP Novaland diễn ra rất tích cực. Đại diện chủ đầu tư đánh giá cao chất lượng hoàn thiện bề mặt melamine chống cháy của Deco Door. Khách hàng yêu cầu cung cấp thêm chứng chỉ đốt mẫu thực tế EI60 trước ngày 15/10 để trình Hội đồng nghiệm thu cấp phép. Đã thống nhất gửi báo giá cập nhật có chiết khấu theo khối lượng 850 bộ.',
-    mood: {
-      label: 'Khởi sắc và Thuận lợi',
-      icon: '✨',
-      color: '#16a34a',
-      bg: 'rgba(22, 163, 74, 0.1)',
-    },
-    location: 'VP Tập đoàn Novaland, 65 Nguyễn Du, P. Bến Nghé, Q.1',
-    clientName: 'Anh Vũ Đức Thịnh (Trưởng ban QLDA)',
-    projectName: 'Khu Đô thị Sinh thái Aqua City',
-    attachments: [
-      {
-        type: 'image',
-        url: '/fac_01.jpg',
-        caption: 'Mẫu hoàn thiện cửa gỗ chống cháy EI60 trình thực tế',
-      },
-      {
-        type: 'image',
-        url: '/cover_01.webp',
-        caption: 'Phối cảnh lắp dựng tại phân khu Aqua Marina',
-      },
-      {
-        type: 'audio',
-        url: '#',
-        duration: '02:18',
-        caption: 'Ghi âm tóm tắt yêu cầu kỹ thuật và tiến độ từ khách hàng',
-      },
-    ],
-    isBookmarked: true,
-    subMeetings: [
-      {
-        id: 'sub-meeting-1',
-        dateStr: 'THỨ SÁU, 2 THÁNG 10, 2026',
-        timeStr: '22:09',
-        title: 'Giao ban cùng đơn vị tư vấn thiết kế',
-        content: 'Không thể nào hiểu được',
-        mood: {
-          label: 'Khởi sắc và Thuận lợi',
-          icon: '✨',
-          color: '#16a34a',
-          bg: 'rgba(22, 163, 74, 0.1)',
-        },
-        attachments: [],
-      },
-    ],
-  },
-  {
-    id: 'entry-2',
-    dateStr: 'THỨ TƯ, 30 THÁNG 9, 2026',
-    timeStr: '10:30',
-    title: 'Khảo sát thực địa ô chờ cửa Tháp Masteri Centre Point',
-    content:
-      'Đi thị sát công trình cùng anh Nam và tổ trưởng giám sát Coteccons. Tầng 12 đến 18 đã hoàn thiện trát tường. Đo đạc ngẫu nhiên 40 ô chờ thì có 15 ô bị lệch dung sai khoảng 4-5mm so với bản vẽ thiết kế ban đầu. Cần lưu ý bộ phận xưởng hiệu chỉnh nẹp chỉ composite bản 65mm để che khít khe hở khi lắp đặt, tránh phát sinh chi phí xử lý nề sau này.',
-    mood: {
-      label: 'Cần theo dõi kỹ thuật',
-      icon: '🔍',
-      color: '#d97706',
-      bg: 'rgba(217, 119, 6, 0.1)',
-    },
-    location: 'Đại đô thị Vinhomes Grand Park, TP. Thủ Đức, TP. HCM',
-    clientName: 'Ban QLDA Masterise Homes và Tổng thầu Coteccons',
-    projectName: 'Masteri Centre Point',
-    attachments: [
-      {
-        type: 'image',
-        url: '/cover_02.webp',
-        caption: 'Kiểm tra hiện trạng ô chờ tầng 15',
-      },
-      {
-        type: 'audio',
-        url: '#',
-        duration: '01:05',
-        caption: 'Thống nhất phương án bù nẹp với giám sát Coteccons',
-      },
-    ],
-    isBookmarked: false,
-  },
-  {
-    id: 'entry-3',
-    dateStr: 'THỨ HAI, 28 THÁNG 9, 2026',
-    timeStr: '14:15',
-    title: 'Thỏa thuận cấu hình khóa điện tử thông minh Hafele dự án Opal',
-    content:
-      'Đã chốt danh mục phụ kiện khóa thẻ từ kết hợp mật mã Hafele EL9000 cho 420 căn hộ thuộc dự án Opal. Phía Tập đoàn Đất Xanh đồng ý thanh toán đợt tạm ứng 30% ngay sau khi ký phụ lục hợp đồng thương mại vào thứ Hai tới. Đây là bước tiến quan trọng giúp đảm bảo chỉ tiêu doanh số quý 4 của nhóm.',
-    mood: {
-      label: 'Chốt hợp đồng thành công',
-      icon: '🎯',
-      color: '#2563eb',
-      bg: 'rgba(37, 99, 235, 0.1)',
-    },
-    location: 'Tòa nhà Đất Xanh Group, 2W Ung Văn Khiêm, Q. Bình Thạnh',
-    clientName: 'Anh Lê Hoàng Nam (Giám đốc PTDA)',
-    projectName: 'Khu căn hộ cao cấp Opal Boulevard',
-    attachments: [
-      {
-        type: 'image',
-        url: '/enterprise-hero.jpg',
-        caption: 'Mẫu khóa từ Hafele lắp thử trên cánh cửa mẫu',
-      },
-    ],
-    isBookmarked: true,
-  },
-  {
-    id: 'entry-4',
-    dateStr: 'THỨ SÁU, 25 THÁNG 9, 2026',
-    timeStr: '09:20',
-    title: 'Ý tưởng phát triển dòng cửa gỗ tự nhiên Tân Cổ Điển cho Villa Ecopark',
-    content:
-      'Chủ tịch Tập đoàn Ecopark chia sẻ định hướng xây dựng các căn biệt thự Đảo Ecopark Grand theo phong cách tân cổ điển nhẹ nhàng, rất cần dòng cửa gỗ tự nhiên Gõ Đỏ hoặc Óc Chó có pano chạm khắc tinh xảo. Rất tiềm năng nếu xưởng Deco Door chế tạo sẵn 2 mẫu cửa demo để đưa vào phòng trưng bày mẫu tại dự án.',
-    mood: {
-      label: 'Ý tưởng và Đột phá',
-      icon: '💡',
-      color: '#8b5cf6',
-      bg: 'rgba(139, 92, 246, 0.1)',
-    },
-    location: 'Văn phòng Ecopark Grand, Văn Giang, Hưng Yên',
-    clientName: 'Anh Lê Minh Thành (Ban Điều hành Dự án)',
-    projectName: 'Khu Đô thị Ecopark Grand The Island',
-    attachments: [
-      {
-        type: 'image',
-        url: '/5.jpg',
-        caption: 'Mẫu vân gỗ tự nhiên được chủ đầu tư đánh giá cao',
-      },
-    ],
-    isBookmarked: false,
-  },
-];
+const INITIAL_ENTRIES: JournalEntry[] = [];
 
 const SUGGESTED_PROMPTS = [
   {
-    title: 'Kết quả cuộc gặp Novaland hôm nay',
-    subtitle: '16:00 • 65 Nguyễn Du, Q.1 • Gặp anh Vũ Đức Thịnh',
-    prompt: 'Hôm nay làm việc với Novaland về tiến độ thẩm định hồ sơ cửa chống cháy ra sao? Đã chốt được đơn giá và lịch đốt mẫu PCCC chưa?',
-    location: 'VP Tập đoàn Novaland, 65 Nguyễn Du, P. Bến Nghé, Q.1',
-    client: 'Anh Vũ Đức Thịnh (Trưởng ban QLDA Novaland)',
-    project: 'Khu Đô thị Sinh thái Aqua City',
+    title: 'Kết quả làm việc với Đại lý Nam Hải Ceramic',
+    subtitle: '16:00 • Showroom Nam Hải Ceramic',
+    prompt: 'Hôm nay làm việc với Đại lý Nam Hải Ceramic về kế hoạch nhập hàng Quý 4 và chính sách chiết khấu ra sao?',
+    location: 'Showroom Nam Hải Ceramic, Hà Nội',
+    client: 'CÔNG TY TNHH NAM HẢI CERAMIC',
+    project: 'Hợp đồng phân phối đại lý cấp 1 Seajong',
   },
   {
-    title: 'Ghi chép khảo sát công trường Masteri',
-    subtitle: '10:00 • Công trường Masteri Centre Point',
-    prompt: 'Tình hình đo đạc ô chờ cửa và điều kiện lắp dựng thực tế tại công trường hôm nay có phát sinh vướng mắc gì không?',
-    location: 'Đại đô thị Vinhomes Grand Park, TP. Thủ Đức, TP. HCM',
-    client: 'Ban QLDA Masterise Homes và Tổng thầu Coteccons',
-    project: 'Masteri Centre Point',
+    title: 'Ghi chép khảo sát trưng bày Showroom Thiên Thuận',
+    subtitle: '10:00 • Showroom Thiên Thuận Lạng Sơn',
+    prompt: 'Tình hình lắp đặt kệ trưng bày sen cây và bồn cầu thông minh tại Showroom hôm nay có vướng mắc gì không?',
+    location: 'Showroom Thiên Thuận Lạng Sơn',
+    client: 'Showroom Thiên Thuận Lạng Sơn',
+    project: 'Gói cung ứng thiết bị phòng tắm Showroom mới',
   },
   {
-    title: 'Thỏa thuận phụ kiện khóa Hafele',
-    subtitle: '14:00 • Đất Xanh Group',
+    title: 'Thỏa thuận đơn hàng OEM thiết bị phòng tắm',
+    subtitle: '14:00 • Văn phòng Seajong',
     prompt: 'Thống nhất sử dụng khóa thẻ từ kết hợp mật mã Hafele EL9000, bên đối tác đồng ý ký phụ lục hợp đồng thương mại.',
     location: 'Tòa nhà Đất Xanh Group, 2W Ung Văn Khiêm, Q. Bình Thạnh',
     client: 'Anh Lê Hoàng Nam (Giám đốc PTDA Đất Xanh)',
@@ -569,13 +433,13 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     setFormTimeStr(timeStr);
 
     if (withDemoDocs) {
-      setFormTitle('Gặp gỡ Trưởng ban QLDA Novaland - Đàm phán gói cửa gỗ chống cháy Aqua City');
+      setFormTitle('Làm việc với Đại lý Nam Hải Ceramic - Thống nhất đơn hàng Quý 4');
       setFormContent(
-        'Cuộc làm việc trực tiếp tại VP Novaland diễn ra rất tích cực. Đại diện chủ đầu tư đánh giá cao chất lượng hoàn thiện bề mặt melamine chống cháy của Deco Door. Khách hàng yêu cầu cung cấp thêm chứng chỉ đốt mẫu thực tế EI60 trước ngày 15/10 để trình Hội đồng nghiệm thu cấp phép. Đã thống nhất gửi báo giá cập nhật có chiết khấu theo khối lượng 850 bộ.'
+        'Cuộc làm việc trực tiếp tại Showroom Nam Hải Ceramic diễn ra rất tích cực. Đại diện đại lý đánh giá cao chất lượng hoàn thiện bề mặt mạ PVD của sen vòi Seajong. Đã thống nhất gửi báo giá cập nhật có chiết khấu theo sản lượng Quý 4.'
       );
-      setFormLocation('VP Tập đoàn Novaland, 65 Nguyễn Du, P. Bến Nghé, Q.1');
-      setFormClient('Anh Vũ Đức Thịnh (Trưởng ban QLDA)');
-      setFormProject('Khu Đô thị Sinh thái Aqua City');
+      setFormLocation('Showroom Nam Hải Ceramic, Hà Nội');
+      setFormClient('CÔNG TY TNHH NAM HẢI CERAMIC');
+      setFormProject('Hợp đồng phân phối đại lý cấp 1 Seajong');
       setFormMood({
         label: 'Khởi sắc và Thuận lợi',
         icon: '✨',
@@ -588,20 +452,13 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
           id: 'att-1',
           type: 'image',
           url: '/fac_01.jpg',
-          caption: 'Mẫu hoàn thiện cửa gỗ chống cháy EI60 trình thực tế',
+          caption: 'Mẫu hoàn thiện bộ sen tắm cây phím đàn Seajong thực tế',
         },
         {
           id: 'att-2',
           type: 'image',
           url: '/cover_01.webp',
-          caption: 'Phối cảnh lắp dựng tại phân khu Aqua Marina',
-        },
-        {
-          id: 'att-3',
-          type: 'audio',
-          url: '#',
-          duration: '02:18',
-          caption: 'Ghi âm tóm tắt yêu cầu kỹ thuật và tiến độ từ khách hàng',
+          caption: 'Phối cảnh trưng bày kệ mẫu tại Showroom Đại lý',
         },
       ]);
     } else {
@@ -2348,10 +2205,10 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
                     </button>
                   </div>
 
-                  {/* Chọn nhanh ảnh mẫu thực tế từ xưởng Deco Door */}
+                  {/* Chọn nhanh ảnh mẫu thực tế từ kho mẫu Seajong */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <span style={{ fontSize: '0.71875rem', color: 'var(--text-muted)' }}>
-                      Chọn nhanh ảnh công trình mẫu Deco Door:
+                      Chọn nhanh ảnh mẫu sản phẩm Seajong:
                     </span>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
                       {PRESET_SAMPLE_PHOTOS.map((p, i) => (

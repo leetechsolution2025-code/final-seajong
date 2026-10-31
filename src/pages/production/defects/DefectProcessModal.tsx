@@ -6,7 +6,7 @@ import { FullWidthTable } from "@/components/common/FullWidthTable";
 import { Button } from "@/components/common/Button";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
-import { isProductionAdmin } from "@/lib/production-permissions";
+import { canManageProdDefects } from "@/lib/production-permissions";
 import { Check2Circle, ArrowRightCircle, LockFill, ArrowClockwise } from "react-bootstrap-icons";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -27,7 +27,7 @@ interface DefectProcessModalProps {
 
 export function DefectProcessModal({ defectId, onClose, onRefresh }: DefectProcessModalProps) {
   const { data: session } = useSession();
-  const isProdAdmin = isProductionAdmin(session?.user);
+  const isProdAdmin = canManageProdDefects(session?.user);
   const [defect, setDefect] = useState<any>(null);
   const [note, setNote] = useState('');
   const [resolution, setResolution] = useState('Sửa chữa tại chỗ');

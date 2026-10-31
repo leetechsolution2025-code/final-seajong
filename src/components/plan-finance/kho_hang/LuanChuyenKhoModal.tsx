@@ -6,7 +6,7 @@ import { useToast }                  from "@/components/ui/Toast";
 import { ConfirmDialog }             from "@/components/ui/ConfirmDialog";
 import { TaoYeuCauMuaHangModal }     from "@/components/plan-finance/mua_hang/TaoYeuCauMuaHangModal";
 import { genDocCode }                from "@/lib/genDocCode";
-import { isLogisticsAdmin }           from "@/lib/logistics-permissions";
+import { canExecuteInOut }           from "@/lib/logistics-permissions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Warehouse     { id: string; code: string | null; name: string; isActive: boolean; }
@@ -71,7 +71,7 @@ const CSS = {
 // ── Component ─────────────────────────────────────────────────────────────────
 export function LuanChuyenKhoModal({ onClose, onSaved }: LuanChuyenKhoModalProps) {
   const { data: session } = useSession();
-  const isThuKho = isLogisticsAdmin(session?.user);
+  const isThuKho = canExecuteInOut(session?.user);
   const toast = useToast();
 
   // ── Header state ────────────────────────────────────────────────────────────

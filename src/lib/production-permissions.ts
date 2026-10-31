@@ -1,24 +1,29 @@
+import { hasAnyPermission, hasPermission, isAdminUser } from './permissions';
+
 /**
  * Production Permission Helper
- * Quy định phân quyền trong hệ thống Quản trị sản xuất:
- * - Chỉ Quản trị viên (ADMIN/SUPERADMIN/GIÁM ĐỐC) và tài khoản Quản đốc xưởng sản xuất, Trưởng bộ phận, Trưởng phòng mới có quyền:
- *   + Xây dựng định mức (BOM): Tạo, sửa, xoá định mức, cập nhật thành phần vật tư
- *   + Báo cáo hoàn thành lệnh sản xuất: Xác nhận hoàn thành lệnh sản xuất
- *   + Tạo yêu cầu sản xuất: Tạo lệnh/yêu cầu sản xuất mới
- *   + Tạo hồ sơ lỗi và xử lý hàng lỗi, hàng trả về: Tạo mới hồ sơ lỗi, quyết định phương án xử lý, xoá hồ sơ lỗi
- * - Các tài khoản nhân viên sản xuất, công nhân, thợ... chỉ có quyền xem dữ liệu (Read-only).
+ * Căn cứ theo quyền hạn đã cấp cho tài khoản trên trang Phân quyền người dùng:
+ * - prod_orders: Quản lý lệnh sản xuất & lắp ráp
+ * - prod_bom: Xây dựng định mức vật tư (BOM)
+ * - prod_defects: Xử lý & khắc phục hàng lỗi
  */
 
-export function isProductionAdmin(user?: {
+export type ProductionUserLike = {
   role?: string | null;
+  permissions?: string[] | string | null;
   positionName?: string | null;
   position?: string | null;
   levelOrder?: number | null;
-} | null): boolean {
-  if (!user) return true; // Cho phép mặc định khi dev/demo nếu chưa truyền user, hoặc kiểm tra role
+} | null;
 
-  const role = (user.role || '').toUpperCase();
-  if (role === 'SUPERADMIN' || role === 'ADMIN' || role === 'DIRECTOR' || role === 'MANAGER') {
+export function isProductionAdmin(user?: ProductionUserLike): boolean {
+  if (!user) return false;
+
+  if (isAdminUser(user as any)) {
+    return true;
+  }
+
+  if (hasAnyPermission(user as any, ['prod_orders', 'prod_bom', 'prod_defects'])) {
     return true;
   }
 
@@ -29,24 +34,20 @@ export function isProductionAdmin(user?: {
     return true;
   }
 
-  // Quản đốc xưởng sản xuất, Trưởng bộ phận, Trưởng phòng, Quản lý sản xuất, Trưởng xưởng
-  if (
-    posName.includes('quản đốc') ||
-    posName.includes('trưởng bộ phận') ||
-    posName.includes('trưởng phòng') ||
-    posName.includes('quản lý sản xuất') ||
-    posName.includes('trưởng xưởng')
-  ) {
-    if (!posName.includes('phó') && !posName.includes('nhân viên') && !posName.includes('học việc')) {
-      return true;
-    }
-  }
-
-  // Cấp bậc lãnh đạo cao trong tổ chức (levelOrder <= 2)
-  if (user.levelOrder !== undefined && user.levelOrder !== null && user.levelOrder <= 2) {
-    return true;
-  }
-
   return false;
 }
 
+export function canManageProdOrders(user?: ProductionUserLike): boolean {
+  if (!user) return false;
+  return isAdminUser(user as any) || hasPermission(user as any, 'prod_orders');
+}
+
+export function canManageProdBom(user?: ProductionUserLike): boolean {
+  if (!user) return false;
+  return isAdminUser(user as any) || hasPermission(user as any, 'prod_bom');
+}
+
+export function canManageProdDefects(user?: ProductionUserLike): boolean {
+  if (!user) return false;
+  return isAdminUser(user as any) || hasPermission(user as any, 'prod_defects');
+}

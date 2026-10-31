@@ -18,7 +18,7 @@ import { TableToolbar, type TableToolbarFilter } from '../../components/common/T
 import { FullWidthTable } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
 import { Button } from '../../components/common/Button';
-import { Modal } from '../../components/common/Modal';
+import { Offcanvas } from '../../components/common/Offcanvas';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
@@ -457,15 +457,34 @@ export const WarehousesPage: React.FC = () => {
         }}
       />
 
-      {/* ── MODAL THÊM / CHỈNH SỬA KHO HÀNG ── */}
+      {/* ── OFFCANVAS THÊM / CHỈNH SỬA KHO HÀNG (400PX) ── */}
       {isModalOpen && (
-        <Modal
+        <Offcanvas
           isOpen={true}
           onClose={() => setIsModalOpen(false)}
-          title={editingWarehouse ? `CẬP NHẬT KHO: ${editingWarehouse.code}` : 'THÊM KHO HÀNG MỚI VÀO HỆ THỐNG'}
-          maxWidth="560px"
+          icon={<Building size={20} />}
+          title={editingWarehouse ? `Cập nhật kho: ${editingWarehouse.code}` : 'Thêm kho hàng mới'}
+          description="Thiết lập thông tin định danh và vị trí kho hàng"
+          width="400px"
+          position="right"
+          footer={
+            <div className="flex justify-end gap-2 w-full">
+              <Button variant="outline" size="sm" type="button" onClick={() => setIsModalOpen(false)}>
+                Hủy bỏ
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                type="submit"
+                form="warehouse-form"
+                className="!bg-blue-600 hover:!bg-blue-700"
+              >
+                {editingWarehouse ? 'Lưu thay đổi' : 'Tạo kho mới'}
+              </Button>
+            </div>
+          }
         >
-          <form onSubmit={handleSubmitForm} className="space-y-3.5 text-xs sm:text-[13px]">
+          <form id="warehouse-form" onSubmit={handleSubmitForm} className="space-y-3.5 text-xs sm:text-[13px]">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Mã kho hàng *</label>
@@ -543,26 +562,54 @@ export const WarehousesPage: React.FC = () => {
                 <span className="font-semibold text-slate-800">Kho đang trong trạng thái hoạt động</span>
               </label>
             </div>
-
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-              <Button variant="outline" size="sm" type="button" onClick={() => setIsModalOpen(false)}>
-                Hủy bỏ
-              </Button>
-              <Button variant="primary" size="sm" type="submit" className="!bg-blue-600 hover:!bg-blue-700">
-                {editingWarehouse ? 'Lưu thay đổi' : 'Tạo kho mới'}
-              </Button>
-            </div>
           </form>
-        </Modal>
+        </Offcanvas>
       )}
 
-      {/* ── MODAL XEM CHI TIẾT KHO ── */}
+      {/* ── OFFCANVAS XEM CHI TIẾT KHO (400PX) ── */}
       {detailWarehouse && (
-        <Modal
+        <Offcanvas
           isOpen={true}
           onClose={() => setDetailWarehouse(null)}
-          title={`CHI TIẾT: ${detailWarehouse.name}`}
-          maxWidth="520px"
+          icon={<Building size={20} />}
+          title={`Chi tiết: ${detailWarehouse.name}`}
+          description={`Mã kho: ${detailWarehouse.code} • ${detailWarehouse.typeLabel}`}
+          width="400px"
+          position="right"
+          footer={
+            <div className="flex justify-between items-center gap-2 w-full">
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => {
+                  const targetId = detailWarehouse.id;
+                  setDetailWarehouse(null);
+                  setDeleteConfirmId(targetId);
+                }}
+                leftIcon={<Trash size={13} />}
+              >
+                Xoá kho
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setDetailWarehouse(null)}>
+                  Đóng
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="!bg-blue-600 hover:!bg-blue-700 !text-white"
+                  onClick={() => {
+                    const target = detailWarehouse;
+                    setDetailWarehouse(null);
+                    handleOpenEdit(target);
+                  }}
+                  leftIcon={<PencilSquare size={13} />}
+                >
+                  Chỉnh sửa
+                </Button>
+              </div>
+            </div>
+          }
         >
           <div className="space-y-3 text-xs sm:text-[13px] text-slate-700">
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
@@ -622,41 +669,8 @@ export const WarehousesPage: React.FC = () => {
                 </div>
               </div>
             </div>
-
-            <div className="flex justify-between items-center gap-2 pt-2 border-t border-slate-100">
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={() => {
-                  const targetId = detailWarehouse.id;
-                  setDetailWarehouse(null);
-                  setDeleteConfirmId(targetId);
-                }}
-                leftIcon={<Trash size={13} />}
-              >
-                Xoá kho
-              </Button>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => setDetailWarehouse(null)}>
-                  Đóng
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  className="!bg-blue-600 hover:!bg-blue-700 !text-white"
-                  onClick={() => {
-                    const target = detailWarehouse;
-                    setDetailWarehouse(null);
-                    handleOpenEdit(target);
-                  }}
-                  leftIcon={<PencilSquare size={13} />}
-                >
-                  Chỉnh sửa thông tin
-                </Button>
-              </div>
-            </div>
           </div>
-        </Modal>
+        </Offcanvas>
       )}
 
       {/* ── CONFIRM DIALOG XÓA 1 KHO ── */}

@@ -4054,31 +4054,53 @@ app.get('/api/sales/dashboard', async (req, res) => {
   try {
     const currentYear = 2026;
 
-    // 1. Orders & Revenue
-    const dbOrders = await prisma.saleOrder.findMany({
-      include: {
-        customer: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    // 1. Orders & Revenue (Bao gồm cả SaleOrder thương hiệu Seajong, OemSaleOrder gia công OEM và DebtPayment)
+    const [dbOrders, oemOrders, debtPayments, employees, allCustomers] = await Promise.all([
+      prisma.saleOrder.findMany({
+        where: { trangThai: { not: 'cancelled' } },
+        include: { customer: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.oemSaleOrder.findMany({
+        where: { trangThai: { not: 'cancelled' } },
+        include: { customer: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.debtPayment.findMany({
+        include: { debt: true },
+      }),
+      prisma.employee.findMany(),
+      prisma.customer.findMany(),
+    ]);
 
-    const totalOrdersCount = dbOrders.length;
-    const totalSales = dbOrders.reduce((sum, o) => sum + (o.tongTien || 0), 0);
-    const totalRevenue = dbOrders.reduce((sum, o) => sum + (o.daThanhToan || 0), 0);
+    const empMap = new Map(employees.map((e) => [e.id, e]));
+    const custMap = new Map(allCustomers.map((c) => [c.id, c]));
+
+    const totalOrdersCount = dbOrders.length + oemOrders.length;
+    const totalSales =
+      dbOrders.reduce((sum, o) => sum + (Number(o.tongTien) || 0), 0) +
+      oemOrders.reduce((sum, o) => sum + (Number(o.tongTien) || 0), 0);
+
+    const recPaymentSum = debtPayments
+      .filter((p) => !p.debt || p.debt.type === 'RECEIVABLE' || p.debt.type === 'phai-thu')
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+    const totalRevenue =
+      dbOrders.reduce((sum, o) => sum + (Number(o.daThanhToan) || 0), 0) +
+      oemOrders.reduce((sum, o) => sum + (Number(o.daThanhToan) || 0), 0) +
+      recPaymentSum;
     const totalDebt = Math.max(0, totalSales - totalRevenue);
 
     // 2. Customers & Dealers
-    const customersCount = await prisma.customer.count();
-    const dealersCount = await prisma.customer.count({
-      where: {
-        OR: [
-          { nhom: 'dai-ly' },
-          { nhom: 'dai-ly-cap-1' },
-          { nhom: 'dai-ly-cap-2' },
-          { nhom: 'showroom' },
-        ],
-      },
-    });
+    const customersCount = allCustomers.length;
+    const dealersCount = allCustomers.filter((c) => {
+      const nhom = String(c.nhom || '').toLowerCase();
+      return (
+        nhom.includes('dai-ly') ||
+        nhom.includes('showroom') ||
+        String(c.loai || '').toLowerCase().includes('đại lý')
+      );
+    }).length || customersCount;
 
     // 3. Yearly Target
     const yearlyPlan = await prisma.salesYearlyPlan.findFirst({
@@ -4092,12 +4114,17 @@ app.get('/api/sales/dashboard', async (req, res) => {
     if (yearlyPlan && yearlyPlan.monthlyTargets) {
       try {
         const parsed = JSON.parse(yearlyPlan.monthlyTargets);
+        let sumTarget = 0;
         for (let m = 1; m <= 12; m++) {
           if (parsed[m]?.revenueRows) {
-            const mTotal = parsed[m].revenueRows.reduce((s, r) => s + (r.value || 0), 0);
-            if (mTotal > 0) monthlyTargetsMap[m] = mTotal;
+            const mTotal = parsed[m].revenueRows.reduce((s, r) => s + (Number(r.value) || 0), 0);
+            if (mTotal > 0) {
+              monthlyTargetsMap[m] = mTotal;
+              sumTarget += mTotal;
+            }
           }
         }
+        if (sumTarget > 0) targetRevenue = sumTarget;
       } catch (e) {}
     }
 
@@ -4108,30 +4135,96 @@ app.get('/api/sales/dashboard', async (req, res) => {
         const d = new Date(o.ngayDat || o.createdAt);
         return d.getMonth() + 1 === monthNum;
       });
-      const actualSales = monthOrders.reduce((s, o) => s + (o.tongTien || 0), 0);
-      const actualRev = monthOrders.reduce((s, o) => s + (o.daThanhToan || 0), 0);
-
-      // Cho các tháng đã có số liệu hoặc phân bổ hợp lý theo thực tế
-      const baseActual = actualSales > 0 ? actualSales : (monthNum <= 10 ? Math.round(monthlyTargetsMap[monthNum] * (0.85 + (monthNum % 3) * 0.08)) : null);
-      const baseRev = actualRev > 0 ? actualRev : (baseActual ? Math.round(baseActual * 0.92) : null);
+      const monthOem = oemOrders.filter((o) => {
+        const d = new Date(o.ngayDat || o.createdAt);
+        return d.getMonth() + 1 === monthNum;
+      });
+      const actualSales =
+        monthOrders.reduce((s, o) => s + (Number(o.tongTien) || 0), 0) +
+        monthOem.reduce((s, o) => s + (Number(o.tongTien) || 0), 0);
+      const actualRev =
+        monthOrders.reduce((s, o) => s + (Number(o.daThanhToan) || 0), 0) +
+        monthOem.reduce((s, o) => s + (Number(o.daThanhToan) || 0), 0);
 
       return {
         month: `Tháng ${monthNum}`,
         target: monthlyTargetsMap[monthNum] || 375000000,
-        actualSales: baseActual,
-        actualRevenue: baseRev,
+        actualSales,
+        actualRevenue: actualRev,
       };
     });
 
-    // 5. Category Breakdown
-    const categoryBreakdown = [
-      { name: 'Sen cây phím đàn hiển thị số', value: 38 },
-      { name: 'Sen tắm nhiệt độ cao cấp', value: 26 },
-      { name: 'Vòi chậu lavabo nóng lạnh', value: 20 },
-      { name: 'Phụ kiện phòng tắm mạ PVD', value: 16 },
-    ];
+    // 5. Xếp hạng Nhân viên Kinh doanh thực tế từ SaleOrder & OemSaleOrder
+    const repStatsMap = new Map();
+    const accumulateOrderForRep = (o) => {
+      const repId = o.nguoiPhuTrach || 'cmra9q6qk00038oq7i8pxa8fs';
+      const emp = empMap.get(repId);
+      const cur = repStatsMap.get(repId) || {
+        id: repId,
+        name: emp?.fullName || o.nguoiDatHang || 'Lê Công Vụ',
+        area: emp?.permanentAddress || emp?.currentAddress || 'Hà Nội & Toàn quốc',
+        orders: 0,
+        revenue: 0,
+      };
+      cur.orders += 1;
+      cur.revenue += Number(o.tongTien) || 0;
+      repStatsMap.set(repId, cur);
+    };
+    dbOrders.forEach(accumulateOrderForRep);
+    oemOrders.forEach(accumulateOrderForRep);
 
-    // 6. Recent Orders
+    const topSalesReps = Array.from(repStatsMap.values())
+      .sort((a, b) => b.revenue - a.revenue)
+      .map((r, idx) => {
+        const target = idx === 0 ? 3000000000 : idx === 1 ? 500000000 : 250000000;
+        const pct = target > 0 ? ((r.revenue / target) * 100).toFixed(1) + '%' : '100%';
+        const bonusAmt = Math.round(r.revenue * 0.02);
+        return {
+          stt: idx + 1,
+          name: r.name,
+          area: r.area,
+          orders: r.orders,
+          revenue: Math.round(r.revenue),
+          target,
+          completion: pct,
+          bonus: bonusAmt.toLocaleString('vi-VN') + ' đ',
+        };
+      });
+
+    // 6. Top Đại lý / Khách hàng có doanh số thực tế cao nhất
+    const dealerStatsMap = new Map();
+    const accumulateOrderForDealer = (o) => {
+      const cid = o.customerId || o.customer?.id;
+      if (!cid) return;
+      const cust = o.customer || custMap.get(cid);
+      const cur = dealerStatsMap.get(cid) || {
+        id: cid,
+        name: cust?.name || o.nguoiNhan || 'Khách hàng Seajong',
+        code: cust?.code || `KH-${String(cid).slice(-4).toUpperCase()}`,
+        orders: 0,
+        revenue: 0,
+      };
+      cur.orders += 1;
+      cur.revenue += Number(o.tongTien) || 0;
+      dealerStatsMap.set(cid, cur);
+    };
+    dbOrders.forEach(accumulateOrderForDealer);
+    oemOrders.forEach(accumulateOrderForDealer);
+
+    const topDealers = Array.from(dealerStatsMap.values())
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 20)
+      .map((d, idx) => ({
+        rank: idx + 1,
+        name: d.name,
+        code: d.code,
+        orders: d.orders,
+        revenue: Math.round(d.revenue),
+        growth: `${d.orders} đơn hàng`,
+        status: d.revenue >= 200000000 ? 'Xuất sắc' : d.revenue >= 100000000 ? 'Tiêu biểu' : 'Đạt chuẩn',
+      }));
+
+    // 7. Recent Orders
     const recentOrders = dbOrders.slice(0, 10).map((o) => ({
       id: o.id,
       code: o.code || `DBH-${o.id.slice(-6).toUpperCase()}`,
@@ -4142,7 +4235,7 @@ app.get('/api/sales/dashboard', async (req, res) => {
       daThanhToan: o.daThanhToan || 0,
     }));
 
-    // 7. Recent Care Activities
+    // 8. Recent Care Activities
     const careHistories = await prisma.customerCareHistory.findMany({
       include: { customer: true, nguoiChamSoc: true },
       orderBy: { ngayChamSoc: 'desc' },
@@ -4154,7 +4247,7 @@ app.get('/api/sales/dashboard', async (req, res) => {
       customerId: c.customerId,
       ngayChamSoc: c.ngayChamSoc,
       hinhThuc: c.hinhThuc || 'Gặp mặt',
-      tomTat: c.tomTat || 'Tư vấn mở rộng danh mục sản phẩm sen vòi Seajong',
+      tomTat: c.tomTat || 'Chăm sóc khách hàng & đại lý Seajong',
       customer: {
         id: c.customer?.id,
         name: c.customer?.name || 'Đại lý Seajong',
@@ -4162,34 +4255,26 @@ app.get('/api/sales/dashboard', async (req, res) => {
       },
       nguoiChamSoc: {
         id: c.nguoiChamSoc?.id,
-        fullName: c.nguoiChamSoc?.fullName || 'Phạm Quang Việt',
+        fullName: c.nguoiChamSoc?.fullName || 'Lê Công Vụ',
       },
     }));
 
     res.json({
       success: true,
       summary: {
-        totalSales: totalSales > 0 ? totalSales : 3824500000,
-        totalRevenue: totalRevenue > 0 ? totalRevenue : 3518000000,
+        totalSales: Math.round(totalSales),
+        totalRevenue: Math.round(totalRevenue),
         targetRevenue,
-        totalOrdersCount: totalOrdersCount > 0 ? totalOrdersCount : 142,
-        totalDebt: totalDebt > 0 ? totalDebt : 306500000,
-        customersCount: customersCount > 0 ? customersCount : 345,
-        dealersCount: dealersCount > 0 ? dealersCount : 128,
+        totalOrdersCount,
+        totalDebt: Math.round(totalDebt),
+        customersCount,
+        dealersCount,
       },
+      topSalesReps,
+      topDealers,
       monthlyTrends,
-      categoryBreakdown,
-      recentOrders: recentOrders.length > 0 ? recentOrders : [
-        { id: 'ro-1', code: 'DBH-20261020-01', customerName: 'Tổng Đại lý Minh Long Khánh', ngayDat: '2026-10-20T08:30:00Z', tongTien: 48500000, trangThai: 'completed', daThanhToan: 48500000 },
-        { id: 'ro-2', code: 'DBH-20261019-02', customerName: 'Showroom Thiết Bị Vệ Sinh An Gia Phát', ngayDat: '2026-10-19T14:15:00Z', tongTien: 62800000, trangThai: 'approved', daThanhToan: 30000000 },
-        { id: 'ro-3', code: 'DBH-20261018-01', customerName: 'Nhà thầu Dự án Villa Flamingo', ngayDat: '2026-10-18T10:00:00Z', tongTien: 125000000, trangThai: 'approved', daThanhToan: 50000000 },
-        { id: 'ro-4', code: 'DBH-20261017-03', customerName: 'Đại lý Thiết Bị Sen Vòi Nam Hà', ngayDat: '2026-10-17T16:20:00Z', tongTien: 34200000, trangThai: 'completed', daThanhToan: 34200000 },
-      ],
-      recentCare: recentCare.length > 0 ? recentCare : [
-        { id: 'rc-1', customerId: 'c1', ngayChamSoc: '2026-10-21T09:30:00Z', hinhThuc: 'Gặp mặt', tomTat: 'Khảo sát mặt bằng showroom 80m2 tại Bắc Ninh, chốt lắp 2 kệ mẫu Seajong', customer: { name: 'Showroom Phương Nga - Bắc Giang', loai: 'Đại lý mới' }, nguoiChamSoc: { fullName: 'Phạm Quang Việt' } },
-        { id: 'rc-2', customerId: 'c2', ngayChamSoc: '2026-10-20T15:00:00Z', hinhThuc: 'Điện thoại', tomTat: 'Tư vấn chính sách thưởng quý IV và gửi báo giá bộ sưu tập sen cây phím đàn', customer: { name: 'Tổng Đại lý Minh Long Khánh', loai: 'Đại lý cấp 1' }, nguoiChamSoc: { fullName: 'Phạm Quang Việt' } },
-        { id: 'rc-3', customerId: 'c3', ngayChamSoc: '2026-10-19T11:20:00Z', hinhThuc: 'Gặp mặt', tomTat: 'Nghiệm thu lắp đặt biển hiệu đại lý và bàn giao catalogue tài liệu bán hàng', customer: { name: 'Showroom An Gia Phát - Hà Nội', loai: 'Đại lý cấp 1' }, nguoiChamSoc: { fullName: 'Lê Công Vụ' } },
-      ],
+      recentOrders,
+      recentCare,
     });
   } catch (err) {
     console.error('Lỗi API /api/sales/dashboard:', err);
@@ -7404,6 +7489,14 @@ app.get('/api/plan-finance/sales/:id', async (req, res) => {
       },
       include: {
         customer: true,
+        logisticsTickets: {
+          include: {
+            items: {
+              include: { inventoryItem: { select: { tenHang: true, code: true } } }
+            },
+            assignedTo: { select: { fullName: true } }
+          }
+        },
         saleOrderItems: {
           include: {
             inventoryItem: {
@@ -7491,10 +7584,25 @@ app.get('/api/plan-finance/sales/:id', async (req, res) => {
       outstandingDebt = debts.reduce((sum, d) => sum + ((d.amount || 0) - (d.paidAmount || 0)), 0);
     }
 
+    const logisticsTask = await prisma.task.findFirst({
+      where: {
+        deptCode: 'logistics',
+        title: { contains: order.code || '' },
+        ...(order.ngayDat ? { createdAt: { gte: order.ngayDat } } : {})
+      }
+    });
+    let logisticsItems = null;
+    if (logisticsTask && logisticsTask.actualResult) {
+      try {
+        logisticsItems = JSON.parse(logisticsTask.actualResult);
+      } catch (_) {}
+    }
+
     const resolved = {
       ...order,
       ghiChu: cleanGhiChu(order.ghiChu),
       items: orderItems,
+      logisticsItems,
       customer: order.customer ? {
         ...order.customer,
         outstandingDebt,
@@ -7862,6 +7970,694 @@ app.get('/api/logistics/summary', async (req, res) => {
   }
 });
 
+// ── GET /api/logistics/overview-orders (Chuẩn client-seajong) ──────────────────
+app.get('/api/logistics/overview-orders', async (req, res) => {
+  try {
+    const [contracts, saleOrders, retailInvoices, materialTasks, inboundTasks, batchPickingTasks, logisticsTickets] = await Promise.all([
+      prisma.contract.findMany({
+        where: { trangThai: 'active' },
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+        select: {
+          id: true, code: true, trangThai: true,
+          giaTriHopDong: true,
+          customer: { select: { name: true, address: true } },
+        },
+      }),
+      prisma.saleOrder.findMany({
+        where: {
+          trangThai: { in: ['active', 'confirmed', 'processing', 'in_production', 'approved'] },
+          keToanDuyet: 'approved'
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+        select: {
+          id: true, code: true, trangThai: true, trangThaiKho: true,
+          tongTien: true,
+          ghiChu: true,
+          customer: { select: { name: true, address: true } },
+          saleOrderItems: {
+            select: {
+              inventoryItemId: true,
+              dinhMucId: true,
+              ghiChu: true
+            }
+          },
+          logisticsTickets: { select: { id: true, type: true } }
+        },
+      }),
+      prisma.retailInvoice.findMany({
+        where: { trangThai: { in: ['partial', 'pending', 'unpaid'] } },
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+        select: {
+          id: true, code: true, trangThai: true,
+          tongCong: true, tenKhach: true, diaChi: true,
+        },
+      }),
+      prisma.task.findMany({
+        where: {
+          deptCode: 'logistics',
+          status: { in: ['pending', 'in_progress', 'completed', 'done'] },
+          title: { contains: 'Lệnh xuất kho KVP' }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+        select: {
+          id: true, title: true, status: true,
+          actualResult: true, createdAt: true,
+          assigneeId: true
+        }
+      }),
+      prisma.task.findMany({
+        where: {
+          deptCode: 'logistics',
+          status: { in: ['pending', 'in_progress', 'completed', 'done'] },
+          OR: [
+            { title: { contains: 'nhập kho thành phẩm' } },
+            { title: { contains: 'nhập kho vật tư' } },
+            { title: { contains: 'nhập kho thu hồi' } },
+            { title: { contains: 'thu hồi' } },
+            { title: { contains: 'nhập kho hàng lỗi' } },
+            { title: { contains: 'nhập kho hàng trả lại' } },
+            { title: { contains: 'hàng trả lại' } }
+          ]
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+        select: {
+          id: true, title: true, description: true, status: true,
+          actualResult: true, createdAt: true,
+          assigneeId: true
+        }
+      }),
+      prisma.task.findMany({
+        where: {
+          deptCode: 'logistics',
+          title: { contains: 'Gom hàng' }
+        },
+        select: { actualResult: true, assigneeId: true }
+      }),
+      prisma.logisticsTicket.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+        select: {
+          id: true, code: true, status: true, type: true, createdAt: true, defectRecordId: true,
+          assignedToId: true,
+          assignedTo: { select: { id: true, fullName: true } },
+          saleOrder: {
+            select: {
+              id: true, code: true, trangThai: true, keToanDuyet: true, trangThaiKho: true, ngayGiao: true, ghiChu: true,
+              customer: { select: { name: true, address: true } },
+              logisticsTickets: { select: { id: true, type: true } },
+              saleOrderItems: {
+                select: {
+                  inventoryItemId: true,
+                  dinhMucId: true,
+                  ghiChu: true
+                }
+              }
+            }
+          },
+          defectRecord: {
+            select: { id: true, code: true }
+          },
+          items: {
+            select: {
+              requestedQty: true,
+              pickedQty: true,
+              inventoryItemId: true,
+              inventoryItem: { select: { tenHang: true, donVi: true, code: true, color: true, giaBan: true, imageUrl: true, soLuong: true } }
+            }
+          }
+        }
+      })
+    ]);
+
+    const allAssigneeIds = [
+      ...batchPickingTasks.map(t => t.assigneeId),
+      ...materialTasks.map(t => t.assigneeId),
+      ...inboundTasks.map(t => t.assigneeId)
+    ].filter(Boolean);
+
+    const uniqueAssigneeIds = [...new Set(allAssigneeIds)];
+    const [users, emps] = uniqueAssigneeIds.length > 0 ? await Promise.all([
+      prisma.user.findMany({
+        where: { id: { in: uniqueAssigneeIds } },
+        select: { id: true, name: true }
+      }),
+      prisma.employee.findMany({
+        where: { id: { in: uniqueAssigneeIds } },
+        select: { id: true, fullName: true }
+      })
+    ]) : [[], []];
+    const userMap = new Map();
+    users.forEach(u => { if (u.name) userMap.set(u.id, u.name); });
+    emps.forEach(e => { if (e.fullName) userMap.set(e.id, e.fullName); });
+
+    const assignedOrderIds = new Set();
+    const assignedOrderAssignees = new Map();
+    batchPickingTasks.forEach(t => {
+      try {
+        if (t.actualResult) {
+          const ids = JSON.parse(t.actualResult);
+          if (Array.isArray(ids)) {
+            ids.forEach(id => {
+              assignedOrderIds.add(id);
+              if (t.assigneeId && userMap.has(t.assigneeId)) {
+                assignedOrderAssignees.set(id, userMap.get(t.assigneeId));
+              }
+            });
+          }
+        }
+      } catch (_) {}
+    });
+
+    const qcCodes = inboundTasks.map(t => {
+      const match = t.title.match(/\(([^)]+)\)/);
+      return match ? match[1] : null;
+    }).filter(Boolean);
+
+    const qcInspections = qcCodes.length > 0 ? await prisma.qualityInspection.findMany({
+      where: { code: { in: qcCodes } },
+      select: { code: true, metadata: true }
+    }) : [];
+    const qcProdOrderMap = new Map();
+    const qcPoMap = new Map();
+
+    const poIdsToFetch = [];
+    qcInspections.forEach(qc => {
+      let meta = null;
+      try {
+        meta = typeof qc.metadata === 'string' ? JSON.parse(qc.metadata) : qc.metadata;
+      } catch (_) {}
+      if (meta?.productionOrder) {
+        qcProdOrderMap.set(qc.code, meta.productionOrder);
+      }
+      if (meta?.purchaseOrderId) {
+        poIdsToFetch.push(meta.purchaseOrderId);
+      }
+    });
+
+    inboundTasks.forEach(t => {
+      try {
+        if (t.actualResult) {
+          const parsed = JSON.parse(t.actualResult);
+          if (Array.isArray(parsed) && parsed[0]?.purchaseOrderId) {
+            poIdsToFetch.push(parsed[0].purchaseOrderId);
+          }
+        }
+      } catch (_) {}
+    });
+
+    const pos = poIdsToFetch.length > 0 ? await prisma.purchaseOrder.findMany({
+      where: { id: { in: poIdsToFetch } },
+      select: { id: true, code: true, shippingFee: true, supplier: { select: { name: true } } }
+    }) : [];
+    const poMap = new Map(pos.map(p => [p.id, p]));
+
+    qcInspections.forEach(qc => {
+      let meta = null;
+      try {
+        meta = typeof qc.metadata === 'string' ? JSON.parse(qc.metadata) : qc.metadata;
+      } catch (_) {}
+      const poId = meta?.purchaseOrderId || null;
+      const po = poId ? poMap.get(poId) : null;
+      if (poId || meta?.purchaseOrderCode || meta?.poNumber || meta?.supplierName) {
+        qcPoMap.set(qc.code, {
+          purchaseOrderId: poId,
+          purchaseOrderCode: po?.code || meta?.purchaseOrderCode || meta?.poNumber || null,
+          shippingFee: Number(po?.shippingFee || 0),
+          supplierName: po?.supplier?.name || meta?.supplierName || null
+        });
+      }
+    });
+
+    const result = [
+      ...logisticsTickets.map(t => ({
+        id: t.id,
+        code: t.code,
+        type: 'logistics-ticket',
+        typeLabel: t.type === 'BATCH_PACKING' ? 'Gom hàng & đóng gói' : (t.type === 'WARRANTY_MATERIAL' || t.defectRecord ? 'Cấp phát linh kiện thay thế' : 'Xuất kho sản xuất'),
+        customer: t.saleOrder?.customer?.name ?? null,
+        customerAddress: t.saleOrder?.customer?.address ?? null,
+        ghiChu: t.saleOrder?.ghiChu ?? (t.defectRecord ? `Yêu cầu vật tư cho lỗi ${t.defectRecord.code}` : null),
+        tongTien: null,
+        trangThai: t.status,
+        isAssigned: assignedOrderIds.has(t.id) || Boolean(t.assignedToId),
+        assigneeName: t.assignedTo?.fullName || assignedOrderAssignees.get(t.id) || null,
+        ticketType: t.type,
+        defectRecordId: t.defectRecordId || t.defectRecord?.id || null,
+        saleOrderId: t.saleOrder?.id,
+        saleOrderCode: t.saleOrder?.code || (t.defectRecord ? t.defectRecord.code : null),
+        saleOrderTrangThai: t.saleOrder?.trangThai,
+        saleOrderTrangThaiKho: t.saleOrder?.trangThaiKho,
+        hasProduction: Boolean(
+          t.type === 'MATERIAL_PICKING' ||
+          t.saleOrder?.trangThai === 'in_production' ||
+          (t.saleOrder?.logisticsTickets && t.saleOrder.logisticsTickets.some(lt => lt.type === 'MATERIAL_PICKING')) ||
+          (t.saleOrder?.trangThaiKho === 'out_of_stock' && t.saleOrder?.saleOrderItems?.some(soi =>
+            soi.dinhMucId || (soi.ghiChu && (soi.ghiChu.includes('dinhMucId') || soi.ghiChu.includes('DM-') || soi.ghiChu.includes('bomCode')))
+          ))
+        ),
+        requestedDate: t.type === 'BATCH_PACKING' ? (t.saleOrder?.ngayGiao ?? t.createdAt) : t.createdAt,
+        items: (t.items || []).map(it => {
+          let bomCode = null;
+          if (t.saleOrder?.saleOrderItems) {
+            const soItem = t.saleOrder.saleOrderItems.find(soi => soi.inventoryItemId === it.inventoryItemId);
+            if (soItem && soItem.ghiChu) {
+              try {
+                const parsed = JSON.parse(soItem.ghiChu);
+                if (parsed.bomCode) bomCode = parsed.bomCode;
+              } catch (_) {}
+            }
+          }
+          return {
+            inventoryItemId: it.inventoryItemId,
+            tenHang: it.inventoryItem?.tenHang || 'Vật tư',
+            soLuong: it.requestedQty || 0,
+            requestedQty: it.requestedQty || 0,
+            pickedQty: it.pickedQty || 0,
+            stockQty: it.inventoryItem?.soLuong ?? 0,
+            isShortage: (it.inventoryItem?.soLuong ?? 0) < (it.requestedQty || 0),
+            donVi: it.inventoryItem?.donVi || 'cái',
+            code: it.inventoryItem?.code,
+            color: it.inventoryItem?.color,
+            giaBan: it.inventoryItem?.giaBan,
+            imageUrl: it.inventoryItem?.imageUrl,
+            bomCode
+          };
+        })
+      })),
+      ...contracts.map(c => ({
+        id: c.id,
+        code: c.code,
+        type: 'contract',
+        typeLabel: 'Hợp đồng',
+        customer: c.customer?.name ?? null,
+        customerAddress: c.customer?.address ?? null,
+        tongTien: c.giaTriHopDong,
+        trangThai: c.trangThai,
+        isAssigned: assignedOrderIds.has(c.id)
+      })),
+      ...saleOrders.filter(so => so.logisticsTickets.length === 0).map(so => {
+        const hasDinhMuc = so.saleOrderItems?.some(soi =>
+          soi.dinhMucId || (soi.ghiChu && (soi.ghiChu.includes('dinhMucId') || soi.ghiChu.includes('DM-') || soi.ghiChu.includes('bomCode')))
+        );
+        const isOutOfStock = so.trangThaiKho === 'out_of_stock';
+        const hasProduction = Boolean(so.trangThai === 'in_production' || (isOutOfStock && hasDinhMuc));
+
+        return {
+          id: so.id,
+          code: so.code,
+          type: 'sale-order',
+          typeLabel: 'Đơn bán hàng',
+          customer: so.customer?.name ?? null,
+          customerAddress: so.customer?.address ?? null,
+          ghiChu: so.ghiChu ?? null,
+          tongTien: so.tongTien,
+          trangThai: so.trangThai,
+          trangThaiKho: so.trangThaiKho,
+          hasProduction,
+          isAssigned: assignedOrderIds.has(so.id),
+          assigneeName: assignedOrderAssignees.get(so.id) || null
+        };
+      }),
+      ...retailInvoices.map(inv => ({
+        id: inv.id,
+        code: inv.code,
+        type: 'retail-invoice',
+        typeLabel: 'Hoá đơn bán lẻ',
+        customer: inv.tenKhach ?? null,
+        customerAddress: inv.diaChi ?? null,
+        tongTien: inv.tongCong,
+        trangThai: inv.trangThai,
+        isAssigned: assignedOrderIds.has(inv.id),
+        assigneeName: assignedOrderAssignees.get(inv.id) || null
+      })),
+      ...materialTasks
+        .filter(t => {
+          const match = t.title.match(/cho (?:đơn hàng|lệnh)\s+(\S+)/i);
+          const orderCode = match ? match[1] : null;
+          if (orderCode && logisticsTickets.some(lt => lt.saleOrder?.code === orderCode || lt.code?.includes(orderCode))) {
+            return false;
+          }
+          return true;
+        })
+        .map(t => {
+          let parsedItems = [];
+          try {
+            if (t.actualResult) parsedItems = JSON.parse(t.actualResult);
+          } catch (_) {}
+          const orderCodeMatch = t.title.match(/cho (?:đơn hàng|lệnh)\s+(\S+)/i);
+          const orderCode = orderCodeMatch ? orderCodeMatch[1] : 'KVP';
+
+          return {
+            id: t.id,
+            code: orderCode,
+            type: 'material-export',
+            typeLabel: 'Xuất kho sản xuất',
+            customer: null,
+            tongTien: null,
+            trangThai: t.status,
+            assigneeName: (t.assigneeId && userMap.get(t.assigneeId)) || null,
+            items: parsedItems,
+          };
+        }),
+      ...inboundTasks.map(t => {
+        let parsedItems = [];
+        try {
+          if (t.actualResult) parsedItems = JSON.parse(t.actualResult);
+        } catch (_) {}
+
+        const qcCodeMatch = t.title.match(/\(([^)]+)\)/);
+        const code = qcCodeMatch ? qcCodeMatch[1] : 'Nhập kho';
+        const prodOrder = qcProdOrderMap.get(code) || null;
+
+        const titleLower = t.title.toLowerCase();
+        let typeLabel = 'Nhập kho vật tư';
+        if (titleLower.includes('hàng trả lại') || titleLower.includes('trả lại')) {
+          typeLabel = 'Nhập kho hàng trả lại';
+        } else if (titleLower.includes('thu hồi')) {
+          typeLabel = 'Nhập kho thu hồi';
+        } else if (titleLower.includes('hàng lỗi') || titleLower.includes('kho-loi') || titleLower.includes('lỗi')) {
+          typeLabel = 'Nhập kho hàng lỗi';
+        } else if (titleLower.includes('thành phẩm')) {
+          typeLabel = 'Nhập kho thành phẩm';
+        }
+
+        const poInfo = qcPoMap.get(code) || null;
+        const itemPoId = parsedItems[0]?.purchaseOrderId || null;
+        const itemPo = itemPoId ? poMap.get(itemPoId) : null;
+
+        const purchaseOrderId = itemPoId || poInfo?.purchaseOrderId || null;
+        const purchaseOrderCode = parsedItems[0]?.purchaseOrderCode || poInfo?.purchaseOrderCode || itemPo?.code || null;
+        const shippingFee = parsedItems[0]?.shippingFee !== undefined ? parsedItems[0].shippingFee : (poInfo?.shippingFee ?? Number(itemPo?.shippingFee || 0));
+
+        const descSupplier = t.description?.match(/Từ nhà cung cấp:\s*([^\n\r]+)/i)?.[1]?.trim() || null;
+        const supplierName = poInfo?.supplierName || itemPo?.supplier?.name || descSupplier || null;
+        const isPurchaseOrder = !!(purchaseOrderId || purchaseOrderCode || supplierName);
+
+        return {
+          id: t.id,
+          title: t.title,
+          code,
+          productionOrder: prodOrder,
+          purchaseOrderId,
+          purchaseOrderCode,
+          shippingFee,
+          saleOrderCode: null,
+          type: 'material-import',
+          typeLabel,
+          customer: supplierName,
+          supplierName,
+          isPurchaseOrder,
+          tongTien: null,
+          trangThai: t.status,
+          assigneeName: (t.assigneeId && userMap.get(t.assigneeId)) || null,
+          items: parsedItems,
+        };
+      }),
+    ];
+
+    res.json(result);
+  } catch (e) {
+    console.error('[GET /api/logistics/overview-orders]', e);
+    res.status(500).json([]);
+  }
+});
+
+// ── GET /api/logistics/staff ───────────────────────────────────────────────────
+app.get('/api/logistics/staff', async (_req, res) => {
+  try {
+    const staff = await prisma.employee.findMany({
+      where: {
+        OR: [
+          { departmentCode: { contains: 'logistics' } },
+          { departmentCode: { contains: 'kho' } },
+          { departmentName: { contains: 'kho' } },
+          { departmentName: { contains: 'Kho' } },
+        ],
+        status: 'active'
+      },
+      select: {
+        id: true,
+        fullName: true,
+        position: true,
+        departmentName: true
+      },
+      orderBy: { fullName: 'asc' }
+    });
+    res.json(staff);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ── DELETE /api/logistics/tickets/:id ──────────────────────────────────────────
+app.delete('/api/logistics/tickets/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.logisticsTicketItem.deleteMany({ where: { ticketId: id } });
+    await prisma.logisticsTicket.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /api/logistics/overview-orders/batch-delete ───────────────────────────
+app.post('/api/logistics/overview-orders/batch-delete', async (req, res) => {
+  try {
+    const { items } = req.body || {};
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, error: 'Chưa chọn mục cần xóa' });
+    }
+    const ticketIds = items.filter((it) => it.type === 'logistics-ticket').map((it) => it.id);
+    const taskIds = items
+      .filter((it) => it.type === 'material-import' || it.type === 'material-export')
+      .map((it) => it.id);
+    const contractIds = items.filter((it) => it.type === 'contract').map((it) => it.id);
+    const saleOrderIds = items.filter((it) => it.type === 'sale-order').map((it) => it.id);
+    const retailIds = items.filter((it) => it.type === 'retail-invoice').map((it) => it.id);
+
+    if (ticketIds.length > 0) {
+      await prisma.logisticsTicketItem.deleteMany({ where: { ticketId: { in: ticketIds } } });
+      await prisma.logisticsTicket.deleteMany({ where: { id: { in: ticketIds } } });
+    }
+    if (taskIds.length > 0) {
+      await prisma.task.deleteMany({ where: { id: { in: taskIds } } });
+    }
+    if (contractIds.length > 0) {
+      await prisma.contract.updateMany({
+        where: { id: { in: contractIds } },
+        data: { trangThai: 'cancelled' },
+      });
+    }
+    if (saleOrderIds.length > 0) {
+      await prisma.saleOrder.updateMany({
+        where: { id: { in: saleOrderIds } },
+        data: { trangThai: 'cancelled' },
+      });
+    }
+    if (retailIds.length > 0) {
+      await prisma.retailInvoice.updateMany({
+        where: { id: { in: retailIds } },
+        data: { trangThai: 'cancelled' },
+      });
+    }
+
+    res.json({ success: true, deletedCount: items.length });
+  } catch (err) {
+    console.error('[POST /api/logistics/overview-orders/batch-delete]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── GET /api/logistics/tasks/pending-import ────────────────────────────────────
+app.get('/api/logistics/tasks/pending-import', async (_req, res) => {
+  try {
+    const tasks = await prisma.task.findMany({
+      where: {
+        deptCode: 'logistics',
+        status: 'pending',
+        OR: [
+          { title: { contains: 'nhập kho thành phẩm' } },
+          { title: { contains: 'nhập kho vật tư' } },
+          { title: { contains: 'nhập kho thu hồi' } },
+          { title: { contains: 'thu hồi' } },
+          { title: { contains: 'nhập kho hàng lỗi' } },
+          { title: { contains: 'nhập kho hàng trả lại' } },
+          { title: { contains: 'hàng trả lại' } }
+        ]
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, title: true, actualResult: true, createdAt: true }
+    });
+    res.json({ items: tasks });
+  } catch (_) {
+    res.json({ items: [] });
+  }
+});
+
+// ── PATCH & DELETE /api/board/tasks/:id ────────────────────────────────────────
+app.patch('/api/board/tasks/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, priority, title, description, dueDate, assigneeId, deptCode, actualResult } = req.body || {};
+    const updateData = {};
+    if (status !== undefined) updateData.status = status;
+    if (priority !== undefined) updateData.priority = priority;
+    if (title !== undefined) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
+    if (dueDate !== undefined) updateData.dueDate = dueDate ? new Date(dueDate) : null;
+    if (assigneeId !== undefined) updateData.assigneeId = assigneeId;
+    if (deptCode !== undefined) updateData.deptCode = deptCode;
+    if (actualResult !== undefined) updateData.actualResult = actualResult;
+    if (status === 'done' || status === 'completed') updateData.completedAt = new Date();
+    const task = await prisma.task.update({ where: { id }, data: updateData });
+    res.json({ success: true, task });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/board/tasks/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.task.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── GET /api/plan-finance/warehouses & sales-active & contracts/:id & retail-invoices/:id ──
+app.get('/api/plan-finance/warehouses', async (_req, res) => {
+  try {
+    const warehouses = await prisma.warehouse.findMany({
+      orderBy: { createdAt: 'asc' },
+      include: { stocks: { select: { soLuong: true } } }
+    });
+    res.json(warehouses.map(w => ({
+      id: w.id,
+      code: w.code,
+      name: w.name,
+      address: w.address,
+      phone: w.phone,
+      managerId: w.managerId,
+      isActive: w.isActive,
+      createdAt: w.createdAt,
+      updatedAt: w.updatedAt,
+      soMatHang: w.stocks.length,
+      tongSoLuong: w.stocks.reduce((s, st) => s + (st.soLuong || 0), 0),
+    })));
+  } catch (_) {
+    res.json([]);
+  }
+});
+
+app.get('/api/plan-finance/sales-active', async (req, res) => {
+  try {
+    const includeId = req.query.includeId ? String(req.query.includeId) : undefined;
+    const [contracts, saleOrders, retailInvoices] = await Promise.all([
+      prisma.contract.findMany({
+        where: includeId ? { OR: [{ trangThai: 'active' }, { id: includeId }] } : { trangThai: 'active' },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: { id: true, code: true, trangThai: true, giaTriHopDong: true, customer: { select: { name: true } } },
+      }),
+      prisma.saleOrder.findMany({
+        where: includeId ? {
+          OR: [
+            { trangThai: { in: ['active', 'confirmed', 'processing', 'in_production', 'approved'] }, keToanDuyet: 'approved' },
+            { id: includeId }
+          ]
+        } : {
+          trangThai: { in: ['active', 'confirmed', 'processing', 'in_production', 'approved'] },
+          keToanDuyet: 'approved'
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: { id: true, code: true, trangThai: true, tongTien: true, customer: { select: { name: true } } },
+      }),
+      prisma.retailInvoice.findMany({
+        where: includeId ? { OR: [{ trangThai: { in: ['partial', 'pending', 'unpaid'] } }, { id: includeId }] } : { trangThai: { in: ['partial', 'pending', 'unpaid'] } },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: { id: true, code: true, trangThai: true, tongCong: true, tenKhach: true },
+      }),
+    ]);
+
+    res.json([
+      ...contracts.map(c => ({ id: c.id, code: c.code, type: 'contract', typeLabel: 'Hợp đồng', customer: c.customer?.name ?? null, tongTien: c.giaTriHopDong, trangThai: c.trangThai })),
+      ...saleOrders.map(so => ({ id: so.id, code: so.code, type: 'sale-order', typeLabel: 'Đơn bán hàng', customer: so.customer?.name ?? null, tongTien: so.tongTien, trangThai: so.trangThai })),
+      ...retailInvoices.map(inv => ({ id: inv.id, code: inv.code, type: 'retail-invoice', typeLabel: 'Hoá đơn bán lẻ', customer: inv.tenKhach ?? null, tongTien: inv.tongCong, trangThai: inv.trangThai })),
+    ]);
+  } catch (_) {
+    res.json([]);
+  }
+});
+
+app.get('/api/plan-finance/contracts/:id', async (req, res) => {
+  try {
+    const contract = await prisma.contract.findUnique({
+      where: { id: req.params.id },
+      include: {
+        customer: true,
+        nguoiPhuTrach: { select: { id: true, fullName: true, position: true } },
+        quotation: {
+          select: {
+            id: true, code: true, ngayBaoGia: true, thanhTien: true,
+            items: { orderBy: { sortOrder: 'asc' } }
+          }
+        }
+      }
+    });
+    if (!contract) return res.status(404).json({ error: 'Không tìm thấy hợp đồng' });
+    res.json(contract);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/plan-finance/contracts/:id', async (req, res) => {
+  try {
+    const { trangThai, uuTien, daThanhToan, ghiChu } = req.body || {};
+    const updated = await prisma.contract.update({
+      where: { id: req.params.id },
+      data: {
+        ...(trangThai !== undefined && { trangThai }),
+        ...(uuTien !== undefined && { uuTien }),
+        ...(daThanhToan !== undefined && { daThanhToan: parseFloat(daThanhToan) }),
+        ...(ghiChu !== undefined && { ghiChu }),
+      }
+    });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/plan-finance/retail-invoices/:id', async (req, res) => {
+  try {
+    const invoice = await prisma.retailInvoice.findUnique({
+      where: { id: req.params.id },
+      include: {
+        items: {
+          include: {
+            inventoryItem: { select: { id: true, code: true, tenHang: true, donVi: true, giaNhap: true } }
+          }
+        }
+      }
+    });
+    if (!invoice) return res.status(404).json({ error: 'Không tìm thấy hoá đơn' });
+    res.json(invoice);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GET /api/logistics/tasks (Danh sách công việc kho hàng đang thực hiện) ─────
 app.get('/api/logistics/tasks', async (req, res) => {
   try {
@@ -7949,81 +8745,6 @@ app.get('/api/logistics/tasks', async (req, res) => {
         dueDate: tsk.dueDate ? new Date(tsk.dueDate).toLocaleDateString('vi-VN') : 'Trong ngày',
       });
     });
-
-    // Nếu dữ liệu mẫu chưa nhiều, bổ sung các công việc chuẩn kho để hiển thị trọn vẹn
-    if (combined.length < 5) {
-      const defaultTasks = [
-        {
-          id: 'def-task-1',
-          sourceType: 'task',
-          code: 'NV-20261028-001',
-          title: 'Tiếp nhận và kiểm định lô đồng thau thỏi 5 tấn đúc sen vòi',
-          type: 'INBOUND',
-          typeLabel: 'Nhập kho nguyên liệu',
-          description: 'Hạ hàng tại Cửa số 2 kho KVP, kiểm tra khối lượng và đối chiếu phiếu kiểm định chất lượng',
-          referenceCode: 'PO-20261028-09',
-          assignedToName: 'Lưu Xuân Trung',
-          priority: 'urgent',
-          status: 'dang_thuc_hien',
-          statusLabel: 'Đang thực hiện',
-          totalItems: 5,
-          createdAt: new Date().toISOString(),
-          dueDate: 'Hôm nay 17:00',
-        },
-        {
-          id: 'def-task-2',
-          sourceType: 'task',
-          code: 'NV-20261028-002',
-          title: 'Cấp phát 100 bộ thân sen âm và lõi chia nước cho xưởng lắp ráp',
-          type: 'MATERIAL_PICKING',
-          typeLabel: 'Cấp phát vật tư',
-          description: 'Xuất từ Kho chính KVP sang chuyền lắp ráp sen cây xuất khẩu Quý 4',
-          referenceCode: 'SX-20261028-03',
-          assignedToName: 'Nguyễn Văn Kháng',
-          priority: 'high',
-          status: 'cho_xu_ly',
-          statusLabel: 'Chờ xử lý',
-          totalItems: 2,
-          createdAt: new Date().toISOString(),
-          dueDate: 'Hôm nay 14:30',
-        },
-        {
-          id: 'def-task-3',
-          sourceType: 'task',
-          code: 'NV-20261027-003',
-          title: 'Kiểm kê định kỳ tháng 10 kệ hàng sen vòi mạ PVD màu ghi',
-          type: 'AUDIT',
-          typeLabel: 'Kiểm kê kho',
-          description: 'Đối chiếu số lượng thực tế trên kệ A3 với phần mềm, lập biên bản lệch tồn nếu có',
-          referenceCode: 'KK-202610-01',
-          assignedToName: 'Phạm Minh Đức',
-          priority: 'medium',
-          status: 'dang_thuc_hien',
-          statusLabel: 'Đang thực hiện',
-          totalItems: 24,
-          createdAt: new Date().toISOString(),
-          dueDate: '29/10/2026',
-        },
-        {
-          id: 'def-task-4',
-          sourceType: 'task',
-          code: 'NV-20261027-004',
-          title: 'Gom hàng và đóng kiện gỗ xuất khẩu cho đối tác Nhật Bản',
-          type: 'BATCH_PACKING',
-          typeLabel: 'Gom hàng & dán nhãn',
-          description: 'Kiểm tra tem nhãn phụ, dán mã QR truy xuất nguồn gốc từng kiện sen âm',
-          referenceCode: 'DBH-20261026-05',
-          assignedToName: 'Lưu Xuân Trung',
-          priority: 'high',
-          status: 'cho_xu_ly',
-          statusLabel: 'Chờ xử lý',
-          totalItems: 50,
-          createdAt: new Date().toISOString(),
-          dueDate: '30/10/2026',
-        }
-      ];
-      combined = [...combined, ...defaultTasks];
-    }
 
     // Filter
     if (search) {
@@ -8522,10 +9243,138 @@ async function attachWebImages(items) {
   });
 }
 
+// ── Helper: Xác định quyền Thủ kho & lọc phiếu công việc được giao ───────────
+async function resolveLogisticsUserContext(req) {
+  let userId = req.query?.userId ? String(req.query.userId).trim() : '';
+  if (!userId) {
+    try {
+      const token =
+        req.cookies?.token ||
+        (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')
+          ? req.headers.authorization.slice(7)
+          : '');
+      if (token) {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded?.id) userId = String(decoded.id);
+      }
+    } catch (_) {}
+  }
+
+  if (!userId) {
+    return {
+      userId: null,
+      employeeId: null,
+      userName: null,
+      employeeFullName: null,
+      isManager: false,
+    };
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { employee: true },
+  });
+
+  if (!user) {
+    return {
+      userId,
+      employeeId: null,
+      userName: null,
+      employeeFullName: null,
+      isManager: false,
+    };
+  }
+
+  const role = String(user.role || '').toUpperCase();
+  let positionName = String(user.employee?.position || '');
+  if (positionName) {
+    const cat = await prisma.category.findFirst({
+      where: { OR: [{ id: positionName }, { code: positionName }] },
+      select: { name: true },
+    });
+    if (cat?.name) positionName = cat.name;
+  }
+
+  const posLower = positionName.toLowerCase();
+  const isManager =
+    role === 'ADMIN' ||
+    role === 'SUPERADMIN' ||
+    role === 'DIRECTOR' ||
+    posLower.includes('thủ kho') ||
+    posLower.includes('trưởng kho') ||
+    posLower.includes('quản lý kho') ||
+    posLower.includes('giám đốc');
+
+  return {
+    userId: user.id,
+    employeeId: user.employee?.id || null,
+    userName: user.name || null,
+    employeeFullName: user.employee?.fullName || null,
+    isManager,
+  };
+}
+
+async function filterTicketsForLogisticsUser(tickets, userCtx) {
+  if (userCtx.isManager) return tickets;
+  if (!userCtx.userId && !userCtx.employeeId) return [];
+
+  const assignedTaskTicketIds = new Set();
+  try {
+    const tasks = await prisma.task.findMany({
+      where: {
+        deptCode: 'logistics',
+        status: { not: 'done' },
+        title: { startsWith: 'Gom hàng:' },
+        OR: [
+          ...(userCtx.userId ? [{ assigneeId: userCtx.userId }] : []),
+          ...(userCtx.employeeId ? [{ assigneeId: userCtx.employeeId }] : []),
+        ],
+      },
+      select: { actualResult: true },
+    });
+    for (const t of tasks) {
+      if (!t.actualResult) continue;
+      try {
+        const ids = JSON.parse(t.actualResult);
+        if (Array.isArray(ids)) {
+          ids.forEach((id) => assignedTaskTicketIds.add(String(id)));
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+
+  return tickets.filter((ticket) => {
+    if (
+      ticket.assignedToId &&
+      (ticket.assignedToId === userCtx.employeeId || ticket.assignedToId === userCtx.userId)
+    ) {
+      return true;
+    }
+    if (ticket.assignedTo?.userId && ticket.assignedTo.userId === userCtx.userId) {
+      return true;
+    }
+    if (
+      ticket.assignedTo?.fullName &&
+      (ticket.assignedTo.fullName === userCtx.employeeFullName ||
+        ticket.assignedTo.fullName === userCtx.userName)
+    ) {
+      return true;
+    }
+    if (
+      assignedTaskTicketIds.has(ticket.id) ||
+      (ticket.saleOrderId && assignedTaskTicketIds.has(ticket.saleOrderId))
+    ) {
+      return true;
+    }
+    return false;
+  });
+}
+
 // ── GET /api/logistics/material-picking ──────────────────────────────────────
 app.get('/api/logistics/material-picking', async (req, res) => {
   try {
-    const tickets = await prisma.logisticsTicket.findMany({
+    const userCtx = await resolveLogisticsUserContext(req);
+    const rawTickets = await prisma.logisticsTicket.findMany({
       where: {
         type: { in: ['MATERIAL_PICKING', 'WARRANTY_MATERIAL'] },
         status: { in: ['PENDING', 'PICKING', 'PACKED'] },
@@ -8540,9 +9389,11 @@ app.get('/api/logistics/material-picking', async (req, res) => {
             }
           }
         },
-        assignedTo: { select: { fullName: true } }
+        assignedTo: { select: { id: true, userId: true, fullName: true } }
       }
     });
+
+    const tickets = await filterTicketsForLogisticsUser(rawTickets, userCtx);
 
     const batchMap = new Map();
     for (const ticket of tickets) {
@@ -8579,7 +9430,7 @@ app.get('/api/logistics/material-picking', async (req, res) => {
             viTriKho: viTriStr,
             tongSoLuong: 0,
             tongDaNhat: 0,
-            thucTon: thucTon,
+            thucTon: userCtx.isManager ? thucTon : undefined,
             ngayGiao: ticket.saleOrder?.ngayGiao || (ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString('vi-VN') : undefined),
             orders: []
           });
@@ -8594,13 +9445,14 @@ app.get('/api/logistics/material-picking', async (req, res) => {
           ticketCode: ticket.code,
           ticketItemId: item.id,
           code: ticket.saleOrder?.code || ticket.defectRecord?.code || ticket.code,
-          customerName: ticket.saleOrder?.customer?.name,
+          customerName: userCtx.isManager ? ticket.saleOrder?.customer?.name : undefined,
           soLuongTrongDon: item.requestedQty || 0,
           daNhatTrongDon: item.pickedQty || 0,
-          thucTon: thucTon,
+          thucTon: userCtx.isManager ? thucTon : undefined,
           ngayGiao: ticket.saleOrder?.ngayGiao || (ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString('vi-VN') : undefined),
           createdAt: ticket.createdAt,
-          assignedTo: ticket.assignedTo?.fullName
+          assignedTo: ticket.assignedTo?.fullName,
+          assignedToId: ticket.assignedToId || ticket.assignedTo?.id || null
         });
       }
     }
@@ -8612,7 +9464,7 @@ app.get('/api/logistics/material-picking', async (req, res) => {
       success: true,
       items: batchListWithImages,
       totalOrders: tickets.length,
-      isManager: true
+      isManager: userCtx.isManager
     });
   } catch (error) {
     console.error('Error GET /api/logistics/material-picking:', error);
@@ -8680,7 +9532,8 @@ app.post('/api/logistics/material-picking', async (req, res) => {
 // ── GET /api/logistics/batch-packing ────────────────────────────────────────
 app.get('/api/logistics/batch-packing', async (req, res) => {
   try {
-    const tickets = await prisma.logisticsTicket.findMany({
+    const userCtx = await resolveLogisticsUserContext(req);
+    const rawTickets = await prisma.logisticsTicket.findMany({
       where: {
         type: "BATCH_PACKING",
         status: { in: ["PENDING", "PICKING", "PACKED"] }
@@ -8700,9 +9553,11 @@ app.get('/api/logistics/batch-packing', async (req, res) => {
             }
           }
         },
-        assignedTo: { select: { fullName: true } }
+        assignedTo: { select: { id: true, userId: true, fullName: true } }
       }
     });
+
+    const tickets = await filterTicketsForLogisticsUser(rawTickets, userCtx);
 
     const batchMap = new Map();
     for (const ticket of tickets) {
@@ -8740,7 +9595,7 @@ app.get('/api/logistics/batch-packing', async (req, res) => {
             viTriKho: viTriStr,
             tongSoLuong: 0,
             tongDaNhat: 0,
-            thucTon: thucTon,
+            thucTon: userCtx.isManager ? thucTon : undefined,
             ngayGiao: ticket.saleOrder?.ngayGiao || (ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString('vi-VN') : undefined),
             orders: []
           });
@@ -8755,13 +9610,14 @@ app.get('/api/logistics/batch-packing', async (req, res) => {
           ticketCode: ticket.code,
           ticketItemId: item.id,
           code: ticket.saleOrder?.code || ticket.code,
-          customerName: ticket.saleOrder?.customer?.name,
+          customerName: userCtx.isManager ? ticket.saleOrder?.customer?.name : undefined,
           soLuongTrongDon: item.requestedQty || 0,
           daNhatTrongDon: item.pickedQty || 0,
-          thucTon: thucTon,
+          thucTon: userCtx.isManager ? thucTon : undefined,
           ngayGiao: ticket.saleOrder?.ngayGiao || (ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString('vi-VN') : undefined),
           createdAt: ticket.createdAt,
-          assignedTo: ticket.assignedTo?.fullName
+          assignedTo: ticket.assignedTo?.fullName,
+          assignedToId: ticket.assignedToId || ticket.assignedTo?.id || null
         });
       }
     }
@@ -8773,7 +9629,7 @@ app.get('/api/logistics/batch-packing', async (req, res) => {
       success: true,
       items: batchListWithImages,
       totalOrders: tickets.length,
-      isManager: true
+      isManager: userCtx.isManager
     });
   } catch (error) {
     console.error('Error GET /api/logistics/batch-packing:', error);
@@ -8846,17 +9702,129 @@ app.post('/api/logistics/batch-packing/assign', async (req, res) => {
       return res.status(400).json({ error: "Missing staffId or orderIds" });
     }
 
-    await prisma.logisticsTicket.updateMany({
-      where: { id: { in: orderIds } },
-      data: { assignedToId: staffId }
+    const [orders, tickets, employee] = await Promise.all([
+      prisma.saleOrder.findMany({
+        where: { id: { in: orderIds } },
+        select: { code: true, ngayGiao: true }
+      }),
+      prisma.logisticsTicket.findMany({
+        where: { id: { in: orderIds } },
+        select: { code: true, createdAt: true, saleOrder: { select: { ngayGiao: true } } }
+      }),
+      prisma.employee.findFirst({
+        where: { OR: [{ id: String(staffId) }, { userId: String(staffId) }] },
+        select: { id: true, userId: true }
+      })
+    ]);
+
+    const codes = [];
+    let maxDueDate = new Date(0);
+    orders.forEach(o => {
+      if (o.code) codes.push(o.code);
+      if (o.ngayGiao && new Date(o.ngayGiao) > maxDueDate) maxDueDate = new Date(o.ngayGiao);
+    });
+    tickets.forEach(t => {
+      if (t.code) codes.push(t.code);
+      if (t.createdAt && new Date(t.createdAt) > maxDueDate) maxDueDate = new Date(t.createdAt);
+      if (t.saleOrder?.ngayGiao && new Date(t.saleOrder.ngayGiao) > maxDueDate) maxDueDate = new Date(t.saleOrder.ngayGiao);
     });
 
-    res.json({ success: true, message: "Giao việc thành công" });
+    const codeList = Array.from(new Set(codes)).join(', ');
+    const dueDate = maxDueDate.getTime() > 0 ? maxDueDate : undefined;
+    const resolvedEmployeeId = employee?.id || String(staffId);
+    const taskAssigneeId = employee?.userId || String(staffId);
+
+    const task = await prisma.task.create({
+      data: {
+        title: `Gom hàng: ${codeList}`,
+        description: `Danh sách mã đơn/phiếu: ${codeList}`,
+        status: 'pending',
+        priority: 'high',
+        deptCode: 'logistics',
+        assigneeId: taskAssigneeId,
+        creatorId: 'user-system',
+        dueDate,
+        actualResult: JSON.stringify(orderIds)
+      }
+    });
+
+    await prisma.logisticsTicket.updateMany({
+      where: {
+        OR: [
+          { id: { in: orderIds } },
+          { saleOrderId: { in: orderIds } },
+        ],
+      },
+      data: { assignedToId: resolvedEmployeeId }
+    });
+
+    await prisma.task.updateMany({
+      where: { id: { in: orderIds }, deptCode: 'logistics' },
+      data: { assigneeId: taskAssigneeId }
+    });
+
+    res.json({ success: true, message: "Giao việc thành công", task });
   } catch (error) {
     console.error('Error POST /api/logistics/batch-packing/assign:', error);
     res.status(500).json({ error: error.message });
   }
 });
+
+// ── POST /api/logistics/assign-tickets ──────────────────────────────────────
+app.post('/api/logistics/assign-tickets', async (req, res) => {
+  try {
+    const { ticketIds, employeeId } = req.body;
+    const ids = Array.isArray(ticketIds) ? ticketIds : ticketIds ? [ticketIds] : [];
+    if (ids.length === 0 || !employeeId) {
+      return res.status(400).json({ error: 'Thiếu thông tin phân công' });
+    }
+    const employee = await prisma.employee.findFirst({
+      where: { OR: [{ id: String(employeeId) }, { userId: String(employeeId) }] },
+      select: { id: true },
+    });
+    const resolvedEmpId = employee?.id || String(employeeId);
+    await prisma.logisticsTicket.updateMany({
+      where: { id: { in: ids } },
+      data: { assignedToId: resolvedEmpId },
+    });
+    res.json({ success: true, message: 'Phân công thành công' });
+  } catch (error) {
+    console.error('Error POST /api/logistics/assign-tickets:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ── POST / PATCH /api/logistics/update-deadline ─────────────────────────────
+const handleUpdateLogisticsDeadline = async (req, res) => {
+  try {
+    const { ticketIds, newDate } = req.body;
+    const ids = Array.isArray(ticketIds) ? ticketIds : ticketIds ? [ticketIds] : [];
+    if (ids.length === 0 || !newDate) {
+      return res.status(400).json({ error: 'Thiếu thông tin hạn hoàn thành' });
+    }
+    const parsedDate = new Date(newDate);
+    if (isNaN(parsedDate.getTime())) {
+      return res.status(400).json({ error: 'Ngày không hợp lệ' });
+    }
+    const tickets = await prisma.logisticsTicket.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, saleOrderId: true },
+    });
+    const saleOrderIds = Array.from(new Set(tickets.map((t) => t.saleOrderId).filter(Boolean)));
+    if (saleOrderIds.length > 0) {
+      await prisma.saleOrder.updateMany({
+        where: { id: { in: saleOrderIds } },
+        data: { ngayGiao: parsedDate },
+      });
+    }
+    res.json({ success: true, message: 'Cập nhật hạn hoàn thành thành công' });
+  } catch (error) {
+    console.error('Error update-deadline:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+app.post('/api/logistics/update-deadline', handleUpdateLogisticsDeadline);
+app.patch('/api/logistics/tickets/update-deadline', handleUpdateLogisticsDeadline);
 
 // ── GET, POST, PUT, PATCH, DELETE /api/production/bom ─────────────────────────
 app.get('/api/production/bom/next-code', async (req, res) => {
@@ -9707,6 +10675,161 @@ app.get('/api/production/products', async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('[GET /api/production/products]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET & PATCH /api/approval-requests & /api/approval-documents (Trung tâm phê duyệt) ──
+const mapApprovalRequestToDoc = (row, idx = 0) => {
+  let meta = {};
+  try {
+    meta = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata || {};
+  } catch {}
+
+  const entityType = String(row.entityType || '').toLowerCase();
+  let docType = 'proposal';
+  let docTypeName = 'Tờ trình phê duyệt';
+  if (entityType.includes('purchase') || entityType.includes('contract')) {
+    docType = 'contract';
+    docTypeName = 'Đơn mua hàng / Hợp đồng';
+  } else if (entityType.includes('expense') || entityType.includes('advance') || meta?.type?.includes('advance')) {
+    docType = 'advance';
+    docTypeName = meta?.loaiText || 'Đề xuất tạm ứng / Chi phí';
+  } else if (entityType.includes('personal')) {
+    docType = 'proposal';
+    docTypeName = meta?.loaiText || 'Đề xuất nhân sự';
+  } else if (entityType.includes('production')) {
+    docType = 'technical';
+    docTypeName = 'Lệnh sản xuất';
+  }
+
+  const rawVal = Number(meta?.totalAmount || meta?.soTien || meta?.details?.amount || meta?.amount || 0);
+  const valueLabel = rawVal > 0 ? `${rawVal.toLocaleString('vi-VN')} đ` : (meta?.loaiText || 'Hồ sơ nghiệp vụ');
+  const createdDate = row.createdAt ? new Date(row.createdAt).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN');
+  const approvedDate = row.approvedAt ? new Date(row.approvedAt).toLocaleDateString('vi-VN') : createdDate;
+  const rawStatus = String(row.status || 'pending').toLowerCase();
+  const status =
+    rawStatus === 'approved' || rawStatus === 'completed'
+      ? 'approved'
+      : rawStatus === 'rejected'
+      ? 'rejected'
+      : 'pending';
+  const rawPriority = String(row.priority || 'normal').toLowerCase();
+  const priority = rawPriority === 'urgent' ? 'urgent' : rawPriority === 'high' ? 'high' : 'normal';
+
+  const reasonText =
+    meta?.reason ||
+    meta?.details?.reason ||
+    row.note ||
+    row.rejectedReason ||
+    row.entityTitle ||
+    'Hồ sơ trình Ban Giám đốc phê duyệt từ hệ thống CSDL Seajong.';
+
+  return {
+    id: String(row.id || `APR-${idx + 1}`),
+    code: String(row.entityCode || meta?.personalRequestId || `TT-${String(idx + 1).padStart(4, '0')}`),
+    title: String(row.entityTitle || 'Tờ trình phê duyệt hồ sơ'),
+    docType,
+    docTypeName,
+    department: String(
+      row.department ||
+        meta?.departmentName ||
+        (entityType.includes('purchase')
+          ? 'Phòng Mua hàng'
+          : entityType.includes('expense')
+          ? 'Phòng Tài chính – Kế toán'
+          : 'Phòng ban Seajong')
+    ),
+    submitter: String(row.requestedByName || meta?.employeeName || 'Cán bộ Seajong'),
+    submitterRole: String(meta?.position || 'Nhân sự trình duyệt'),
+    submitDate: createdDate,
+    value: rawVal,
+    valueLabel,
+    priority,
+    status,
+    summary: String(reasonText),
+    content: String(reasonText),
+    approvalDate: status === 'approved' ? approvedDate : undefined,
+    approvedBy: status === 'approved' ? (row.approvedById || 'Lê Công Vụ (Giám đốc)') : undefined,
+    approvalNote: status === 'approved' ? (row.note || 'Đồng ý phê duyệt') : undefined,
+    rejectionDate: status === 'rejected' ? approvedDate : undefined,
+    rejectedBy: status === 'rejected' ? (row.approvedById || 'Lê Công Vụ (Giám đốc)') : undefined,
+    rejectionReason: status === 'rejected' ? (row.rejectedReason || row.note || 'Từ chối phê duyệt') : undefined,
+    attachments: Array.isArray(meta?.attachments) ? meta.attachments : [],
+  };
+};
+
+app.get('/api/approval-requests', async (req, res) => {
+  try {
+    const requests = await prisma.approvalRequest.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        comments: { orderBy: { createdAt: 'asc' } },
+      },
+    });
+    res.json({ success: true, data: requests, items: requests.map((r, i) => mapApprovalRequestToDoc(r, i)) });
+  } catch (err) {
+    console.error('[GET /api/approval-requests]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/approval-documents', async (req, res) => {
+  try {
+    const requests = await prisma.approvalRequest.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        comments: { orderBy: { createdAt: 'asc' } },
+      },
+    });
+    res.json(requests.map((r, i) => mapApprovalRequestToDoc(r, i)));
+  } catch (err) {
+    console.error('[GET /api/approval-documents]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/approval-documents/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, note, approverName } = req.body || {};
+    const updated = await prisma.approvalRequest.update({
+      where: { id },
+      data: {
+        ...(status && { status }),
+        ...(note !== undefined && { note }),
+        ...(status === 'rejected' && note ? { rejectedReason: note } : {}),
+        ...(approverName && { approvedById: approverName }),
+        ...(status === 'approved' && { approvedAt: new Date() }),
+      },
+    });
+    res.json({ success: true, data: mapApprovalRequestToDoc(updated, 0) });
+  } catch (err) {
+    console.error('[PATCH /api/approval-documents/:id/status]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/approval-requests/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, note, rejectedReason, approvedById } = req.body || {};
+    const updated = await prisma.approvalRequest.update({
+      where: { id },
+      data: {
+        ...(status && { status }),
+        ...(note !== undefined && { note }),
+        ...(rejectedReason !== undefined && { rejectedReason }),
+        ...(approvedById !== undefined && { approvedById }),
+        ...(status === 'approved' && { approvedAt: new Date() }),
+      },
+      include: {
+        comments: { orderBy: { createdAt: 'asc' } },
+      },
+    });
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    console.error('[PATCH /api/approval-requests/:id]', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -10605,90 +11728,57 @@ app.patch('/api/finance/purchase-requests/:id', async (req, res) => {
 });
 
 // ── GET & PATCH /api/sales/omnichannel/orders ─────────────────────────────────
-let omnichannelOrdersMock = [
-  {
-    id: 'oc-1',
-    externalId: 'SHOPEE-261022-881',
-    channel: 'Shopee Mall',
-    customer: 'Trần Văn Hoàng (hoang_bath99)',
-    phone: '0912.839.221',
-    address: 'Số 45 Ngõ 120 Hoàng Quốc Việt, Cầu Giấy, Hà Nội',
-    productSummary: '01 x Sen cây phím đàn LED Seajong SJ-9900',
-    amount: 5450000,
-    trackingCode: 'SPX-VN8921827419',
-    carrier: 'Shopee Xpress',
-    status: 'Đã xác nhận',
-    createdAt: '2026-10-22T08:15:00Z',
-    shippingDate: '2026-10-22T14:00:00Z',
-  },
-  {
-    id: 'oc-2',
-    externalId: 'TIKTOK-261021-419',
-    channel: 'TikTok Shop',
-    customer: 'Nguyễn Thị Thuỳ Linh',
-    phone: '0988.314.992',
-    address: 'Khu Đô Thị Ecopark, Văn Giang, Hưng Yên',
-    productSummary: '02 x Vòi chậu lavabo nóng lạnh đồng mạ PVD SJ-612',
-    amount: 3200000,
-    trackingCode: 'JNT-TK9918237',
-    carrier: 'J&T Express',
-    status: 'Đang giao hàng',
-    createdAt: '2026-10-21T16:30:00Z',
-    shippingDate: '2026-10-21T18:00:00Z',
-  },
-  {
-    id: 'oc-3',
-    externalId: 'WEB-261020-093',
-    channel: 'Website Seajong.vn',
-    customer: 'Công ty Cổ phần Xây dựng Nam Sông Hồng',
-    phone: '0903.221.789',
-    address: 'Tầng 5 Toà nhà Diamond Flower, Thanh Xuân, Hà Nội',
-    productSummary: '05 x Bồn cầu thông minh Seajong SJ-TLT103SFDUV',
-    amount: 67500000,
-    trackingCode: 'VTP-98217311',
-    carrier: 'Viettel Post',
-    status: 'Hoàn tất',
-    createdAt: '2026-10-20T11:00:00Z',
-    shippingDate: '2026-10-20T15:30:00Z',
-  },
-  {
-    id: 'oc-4',
-    externalId: 'SHOPEE-261020-332',
-    channel: 'Shopee Mall',
-    customer: 'Phạm Minh Đức',
-    phone: '0977.102.394',
-    address: 'P.1202 Chung cư Vinhomes Ocean Park, Gia Lâm, Hà Nội',
-    productSummary: '01 x Vòi rửa bát rút dây cao cấp SJ-805',
-    amount: 1850000,
-    trackingCode: 'GHTK-HN2839182',
-    carrier: 'Giao Hàng Tiết Kiệm',
-    status: 'Hoàn tất',
-    createdAt: '2026-10-20T09:40:00Z',
-    shippingDate: '2026-10-20T13:00:00Z',
-  },
-  {
-    id: 'oc-5',
-    externalId: 'TIKTOK-261019-112',
-    channel: 'TikTok Shop',
-    customer: 'Lê Bảo Nam',
-    phone: '0936.551.290',
-    address: 'Số 18 Đường 2/9, Hải Châu, Đà Nẵng',
-    productSummary: '01 x Bộ sen tắm nhiệt độ ổn nhiệt an toàn SJ-TH30',
-    amount: 4200000,
-    trackingCode: 'JNT-TK8810293',
-    carrier: 'J&T Express',
-    status: 'Đã xác nhận',
-    createdAt: '2026-10-19T20:10:00Z',
-    shippingDate: '2026-10-20T09:00:00Z',
-  },
-];
-
 app.get('/api/sales/omnichannel/orders', async (req, res) => {
   try {
     const channel = req.query.channel;
-    let list = omnichannelOrdersMock;
+    const dbOmnichannel = await prisma.omnichannelOrder.findMany({
+      include: { channel: true, items: true },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+
+    let list = [];
+    if (dbOmnichannel.length > 0) {
+      list = dbOmnichannel.map((o) => ({
+        id: o.id,
+        externalId: o.externalOrderId,
+        channel: o.channel?.name || o.channel?.platform || 'Omnichannel',
+        customer: o.customerName || 'Khách hàng',
+        phone: o.customerPhone || '',
+        address: o.customerAddress || '',
+        productSummary: (o.items || []).map((it) => `${it.quantity} x ${it.productName}`).join(', '),
+        amount: Number(o.totalAmount) || 0,
+        trackingCode: o.internalOrderId || o.externalOrderId,
+        carrier: 'Đối tác vận chuyển',
+        status: o.orderStatus || 'Đã xác nhận',
+        createdAt: o.createdAt ? o.createdAt.toISOString() : new Date().toISOString(),
+        shippingDate: o.updatedAt ? o.updatedAt.toISOString() : new Date().toISOString(),
+      }));
+    } else {
+      const saleOrders = await prisma.saleOrder.findMany({
+        include: { customer: true, saleOrderItems: true },
+        orderBy: { ngayDat: 'desc' },
+        take: 100,
+      });
+      list = saleOrders.map((o) => ({
+        id: o.id,
+        externalId: o.code || o.id,
+        channel: o.kenhBan || 'Showroom / Đại lý',
+        customer: o.customer?.name || 'Khách hàng Seajong',
+        phone: o.customer?.dienThoai || o.customer?.phone || '',
+        address: o.customer?.address || '',
+        productSummary: (o.saleOrderItems || []).map((it) => `${it.soLuong} x ${it.tenHang}`).join(', ') || o.ghiChu || 'Đơn hàng thiết bị vệ sinh Seajong',
+        amount: Number(o.tongTien) || 0,
+        trackingCode: o.code || '',
+        carrier: o.donViVanChuyen || 'Vận chuyển Seajong',
+        status: o.trangThai === 'completed' ? 'Hoàn tất' : o.trangThai === 'shipping' ? 'Đang giao hàng' : 'Đã xác nhận',
+        createdAt: o.ngayDat ? o.ngayDat.toISOString() : new Date().toISOString(),
+        shippingDate: o.ngayGiao ? o.ngayGiao.toISOString() : (o.ngayDat ? o.ngayDat.toISOString() : new Date().toISOString()),
+      }));
+    }
+
     if (channel && channel !== 'all') {
-      list = list.filter((o) => o.channel.toLowerCase().includes(channel.toLowerCase()));
+      list = list.filter((o) => String(o.channel || '').toLowerCase().includes(String(channel).toLowerCase()));
     }
     res.json(list);
   } catch (err) {
@@ -10700,13 +11790,13 @@ app.get('/api/sales/omnichannel/orders', async (req, res) => {
 app.patch('/api/sales/omnichannel/orders', async (req, res) => {
   try {
     const { ids, status } = req.body;
-    if (Array.isArray(ids) && status) {
-      omnichannelOrdersMock = omnichannelOrdersMock.map((o) => {
-        if (ids.includes(o.id)) return { ...o, status };
-        return o;
-      });
+    if (Array.isArray(ids) && ids.length > 0 && status) {
+      await prisma.omnichannelOrder.updateMany({
+        where: { id: { in: ids } },
+        data: { orderStatus: status },
+      }).catch(() => {});
     }
-    res.json({ success: true, orders: omnichannelOrdersMock });
+    res.json({ success: true });
   } catch (err) {
     console.error('Lỗi PATCH /api/sales/omnichannel/orders:', err);
     res.status(500).json({ error: err.message });
@@ -10716,66 +11806,6 @@ app.patch('/api/sales/omnichannel/orders', async (req, res) => {
 // ── GET, POST, DELETE /api/production/defects (Hàng lỗi, trả về & bảo hành) ──
 app.get('/api/production/defects', async (req, res) => {
   try {
-    const qaCount = await prisma.defectRecord.count({ where: { reporterDepartment: 'qa' } });
-    if (qaCount === 0) {
-      const qaSeeds = [
-        {
-          code: 'DEF-QA-261001',
-          source: 'INTERNAL',
-          status: 'NEW',
-          productName: 'Vòi chậu lavabo nóng lạnh Seajong Titan Gray',
-          productCode: 'SJ-LAV-305TG',
-          quantity: 4,
-          orderNumber: 'LSX-20261006-05',
-          description: '[Lỗi OQC - LSX-20261006-05] - Vòi chậu lavabo nóng lạnh Seajong Titan Gray (x4 Bộ): Rò rỉ nhẹ tại khớp nối ren G1/2 khi thử áp lực nước tĩnh 5.5 bar, bề mặt mạ PVD xước mặt tiền 3mm.',
-          reporterName: 'Trưởng bộ phận QA/QC',
-          reporterDepartment: 'qa',
-        },
-        {
-          code: 'DEF-QA-261002',
-          source: 'INTERNAL',
-          status: 'TECH_EVALUATING',
-          productName: 'Thân vòi đồng thau đúc áp lực SJ-8800-BODY',
-          productCode: 'LK-BODY-8800',
-          quantity: 12,
-          orderNumber: 'PO-202610-089',
-          description: '[Lỗi IQC - PO-202610-089] - Thân vòi đồng thau đúc áp lực SJ-8800-BODY (x12 Cái): Phát hiện rỗ khí ngầm và sứt bước ren trong khi kiểm tra bằng dưỡng đo ren chuẩn.',
-          reporterName: 'Kỹ sư IQC Nguyễn Hoàng Nam',
-          reporterDepartment: 'qa',
-        },
-        {
-          code: 'DEF-QA-261003',
-          source: 'INTERNAL',
-          status: 'COMPLETED',
-          productName: 'Bồn cầu thông minh Seajong Smart Luxury',
-          productCode: 'SJ-209S',
-          quantity: 2,
-          orderNumber: 'LSX-20261002-01',
-          description: '[Lỗi OQC - LSX-20261002-01] - Bồn cầu thông minh Seajong Smart Luxury (x2 Bộ): Nắp rơi êm đóng hơi nhanh, đã hiệu chỉnh lại bản lề thủy lực và tái kiểm đạt 100%.',
-          reporterName: 'Kỹ sư OQC Lê Minh Tuấn',
-          reporterDepartment: 'qa',
-          isRepairable: true,
-          repairPlan: 'Thay thế cụm giảm chấn bản lề rơi êm và test lại 20 chu kỳ đóng mở.',
-        },
-      ];
-      for (const seed of qaSeeds) {
-        await prisma.defectRecord.upsert({
-          where: { code: seed.code },
-          update: {},
-          create: {
-            ...seed,
-            activities: {
-              create: {
-                action: 'BÁO CÁO LỖI TỪ QA/QC',
-                performer: seed.reporterName,
-                note: 'Tự động trích xuất từ biên bản kiểm định chất lượng IQC/OQC.',
-              },
-            },
-          },
-        });
-      }
-    }
-
     const defects = await prisma.defectRecord.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
@@ -11569,6 +12599,12 @@ app.get('/api/plan-finance/inventory/search', async (req, res) => {
     const mapped = items.map((it) => ({
       id: it.id,
       code: it.code,
+      maThayThe: it.maThayThe,
+      model: it.model,
+      chatLieu: it.chatLieu,
+      color: it.color,
+      brand: it.brand,
+      thongSoKyThuat: it.thongSoKyThuat,
       tenHang: it.tenHang,
       donVi: it.donVi,
       giaNhap: it.giaNhap,
@@ -11580,6 +12616,429 @@ app.get('/api/plan-finance/inventory/search', async (req, res) => {
     res.json({ items: mapped, data: mapped });
   } catch (err) {
     res.json({ items: [], data: [] });
+  }
+});
+
+app.post('/api/logistics/product-label-specs', async (req, res) => {
+  try {
+    const reqItems = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (reqItems.length === 0) {
+      return res.json({ success: true, items: [], companyInfo: null });
+    }
+
+    const [companyInfo, allInvItems, allWebProducts] = await Promise.all([
+      prisma.companyInfo.findFirst(),
+      prisma.inventoryItem.findMany({
+        include: {
+          category: { select: { name: true, code: true } },
+          erpCategory: { select: { name: true, code: true, type: true } },
+          dinhMucs: {
+            include: {
+              vatTu: {
+                include: {
+                  inventoryItem: {
+                    select: { code: true, tenHang: true, chatLieu: true, model: true, thongSoKyThuat: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+      prisma.seajongProduct.findMany({
+        select: { id: true, slug: true, name: true, specs: true, images: true, imageUrl: true, price: true },
+      }),
+    ]);
+
+    const norm = (s) =>
+      String(s || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/Đ/g, 'D')
+        .toLowerCase()
+        .trim();
+
+    const cleanMaterialTerm = (raw) => {
+      if (!raw) return '';
+      let s = String(raw).trim();
+      if (!s) return '';
+      s = s
+        .replace(/th[eé]o kh[oô]ng g[iỉ]/gi, 'Thép không gỉ')
+        .replace(/thep khong gi/gi, 'Thép không gỉ')
+        .replace(/^pcs$/i, 'PVC')
+        .replace(/\r?\n/g, '; ');
+      if (s.length > 75) {
+        const parts = s
+          .split(';')
+          .map((p) => p.replace(/^[^:]+:\s*/, '').split(',')[0].trim())
+          .filter(Boolean);
+        if (parts.length > 0) s = parts.slice(0, 3).join(', ');
+      }
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    };
+
+    const cleanModelTerm = (raw) => {
+      if (!raw) return '';
+      let s = String(raw).trim();
+      if (!s) return '';
+      s = s.replace(/ốp trân sen/gi, 'Ốp chân sen');
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    };
+
+    const cleanCategoryName = (raw) => {
+      if (!raw) return '';
+      return String(raw).trim().replace(/^Lịn kiện$/i, 'Linh kiện');
+    };
+
+    const cleanBrandName = (raw) => {
+      if (!raw) return '';
+      const b = String(raw).trim();
+      if (/^(oem|0em|eom)$/i.test(b)) return 'OEM';
+      if (/^seajong$/i.test(b)) return 'Seajong';
+      if (/^sejong/i.test(b)) return 'Sejong';
+      if (/^voriger$/i.test(b)) return 'Voriger';
+      if (/^buchen$/i.test(b)) return 'Buchen';
+      return b;
+    };
+
+    const webById = new Map();
+    for (const wp of allWebProducts) {
+      webById.set(wp.id, wp);
+    }
+
+    const enriched = reqItems.map((reqIt) => {
+      const rawCode = String(reqIt?.code || '').trim();
+      const rawName = String(reqIt?.name || '').trim();
+      const codeNorm = norm(rawCode);
+      const nameNorm = norm(rawName);
+
+      let extractedTrailingCode = '';
+      if (rawName) {
+        const m = rawName.match(/([A-Za-z0-9]+-[A-Za-z0-9-]+|[A-Za-z]{2,}\d+[A-Za-z0-9-]*)$/);
+        if (m && m[1]) extractedTrailingCode = norm(m[1]);
+      }
+
+      // 1. Find InventoryItem
+      let inv = null;
+      if (codeNorm && codeNorm !== 'n/a') {
+        inv =
+          allInvItems.find((it) => norm(it.code) === codeNorm) ||
+          allInvItems.find((it) => norm(it.maThayThe) === codeNorm);
+      }
+      if (!inv && rawName) {
+        inv =
+          allInvItems.find((it) => norm(it.tenHang) === nameNorm) ||
+          (extractedTrailingCode
+            ? allInvItems.find((it) => norm(it.code) === extractedTrailingCode)
+            : null) ||
+          allInvItems.find(
+            (it) =>
+              nameNorm.length >= 5 &&
+              (norm(it.tenHang).includes(nameNorm) || nameNorm.includes(norm(it.tenHang)))
+          );
+      }
+
+      // 2. Find SeajongProduct
+      let wp = inv?.webProductId ? webById.get(inv.webProductId) : null;
+      if (!wp) {
+        wp =
+          allWebProducts.find(
+            (p) =>
+              (codeNorm && norm(p.slug) === codeNorm) ||
+              (nameNorm && norm(p.name) === nameNorm) ||
+              (inv?.code && norm(p.slug).includes(norm(inv.code)))
+          ) || null;
+      }
+
+      let webSpecs = {};
+      if (wp?.specs) {
+        try {
+          const parsed = JSON.parse(wp.specs);
+          if (parsed && typeof parsed === 'object') webSpecs = parsed;
+        } catch (_) {}
+      }
+
+      const getSpecVal = (keys) => {
+        for (const k of keys) {
+          for (const [sk, sv] of Object.entries(webSpecs)) {
+            if (norm(sk).replace(/[:]/g, '') === norm(k).replace(/[:]/g, '') && sv && String(sv).trim()) {
+              return String(sv).trim();
+            }
+          }
+        }
+        return '';
+      };
+
+      // Resolve Model Code
+      const specModelCode = getSpecVal(['Mã sản phẩm:', 'Mã sản phẩm', 'Model']);
+      const resolvedCode =
+        (inv?.code && inv.code.trim()) ||
+        specModelCode ||
+        (rawCode && rawCode !== 'N/A' ? rawCode : '') ||
+        (extractedTrailingCode ? extractedTrailingCode.toUpperCase() : '') ||
+        inv?.model ||
+        'N/A';
+
+      // Resolve Name
+      const resolvedName = inv?.tenHang || wp?.name || rawName || 'Sản phẩm Seajong';
+
+      // Resolve Material (Chất liệu)
+      let resolvedChatLieu = '';
+      const webMat = getSpecVal(['Chất liệu:', 'Chất liệu', 'Chất liệu mặt sứ', 'Chất liệu tủ', 'Chất liệu nắp']);
+      if (inv?.chatLieu && String(inv.chatLieu).trim()) {
+        resolvedChatLieu = cleanMaterialTerm(inv.chatLieu);
+      } else if (webMat) {
+        resolvedChatLieu = cleanMaterialTerm(webMat);
+      } else if (inv?.dinhMucs?.length > 0 && inv.dinhMucs[0]?.vatTu?.length > 0) {
+        const bomMats = Array.from(
+          new Set(
+            inv.dinhMucs[0].vatTu
+              .map((v) => cleanMaterialTerm(v.inventoryItem?.chatLieu))
+              .filter(Boolean)
+          )
+        );
+        if (bomMats.length > 0) {
+          resolvedChatLieu = bomMats.slice(0, 4).join('/');
+        }
+      }
+      if (!resolvedChatLieu) {
+        const searchTxt = `${inv?.ghiChu || ''} ${inv?.tenHang || rawName}`;
+        if (/inox\s*sus\s*304|sus\s*304|inox\s*304/i.test(searchTxt)) resolvedChatLieu = 'Inox SUS 304';
+        else if (/inox\s*201/i.test(searchTxt)) resolvedChatLieu = 'Inox 201';
+        else if (/th[eé]p kh[oô]ng g[iỉ]/i.test(searchTxt)) resolvedChatLieu = 'Thép không gỉ';
+        else if (/pvc\s*foam|pvc/i.test(searchTxt)) resolvedChatLieu = 'PVC Foam';
+        else if (/nh[uự]a\s*abs/i.test(searchTxt)) resolvedChatLieu = 'Nhựa ABS';
+        else if (/nh[uự]a/i.test(searchTxt)) resolvedChatLieu = 'Nhựa';
+        else if (/g[oố]m\s*s[uứ]|men\s*s[uứ]|ch[aậ]u\s*s[uứ]|b[oồ]n\s*c[aầ]u/i.test(searchTxt))
+          resolvedChatLieu = 'Gốm sứ phủ men Nano';
+        else if (/h[oợ]p\s*kim/i.test(searchTxt)) resolvedChatLieu = 'Hợp kim';
+        else if (/\bđ[oồ]ng\b/i.test(searchTxt)) resolvedChatLieu = 'Đồng';
+      }
+      if (!resolvedChatLieu && reqIt?.chatLieu) {
+        resolvedChatLieu = cleanMaterialTerm(reqIt.chatLieu);
+      }
+      if (!resolvedChatLieu) {
+        resolvedChatLieu = 'Theo tiêu chuẩn nhà sản xuất';
+      }
+
+      // Resolve Technical Spec Lines (Thông số kỹ thuật)
+      const specParts = [];
+      const addPart = (text) => {
+        const cleaned = String(text || '')
+          .replace(/\r?\n/g, ', ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (cleaned && !specParts.some((p) => norm(p) === norm(cleaned))) {
+          specParts.push(cleaned);
+        }
+      };
+
+      // A. From SeajongProduct.specs
+      const priorityWebKeys = [
+        { keys: ['Kích thước (mm):', 'Kích thước (mm)', 'Chiều cao'], label: 'Kích thước' },
+        { keys: ['Kiểu dáng:', 'Kiểu dáng'], label: 'Kiểu dáng' },
+        { keys: ['Áp lực nước khuyến nghị'], label: 'Áp lực nước' },
+        { keys: ['Nhiệt độ nước', 'Chế độ nước'], label: 'Nhiệt độ nước' },
+        { keys: ['Bề mặt:', 'Xử lý bề mặt', 'Bề mặt / Màu sắc'], label: 'Bề mặt' },
+        { keys: ['Độ dày (mm):'], label: 'Độ dày' },
+        { keys: ['Trọng lượng', 'Cân nặng củ sen'], label: 'Trọng lượng' },
+        { keys: ['Tải trọng tối đa'], label: 'Tải trọng' },
+        { keys: ['Lõi trộn'], label: 'Lõi trộn' },
+        { keys: ['Kiểu xả'], label: 'Kiểu xả' },
+        { keys: ['Lượng xả', 'Chế độ xả'], label: 'Lượng xả' },
+        { keys: ['Tâm hố', 'Khoảng cách tâm hố'], label: 'Tâm thoát' },
+        { keys: ['Nguồn điện'], label: 'Nguồn điện' },
+        { keys: ['Tổng công suất:'], label: 'Công suất' },
+        { keys: ['Động cơ'], label: 'Động cơ' },
+        { keys: ['Chiều dài dây rút'], label: 'Dây rút' },
+        { keys: ['Công nghệ'], label: 'Công nghệ' },
+      ];
+      for (const pk of priorityWebKeys) {
+        const val = getSpecVal(pk.keys);
+        if (val) {
+          const shortVal = val.replace(/^\-\s*/, '').replace(/\r?\n\s*-\s*/g, ', ');
+          addPart(`${pk.label}: ${shortVal.length > 55 ? shortVal.slice(0, 52) + '...' : shortVal}`);
+        }
+      }
+
+      // B. From InventoryItem.thongSoKyThuat (if concise technical text, not long SEO blog)
+      const rawThongSo = String(inv?.thongSoKyThuat || '').trim();
+      if (rawThongSo && rawThongSo.length <= 240 && !/mục lục toggle/i.test(rawThongSo)) {
+        const lines = rawThongSo
+          .split(/\r?\n/)
+          .map((l) => l.replace(/^[-•*]\s*/, '').trim())
+          .filter((l) => l && !/^kích thước:?$/i.test(l));
+        for (const l of lines) {
+          if (l.includes(':')) {
+            addPart(l);
+          } else {
+            addPart(`Quy cách: ${l}`);
+          }
+        }
+      }
+
+      // C. From InventoryItem dimensions (chieuDai, chieuRong, chieuDay)
+      if (inv?.chieuDai || inv?.chieuRong || inv?.chieuDay) {
+        const dims = [inv.chieuDai, inv.chieuRong, inv.chieuDay].filter(Boolean).join(' × ');
+        if (dims) addPart(`Kích thước: ${dims} mm`);
+      }
+
+      // D. From InventoryItem.ghiChu (extract technical specs like kích thước, trọng lượng)
+      const rawGhiChu = String(inv?.ghiChu || '').trim();
+      if (rawGhiChu && rawGhiChu.length <= 260 && norm(rawGhiChu) !== norm(inv?.code)) {
+        const ktMatch = rawGhiChu.match(/(?:kích\s*thước|kt)\s*[: ]?\s*([^.,;\n"]+)/i);
+        if (ktMatch && ktMatch[1]) {
+          addPart(`Kích thước: ${ktMatch[1].trim()}`);
+        }
+        const tlMatch = rawGhiChu.match(/trọng\s*lượng\s*[: ]?\s*([^.,;\n"]+)/i);
+        if (tlMatch && tlMatch[1]) {
+          addPart(`Trọng lượng: ${tlMatch[1].trim()}`);
+        }
+      }
+
+      // E. From InventoryItem real structured fields (model, category, donVi, version, color, BOM, maThayThe)
+      const catName = cleanCategoryName(inv?.erpCategory?.name || inv?.category?.name || '');
+      const cleanModel = cleanModelTerm(inv?.model);
+      if (cleanModel && norm(cleanModel) !== norm(resolvedCode)) {
+        addPart(`Kiểu loại: ${cleanModel}`);
+      }
+      if (inv?.version && String(inv.version).trim()) {
+        addPart(`Phiên bản: ${String(inv.version).trim()}`);
+      }
+      const resolvedColor =
+        (inv?.color && String(inv.color).trim()) || getSpecVal(['Màu sắc', 'Bề mặt / Màu sắc']) || reqIt?.color || '';
+      if (resolvedColor) {
+        addPart(`Màu sắc: ${resolvedColor}`);
+      }
+      if (catName) {
+        addPart(`Nhóm hàng: ${catName}`);
+      }
+      if (inv?.donVi && String(inv.donVi).trim() && String(inv.donVi).trim() !== '0') {
+        const dvt = String(inv.donVi).trim();
+        addPart(`Đơn vị tính: ${dvt.charAt(0).toUpperCase() + dvt.slice(1)}`);
+      }
+      if (inv?.dinhMucs?.length > 0 && inv.dinhMucs[0]?.code) {
+        const vtCount = inv.dinhMucs[0]?.vatTu?.length || 0;
+        addPart(
+          vtCount > 0
+            ? `Định mức: ${inv.dinhMucs[0].code} (${vtCount} linh kiện)`
+            : `Định mức: ${inv.dinhMucs[0].code}`
+        );
+      } else if (inv?.maThayThe && String(inv.maThayThe).trim()) {
+        addPart(`Mã phân loại: ${String(inv.maThayThe).trim()}`);
+      }
+      if (inv?.brand && String(inv.brand).trim()) {
+        addPart(`Thương hiệu: ${cleanBrandName(inv.brand)}`);
+      }
+
+      // Build 2 concise lines for the 80x60mm stamp
+      let line1 = '';
+      let line2 = '';
+      if (specParts.length === 0) {
+        line1 = `Mã định danh: ${resolvedCode}`;
+        line2 = 'Đạt tiêu chuẩn kỹ thuật nhà máy Seajong';
+      } else if (specParts.length === 1) {
+        line1 = specParts[0];
+        line2 = `Mã định danh: ${resolvedCode}`;
+      } else if (specParts.length === 2) {
+        line1 = specParts[0];
+        line2 = specParts[1];
+      } else if (specParts.length === 3) {
+        if (specParts[0].length <= 34 && specParts[1].length <= 34) {
+          line1 = `${specParts[0]} • ${specParts[1]}`;
+          line2 = specParts[2];
+        } else {
+          line1 = specParts[0];
+          line2 = `${specParts[1]} • ${specParts[2]}`;
+        }
+      } else {
+        if (specParts[0].length + specParts[1].length <= 58) {
+          line1 = `${specParts[0]} • ${specParts[1]}`;
+          line2 =
+            specParts[2].length + specParts[3].length <= 58
+              ? `${specParts[2]} • ${specParts[3]}`
+              : specParts[2];
+        } else {
+          line1 = specParts[0];
+          line2 =
+            specParts[1].length + specParts[2].length <= 58
+              ? `${specParts[1]} • ${specParts[2]}`
+              : specParts[1];
+        }
+      }
+
+      // Resolve Warranty (Bảo hành)
+      let resolvedWarranty = getSpecVal(['Thời gian bảo hành', 'Bảo hành']);
+      if (!resolvedWarranty) {
+        const isSparePart =
+          inv?.loai === 'vat-tu' && (!inv?.dinhMucs || inv.dinhMucs.length === 0);
+        if (isSparePart) {
+          if (/vỏ hộp|túi vải|bao bì/i.test(catName)) {
+            resolvedWarranty = 'Theo tiêu chuẩn NSX';
+          } else {
+            resolvedWarranty = '12 tháng';
+          }
+        } else if (/bồn rửa chén|chậu bếp/i.test(catName)) {
+          resolvedWarranty = '10 năm';
+        } else if (/bồn cầu|chậu lavabo|bồn tiểu/i.test(catName)) {
+          resolvedWarranty = '10 năm men sứ';
+        } else if (/tủ lavabo|gương|đèn điều hòa|hút mùi/i.test(catName)) {
+          resolvedWarranty = '3 năm';
+        } else {
+          resolvedWarranty = '5 năm';
+        }
+      }
+
+      // Resolve Origin (Xuất xứ)
+      let resolvedOrigin = getSpecVal(['Xuất xứ']);
+      if (!resolvedOrigin) {
+        if (/hàn quốc/i.test(`${resolvedName} ${resolvedChatLieu}`)) {
+          resolvedOrigin = 'Hàn Quốc / Trung Quốc';
+        } else {
+          resolvedOrigin = 'Trung Quốc';
+        }
+      }
+
+      // Resolve Image URL
+      let resolvedImageUrl = inv?.imageUrl || reqIt?.imageUrl || wp?.imageUrl || null;
+      if (!resolvedImageUrl && wp?.images) {
+        try {
+          const arr = JSON.parse(wp.images);
+          if (Array.isArray(arr) && arr.length > 0) resolvedImageUrl = arr[0];
+        } catch (_) {}
+      }
+
+      return {
+        name: resolvedName,
+        code: resolvedCode,
+        model: cleanModel || resolvedCode,
+        chatLieu: resolvedChatLieu,
+        color: resolvedColor || null,
+        giaBan: inv?.giaBan || wp?.price || reqIt?.giaBan || null,
+        imageUrl: resolvedImageUrl,
+        specLines: [line1, line2],
+        warranty: resolvedWarranty,
+        origin: resolvedOrigin,
+        brand: cleanBrandName(inv?.brand || 'Seajong'),
+        categoryName: catName || null,
+        donVi: inv?.donVi || null,
+      };
+    });
+
+    res.json({
+      success: true,
+      items: enriched,
+      companyInfo: companyInfo || {
+        name: 'Công ty cổ phần Seajong Việt Nam',
+        address: 'LK7D4 KĐT Cầu Diễn, Phú Diễn, TP Hà Nội',
+        phone: '1900.633.862',
+        website: 'https://seajong.com/',
+      },
+    });
+  } catch (err) {
+    console.error('Lỗi POST /api/logistics/product-label-specs:', err);
+    res.status(500).json({ success: false, error: err.message, items: [] });
   }
 });
 
@@ -12569,23 +14028,6 @@ app.get('/api/labor-rules', async (req, res) => {
       updatedBy: 'Lê Công Vụ - Giám đốc',
     };
 
-    // Lưu vào CSDL
-    await prisma.laborPolicy.upsert({
-      where: {
-        clientId_type: {
-          clientId: 'seajong',
-          type: 'labor_rules',
-        },
-      },
-      update: { content: JSON.stringify(initialRules) },
-      create: {
-        clientId: 'seajong',
-        type: 'labor_rules',
-        title: 'Nội quy & Chính sách lao động Seajong',
-        content: JSON.stringify(initialRules),
-      },
-    });
-
     res.json(initialRules);
   } catch (err) {
     console.error('Lỗi GET /api/labor-rules:', err);
@@ -12847,21 +14289,6 @@ app.get('/api/work-locations', async (req, res) => {
   try {
     const realLocations = await getResolvedWorkLocations();
     if (realLocations && realLocations.length > 0) {
-      await prisma.laborPolicy.upsert({
-        where: {
-          clientId_type: {
-            clientId: 'seajong',
-            type: 'work_locations',
-          },
-        },
-        update: { content: JSON.stringify(realLocations) },
-        create: {
-          clientId: 'seajong',
-          type: 'work_locations',
-          title: 'Vị trí làm việc và Mạng nội bộ Seajong',
-          content: JSON.stringify(realLocations),
-        },
-      });
       return res.json(realLocations);
     }
 
@@ -13633,19 +15060,123 @@ app.get('/api/logistics/audit-logs', async (req, res) => {
       };
     }
 
-    // 5. Tìm kiếm theo từ khoá
+    // 5. Tìm kiếm theo từ khoá (hỗ trợ cả mã đơn hàng, tên khách hàng, địa chỉ khách hàng)
     if (search) {
+      const extraLyDoTokens = new Set();
+      const matchingPoIds = [];
+
+      const [matchedSaleOrders, matchedDefects, matchedContracts, matchedQuotations, matchedPos] = await Promise.all([
+        prisma.saleOrder.findMany({
+          where: {
+            OR: [
+              { code: { contains: search } },
+              { nguoiNhan: { contains: search } },
+              { nguoiDatHang: { contains: search } },
+              { diaChiGiaoHang: { contains: search } },
+              { customer: { name: { contains: search } } },
+              { customer: { address: { contains: search } } },
+            ],
+          },
+          select: { code: true },
+        }),
+        prisma.defectRecord.findMany({
+          where: {
+            OR: [
+              { code: { contains: search } },
+              { orderNumber: { contains: search } },
+              { customerName: { contains: search } },
+              { customerAddress: { contains: search } },
+            ],
+          },
+          select: { code: true, orderNumber: true },
+        }),
+        prisma.contract.findMany({
+          where: {
+            OR: [
+              { code: { contains: search } },
+              { customer: { name: { contains: search } } },
+              { customer: { address: { contains: search } } },
+            ],
+          },
+          select: { code: true },
+        }),
+        prisma.quotation.findMany({
+          where: {
+            OR: [
+              { code: { contains: search } },
+              { customer: { name: { contains: search } } },
+              { customer: { address: { contains: search } } },
+            ],
+          },
+          select: { code: true },
+        }),
+        prisma.purchaseOrder.findMany({
+          where: {
+            OR: [
+              { code: { contains: search } },
+              { supplier: { name: { contains: search } } },
+              { supplier: { address: { contains: search } } },
+            ],
+          },
+          select: { id: true, code: true },
+        }),
+      ]);
+
+      const soCodes = new Set();
+      matchedSaleOrders.forEach((so) => {
+        if (so.code) {
+          soCodes.add(so.code);
+          extraLyDoTokens.add(so.code);
+          const suffix = so.code.replace(/^DBH-/i, '');
+          if (suffix && suffix !== so.code) {
+            extraLyDoTokens.add(`LSX-${suffix}`);
+          }
+        }
+      });
+
+      if (soCodes.size > 0) {
+        const matchedQcs = await prisma.qualityInspection.findMany({
+          where: {
+            OR: Array.from(soCodes).flatMap((soCode) => [
+              { notes: { contains: soCode } },
+              { metadata: { contains: soCode } },
+            ]),
+          },
+          select: { code: true },
+        });
+        matchedQcs.forEach((qc) => {
+          if (qc.code) extraLyDoTokens.add(qc.code);
+        });
+      }
+
+      matchedDefects.forEach((d) => {
+        if (d.code) extraLyDoTokens.add(d.code);
+        if (d.orderNumber) extraLyDoTokens.add(d.orderNumber);
+      });
+      matchedContracts.forEach((c) => {
+        if (c.code) extraLyDoTokens.add(c.code);
+      });
+      matchedQuotations.forEach((q) => {
+        if (q.code) extraLyDoTokens.add(q.code);
+      });
+      matchedPos.forEach((po) => {
+        if (po.id) matchingPoIds.push(po.id);
+        if (po.code) extraLyDoTokens.add(po.code);
+      });
+
+      const searchOrConditions = [
+        { soChungTu: { contains: search } },
+        { lyDo: { contains: search } },
+        { nguoiThucHien: { contains: search } },
+        { inventoryItem: { code: { contains: search } } },
+        { inventoryItem: { tenHang: { contains: search } } },
+        ...Array.from(extraLyDoTokens).map((token) => ({ lyDo: { contains: token } })),
+        ...(matchingPoIds.length > 0 ? [{ purchaseOrderId: { in: matchingPoIds } }] : []),
+      ];
+
       where.AND = [
         ...(where.AND || []),
-        {
-          OR: [
-            { soChungTu: { contains: search } },
-            { lyDo: { contains: search } },
-            { nguoiThucHien: { contains: search } },
-            { inventoryItem: { code: { contains: search } } },
-            { inventoryItem: { tenHang: { contains: search } } },
-          ],
-        },
+        { OR: searchOrConditions },
       ];
     }
 
@@ -13677,9 +15208,219 @@ app.get('/api/logistics/audit-logs', async (req, res) => {
             inventoryItem: true,
             fromWarehouse: true,
             toWarehouse: true,
+            purchaseOrder: {
+              include: { supplier: true },
+            },
           },
         })
       : [];
+
+    // Nạp dữ liệu đối chiếu Đơn hàng, Khách hàng, Địa chỉ cho các hoạt động kho trên trang hiện tại
+    const [allSaleOrders, allQcs, allDefects, allContracts, allQuotations, allPos] =
+      movements.length > 0
+        ? await Promise.all([
+            prisma.saleOrder.findMany({ include: { customer: true } }),
+            prisma.qualityInspection.findMany(),
+            prisma.defectRecord.findMany(),
+            prisma.contract.findMany({ include: { customer: true } }),
+            prisma.quotation.findMany({ include: { customer: true } }),
+            prisma.purchaseOrder.findMany({ include: { supplier: true } }),
+          ])
+        : [[], [], [], [], [], []];
+
+    const saleOrderByCode = new Map();
+    allSaleOrders.forEach((so) => {
+      if (so.code) saleOrderByCode.set(so.code.toUpperCase(), so);
+    });
+
+    const qcByCode = new Map();
+    allQcs.forEach((qc) => {
+      if (qc.code) qcByCode.set(qc.code.toUpperCase(), qc);
+    });
+
+    const defectByCode = new Map();
+    allDefects.forEach((d) => {
+      if (d.code) defectByCode.set(d.code.toUpperCase(), d);
+    });
+
+    const contractByCode = new Map();
+    allContracts.forEach((c) => {
+      if (c.code) contractByCode.set(c.code.toUpperCase(), c);
+    });
+
+    const quotationByCode = new Map();
+    allQuotations.forEach((q) => {
+      if (q.code) quotationByCode.set(q.code.toUpperCase(), q);
+    });
+
+    const poByCode = new Map();
+    allPos.forEach((po) => {
+      if (po.code) poByCode.set(po.code.toUpperCase(), po);
+    });
+
+    const resolveMovementOrderCustomer = (firstMovement, codeStr) => {
+      const text = `${codeStr || ''} ${firstMovement?.lyDo || ''}`;
+      let orderCode = null;
+      let customerName = null;
+      let customerAddress = null;
+      let partnerType = null;
+
+      const applyFromSaleOrder = (so) => {
+        if (!so) return;
+        orderCode = orderCode || so.code || null;
+        customerName =
+          customerName ||
+          so.customer?.name ||
+          so.nguoiNhan ||
+          so.nguoiDatHang ||
+          null;
+        customerAddress =
+          customerAddress ||
+          so.diaChiGiaoHang ||
+          so.customer?.address ||
+          null;
+        partnerType = partnerType || 'customer';
+      };
+
+      const applyFromPurchaseOrder = (po) => {
+        if (!po) return;
+        orderCode = orderCode || po.code || null;
+        customerName = customerName || po.supplier?.name || null;
+        customerAddress = customerAddress || po.supplier?.address || null;
+        partnerType = partnerType || 'supplier';
+      };
+
+      // 1. Kiểm tra mã đơn bán hàng trực tiếp (DBH-...)
+      const dbhMatch = text.match(/\b(DBH-[0-9]{8}-[0-9A-Za-z-]+)\b/i);
+      if (dbhMatch) {
+        const so = saleOrderByCode.get(dbhMatch[1].toUpperCase());
+        if (so) {
+          applyFromSaleOrder(so);
+        } else {
+          orderCode = dbhMatch[1].toUpperCase();
+          partnerType = 'customer';
+        }
+      }
+
+      // 2. Kiểm tra mã lệnh sản xuất (LSX-...) -> liên kết tới đơn bán hàng DBH-...
+      if (!orderCode || !customerName) {
+        const lsxMatch = text.match(/\bLSX-([0-9]{8}-[0-9A-Za-z-]+)\b/i);
+        if (lsxMatch) {
+          const candidateSoCode = `DBH-${lsxMatch[1]}`.toUpperCase();
+          const so = saleOrderByCode.get(candidateSoCode);
+          if (so) {
+            applyFromSaleOrder(so);
+          }
+        }
+      }
+
+      // 3. Kiểm tra hồ sơ lỗi / bảo hành (ERR-... / WR-...)
+      if (!orderCode || !customerName) {
+        const errMatch = text.match(/\b((?:ERR|WR)-[0-9]{8}-[0-9A-Za-z-]+)\b/i);
+        if (errMatch) {
+          const defect = defectByCode.get(errMatch[1].toUpperCase());
+          if (defect) {
+            if (defect.customerName) customerName = customerName || defect.customerName;
+            if (defect.customerAddress) customerAddress = customerAddress || defect.customerAddress;
+            partnerType = partnerType || 'customer';
+            if (defect.orderNumber) {
+              const defOrderUpper = defect.orderNumber.toUpperCase();
+              if (saleOrderByCode.has(defOrderUpper)) {
+                applyFromSaleOrder(saleOrderByCode.get(defOrderUpper));
+              } else if (qcByCode.has(defOrderUpper)) {
+                const qc = qcByCode.get(defOrderUpper);
+                const qcText = `${qc.notes || ''} ${qc.metadata || ''}`;
+                const qcDbh = qcText.match(/\b(DBH-[0-9]{8}-[0-9A-Za-z-]+)\b/i);
+                if (qcDbh && saleOrderByCode.has(qcDbh[1].toUpperCase())) {
+                  applyFromSaleOrder(saleOrderByCode.get(qcDbh[1].toUpperCase()));
+                }
+              }
+              orderCode = orderCode || defect.orderNumber;
+            }
+          }
+        }
+      }
+
+      // 4. Kiểm tra biên bản QC (QC-...)
+      if (!orderCode || !customerName) {
+        const qcMatch = text.match(/\b(QC-[0-9A-Za-z-]+)\b/i);
+        if (qcMatch) {
+          const qc = qcByCode.get(qcMatch[1].toUpperCase());
+          if (qc) {
+            let metaObj = {};
+            if (qc.metadata) {
+              try {
+                metaObj = typeof qc.metadata === 'string' ? JSON.parse(qc.metadata) : qc.metadata;
+              } catch (_e) {
+                metaObj = {};
+              }
+            }
+            const qcSearchStr = `${metaObj.productionOrder || ''} ${metaObj.orderCode || ''} ${qc.notes || ''} ${qc.code || ''}`;
+            const qcDbh = qcSearchStr.match(/\b(DBH-[0-9]{8}-[0-9A-Za-z-]+)\b/i);
+            if (qcDbh) {
+              const so = saleOrderByCode.get(qcDbh[1].toUpperCase());
+              if (so) {
+                applyFromSaleOrder(so);
+              } else {
+                orderCode = orderCode || qcDbh[1].toUpperCase();
+                partnerType = partnerType || 'customer';
+              }
+            } else {
+              const qcLsx = qcSearchStr.match(/\bLSX-([0-9]{8}-[0-9A-Za-z-]+)\b/i);
+              if (qcLsx) {
+                const so = saleOrderByCode.get(`DBH-${qcLsx[1]}`.toUpperCase());
+                if (so) applyFromSaleOrder(so);
+              }
+              const qcDh = qcSearchStr.match(/\b(DH-[0-9]{8}-[0-9A-Za-z-]+)\b/i);
+              if (qcDh) {
+                const po = poByCode.get(qcDh[1].toUpperCase());
+                if (po) applyFromPurchaseOrder(po);
+              }
+            }
+          }
+        }
+      }
+
+      // 5. Kiểm tra hợp đồng / báo giá (QUO-...)
+      if (!orderCode || !customerName) {
+        const quoMatch = text.match(/\b(QUO-[0-9]{8}-[0-9A-Za-z/-]+)\b/i);
+        if (quoMatch) {
+          const fullToken = quoMatch[1].toUpperCase();
+          const baseToken = fullToken.split('/')[0];
+          const contract = contractByCode.get(fullToken) || contractByCode.get(baseToken);
+          const quotation = quotationByCode.get(fullToken) || quotationByCode.get(baseToken);
+          if (contract) {
+            orderCode = orderCode || contract.code;
+            customerName = customerName || contract.customer?.name || null;
+            customerAddress = customerAddress || contract.customer?.address || null;
+            partnerType = partnerType || 'customer';
+          } else if (quotation) {
+            orderCode = orderCode || quotation.code;
+            customerName = customerName || quotation.customer?.name || null;
+            customerAddress = customerAddress || quotation.customer?.address || null;
+            partnerType = partnerType || 'customer';
+          } else {
+            orderCode = orderCode || quoMatch[1];
+            partnerType = partnerType || 'customer';
+          }
+        }
+      }
+
+      // 6. Kiểm tra đơn mua hàng (purchaseOrderId hoặc DH-...)
+      if (!orderCode || !customerName) {
+        if (firstMovement?.purchaseOrder) {
+          applyFromPurchaseOrder(firstMovement.purchaseOrder);
+        } else {
+          const dhMatch = text.match(/\b(DH-[0-9]{8}-[0-9A-Za-z-]+)\b/i);
+          if (dhMatch) {
+            const po = poByCode.get(dhMatch[1].toUpperCase());
+            if (po) applyFromPurchaseOrder(po);
+          }
+        }
+      }
+
+      return { orderCode, customerName, customerAddress, partnerType };
+    };
 
     // Gom các dòng theo soChungTu
     const groupedMap = {};
@@ -13758,6 +15499,7 @@ app.get('/api/logistics/audit-logs', async (req, res) => {
       });
 
       const maxCreatedAt = g._max?.createdAt || first.createdAt || new Date();
+      const { orderCode, customerName, customerAddress, partnerType } = resolveMovementOrderCustomer(first, code);
 
       return {
         id: first.id || code,
@@ -13779,6 +15521,10 @@ app.get('/api/logistics/audit-logs', async (req, res) => {
         nguoiThucHien: first.nguoiThucHien || 'Hệ thống kho Seajong',
         lyDo: first.lyDo || 'Ghi nhận biến động vật tư kho hàng',
         ghiChu: first.purchaseOrderId ? `Theo đơn mua #${first.purchaseOrderId}` : (first.lyDo || 'Đã đối soát chứng từ phát sinh'),
+        orderCode,
+        customerName,
+        customerAddress,
+        partnerType,
         tongSoLuong,
         linesCount: lines.length,
         lines: mappedLines,
@@ -15958,204 +17704,6 @@ app.post('/api/personal-requests/bulk-delete', async (req, res) => {
 
 app.get('/api/qa/inspections', async (req, res) => {
   try {
-    const count = await prisma.qualityInspection.count();
-    if (count === 0) {
-      const mockData = [
-        {
-          code: 'QC-20261030-107',
-          type: 'IQC',
-          productName: 'Lõi van chia nước Ceramic 35mm Hàn Quốc',
-          requesterName: 'Nguyễn Thị Dung',
-          requesterDept: 'Bộ phận Mua hàng',
-          status: 'Chưa thực hiện',
-          notes: 'Kiểm định lô linh kiện lõi van mới nhập kho sáng nay',
-          executionTime: new Date('2026-10-30T09:00:00Z'),
-          metadata: JSON.stringify({
-            supplierName: 'Công ty TNHH Linh kiện Sen vòi Hàn Quốc K-Valve',
-            poNumber: 'DH-20261028-0042',
-            deliveryNote: 'PXK-42991',
-            items: [
-              {
-                productName: 'Lõi van chia nước Ceramic 35mm Hàn Quốc',
-                model: 'LK-CV35-KR',
-                batch: 'LOT-202610-01',
-                quantity: 500,
-                sampleQuantity: 32,
-                passQuantity: 500,
-                failQuantity: 0,
-                donVi: 'cái',
-              },
-            ],
-          }),
-        },
-        {
-          code: 'QC-20261030-106',
-          type: 'OQC',
-          productName: 'Sen cây tắm đứng phím đàn Seajong SJ-8800 (Mạ PVD Gray)',
-          requesterName: 'Nguyễn Quý Dương',
-          requesterDept: 'Bộ phận Sản xuất',
-          status: 'Chưa thực hiện',
-          notes: 'Yêu cầu kiểm định chất lượng áp lực nước 16 bar & bề mặt mạ PVD lô thành phẩm',
-          executionTime: new Date('2026-10-30T08:30:00Z'),
-          metadata: JSON.stringify({
-            productionOrder: 'LSX-20261007-01',
-            dinhMucCode: 'DM-SJ8800',
-            assemblyTeam: 'Tổ Lắp ráp Sen cây - Ca Sáng',
-            totalQuantity: 50,
-            sampleQuantity: 10,
-            batch: 'LOT-SJ8800-1026',
-            items: [
-              {
-                productName: 'Sen cây tắm đứng phím đàn Seajong SJ-8800 (Mạ PVD Gray)',
-                model: 'SJ-8800',
-                dinhMucCode: 'DM-SJ8800',
-                dinhMucTen: 'Định mức chuẩn Sen cây SJ-8800',
-                batch: 'LOT-SJ8800-1026',
-                quantity: 50,
-                sampleQuantity: 10,
-                passQuantity: 50,
-                failQuantity: 0,
-                donVi: 'bộ',
-              },
-            ],
-          }),
-        },
-        {
-          code: 'QC-20261029-105',
-          type: 'IQC',
-          productName: 'Phôi đồng thau đúc thân vòi 61% Cu',
-          requesterName: 'Trần Văn An',
-          requesterDept: 'Bộ phận Mua hàng',
-          status: 'Đã hoàn thành',
-          result: 'Đạt',
-          notes: 'Kích thước ren G1/2 và tỷ lệ đồng đạt chuẩn 100%',
-          executionTime: new Date('2026-10-29T14:30:00Z'),
-          inspectorName: 'Lê Anh Vân',
-          metadata: JSON.stringify({
-            supplierName: 'Công ty Cổ phần Kim loại Màu Hải Âu',
-            poNumber: 'DH-20261025-0021',
-            deliveryNote: 'DN-88211',
-            passedQuantity: 300,
-            failedQuantity: 0,
-            items: [
-              {
-                productName: 'Phôi đồng thau đúc thân vòi 61% Cu',
-                model: 'VT-PD61-01',
-                batch: 'LOT-CU-1029',
-                quantity: 300,
-                sampleQuantity: 20,
-                passQuantity: 300,
-                failQuantity: 0,
-                comment: 'Bề mặt đúc mịn, không rỗ khí, bước ren chuẩn G1/2.',
-                result: 'pass',
-              },
-            ],
-          }),
-        },
-        {
-          code: 'QC-20261029-104',
-          type: 'OQC',
-          productName: 'Vòi chậu Lavabo nóng lạnh Seajong SJ-302',
-          requesterName: 'Lê Thị Bình',
-          requesterDept: 'Bộ phận Kho vận',
-          status: 'Đã hoàn thành',
-          result: 'Lỗi một phần',
-          notes: 'Phát hiện 2 sản phẩm trầy xước nhẹ bề mặt mạ Chrome mặt tiền',
-          executionTime: new Date('2026-10-29T11:15:00Z'),
-          inspectorName: 'Lê Anh Vân',
-          metadata: JSON.stringify({
-            productionOrder: 'LSX-20261007-02',
-            assemblyTeam: 'Tổ Lắp ráp Vòi chậu 01',
-            totalQuantity: 100,
-            sampleQuantity: 20,
-            passedQuantity: 98,
-            failedQuantity: 2,
-            items: [
-              {
-                productName: 'Vòi chậu Lavabo nóng lạnh Seajong SJ-302',
-                model: 'SJ-302',
-                dinhMucCode: 'DM-SJ302',
-                batch: 'LOT-SJ302-1029',
-                quantity: 100,
-                sampleQuantity: 20,
-                passQuantity: 98,
-                failQuantity: 2,
-                comment: '98 bộ đạt chuẩn thử áp 6 bar.',
-                defectDesc: '02 bộ bị xước dăm bề mặt mạ > 2mm ở thân trước.',
-                result: 'fail',
-              },
-            ],
-          }),
-        },
-        {
-          code: 'QC-20261028-103',
-          type: 'OQC',
-          productName: 'Bồn cầu thông minh Seajong Smart Toilet SJ-9900',
-          requesterName: 'Nguyễn Quý Dương',
-          requesterDept: 'Bộ phận Sản xuất',
-          status: 'Đã hoàn thành',
-          result: 'Đạt',
-          notes: 'Kiểm tra men sứ nano kháng khuẩn, cảm biến nắp đóng mở êm & xả xoáy Siphon đạt 100%',
-          executionTime: new Date('2026-10-28T15:45:00Z'),
-          inspectorName: 'Lê Anh Vân',
-          metadata: JSON.stringify({
-            productionOrder: 'LSX-260930-CNXB',
-            assemblyTeam: 'Tổ Kiểm thử Thiết bị Vệ sinh',
-            totalQuantity: 30,
-            sampleQuantity: 5,
-            passedQuantity: 30,
-            failedQuantity: 0,
-            items: [
-              {
-                productName: 'Bồn cầu thông minh Seajong Smart Toilet SJ-9900',
-                model: 'SJ-9900',
-                batch: 'LOT-SJ9900-1028',
-                quantity: 30,
-                sampleQuantity: 5,
-                passQuantity: 30,
-                failQuantity: 0,
-                comment: 'Men sứ trắng sáng không châm kim, hệ thống điện tử và xả đạt chuẩn.',
-                result: 'pass',
-              },
-            ],
-          }),
-        },
-        {
-          code: 'QC-20261027-089',
-          type: 'IQC',
-          productName: 'Dây cấp nước Inox 304 chịu áp cao (60cm)',
-          requesterName: 'Trần Văn An',
-          requesterDept: 'Bộ phận Mua hàng',
-          status: 'Đã hoàn thành',
-          result: 'Không đạt',
-          notes: 'Gioăng cao su EPDM bị lệch và chiều dài hụt 1.5cm so với bản vẽ kỹ thuật',
-          executionTime: new Date('2026-10-27T16:00:00Z'),
-          inspectorName: 'Lê Anh Vân',
-          metadata: JSON.stringify({
-            supplierName: 'Công ty TNHH Vật tư Inox Toàn Cầu',
-            poNumber: 'DH-20261022-0009',
-            deliveryNote: 'DN-11200',
-            passedQuantity: 0,
-            failedQuantity: 200,
-            items: [
-              {
-                productName: 'Dây cấp nước Inox 304 chịu áp cao (60cm)',
-                model: 'VT-DC304-60',
-                batch: 'LOT-DC-1027',
-                quantity: 200,
-                sampleQuantity: 20,
-                passQuantity: 0,
-                failQuantity: 200,
-                defectDesc: 'Hụt chiều dài tiêu chuẩn 1.5cm, đầu tán ren bị bavia.',
-                result: 'fail',
-              },
-            ],
-          }),
-        },
-      ];
-      await prisma.qualityInspection.createMany({ data: mockData });
-    }
-
     const q = String(req.query.q || '').trim();
     const whereClause = {};
     if (q) {
@@ -17983,498 +19531,115 @@ async function ensureHrRecruitmentTables() {
       )
     `);
 
-    // Seed initial probation data if empty
-    const probCountRows = await prisma.$queryRawUnsafe(`SELECT COUNT(*) as cnt FROM admin_hr_items WHERE category = 'probation'`);
-    const probCount = Number(probCountRows?.[0]?.cnt || 0);
-    if (probCount === 0) {
-      const seedProbation = [
-        {
-          id: 'PROB-SJ-001',
-          category: 'probation',
-          title: 'Nguyễn Minh Quân',
-          sub: 'Chuyên viên Kinh doanh Showroom',
-          value: '88/100 điểm',
-          status: 'Đang thử việc',
-          date: '01/09/2026 - 31/10/2026',
-          department: 'Phòng Kinh doanh',
-          owner: 'Phạm Quang Việt',
-          priority: 'Bình thường',
-          description: 'Thử việc 02 tháng tại bộ phận phát triển đại lý khu vực Miền Bắc. Hoàn thành tốt chỉ tiêu mở mới đại lý.',
-          progress: 85,
-          target: 100,
-          email: 'quan.nm@seajong.vn',
-          phone: '0984512369',
-          location: 'Văn phòng Hà Nội',
-          tags: '["Kinh doanh","Showroom"]',
-          salary: '12,000,000',
-          deadline: '2026-10-31',
-          extra_json: JSON.stringify({
-            empCode: 'NV-TV01',
-            startDate: '2026-09-01',
-            endDate: '2026-10-31',
-            attitudeScore: 90,
-            skillScore: 86,
-            kpiScore: 88,
-          }),
-        },
-        {
-          id: 'PROB-SJ-002',
-          category: 'probation',
-          title: 'Trần Thu Thảo',
-          sub: 'Chuyên viên Digital Marketing',
-          value: '92/100 điểm',
-          status: 'Đạt yêu cầu',
-          date: '15/08/2026 - 15/10/2026',
-          department: 'Phòng Marketing',
-          owner: 'Nguyễn Thị Hoa',
-          priority: 'Cao',
-          description: 'Đạt 105% KPI chiến dịch quảng cáo Sen cây phím đàn Q3/2026. Đề xuất ký hợp đồng lao động chính thức 12 tháng.',
-          progress: 100,
-          target: 100,
-          email: 'thao.tt@seajong.vn',
-          phone: '0973612480',
-          location: 'Văn phòng Hà Nội',
-          tags: '["Marketing","Digital"]',
-          salary: '14,000,000',
-          deadline: '2026-10-15',
-          extra_json: JSON.stringify({
-            empCode: 'NV-TV02',
-            startDate: '2026-08-15',
-            endDate: '2026-10-15',
-            attitudeScore: 95,
-            skillScore: 90,
-            kpiScore: 92,
-          }),
-        },
-        {
-          id: 'PROB-SJ-003',
-          category: 'probation',
-          title: 'Lê Hoàng Nam',
-          sub: 'Kỹ thuật viên Lắp đặt & Bảo hành',
-          value: '82/100 điểm',
-          status: 'Đang thử việc',
-          date: '15/09/2026 - 15/11/2026',
-          department: 'Phòng Kỹ thuật - Thiết kế',
-          owner: 'Nguyên Văn Thành',
-          priority: 'Bình thường',
-          description: 'Đang đào tạo thực chiến lắp đặt quầy kệ showroom và bảo hành thiết bị vệ sinh thông minh.',
-          progress: 65,
-          target: 100,
-          email: 'nam.lh@seajong.vn',
-          phone: '0915223689',
-          location: 'Kho & Xưởng Kỹ thuật',
-          tags: '["Kỹ thuật","Showroom"]',
-          salary: '11,000,000',
-          deadline: '2026-11-15',
-          extra_json: JSON.stringify({
-            empCode: 'NV-TV03',
-            startDate: '2026-09-15',
-            endDate: '2026-11-15',
-            attitudeScore: 85,
-            skillScore: 80,
-            kpiScore: 82,
-          }),
-        },
-      ];
-      for (const item of seedProbation) {
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO admin_hr_items (
-            id, category, title, sub, value, status, date, department, owner, priority,
-            description, progress, target, email, phone, location, tags, salary, deadline, extra_json
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          item.id, item.category, item.title, item.sub, item.value, item.status, item.date,
-          item.department, item.owner, item.priority, item.description, item.progress,
-          item.target, item.email, item.phone, item.location, item.tags, item.salary,
-          item.deadline, item.extra_json
-        );
-      }
+    // Dọn dẹp các dòng dữ liệu mẫu cũ (PROB-SJ-*, REQ-SJ-*, CAND-SJ-*, INT-SJ-*, TRN-SJ-*)
+    await prisma.$executeRawUnsafe(`DELETE FROM admin_hr_items WHERE id LIKE 'PROB-SJ-%'`);
+    await prisma.$executeRawUnsafe(`DELETE FROM recruitment_requests WHERE id LIKE 'REQ-SJ-%'`);
+    await prisma.$executeRawUnsafe(`DELETE FROM recruitment_candidates WHERE id LIKE 'CAND-SJ-%'`);
+    await prisma.$executeRawUnsafe(`DELETE FROM recruitment_interviews WHERE id LIKE 'INT-SJ-%'`);
+    await prisma.$executeRawUnsafe(`DELETE FROM training_courses WHERE id LIKE 'TRN-SJ-%'`);
+
+    // Đồng bộ từ các bảng Prisma thực tế (RecruitmentRequest, Candidate, Employee)
+    const [prismaReqs, prismaCands, prismaEmps] = await Promise.all([
+      prisma.recruitmentRequest.findMany().catch(() => []),
+      prisma.candidate.findMany().catch(() => []),
+      prisma.employee.findMany().catch(() => []),
+    ]);
+    const empMap = new Map((prismaEmps || []).map((e) => [e.id, e]));
+
+    for (const r of prismaReqs || []) {
+      const reqDate = r.date ? new Date(r.date).toLocaleDateString('vi-VN') : '';
+      const dlDate = r.deadline ? new Date(r.deadline).toLocaleDateString('vi-VN') : '';
+      const requesterEmp = r.requesterId ? empMap.get(r.requesterId) : null;
+      const requesterName = r.requestedBy || requesterEmp?.fullName || '';
+      const salMin = Number(r.salaryMin) || 0;
+      const salMax = Number(r.salaryMax) || 0;
+      const salRange =
+        salMin > 0 && salMax > 0
+          ? `${(salMin / 1000000).toFixed(0)} - ${(salMax / 1000000).toFixed(0)} triệu`
+          : 'Thỏa thuận';
+      const stLower = String(r.status || '').toLowerCase();
+      const statusNorm = stLower.includes('close') || stLower.includes('done') ? 'completed' : 'recruiting';
+      const statusLabel = statusNorm === 'completed' ? 'Đã đủ chỉ tiêu' : 'Đang tuyển dụng';
+      const code = `YC-TD-${String(r.id).slice(-6).toUpperCase()}`;
+      const extra = {
+        position: r.position || '',
+        experienceLevel: r.experience || '',
+        requestDate: reqDate,
+        statusLabel,
+        receivedCount: 0,
+      };
+      await prisma.$executeRawUnsafe(
+        `INSERT OR IGNORE INTO recruitment_requests (
+          id, code, title, department, requester, quantity, filled, type, salary_range,
+          experience, deadline, priority, status, description, extra_json
+        ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        r.id,
+        code,
+        r.position || '',
+        r.department || '',
+        requesterName,
+        Number(r.quantity) || 1,
+        r.workType || 'Toàn thời gian',
+        salRange,
+        r.experience || '',
+        dlDate,
+        String(r.priority || 'normal').toLowerCase(),
+        statusNorm,
+        r.description || '',
+        JSON.stringify(extra)
+      );
     }
 
-    // Seed initial recruitment requests if empty
-    const reqCountRows = await prisma.$queryRawUnsafe(`SELECT COUNT(*) as cnt FROM recruitment_requests`);
-    if (Number(reqCountRows?.[0]?.cnt || 0) === 0) {
-      const seedRequests = [
-        {
-          id: 'REQ-SJ-001',
-          code: 'YC-TD-2026-001',
-          title: 'Chuyên viên Phát triển Đại lý Khu vực Miền Bắc',
-          department: 'Phòng Kinh doanh',
-          requester: 'Phạm Quang Việt',
-          quantity: 3,
-          filled: 1,
-          type: 'Toàn thời gian',
-          salary_range: '15 - 25 triệu + Hoa hồng',
-          experience: '1 - 2 năm',
-          deadline: '15/11/2026',
-          priority: 'high',
-          status: 'recruiting',
-          description: 'Mở rộng hệ thống đại lý thiết bị vệ sinh và nhà bếp Seajong tại các tỉnh Miền Bắc.',
-          extra_json: JSON.stringify({
-            position: 'Chuyên viên Phát triển Đại lý Khu vực Miền Bắc',
-            experienceLevel: '1 - 2 năm',
-            requestDate: '01/10/2026',
-            statusLabel: 'Đang tuyển dụng',
-            receivedCount: 2,
-          }),
-        },
-        {
-          id: 'REQ-SJ-002',
-          code: 'YC-TD-2026-002',
-          title: 'Kỹ sư Thiết kế 3D Quầy kệ Showroom',
-          department: 'Phòng Kỹ thuật - Thiết kế',
-          requester: 'Nguyên Văn Thành',
-          quantity: 2,
-          filled: 1,
-          type: 'Toàn thời gian',
-          salary_range: '14 - 20 triệu',
-          experience: '2 năm',
-          deadline: '10/11/2026',
-          priority: 'normal',
-          status: 'recruiting',
-          description: 'Thiết kế 3D không gian trưng bày showroom đại lý theo nhận diện thương hiệu Seajong.',
-          extra_json: JSON.stringify({
-            position: 'Kỹ sư Thiết kế 3D Quầy kệ Showroom',
-            experienceLevel: '2 năm',
-            requestDate: '05/10/2026',
-            statusLabel: 'Đang tuyển dụng',
-            receivedCount: 1,
-          }),
-        },
-        {
-          id: 'REQ-SJ-003',
-          code: 'YC-TD-2026-003',
-          title: 'Chuyên viên Content & Trade Marketing',
-          department: 'Phòng Marketing',
-          requester: 'Cao Thị Phương',
-          quantity: 1,
-          filled: 1,
-          type: 'Toàn thời gian',
-          salary_range: '12 - 16 triệu',
-          experience: '1 năm',
-          deadline: '25/10/2026',
-          priority: 'normal',
-          status: 'completed',
-          description: 'Xây dựng nội dung truyền thông sản phẩm sen cây phím đàn, bồn cầu thông minh Seajong.',
-          extra_json: JSON.stringify({
-            position: 'Chuyên viên Content & Trade Marketing',
-            experienceLevel: '1 năm',
-            requestDate: '20/09/2026',
-            statusLabel: 'Đã đủ chỉ tiêu',
-            receivedCount: 1,
-          }),
-        },
-      ];
-      for (const r of seedRequests) {
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO recruitment_requests (
-            id, code, title, department, requester, quantity, filled, type, salary_range,
-            experience, deadline, priority, status, description, extra_json
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          r.id, r.code, r.title, r.department, r.requester, r.quantity, r.filled, r.type,
-          r.salary_range, r.experience, r.deadline, r.priority, r.status, r.description, r.extra_json
-        );
-      }
-    }
-
-    // Seed initial recruitment candidates if empty
-    const candCountRows = await prisma.$queryRawUnsafe(`SELECT COUNT(*) as cnt FROM recruitment_candidates`);
-    if (Number(candCountRows?.[0]?.cnt || 0) === 0) {
-      const seedCandidates = [
-        {
-          id: 'CAND-SJ-001',
-          code: 'UV-2026-001',
-          name: 'Đặng Quốc Khánh',
-          phone: '0987654321',
-          email: 'khanh.dq@gmail.com',
-          position: 'Chuyên viên Phát triển Đại lý Khu vực Miền Bắc',
-          department: 'Phòng Kinh doanh',
-          source: 'VietnamWorks',
-          experience: '3 năm kinh doanh TBVS',
-          expected_salary: '18,000,000',
-          applied_date: '18/10/2026',
-          stage: 'interviewing',
-          rating: 5,
-          cv_file: 'CV_DangQuocKhanh_Sales.pdf',
-          interviewer: 'Phạm Quang Việt',
-          notes: 'Có sẵn tệp đại lý vật liệu xây dựng tại Hải Phòng, Quảng Ninh.',
-          extra_json: JSON.stringify({
-            fullName: 'Đặng Quốc Khánh',
-            gender: 'Nam',
-            permanentAddress: 'Ngô Quyền, Hải Phòng',
-            appliedPosition: 'Chuyên viên Phát triển Đại lý Khu vực Miền Bắc',
-            education: 'Đại học Thương mại',
-            status: 'interviewing',
-            statusLabel: 'Đang phỏng vấn',
-            note: 'Có sẵn tệp đại lý vật liệu xây dựng tại Hải Phòng, Quảng Ninh.',
-          }),
-        },
-        {
-          id: 'CAND-SJ-002',
-          code: 'UV-2026-002',
-          name: 'Vũ Thị Minh Anh',
-          phone: '0912345678',
-          email: 'minhanh.vu@gmail.com',
-          position: 'Kỹ sư Thiết kế 3D Quầy kệ Showroom',
-          department: 'Phòng Kỹ thuật - Thiết kế',
-          source: 'TopCV',
-          experience: '2 năm thiết kế nội thất showroom',
-          expected_salary: '16,000,000',
-          applied_date: '20/10/2026',
-          stage: 'passed',
-          rating: 5,
-          cv_file: 'Portfolio_VuThiMinhAnh_3D.pdf',
-          interviewer: 'Nguyên Văn Thành',
-          notes: 'Sử dụng thành thạo 3dsMax, SketchUp, AutoCAD. Bài test thiết kế đạt điểm xuất sắc.',
-          extra_json: JSON.stringify({
-            fullName: 'Vũ Thị Minh Anh',
-            gender: 'Nữ',
-            permanentAddress: 'Cầu Giấy, Hà Nội',
-            appliedPosition: 'Kỹ sư Thiết kế 3D Quầy kệ Showroom',
-            education: 'Đại học Kiến trúc Hà Nội',
-            status: 'passed',
-            statusLabel: 'Đạt phỏng vấn',
-            note: 'Sử dụng thành thạo 3dsMax, SketchUp, AutoCAD. Bài test thiết kế đạt điểm xuất sắc.',
-          }),
-        },
-        {
-          id: 'CAND-SJ-003',
-          code: 'UV-2026-003',
-          name: 'Hoàng Văn Bách',
-          phone: '0966889900',
-          email: 'bach.hv@gmail.com',
-          position: 'Chuyên viên Phát triển Đại lý Khu vực Miền Bắc',
-          department: 'Phòng Kinh doanh',
-          source: 'Giới thiệu nội bộ',
-          experience: '1.5 năm Sales B2B',
-          expected_salary: '15,000,000',
-          applied_date: '25/10/2026',
-          stage: 'screening',
-          rating: 4,
-          cv_file: 'CV_HoangVanBach.pdf',
-          interviewer: 'Cao Thị Phương',
-          notes: 'Nhiệt huyết, sẵn sàng đi công tác tỉnh thường xuyên.',
-          extra_json: JSON.stringify({
-            fullName: 'Hoàng Văn Bách',
-            gender: 'Nam',
-            permanentAddress: 'Thanh Xuân, Hà Nội',
-            appliedPosition: 'Chuyên viên Phát triển Đại lý Khu vực Miền Bắc',
-            education: 'Cao đẳng Kinh tế',
-            status: 'screening',
-            statusLabel: 'Đã duyệt CV',
-            note: 'Nhiệt huyết, sẵn sàng đi công tác tỉnh thường xuyên.',
-          }),
-        },
-      ];
-      for (const c of seedCandidates) {
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO recruitment_candidates (
-            id, code, name, phone, email, position, department, source, experience,
-            expected_salary, applied_date, stage, rating, cv_file, interviewer, notes, extra_json
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          c.id, c.code, c.name, c.phone, c.email, c.position, c.department, c.source,
-          c.experience, c.expected_salary, c.applied_date, c.stage, c.rating, c.cv_file,
-          c.interviewer, c.notes, c.extra_json
-        );
-      }
-    }
-
-    // Seed initial interviews if empty
-    const intvCountRows = await prisma.$queryRawUnsafe(`SELECT COUNT(*) as cnt FROM recruitment_interviews`);
-    if (Number(intvCountRows?.[0]?.cnt || 0) === 0) {
-      const seedInterviews = [
-        {
-          id: 'INT-SJ-001',
-          code: 'PV-2026-001',
-          candidate_id: 'CAND-SJ-001',
-          candidate_name: 'Đặng Quốc Khánh',
-          phone: '0987654321',
-          position: 'Chuyên viên Phát triển Đại lý Khu vực Miền Bắc',
-          department: 'Phòng Kinh doanh',
-          round: 'round_2',
-          interview_date: '28/10/2026',
-          interview_time: '09:30',
-          format: 'Trực tiếp',
-          location: 'Phòng họp tầng 3 - Trụ sở Seajong',
-          interviewer: 'Phạm Quang Việt, Cao Thị Phương',
-          score: 88,
-          result: 'passed',
-          notes: 'Kỹ năng đàm phán đại lý tốt, hiểu rõ chính sách chiết khấu ngành thiết bị vệ sinh.',
-          extra_json: JSON.stringify({
-            candidatePhone: '0987654321',
-            roundLabel: 'Vòng 2: Chuyên môn',
-            interviewers: 'Phạm Quang Việt, Cao Thị Phương',
-            resultLabel: 'Đạt phỏng vấn',
-            hasProbation: true,
-            probationDays: 60,
-            probationSupervisor: 'Phạm Quang Việt',
-            probationStartDate: '01/11/2026',
-          }),
-        },
-        {
-          id: 'INT-SJ-002',
-          code: 'PV-2026-002',
-          candidate_id: 'CAND-SJ-002',
-          candidate_name: 'Vũ Thị Minh Anh',
-          phone: '0912345678',
-          position: 'Kỹ sư Thiết kế 3D Quầy kệ Showroom',
-          department: 'Phòng Kỹ thuật - Thiết kế',
-          round: 'round_2',
-          interview_date: '29/10/2026',
-          interview_time: '14:00',
-          format: 'Trực tiếp',
-          location: 'Phòng Kỹ thuật - Thiết kế',
-          interviewer: 'Nguyên Văn Thành',
-          score: 92,
-          result: 'passed',
-          notes: 'Bố cục quầy kệ sen vòi tối ưu diện tích, đúng chuẩn màu sắc thương hiệu Seajong.',
-          extra_json: JSON.stringify({
-            candidatePhone: '0912345678',
-            roundLabel: 'Vòng 2: Chuyên môn',
-            interviewers: 'Nguyên Văn Thành',
-            resultLabel: 'Đạt phỏng vấn',
-            hasProbation: true,
-            probationDays: 60,
-            probationSupervisor: 'Nguyên Văn Thành',
-            probationStartDate: '01/11/2026',
-          }),
-        },
-      ];
-      for (const iv of seedInterviews) {
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO recruitment_interviews (
-            id, code, candidate_id, candidate_name, phone, position, department, round,
-            interview_date, interview_time, format, location, interviewer, score, result, notes, extra_json
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          iv.id, iv.code, iv.candidate_id, iv.candidate_name, iv.phone, iv.position,
-          iv.department, iv.round, iv.interview_date, iv.interview_time, iv.format,
-          iv.location, iv.interviewer, iv.score, iv.result, iv.notes, iv.extra_json
-        );
-      }
-    }
-
-    // Seed initial training courses if empty
-    const courseCountRows = await prisma.$queryRawUnsafe(`SELECT COUNT(*) as cnt FROM training_courses`);
-    if (Number(courseCountRows?.[0]?.cnt || 0) === 0) {
-      const seedCourses = [
-        {
-          id: 'TRN-SJ-001',
-          code: 'ĐT-2026-001',
-          title: 'Hội nhập Văn hóa & Quy trình Vận hành Seajong EOS',
-          category: 'onboarding',
-          department: 'Toàn công ty',
-          trainer: 'Cao Thị Phương',
-          format: 'internal',
-          location: 'Phòng Đào tạo Tầng 4',
-          start_date: '05/10/2026',
-          end_date: '06/10/2026',
-          duration_hours: 12,
-          budget: 3500000,
-          status: 'completed',
-          progress: 100,
-          enrolled_count: 15,
-          max_capacity: 20,
-          completion_rate: 100,
-          avg_score: 9.1,
-          description: 'Giới thiệu lịch sử phát triển Seajong Việt Nam, nội quy lao động, quy trình phê duyệt trên EOS Master.',
-          materials: 'Sổ tay nhân sự Seajong 2026.pdf',
-          extra_json: JSON.stringify({
-            categoryLabel: 'Hội nhập',
-            targetAudience: 'Nhân viên mới gia nhập Seajong',
-            targetDept: 'Toàn công ty',
-            instructorType: 'internal',
-            instructorName: 'Cao Thị Phương',
-            instructorInfo: 'Trưởng phòng Nhân sự',
-            duration: '02 ngày (12 giờ)',
-            maxParticipants: 20,
-            passedCount: 15,
-            statusLabel: 'Đã hoàn thành',
-            objectives: 'Nắm vững văn hóa doanh nghiệp, nội quy lao động và thao tác phần mềm EOS Master.',
-          }),
-        },
-        {
-          id: 'TRN-SJ-002',
-          code: 'ĐT-2026-002',
-          title: 'Kiến thức Sản phẩm Sen cây Phím đàn & Bồn cầu Thông minh 2026',
-          category: 'job_title',
-          department: 'Phòng Kinh doanh',
-          trainer: 'Phạm Quang Việt',
-          format: 'internal',
-          location: 'Showroom Trung tâm Seajong',
-          start_date: '15/10/2026',
-          end_date: '31/10/2026',
-          duration_hours: 16,
-          budget: 6000000,
-          status: 'in_progress',
-          progress: 75,
-          enrolled_count: 22,
-          max_capacity: 25,
-          completion_rate: 80,
-          avg_score: 8.6,
-          description: 'Đào tạo chuyên sâu tính năng kỹ thuật, ưu điểm cạnh tranh và chính sách bảo hành điện tử Seajong.',
-          materials: 'Catalogue_KyThuat_Seajong_2026.pdf',
-          extra_json: JSON.stringify({
-            categoryLabel: 'Theo chức danh (QL và VP)',
-            targetAudience: 'Chuyên viên Kinh doanh & Tư vấn Showroom',
-            targetDept: 'Phòng Kinh doanh',
-            instructorType: 'internal',
-            instructorName: 'Phạm Quang Việt',
-            instructorInfo: 'Trưởng phòng Kinh doanh',
-            duration: '02 ngày (16 giờ)',
-            maxParticipants: 25,
-            passedCount: 18,
-            statusLabel: 'Đang diễn ra',
-            objectives: 'Tư vấn chuyên sâu cấu tạo lõi đồng, mạ PVD và chính sách chiết khấu đại lý Seajong.',
-          }),
-        },
-        {
-          id: 'TRN-SJ-003',
-          code: 'ĐT-2026-003',
-          title: 'Tiêu chuẩn Thi công Quầy kệ & Nghiệm thu Showroom Đại lý',
-          category: 'installation',
-          department: 'Phòng Kỹ thuật - Thiết kế',
-          trainer: 'Nguyên Văn Thành',
-          format: 'internal',
-          location: 'Xưởng Kỹ thuật Seajong',
-          start_date: '05/11/2026',
-          end_date: '12/11/2026',
-          duration_hours: 20,
-          budget: 8500000,
-          status: 'upcoming',
-          progress: 15,
-          enrolled_count: 12,
-          max_capacity: 15,
-          completion_rate: 0,
-          avg_score: 0,
-          description: 'Chuẩn hóa quy trình 5 bước thi công lắp đặt quầy kệ và trưng bày mẫu tại đại lý.',
-          materials: 'QuyChuan_ThiCong_Showroom_Seajong.pdf',
-          extra_json: JSON.stringify({
-            categoryLabel: 'Lắp dựng và Nghiệm thu',
-            targetAudience: 'Đội Thi công Showroom & Kỹ thuật viên',
-            targetDept: 'Phòng Kỹ thuật - Thiết kế',
-            instructorType: 'internal',
-            instructorName: 'Nguyên Văn Thành',
-            instructorInfo: 'Trưởng phòng Kỹ thuật',
-            duration: '03 ngày (20 giờ)',
-            maxParticipants: 15,
-            passedCount: 0,
-            statusLabel: 'Sắp diễn ra',
-            objectives: 'Chuẩn hóa 5 bước thi công lắp đặt quầy kệ và bàn giao nghiệm thu showroom đại lý.',
-          }),
-        },
-      ];
-      for (const tc of seedCourses) {
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO training_courses (
-            id, code, title, category, department, trainer, format, location, start_date,
-            end_date, duration_hours, budget, status, progress, enrolled_count, max_capacity,
-            completion_rate, avg_score, description, materials, extra_json
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          tc.id, tc.code, tc.title, tc.category, tc.department, tc.trainer, tc.format,
-          tc.location, tc.start_date, tc.end_date, tc.duration_hours, tc.budget, tc.status,
-          tc.progress, tc.enrolled_count, tc.max_capacity, tc.completion_rate, tc.avg_score,
-          tc.description, tc.materials, tc.extra_json
-        );
-      }
+    for (const c of prismaCands || []) {
+      const appDate = c.date ? new Date(c.date).toLocaleDateString('vi-VN') : '';
+      const code = `UV-${String(c.id).slice(-6).toUpperCase()}`;
+      const stLower = String(c.status || '').toLowerCase();
+      const stage = stLower.includes('hired')
+        ? 'hired'
+        : stLower.includes('interview')
+        ? 'interview'
+        : stLower.includes('reject')
+        ? 'rejected'
+        : 'screening';
+      const statusLabel =
+        stage === 'hired'
+          ? 'Trúng tuyển'
+          : stage === 'interview'
+          ? 'Phỏng vấn'
+          : stage === 'rejected'
+          ? 'Từ chối'
+          : 'Sơ loại hồ sơ';
+      const extra = {
+        fullName: c.name || '',
+        gender: c.gender || 'Nam',
+        permanentAddress: c.address || '',
+        appliedPosition: c.position || '',
+        education: c.education || 'Đại học',
+        status: stage,
+        statusLabel,
+        note: c.summary || '',
+      };
+      await prisma.$executeRawUnsafe(
+        `INSERT OR IGNORE INTO recruitment_candidates (
+          id, code, name, phone, email, position, department, source, experience,
+          expected_salary, applied_date, stage, rating, cv_file, interviewer, notes, extra_json
+        ) VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, 4, ?, ?, ?, ?)`,
+        c.id,
+        code,
+        c.name || '',
+        c.phone || '',
+        c.email || '',
+        c.position || '',
+        c.source || 'Trực tiếp',
+        c.experience || c.expYears || '',
+        c.desiredSalary || 'Thỏa thuận',
+        appDate,
+        stage,
+        c.cvUrl || '',
+        c.interviewer || '',
+        c.summary || '',
+        JSON.stringify(extra)
+      );
     }
 
     hrRecruitmentTablesInitialized = true;

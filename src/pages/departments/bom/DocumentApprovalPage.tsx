@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { StepPage } from '../../../components/common/StepPage';
-import { DocumentApprovalView, cleanDocumentList, type ApprovalDocument } from './DocumentApprovalView';
+import { DocumentApprovalView, type ApprovalDocument } from './DocumentApprovalView';
 import type { ModernStepItem } from '../../../types';
 import { HourglassSplit, CheckCircleFill, XCircleFill } from 'react-bootstrap-icons';
 
@@ -9,131 +9,85 @@ export interface DocumentApprovalPageProps {
   onShowToast?: (type: 'success' | 'error' | 'warning' | 'info', title: string, message: string) => void;
 }
 
-const DEFAULT_SEAJONG_APPROVALS: ApprovalDocument[] = [
-  {
-    id: 'APR-2026-001',
-    code: 'TT-MKT-1026-01',
-    title: 'Tờ trình phê duyệt ngân sách chiến dịch Meta & TikTok tháng 11',
-    docType: 'proposal',
-    docTypeName: 'Tờ trình kế hoạch',
-    department: 'Phòng Marketing',
-    submitter: 'Nguyễn Văn Đạt',
-    submitterRole: 'Trưởng phòng Marketing',
-    submitDate: '22/10/2026',
-    value: 85000000,
-    valueLabel: '85.000.000 đ',
-    priority: 'urgent',
-    status: 'pending',
-    summary: 'Đề xuất phân bổ ngân sách 85 triệu đồng triển khai quảng bá bộ sưu tập sen cây phím đàn hiển thị số trên nền tảng Meta và TikTok Ads chuẩn bị cho mùa mua sắm cao điểm cuối năm.',
-    content: 'Kính gửi Ban Giám đốc,\n\nPhòng Marketing xin trình duyệt kế hoạch chạy truyền thông số cho dòng sen tắm hiển thị số Seajong. Dự kiến tiếp cận 500.000 lượt khách hàng tiềm năng, chuyển đổi khoảng 350 khách hàng liên hệ đại lý.',
-    attachments: [
-      { name: 'Ke_hoach_ngan_sach_MKT_T11.pdf', size: '1.4 MB', type: 'application/pdf', url: '#' },
-      { name: 'Bang_du_toan_chi_phi_Meta_TikTok.xlsx', size: '420 KB', type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', url: '#' }
-    ]
-  },
-  {
-    id: 'APR-2026-002',
-    code: 'DX-TU-1026-02',
-    title: 'Đề xuất tạm ứng chi phí in ấn Catalogue Sen vòi Seajong 2026',
-    docType: 'advance',
-    docTypeName: 'Đề xuất tạm ứng',
-    department: 'Phòng Marketing',
-    submitter: 'Trần Thị Mai',
-    submitterRole: 'Chuyên viên Thiết kế & Thương hiệu',
-    submitDate: '23/10/2026',
-    value: 36000000,
-    valueLabel: '36.000.000 đ',
-    priority: 'high',
-    status: 'pending',
-    summary: 'Tạm ứng đợt 1 (50% giá trị hợp đồng in ấn 2.000 cuốn Catalogue thiết bị vệ sinh Seajong phiên bản cao cấp phục vụ hệ thống 120 đại lý).',
-    content: 'Kính gửi Tổng Giám đốc,\n\nĐể đảm bảo tiến độ bàn giao Catalogue cho sự kiện Vietbuild và cấp phát đại lý trước ngày 05/11/2026, kính trình Ban Giám đốc duyệt tạm ứng đợt 1 cho Nhà in Hồng Hà.',
-    attachments: [
-      { name: 'Hop_dong_in_an_Catalogue_Seajong.pdf', size: '2.1 MB', type: 'application/pdf', url: '#' }
-    ]
-  },
-  {
-    id: 'APR-2026-003',
-    code: 'TT-KD-1026-05',
-    title: 'Tờ trình cấp hạn mức công nợ 500 triệu cho Đại lý Thành Đạt',
-    docType: 'proposal',
-    docTypeName: 'Tờ trình kinh doanh',
-    department: 'Phòng Kinh doanh',
-    submitter: 'Phạm Hùng Sơn',
-    submitterRole: 'Giám đốc Kinh doanh Miền Bắc',
-    submitDate: '19/10/2026',
-    value: 500000000,
-    valueLabel: '500.000.000 đ',
-    priority: 'urgent',
-    status: 'pending',
-    summary: 'Đại lý Thành Đạt (Hải Dương) xin nâng hạn mức công nợ từ 300 triệu lên 500 triệu đồng để nhập lô hàng dự án 40 bộ sen cây phím đàn cung cấp cho Khách sạn 4 sao Nam Cường.',
-    content: 'Đại lý Thành Đạt là đối tác chiến lược cấp 1, lịch sử thanh toán tốt trong 18 tháng qua (hệ số tín nhiệm AAA, chưa từng có nợ quá hạn). Kính trình Ban Giám đốc phê duyệt điều chỉnh hạn mức bảo lãnh.',
-    attachments: [
-      { name: 'Ho_so_nang_luc_Dai_ly_Thanh_Dat.pdf', size: '3.5 MB', type: 'application/pdf', url: '#' },
-      { name: 'Hop_dong_cung_cap_ks_Nam_Cuong.pdf', size: '1.8 MB', type: 'application/pdf', url: '#' }
-    ]
-  },
-  {
-    id: 'APR-2026-004',
-    code: 'HD-DA-1026-04',
-    title: 'Phê duyệt hợp đồng tài trợ và bảng hiệu trưng bày tại Showroom An Gia Phát',
-    docType: 'contract',
-    docTypeName: 'Hợp đồng kinh tế',
-    department: 'Phòng Marketing',
-    submitter: 'Nguyễn Văn Đạt',
-    submitterRole: 'Trưởng phòng Marketing',
-    submitDate: '20/10/2026',
-    value: 45000000,
-    valueLabel: '45.000.000 đ',
-    priority: 'high',
-    status: 'approved',
-    summary: 'Hợp đồng liên kết trưng bày thương hiệu và kệ mẫu sen tắm cao cấp tại Trung tâm thiết bị nội thất An Gia Phát (Hà Đông, Hà Nội).',
-    content: 'Đã được Tổng Giám đốc Lê Công Vụ phê duyệt ngày 21/10/2026. Chuyển phòng Kế toán thực hiện giải ngân theo điều khoản hợp đồng.',
-    attachments: [
-      { name: 'Hop_dong_tai_tro_Showroom_AnGiaPhat_da_ky.pdf', size: '2.8 MB', type: 'application/pdf', url: '#' }
-    ]
-  },
-  {
-    id: 'APR-2026-005',
-    code: 'YC-NS-1026-03',
-    title: 'Phiếu yêu cầu cấp bổ sung 01 nhân sự Content Creator & Quay dựng Video',
-    docType: 'proposal',
-    docTypeName: 'Đề xuất nhân sự',
-    department: 'Phòng Marketing',
-    submitter: 'Trần Thị Mai',
-    submitterRole: 'Chuyên viên Thương hiệu',
-    submitDate: '25/10/2026',
-    value: 0,
-    valueLabel: 'Định biên nhân sự',
-    priority: 'normal',
-    status: 'pending',
-    summary: 'Yêu cầu tuyển dụng 01 nhân sự chuyên trách sáng tạo nội dung video ngắn (Reels, TikTok, Shorts) phục vụ quảng bá tính năng sản phẩm sen vòi.',
-    content: 'Khối lượng công việc sản xuất video thực tế tăng cao. Đề nghị Ban Giám đốc cho phép bổ sung định biên 01 nhân sự trong tháng 11/2026.',
-    attachments: [
-      { name: 'Mo_ta_cong_viec_JD_Content_Creator.pdf', size: '650 KB', type: 'application/pdf', url: '#' }
-    ]
+const mapDbApprovalToDocument = (row: any, idx: number): ApprovalDocument => {
+  let meta: any = {};
+  try {
+    meta = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata || {};
+  } catch {}
+
+  const entityType = String(row.entityType || '').toLowerCase();
+  let docType: ApprovalDocument['docType'] = 'proposal';
+  let docTypeName = 'Tờ trình phê duyệt';
+  if (entityType.includes('purchase') || entityType.includes('contract')) {
+    docType = 'contract';
+    docTypeName = 'Đơn mua hàng / Hợp đồng';
+  } else if (entityType.includes('expense') || entityType.includes('advance') || meta?.type?.includes('advance')) {
+    docType = 'advance';
+    docTypeName = meta?.loaiText || 'Đề xuất tạm ứng / Chi phí';
+  } else if (entityType.includes('personal')) {
+    docType = 'proposal';
+    docTypeName = meta?.loaiText || 'Đề xuất nhân sự';
+  } else if (entityType.includes('production')) {
+    docType = 'proposal';
+    docTypeName = 'Lệnh sản xuất';
   }
-];
+
+  const rawVal = Number(meta?.totalAmount || meta?.soTien || meta?.details?.amount || meta?.amount || 0);
+  const valueLabel = rawVal > 0 ? `${rawVal.toLocaleString('vi-VN')} đ` : (meta?.loaiText || 'Hồ sơ nghiệp vụ');
+  const createdDate = row.createdAt ? new Date(row.createdAt).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN');
+  const rawStatus = String(row.status || 'pending').toLowerCase();
+  const status: ApprovalDocument['status'] =
+    rawStatus === 'approved' || rawStatus === 'completed'
+      ? 'approved'
+      : rawStatus === 'rejected'
+      ? 'rejected'
+      : 'pending';
+  const rawPriority = String(row.priority || 'normal').toLowerCase();
+  const priority: ApprovalDocument['priority'] =
+    rawPriority === 'urgent' ? 'urgent' : rawPriority === 'high' ? 'high' : 'normal';
+
+  const reasonText =
+    meta?.reason ||
+    meta?.details?.reason ||
+    row.note ||
+    row.rejectedReason ||
+    row.entityTitle ||
+    'Hồ sơ trình Ban Giám đốc phê duyệt từ hệ thống CSDL Seajong.';
+
+  return {
+    id: String(row.id || `APR-${idx + 1}`),
+    code: String(row.entityCode || meta?.personalRequestId || `TT-${String(idx + 1).padStart(4, '0')}`),
+    title: String(row.entityTitle || 'Tờ trình phê duyệt hồ sơ'),
+    docType,
+    docTypeName,
+    department: String(row.department || meta?.departmentName || (entityType.includes('purchase') ? 'Phòng Mua hàng' : entityType.includes('expense') ? 'Phòng Kế toán' : 'Phòng ban Seajong')),
+    submitter: String(row.requestedByName || meta?.employeeName || 'Cán bộ Seajong'),
+    submitterRole: String(meta?.position || 'Nhân sự trình duyệt'),
+    submitDate: createdDate,
+    value: rawVal,
+    valueLabel,
+    priority,
+    status,
+    summary: String(reasonText),
+    content: String(reasonText),
+    attachments: [],
+  };
+};
 
 export const DocumentApprovalPage: React.FC<DocumentApprovalPageProps> = ({ onShowToast }) => {
   const [currentStep, setCurrentStep] = useState<number>(1);
-  const [approvalDocuments, setApprovalDocuments] = useState<ApprovalDocument[]>(() => {
-    try {
-      const saved = localStorage.getItem('decodoor_approval_documents');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return cleanDocumentList(parsed);
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to parse approval documents', e);
-    }
-    // Ghi nhận dữ liệu mẫu Seajong vào storage nếu chưa có
-    try {
-      localStorage.setItem('decodoor_approval_documents', JSON.stringify(DEFAULT_SEAJONG_APPROVALS));
-    } catch (_) {}
-    return DEFAULT_SEAJONG_APPROVALS;
-  });
+  const [approvalDocuments, setApprovalDocuments] = useState<ApprovalDocument[]>([]);
+
+  useEffect(() => {
+    fetch('/api/approval-requests')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        const rows = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+        const mapped = rows.map((r: any, idx: number) => mapDbApprovalToDocument(r, idx));
+        setApprovalDocuments(mapped);
+      })
+      .catch((err) => console.error('Lỗi tải danh sách phê duyệt từ DB:', err));
+  }, []);
 
   const approvalCounts = useMemo(() => {
     let pending = 0;

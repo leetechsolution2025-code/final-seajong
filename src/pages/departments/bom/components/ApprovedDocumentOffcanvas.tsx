@@ -232,7 +232,7 @@ export const ApprovedDocumentOffcanvas: React.FC<ApprovedDocumentOffcanvasProps>
                 paddingTop: '6px',
               }}
             >
-              <span>Nguồn: Dự án DecoDoor</span>
+              <span>Nguồn: Hệ thống Seajong</span>
               <span style={{ color: '#059669', fontWeight: 600 }}>Đã duyệt giải ngân</span>
             </div>
           </div>

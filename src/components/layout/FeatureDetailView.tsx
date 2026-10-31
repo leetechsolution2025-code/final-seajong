@@ -1,8 +1,12 @@
-import React, { useState } from 'react';
-import { useDepartment } from '../../context/DepartmentContext';
-import { PageHeader } from './PageHeader';
-import { DynamicTicker } from './DynamicTicker';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { StandardPage } from './StandardPage';
+import { TableToolbar } from '../common/TableToolbar';
+import { FullWidthTable } from '../common/FullWidthTable';
 import { Pagination } from '../common/Pagination';
+import { Offcanvas } from '../common/Offcanvas';
+import { Button } from '../common/Button';
+import { Input } from '../common/Input';
+import { Select } from '../common/Select';
 import { EmployeesPage } from '../../pages/hr/EmployeesPage';
 import { DocumentApprovalPage } from '../../pages/departments/bom/DocumentApprovalPage';
 
@@ -20,6 +24,16 @@ interface FeatureMeta {
   badge: string;
 }
 
+interface FeatureRowItem {
+  id: string;
+  code: string;
+  title: string;
+  dept: string;
+  deadline: string;
+  priority: string;
+  status: string;
+}
+
 export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, deptCode }) => {
   if (menuKey === 'employees') {
     return <EmployeesPage />;
@@ -29,18 +43,16 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
     return <DocumentApprovalPage />;
   }
 
-  const { setActiveMenuKey } = useDepartment();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'completed'>('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
-
-  const showToast = (msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(null), 3000);
-  };
+  const [newTitle, setNewTitle] = useState('');
+  const [newPriority, setNewPriority] = useState('Bình thường');
+  const [newNotes, setNewNotes] = useState('');
+  const [dbRows, setDbRows] = useState<FeatureRowItem[]>([]);
+  const [, setLoading] = useState(false);
 
   // Tra cứu metadata theo menuKey
   const getFeatureMeta = (key: string): FeatureMeta => {
@@ -580,374 +592,320 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
 
   const meta = getFeatureMeta(menuKey);
 
-  // Mẫu dữ liệu bảng hiển thị chân thực theo nghiệp vụ
-  const getTableRows = () => {
-    if (menuKey === 'my_tasks' || menuKey === 'tasks') {
-      return [
-        { code: 'CV-101', title: 'Kiểm tra độ dày lớp mạ crom lô sen cây SJ-8800', dept: 'Phòng QA/QC', deadline: '19/10/2026', priority: 'Gấp', status: 'Đang làm' },
-        { code: 'CV-102', title: 'Gửi bảng chiết khấu đại lý mới khu vực Đông Triều', dept: 'Kinh doanh', deadline: '20/10/2026', priority: 'Cao', status: 'Chờ duyệt' },
-        { code: 'CV-103', title: 'Đối soát công nợ tháng 9 với đại lý Hùng Cường', dept: 'Kế toán', deadline: '21/10/2026', priority: 'Bình thường', status: 'Hoàn thành' },
-        { code: 'CV-104', title: 'Lập lịch giao 150 bộ vòi lavabo cho công trình Chung cư Eco', dept: 'Kho vận', deadline: '22/10/2026', priority: 'Bình thường', status: 'Đang làm' },
-        { code: 'CV-105', title: 'Đánh giá định kỳ 60 ngày thử việc nhân viên mới', dept: 'Nhân sự', deadline: '24/10/2026', priority: 'Trung bình', status: 'Chưa làm' },
-        { code: 'CV-106', title: 'Bảo dưỡng hệ thống lọc khí xưởng đúc đồng số 1', dept: 'Kỹ thuật', deadline: '25/10/2026', priority: 'Cao', status: 'Chưa làm' },
-      ];
-    }
+  const loadRealData = useCallback(async () => {
+    setLoading(true);
+    try {
+      if (menuKey === 'categories') {
+        const res = await fetch('/api/board/categories');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            setDbRows(
+              data.map((c: any, idx: number) => ({
+                id: String(c.id || idx),
+                code: c.code || `DM-${idx + 1}`,
+                title: c.name || c.title || 'Danh mục hệ thống',
+                dept: c.type || 'Hệ thống',
+                deadline: c.updatedAt ? new Date(c.updatedAt).toLocaleDateString('vi-VN') : 'Hệ thống',
+                priority: 'Cốt lõi',
+                status: c.status === 'hidden' ? 'Tạm ẩn' : 'Hoạt động',
+              }))
+            );
+            return;
+          }
+        }
+      }
 
-    if (menuKey === 'categories') {
-      return [
-        { code: 'DM-SP', title: 'Danh mục nhóm sản phẩm (Sen cây, Vòi chậu, Phụ kiện)', dept: 'Sản phẩm', deadline: 'Hệ thống', priority: 'Cốt lõi', status: 'Hoạt động' },
-        { code: 'DM-VT', title: 'Danh mục vật tư tiêu hao xưởng đúc và máy mạ', dept: 'Sản xuất', deadline: 'Hệ thống', priority: 'Cốt lõi', status: 'Hoạt động' },
-        { code: 'DM-KH', title: 'Phân loại cấp bậc đại lý (Đại lý Vàng, Bạc, Đồng)', dept: 'Kinh doanh', deadline: 'Hệ thống', priority: 'Cốt lõi', status: 'Hoạt động' },
-        { code: 'DM-NCC', title: 'Danh mục nhóm nhà cung cấp vật liệu và bao bì', dept: 'Mua hàng', deadline: 'Hệ thống', priority: 'Tiêu chuẩn', status: 'Hoạt động' },
-        { code: 'DM-TT', title: 'Trạng thái vòng đời hồ sơ kỹ thuật & tài liệu', dept: 'Hành chính', deadline: 'Hệ thống', priority: 'Tiêu chuẩn', status: 'Hoạt động' },
-      ];
-    }
+      if (menuKey === 'users') {
+        const res = await fetch('/api/users');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            setDbRows(
+              data.map((u: any, idx: number) => ({
+                id: String(u.id || idx),
+                code: u.code || `TK-${String(idx + 1).padStart(2, '0')}`,
+                title: `${u.name || 'Nhân sự'} (${u.email || ''}) - ${u.position || u.role || 'Nhân viên'}`,
+                dept: u.department || 'Seajong',
+                deadline: 'Toàn hệ thống',
+                priority: u.role || 'Staff',
+                status: u.status === 'inactive' ? 'Tạm khóa' : 'Hoạt động',
+              }))
+            );
+            return;
+          }
+        }
+      }
 
-    if (menuKey === 'users') {
-      return [
-        { code: 'TK-01', title: 'Lê Công Vụ (lecongvu@seajong.vn) - Tổng Giám đốc', dept: 'Ban Giám đốc', deadline: 'Toàn quyền', priority: 'SuperAdmin', status: 'Hoạt động' },
-        { code: 'TK-02', title: 'Đoàn Thị Yến (doanthiyen@seajong.vn) - Phó TGĐ Sản xuất', dept: 'Ban Giám đốc', deadline: 'Quản trị', priority: 'Admin', status: 'Hoạt động' },
-        { code: 'TK-03', title: 'Trần Thị Linh (tranthilinh@seajong.vn) - Kế toán trưởng', dept: 'Tài chính', deadline: 'Chuyên môn', priority: 'Manager', status: 'Hoạt động' },
-        { code: 'TK-04', title: 'Bùi Thế Hiệp (buithehiep@seajong.vn) - Trưởng phòng Kinh doanh', dept: 'Kinh doanh', deadline: 'Chuyên môn', priority: 'Manager', status: 'Hoạt động' },
-        { code: 'TK-05', title: 'Lê Hồng Thu (lehongthu@seajong.vn) - Trưởng phòng Nhân sự', dept: 'Nhân sự', deadline: 'Chuyên môn', priority: 'Manager', status: 'Hoạt động' },
-      ];
-    }
+      // Mặc định: Tải dữ liệu thực tế từ bảng Công việc (/api/tasks) và Tờ trình phê duyệt (/api/approval-requests)
+      const [tasksRes, reqRes] = await Promise.all([
+        fetch('/api/tasks'),
+        fetch('/api/approval-requests'),
+      ]);
+      const tasksData = tasksRes.ok ? await tasksRes.json() : [];
+      const reqData = reqRes.ok ? await reqRes.json() : [];
 
-    if (menuKey === 'labor-policy') {
-      return [
-        { code: 'NQ-01', title: 'Chương 1: Quy định thời giờ làm việc, nghỉ ngơi & chấm công', dept: 'Toàn công ty', deadline: 'Ban hành 2026', priority: 'Bắt buộc', status: 'Hiệu lực' },
-        { code: 'NQ-02', title: 'Chương 2: Tiêu chuẩn an toàn lao động & BHLĐ xưởng đúc', dept: 'Khối Sản xuất', deadline: 'Ban hành 2026', priority: 'Bắt buộc', status: 'Hiệu lực' },
-        { code: 'NQ-03', title: 'Chương 3: Bảo mật công nghệ đúc & bí mật kinh doanh Seajong', dept: 'Toàn công ty', deadline: 'Ban hành 2026', priority: 'Bắt buộc', status: 'Hiệu lực' },
-        { code: 'NQ-04', title: 'Chương 4: Quy chế khen thưởng thành tích & chế tài xử lý kỷ luật', dept: 'Nhân sự', deadline: 'Ban hành 2026', priority: 'Bắt buộc', status: 'Hiệu lực' },
-      ];
-    }
+      const taskList = Array.isArray(tasksData)
+        ? tasksData
+        : Array.isArray(tasksData?.tasks)
+        ? tasksData.tasks
+        : [];
+      const reqList = Array.isArray(reqData)
+        ? reqData
+        : Array.isArray(reqData?.requests)
+        ? reqData.requests
+        : [];
 
-    if (menuKey === 'approvals' || menuKey === 'requests_approvals' || menuKey === 'hr_requests_approvals' || menuKey === 'recruitment_req') {
-      return [
-        { code: 'YC-2026-01', title: 'Tờ trình phê duyệt ngân sách chiến dịch Meta & TikTok tháng 11', dept: 'Phòng Marketing', deadline: '22/10/2026', priority: 'Gấp', status: 'Chờ duyệt' },
-        { code: 'YC-2026-02', title: 'Đề xuất tạm ứng chi phí in ấn Catalogue Sen vòi Seajong 2026', dept: 'Phòng Marketing', deadline: '23/10/2026', priority: 'Cao', status: 'Chờ duyệt' },
-        { code: 'YC-2026-03', title: 'Phiếu yêu cầu cấp bổ sung 01 nhân sự Content Creator & Quay dựng Video', dept: 'Phòng Marketing', deadline: '25/10/2026', priority: 'Bình thường', status: 'Đang xử lý' },
-        { code: 'YC-2026-04', title: 'Phê duyệt hợp đồng tài trợ và bảng hiệu trưng bày tại Showroom An Gia Phát', dept: 'Phòng Marketing', deadline: '20/10/2026', priority: 'Cao', status: 'Hoàn thành' },
-        { code: 'YC-2026-05', title: 'Tờ trình cấp hạn mức công nợ 500 triệu cho Đại lý Thành Đạt', dept: 'Phòng Kinh doanh', deadline: '19/10/2026', priority: 'Gấp', status: 'Chờ duyệt' },
+      const combined: FeatureRowItem[] = [
+        ...taskList.map((t: any, idx: number) => ({
+          id: String(t.id || `task-${idx}`),
+          code: t.code || `CV-${String(idx + 1).padStart(3, '0')}`,
+          title: t.title || t.name || 'Nhiệm vụ công việc',
+          dept: t.departmentName || t.department || `Khối ${deptCode.toUpperCase()}`,
+          deadline: t.dueDate || t.deadline ? new Date(t.dueDate || t.deadline).toLocaleDateString('vi-VN') : 'Tháng 10/2026',
+          priority: t.priority === 'urgent' || t.priority === 'high' ? 'Cao' : 'Bình thường',
+          status:
+            t.status === 'done' || t.status === 'completed'
+              ? 'Hoàn thành'
+              : t.status === 'in_progress'
+              ? 'Đang xử lý'
+              : 'Chờ xử lý',
+        })),
+        ...reqList.map((r: any, idx: number) => ({
+          id: String(r.id || `req-${idx}`),
+          code: r.code || `TT-${String(idx + 1).padStart(3, '0')}`,
+          title: r.title || 'Hồ sơ đề xuất nghiệp vụ',
+          dept: r.department || `Khối ${deptCode.toUpperCase()}`,
+          deadline: r.createdAt ? new Date(r.createdAt).toLocaleDateString('vi-VN') : 'Tháng 10/2026',
+          priority: r.priority === 'urgent' ? 'Gấp' : 'Tiêu chuẩn',
+          status:
+            r.status === 'approved'
+              ? 'Hoàn thành'
+              : r.status === 'rejected'
+              ? 'Từ chối'
+              : 'Đang xử lý',
+        })),
       ];
-    }
 
-    if (menuKey === 'my_attendance') {
-      return [
-        { code: 'CC-19/10', title: 'Chấm công ngày 19/10/2026: Vào 07:54 - Ra 17:05 (8.0 giờ)', dept: 'Vân tay Cổng A', deadline: '19/10/2026', priority: 'Đúng giờ', status: 'Hợp lệ' },
-        { code: 'CC-18/10', title: 'Chấm công ngày 18/10/2026: Vào 07:58 - Ra 17:02 (8.0 giờ)', dept: 'Vân tay Cổng A', deadline: '18/10/2026', priority: 'Đúng giờ', status: 'Hợp lệ' },
-        { code: 'CC-17/10', title: 'Chấm công ngày 17/10/2026: Vào 07:50 - Ra 18:30 (9.5 giờ - Tăng ca 1.5h)', dept: 'Vân tay Cổng A', deadline: '17/10/2026', priority: 'Tăng ca', status: 'Đã xác nhận' },
-        { code: 'CC-16/10', title: 'Chấm công ngày 16/10/2026: Vào 07:56 - Ra 17:00 (8.0 giờ)', dept: 'Vân tay Cổng A', deadline: '16/10/2026', priority: 'Đúng giờ', status: 'Hợp lệ' },
-      ];
+      setDbRows(combined);
+    } catch (err) {
+      console.error('Lỗi tải dữ liệu nghiệp vụ từ DB:', err);
+    } finally {
+      setLoading(false);
     }
+  }, [menuKey, deptCode]);
 
-    if (menuKey === 'my_requests') {
-      return [
-        { code: 'YC-2026-11', title: 'Đơn xin nghỉ phép năm ngày 28/10/2026 (Lý do gia đình)', dept: 'Phòng Nhân sự', deadline: '19/10/2026', priority: 'Cá nhân', status: 'Đã duyệt' },
-        { code: 'YC-2026-09', title: 'Đề xuất cấp mới bộ quần áo bảo hộ lao động size L', dept: 'Hành chính', deadline: '15/10/2026', priority: 'Dụng cụ', status: 'Đã cấp' },
-        { code: 'YC-2026-08', title: 'Giấy đi công tác kiểm tra đại lý Nam Định 2 ngày', dept: 'Kinh doanh', deadline: '10/10/2026', priority: 'Công tác', status: 'Đã thanh toán' },
-      ];
-    }
+  useEffect(() => {
+    loadRealData();
+  }, [loadRealData]);
 
-    if (menuKey === 'documents' || menuKey === 'doc_library') {
-      return [
-        { code: 'TL-ISO', title: 'Tiêu chuẩn chất lượng xuất xưởng sen vòi ISO 9001:2015', dept: 'Phòng QA/QC', deadline: 'Phiên bản 3.2', priority: 'Tài liệu nội bộ', status: 'Lưu hành' },
-        { code: 'TL-CAT', title: 'Catalogue sản phẩm sen vòi Seajong cao cấp năm 2026', dept: 'Marketing', deadline: 'PDF 48 trang', priority: 'Công khai', status: 'Lưu hành' },
-        { code: 'TL-SOP', title: 'Quy trình vận hành máy đúc áp lực cao và an toàn lò nấu', dept: 'Sản xuất', deadline: 'SOP-SX-01', priority: 'Nghiêm ngặt', status: 'Lưu hành' },
-        { code: 'TL-PL', title: 'Giấy chứng nhận đăng ký nhãn hiệu độc quyền Seajong Korea', dept: 'Pháp chế', deadline: 'Bản gốc', priority: 'Pháp lý', status: 'Bảo mật' },
-      ];
-    }
+  const filteredRows = useMemo(() => {
+    return dbRows.filter((r) => {
+      const matchSearch =
+        !searchTerm.trim() ||
+        r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.dept.toLowerCase().includes(searchTerm.toLowerCase());
+      if (!matchSearch) return false;
+      if (filterTab === 'pending') {
+        return !r.status.includes('Hoàn thành') && !r.status.includes('Hoạt động');
+      }
+      if (filterTab === 'completed') {
+        return r.status.includes('Hoàn thành') || r.status.includes('Hoạt động');
+      }
+      return true;
+    });
+  }, [dbRows, searchTerm, filterTab]);
 
-    // Default template row
-    return [
-      { code: `${deptCode.toUpperCase()}-01`, title: `Hồ sơ triển khai nghiệp vụ số 01 - ${meta.title}`, dept: `Khối ${deptCode.toUpperCase()}`, deadline: '19/10/2026', priority: 'Ưu tiên', status: 'Đang xử lý' },
-      { code: `${deptCode.toUpperCase()}-02`, title: `Kế hoạch kiểm tra đối soát quy trình - ${meta.title}`, dept: `Khối ${deptCode.toUpperCase()}`, deadline: '20/10/2026', priority: 'Định kỳ', status: 'Đã lập' },
-      { code: `${deptCode.toUpperCase()}-03`, title: `Báo cáo tổng hợp số liệu thực thi - ${meta.title}`, dept: `Khối ${deptCode.toUpperCase()}`, deadline: '22/10/2026', priority: 'Quan trọng', status: 'Hoàn thành' },
-    ];
+  const handleSaveNewItem = async () => {
+    if (!newTitle.trim()) return;
+    const created: FeatureRowItem = {
+      id: `item-${Date.now()}`,
+      code: `${deptCode.toUpperCase()}-${String(dbRows.length + 1).padStart(3, '0')}`,
+      title: newTitle.trim(),
+      dept: `Khối ${deptCode.toUpperCase()}`,
+      deadline: new Date().toLocaleDateString('vi-VN'),
+      priority: newPriority,
+      status: 'Đang xử lý',
+    };
+    setDbRows((prev) => [created, ...prev]);
+    setNewTitle('');
+    setNewNotes('');
+    setShowAddModal(false);
   };
 
-  const rows = getTableRows();
-  const filteredRows = rows.filter((r) =>
-    r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.code.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   return (
-    <div className="flex flex-col min-h-full bg-slate-50/60 animate-fade-in text-slate-800">
-      {/* ── PageHeader với nút "Quay về" mượt mà ── */}
-      <PageHeader
-        title={meta.title}
-        description={meta.desc}
-        icon={meta.icon}
-        color={meta.color}
-      />
-
-      {/* ── Dynamic Ticker ── */}
-      <DynamicTicker context={menuKey} pageTitle={meta.title} />
-
-      {/* ── Toast thông báo tương tác ── */}
-      {toastMsg && (
-        <div className="fixed top-20 right-6 z-50 bg-slate-900 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg border border-slate-700 flex items-center gap-2 animate-bounce">
-          <i className="bi bi-check-circle-fill text-emerald-400" />
-          <span>{toastMsg}</span>
-        </div>
-      )}
-
-      {/* ── Main Content Area ── */}
-      <div className="p-4 sm:p-5 lg:p-6 space-y-5">
-        
-        {/* Top Control Bar: Search + Filter Tabs + Action Buttons */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
-          
-          {/* Search box */}
-          <div className="relative w-full sm:w-80">
-            <i className="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
-            <input
-              type="text"
-              placeholder="Tìm kiếm mã, tên hồ sơ, người phụ trách..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
+    <StandardPage
+      title={meta.title}
+      badge={meta.badge}
+      description={meta.desc}
+      icon={meta.icon}
+      color={meta.color}
+      tickerContext={menuKey}
+    >
+      <div className="flex flex-col h-full flex-1 overflow-hidden">
+        <TableToolbar
+          searchValue={searchTerm}
+          onSearchChange={(val) => {
+            setSearchTerm(val);
+            setPage(1);
+          }}
+          searchPlaceholder="Tìm kiếm mã, tên hồ sơ, bộ phận..."
+          filters={[
+            {
+              id: 'feature-status-filter',
+              value: filterTab,
+              onChange: (val) => {
+                setFilterTab(val as any);
                 setPage(1);
-              }}
-              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition-colors"
-            />
-          </div>
-
-          {/* Quick Filter Tabs */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl w-full sm:w-auto justify-center">
-            <button
-              type="button"
-              onClick={() => {
-                setFilterTab('all');
-                setPage(1);
-              }}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all border-0 cursor-pointer ${
-                filterTab === 'all' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800 bg-transparent'
-              }`}
-            >
-              Tất cả ({rows.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setFilterTab('pending');
-                setPage(1);
-              }}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all border-0 cursor-pointer ${
-                filterTab === 'pending' ? 'bg-white text-blue-600 shadow-2xs' : 'text-slate-500 hover:text-slate-800 bg-transparent'
-              }`}
-            >
-              Đang xử lý
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setFilterTab('completed');
-                setPage(1);
-              }}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all border-0 cursor-pointer ${
-                filterTab === 'completed' ? 'bg-white text-emerald-600 shadow-2xs' : 'text-slate-500 hover:text-slate-800 bg-transparent'
-              }`}
-            >
-              Hoàn thành
-            </button>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-            <button
-              type="button"
-              onClick={() => showToast('Đang xuất tệp Excel báo cáo nghiệp vụ')}
-              className="px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-            >
-              <i className="bi bi-file-earmark-excel text-emerald-600 text-sm" />
-              <span>Xuất Excel</span>
-            </button>
-            <button
-              type="button"
+              },
+              minWidth: '170px',
+              options: [
+                { label: `Tất cả (${dbRows.length})`, value: 'all' },
+                { label: 'Đang xử lý', value: 'pending' },
+                { label: 'Hoàn thành', value: 'completed' },
+              ],
+            },
+          ]}
+          onRefresh={loadRealData}
+          rightActions={
+            <Button
+              variant="primary"
+              size="sm"
               onClick={() => setShowAddModal(true)}
-              className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+              leftIcon={<i className="bi bi-plus-lg" />}
             >
-              <i className="bi bi-plus-lg text-sm" />
-              <span>Thêm mới</span>
-            </button>
-          </div>
-        </div>
+              Thêm mới
+            </Button>
+          }
+        />
 
-        {/* ── Table Card ── */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
-          <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-blue-600"></span>
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-700 font-sans">
-                {meta.groupName} · DANH SÁCH DỮ LIỆU THỰC THI
-              </span>
-            </div>
-            <span className="text-xs text-slate-400">
-              Hiển thị {filteredRows.length} bản ghi phù hợp
-            </span>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 text-slate-500 uppercase tracking-wider font-semibold bg-slate-50/30">
-                  <th className="py-3 px-4 w-28">Mã số</th>
-                  <th className="py-3 px-4">Tên công việc / Hồ sơ nghiệp vụ</th>
-                  <th className="py-3 px-4 w-40">Bộ phận</th>
-                  <th className="py-3 px-4 w-32">Thời hạn / Ngày</th>
-                  <th className="py-3 px-4 w-28">Mức độ</th>
-                  <th className="py-3 px-4 w-28 text-center">Trạng thái</th>
-                  <th className="py-3 px-4 w-24 text-right">Thao tác</th>
+        <FullWidthTable>
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 text-slate-500 uppercase tracking-wider font-semibold bg-slate-50/60">
+                <th className="py-3 px-4 w-28">Mã số</th>
+                <th className="py-3 px-4">Tên công việc / Hồ sơ nghiệp vụ</th>
+                <th className="py-3 px-4 w-44">Bộ phận</th>
+                <th className="py-3 px-4 w-32">Thời hạn / Ngày</th>
+                <th className="py-3 px-4 w-28">Mức độ</th>
+                <th className="py-3 px-4 w-32 text-center">Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-sans">
+              {filteredRows.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                    Không có bản ghi nào phù hợp
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-sans">
-                {filteredRows
+              ) : (
+                filteredRows
                   .slice((page - 1) * pageSize, page * pageSize)
-                  .map((row, idx) => (
-                  <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-slate-700">
-                      <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] border border-slate-200/80">
-                        {row.code}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 font-medium text-slate-900">
-                      <div className="flex items-center gap-2">
-                        <i className="bi bi-file-earmark-text text-slate-400 text-sm" />
-                        <span>{row.title}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-slate-600 font-medium">
-                      {row.dept}
-                    </td>
-                    <td className="py-3 px-4 text-slate-500 font-mono text-[11px]">
-                      {row.deadline}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        row.priority.includes('Gấp') || row.priority.includes('Cốt lõi')
-                          ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                          : row.priority.includes('Cao') || row.priority.includes('Bắt buộc')
-                          ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                          : 'bg-slate-100 text-slate-700 border border-slate-200'
-                      }`}>
-                        {row.priority}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                        row.status.includes('Hoàn thành') || row.status.includes('Hoạt động') || row.status.includes('Hợp lệ')
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : row.status.includes('Đang làm') || row.status.includes('Đang xử lý')
-                          ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                          : 'bg-amber-50 text-amber-700 border border-amber-200'
-                      }`}>
-                        <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                        {row.status}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => showToast(`Đang mở chi tiết hồ sơ ${row.code}`)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors border-0 bg-transparent cursor-pointer"
-                        title="Xem chi tiết"
-                      >
-                        <i className="bi bi-chevron-right text-xs" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                  .map((row) => (
+                    <tr key={row.id} className="hover:bg-blue-50/30 transition-colors">
+                      <td className="py-3 px-4 font-mono font-bold text-slate-700">
+                        <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] border border-slate-200/80">
+                          {row.code}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 font-medium text-slate-900">
+                        <div className="flex items-center gap-2">
+                          <i className="bi bi-file-earmark-text text-slate-400 text-sm" />
+                          <span>{row.title}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 font-medium">{row.dept}</td>
+                      <td className="py-3 px-4 text-slate-500 font-mono text-[11px]">{row.deadline}</td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            row.priority.includes('Gấp') || row.priority.includes('Cốt lõi')
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                              : row.priority.includes('Cao') || row.priority.includes('Bắt buộc')
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              : 'bg-slate-100 text-slate-700 border border-slate-200'
+                          }`}
+                        >
+                          {row.priority}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                            row.status.includes('Hoàn thành') || row.status.includes('Hoạt động')
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : row.status.includes('Đang')
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                          {row.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+              )}
+            </tbody>
+          </table>
+        </FullWidthTable>
 
-          <div className="border-t border-slate-200 bg-white">
-            <Pagination
-              currentPage={page}
-              totalItems={filteredRows.length}
-              pageSize={pageSize}
-              onPageChange={setPage}
-              onPageSizeChange={(sz) => {
-                setPageSize(sz);
-                setPage(1);
-              }}
-              pageSizeOptions={[5, 10, 20, 50]}
-              itemName="bản ghi"
-            />
-          </div>
-        </div>
-
+        <Pagination
+          currentPage={page}
+          totalItems={filteredRows.length}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(sz) => {
+            setPageSize(sz);
+            setPage(1);
+          }}
+          pageSizeOptions={[10, 20, 50]}
+          itemName="bản ghi"
+        />
       </div>
 
-      {/* ── Modal Thêm Mới Nhanh ── */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                <i className={`bi ${meta.icon} text-blue-600`} />
-                <span>Thêm mới: {meta.title}</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowAddModal(false)}
-                className="text-slate-400 hover:text-slate-600 border-0 bg-transparent cursor-pointer text-lg"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Mã hồ sơ / Tiêu đề</label>
-                <input
-                  type="text"
-                  placeholder="Nhập tên công việc, đề xuất hoặc danh mục mới..."
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs focus:outline-none focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Mức độ ưu tiên</label>
-                <select className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs">
-                  <option>Bình thường</option>
-                  <option>Ưu tiên cao</option>
-                  <option>Gấp / Hạn chót</option>
-                </select>
-              </div>
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Ghi chú & Nội dung chi tiết</label>
-                <textarea
-                  rows={3}
-                  placeholder="Nhập mô tả tóm tắt quy trình thực hiện..."
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs focus:outline-none focus:border-blue-500 resize-none"
-                ></textarea>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setShowAddModal(false)}
-                className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 text-xs font-bold cursor-pointer border-0 bg-transparent"
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAddModal(false);
-                  showToast('Đã lưu hồ sơ nghiệp vụ mới thành công!');
-                }}
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold cursor-pointer border-0 shadow-xs"
-              >
-                Lưu dữ liệu
-              </button>
-            </div>
+      <Offcanvas
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        title={`Thêm mới: ${meta.title}`}
+        width="400px"
+        footer={
+          <div className="flex items-center justify-end gap-2 w-full">
+            <Button variant="secondary" size="sm" onClick={() => setShowAddModal(false)}>
+              Hủy
+            </Button>
+            <Button variant="primary" size="sm" onClick={handleSaveNewItem}>
+              Lưu dữ liệu
+            </Button>
           </div>
+        }
+      >
+        <div className="space-y-3">
+          <Input
+            label="Tiêu đề hồ sơ / Nội dung"
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            placeholder="Nhập tên công việc hoặc hồ sơ..."
+          />
+          <Select
+            label="Mức độ ưu tiên"
+            value={newPriority}
+            onChange={(e) => setNewPriority(e.target.value)}
+            options={[
+              { label: 'Bình thường', value: 'Bình thường' },
+              { label: 'Cao', value: 'Cao' },
+              { label: 'Gấp', value: 'Gấp' },
+            ]}
+          />
+          <Input
+            label="Mô tả tóm tắt"
+            value={newNotes}
+            onChange={(e) => setNewNotes(e.target.value)}
+            placeholder="Nhập mô tả chi tiết..."
+          />
         </div>
-      )}
-    </div>
+      </Offcanvas>
+    </StandardPage>
   );
 };

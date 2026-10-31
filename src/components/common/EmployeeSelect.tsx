@@ -424,7 +424,8 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
             position: 'absolute',
             top: '100%',
             left: 0,
-            right: 0,
+            minWidth: '100%',
+            width: 'max-content',
             marginTop: '4px',
             backgroundColor: '#ffffff',
             border: '1px solid #cbd5e1',
@@ -596,9 +597,7 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
                         fontSize: '0.8125rem',
                         color: selected ? '#0284c7' : '#1e293b',
                         whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        marginRight: '8px',
+                        marginRight: '12px',
                       }}
                     >
                       {staff.name}

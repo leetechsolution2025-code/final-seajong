@@ -606,160 +606,13 @@ export async function ensureCalendarEventsTableAndSeed(prisma) {
       )
     `);
 
-    const countRows = await prisma.$queryRawUnsafe(`SELECT COUNT(*) as cnt FROM calendar_events`);
-    const existingCount = Number(countRows?.[0]?.cnt || 0);
-
-    if (existingCount === 0) {
-      const now = new Date();
-      const todayStr = formatDateYMD(now);
-      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-      const tomorrowStr = formatDateYMD(tomorrow);
-      const dayAfter = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2);
-      const dayAfterStr = formatDateYMD(dayAfter);
-
-      const seedEvents = [
-        // Lịch làm việc của Giám đốc Lê Công Vụ
-        {
-          id: 'ev-seed-leader-1',
-          userId: 'cmra9q6qi00018oq7nniehh75',
-          userEmail: 'lecongvu@seajong.com',
-          title: 'Họp giao ban Kinh doanh & duyệt cơ chế đại lý Quý 4/2026',
-          description: 'Rà soát tiến độ doanh số hệ thống 345 đại lý và phê duyệt đơn hàng KH0003-20261028-01 (Anh Tính).',
-          date: todayStr,
-          endDate: todayStr,
-          timeStart: '08:30',
-          timeEnd: '10:00',
-          location: 'Phòng họp Ban Giám đốc - CT3',
-          category: 'meeting',
-          priority: 'urgent',
-          status: 'todo',
-          assigneeName: 'Lê Công Vụ',
-        },
-        {
-          id: 'ev-seed-leader-2',
-          userId: 'cmra9q6qi00018oq7nniehh75',
-          userEmail: 'lecongvu@seajong.com',
-          title: 'Làm việc với Showroom Phương Nga & đại lý khu vực phía Bắc',
-          description: 'Thống nhất chính sách chiết khấu trưng bày kệ sen vòi và bồn cầu thông minh Seajong.',
-          date: todayStr,
-          endDate: todayStr,
-          timeStart: '14:00',
-          timeEnd: '16:00',
-          location: 'Showroom Trung tâm Seajong',
-          category: 'client',
-          priority: 'high',
-          status: 'todo',
-          assigneeName: 'Lê Công Vụ',
-        },
-        {
-          id: 'ev-seed-leader-3',
-          userId: 'cmra9q6qi00018oq7nniehh75',
-          userEmail: 'lecongvu@seajong.com',
-          title: 'Kiểm tra tiến độ lắp ráp đơn hàng DBH-20261007-02 (Nguyen Thanh Phuc)',
-          description: 'Làm việc cùng khối Sản xuất & QC nghiệm thu lô thiết bị phòng tắm giao đại lý.',
-          date: tomorrowStr,
-          endDate: tomorrowStr,
-          timeStart: '09:00',
-          timeEnd: '11:00',
-          location: 'Nhà máy Sản xuất Seajong',
-          category: 'site',
-          priority: 'high',
-          status: 'todo',
-          assigneeName: 'Lê Công Vụ',
-        },
-        {
-          id: 'ev-seed-leader-4',
-          userId: 'cmra9q6qi00018oq7nniehh75',
-          userEmail: 'lecongvu@seajong.com',
-          title: 'Duyệt ngân sách Marketing & POSM hỗ trợ đại lý mở mới',
-          description: 'Xét duyệt gói bảng biển, kệ trưng bày POSM và catalogue giá mới cho đại lý.',
-          date: dayAfterStr,
-          endDate: dayAfterStr,
-          timeStart: '15:00',
-          timeEnd: '16:30',
-          location: 'Phòng họp CT3',
-          category: 'meeting',
-          priority: 'normal',
-          status: 'todo',
-          assigneeName: 'Lê Công Vụ',
-        },
-        // Lịch công việc của chuyên viên Kinh doanh Nguyễn Minh Thành
-        {
-          id: 'ev-seed-sales-1',
-          userId: 'cmsbc9bfu00voyg9msjo51cs3',
-          userEmail: 'nguyenminhthanh@seajong.com',
-          title: 'Xử lý yêu cầu hỗ trợ đại lý & theo dõi giao đơn hàng Anh Thạo (DH-DL-977995)',
-          description: 'Phối hợp bộ phận Kho vận kiểm tra tiến độ đóng gói và lịch xe giao hàng cho đại lý.',
-          date: todayStr,
-          endDate: todayStr,
-          timeStart: '08:30',
-          timeEnd: '10:30',
-          location: 'Phòng Kinh doanh - CT3',
-          category: 'client',
-          priority: 'urgent',
-          status: 'todo',
-          assigneeName: 'Nguyễn Minh Thành',
-        },
-        {
-          id: 'ev-seed-sales-2',
-          userId: 'cmsbc9bfu00voyg9msjo51cs3',
-          userEmail: 'nguyenminhthanh@seajong.com',
-          title: 'Chốt báo giá thiết bị vệ sinh & sen cây cho đại lý Anh Tính (135,1 triệu)',
-          description: 'Hoàn thiện xác nhận đơn hàng KH0003-20261028-01 và chuyển Kế toán duyệt công nợ.',
-          date: todayStr,
-          endDate: todayStr,
-          timeStart: '14:00',
-          timeEnd: '15:30',
-          location: 'Văn phòng Seajong / Zalo OA',
-          category: 'meeting',
-          priority: 'high',
-          status: 'todo',
-          assigneeName: 'Nguyễn Minh Thành',
-        },
-        {
-          id: 'ev-seed-sales-3',
-          userId: 'cmsbc9bfu00voyg9msjo51cs3',
-          userEmail: 'nguyenminhthanh@seajong.com',
-          title: 'Đối soát công nợ tháng 10 với Showroom Thiên Thuận Lạng Sơn (KH0014)',
-          description: 'Kiểm tra chứng từ thanh toán PC-DBH-20261010-01 và cập nhật điểm thưởng đại lý.',
-          date: tomorrowStr,
-          endDate: tomorrowStr,
-          timeStart: '09:30',
-          timeEnd: '11:00',
-          location: 'Phòng Kinh doanh',
-          category: 'client',
-          priority: 'high',
-          status: 'todo',
-          assigneeName: 'Nguyễn Minh Thành',
-        },
-      ];
-
-      const nowIso = new Date().toISOString();
-      for (const ev of seedEvents) {
-        await prisma.$executeRawUnsafe(
-          `INSERT OR IGNORE INTO calendar_events (
-            id, userId, userEmail, title, description, date, endDate,
-            timeStart, timeEnd, location, category, priority, status, assigneeName, createdAt, updatedAt
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          ev.id,
-          ev.userId,
-          ev.userEmail,
-          ev.title,
-          ev.description,
-          ev.date,
-          ev.endDate,
-          ev.timeStart,
-          ev.timeEnd,
-          ev.location,
-          ev.category,
-          ev.priority,
-          ev.status,
-          ev.assigneeName,
-          nowIso,
-          nowIso
-        );
-      }
-    }
+    // Xoá toàn bộ dữ liệu mẫu (seed/mock) cũ nếu tồn tại trong bảng calendar_events
+    await prisma.$executeRawUnsafe(`
+      DELETE FROM calendar_events
+      WHERE id LIKE 'ev-seed-%'
+         OR id LIKE 'bom-pl-%'
+         OR id LIKE 'pl-init-%'
+    `);
 
     isCalendarTableInitialized = true;
   } catch (err) {
@@ -767,51 +620,165 @@ export async function ensureCalendarEventsTableAndSeed(prisma) {
   }
 }
 
-export async function getCalendarEvents(prisma, { userEmail, userId }) {
+function parseTimestampToDateAndTime(val, fallbackTime = '08:00') {
+  if (!val && val !== 0) {
+    return { date: formatDateYMD(new Date()), time: fallbackTime };
+  }
+  const num = Number(val);
+  const d = !Number.isNaN(num) && num > 1000000000 ? new Date(num) : new Date(val);
+  if (Number.isNaN(d.getTime())) {
+    return { date: formatDateYMD(new Date()), time: fallbackTime };
+  }
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return {
+    date: `${y}-${m}-${day}`,
+    time: `${hh}:${mm}`,
+  };
+}
+
+export async function getCalendarEvents(prisma, { userEmail, userId } = {}) {
   await ensureCalendarEventsTableAndSeed(prisma);
   const emailNorm = String(userEmail || '').trim().toLowerCase();
   const idNorm = String(userId || '').trim();
 
-  // Nếu là tài khoản Giám đốc Lê Công Vụ (hoặc alias .vn / .com / 2091)
-  if (
-    emailNorm.includes('lecongvu') ||
-    emailNorm.includes('hahailam') ||
-    idNorm === '2091' ||
-    idNorm === 'usr-admin' ||
-    idNorm === 'cmra9q6qi00018oq7nniehh75'
-  ) {
-    const rows = await prisma.$queryRawUnsafe(
+  // 1. Lấy các sự kiện thực tế do người dùng tạo trong bảng calendar_events (đã loại bỏ hoàn toàn seed mẫu)
+  let customRows = [];
+  try {
+    const allCustom = await prisma.$queryRawUnsafe(
       `SELECT * FROM calendar_events
-       WHERE LOWER(userEmail) LIKE '%lecongvu%'
-          OR userId = ?
-          OR LOWER(userEmail) = ?
-       ORDER BY date ASC, timeStart ASC`,
-      idNorm,
-      emailNorm
+       WHERE id NOT LIKE 'ev-seed-%'
+         AND id NOT LIKE 'bom-pl-%'
+         AND id NOT LIKE 'pl-init-%'
+       ORDER BY date ASC, timeStart ASC`
     );
-    return Array.isArray(rows) ? rows : [];
-  }
-
-  if (emailNorm || idNorm) {
-    const rows = await prisma.$queryRawUnsafe(
-      `SELECT * FROM calendar_events
-       WHERE LOWER(userEmail) = ? OR userId = ?
-       ORDER BY date ASC, timeStart ASC`,
-      emailNorm,
-      idNorm
-    );
-    if (Array.isArray(rows) && rows.length > 0) {
-      return rows;
+    if (Array.isArray(allCustom)) {
+      if (
+        !emailNorm && !idNorm ||
+        emailNorm.includes('lecongvu') ||
+        emailNorm.includes('hahailam') ||
+        idNorm === '2091' ||
+        idNorm === 'usr-admin' ||
+        idNorm === 'cmra9q6qi00018oq7nniehh75'
+      ) {
+        customRows = allCustom;
+      } else {
+        const filtered = allCustom.filter((r) => {
+          const rEmail = String(r.userEmail || '').trim().toLowerCase();
+          const rId = String(r.userId || '').trim();
+          return (emailNorm && rEmail === emailNorm) || (idNorm && rId === idNorm) || (!rEmail && !rId);
+        });
+        customRows = filtered.length > 0 ? filtered : allCustom;
+      }
     }
-    // Nếu nhân viên phòng Kinh doanh mới đăng nhập chưa có lịch riêng, trả về lịch mẫu phòng Kinh doanh của user đó
-    const defaultSalesRows = await prisma.$queryRawUnsafe(
-      `SELECT * FROM calendar_events WHERE LOWER(userEmail) = 'nguyenminhthanh@seajong.com' ORDER BY date ASC, timeStart ASC`
-    );
-    return Array.isArray(defaultSalesRows) ? defaultSalesRows : [];
+  } catch (err) {
+    console.warn('Lỗi đọc bảng calendar_events:', err);
   }
 
-  const allRows = await prisma.$queryRawUnsafe(`SELECT * FROM calendar_events ORDER BY date ASC, timeStart ASC`);
-  return Array.isArray(allRows) ? allRows : [];
+  // 2. Lấy lịch họp thực tế từ bảng Meeting trong SQLite DB
+  const meetingEvents = [];
+  try {
+    const meetings = await prisma.$queryRawUnsafe(`SELECT * FROM Meeting ORDER BY startTime ASC`);
+    if (Array.isArray(meetings)) {
+      for (const m of meetings) {
+        const startInfo = parseTimestampToDateAndTime(m.startTime, '08:30');
+        const endInfo = parseTimestampToDateAndTime(m.endTime, '10:00');
+        let attendeeList = [];
+        try {
+          if (m.attendees) {
+            const parsed = typeof m.attendees === 'string' ? JSON.parse(m.attendees) : m.attendees;
+            if (Array.isArray(parsed)) attendeeList = parsed;
+          }
+        } catch {}
+
+        const attendeeNames = attendeeList
+          .map((a) => (typeof a === 'string' ? a : a?.name))
+          .filter(Boolean);
+
+        const descParts = [];
+        if (m.description && String(m.description).trim()) {
+          descParts.push(String(m.description).trim());
+        }
+        if (m.host) {
+          descParts.push(`Chủ trì: ${m.host}${m.secretary ? ` | Thư ký: ${m.secretary}` : ''}`);
+        }
+        if (attendeeNames.length > 0) {
+          descParts.push(`• Khách mời: ${attendeeNames.join(', ')}`);
+        }
+
+        meetingEvents.push({
+          id: String(m.id),
+          userId: String(m.creatorId || 'cmra9q6qi00018oq7nniehh75'),
+          userEmail: 'lecongvu@seajong.com',
+          title: String(m.title || 'Cuộc họp công ty'),
+          description: descParts.join('\n'),
+          date: startInfo.date,
+          endDate: endInfo.date || startInfo.date,
+          timeStart: startInfo.time,
+          timeEnd: endInfo.time,
+          location: String(m.location || 'Văn phòng Seajong'),
+          category: 'meeting',
+          priority: 'high',
+          status: 'todo',
+          assigneeName: String(m.host || 'Lê Công Vụ'),
+          createdAt: m.createdAt ? new Date(Number(m.createdAt) || m.createdAt).toISOString() : new Date().toISOString(),
+          updatedAt: m.updatedAt ? new Date(Number(m.updatedAt) || m.updatedAt).toISOString() : new Date().toISOString(),
+        });
+      }
+    }
+  } catch (err) {
+    // Bảng Meeting có thể chưa tồn tại ở một số môi trường
+  }
+
+  // 3. Lấy sự kiện Marketing thực tế từ bảng MarketingEvent trong SQLite DB
+  const marketingEvents = [];
+  try {
+    const mktRows = await prisma.$queryRawUnsafe(`SELECT * FROM MarketingEvent ORDER BY startDate ASC`);
+    if (Array.isArray(mktRows)) {
+      for (const ev of mktRows) {
+        const startInfo = parseTimestampToDateAndTime(ev.startDate, '08:00');
+        const endInfo = parseTimestampToDateAndTime(ev.endDate, '17:30');
+        const locParts = [ev.location, ev.address].map((s) => String(s || '').trim()).filter(Boolean);
+        marketingEvents.push({
+          id: String(ev.id),
+          userId: 'cmra9q6qi00018oq7nniehh75',
+          userEmail: 'lecongvu@seajong.com',
+          title: String(ev.name || ev.code || 'Sự kiện Marketing'),
+          description: String(ev.description || ''),
+          date: startInfo.date,
+          endDate: endInfo.date || startInfo.date,
+          timeStart: startInfo.time,
+          timeEnd: endInfo.time,
+          location: locParts.join(' - ') || 'Trung tâm sự kiện',
+          category: 'marketing',
+          priority: 'high',
+          status: ev.status === 'completed' ? 'done' : 'todo',
+          assigneeName: String(ev.pic || 'Phòng Marketing'),
+          createdAt: ev.createdAt ? new Date(Number(ev.createdAt) || ev.createdAt).toISOString() : new Date().toISOString(),
+          updatedAt: ev.updatedAt ? new Date(Number(ev.updatedAt) || ev.updatedAt).toISOString() : new Date().toISOString(),
+        });
+      }
+    }
+  } catch (err) {
+    // Bỏ qua nếu bảng MarketingEvent không tồn tại
+  }
+
+  // Gộp và khử trùng lặp theo id
+  const mergedMap = new Map();
+  for (const item of [...customRows, ...meetingEvents, ...marketingEvents]) {
+    if (item && item.id) {
+      mergedMap.set(String(item.id), item);
+    }
+  }
+
+  return Array.from(mergedMap.values()).sort((a, b) => {
+    const dCmp = String(a.date || '').localeCompare(String(b.date || ''));
+    if (dCmp !== 0) return dCmp;
+    return String(a.timeStart || '').localeCompare(String(b.timeStart || ''));
+  });
 }
 
 export async function createCalendarEvent(prisma, payload) {
@@ -848,36 +815,62 @@ export async function createCalendarEvent(prisma, payload) {
 export async function updateCalendarEvent(prisma, id, payload) {
   await ensureCalendarEventsTableAndSeed(prisma);
   const existingRows = await prisma.$queryRawUnsafe(`SELECT * FROM calendar_events WHERE id = ?`, id);
-  const existing = existingRows?.[0] || {};
+  const existing = existingRows?.[0];
   const nowIso = new Date().toISOString();
 
-  await prisma.$executeRawUnsafe(
-    `UPDATE calendar_events SET
-      title = ?,
-      description = ?,
-      date = ?,
-      endDate = ?,
-      timeStart = ?,
-      timeEnd = ?,
-      location = ?,
-      category = ?,
-      priority = ?,
-      status = ?,
-      updatedAt = ?
-     WHERE id = ?`,
-    payload.title !== undefined ? String(payload.title) : existing.title || '',
-    payload.description !== undefined ? String(payload.description) : existing.description || '',
-    payload.date !== undefined ? String(payload.date) : existing.date || '',
-    payload.endDate !== undefined ? String(payload.endDate) : existing.endDate || existing.date || '',
-    payload.timeStart !== undefined ? String(payload.timeStart) : existing.timeStart || '08:00',
-    payload.timeEnd !== undefined ? String(payload.timeEnd) : existing.timeEnd || '09:00',
-    payload.location !== undefined ? String(payload.location) : existing.location || '',
-    payload.category !== undefined ? String(payload.category) : existing.category || 'meeting',
-    payload.priority !== undefined ? String(payload.priority) : existing.priority || 'high',
-    payload.status !== undefined ? String(payload.status) : existing.status || 'todo',
-    nowIso,
-    id
-  );
+  if (existing) {
+    await prisma.$executeRawUnsafe(
+      `UPDATE calendar_events SET
+        title = ?,
+        description = ?,
+        date = ?,
+        endDate = ?,
+        timeStart = ?,
+        timeEnd = ?,
+        location = ?,
+        category = ?,
+        priority = ?,
+        status = ?,
+        updatedAt = ?
+       WHERE id = ?`,
+      payload.title !== undefined ? String(payload.title) : existing.title || '',
+      payload.description !== undefined ? String(payload.description) : existing.description || '',
+      payload.date !== undefined ? String(payload.date) : existing.date || '',
+      payload.endDate !== undefined ? String(payload.endDate) : existing.endDate || existing.date || '',
+      payload.timeStart !== undefined ? String(payload.timeStart) : existing.timeStart || '08:00',
+      payload.timeEnd !== undefined ? String(payload.timeEnd) : existing.timeEnd || '09:00',
+      payload.location !== undefined ? String(payload.location) : existing.location || '',
+      payload.category !== undefined ? String(payload.category) : existing.category || 'meeting',
+      payload.priority !== undefined ? String(payload.priority) : existing.priority || 'high',
+      payload.status !== undefined ? String(payload.status) : existing.status || 'todo',
+      nowIso,
+      id
+    );
+  } else {
+    // Nếu cập nhật một cuộc họp từ bảng Meeting hoặc sự kiện chưa có trong calendar_events
+    try {
+      const meetingRows = await prisma.$queryRawUnsafe(`SELECT * FROM Meeting WHERE id = ?`, id);
+      if (Array.isArray(meetingRows) && meetingRows.length > 0) {
+        const m = meetingRows[0];
+        const dateStr = payload.date || formatDateYMD(new Date(Number(m.startTime) || Date.now()));
+        const endDateStr = payload.endDate || dateStr;
+        const startT = payload.timeStart || '08:30';
+        const endT = payload.timeEnd || '10:00';
+        const startMs = new Date(`${dateStr}T${startT}:00`).getTime();
+        const endMs = new Date(`${endDateStr}T${endT}:00`).getTime();
+        await prisma.$executeRawUnsafe(
+          `UPDATE Meeting SET title = ?, description = ?, location = ?, startTime = ?, endTime = ?, updatedAt = ? WHERE id = ?`,
+          payload.title !== undefined ? String(payload.title) : m.title,
+          payload.description !== undefined ? String(payload.description) : m.description,
+          payload.location !== undefined ? String(payload.location) : m.location,
+          !Number.isNaN(startMs) ? startMs : m.startTime,
+          !Number.isNaN(endMs) ? endMs : m.endTime,
+          Date.now(),
+          id
+        );
+      }
+    } catch {}
+  }
 
   return { success: true, id };
 }
@@ -885,6 +878,9 @@ export async function updateCalendarEvent(prisma, id, payload) {
 export async function deleteCalendarEvent(prisma, id) {
   await ensureCalendarEventsTableAndSeed(prisma);
   await prisma.$executeRawUnsafe(`DELETE FROM calendar_events WHERE id = ?`, id);
+  try {
+    await prisma.$executeRawUnsafe(`DELETE FROM Meeting WHERE id = ?`, id);
+  } catch {}
   return { success: true, id };
 }
 

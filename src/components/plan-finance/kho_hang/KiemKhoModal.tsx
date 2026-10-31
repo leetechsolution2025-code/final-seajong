@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { useSession } from "next-auth/react";
-import { isLogisticsAdmin } from "@/lib/logistics-permissions";
+import { canExecuteInOut } from "@/lib/logistics-permissions";
 import { useToast }                  from "@/components/ui/Toast";
 import { ConfirmDialog }             from "@/components/ui/ConfirmDialog";
 import { TaoYeuCauMuaHangModal }     from "@/components/plan-finance/mua_hang/TaoYeuCauMuaHangModal";
@@ -90,7 +90,7 @@ function useBreakpoint() {
 // ── Component ─────────────────────────────────────────────────────────────────
 export function KiemKhoModal({ onClose, onSaved }: KiemKhoModalProps) {
   const { data: session } = useSession();
-  const isThuKho = isLogisticsAdmin(session?.user);
+  const isThuKho = canExecuteInOut(session?.user);
   const toast    = useToast();
   const toastRef  = React.useRef(toast);
   React.useEffect(() => { toastRef.current = toast; });

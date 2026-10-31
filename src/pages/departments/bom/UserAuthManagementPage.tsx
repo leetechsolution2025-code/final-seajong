@@ -2,20 +2,142 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { SplitLayoutPage } from '../../../components/layout/SplitLayoutPage';
 import { SearchInput } from '../../../components/ui/SearchInput';
 import { useToast } from '../../../components/ui/Toast';
+import { useAuth } from '../../../context/AuthContext';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-export const SYSTEM_PERMISSIONS = [
-  { key: 'crm',             label: 'Quản lý khách hàng (CRM)',   icon: 'bi-person-heart',       color: '#3b82f6' },
-  { key: 'chat',            label: 'Nhắn tin nội bộ',             icon: 'bi-chat-dots',           color: '#10b981' },
-  { key: 'notify',          label: 'Thông báo hệ thống',          icon: 'bi-bell',                color: '#f59e0b' },
-  { key: 'task',            label: 'Quản lý công việc',           icon: 'bi-kanban',              color: '#8b5cf6' },
-  { key: 'report',          label: 'Xem báo cáo',                 icon: 'bi-bar-chart-line',      color: '#06b6d4' },
-  { key: 'plan',            label: 'Lập kế hoạch',                icon: 'bi-calendar3',           color: '#f43f5e' },
-  { key: 'approve_request', label: 'Duyệt yêu cầu',               icon: 'bi-check2-circle',       color: '#22c55e' },
-  { key: 'oem_sales',       label: 'Bán hàng OEM',                icon: 'bi-bag-check',           color: '#0ea5e9' },
-  { key: 'view_prices',     label: 'Hiển thị giá sản phẩm',       icon: 'bi-tag',                 color: '#8b5cf6' },
-  { key: 'approve_budget',  label: 'Duyệt ngân sách',             icon: 'bi-cash-coin',           color: '#ef4444' },
+export type PermissionItem = {
+  key: string;
+  label: string;
+  icon: string;
+  color: string;
+};
+
+export type DepartmentPermissionGroup = {
+  deptCode: string;
+  deptName: string;
+  deptGroupLabel: string;
+  icon: string;
+  color: string;
+  permissions: PermissionItem[];
+};
+
+export const PERMISSION_GROUPS_BY_DEPT: DepartmentPermissionGroup[] = [
+  {
+    deptCode: 'board',
+    deptName: 'Ban Giám đốc & Điều hành chung',
+    deptGroupLabel: 'Ban điều hành',
+    icon: 'bi-building',
+    color: '#6366f1',
+    permissions: [
+      { key: 'approve_request', label: 'Duyệt yêu cầu & tờ trình',     icon: 'bi-check2-circle',  color: '#22c55e' },
+      { key: 'plan',            label: 'Lập kế hoạch chiến lược',      icon: 'bi-calendar3',      color: '#f43f5e' },
+      { key: 'task',            label: 'Quản trị & giao công việc',    icon: 'bi-kanban',         color: '#8b5cf6' },
+      { key: 'report',          label: 'Xem báo cáo tổng hợp',         icon: 'bi-bar-chart-line', color: '#06b6d4' },
+      { key: 'chat',            label: 'Nhắn tin nội bộ',              icon: 'bi-chat-dots',      color: '#10b981' },
+      { key: 'notify',          label: 'Thông báo hệ thống',           icon: 'bi-bell',           color: '#f59e0b' },
+    ],
+  },
+  {
+    deptCode: 'sales',
+    deptName: 'Phòng Kinh doanh',
+    deptGroupLabel: 'Khối kinh doanh',
+    icon: 'bi-graph-up-arrow',
+    color: '#3b82f6',
+    permissions: [
+      { key: 'crm',             label: 'Quản lý khách hàng (CRM)',     icon: 'bi-person-heart',   color: '#3b82f6' },
+      { key: 'sales_orders',    label: 'Tạo & quản lý đơn bán hàng',   icon: 'bi-receipt',        color: '#2563eb' },
+      { key: 'oem_sales',       label: 'Bán hàng & hợp đồng OEM',      icon: 'bi-bag-check',      color: '#0ea5e9' },
+      { key: 'view_prices',     label: 'Hiển thị giá & chiết khấu',    icon: 'bi-tag',            color: '#8b5cf6' },
+    ],
+  },
+  {
+    deptCode: 'finance',
+    deptName: 'Phòng Tài chính – Kế toán',
+    deptGroupLabel: 'Khối lõi',
+    icon: 'bi-cash-stack',
+    color: '#10b981',
+    permissions: [
+      { key: 'approve_budget',   label: 'Duyệt ngân sách & định mức chi', icon: 'bi-cash-coin',              color: '#ef4444' },
+      { key: 'finance_cashflow', label: 'Quản lý dòng tiền & thu chi',    icon: 'bi-wallet2',                color: '#10b981' },
+      { key: 'finance_debts',    label: 'Quản lý công nợ & tạm ứng',      icon: 'bi-journal-check',          color: '#059669' },
+      { key: 'finance_reports',  label: 'Lập & xuất báo cáo tài chính',   icon: 'bi-file-earmark-bar-graph', color: '#0d9488' },
+    ],
+  },
+  {
+    deptCode: 'logistics',
+    deptName: 'Bộ phận Kho vận',
+    deptGroupLabel: 'Hỗ trợ / Vận hành',
+    icon: 'bi-truck',
+    color: '#f59e0b',
+    permissions: [
+      { key: 'logistics_assign',  label: 'Điều phối & giao việc kho',       icon: 'bi-person-check',      color: '#f59e0b' },
+      { key: 'logistics_in_out',  label: 'Thực hiện xuất / nhập & kiểm kho', icon: 'bi-box-arrow-in-down', color: '#d97706' },
+      { key: 'logistics_picking', label: 'Cấp phát vật tư & gom hàng',      icon: 'bi-boxes',             color: '#ea580c' },
+      { key: 'logistics_print',   label: 'In phiếu kho & in tem nhiệt',     icon: 'bi-printer',           color: '#0284c7' },
+    ],
+  },
+  {
+    deptCode: 'production',
+    deptName: 'Phòng Sản xuất',
+    deptGroupLabel: 'Hỗ trợ / Vận hành',
+    icon: 'bi-tools',
+    color: '#f43f5e',
+    permissions: [
+      { key: 'prod_orders',  label: 'Quản lý lệnh sản xuất & lắp ráp', icon: 'bi-gear-wide-connected', color: '#f43f5e' },
+      { key: 'prod_bom',     label: 'Xây dựng định mức vật tư (BOM)',  icon: 'bi-diagram-3',           color: '#e11d48' },
+      { key: 'prod_defects', label: 'Xử lý & khắc phục hàng lỗi',      icon: 'bi-wrench-adjustable',   color: '#be123c' },
+    ],
+  },
+  {
+    deptCode: 'qa',
+    deptName: 'Bộ phận Đảm bảo chất lượng',
+    deptGroupLabel: 'Hỗ trợ / Vận hành',
+    icon: 'bi-patch-check',
+    color: '#06b6d4',
+    permissions: [
+      { key: 'qa_inspect',   label: 'Kiểm định chất lượng IQC / OQC', icon: 'bi-clipboard2-pulse',     color: '#06b6d4' },
+      { key: 'qa_standards', label: 'Thiết lập tiêu chuẩn chất lượng', icon: 'bi-award',               color: '#0891b2' },
+      { key: 'qa_defects',   label: 'Lập biên bản & tổng hợp hàng lỗi', icon: 'bi-exclamation-triangle', color: '#0284c7' },
+    ],
+  },
+  {
+    deptCode: 'purchase',
+    deptName: 'Phòng Mua hàng',
+    deptGroupLabel: 'Hỗ trợ / Vận hành',
+    icon: 'bi-cart3',
+    color: '#8b5cf6',
+    permissions: [
+      { key: 'purchase_po',        label: 'Lập & quản lý đơn mua hàng (PO)', icon: 'bi-cart-check',     color: '#8b5cf6' },
+      { key: 'purchase_suppliers', label: 'Quản lý nhà cung cấp & vận chuyển', icon: 'bi-building-check', color: '#7c3aed' },
+    ],
+  },
+  {
+    deptCode: 'marketing',
+    deptName: 'Phòng Marketing',
+    deptGroupLabel: 'Khối kinh doanh',
+    icon: 'bi-megaphone',
+    color: '#ec4899',
+    permissions: [
+      { key: 'mkt_products',  label: 'Quản lý sản phẩm & thương hiệu',    icon: 'bi-box-seam', color: '#ec4899' },
+      { key: 'mkt_campaigns', label: 'Thị trường, sự kiện & đối thủ',     icon: 'bi-bullseye', color: '#db2777' },
+    ],
+  },
+  {
+    deptCode: 'hr',
+    deptName: 'Phòng Nhân sự',
+    deptGroupLabel: 'Khối lõi',
+    icon: 'bi-people',
+    color: '#0ea5e9',
+    permissions: [
+      { key: 'hr_profiles', label: 'Quản lý hồ sơ nhân sự & tuyển dụng', icon: 'bi-person-badge', color: '#0ea5e9' },
+      { key: 'hr_payroll',  label: 'Chấm công, tính lương & bảo hiểm',   icon: 'bi-calculator',   color: '#0284c7' },
+    ],
+  },
 ];
+
+export const SYSTEM_PERMISSIONS: PermissionItem[] = PERMISSION_GROUPS_BY_DEPT.flatMap(
+  (g) => g.permissions
+);
 
 const GROUP_COLORS: Record<string, string> = {
   management: '#6366f1',
@@ -205,6 +327,7 @@ function ToggleSwitch({
 // ── Main Component ────────────────────────────────────────────────────────────
 export const UserAuthManagementPage: React.FC = () => {
   const toast = useToast();
+  const { user: currentUser, refreshUser } = useAuth();
 
   // Data states
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -306,6 +429,18 @@ export const UserAuthManagementPage: React.FC = () => {
     setDirty(true);
   };
 
+  const handleToggleGroupPerms = (groupKeys: string[]) => {
+    setEditPerms((prev) => {
+      const allSelected = groupKeys.every((k) => prev.includes(k));
+      if (allSelected) {
+        return prev.filter((k) => !groupKeys.includes(k));
+      }
+      const next = new Set([...prev, ...groupKeys]);
+      return Array.from(next);
+    });
+    setDirty(true);
+  };
+
   const handleCycleDeptLevel = (code: string) => {
     const cycle: DeptAccess['level'][] = ['none', 'view', 'full'];
     setEditDeptAccess((prev) =>
@@ -381,6 +516,10 @@ export const UserAuthManagementPage: React.FC = () => {
           };
         })
       );
+
+      if (currentUser?.id === selectedId) {
+        await refreshUser();
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Lỗi không xác định';
       toast.error('Lỗi cập nhật', msg);
@@ -716,12 +855,17 @@ export const UserAuthManagementPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Section 2: Quyền chức năng */}
+            {/* Section 2: Quyền chức năng theo nhóm phòng ban */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  2. Quyền chức năng nghiệp vụ
-                </span>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    2. Quyền chức năng nghiệp vụ theo phòng ban
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100">
+                    {PERMISSION_GROUPS_BY_DEPT.length} nhóm phòng ban
+                  </span>
+                </div>
                 {editRole === 'USER' && (
                   <div className="flex items-center gap-2">
                     <button
@@ -729,7 +873,7 @@ export const UserAuthManagementPage: React.FC = () => {
                       onClick={handleSelectAllPerms}
                       className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer bg-transparent border-none p-0"
                     >
-                      Chọn tất cả
+                      Chọn tất cả ({SYSTEM_PERMISSIONS.length})
                     </button>
                     <span className="text-slate-300">|</span>
                     <button
@@ -754,49 +898,127 @@ export const UserAuthManagementPage: React.FC = () => {
                     </h5>
                     <p className="text-[11.5px] text-amber-700/90 mt-1 leading-relaxed m-0">
                       Tài khoản Quản trị viên (ADMIN) mặc định sở hữu toàn bộ quyền hạn chức năng
-                      và quyền truy cập toàn diện 18 phòng ban của Seajong Việt Nam.
+                      nghiệp vụ của tất cả các phòng ban trong hệ thống Seajong Việt Nam.
                     </p>
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {SYSTEM_PERMISSIONS.map((p) => {
-                    const isChecked = editPerms.includes(p.key);
+                <div className="space-y-3.5">
+                  {PERMISSION_GROUPS_BY_DEPT.map((group) => {
+                    const groupKeys = group.permissions.map((p) => p.key);
+                    const activeCount = groupKeys.filter((k) => editPerms.includes(k)).length;
+                    const allGroupSelected = activeCount === groupKeys.length && groupKeys.length > 0;
+                    const isPrimaryDept =
+                      Boolean(selectedUser.employee?.departmentCode) &&
+                      selectedUser.employee?.departmentCode === group.deptCode;
+
                     return (
                       <div
-                        key={p.key}
-                        onClick={() => handleTogglePerm(p.key)}
-                        className={`flex items-center justify-between p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer ${
-                          isChecked
-                            ? 'bg-slate-50/80 border-indigo-200 shadow-2xs'
-                            : 'bg-white border-slate-200 hover:border-slate-300'
+                        key={group.deptCode}
+                        className={`rounded-xl border transition-all overflow-hidden ${
+                          isPrimaryDept
+                            ? 'border-indigo-300 bg-indigo-50/20 shadow-2xs'
+                            : activeCount > 0
+                            ? 'border-slate-200/90 bg-white'
+                            : 'border-slate-200/70 bg-slate-50/30'
                         }`}
                       >
-                        <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                          <div
-                            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                            style={{
-                              backgroundColor: `color-mix(in srgb, ${p.color} 14%, transparent)`,
-                              color: p.color,
-                            }}
-                          >
-                            <i className={`bi ${p.icon} text-sm`} />
+                        {/* Department Group Header */}
+                        <div
+                          className={`px-3.5 py-2.5 border-b flex items-center justify-between gap-2 ${
+                            isPrimaryDept
+                              ? 'bg-indigo-50/60 border-indigo-200/70'
+                              : 'bg-slate-50/80 border-slate-200/70'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div
+                              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                              style={{
+                                backgroundColor: `color-mix(in srgb, ${group.color} 15%, transparent)`,
+                                color: group.color,
+                              }}
+                            >
+                              <i className={`bi ${group.icon} text-xs`} />
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap min-w-0">
+                              <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wide truncate">
+                                {group.deptName}
+                              </span>
+                              {isPrimaryDept && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 border border-indigo-200">
+                                  <i className="bi bi-person-badge-fill text-[9px]" />
+                                  Phòng ban trực thuộc
+                                </span>
+                              )}
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  activeCount > 0
+                                    ? 'bg-emerald-100 text-emerald-700'
+                                    : 'bg-slate-200/70 text-slate-500'
+                                }`}
+                              >
+                                {activeCount}/{groupKeys.length} quyền
+                              </span>
+                            </div>
                           </div>
-                          <span
-                            className={`text-xs truncate ${
-                              isChecked
-                                ? 'font-bold text-slate-900'
-                                : 'font-medium text-slate-700'
+
+                          <button
+                            type="button"
+                            onClick={() => handleToggleGroupPerms(groupKeys)}
+                            className={`text-[11px] font-bold px-2.5 py-1 rounded-md border transition-all cursor-pointer shrink-0 ${
+                              allGroupSelected
+                                ? 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                                : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'
                             }`}
                           >
-                            {p.label}
-                          </span>
+                            {allGroupSelected ? 'Bỏ chọn nhóm' : 'Chọn cả nhóm'}
+                          </button>
                         </div>
-                        <ToggleSwitch
-                          on={isChecked}
-                          onChange={() => handleTogglePerm(p.key)}
-                          color={p.color}
-                        />
+
+                        {/* Permissions Grid inside Department Group */}
+                        <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          {group.permissions.map((p) => {
+                            const isChecked = editPerms.includes(p.key);
+                            return (
+                              <div
+                                key={p.key}
+                                onClick={() => handleTogglePerm(p.key)}
+                                className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
+                                  isChecked
+                                    ? 'bg-indigo-50/40 border-indigo-200 shadow-2xs'
+                                    : 'bg-white border-slate-200/80 hover:border-slate-300'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                  <div
+                                    className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                                    style={{
+                                      backgroundColor: `color-mix(in srgb, ${p.color} 14%, transparent)`,
+                                      color: p.color,
+                                    }}
+                                  >
+                                    <i className={`bi ${p.icon} text-sm`} />
+                                  </div>
+                                  <span
+                                    className={`text-xs truncate ${
+                                      isChecked
+                                        ? 'font-bold text-slate-900'
+                                        : 'font-medium text-slate-700'
+                                    }`}
+                                  >
+                                    {p.label}
+                                  </span>
+                                </div>
+                                <ToggleSwitch
+                                  on={isChecked}
+                                  onChange={() => handleTogglePerm(p.key)}
+                                  color={p.color}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     );
                   })}
@@ -871,7 +1093,7 @@ export const UserAuthManagementPage: React.FC = () => {
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-slate-800 truncate">
+                          <span className="text-xs font-bold text-slate-800 uppercase tracking-wide truncate">
                             {d.nameVi}
                           </span>
                           <span

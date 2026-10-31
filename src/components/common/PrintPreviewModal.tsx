@@ -12,7 +12,9 @@ export function printDocumentById(
   orientation: 'portrait' | 'landscape' = 'portrait',
   title?: string,
   keepFirstPageMargin: boolean = true,
-  customMargins?: string
+  customMargins?: string,
+  customPageSize?: string,
+  extraPrintCss?: string
 ) {
   const docEl = globalThis.document?.getElementById(documentId);
   if (!docEl) {
@@ -65,7 +67,7 @@ export function printDocumentById(
       background-color: #f8fafc !important;
     }
     @page { 
-      size: A4 ${orientation}; 
+      size: ${customPageSize ? customPageSize : `A4 ${orientation}`}; 
       margin: ${printMargin} !important; 
     }
     @page :first {
@@ -96,6 +98,7 @@ export function printDocumentById(
     thead { display: table-header-group !important; }
     tr { page-break-inside: avoid !important; }
     .no-print { display: none !important; }
+    ${extraPrintCss || ''}
   </style>
 </head>
 <body>${docEl.innerHTML}</body>

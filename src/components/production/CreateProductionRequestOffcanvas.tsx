@@ -6,7 +6,7 @@ import { Input } from '@/components/common/Input';
 import { Select } from '@/components/common/Select';
 import { DatePicker } from '@/components/common/DatePicker';
 import { useToast } from '@/components/ui/Toast';
-import { isProductionAdmin } from '@/lib/production-permissions';
+import { canManageProdOrders } from '@/lib/production-permissions';
 import {
   SendPlus,
   PlusCircleFill,
@@ -71,7 +71,7 @@ export function CreateProductionRequestOffcanvas({
   const handleCreated = onCreated || onSuccess;
 
   const { data: session } = useSession();
-  const isProdAdmin = isProductionAdmin(session?.user);
+  const isProdAdmin = canManageProdOrders(session?.user);
   const { success: toastSuccess, error: toastError } = useToast();
 
   const [items, setItems] = useState<RequestItemRow[]>([createEmptyRow()]);

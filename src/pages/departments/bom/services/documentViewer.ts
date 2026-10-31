@@ -81,7 +81,7 @@ export function openAttachmentInNewTab(
  * Xem và in toàn văn Tờ trình pháp lý Deco Door (mẫu trình duyệt văn bản tiêu chuẩn)
  */
 export function openOfficialDocumentSheet(doc: DocumentViewerData, fileNameOverride?: string) {
-  const fileName = fileNameOverride || doc.attachmentName || `To_trinh_${doc.code || 'DecoDoor'}.pdf`;
+  const fileName = fileNameOverride || doc.attachmentName || `To_trinh_${doc.code || 'Seajong'}.pdf`;
   const isApproved = doc.status === 'approved';
   const isRejected = doc.status === 'rejected';
 
@@ -280,7 +280,7 @@ export function openOfficialDocumentSheet(doc: DocumentViewerData, fileNameOverr
   <div class="paper">
     <div class="national-header">
       <div>
-        <div class="corp-name">CÔNG TY CỔ PHẦN SẢN XUẤT DECO DOOR</div>
+        <div class="corp-name">CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM</div>
         <div class="corp-sub">Đơn vị: ${doc.department || 'Phòng kinh doanh'}</div>
       </div>
       <div>
@@ -333,7 +333,7 @@ export function openOfficialDocumentSheet(doc: DocumentViewerData, fileNameOverr
     </table>
 
     <div class="section-title">II. NỘI DUNG CHI TIẾT TỜ TRÌNH VÀ THUYẾT MINH</div>
-    <div class="content-box">${doc.content || 'Kính trình Ban Giám đốc xem xét phê duyệt hồ sơ đính kèm. Toàn bộ các tiêu chuẩn kỹ thuật, báo giá cạnh tranh và tiến độ thi công đã được kiểm tra, thẩm tra chặt chẽ theo đúng quy trình công ty DecoDoor.'}</div>
+    <div class="content-box">${doc.content || 'Kính trình Ban Giám đốc xem xét phê duyệt hồ sơ đính kèm. Toàn bộ các tiêu chuẩn kỹ thuật, báo giá cạnh tranh và tiến độ thi công đã được kiểm tra, thẩm tra chặt chẽ theo đúng quy trình công ty Seajong.'}</div>
 
     ${isApproved && doc.approvalNote ? `
       <div class="section-title" style="color: #059669; border-color: #059669;">III. Ý KIẾN BÚT PHÊ BAN GIÁM ĐỐC</div>
@@ -363,7 +363,7 @@ export function openOfficialDocumentSheet(doc: DocumentViewerData, fileNameOverr
           <div class="sig-name">${doc.approvedBy || 'TGĐ. Hà Hải Lâm'}</div>
         ` : `
           <div style="height: 60px;"></div>
-          <div class="sig-name">Ban Giám đốc Deco Door</div>
+          <div class="sig-name">Ban Giám đốc Seajong</div>
         `}
       </div>
     </div>

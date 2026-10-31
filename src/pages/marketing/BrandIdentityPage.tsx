@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { PageTitle } from '../../components/ui/PageTitle';
-import { DynamicTicker } from '../../components/layout/DynamicTicker';
+import { StandardPage } from '../../components/layout/StandardPage';
 import {
   Copy,
   Check,
@@ -262,39 +261,15 @@ export const BrandIdentityPage: React.FC = () => {
   };
 
   return (
-    <div
-      className="flex flex-col h-full flex-1 overflow-hidden"
-      style={{
-        background: '#EBF0F5',
-        height: '100%',
-        minHeight: 0,
-        maxHeight: '100%',
-      }}
+    <StandardPage
+      title="Nhận diện thương hiệu"
+      description="Hệ thống quy chuẩn màu sắc, typography, logo và tone giọng thương hiệu Seajong"
+      icon="bi-award"
+      color="rose"
+      badge="BRAND GUIDE"
+      tickerContext="brand"
     >
-      {/* ── 1. PageTitle Chuẩn (Tuyệt đối không có nút bấm theo AGENTS.md) ── */}
-      <div style={{ flexShrink: 0 }}>
-        <PageTitle
-          title="Nhận diện thương hiệu"
-          description="Hệ thống quy chuẩn màu sắc, typography, logo và tone giọng thương hiệu Seajong"
-          icon="bi-award"
-          color="rose"
-          badge="BRAND GUIDE"
-        />
-
-        <DynamicTicker context="brand" pageTitle="Nhận diện thương hiệu" />
-      </div>
-
-      {/* ── 2. Card Chính bo góc rounded-xl, padding ngoài 8px chuẩn Enterprise Seajong ── */}
-      <div
-        className="flex-1 flex flex-col overflow-hidden"
-        style={{
-          padding: 8,
-          flex: '1 1 0%',
-          minHeight: 0,
-          height: '100%',
-        }}
-      >
-        <div className="flex-1 bg-white rounded-xl border border-slate-200/90 shadow-xs flex flex-col overflow-hidden min-h-0">
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
           {/* Toolbar Tabs Điều Hướng */}
           <div className="shrink-0 px-4 py-2.5 border-b border-slate-200/80 bg-slate-50/50 flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
@@ -853,7 +828,6 @@ export const BrandIdentityPage: React.FC = () => {
               </div>
             )}
           </div>
-        </div>
       </div>
 
       {/* Floating Toast Notification */}
@@ -863,7 +837,7 @@ export const BrandIdentityPage: React.FC = () => {
           <span>{toastMessage}</span>
         </div>
       )}
-    </div>
+    </StandardPage>
   );
 };
 
