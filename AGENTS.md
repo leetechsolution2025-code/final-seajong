@@ -22,3 +22,6 @@
    - Dùng **`TableToolbar`** (từ `client-skydoor`, padding 8px).
    - Dùng **`FullWidthTable`** (sticky header, chống giật nháy loading).
    - Dùng **`Pagination`** (phân trang chuẩn enterprise).
+
+4. **Quy tắc thiết kế Form / Offcanvas / Modal**:
+   - **KHÔNG hiển thị các đoạn ghi chú / giải thích dài dòng** (ví dụ: các hộp văn bản `⛔ Đã khóa nút...`, `✅ Hợp lệ trong định mức...`, `Lưu ý: ...`) bên trong Form, Offcanvas hoặc Modal. Chỉ hiển thị các trường dữ liệu và chỉ số kiểm soát ngắn gọn, trực quan.

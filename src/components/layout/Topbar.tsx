@@ -39,7 +39,7 @@ const DEPT_LABEL: Record<string, string> = {
 
 export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
   const { user, logout } = useAuth();
-  const { activeDeptCode, setActiveDeptCode, navigateToUserDept } = useDepartment();
+  const { activeDeptCode, setActiveDeptCode, setActiveMenuKey, navigateToUserDept } = useDepartment();
 
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -134,6 +134,14 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
   const userSubtitle = isDealer
     ? (user?.customer?.code ? `Đại lý • ${user.customer.code}` : 'Đại lý chính thức')
     : userPosition;
+
+  const isAdminAccount =
+    !isDealer &&
+    (user?.role === 'ADMIN' ||
+      user?.role === 'SUPERADMIN' ||
+      userPosition.toLowerCase().includes('giám đốc') ||
+      user?.departmentCode?.toLowerCase() === 'board' ||
+      user?.employee?.departmentCode?.toLowerCase() === 'board');
 
   return (
     <>
@@ -402,6 +410,22 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
                     <i className="bi bi-gear text-slate-500 text-[14px]" />
                     <span>Cài đặt tài khoản &amp; mật khẩu</span>
                   </button>
+
+                  {/* Quản trị dữ liệu (Chỉ hiển thị cho tài khoản Admin / Ban Giám đốc) */}
+                  {isAdminAccount && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        setActiveDeptCode('board');
+                        setActiveMenuKey('data-management');
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 transition-colors text-left cursor-pointer border-0 bg-transparent"
+                    >
+                      <i className="bi bi-database-lock text-slate-500 text-[14px]" />
+                      <span>Quản trị dữ liệu</span>
+                    </button>
+                  )}
 
                   {/* Switch Demo user */}
                   <Link

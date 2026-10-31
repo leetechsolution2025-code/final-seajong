@@ -60,6 +60,20 @@ export interface TimekeepingRecord {
   explanationStatus?: 'none' | 'pending' | 'approved' | 'rejected';
   registeredLunch?: boolean;
   registeredDinner?: boolean;
+  leaveInfo?: {
+    requestId?: string;
+    status: 'approved' | 'pending' | 'rejected';
+    leaveCategory: 'annual' | 'sick' | 'special' | 'unpaid';
+    leaveCategoryLabel: string;
+    leaveSession: 'all_day' | 'morning' | 'afternoon';
+    isPaidLeave: boolean;
+    paidCredit?: number;
+    morningPaidCredit?: number;
+    afternoonPaidCredit?: number;
+    quotaConvertedToUnpaid?: boolean;
+    reason?: string;
+    approver?: string;
+  } | null;
 }
 
 export interface MyTimekeepingViewProps {
@@ -452,11 +466,38 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
     return 'Chưa đủ điều kiện';
   }, [authMode, currentCoords.lat, currentCoords.lng, locationRangeCheck?.isInside, locationRangeCheck?.distanceMeters]);
 
-  // Khoá nút bấm chấm công khi đã quẹt xong ca, hoặc chưa đáp ứng kết nối mạng, hoặc chưa đến giờ / hết giờ ca
-  const isMorningInLocked = hasMorningIn || isMorningEnded || !isNetworkReadyForCheckIn;
-  const isMorningCheckOutLocked = hasMorningOut || isMorningEnded || !hasMorningIn || !isNetworkReadyForCheckIn;
-  const isAfternoonInLocked = hasAfternoonIn || !isAfternoonReady || !isNetworkReadyForCheckIn;
-  const isAfternoonCheckOutLocked = hasAfternoonOut || !isAfternoonReady || !hasAfternoonIn || !isNetworkReadyForCheckIn;
+  // Kiểm tra hôm nay có đơn Nghỉ phép hay không
+  // QUY TẮC BẮT BUỘC (Mục 1 & Mục 3):
+  // - Trong thời gian đơn đang "Chờ phê duyệt" (pending) hoặc "Từ chối" (rejected), nhân viên VẪN ĐƯỢC CHẤM CÔNG BÌNH THƯỜNG.
+  // - CHỈ KHI đơn đã được "Phê duyệt" (status === 'approved') mới khoá ca nghỉ tương ứng (Sáng / Chiều / Cả ngày).
+  const todayLeaveInfo = useMemo(() => {
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const found = records.find((r) => r.dateStr === todayStr);
+    return found?.leaveInfo || null;
+  }, [records]);
+
+  const isTodayMorningLeave = Boolean(
+    todayLeaveInfo &&
+      todayLeaveInfo.status === 'approved' &&
+      (todayLeaveInfo.leaveSession === 'all_day' || todayLeaveInfo.leaveSession === 'morning')
+  );
+  const isTodayAfternoonLeave = Boolean(
+    todayLeaveInfo &&
+      todayLeaveInfo.status === 'approved' &&
+      (todayLeaveInfo.leaveSession === 'all_day' || todayLeaveInfo.leaveSession === 'afternoon')
+  );
+  const isTodayFullDayLeave = Boolean(
+    todayLeaveInfo &&
+      todayLeaveInfo.status === 'approved' &&
+      todayLeaveInfo.leaveSession === 'all_day'
+  );
+
+  // Khoá nút bấm chấm công khi đã quẹt xong ca, hoặc đang nghỉ phép ca đó, hoặc chưa đáp ứng kết nối mạng, hoặc chưa đến giờ / hết giờ ca
+  const isMorningInLocked = hasMorningIn || isMorningEnded || !isNetworkReadyForCheckIn || isTodayMorningLeave;
+  const isMorningCheckOutLocked = hasMorningOut || isMorningEnded || !hasMorningIn || !isNetworkReadyForCheckIn || isTodayMorningLeave;
+  const isAfternoonInLocked = hasAfternoonIn || !isAfternoonReady || !isNetworkReadyForCheckIn || isTodayAfternoonLeave;
+  const isAfternoonCheckOutLocked = hasAfternoonOut || !isAfternoonReady || !hasAfternoonIn || !isNetworkReadyForCheckIn || isTodayAfternoonLeave;
 
   // Chức năng chấm công ngoài văn phòng hoặc công trình dự án
   const [isOutsideWork, setIsOutsideWork] = useState<boolean>(false);
@@ -522,6 +563,10 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       onShowToast('warning', 'Tài khoản đã khoá', `Nhân viên đang ở trạng thái ${employeeStatus === 'temporary_leave' ? 'Tạm nghỉ' : 'Đã nghỉ việc'}, không thể đăng ký suất ăn.`);
       return;
     }
+    if (isTodayFullDayLeave) {
+      onShowToast('warning', 'Đang trong ngày nghỉ phép', `Hôm nay bạn có đơn ${todayLeaveInfo?.leaveCategoryLabel || 'Nghỉ phép'} cả ngày nên hệ thống tự động tắt đăng ký suất ăn trưa.`);
+      return;
+    }
     if (isLunchLocked) {
       onShowToast('warning', 'Đã hết giờ báo cơm trưa', `Theo nội quy, giờ chốt đăng ký / hủy ăn trưa là trước ${lunchDeadlineStr}. Hiện đã quá giờ quy định, nút báo cơm trưa đã khoá để nhà bếp chuẩn bị suất ăn.`);
       return;
@@ -572,6 +617,10 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       onShowToast('warning', 'Tài khoản đã khoá', `Nhân viên đang ở trạng thái ${employeeStatus === 'temporary_leave' ? 'Tạm nghỉ' : 'Đã nghỉ việc'}, không thể đăng ký suất ăn.`);
       return;
     }
+    if (isTodayFullDayLeave) {
+      onShowToast('warning', 'Đang trong ngày nghỉ phép', `Hôm nay bạn có đơn ${todayLeaveInfo?.leaveCategoryLabel || 'Nghỉ phép'} cả ngày nên hệ thống tự động tắt đăng ký suất ăn tối.`);
+      return;
+    }
     if (isDinnerLocked) {
       onShowToast('warning', 'Đã hết giờ báo cơm tối', `Theo nội quy, giờ chốt đăng ký / hủy ăn tối tăng ca là trước ${dinnerDeadlineStr}. Hiện đã quá giờ quy định, nút báo cơm tối đã khoá.`);
       return;
@@ -617,10 +666,12 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
     }
   };
 
-  // Modal Giải trình chấm công
+  // Modal Giải trình chấm công / Xin nghỉ phép
   const [showExplanationModal, setShowExplanationModal] = useState<boolean>(false);
   const [explanationRecord, setExplanationRecord] = useState<TimekeepingRecord | null>(null);
   const [explanationReasonType, setExplanationReasonType] = useState<string>('forget_morning_in');
+  const [modalLeaveCategory, setModalLeaveCategory] = useState<'annual' | 'special' | 'sick' | 'unpaid'>('annual');
+  const [modalLeaveSession, setModalLeaveSession] = useState<'all_day' | 'morning' | 'afternoon'>('all_day');
   const [proposedCheckIn, setProposedCheckIn] = useState<string>('08:00');
   const [proposedCheckOut, setProposedCheckOut] = useState<string>('17:30');
   const [explanationContent, setExplanationContent] = useState<string>('');
@@ -656,10 +707,17 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
         } catch {}
       }
 
-      // 2. Gửi địa chỉ IP lên API máy chủ để đối soát với CSDL
-      const verifyUrl = detectedClientWanIp
-        ? `/api/timekeeping/verify-network?clientWanIp=${encodeURIComponent(detectedClientWanIp)}`
-        : '/api/timekeeping/verify-network';
+      // 2. Gửi địa chỉ IP & định danh nhân sự lên API máy chủ để đối soát với Địa điểm làm việc được gán trong CSDL
+      const uid =
+        currentEmployee?.id ||
+        dbUser?.id ||
+        activeUser?.id ||
+        (activeUser as any)?.email ||
+        'lecongvu@seajong.com';
+      const params = new URLSearchParams();
+      if (detectedClientWanIp) params.set('clientWanIp', detectedClientWanIp);
+      if (uid) params.set('userId', String(uid));
+      const verifyUrl = `/api/timekeeping/verify-network?${params.toString()}`;
 
       const res = await fetch(verifyUrl);
       if (res.ok) {
@@ -1047,21 +1105,130 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       if (typeof raw.otHours === 'number') calculatedOtHours = raw.otHours;
     }
 
-    const mCredit = typeof raw.morningCredit === 'number'
-      ? raw.morningCredit
-      : (morningCheckIn !== '--:--' && morningCheckOut !== '--:--'
+    const leaveInfo = raw.leaveInfo || null;
+    // Chỉ tính nghỉ phép vào ca làm việc khi đơn ĐÃ ĐƯỢC PHÊ DUYỆT (status === 'approved')
+    const isApprovedLeaveMorning = Boolean(
+      leaveInfo &&
+        leaveInfo.status === 'approved' &&
+        (leaveInfo.leaveSession === 'all_day' || leaveInfo.leaveSession === 'morning')
+    );
+    const isApprovedLeaveAfternoon = Boolean(
+      leaveInfo &&
+        leaveInfo.status === 'approved' &&
+        (leaveInfo.leaveSession === 'all_day' || leaveInfo.leaveSession === 'afternoon')
+    );
+    const isApprovedLeaveFullDay = Boolean(
+      leaveInfo && leaveInfo.status === 'approved' && leaveInfo.leaveSession === 'all_day'
+    );
+
+    const hasActualMorningWork = Boolean(
+      morningCheckIn && morningCheckIn !== '--:--'
+    );
+    const hasActualAfternoonWork = Boolean(
+      afternoonCheckIn && afternoonCheckIn !== '--:--'
+    );
+
+    if (isApprovedLeaveMorning && !hasActualMorningWork) {
+      calculatedMorningLate = 0;
+      calculatedMorningEarly = 0;
+    }
+    if (isApprovedLeaveAfternoon && !hasActualAfternoonWork) {
+      calculatedAfternoonLate = 0;
+      calculatedAfternoonEarly = 0;
+    }
+
+    const actualMorningCredit =
+      typeof raw.morningCredit === 'number'
+        ? raw.morningCredit
+        : morningCheckIn !== '--:--' && morningCheckOut !== '--:--'
           ? calculateShiftCredit(calculatedMorningLate, calculatedMorningEarly, true).workCredit
-          : (raw.workCredit === 0.5 ? 0.5 : (raw.workCredit === 1.0 ? 0.5 : 0)));
+          : raw.workCredit === 0.5
+            ? 0.5
+            : raw.workCredit === 1.0
+              ? 0.5
+              : 0;
 
-    const aCredit = typeof raw.afternoonCredit === 'number'
-      ? raw.afternoonCredit
-      : (afternoonCheckIn !== '--:--' && afternoonCheckOut !== '--:--'
+    const actualAfternoonCredit =
+      typeof raw.afternoonCredit === 'number'
+        ? raw.afternoonCredit
+        : afternoonCheckIn !== '--:--' && afternoonCheckOut !== '--:--'
           ? calculateShiftCredit(calculatedAfternoonLate, calculatedAfternoonEarly, true).workCredit
-          : (raw.workCredit === 1.0 ? 0.5 : 0));
+          : raw.workCredit === 1.0
+            ? 0.5
+            : 0;
 
-    const totCredit = typeof raw.totalCredit === 'number'
-      ? raw.totalCredit
-      : (typeof raw.workCredit === 'number' ? raw.workCredit : (mCredit + aCredit));
+    const approvedLeaveMorningCredit = isApprovedLeaveMorning
+      ? typeof leaveInfo?.morningPaidCredit === 'number'
+        ? leaveInfo.morningPaidCredit
+        : leaveInfo?.isPaidLeave
+          ? 0.5
+          : 0
+      : 0;
+
+    const approvedLeaveAfternoonCredit = isApprovedLeaveAfternoon
+      ? typeof leaveInfo?.afternoonPaidCredit === 'number'
+        ? leaveInfo.afternoonPaidCredit
+        : leaveInfo?.isPaidLeave
+          ? 0.5
+          : 0
+      : 0;
+
+    // Bảo toàn công thực tế đã chấm: nếu nhân viên có chấm công thực tế thì giữ nguyên, hoặc lấy công phép đã duyệt
+    const mCredit = isApprovedLeaveMorning
+      ? Math.max(actualMorningCredit, approvedLeaveMorningCredit)
+      : actualMorningCredit;
+
+    const aCredit = isApprovedLeaveAfternoon
+      ? Math.max(actualAfternoonCredit, approvedLeaveAfternoonCredit)
+      : actualAfternoonCredit;
+
+    const totCredit =
+      typeof raw.totalCredit === 'number' && !leaveInfo
+        ? raw.totalCredit
+        : typeof raw.workCredit === 'number' && !leaveInfo
+          ? raw.workCredit
+          : Math.min(1.0, mCredit + aCredit);
+
+    let computedStatusLabel =
+      raw.statusLabel ||
+      (totCredit === 1.0
+        ? 'Đủ 1.0 công chuẩn 2 ca'
+        : totCredit === 0.5
+          ? '0.5 công'
+          : calculatedMorningLate > 0 || calculatedMorningEarly > 0
+            ? `Vi phạm (${calculatedMorningLate > 0 ? `Muộn ${calculatedMorningLate}p` : ''}${calculatedMorningLate > 0 && calculatedMorningEarly > 0 ? ', ' : ''}${calculatedMorningEarly > 0 ? `Sớm ${calculatedMorningEarly}p` : ''})`
+            : 'Nghỉ làm');
+
+    if (leaveInfo) {
+      const sesLbl =
+        leaveInfo.leaveSession === 'morning'
+          ? 'Buổi sáng'
+          : leaveInfo.leaveSession === 'afternoon'
+            ? 'Buổi chiều'
+            : 'Cả ngày';
+      if (leaveInfo.status === 'approved') {
+        computedStatusLabel = `${leaveInfo.leaveCategoryLabel} • ${sesLbl} (${totCredit.toFixed(1)} công)`;
+      } else if (leaveInfo.status === 'rejected') {
+        const isAbsentMorning =
+          (leaveInfo.leaveSession === 'all_day' || leaveInfo.leaveSession === 'morning') &&
+          !hasActualMorningWork;
+        const isAbsentAfternoon =
+          (leaveInfo.leaveSession === 'all_day' || leaveInfo.leaveSession === 'afternoon') &&
+          !hasActualAfternoonWork;
+        if (isAbsentMorning || isAbsentAfternoon) {
+          computedStatusLabel = 'Vắng mặt chưa được chấp thuận • Chờ Nhân sự kiểm tra';
+        } else {
+          computedStatusLabel = `Đơn nghỉ từ chối • Đi làm bình thường (${totCredit.toFixed(1)} công)`;
+        }
+      } else {
+        // status === 'pending'
+        if (hasActualMorningWork || hasActualAfternoonWork) {
+          computedStatusLabel = `Đi làm bình thường (${totCredit.toFixed(1)} công) • Đơn nghỉ chờ duyệt`;
+        } else {
+          computedStatusLabel = `Chờ phê duyệt: ${leaveInfo.leaveCategoryLabel} (${sesLbl})`;
+        }
+      }
+    }
 
     return {
       id: raw.id || `TK-${Date.now()}`,
@@ -1072,24 +1239,72 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       morningCredit: mCredit,
       morningLateMinutes: calculatedMorningLate,
       morningEarlyMinutes: calculatedMorningEarly,
-      morningStatus: raw.morningStatus || (mCredit > 0 ? 'completed' : morningCheckIn !== '--:--' ? 'working' : 'not_yet'),
+      morningStatus:
+        raw.morningStatus ||
+        (mCredit > 0 ? 'completed' : morningCheckIn !== '--:--' ? 'working' : 'not_yet'),
       afternoonCheckIn,
       afternoonCheckOut,
       afternoonCredit: aCredit,
       afternoonLateMinutes: calculatedAfternoonLate,
       afternoonEarlyMinutes: calculatedAfternoonEarly,
-      afternoonStatus: raw.afternoonStatus || (aCredit > 0 ? 'completed' : afternoonCheckIn !== '--:--' ? 'working' : 'not_yet'),
+      afternoonStatus:
+        raw.afternoonStatus ||
+        (aCredit > 0 ? 'completed' : afternoonCheckIn !== '--:--' ? 'working' : 'not_yet'),
       totalCredit: totCredit,
       otHours: calculatedOtHours,
-      totalWorkHoursFormatted: raw.totalWorkHoursFormatted || raw.workHoursFormatted || (totCredit > 0 ? `${totCredit * 8} giờ` : '0 giờ 00 phút'),
-      locationName: raw.locationName || raw.checkInLocation || 'Trụ sở chính và Văn phòng điều hành Seajong',
-      locationCoords: typeof raw.locationCoords === 'object' ? raw.locationCoords : { lat: 21.047219, lng: 105.770514 },
+      totalWorkHoursFormatted:
+        raw.totalWorkHoursFormatted ||
+        raw.workHoursFormatted ||
+        (totCredit > 0 ? `${totCredit * 8} giờ` : '0 giờ 00 phút'),
+      locationName:
+        raw.locationName ||
+        raw.checkInLocation ||
+        (leaveInfo && !hasActualMorningWork && !hasActualAfternoonWork
+          ? leaveInfo.status === 'rejected'
+            ? 'Vắng mặt chưa được chấp thuận (Chờ NS xác minh)'
+            : `Nghỉ phép (${leaveInfo.leaveCategoryLabel})`
+          : 'Trụ sở chính và Văn phòng điều hành Seajong'),
+      locationCoords:
+        typeof raw.locationCoords === 'object'
+          ? raw.locationCoords
+          : { lat: 21.047219, lng: 105.770514 },
       method: raw.method || raw.checkInMethod || 'Mạng dây LAN nội bộ Seajong',
-      statusLabel: raw.statusLabel || (totCredit === 1.0 ? 'Đủ 1.0 công chuẩn 2 ca' : totCredit === 0.5 ? '0.5 công' : (calculatedMorningLate > 0 || calculatedMorningEarly > 0) ? `Vi phạm (${calculatedMorningLate > 0 ? `Muộn ${calculatedMorningLate}p` : ''}${calculatedMorningLate > 0 && calculatedMorningEarly > 0 ? ', ' : ''}${calculatedMorningEarly > 0 ? `Sớm ${calculatedMorningEarly}p` : ''})` : 'Nghỉ làm'),
+      statusLabel: computedStatusLabel,
       note: raw.note || '',
-      explanationStatus: raw.explanationStatus || ((calculatedMorningLate > 0 || calculatedMorningEarly > 0 || calculatedAfternoonLate > 0 || calculatedAfternoonEarly > 0) ? 'pending' : 'none'),
-      registeredLunch: Boolean(raw.registeredLunch !== undefined ? raw.registeredLunch : (raw.dateStr === dynamicTodayStr ? registerLunch : false)),
-      registeredDinner: Boolean(raw.registeredDinner !== undefined ? raw.registeredDinner : (raw.dateStr === dynamicTodayStr ? registerDinner : false)),
+      explanationStatus: leaveInfo
+        ? leaveInfo.status === 'approved'
+          ? 'approved'
+          : leaveInfo.status === 'rejected'
+            ? 'rejected'
+            : 'pending'
+        : raw.explanationStatus ||
+          (calculatedMorningLate > 0 ||
+          calculatedMorningEarly > 0 ||
+          calculatedAfternoonLate > 0 ||
+          calculatedAfternoonEarly > 0
+            ? 'pending'
+            : 'none'),
+      registeredLunch:
+        isApprovedLeaveFullDay && !hasActualMorningWork && !hasActualAfternoonWork
+          ? false
+          : Boolean(
+              raw.registeredLunch !== undefined
+                ? raw.registeredLunch
+                : raw.dateStr === dynamicTodayStr
+                  ? registerLunch
+                  : false
+            ),
+      registeredDinner:
+        isApprovedLeaveFullDay && !hasActualMorningWork && !hasActualAfternoonWork
+          ? false
+          : Boolean(
+              raw.registeredDinner !== undefined
+                ? raw.registeredDinner
+                : raw.dateStr === dynamicTodayStr
+                  ? registerDinner
+                  : false
+            ),
+      leaveInfo,
     };
   };
 
@@ -1179,8 +1394,16 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
 
     initData();
 
+    const handleRefreshAttendance = () => {
+      initData();
+    };
+    window.addEventListener('decodoor_request_created', handleRefreshAttendance);
+    window.addEventListener('decodoor_request_updated', handleRefreshAttendance);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('decodoor_request_created', handleRefreshAttendance);
+      window.removeEventListener('decodoor_request_updated', handleRefreshAttendance);
     };
   }, [activeUser?.id, activeUser?.email]);
 
@@ -1323,6 +1546,10 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       onShowToast('warning', 'Tài khoản đã khoá', `Nhân viên đang ở trạng thái ${employeeStatus === 'temporary_leave' ? 'Tạm nghỉ' : 'Đã nghỉ việc'}, không thể thực hiện chấm công.`);
       return;
     }
+    if (isTodayMorningLeave) {
+      onShowToast('info', 'Đang nghỉ phép ca sáng', `Bạn đã đăng ký ${todayLeaveInfo?.leaveCategoryLabel || 'Nghỉ phép'} vào ca sáng hôm nay nên không cần chấm công ca sáng.`);
+      return;
+    }
     if (hasMorningIn) {
       onShowToast('info', 'Đã chấm công', `Bạn đã quẹt vào ca sáng lúc ${todayMorningIn}, nút đã khoá để tránh bấm trùng lặp.`);
       return;
@@ -1351,6 +1578,10 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
   const handleCheckOutMorning = () => {
     if (isEmployeeInactive) {
       onShowToast('warning', 'Tài khoản đã khoá', `Nhân viên đang ở trạng thái ${employeeStatus === 'temporary_leave' ? 'Tạm nghỉ' : 'Đã nghỉ việc'}, không thể thực hiện chấm công.`);
+      return;
+    }
+    if (isTodayMorningLeave) {
+      onShowToast('info', 'Đang nghỉ phép ca sáng', `Bạn đã đăng ký ${todayLeaveInfo?.leaveCategoryLabel || 'Nghỉ phép'} vào ca sáng hôm nay.`);
       return;
     }
     if (hasMorningOut) {
@@ -1408,6 +1639,10 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       onShowToast('warning', 'Tài khoản đã khoá', `Nhân viên đang ở trạng thái ${employeeStatus === 'temporary_leave' ? 'Tạm nghỉ' : 'Đã nghỉ việc'}, không thể thực hiện chấm công.`);
       return;
     }
+    if (isTodayAfternoonLeave) {
+      onShowToast('info', 'Đang nghỉ phép ca chiều', `Bạn đã đăng ký ${todayLeaveInfo?.leaveCategoryLabel || 'Nghỉ phép'} vào ca chiều hôm nay nên không cần chấm công ca chiều.`);
+      return;
+    }
     if (hasAfternoonIn) {
       onShowToast('info', 'Đã chấm công', `Bạn đã quẹt vào ca chiều lúc ${todayAfternoonIn}, nút đã khoá để tránh bấm trùng lặp.`);
       return;
@@ -1436,6 +1671,10 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
   const handleCheckOutAfternoon = () => {
     if (isEmployeeInactive) {
       onShowToast('warning', 'Tài khoản đã khoá', `Nhân viên đang ở trạng thái ${employeeStatus === 'temporary_leave' ? 'Tạm nghỉ' : 'Đã nghỉ việc'}, không thể thực hiện chấm công.`);
+      return;
+    }
+    if (isTodayAfternoonLeave) {
+      onShowToast('info', 'Đang nghỉ phép ca chiều', `Bạn đã đăng ký ${todayLeaveInfo?.leaveCategoryLabel || 'Nghỉ phép'} vào ca chiều hôm nay.`);
       return;
     }
     if (hasAfternoonOut) {
@@ -1493,59 +1732,137 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
     }
   };
 
-  // Mở modal gửi giải trình
+  // Mở modal gửi giải trình / xin nghỉ phép
   const handleOpenExplanation = (record?: TimekeepingRecord) => {
     const target = record || records[0];
     setExplanationRecord(target);
-    setExplanationReasonType('forget_morning_in');
+    if (target?.leaveInfo) {
+      setExplanationReasonType('leave_request');
+      setModalLeaveCategory(target.leaveInfo.leaveCategory || 'annual');
+      setModalLeaveSession(target.leaveInfo.leaveSession || 'all_day');
+      setExplanationContent(target.leaveInfo.reason || '');
+    } else {
+      setExplanationReasonType('forget_morning_in');
+      setModalLeaveCategory('annual');
+      setModalLeaveSession('all_day');
+      setExplanationContent('');
+    }
     setProposedCheckIn('08:00');
     setProposedCheckOut('17:30');
-    setExplanationContent('');
     setShowExplanationModal(true);
   };
 
-  // Gửi giải trình chấm công và lưu vào bảng PersonalRequest thực tế
-  const handleSubmitExplanation = () => {
+  // Gửi giải trình chấm công hoặc đơn xin nghỉ phép và lưu vào bảng PersonalRequest thực tế
+  const handleSubmitExplanation = async () => {
     if (!explanationContent.trim()) {
-      onShowToast('warning', 'Thiếu nội dung', 'Vui lòng nhập lý do giải trình chi tiết');
+      onShowToast('warning', 'Thiếu nội dung', 'Vui lòng nhập lý do chi tiết');
       return;
     }
 
     if (explanationRecord) {
-      const updated = records.map((r) => {
-        if (r.id === explanationRecord.id || r.dateStr === explanationRecord.dateStr) {
-          return {
-            ...r,
-            explanationStatus: 'pending' as const,
-            note: `Giải trình đang chờ duyệt: ${explanationContent.slice(0, 40)}...`,
-          };
-        }
-        return r;
-      });
-      saveRecords(updated);
+      const isLeaveReq = explanationReasonType === 'leave_request';
+      const isPaidLeave = modalLeaveCategory === 'annual' || modalLeaveCategory === 'special';
+      const leaveCatLabel =
+        modalLeaveCategory === 'annual'
+          ? 'Nghỉ phép năm hưởng lương'
+          : modalLeaveCategory === 'special'
+            ? 'Nghỉ hưởng lương theo chế độ'
+            : modalLeaveCategory === 'sick'
+              ? 'Nghỉ theo chính sách (Ốm/BHXH)'
+              : 'Nghỉ không hưởng lương';
+      const leaveDaysNum = modalLeaveSession === 'all_day' ? 1 : 0.5;
 
-      // Đồng bộ đơn giải trình sang CSDL PersonalRequest
-      fetch('/api/personal-requests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'late_early',
-          title: `Giải trình chấm công ngày ${explanationRecord.dateStr}`,
-          content: explanationContent,
-          lateEarlyDate: explanationRecord.dateStr,
-          lateEarlyTargetTime: `${proposedCheckIn} - ${proposedCheckOut}`,
-          approver: approverName,
-          applicantName: currentEmployee.name,
-          applicantRole: currentEmployee.role,
-          department: currentEmployee.department,
-          userId: currentEmployee.id,
-          userEmail: currentEmployee.email,
-        }),
-      }).catch(() => {});
+      const payload: Record<string, any> = isLeaveReq
+        ? {
+            type: 'leave',
+            title: `Xin nghỉ phép (${leaveCatLabel}) ngày ${explanationRecord.dateStr}`,
+            content: explanationContent,
+            leaveCategory: modalLeaveCategory,
+            leaveSession: modalLeaveSession,
+            leaveFromDate: explanationRecord.dateStr,
+            leaveToDate: explanationRecord.dateStr,
+            leaveDays: leaveDaysNum,
+            approver: approverName,
+            applicantName: currentEmployee.name,
+            applicantRole: currentEmployee.role,
+            department: currentEmployee.department,
+            userId: currentEmployee.id,
+            userEmail: currentEmployee.email,
+            status: 'pending',
+          }
+        : {
+            type: 'late_early',
+            title: `Giải trình chấm công ngày ${explanationRecord.dateStr}`,
+            content: explanationContent,
+            lateEarlyDate: explanationRecord.dateStr,
+            lateEarlyTargetTime: `${proposedCheckIn} - ${proposedCheckOut}`,
+            approver: approverName,
+            applicantName: currentEmployee.name,
+            applicantRole: currentEmployee.role,
+            department: currentEmployee.department,
+            userId: currentEmployee.id,
+            userEmail: currentEmployee.email,
+            status: 'pending',
+          };
+
+      try {
+        await fetch('/api/personal-requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        // Tải lại bảng chấm công thực tế từ CSDL để đồng bộ ngay lập tức (đơn ở trạng thái Chờ phê duyệt, không khóa chấm công)
+        const realUid = currentEmployee.id || dbUser?.employeeId || dbUser?.id || activeUser?.id || 'lecongvu@seajong.com';
+        const tkRes = await fetch(`/api/timekeeping?userId=${encodeURIComponent(String(realUid))}`);
+        if (tkRes.ok) {
+          const tkData = await tkRes.json();
+          if (Array.isArray(tkData)) {
+            const normalized = tkData.map(normalizeRecord);
+            setRecords(normalized);
+          }
+        }
+      } catch {
+        const updated = records.map((r) => {
+          if (r.id === explanationRecord.id || r.dateStr === explanationRecord.dateStr) {
+            return {
+              ...r,
+              explanationStatus: 'pending' as any,
+              note: `${isLeaveReq ? leaveCatLabel : 'Giải trình'}: ${explanationContent.slice(0, 40)}...`,
+              leaveInfo: isLeaveReq
+                ? {
+                    status: 'pending' as const,
+                    leaveCategory: modalLeaveCategory,
+                    leaveCategoryLabel: leaveCatLabel,
+                    leaveSession: modalLeaveSession,
+                    isPaidLeave,
+                    reason: explanationContent,
+                    approver: approverName,
+                  }
+                : r.leaveInfo,
+            };
+          }
+          return r;
+        });
+        saveRecords(updated);
+      }
+
+      window.dispatchEvent(new CustomEvent('decodoor_request_created'));
+      setShowExplanationModal(false);
+
+      if (isLeaveReq) {
+        onShowToast(
+          'success',
+          'Đã gửi đơn xin nghỉ (Chờ phê duyệt)',
+          `Đơn xin nghỉ (${modalLeaveSession === 'all_day' ? 'Cả ngày' : modalLeaveSession === 'morning' ? 'Buổi sáng' : 'Buổi chiều'}) ngày ${explanationRecord.dateStr} đã chuyển sang trạng thái "Chờ phê duyệt". Trong thời gian chờ duyệt, bạn vẫn được chấm công bình thường.`
+        );
+      } else {
+        onShowToast('success', 'Đã gửi giải trình', 'Đơn giải trình chấm công đã được chuyển tới Trưởng bộ phận xem xét duyệt');
+      }
+      return;
     }
 
     setShowExplanationModal(false);
-    onShowToast('success', 'Đã gửi giải trình', 'Đơn giải trình chấm công đã được chuyển tới Trưởng bộ phận xem xét duyệt');
   };
 
   // Thông tin nhân viên hiện tại (Liên kết trực tiếp từ CSDL Seajong)
@@ -1831,6 +2148,51 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
               </div>
               <div style={{ fontSize: '0.72rem', color: employeeStatus === 'temporary_leave' ? '#b45309' : '#b91c1c', marginTop: '2px', lineHeight: 1.4 }}>
                 Trạng thái nhân viên: <strong>{employeeStatus === 'temporary_leave' ? 'Tạm nghỉ' : 'Đã nghỉ việc'}</strong>. Tất cả chức năng chấm công, quẹt thẻ và đăng ký dịch vụ đã bị vô hiệu hoá.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Banner thông báo khi hôm nay có đơn Nghỉ phép */}
+        {todayLeaveInfo && (
+          <div
+            style={{
+              backgroundColor: todayLeaveInfo.status === 'approved' ? '#f0fdfa' : '#fffbeb',
+              border: todayLeaveInfo.status === 'approved' ? '1.5px solid #99f6e4' : '1.5px solid #fde68a',
+              borderRadius: '10px',
+              padding: '10px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
+            }}
+          >
+            <div
+              style={{
+                width: '34px',
+                height: '34px',
+                borderRadius: '8px',
+                backgroundColor: todayLeaveInfo.status === 'approved' ? '#ccfbf1' : '#fef3c7',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: todayLeaveInfo.status === 'approved' ? '#0f766e' : '#d97706',
+                flexShrink: 0,
+              }}
+            >
+              <CalendarCheck size={17} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: todayLeaveInfo.status === 'approved' ? '#115e59' : '#92400e' }}>
+                {todayLeaveInfo.status === 'approved' ? 'Đang trong ngày nghỉ phép đã duyệt' : 'Đã gửi đơn xin nghỉ phép hôm nay'}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: todayLeaveInfo.status === 'approved' ? '#0f766e' : '#b45309', marginTop: '2px', lineHeight: 1.35 }}>
+                <strong>{todayLeaveInfo.leaveCategoryLabel}</strong> •{' '}
+                {todayLeaveInfo.leaveSession === 'morning'
+                  ? 'Nghỉ buổi sáng'
+                  : todayLeaveInfo.leaveSession === 'afternoon'
+                    ? 'Nghỉ buổi chiều'
+                    : 'Nghỉ cả ngày (Tự động tắt báo cơm)'}
               </div>
             </div>
           </div>
@@ -3822,215 +4184,443 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
 
                         {/* 2. SÁNG (08:00 - 12:00) */}
                         <td style={{ padding: '12px 8px', verticalAlign: 'middle' }}>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                            <div>
-                              <div
-                                style={{
-                                  fontSize: '0.6875rem',
-                                  color: '#94a3b8',
-                                  fontWeight: 600,
-                                  textTransform: 'uppercase',
-                                  marginBottom: '2px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '3px',
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                <span>VÀO</span>
-                                {(r.morningLateMinutes || 0) > 0 && (
-                                  <span
+                          {(() => {
+                            const hasMorningLeaveShift = Boolean(
+                              r.leaveInfo &&
+                                (r.leaveInfo.leaveSession === 'all_day' ||
+                                  r.leaveInfo.leaveSession === 'morning')
+                            );
+                            const hasActualMorningPunch = Boolean(
+                              r.morningCheckIn && r.morningCheckIn !== '--:--'
+                            );
+                            const mPaidCred =
+                              typeof r.leaveInfo?.morningPaidCredit === 'number'
+                                ? r.leaveInfo.morningPaidCredit
+                                : r.leaveInfo?.isPaidLeave
+                                  ? 0.5
+                                  : 0;
+
+                            // Nếu đơn đã duyệt và không có chấm công thực tế -> hiển thị chế độ nghỉ đã duyệt
+                            if (
+                              hasMorningLeaveShift &&
+                              r.leaveInfo?.status === 'approved' &&
+                              !hasActualMorningPunch
+                            ) {
+                              return (
+                                <div
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    padding: '4px 8px',
+                                    borderRadius: '6px',
+                                    backgroundColor: mPaidCred > 0 ? '#f0fdfa' : '#f1f5f9',
+                                    border:
+                                      mPaidCred > 0 ? '1px solid #99f6e4' : '1px solid #cbd5e1',
+                                    color: mPaidCred > 0 ? '#0f766e' : '#475569',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  <CalendarCheck size={12} />
+                                  <span>
+                                    {r.leaveInfo.leaveCategoryLabel} (
+                                    {mPaidCred > 0 ? `+${mPaidCred} công` : '0 công'})
+                                  </span>
+                                </div>
+                              );
+                            }
+
+                            // Nếu đơn bị từ chối và nhân viên thực tế vắng mặt -> ghi nhận "Vắng mặt chưa được chấp thuận"
+                            if (
+                              hasMorningLeaveShift &&
+                              r.leaveInfo?.status === 'rejected' &&
+                              !hasActualMorningPunch
+                            ) {
+                              return (
+                                <div
+                                  title="Đơn xin nghỉ không được duyệt và nhân viên thực tế vắng mặt - Chuyển Nhân sự kiểm tra trước khi chốt công"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    padding: '4px 8px',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#fef2f2',
+                                    border: '1px solid #fecaca',
+                                    color: '#dc2626',
+                                    fontSize: '0.71rem',
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  <ExclamationTriangle size={12} />
+                                  <span>Vắng mặt chưa được chấp thuận</span>
+                                </div>
+                              );
+                            }
+
+                            // Các trường hợp còn lại (kể cả đang Chờ phê duyệt hoặc Từ chối nhưng vẫn đi làm): luôn hiển thị giờ chấm công thực tế VÀO / RA
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                                  <div>
+                                    <div
+                                      style={{
+                                        fontSize: '0.6875rem',
+                                        color: '#94a3b8',
+                                        fontWeight: 600,
+                                        textTransform: 'uppercase',
+                                        marginBottom: '2px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '3px',
+                                        whiteSpace: 'nowrap',
+                                      }}
+                                    >
+                                      <span>VÀO</span>
+                                      {(r.morningLateMinutes || 0) > 0 && (
+                                        <span
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            padding: '0 4px',
+                                            borderRadius: '3px',
+                                            backgroundColor: '#fef3c7',
+                                            color: '#b45309',
+                                            border: '1px solid #fde68a',
+                                            fontSize: '0.5625rem',
+                                            fontWeight: 700,
+                                            lineHeight: '1.2',
+                                            textTransform: 'none',
+                                          }}
+                                        >
+                                          Muộn
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontSize: '0.8125rem',
+                                        fontWeight:
+                                          r.morningCheckIn && r.morningCheckIn !== '--:--'
+                                            ? 700
+                                            : 500,
+                                        color:
+                                          (r.morningLateMinutes || 0) > 0
+                                            ? '#b45309'
+                                            : r.morningCheckIn && r.morningCheckIn !== '--:--'
+                                              ? '#0f172a'
+                                              : '#94a3b8',
+                                      }}
+                                    >
+                                      {formatTimeWithoutSeconds(r.morningCheckIn)}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div
+                                      style={{
+                                        fontSize: '0.6875rem',
+                                        color: '#94a3b8',
+                                        fontWeight: 600,
+                                        textTransform: 'uppercase',
+                                        marginBottom: '2px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '3px',
+                                        whiteSpace: 'nowrap',
+                                      }}
+                                    >
+                                      <span>RA</span>
+                                      {(r.morningEarlyMinutes || 0) > 0 && (
+                                        <span
+                                          title={`Về sớm ${r.morningEarlyMinutes} phút so với giờ quy định (${shiftHours.morningEnd || '12:00'})`}
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            padding: '0 4px',
+                                            borderRadius: '3px',
+                                            backgroundColor: '#ffedd5',
+                                            color: '#c2410c',
+                                            border: '1px solid #fed7aa',
+                                            fontSize: '0.5625rem',
+                                            fontWeight: 700,
+                                            lineHeight: '1.2',
+                                            textTransform: 'none',
+                                          }}
+                                        >
+                                          Sớm
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div
+                                      title={
+                                        (r.morningEarlyMinutes || 0) > 0
+                                          ? `Giờ ra: ${r.morningCheckOut} (Về sớm ${r.morningEarlyMinutes} phút so với ${shiftHours.morningEnd || '12:00'})`
+                                          : undefined
+                                      }
+                                      style={{
+                                        fontSize: '0.8125rem',
+                                        fontWeight:
+                                          r.morningCheckOut && r.morningCheckOut !== '--:--'
+                                            ? 700
+                                            : 500,
+                                        color:
+                                          (r.morningEarlyMinutes || 0) > 0
+                                            ? '#c2410c'
+                                            : r.morningCheckOut && r.morningCheckOut !== '--:--'
+                                              ? '#0f172a'
+                                              : '#94a3b8',
+                                      }}
+                                    >
+                                      {formatTimeWithoutSeconds(r.morningCheckOut)}
+                                    </div>
+                                  </div>
+                                </div>
+                                {hasMorningLeaveShift && r.leaveInfo?.status === 'pending' && (
+                                  <div
                                     style={{
                                       display: 'inline-flex',
                                       alignItems: 'center',
-                                      padding: '0 4px',
-                                      borderRadius: '3px',
-                                      backgroundColor: '#fef3c7',
+                                      gap: '4px',
+                                      fontSize: '0.65rem',
+                                      fontWeight: 700,
                                       color: '#b45309',
-                                      border: '1px solid #fde68a',
-                                      fontSize: '0.5625rem',
-                                      fontWeight: 700,
-                                      lineHeight: '1.2',
-                                      textTransform: 'none',
                                     }}
                                   >
-                                    Muộn
-                                  </span>
+                                    <CalendarCheck size={10} />
+                                    <span>Đơn chờ duyệt ({r.leaveInfo.leaveCategoryLabel})</span>
+                                  </div>
                                 )}
                               </div>
-                              <div
-                                style={{
-                                  fontSize: '0.8125rem',
-                                  fontWeight: r.morningCheckIn && r.morningCheckIn !== '--:--' ? 700 : 500,
-                                  color: (r.morningLateMinutes || 0) > 0 ? '#b45309' : r.morningCheckIn && r.morningCheckIn !== '--:--' ? '#0f172a' : '#94a3b8',
-                                }}
-                              >
-                                {formatTimeWithoutSeconds(r.morningCheckIn)}
-                              </div>
-                            </div>
-                            <div>
-                              <div
-                                style={{
-                                  fontSize: '0.6875rem',
-                                  color: '#94a3b8',
-                                  fontWeight: 600,
-                                  textTransform: 'uppercase',
-                                  marginBottom: '2px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '3px',
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                <span>RA</span>
-                                {(r.morningEarlyMinutes || 0) > 0 && (
-                                  <span
-                                    title={`Về sớm ${r.morningEarlyMinutes} phút so với giờ quy định (${shiftHours.morningEnd || '12:00'})`}
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      padding: '0 4px',
-                                      borderRadius: '3px',
-                                      backgroundColor: '#ffedd5',
-                                      color: '#c2410c',
-                                      border: '1px solid #fed7aa',
-                                      fontSize: '0.5625rem',
-                                      fontWeight: 700,
-                                      lineHeight: '1.2',
-                                      textTransform: 'none',
-                                    }}
-                                  >
-                                    Sớm
-                                  </span>
-                                )}
-                              </div>
-                              <div
-                                title={(r.morningEarlyMinutes || 0) > 0 ? `Giờ ra: ${r.morningCheckOut} (Về sớm ${r.morningEarlyMinutes} phút so với ${shiftHours.morningEnd || '12:00'})` : undefined}
-                                style={{
-                                  fontSize: '0.8125rem',
-                                  fontWeight: r.morningCheckOut && r.morningCheckOut !== '--:--' ? 700 : 500,
-                                  color: (r.morningEarlyMinutes || 0) > 0 ? '#c2410c' : r.morningCheckOut && r.morningCheckOut !== '--:--' ? '#0f172a' : '#94a3b8',
-                                }}
-                              >
-                                {formatTimeWithoutSeconds(r.morningCheckOut)}
-                              </div>
-                            </div>
-                          </div>
+                            );
+                          })()}
                         </td>
 
                         {/* 3. CHIỀU (13:30 - 17:30) */}
                         <td style={{ padding: '12px 8px', verticalAlign: 'middle' }}>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                            <div>
-                              <div
-                                style={{
-                                  fontSize: '0.6875rem',
-                                  color: '#94a3b8',
-                                  fontWeight: 600,
-                                  textTransform: 'uppercase',
-                                  marginBottom: '2px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '3px',
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                <span>VÀO</span>
-                                {(r.afternoonLateMinutes || 0) > 0 && (
-                                  <span
+                          {(() => {
+                            const hasAfternoonLeaveShift = Boolean(
+                              r.leaveInfo &&
+                                (r.leaveInfo.leaveSession === 'all_day' ||
+                                  r.leaveInfo.leaveSession === 'afternoon')
+                            );
+                            const hasActualAfternoonPunch = Boolean(
+                              r.afternoonCheckIn && r.afternoonCheckIn !== '--:--'
+                            );
+                            const aPaidCred =
+                              typeof r.leaveInfo?.afternoonPaidCredit === 'number'
+                                ? r.leaveInfo.afternoonPaidCredit
+                                : r.leaveInfo?.isPaidLeave
+                                  ? 0.5
+                                  : 0;
+
+                            if (
+                              hasAfternoonLeaveShift &&
+                              r.leaveInfo?.status === 'approved' &&
+                              !hasActualAfternoonPunch
+                            ) {
+                              return (
+                                <div
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    padding: '4px 8px',
+                                    borderRadius: '6px',
+                                    backgroundColor: aPaidCred > 0 ? '#f0fdfa' : '#f1f5f9',
+                                    border:
+                                      aPaidCred > 0 ? '1px solid #99f6e4' : '1px solid #cbd5e1',
+                                    color: aPaidCred > 0 ? '#0f766e' : '#475569',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  <CalendarCheck size={12} />
+                                  <span>
+                                    {r.leaveInfo.leaveCategoryLabel} (
+                                    {aPaidCred > 0 ? `+${aPaidCred} công` : '0 công'})
+                                  </span>
+                                </div>
+                              );
+                            }
+
+                            if (
+                              hasAfternoonLeaveShift &&
+                              r.leaveInfo?.status === 'rejected' &&
+                              !hasActualAfternoonPunch
+                            ) {
+                              return (
+                                <div
+                                  title="Đơn xin nghỉ không được duyệt và nhân viên thực tế vắng mặt - Chuyển Nhân sự kiểm tra trước khi chốt công"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    padding: '4px 8px',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#fef2f2',
+                                    border: '1px solid #fecaca',
+                                    color: '#dc2626',
+                                    fontSize: '0.71rem',
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  <ExclamationTriangle size={12} />
+                                  <span>Vắng mặt chưa được chấp thuận</span>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                                  <div>
+                                    <div
+                                      style={{
+                                        fontSize: '0.6875rem',
+                                        color: '#94a3b8',
+                                        fontWeight: 600,
+                                        textTransform: 'uppercase',
+                                        marginBottom: '2px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '3px',
+                                        whiteSpace: 'nowrap',
+                                      }}
+                                    >
+                                      <span>VÀO</span>
+                                      {(r.afternoonLateMinutes || 0) > 0 && (
+                                        <span
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            padding: '0 4px',
+                                            borderRadius: '3px',
+                                            backgroundColor: '#fef3c7',
+                                            color: '#b45309',
+                                            border: '1px solid #fde68a',
+                                            fontSize: '0.5625rem',
+                                            fontWeight: 700,
+                                            lineHeight: '1.2',
+                                            textTransform: 'none',
+                                          }}
+                                        >
+                                          Muộn
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontSize: '0.8125rem',
+                                        fontWeight:
+                                          r.afternoonCheckIn && r.afternoonCheckIn !== '--:--'
+                                            ? 700
+                                            : 500,
+                                        color:
+                                          (r.afternoonLateMinutes || 0) > 0
+                                            ? '#b45309'
+                                            : r.afternoonCheckIn && r.afternoonCheckIn !== '--:--'
+                                              ? '#0f172a'
+                                              : '#94a3b8',
+                                      }}
+                                    >
+                                      {formatTimeWithoutSeconds(r.afternoonCheckIn)}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div
+                                      style={{
+                                        fontSize: '0.6875rem',
+                                        color: '#94a3b8',
+                                        fontWeight: 600,
+                                        textTransform: 'uppercase',
+                                        marginBottom: '2px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '3px',
+                                        whiteSpace: 'nowrap',
+                                      }}
+                                    >
+                                      <span>RA</span>
+                                      {(r.afternoonEarlyMinutes || 0) > 0 && (
+                                        <span
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            padding: '0 4px',
+                                            borderRadius: '3px',
+                                            backgroundColor: '#ffedd5',
+                                            color: '#c2410c',
+                                            border: '1px solid #fed7aa',
+                                            fontSize: '0.5625rem',
+                                            fontWeight: 700,
+                                            lineHeight: '1.2',
+                                            textTransform: 'none',
+                                          }}
+                                        >
+                                          Sớm
+                                        </span>
+                                      )}
+                                      {hasOt && (
+                                        <span
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            padding: '0 4px',
+                                            borderRadius: '3px',
+                                            backgroundColor: '#f3e8ff',
+                                            color: '#7e22ce',
+                                            border: '1px solid #e9d5ff',
+                                            fontSize: '0.5625rem',
+                                            fontWeight: 700,
+                                            lineHeight: '1.2',
+                                            textTransform: 'none',
+                                          }}
+                                        >
+                                          Tăng
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontSize: '0.8125rem',
+                                        fontWeight:
+                                          r.afternoonCheckOut && r.afternoonCheckOut !== '--:--'
+                                            ? 700
+                                            : 500,
+                                        color:
+                                          (r.afternoonEarlyMinutes || 0) > 0
+                                            ? '#c2410c'
+                                            : hasOt
+                                              ? '#7e22ce'
+                                              : r.afternoonCheckOut &&
+                                                  r.afternoonCheckOut !== '--:--'
+                                                ? '#0f172a'
+                                                : '#94a3b8',
+                                      }}
+                                    >
+                                      {formatTimeWithoutSeconds(r.afternoonCheckOut)}
+                                    </div>
+                                  </div>
+                                </div>
+                                {hasAfternoonLeaveShift && r.leaveInfo?.status === 'pending' && (
+                                  <div
                                     style={{
                                       display: 'inline-flex',
                                       alignItems: 'center',
-                                      padding: '0 4px',
-                                      borderRadius: '3px',
-                                      backgroundColor: '#fef3c7',
+                                      gap: '4px',
+                                      fontSize: '0.65rem',
+                                      fontWeight: 700,
                                       color: '#b45309',
-                                      border: '1px solid #fde68a',
-                                      fontSize: '0.5625rem',
-                                      fontWeight: 700,
-                                      lineHeight: '1.2',
-                                      textTransform: 'none',
                                     }}
                                   >
-                                    Muộn
-                                  </span>
+                                    <CalendarCheck size={10} />
+                                    <span>Đơn chờ duyệt ({r.leaveInfo.leaveCategoryLabel})</span>
+                                  </div>
                                 )}
                               </div>
-                              <div
-                                style={{
-                                  fontSize: '0.8125rem',
-                                  fontWeight: r.afternoonCheckIn && r.afternoonCheckIn !== '--:--' ? 700 : 500,
-                                  color: (r.afternoonLateMinutes || 0) > 0 ? '#b45309' : r.afternoonCheckIn && r.afternoonCheckIn !== '--:--' ? '#0f172a' : '#94a3b8',
-                                }}
-                              >
-                                {formatTimeWithoutSeconds(r.afternoonCheckIn)}
-                              </div>
-                            </div>
-                            <div>
-                              <div
-                                style={{
-                                  fontSize: '0.6875rem',
-                                  color: '#94a3b8',
-                                  fontWeight: 600,
-                                  textTransform: 'uppercase',
-                                  marginBottom: '2px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '3px',
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                <span>RA</span>
-                                {(r.afternoonEarlyMinutes || 0) > 0 && (
-                                  <span
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      padding: '0 4px',
-                                      borderRadius: '3px',
-                                      backgroundColor: '#ffedd5',
-                                      color: '#c2410c',
-                                      border: '1px solid #fed7aa',
-                                      fontSize: '0.5625rem',
-                                      fontWeight: 700,
-                                      lineHeight: '1.2',
-                                      textTransform: 'none',
-                                    }}
-                                  >
-                                    Sớm
-                                  </span>
-                                )}
-                                {hasOt && (
-                                  <span
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      padding: '0 4px',
-                                      borderRadius: '3px',
-                                      backgroundColor: '#f3e8ff',
-                                      color: '#7e22ce',
-                                      border: '1px solid #e9d5ff',
-                                      fontSize: '0.5625rem',
-                                      fontWeight: 700,
-                                      lineHeight: '1.2',
-                                      textTransform: 'none',
-                                    }}
-                                  >
-                                    Tăng
-                                  </span>
-                                )}
-                              </div>
-                              <div
-                                style={{
-                                  fontSize: '0.8125rem',
-                                  fontWeight: r.afternoonCheckOut && r.afternoonCheckOut !== '--:--' ? 700 : 500,
-                                  color: (r.afternoonEarlyMinutes || 0) > 0 ? '#c2410c' : hasOt ? '#7e22ce' : r.afternoonCheckOut && r.afternoonCheckOut !== '--:--' ? '#0f172a' : '#94a3b8',
-                                }}
-                              >
-                                {formatTimeWithoutSeconds(r.afternoonCheckOut)}
-                              </div>
-                            </div>
-                          </div>
+                            );
+                          })()}
                         </td>
 
                         {/* 4. TỔNG CÔNG */}
@@ -4039,7 +4629,14 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                             style={{
                               fontSize: '0.9375rem',
                               fontWeight: 800,
-                              color: (r.totalCredit || 0) > 0 ? '#0f172a' : '#64748b',
+                              color:
+                                r.leaveInfo?.status === 'rejected' && (r.totalCredit || 0) === 0
+                                  ? '#dc2626'
+                                  : r.leaveInfo?.status === 'approved' && r.leaveInfo?.isPaidLeave
+                                    ? '#0f766e'
+                                    : (r.totalCredit || 0) > 0
+                                      ? '#0f172a'
+                                      : '#64748b',
                             }}
                           >
                             {(r.totalCredit || 0).toFixed(2)}
@@ -4048,11 +4645,35 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                             style={{
                               fontSize: '0.6875rem',
                               fontWeight: 700,
-                              color: '#94a3b8',
+                              color:
+                                r.leaveInfo?.status === 'rejected' && (r.totalCredit || 0) === 0
+                                  ? '#dc2626'
+                                  : r.leaveInfo?.status === 'approved'
+                                    ? r.leaveInfo.isPaidLeave
+                                      ? '#0f766e'
+                                      : '#64748b'
+                                    : r.leaveInfo?.status === 'pending' && (r.totalCredit || 0) === 0
+                                      ? '#d97706'
+                                      : '#94a3b8',
                               letterSpacing: '0.5px',
                             }}
                           >
-                            CÔNG
+                            {r.leaveInfo
+                              ? r.leaveInfo.status === 'approved'
+                                ? (r.morningCheckIn && r.morningCheckIn !== '--:--') ||
+                                  (r.afternoonCheckIn && r.afternoonCheckIn !== '--:--')
+                                  ? 'CÔNG + PHÉP'
+                                  : r.leaveInfo.isPaidLeave
+                                    ? 'CÔNG PHÉP'
+                                    : 'KHÔNG LƯƠNG'
+                                : r.leaveInfo.status === 'rejected'
+                                  ? (r.totalCredit || 0) > 0
+                                    ? 'ĐI LÀM'
+                                    : 'CHỜ NS XÁC MINH'
+                                  : (r.totalCredit || 0) > 0
+                                    ? 'ĐI LÀM (CHỜ DUYỆT)'
+                                    : 'CHỜ PHÊ DUYỆT'
+                              : 'CÔNG'}
                           </div>
                         </td>
                       </tr>
@@ -4123,7 +4744,7 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
         />
       )}
 
-      {/* ── MODAL GIẢI TRÌNH CHẤM CÔNG ── */}
+      {/* ── MODAL GIẢI TRÌNH CHẤM CÔNG / XIN NGHỈ PHÉP ── */}
       {showExplanationModal && explanationRecord && (
         <div
           style={{
@@ -4159,7 +4780,9 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
             >
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.0625rem', fontWeight: 800, color: '#0f172a' }}>
-                  Gửi giải trình chấm công
+                  {explanationReasonType === 'leave_request'
+                    ? 'Đăng ký nghỉ phép'
+                    : 'Gửi giải trình chấm công'}
                 </h3>
                 <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
                   Ngày làm việc: {explanationRecord.dateStr} • {explanationRecord.dayOfWeek}
@@ -4184,7 +4807,7 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
             <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                  Lý do giải trình
+                  Loại yêu cầu / Lý do
                 </label>
                 <select
                   value={explanationReasonType}
@@ -4198,6 +4821,7 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                     fontFamily: "'Roboto Condensed', sans-serif",
                   }}
                 >
+                  <option value="leave_request">📅 Xin nghỉ phép ngày này (Phép năm / Việc riêng / Nghỉ ốm)</option>
                   <option value="forget_morning_in">Quên chấm công vào ca sáng</option>
                   <option value="forget_morning_out">Quên chấm công ra ca sáng</option>
                   <option value="forget_afternoon_in">Quên chấm công vào ca chiều</option>
@@ -4207,55 +4831,235 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                 </select>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                    Giờ vào thực tế đề xuất
-                  </label>
-                  <input
-                    type="time"
-                    value={proposedCheckIn}
-                    onChange={(e) => setProposedCheckIn(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '8px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
-                      fontSize: '0.875rem',
-                      fontFamily: "'Roboto Condensed', sans-serif",
-                    }}
-                  />
-                </div>
+              {explanationReasonType === 'leave_request' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                        Phân loại nghỉ phép
+                      </label>
+                      <select
+                        value={modalLeaveCategory}
+                        onChange={(e) => setModalLeaveCategory(e.target.value as any)}
+                        style={{
+                          width: '100%',
+                          padding: '8px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid #cbd5e1',
+                          fontSize: '0.875rem',
+                          fontFamily: "'Roboto Condensed', sans-serif",
+                        }}
+                      >
+                        <option value="annual">Nghỉ phép năm hưởng lương (1 ngày/tháng)</option>
+                        <option value="special">Nghỉ hưởng lương theo chế độ</option>
+                        <option value="unpaid">Nghỉ không hưởng lương</option>
+                        <option value="sick">Các loại nghỉ khác theo chính sách (Ốm/BHXH)</option>
+                      </select>
+                    </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                    Giờ ra thực tế đề xuất
-                  </label>
-                  <input
-                    type="time"
-                    value={proposedCheckOut}
-                    onChange={(e) => setProposedCheckOut(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '8px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
-                      fontSize: '0.875rem',
-                      fontFamily: "'Roboto Condensed', sans-serif",
-                    }}
-                  />
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                        Thời gian nghỉ trong ngày
+                      </label>
+                      <select
+                        value={modalLeaveSession}
+                        onChange={(e) => setModalLeaveSession(e.target.value as any)}
+                        style={{
+                          width: '100%',
+                          padding: '8px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid #cbd5e1',
+                          fontSize: '0.875rem',
+                          fontFamily: "'Roboto Condensed', sans-serif",
+                        }}
+                      >
+                        <option value="all_day">Cả ngày (1.0 ngày)</option>
+                        <option value="morning">Buổi sáng (0.5 ngày)</option>
+                        <option value="afternoon">Buổi chiều (0.5 ngày)</option>
+                      </select>
+                    </div>
+                  </div>
+                  {(() => {
+                    const targetY = explanationRecord?.dateStr?.slice(0, 4) || String(new Date().getFullYear());
+                    const targetYM = explanationRecord?.dateStr?.slice(0, 7) || `${targetY}-10`;
+                    const targetMNum = parseInt(targetYM.slice(5, 7), 10) || 10;
+                    const reqDays = modalLeaveSession === 'all_day' ? 1 : 0.5;
+
+                    let usedYearPaid = 0;
+                    let usedMonthAllLeave = 0;
+                    let usedMonthPaidAnnual = 0;
+
+                    for (const rec of records) {
+                      if (!rec.leaveInfo || rec.leaveInfo.status === 'rejected') continue;
+                      if (rec.dateStr === explanationRecord?.dateStr) continue;
+                      const w = rec.leaveInfo.leaveSession === 'all_day' ? 1 : 0.5;
+                      if (rec.dateStr.startsWith(targetYM)) {
+                        usedMonthAllLeave += w;
+                      }
+                      if (rec.dateStr.startsWith(targetY) && rec.leaveInfo.leaveCategory === 'annual') {
+                        const p =
+                          typeof rec.leaveInfo.paidCredit === 'number'
+                            ? rec.leaveInfo.paidCredit
+                            : rec.leaveInfo.isPaidLeave
+                              ? w
+                              : 0;
+                        usedYearPaid += p;
+                        if (rec.dateStr.startsWith(targetYM)) {
+                          usedMonthPaidAnnual += p;
+                        }
+                      }
+                    }
+
+                    const remYearBefore = Math.max(0, 12 - usedYearPaid);
+                    const remMonthPaid = Math.max(0, Math.min(1.0 - usedMonthPaidAnnual, remYearBefore));
+                    const paidThis =
+                      modalLeaveCategory === 'annual' ? Math.min(reqDays, remMonthPaid) : 0;
+                    const remYearAfter =
+                      modalLeaveCategory === 'annual'
+                        ? Math.max(0, remYearBefore - paidThis)
+                        : remYearBefore;
+                    const isQuotaExceeded =
+                      modalLeaveCategory === 'annual' &&
+                      (remMonthPaid <= 0 || reqDays > remMonthPaid || remYearBefore <= 0);
+
+                    return (
+                      <div
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          backgroundColor: isQuotaExceeded ? '#fef2f2' : '#f0fdf4',
+                          border: isQuotaExceeded
+                            ? '1px solid #fecaca'
+                            : '1px solid #bbf7d0',
+                          fontSize: '0.78rem',
+                          color: isQuotaExceeded ? '#991b1b' : '#166534',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                        }}
+                      >
+                        <div style={{ fontWeight: 800, fontSize: '0.8rem', textTransform: 'uppercase' }}>
+                          Kiểm soát phép năm
+                        </div>
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: '1fr 1fr',
+                            gap: '8px',
+                            backgroundColor: '#ffffff',
+                            padding: '7px 10px',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(0,0,0,0.08)',
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>
+                              Tổng số ngày còn lại ({targetY}):
+                            </div>
+                            <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>
+                              {remYearBefore} / 12 ngày
+                            </div>
+                            <div
+                              style={{
+                                fontSize: '0.68rem',
+                                color: isQuotaExceeded ? '#64748b' : '#15803d',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {isQuotaExceeded
+                                ? `Đã dùng: ${usedYearPaid}/12 ngày phép năm`
+                                : `Sau đơn này còn: ${remYearAfter} ngày`}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>
+                              Số ngày nghỉ trong tháng {targetMNum}/{targetY}:
+                            </div>
+                            <div
+                              style={{
+                                fontSize: '0.92rem',
+                                fontWeight: 800,
+                                color: isQuotaExceeded ? '#dc2626' : '#15803d',
+                              }}
+                            >
+                              Khả dụng: {remMonthPaid} / 1 ngày
+                            </div>
+                            <div
+                              style={{
+                                fontSize: '0.68rem',
+                                color: isQuotaExceeded ? '#dc2626' : '#15803d',
+                                fontWeight: 700,
+                              }}
+                            >
+                              {remMonthPaid <= 0
+                                ? `Đã hết phép có lương tháng ${targetMNum} (Đã nghỉ: ${Math.min(1, usedMonthPaidAnnual)}/1 ngày)`
+                                : reqDays > remMonthPaid
+                                  ? `Vượt phép có lương khả dụng (Đơn này: ${reqDays} ngày)`
+                                  : `Đã nghỉ phép có lương: ${Math.min(1, usedMonthPaidAnnual)}/1 ngày`}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
-              </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                      Giờ vào thực tế đề xuất
+                    </label>
+                    <input
+                      type="time"
+                      value={proposedCheckIn}
+                      onChange={(e) => setProposedCheckIn(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        fontSize: '0.875rem',
+                        fontFamily: "'Roboto Condensed', sans-serif",
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                      Giờ ra thực tế đề xuất
+                    </label>
+                    <input
+                      type="time"
+                      value={proposedCheckOut}
+                      onChange={(e) => setProposedCheckOut(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        fontSize: '0.875rem',
+                        fontFamily: "'Roboto Condensed', sans-serif",
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                  Lý do chi tiết giải trình
+                  {explanationReasonType === 'leave_request'
+                    ? 'Lý do xin nghỉ phép & bàn giao công việc'
+                    : 'Lý do chi tiết giải trình'}
                 </label>
                 <textarea
                   rows={3}
                   value={explanationContent}
                   onChange={(e) => setExplanationContent(e.target.value)}
-                  placeholder="Nhập chi tiết hoàn cảnh hoặc lý do quên chấm công..."
+                  placeholder={
+                    explanationReasonType === 'leave_request'
+                      ? 'Nhập lý do xin nghỉ phép và người nhận bàn giao công việc...'
+                      : 'Nhập chi tiết hoàn cảnh hoặc lý do quên chấm công...'
+                  }
                   style={{
                     width: '100%',
                     padding: '8px 10px',
@@ -4302,9 +5106,50 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
               <Button type="button" variant="secondary" onClick={() => setShowExplanationModal(false)}>
                 Hủy bỏ
               </Button>
-              <Button type="button" variant="primary" onClick={handleSubmitExplanation}>
-                Gửi giải trình
-              </Button>
+              {(() => {
+                let isModalAnnualQuotaExceeded = false;
+                if (explanationReasonType === 'leave_request' && modalLeaveCategory === 'annual') {
+                  const targetY = explanationRecord?.dateStr?.slice(0, 4) || String(new Date().getFullYear());
+                  const targetYM = explanationRecord?.dateStr?.slice(0, 7) || `${targetY}-10`;
+                  const reqDays = modalLeaveSession === 'all_day' ? 1 : 0.5;
+                  let usedYearPaid = 0;
+                  let usedMonthPaidAnnual = 0;
+                  for (const rec of records) {
+                    if (!rec.leaveInfo || rec.leaveInfo.status === 'rejected') continue;
+                    if (rec.dateStr === explanationRecord?.dateStr) continue;
+                    const w = rec.leaveInfo.leaveSession === 'all_day' ? 1 : 0.5;
+                    if (rec.dateStr.startsWith(targetY) && rec.leaveInfo.leaveCategory === 'annual') {
+                      const p =
+                        typeof rec.leaveInfo.paidCredit === 'number'
+                          ? rec.leaveInfo.paidCredit
+                          : rec.leaveInfo.isPaidLeave
+                            ? w
+                            : 0;
+                      usedYearPaid += p;
+                      if (rec.dateStr.startsWith(targetYM)) {
+                        usedMonthPaidAnnual += p;
+                      }
+                    }
+                  }
+                  const remYearBefore = Math.max(0, 12 - usedYearPaid);
+                  const remMonthPaid = Math.max(0, Math.min(1.0 - usedMonthPaidAnnual, remYearBefore));
+                  isModalAnnualQuotaExceeded = remMonthPaid <= 0 || reqDays > remMonthPaid || remYearBefore <= 0;
+                }
+                return (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    disabled={isModalAnnualQuotaExceeded}
+                    onClick={handleSubmitExplanation}
+                    style={{
+                      opacity: isModalAnnualQuotaExceeded ? 0.5 : 1,
+                      cursor: isModalAnnualQuotaExceeded ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {explanationReasonType === 'leave_request' ? 'Gửi đơn nghỉ phép' : 'Gửi giải trình'}
+                  </Button>
+                );
+              })()}
             </div>
           </div>
         </div>

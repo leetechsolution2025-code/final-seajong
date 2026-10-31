@@ -176,6 +176,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
   // Nạp dữ liệu tờ trình từ CSDL SQLite theo thời gian thực (Polling mỗi 3.5 giây)
   useEffect(() => {
     let isSubscribed = true;
+    let lastJson = '';
 
     const fetchDocuments = () => {
       fetch('/api/approval-documents')
@@ -193,13 +194,16 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                 d.code !== 'TT-PCCC-04'
             );
             const cleaned = cleanDocumentList(realDocs);
+            const nextJson = JSON.stringify(cleaned);
+            if (nextJson === lastJson) return;
+            lastJson = nextJson;
             if (onItemsChange) {
               onItemsChange(cleaned);
             } else {
               setInternalItems(cleaned);
             }
             try {
-              localStorage.setItem('decodoor_approval_documents', JSON.stringify(cleaned));
+              localStorage.setItem('decodoor_approval_documents', nextJson);
             } catch {}
           }
         })

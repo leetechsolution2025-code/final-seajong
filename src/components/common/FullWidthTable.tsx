@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 export interface FullWidthTableProps {
   children: React.ReactNode;
@@ -11,7 +11,7 @@ export interface FullWidthTableProps {
 
 /**
  * FullWidthTable - Component bao bọc bảng dữ liệu chính chiếm trọn chiều rộng và chiều cao
- * Chuẩn phong cách thiết kế Deco Door Enterprise: Sticky header, custom scrollbar, chống giật nháy khi tải dữ liệu.
+ * Chuẩn phong cách thiết kế Enterprise: Sticky header, custom scrollbar, chống giật nháy triệt để khi tải dữ liệu thời gian thực.
  */
 export const FullWidthTable: React.FC<FullWidthTableProps> = ({
   children,
@@ -20,6 +20,52 @@ export const FullWidthTable: React.FC<FullWidthTableProps> = ({
   loading = false,
   loadingText = 'Đang tải dữ liệu...',
 }) => {
+  // Ghi nhận bảng đã từng hoàn tất tải dữ liệu ít nhất 1 lần
+  const hasLoadedOnceRef = useRef<boolean>(!loading);
+  // Lưu giữ cấu trúc DOM bảng hợp lệ gần nhất để khi reload ngầm (polling / filter) không bị xóa trắng tbody
+  const stableChildrenRef = useRef<React.ReactNode>(children);
+
+  if (!loading) {
+    hasLoadedOnceRef.current = true;
+    stableChildrenRef.current = children;
+  }
+
+  // Trì hoãn hiển thị chỉ báo loading để các truy vấn nhanh (< 250ms) hoặc polling ngầm không bao giờ nhấp nháy
+  const [showInitialSpinner, setShowInitialSpinner] = useState<boolean>(false);
+  const [showTopProgressBar, setShowTopProgressBar] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!loading) {
+      setShowInitialSpinner(false);
+      setShowTopProgressBar(false);
+      return;
+    }
+
+    // Nếu là lần tải đầu tiên chưa có dữ liệu: chờ 180ms mới hiện spinner
+    let spinnerTimer: ReturnType<typeof setTimeout> | null = null;
+    if (!hasLoadedOnceRef.current) {
+      spinnerTimer = setTimeout(() => {
+        setShowInitialSpinner(true);
+      }, 180);
+    }
+
+    // Thanh tiến trình mảnh ở mép trên: chỉ hiện nếu tải lâu hơn 350ms
+    const barTimer = setTimeout(() => {
+      setShowTopProgressBar(true);
+    }, 350);
+
+    return () => {
+      if (spinnerTimer) clearTimeout(spinnerTimer);
+      clearTimeout(barTimer);
+    };
+  }, [loading]);
+
+  // Nếu đang loading lại sau khi đã có dữ liệu, giữ nguyên nội dung bảng cũ để triệt tiêu nhấp nháy 100%
+  const renderedChildren =
+    loading && hasLoadedOnceRef.current && stableChildrenRef.current
+      ? stableChildrenRef.current
+      : children;
+
   return (
     <div
       className={`table-container full-width-table-wrapper ${className}`}
@@ -36,18 +82,19 @@ export const FullWidthTable: React.FC<FullWidthTableProps> = ({
         ...style,
       }}
     >
-      {/* Thanh chạy tiến trình mượt mà ở cạnh trên khi loading (chống nháy) */}
-      {loading && (
+      {/* Thanh chạy tiến trình siêu mảnh ở cạnh trên khi tác vụ tải kéo dài > 350ms */}
+      {showTopProgressBar && (
         <div
           style={{
             position: 'absolute',
             top: 0,
             left: 0,
             right: 0,
-            height: '2.5px',
+            height: '2px',
             overflow: 'hidden',
             zIndex: 40,
-            backgroundColor: 'rgba(23, 92, 211, 0.1)',
+            backgroundColor: 'rgba(23, 92, 211, 0.08)',
+            pointerEvents: 'none',
           }}
         >
           <div
@@ -62,8 +109,8 @@ export const FullWidthTable: React.FC<FullWidthTableProps> = ({
         </div>
       )}
 
-      {/* Lớp phủ loading mờ mượt mà, giữ nguyên cấu trúc DOM bảng để triệt tiêu hiện tượng nháy */}
-      {loading && (
+      {/* Lớp phủ spinner chỉ hiển thị duy nhất ở lần khởi tạo đầu tiên nếu chưa có dữ liệu */}
+      {showInitialSpinner && !hasLoadedOnceRef.current && (
         <div
           style={{
             position: 'absolute',
@@ -71,14 +118,12 @@ export const FullWidthTable: React.FC<FullWidthTableProps> = ({
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'rgba(255, 255, 255, 0.45)',
-            backdropFilter: 'blur(1px)',
+            backgroundColor: 'rgba(255, 255, 255, 0.6)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 35,
             pointerEvents: 'none',
-            transition: 'opacity 0.2s ease',
           }}
         >
           <div
@@ -119,11 +164,10 @@ export const FullWidthTable: React.FC<FullWidthTableProps> = ({
           overflowY: 'auto',
           overflowX: 'auto',
           width: '100%',
-          opacity: loading ? 0.75 : 1,
-          transition: 'opacity 0.15s ease',
+          opacity: 1,
         }}
       >
-        {children}
+        {renderedChildren}
       </div>
 
       <style>{`

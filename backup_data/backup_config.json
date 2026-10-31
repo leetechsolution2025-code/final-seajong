@@ -1,0 +1,11 @@
+{
+  "autoBackupEnabled": true,
+  "scheduleFrequency": "weekly",
+  "backupTime": "02:00",
+  "autoCleanupEnabled": true,
+  "retentionDays": 30,
+  "maxBackups": 30,
+  "cleanupScope": "all",
+  "lastAutoBackupSlot": null,
+  "updatedAt": "2026-10-31T04:35:33.020Z"
+}

@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeFinancialReports } from '../services/financialReportEngine.js';
 import { syncAllSubledgersToJournal } from '../services/journalSyncService.js';
+import { syncPrismaFinanceToAccountingTables } from '../services/prismaFinanceSyncService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,7 +12,12 @@ const dbPath = path.join(__dirname, '..', 'prisma', 'dev.db');
 
 export const db = new sqlite3.Database(dbPath, (err) => {
   if (err) console.error('Lỗi kết nối SQLite tại financeAccountingRouter:', err);
-  else console.log('✓ FinanceAccountingRouter đã kết nối SQLite:', dbPath);
+  else {
+    console.log('✓ FinanceAccountingRouter đã kết nối SQLite:', dbPath);
+    syncPrismaFinanceToAccountingTables(db)
+      .then((res) => console.log('✓ Đã đồng bộ dữ liệu Tài chính - Kế toán từ DB thực tế:', res))
+      .catch((e) => console.warn('Cảnh báo đồng bộ Finance:', e.message));
+  }
 });
 
 const router = express.Router();
@@ -2375,65 +2381,236 @@ router.patch('/api/finance/payment-orders/:id/execute', (req, res) => {
   });
 });
 
-// 3b. API Biểu đồ diễn biến dòng tiền Thu - Chi và Số dư quỹ 6 tháng thực tế
+// 3b. API Biểu đồ diễn biến dòng tiền Thu - Chi và Số dư quỹ 6 tháng + KPI theo kỳ (Tháng / Quý / Năm)
 router.get('/api/finance/cashflow-chart', (req, res) => {
-  const monthsConfig = [
-    { month: 'T05/26', key: '05/2026', cx: 84.6 },
-    { month: 'T06/26', key: '06/2026', cx: 183.8 },
-    { month: 'T07/26', key: '07/2026', cx: 282.9 },
-    { month: 'T08/26', key: '08/2026', cx: 382.1 },
-    { month: 'T09/26', key: '09/2026', cx: 481.3 },
-    { month: 'T10/26 (HT)', key: '10/2026', cx: 580.4 },
-  ];
+  const period = String(req.query.period || 'month'); // 'month' | 'quarter' | 'year'
+  const selectedMonthNum = Math.min(Math.max(Number(req.query.month) || 10, 1), 12);
+  const selectedYear = Number(req.query.year) || 2026;
+  const selectedIsoPrefix = `${selectedYear}-${String(selectedMonthNum).padStart(2, '0')}`;
 
-  db.all('SELECT voucher_type, date, amount FROM financial_vouchers', (vErr, vRows) => {
-    db.all('SELECT balance FROM cash_and_bank_assets', (bErr, bRows) => {
-      const totalCurrentBalance = (bRows || []).reduce((acc, r) => acc + (Number(r.balance) || 0), 0);
-      const balanceInBillions = +(totalCurrentBalance / 1e9).toFixed(3);
+  const allYearMonths = Array.from({ length: 12 }, (_, idx) => {
+    const m = idx + 1;
+    const mStr = String(m).padStart(2, '0');
+    return {
+      monthNum: m,
+      month: m === 10 ? `T${mStr}/26 (HT)` : `T${mStr}/26`,
+      key: `${mStr}/${selectedYear}`,
+      isoPrefix: `${selectedYear}-${mStr}`,
+    };
+  });
 
-      const months = monthsConfig.map((cfg, idx) => {
-        let inFlowRaw = 0;
-        let outFlowRaw = 0;
+  const cxPositions = [84.6, 183.8, 282.9, 382.1, 481.3, 580.4];
+  const endWindowMonth = selectedMonthNum < 6 ? 6 : selectedMonthNum > 10 ? selectedMonthNum : 10;
+  const startWindowMonth = Math.max(1, endWindowMonth - 5);
 
-        (vRows || []).forEach((v) => {
-          const vDate = v.date || '';
-          if (vDate.includes(cfg.key)) {
-            const amt = Number(v.amount) || 0;
-            if (v.voucher_type === 'receipt' || v.voucher_type === 'PT') {
-              inFlowRaw += amt;
-            } else if (v.voucher_type === 'PC' || v.voucher_type === 'payment') {
-              outFlowRaw += amt;
-            }
+  const journalSql = `
+    SELECT e.entry_date, l.account_code, l.type, l.amount
+    FROM accounting_journal_lines l
+    INNER JOIN accounting_journal_entries e ON l.entry_id = e.id
+    WHERE l.account_code IN ('1111', '1121')
+  `;
+
+  db.all(journalSql, [], (jErr, jRows) => {
+    db.all('SELECT voucher_type, date, amount FROM financial_vouchers', (vErr, vRows) => {
+      db.all('SELECT type, balance FROM cash_and_bank_assets WHERE status = "active"', (bErr, bRows) => {
+        db.all(
+          `SELECT mb.openingDebit, mb.openingCredit, a.code
+           FROM "MonthlyBalance" mb
+           INNER JOIN "AccountingAccount" a ON mb.accountId = a.id
+           WHERE a.code IN ('1111', '1121')`,
+          [],
+          (mbErr, mbRows) => {
+            db.all(
+              `SELECT createdAt, dueDate, amount, paidAmount, status, type
+               FROM "Debt"
+               WHERE type IN ('RECEIVABLE', 'phai-thu')`,
+              [],
+              (dErr, debtRows) => {
+                db.get(
+                  'SELECT SUM(remaining_amount) as total_rem FROM debt_receivables',
+                  [],
+                  (drErr, drSumRow) => {
+                    const totalCurrentBalance = (bRows || []).reduce(
+                      (acc, r) => acc + (Number(r.balance) || 0),
+                      0
+                    );
+                    const openingFund = (mbRows || []).reduce(
+                      (acc, r) => acc + ((Number(r.openingDebit) || 0) - (Number(r.openingCredit) || 0)),
+                      0
+                    );
+
+                    const hasJournalCashLines = Array.isArray(jRows) && jRows.length > 0;
+                    let runningBalance = openingFund > 0 ? openingFund : 0;
+
+                    // Tính dòng tiền và số dư quỹ lũy kế cho cả 12 tháng trong năm
+                    const fullYearCalculated = allYearMonths.map((cfg) => {
+                      const openingMonthBal = runningBalance;
+                      let inFlowRaw = 0;
+                      let outFlowRaw = 0;
+
+                      if (hasJournalCashLines) {
+                        (jRows || []).forEach((row) => {
+                          const eDate = String(row.entry_date || '');
+                          if (eDate.startsWith(cfg.isoPrefix) || eDate.includes(cfg.key)) {
+                            const amt = Number(row.amount) || 0;
+                            if (row.type === 'DEBIT') inFlowRaw += amt;
+                            else if (row.type === 'CREDIT') outFlowRaw += amt;
+                          }
+                        });
+                      } else {
+                        (vRows || []).forEach((v) => {
+                          const vDate = String(v.date || '');
+                          if (vDate.includes(cfg.key) || vDate.startsWith(cfg.isoPrefix)) {
+                            const amt = Number(v.amount) || 0;
+                            if (v.voucher_type === 'receipt' || v.voucher_type === 'PT') {
+                              inFlowRaw += amt;
+                            } else if (v.voucher_type === 'PC' || v.voucher_type === 'payment') {
+                              outFlowRaw += amt;
+                            }
+                          }
+                        });
+                      }
+
+                      inFlowRaw = Math.round(inFlowRaw);
+                      outFlowRaw = Math.round(outFlowRaw);
+
+                      if (inFlowRaw > 0 || outFlowRaw > 0 || cfg.monthNum >= 7) {
+                        runningBalance = Math.max(0, runningBalance + inFlowRaw - outFlowRaw);
+                      }
+
+                      const hasActivity = inFlowRaw > 0 || outFlowRaw > 0 || (cfg.monthNum >= 7 && cfg.monthNum <= 10);
+                      const netBalRaw = hasActivity ? runningBalance : 0;
+
+                      // Tính Công nợ phải thu phát sinh và đã thu trong tháng
+                      let debtInvoiced = 0;
+                      let debtCollected = 0;
+                      (debtRows || []).forEach((d) => {
+                        const dt = new Date(Number(d.createdAt || d.dueDate));
+                        if (!isNaN(dt.getTime())) {
+                          const ym = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+                          if (ym === cfg.isoPrefix) {
+                            debtInvoiced += Number(d.amount) || 0;
+                            debtCollected += Number(d.paidAmount) || 0;
+                          }
+                        }
+                      });
+                      debtInvoiced = Math.round(debtInvoiced);
+                      debtCollected = Math.round(debtCollected);
+                      const debtNetRemain = Math.max(0, debtInvoiced - debtCollected);
+
+                      return {
+                        ...cfg,
+                        openingMonthBal: Math.round(openingMonthBal),
+                        inFlowRaw,
+                        outFlowRaw,
+                        netBalRaw: Math.round(netBalRaw),
+                        debtInvoiced,
+                        debtCollected,
+                        debtNetRemain,
+                      };
+                    });
+
+                    // Cửa sổ 6 tháng hiển thị trên biểu đồ
+                    const rawMonths = fullYearCalculated
+                      .filter((m) => m.monthNum >= startWindowMonth && m.monthNum <= endWindowMonth)
+                      .map((m, idx) => ({
+                        ...m,
+                        cx: cxPositions[idx] || 84.6 + idx * 99.16,
+                      }));
+
+                    const maxValBillions = Math.max(
+                      2,
+                      ...rawMonths.flatMap((m) => [m.inFlowRaw / 1e9, m.outFlowRaw / 1e9, m.netBalRaw / 1e9])
+                    );
+                    const yScaleMax =
+                      maxValBillions <= 2 ? 2 : maxValBillions <= 5 ? 5 : maxValBillions <= 10 ? 10 : 20;
+
+                    const months = rawMonths.map((m) => {
+                      const netBal = +(m.netBalRaw / 1e9).toFixed(3);
+                      const cy =
+                        netBal > 0 ? +(175 - Math.min(yScaleMax, netBal) * (150 / yScaleMax)).toFixed(2) : 175;
+                      const val =
+                        m.netBalRaw > 0
+                          ? m.netBalRaw >= 1e9
+                            ? `${(m.netBalRaw / 1e9).toFixed(2)} tỷ`
+                            : `${(m.netBalRaw / 1e6).toFixed(1)} tr`
+                          : '0 đ';
+
+                      return {
+                        monthNum: m.monthNum,
+                        month: m.month,
+                        inFlow: +(m.inFlowRaw / 1e9).toFixed(3),
+                        outFlow: +(m.outFlowRaw / 1e9).toFixed(3),
+                        inFlowRaw: m.inFlowRaw,
+                        outFlowRaw: m.outFlowRaw,
+                        netBalance: netBal,
+                        netBalRaw: m.netBalRaw,
+                        openingMonthBal: m.openingMonthBal,
+                        debtInvoiced: m.debtInvoiced,
+                        debtCollected: m.debtCollected,
+                        debtNetRemain: m.debtNetRemain,
+                        cx: m.cx,
+                        cy,
+                        val,
+                      };
+                    });
+
+                    // Tính toán 4 chỉ số KPI chuẩn xác theo Kỳ được chọn (month | quarter | year)
+                    const cumulativeReceivables = Math.round(Number(drSumRow?.total_rem) || 0);
+                    let targetMonths = fullYearCalculated.filter((m) => m.monthNum === selectedMonthNum);
+                    if (period === 'quarter') {
+                      // Kỳ Quý: tổng hợp 3 tháng gần nhất có dữ liệu thực tế trên biểu đồ (T08, T09, T10/2026) đồng bộ với Phòng Kinh doanh
+                      targetMonths = fullYearCalculated.filter((m) => [8, 9, 10].includes(m.monthNum));
+                    } else if (period === 'year') {
+                      // Kỳ Năm: tổng hợp toàn bộ 12 tháng trong năm 2026
+                      targetMonths = fullYearCalculated;
+                    }
+
+                    const periodInflow = targetMonths.reduce((s, m) => s + m.inFlowRaw, 0);
+                    const periodOutflow = targetMonths.reduce((s, m) => s + m.outFlowRaw, 0);
+                    const periodDebtInvoiced = targetMonths.reduce((s, m) => s + m.debtInvoiced, 0);
+                    const periodDebtCollected = targetMonths.reduce((s, m) => s + m.debtCollected, 0);
+
+                    const periodReceivables =
+                      period === 'year'
+                        ? cumulativeReceivables
+                        : Math.max(0, periodDebtInvoiced - periodDebtCollected);
+
+                    const activeTargetWithBal = [...targetMonths].reverse().find((m) => m.netBalRaw > 0);
+                    const periodCashBalance =
+                      period === 'month' && selectedMonthNum <= 10
+                        ? activeTargetWithBal?.netBalRaw || totalCurrentBalance
+                        : totalCurrentBalance;
+                    const periodOpeningCash =
+                      targetMonths.find((m) => m.inFlowRaw > 0 || m.outFlowRaw > 0)?.openingMonthBal ||
+                      Math.round(openingFund);
+
+                    res.json({
+                      months,
+                      yScaleMax,
+                      currentInflow: periodInflow,
+                      currentOutflow: periodOutflow,
+                      currentBalance: periodCashBalance,
+                      currentReceivables: periodReceivables,
+                      periodStats: {
+                        period,
+                        selectedMonth: selectedMonthNum,
+                        cashBalance: periodCashBalance,
+                        openingCashBalance: periodOpeningCash,
+                        inflowTotal: periodInflow,
+                        outflowTotal: periodOutflow,
+                        receivablesTotal: periodReceivables,
+                        receivablesCumulative: cumulativeReceivables,
+                        receivablesInvoiced: periodDebtInvoiced,
+                        receivablesCollected: periodDebtCollected,
+                      },
+                    });
+                  }
+                );
+              }
+            );
           }
-        });
-
-        const isCurrent = idx === monthsConfig.length - 1;
-        const netBal = isCurrent ? balanceInBillions : 0;
-        const cy = netBal > 0 ? +(175 - Math.min(20, netBal) * 7.5).toFixed(2) : 175;
-        const val = netBal > 0
-          ? (netBal >= 1 ? `${netBal} tỷ` : `${(totalCurrentBalance / 1e6).toFixed(1)} tr`)
-          : '0 đ';
-
-        return {
-          month: cfg.month,
-          inFlow: +(inFlowRaw / 1e9).toFixed(3),
-          outFlow: +(outFlowRaw / 1e9).toFixed(3),
-          inFlowRaw,
-          outFlowRaw,
-          netBalance: netBal,
-          cx: cfg.cx,
-          cy,
-          val,
-        };
-      });
-
-      const currentMonth = months[months.length - 1];
-
-      res.json({
-        months,
-        currentInflow: currentMonth.inFlowRaw,
-        currentOutflow: currentMonth.outFlowRaw,
-        currentBalance: totalCurrentBalance,
+        );
       });
     });
   });

@@ -13,7 +13,7 @@ export const MyRequestsPage: React.FC<MyRequestsPageProps> = ({
 }) => {
   return (
     <StandardPage
-      title="Yêu cầu & Đề xuất cá nhân"
+      title="Yêu cầu và đề xuất cá nhân"
       description="Tạo đơn xin nghỉ phép, tạm ứng chi phí, công tác và theo dõi tiến độ phê duyệt"
       icon="bi-file-earmark-plus"
       color="amber"

@@ -465,8 +465,8 @@ function buildReportFromData(dbData, period) {
   // TÀI SẢN (Mã 270)
   // Tài sản dài hạn (Mã 200)
   // Tích hợp dữ liệu trực tiếp 100% từ bảng fixed_assets trong Database:
-  const faOrigValue = initTangibleOriginal + dbFaOrig; // Mã 222
-  const faAccDepreciation = Math.abs(initTangibleDepreciation) + dbFaAcc; // Mã 223 (dương tính theo giá trị hao mòn)
+  const faOrigValue = dbFaOrig > 0 ? dbFaOrig : initTangibleOriginal; // Mã 222
+  const faAccDepreciation = dbFaOrig > 0 ? dbFaAcc : Math.abs(initTangibleDepreciation); // Mã 223 (dương tính theo giá trị hao mòn)
   const faNetBookValue = faOrigValue - faAccDepreciation; // Mã 221
 
   const longTermReceivables = initLongTermReceivables; // Mã 210
@@ -480,19 +480,19 @@ function buildReportFromData(dbData, period) {
   // Dữ liệu từ bảng cash_and_bank_assets kết hợp phát sinh Sổ nhật ký chung
   const dbCashBal = dbData.cashAssets?.cash_balance != null && Number(dbData.cashAssets.cash_balance) > 0 
     ? Number(dbData.cashAssets.cash_balance) 
-    : initCash;
+    : 0;
   const dbBankBal = dbData.cashAssets?.bank_balance != null && Number(dbData.cashAssets.bank_balance) > 0 
     ? Number(dbData.cashAssets.bank_balance) 
-    : initBank;
+    : 0;
   const dbTermBal = dbData.cashAssets?.term_balance != null && Number(dbData.cashAssets.term_balance) > 0 
     ? Number(dbData.cashAssets.term_balance) 
     : initShortTermInvestments;
 
-  // Tiền mặt tại quỹ: Liên kết biến động từ phát sinh TK 1111 Sổ nhật ký chung
-  const cashInHand = Math.max(0, dbCashBal + cash111Flow); // Mã 111
+  // Tiền mặt tại quỹ: Liên kết trực tiếp từ cash_and_bank_assets (hoặc đầu kỳ + phát sinh TK 1111)
+  const cashInHand = dbCashBal > 0 ? dbCashBal : Math.max(0, initCash + cash111Flow); // Mã 111
 
-  // Tiền gửi ngân hàng: Liên kết phát sinh thực tế TK 1121 Sổ nhật ký chung
-  const bankDeposits = Math.max(0, dbBankBal + bank112Flow); // Mã 112
+  // Tiền gửi ngân hàng: Liên kết trực tiếp từ cash_and_bank_assets (hoặc đầu kỳ + phát sinh TK 1121)
+  const bankDeposits = dbBankBal > 0 ? dbBankBal : Math.max(0, initBank + bank112Flow); // Mã 112
   const totalCashAndEquivalents = cashInHand + bankDeposits; // Mã 110
 
   const shortTermInvestments = dbTermBal; // Mã 120, 121
@@ -506,11 +506,11 @@ function buildReportFromData(dbData, period) {
   const otherShortTermReceivables = initOtherShortTermReceivables + advance141Flow + payrollAdv; // Mã 136
   const totalShortTermReceivables = shortTermReceivables + prepaymentsToSuppliers + otherShortTermReceivables; // Mã 130
 
-  // Hàng tồn kho: Tự động liên kết bảng warehouse_movements và goods (kho hàng) & biến động nguyên vật liệu TK 1521, 1522
+  // Hàng tồn kho: Tự động liên kết bảng goods (InventoryItem) và warehouse_movements
   const dbWarehouseClosing = Number(dbData.warehouseMovements?.closing_val) || 0;
   const dbGoodsVal = Number(dbData.inventoryFromGoods?.inv_val) || 0;
   const isInventoryFromDb = dbWarehouseClosing > 0 || dbGoodsVal > 0;
-  const baseInventoryGross = dbWarehouseClosing > 0 ? dbWarehouseClosing : (dbGoodsVal > 0 ? dbGoodsVal : (initInventoryGross + material152Flow));
+  const baseInventoryGross = dbGoodsVal > 0 ? dbGoodsVal : (dbWarehouseClosing > 0 ? dbWarehouseClosing : (initInventoryGross + material152Flow));
   const inventoryGross = baseInventoryGross; // Mã 141
   const inventoryProvision = initInventoryProvision; // Mã 149
   const totalInventory = inventoryGross + inventoryProvision; // Mã 140

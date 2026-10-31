@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   FileEarmarkText,
   Clock,
@@ -15,12 +15,14 @@ import { Button } from '../../../components/common/Button';
 import { DeleteButton } from '../../../components/common/DeleteButton';
 import { Badge } from '../../../components/common/Badge';
 import { TableToolbar, type TableToolbarFilter } from '../../../components/common/TableToolbar';
+import { FullWidthTable } from '../../../components/common/FullWidthTable';
 import { Pagination } from '../../../components/common/Pagination';
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog';
 import { Offcanvas } from '../../../components/common/Offcanvas';
 import { Select } from '../../../components/common/Select';
 import { Input } from '../../../components/common/Input';
 import { notifyFinanceUpdated } from '../../../services/financeSyncService';
+import { useAuth } from '../../../context/AuthContext';
 
 export type RequestType =
   | 'late_early'
@@ -146,6 +148,14 @@ const parseApprover = (approverStr?: string): { name: string; role: string } => 
 
 const getCurrentUserFromStorage = () => {
   try {
+    const seajongStr = localStorage.getItem('seajong_user');
+    if (seajongStr) {
+      const s = JSON.parse(seajongStr);
+      if (s.user) return s.user;
+      if (s.email || s.id) return s;
+    }
+  } catch {}
+  try {
     const sessionStr = localStorage.getItem('decodoor_session');
     if (sessionStr) {
       const s = JSON.parse(sessionStr);
@@ -164,50 +174,54 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
   department = 'finance',
   onShowToast,
 }) => {
+  const { user: authUser } = useAuth();
   const [requests, setRequests] = useState<MyRequestItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const hasLoadedRef = useRef<boolean>(false);
+  const lastPayloadHashRef = useRef<string>('');
 
-  // Tải dữ liệu thực tế từ CSDL SQLite: Chỉ hiển thị yêu cầu của chính tài khoản đang đăng nhập
-  const fetchRequests = async () => {
-    setIsLoading(true);
+  // Tải dữ liệu thực tế từ CSDL SQLite (/api/personal-requests) của riêng cá nhân đang đăng nhập
+  const fetchRequests = async (silent = false) => {
+    if (!silent && !hasLoadedRef.current) {
+      setIsLoading(true);
+    }
     try {
-      const user = getCurrentUserFromStorage();
+      const user: any = authUser || getCurrentUserFromStorage();
+      const storedUserId = localStorage.getItem('seajong_user_id');
+      const email = user?.email || user?.employee?.workEmail || '';
+      const uid = user?.employee?.id || user?.id || storedUserId || '';
+      const uname = user?.employee?.fullName || user?.name || '';
+
+      if (!email && !uid && !uname) {
+        if (!silent) setIsLoading(false);
+        return;
+      }
+
       const params = new URLSearchParams();
-      if (user?.email) params.append('userEmail', user.email);
-      if (user?.id) params.append('userId', String(user.id));
-      if (user?.name) params.append('userName', user.name);
+      params.append('scope', 'mine');
+      if (email) params.append('userEmail', String(email));
+      if (uid) params.append('userId', String(uid));
+      if (uname) params.append('userName', String(uname));
 
       const url = `/api/personal-requests?${params.toString()}`;
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         const list = Array.isArray(data) ? data : [];
-        if (user) {
-          const uEmail = (user.email || '').toLowerCase().trim();
-          const uId = String(user.id || '');
-          const uName = (user.name || '').toLowerCase().trim();
-
-          const myOnly = list.filter((item: MyRequestItem) => {
-            const itemEmail = (item.userEmail || '').toLowerCase().trim();
-            const itemId = String(item.userId || '');
-            const itemName = (item.applicantName || '').toLowerCase().trim();
-
-            return (
-              (uEmail && itemEmail === uEmail) ||
-              (uId && itemId === uId) ||
-              (uName && itemName === uName)
-            );
-          });
-          setRequests(myOnly);
-        } else {
+        const nextHash = JSON.stringify(list);
+        if (nextHash !== lastPayloadHashRef.current) {
+          lastPayloadHashRef.current = nextHash;
           setRequests(list);
         }
+        hasLoadedRef.current = true;
       }
     } catch (err) {
       console.error('Lỗi khi tải yêu cầu cá nhân từ CSDL:', err);
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -215,17 +229,18 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
     try {
       localStorage.removeItem('decodoor_my_requests');
     } catch {}
-    fetchRequests();
+    lastPayloadHashRef.current = '';
+    fetchRequests(false);
 
     const handleSync = () => {
-      fetchRequests();
+      fetchRequests(true);
     };
 
     window.addEventListener('decodoor_request_created', handleSync);
     window.addEventListener('storage', handleSync);
     window.addEventListener('focus', handleSync);
 
-    const interval = setInterval(fetchRequests, 5000);
+    const interval = setInterval(() => fetchRequests(true), 5000);
 
     return () => {
       window.removeEventListener('decodoor_request_created', handleSync);
@@ -233,7 +248,7 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
       window.removeEventListener('focus', handleSync);
       clearInterval(interval);
     };
-  }, []);
+  }, [authUser?.id, authUser?.email, authUser?.name]);
 
   // Bộ lọc
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -249,26 +264,215 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
   const [editingRequest, setEditingRequest] = useState<MyRequestItem | null>(null);
   const [selectedCreateType, setSelectedCreateType] = useState<RequestType>('late_early');
 
+  const defaultTodayDmy = useMemo(() => {
+    const now = new Date();
+    return `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+  }, []);
+
   // Form tạo mới
   const [formTitle, setFormTitle] = useState('');
   const [formContent, setFormContent] = useState('');
-  const [formApprover, setFormApprover] = useState('Hà Hải Lâm - Ban Giám đốc');
+  const [formApprover, setFormApprover] = useState('Lê Công Vụ - Ban Giám đốc');
   const [formPriority, setFormPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
   const [formNote, setFormNote] = useState('');
 
   // Form Đi muộn về sớm
   const [lateEarlyType, setLateEarlyType] = useState<'late' | 'early'>('late');
   const [lateEarlyMinutes, setLateEarlyMinutes] = useState('30');
-  const [lateEarlyDate, setLateEarlyDate] = useState('05/10/2026');
+  const [lateEarlyDate, setLateEarlyDate] = useState(() => {
+    const now = new Date();
+    return `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+  });
   const [lateEarlyTargetTime, setLateEarlyTargetTime] = useState('08:30');
 
   // Form Nghỉ phép
   const [leaveCategory, setLeaveCategory] = useState<'annual' | 'sick' | 'special' | 'unpaid'>('annual');
   const [leaveSession, setLeaveSession] = useState<'all_day' | 'morning' | 'afternoon'>('all_day');
-  const [leaveFromDate, setLeaveFromDate] = useState('06/10/2026');
-  const [leaveToDate, setLeaveToDate] = useState('06/10/2026');
+  const [leaveFromDate, setLeaveFromDate] = useState(defaultTodayDmy);
+  const [leaveToDate, setLeaveToDate] = useState(defaultTodayDmy);
   const [leaveDays, setLeaveDays] = useState('1');
   const [handoverPerson, setHandoverPerson] = useState('');
+
+  // Tự động xác định số ngày nghỉ từ dữ liệu Thời gian nghỉ, Từ ngày và Đến ngày
+  useEffect(() => {
+    const parseDmy = (str: string): Date | null => {
+      if (!str) return null;
+      const s = str.trim();
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+        const [dd, mm, yyyy] = s.split('/').map(Number);
+        return new Date(yyyy, mm - 1, dd, 0, 0, 0, 0);
+      }
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+        const [yyyy, mm, dd] = s.slice(0, 10).split('-').map(Number);
+        return new Date(yyyy, mm - 1, dd, 0, 0, 0, 0);
+      }
+      return null;
+    };
+
+    const fromDt = parseDmy(leaveFromDate);
+    const toDt = parseDmy(leaveToDate) || fromDt;
+    if (!fromDt || !toDt || toDt < fromDt) {
+      setLeaveDays(leaveSession === 'all_day' ? '1' : '0.5');
+      return;
+    }
+
+    const cur = new Date(fromDt.getFullYear(), fromDt.getMonth(), fromDt.getDate());
+    const end = new Date(toDt.getFullYear(), toDt.getMonth(), toDt.getDate());
+    let workDaysCount = 0;
+    let guard = 0;
+    while (cur <= end && guard < 60) {
+      guard++;
+      if (cur.getDay() !== 0) {
+        workDaysCount++;
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+    const baseDays = Math.max(1, workDaysCount);
+    const weight = leaveSession === 'all_day' ? 1 : 0.5;
+    setLeaveDays(String(baseDays * weight));
+  }, [leaveFromDate, leaveToDate, leaveSession]);
+
+  // Kiểm soát quỹ phép năm của nhân viên (Tối đa 12 ngày/năm • 1 ngày phép có lương/tháng)
+  const leaveQuotaSummary = useMemo(() => {
+    const parseDmy = (str?: string): Date | null => {
+      if (!str) return null;
+      const s = str.trim();
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+        const [dd, mm, yyyy] = s.split('/').map(Number);
+        return new Date(yyyy, mm - 1, dd, 0, 0, 0, 0);
+      }
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+        const [yyyy, mm, dd] = s.slice(0, 10).split('-').map(Number);
+        return new Date(yyyy, mm - 1, dd, 0, 0, 0, 0);
+      }
+      return null;
+    };
+
+    const refDt = parseDmy(leaveFromDate) || new Date();
+    const targetYear = refDt.getFullYear();
+    const targetMonth = refDt.getMonth() + 1;
+    const targetMonthKey = `${targetYear}-${String(targetMonth).padStart(2, '0')}`;
+
+    const sUser: any = authUser || getCurrentUserFromStorage();
+    const targetApplicant =
+      editingRequest?.applicantName ||
+      sUser?.employee?.fullName ||
+      sUser?.name ||
+      '';
+    const targetEmail =
+      editingRequest?.userEmail ||
+      sUser?.employee?.workEmail ||
+      sUser?.email ||
+      '';
+
+    // Lọc các đơn nghỉ phép của chính nhân viên đang thao tác (trừ đơn đang sửa nếu có)
+    const empLeaveReqs = requests
+      .filter((r) => {
+        if (r.type !== 'leave') return false;
+        if (editingRequest && r.id === editingRequest.id) return false;
+        if (r.status === 'rejected') return false;
+        const sameName =
+          r.applicantName &&
+          targetApplicant &&
+          r.applicantName.toLowerCase().trim() === targetApplicant.toLowerCase().trim();
+        const sameEmail =
+          r.userEmail &&
+          targetEmail &&
+          r.userEmail.toLowerCase().trim() === targetEmail.toLowerCase().trim();
+        return sameName || sameEmail || !targetApplicant;
+      })
+      .sort((a, b) => {
+        const da = parseDmy(a.leaveFromDate) || new Date(0);
+        const db = parseDmy(b.leaveFromDate) || new Date(0);
+        return da.getTime() - db.getTime();
+      });
+
+    const paidAnnualByMonth = new Map<string, number>();
+    let totalYearPaidAnnualUsed = 0;
+    let totalMonthLeaveDays = 0;
+
+    for (const r of empLeaveReqs) {
+      const fDt = parseDmy(r.leaveFromDate);
+      const tDt = parseDmy(r.leaveToDate) || fDt;
+      if (!fDt || !tDt) continue;
+
+      const ses = r.leaveSession || 'all_day';
+      const dayWeight = ses === 'morning' || ses === 'afternoon' ? 0.5 : 1.0;
+      const cur = new Date(fDt.getFullYear(), fDt.getMonth(), fDt.getDate());
+      const end = new Date(tDt.getFullYear(), tDt.getMonth(), tDt.getDate());
+      let guard = 0;
+
+      while (cur <= end && guard < 60) {
+        guard++;
+        if (cur.getDay() !== 0) {
+          const y = cur.getFullYear();
+          const m = cur.getMonth() + 1;
+          const mKey = `${y}-${String(m).padStart(2, '0')}`;
+
+          if (mKey === targetMonthKey) {
+            totalMonthLeaveDays += dayWeight;
+          }
+
+          if (y === targetYear && (r.leaveCategory || 'annual') === 'annual') {
+            const usedInM = paidAnnualByMonth.get(mKey) || 0;
+            const avail = Math.max(
+              0,
+              Math.min(1.0 - usedInM, 12.0 - totalYearPaidAnnualUsed)
+            );
+            const paidPortion = Math.min(dayWeight, avail);
+            paidAnnualByMonth.set(mKey, usedInM + paidPortion);
+            totalYearPaidAnnualUsed += paidPortion;
+          }
+        }
+        cur.setDate(cur.getDate() + 1);
+      }
+    }
+
+    const currentReqDays = parseFloat(leaveDays) || (leaveSession === 'all_day' ? 1 : 0.5);
+    const usedPaidInTargetMonth = paidAnnualByMonth.get(targetMonthKey) || 0;
+    const remainingYearBefore = Math.max(0, 12 - totalYearPaidAnnualUsed);
+    const remainingMonthPaidBefore = Math.max(
+      0,
+      Math.min(1.0 - usedPaidInTargetMonth, remainingYearBefore)
+    );
+
+    const paidDaysForCurrent =
+      leaveCategory === 'annual'
+        ? Math.min(currentReqDays, remainingMonthPaidBefore)
+        : leaveCategory === 'special'
+          ? currentReqDays
+          : 0;
+    const unpaidDaysForCurrent = Math.max(0, currentReqDays - paidDaysForCurrent);
+    const remainingYearAfter =
+      leaveCategory === 'annual'
+        ? Math.max(0, remainingYearBefore - paidDaysForCurrent)
+        : remainingYearBefore;
+    const totalMonthWithCurrent = totalMonthLeaveDays + currentReqDays;
+
+    return {
+      targetMonth,
+      targetYear,
+      maxAnnualQuota: 12,
+      totalYearPaidAnnualUsed,
+      remainingYearBefore,
+      remainingYearAfter,
+      totalMonthLeaveDays,
+      totalMonthWithCurrent,
+      usedPaidInTargetMonth,
+      remainingMonthPaidBefore,
+      currentReqDays,
+      paidDaysForCurrent,
+      unpaidDaysForCurrent,
+    };
+  }, [requests, editingRequest, leaveFromDate, leaveToDate, leaveSession, leaveDays, leaveCategory]);
+
+  // Kiểm tra định mức phép năm hưởng lương (12 ngày/năm và 1 ngày/tháng): nếu hết phép có lương khả dụng trong tháng thì khóa nút Gửi yêu cầu phê duyệt
+  const isAnnualLeaveQuotaExceeded =
+    selectedCreateType === 'leave' &&
+    leaveCategory === 'annual' &&
+    (leaveQuotaSummary.remainingMonthPaidBefore <= 0 ||
+      leaveQuotaSummary.currentReqDays > leaveQuotaSummary.remainingMonthPaidBefore ||
+      leaveQuotaSummary.remainingYearBefore <= 0);
 
   // Form Tạm ứng
   const [advanceAmount, setAdvanceAmount] = useState('5000000');
@@ -300,9 +504,24 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [requestToCancel, setRequestToCancel] = useState<MyRequestItem | null>(null);
 
-  // Lọc dữ liệu
+  // Lọc dữ liệu (chỉ hiển thị các yêu cầu & đề xuất của chính cá nhân đang đăng nhập)
   const filteredRequests = useMemo(() => {
+    const activeUser: any = authUser || getCurrentUserFromStorage();
+    const myEmail = (activeUser?.employee?.workEmail || activeUser?.email || '').toLowerCase().trim();
+    const myName = (activeUser?.employee?.fullName || activeUser?.name || '').toLowerCase().trim();
+    const myId = String(activeUser?.employee?.id || activeUser?.id || '').trim();
+
     return requests.filter((item) => {
+      if (myEmail || myName || myId) {
+        const itemEmail = (item.userEmail || '').toLowerCase().trim();
+        const itemName = (item.applicantName || '').toLowerCase().trim();
+        const itemId = String(item.userId || '').trim();
+        const isMine =
+          (myEmail && itemEmail && itemEmail === myEmail) ||
+          (myName && itemName && itemName === myName) ||
+          (myId && itemId && itemId === myId);
+        if (!isMine) return false;
+      }
       if (typeFilter !== 'all' && item.type !== typeFilter) return false;
       if (statusFilter !== 'all' && item.status !== statusFilter) return false;
       if (searchValue.trim()) {
@@ -315,7 +534,7 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
       }
       return true;
     });
-  }, [requests, typeFilter, statusFilter, searchValue]);
+  }, [requests, typeFilter, statusFilter, searchValue, authUser]);
 
   // Phân trang
   const pagedList = useMemo(() => {
@@ -594,7 +813,7 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
     setFormTitle('');
     setFormContent('');
     setFormNote('');
-    setFormApprover('Hà Hải Lâm - Ban Giám đốc');
+    setFormApprover('Lê Công Vụ - Ban Giám đốc');
     setFormPriority('medium');
     setCreateModalOpen(true);
   };
@@ -607,7 +826,7 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
     setFormTitle(item.title || '');
     setFormContent(item.content || '');
     setFormNote(item.note || item.content || '');
-    setFormApprover(item.approver || 'Hà Hải Lâm - Ban Giám đốc');
+    setFormApprover(item.approver || 'Lê Công Vụ - Ban Giám đốc');
     setFormPriority(item.priority || 'medium');
 
     if (item.type === 'late_early') {
@@ -649,6 +868,16 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
   // Submit tạo mới hoặc lưu chỉnh sửa yêu cầu
   const handleSubmitCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isAnnualLeaveQuotaExceeded) {
+      if (onShowToast) {
+        onShowToast(
+          'warning',
+          'Hết phép có lương khả dụng trong tháng',
+          `Tháng ${leaveQuotaSummary.targetMonth}/${leaveQuotaSummary.targetYear} chỉ còn ${leaveQuotaSummary.remainingMonthPaidBefore}/1 ngày phép có lương khả dụng (Đơn đăng ký: ${leaveQuotaSummary.currentReqDays} ngày). Vui lòng chọn hình thức nghỉ khác!`
+        );
+      }
+      return;
+    }
     const newId = `REQ-${Date.now().toString().slice(-4)}`;
     const randomCodeNum = Math.floor(100 + Math.random() * 900);
     const newCode = `YC-2026-${randomCodeNum}`;
@@ -782,22 +1011,19 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
     }
 
     // Đọc thông tin user đăng nhập
-    let applicantName = 'Mai Thị Ngọc';
-    let applicantRole = 'Trưởng phòng';
-    let userId: number | undefined;
+    let applicantName = 'Lê Công Vụ';
+    let applicantRole = 'Nhân viên';
+    let userId: any;
     let userEmail: string | undefined;
     let userDept = '';
     try {
-      const sessionStr = localStorage.getItem('decodoor_session');
-      if (sessionStr) {
-        const s = JSON.parse(sessionStr);
-        if (s.user) {
-          applicantName = s.user.name || applicantName;
-          applicantRole = s.user.roleName || s.user.position || applicantRole;
-          userId = s.user.id;
-          userEmail = s.user.email;
-          userDept = s.user.department || '';
-        }
+      const sUser: any = authUser || getCurrentUserFromStorage();
+      if (sUser) {
+        applicantName = sUser.employee?.fullName || sUser.name || applicantName;
+        applicantRole = sUser.employee?.position || sUser.roleName || sUser.position || applicantRole;
+        userId = sUser.employee?.id || sUser.id;
+        userEmail = sUser.employee?.workEmail || sUser.email;
+        userDept = sUser.employee?.departmentName || sUser.department || '';
       }
     } catch {}
 
@@ -1006,236 +1232,211 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
       </div>
 
       {/* ── 3. BẢNG DANH SÁCH YÊU CẦU CÁ NHÂN FULLWIDTH VÀ PAGINATION ── */}
-      <div
-        className="table-container"
-        style={{
-          flex: '1 1 0%',
-          display: 'flex',
-          flexDirection: 'column',
-          minHeight: 0,
-          overflow: 'hidden',
-          border: 'none',
-          borderRadius: 0,
-          backgroundColor: 'var(--bg-surface-1, #ffffff)',
-        }}
+      <FullWidthTable
+        loading={isLoading}
+        loadingText="Đang tải dữ liệu yêu cầu cá nhân từ cơ sở dữ liệu..."
       >
-        <div
-          className="table-responsive custom-scrollbar"
+        <table
+          className="custom-table"
           style={{
-            flex: '1 1 0%',
-            minHeight: 0,
-            overflowY: 'auto',
-            overflowX: 'auto',
+            width: '100%',
+            borderCollapse: 'collapse',
+            textAlign: 'left',
+            fontSize: '0.8125rem',
+            fontFamily: "'Roboto Condensed', sans-serif",
           }}
         >
-          <table
-            className="custom-table"
+          <thead
             style={{
-              width: '100%',
-              borderCollapse: 'collapse',
-              textAlign: 'left',
-              fontSize: '0.8125rem',
-              fontFamily: "'Roboto Condensed', sans-serif",
+              position: 'sticky',
+              top: 0,
+              zIndex: 10,
+              backgroundColor: 'var(--bg-surface-2, #f8fafc)',
             }}
           >
-            <thead
+            <tr
               style={{
-                position: 'sticky',
-                top: 0,
-                zIndex: 10,
                 backgroundColor: 'var(--bg-surface-2, #f8fafc)',
+                borderBottom: '1px solid var(--border-default, #e2e8f0)',
+                color: 'var(--text-secondary, #475569)',
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
               }}
             >
-              <tr
-                style={{
-                  backgroundColor: 'var(--bg-surface-2, #f8fafc)',
-                  borderBottom: '1px solid var(--border-default, #e2e8f0)',
-                  color: 'var(--text-secondary, #475569)',
-                  fontWeight: 700,
-                  fontSize: '0.75rem',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                }}
-              >
-                <th style={{ padding: '12px 14px', width: '44px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                  <input
-                    type="checkbox"
-                    checked={pagedList.length > 0 && pagedList.every((item) => selectedIds.includes(item.id))}
-                    onChange={toggleSelectAll}
-                    style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--primary-color, #2563eb)' }}
-                    title="Chọn tất cả trên trang này"
-                  />
-                </th>
-                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Nội dung yêu cầu</th>
-                <th style={{ padding: '12px 14px', width: '150px', minWidth: '140px', whiteSpace: 'nowrap' }}>Thời gian gửi</th>
-                <th style={{ padding: '12px 14px', width: '130px', minWidth: '120px', textAlign: 'right', whiteSpace: 'nowrap' }}>Số tiền VND</th>
-                <th style={{ padding: '12px 14px', width: '220px', minWidth: '200px', whiteSpace: 'nowrap' }}>Người phê duyệt</th>
-                <th style={{ padding: '12px 14px', width: '130px', minWidth: '120px', textAlign: 'center', whiteSpace: 'nowrap' }}>Trạng thái</th>
+              <th style={{ padding: '12px 14px', width: '44px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                <input
+                  type="checkbox"
+                  checked={pagedList.length > 0 && pagedList.every((item) => selectedIds.includes(item.id))}
+                  onChange={toggleSelectAll}
+                  style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--primary-color, #2563eb)' }}
+                  title="Chọn tất cả trên trang này"
+                />
+              </th>
+              <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Nội dung yêu cầu</th>
+              <th style={{ padding: '12px 14px', width: '150px', minWidth: '140px', whiteSpace: 'nowrap' }}>Thời gian gửi</th>
+              <th style={{ padding: '12px 14px', width: '130px', minWidth: '120px', textAlign: 'right', whiteSpace: 'nowrap' }}>Số tiền VND</th>
+              <th style={{ padding: '12px 14px', width: '220px', minWidth: '200px', whiteSpace: 'nowrap' }}>Người phê duyệt</th>
+              <th style={{ padding: '12px 14px', width: '130px', minWidth: '120px', textAlign: 'center', whiteSpace: 'nowrap' }}>Trạng thái</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pagedList.length === 0 && !isLoading ? (
+              <tr>
+                <td colSpan={6} style={{ padding: '36px', textAlign: 'center', color: '#94a3b8' }}>
+                  Không có yêu cầu cá nhân nào trong hệ thống
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr>
-                  <td colSpan={6} style={{ padding: '36px', textAlign: 'center', color: '#94a3b8' }}>
-                    Đang tải dữ liệu yêu cầu cá nhân từ cơ sở dữ liệu...
-                  </td>
-                </tr>
-              ) : pagedList.length === 0 ? (
-                <tr>
-                  <td colSpan={6} style={{ padding: '36px', textAlign: 'center', color: '#94a3b8' }}>
-                    Không có yêu cầu cá nhân nào trong hệ thống
-                  </td>
-                </tr>
-              ) : (
-                pagedList.map((item) => {
-                  const isChecked = selectedIds.includes(item.id);
-                  const hasAmount = item.advanceAmount || item.actualSpentAmount || item.tripEstimatedCost;
-                  const displayAmount =
-                    item.type === 'advance'
-                      ? item.advanceAmount
-                      : item.type === 'refund'
-                      ? item.actualSpentAmount
-                      : item.type === 'business_trip'
-                      ? item.tripEstimatedCost
-                      : undefined;
+            ) : (
+              pagedList.map((item) => {
+                const isChecked = selectedIds.includes(item.id);
+                const hasAmount = item.advanceAmount || item.actualSpentAmount || item.tripEstimatedCost;
+                const displayAmount =
+                  item.type === 'advance'
+                    ? item.advanceAmount
+                    : item.type === 'refund'
+                    ? item.actualSpentAmount
+                    : item.type === 'business_trip'
+                    ? item.tripEstimatedCost
+                    : undefined;
 
-                  return (
-                    <tr
-                      key={item.id}
-                      onClick={() => handleOpenEditModal(item)}
-                      style={{
-                        borderBottom: '1px solid var(--border-subtle, #f1f5f9)',
-                        backgroundColor: isChecked ? 'rgba(37, 99, 235, 0.05)' : 'transparent',
-                        transition: 'background-color 0.15s ease',
-                        cursor: 'pointer',
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isChecked) e.currentTarget.style.backgroundColor = 'var(--bg-surface-2, #f8fafc)';
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isChecked) e.currentTarget.style.backgroundColor = 'transparent';
-                      }}
+                return (
+                  <tr
+                    key={item.id}
+                    onClick={() => handleOpenEditModal(item)}
+                    style={{
+                      borderBottom: '1px solid var(--border-subtle, #f1f5f9)',
+                      backgroundColor: isChecked ? 'rgba(37, 99, 235, 0.05)' : 'transparent',
+                      transition: 'background-color 0.15s ease',
+                      cursor: 'pointer',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isChecked) e.currentTarget.style.backgroundColor = 'var(--bg-surface-2, #f8fafc)';
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isChecked) e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                  >
+                    <td
+                      style={{ padding: '12px 14px', textAlign: 'center', width: '44px' }}
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      <td
-                        style={{ padding: '12px 14px', textAlign: 'center', width: '44px' }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleSelectRow(item.id)}
-                          style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--primary-color, #2563eb)' }}
-                        />
-                      </td>
-                      <td style={{ padding: '12px 14px', maxWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                          <span
-                            style={{
-                              fontFamily: "'Roboto Condensed', sans-serif",
-                              backgroundColor: 'var(--brand-50, #eff6ff)',
-                              padding: '1px 6px',
-                              borderRadius: '4px',
-                              fontSize: '0.75rem',
-                              fontWeight: 700,
-                              color: 'var(--brand-700, #1d4ed8)',
-                              border: '1px solid rgba(29, 78, 216, 0.18)',
-                            }}
-                          >
-                            {item.code}
-                          </span>
-                          {getTypeBadge(item.type)}
-                        </div>
-                        <div
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => toggleSelectRow(item.id)}
+                        style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--primary-color, #2563eb)' }}
+                      />
+                    </td>
+                    <td style={{ padding: '12px 14px', maxWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                        <span
                           style={{
-                            fontWeight: 400,
                             fontFamily: "'Roboto Condensed', sans-serif",
-                            color: '#0f172a',
-                            fontSize: '0.875rem',
-                            marginBottom: '2px',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}
-                          title={item.title}
-                        >
-                          {item.title}
-                        </div>
-                        <div
-                          style={{
+                            backgroundColor: 'var(--brand-50, #eff6ff)',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
                             fontSize: '0.75rem',
-                            color: '#64748b',
-                            lineHeight: 1.4,
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
+                            fontWeight: 700,
+                            color: 'var(--brand-700, #1d4ed8)',
+                            border: '1px solid rgba(29, 78, 216, 0.18)',
                           }}
-                          title={item.content}
                         >
-                          {item.content}
-                        </div>
-                      </td>
-                      <td style={{ padding: '12px 14px', color: '#475569', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                        {item.createdAt}
-                      </td>
-                      <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>
-                        {hasAmount && displayAmount !== undefined ? (
-                          <span style={{ color: item.type === 'refund' ? '#16a34a' : '#0f172a' }}>
-                            {formatNumberGroup(displayAmount)}
-                          </span>
-                        ) : (
-                          <span style={{ color: '#cbd5e1' }}>—</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '12px 14px', width: '220px', minWidth: '200px', whiteSpace: 'nowrap' }}>
-                        {(() => {
-                          const { name, role } = parseApprover(item.approver);
-                          return (
-                            <div>
-                              <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.85rem', lineHeight: 1.35, whiteSpace: 'nowrap' }}>
-                                {name}
-                              </div>
-                              {role && (
-                                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', lineHeight: 1.3, whiteSpace: 'nowrap' }}>
-                                  {role}
-                                </div>
-                              )}
+                          {item.code}
+                        </span>
+                        {getTypeBadge(item.type)}
+                      </div>
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          fontFamily: "'Roboto Condensed', sans-serif",
+                          color: '#0f172a',
+                          fontSize: '0.875rem',
+                          marginBottom: '2px',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                        title={item.title}
+                      >
+                        {item.title}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '0.75rem',
+                          color: '#64748b',
+                          lineHeight: 1.4,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                        title={item.content}
+                      >
+                        {item.content}
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px 14px', color: '#475569', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                      {item.createdAt}
+                    </td>
+                    <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>
+                      {hasAmount && displayAmount !== undefined ? (
+                        <span style={{ color: item.type === 'refund' ? '#16a34a' : '#0f172a' }}>
+                          {formatNumberGroup(displayAmount)}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#cbd5e1' }}>—</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '12px 14px', width: '220px', minWidth: '200px', whiteSpace: 'nowrap' }}>
+                      {(() => {
+                        const { name, role } = parseApprover(item.approver);
+                        return (
+                          <div>
+                            <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.85rem', lineHeight: 1.35, whiteSpace: 'nowrap' }}>
+                              {name}
                             </div>
-                          );
-                        })()}
-                      </td>
-                      <td style={{ padding: '12px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                        {getStatusBadge(item.status, item.statusLabel)}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                            {role && (
+                              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', lineHeight: 1.3, whiteSpace: 'nowrap' }}>
+                                {role}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
+                    <td style={{ padding: '12px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      {getStatusBadge(item.status, item.statusLabel)}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </FullWidthTable>
 
-        {/* ── 4. COMPONENT PAGINATION TÍCH HỢP TRỰC TIẾP VÀO CHÂN BẢNG ── */}
-        <div
-          className="pagination-container"
-          style={{
-            flexShrink: 0,
-            borderTop: '1px solid var(--border-default, #e2e8f0)',
-            backgroundColor: 'var(--bg-surface-1, #ffffff)',
-            padding: 0,
+      {/* ── 4. COMPONENT PAGINATION TÍCH HỢP TRỰC TIẾP VÀO CHÂN BẢNG ── */}
+      <div
+        className="pagination-container"
+        style={{
+          flexShrink: 0,
+          borderTop: '1px solid var(--border-default, #e2e8f0)',
+          backgroundColor: 'var(--bg-surface-1, #ffffff)',
+          padding: 0,
+        }}
+      >
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredRequests.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(newSize) => {
+            setPageSize(newSize);
+            setCurrentPage(1);
           }}
-        >
-          <Pagination
-            currentPage={currentPage}
-            totalItems={filteredRequests.length}
-            pageSize={pageSize}
-            onPageChange={setCurrentPage}
-            onPageSizeChange={(newSize) => {
-              setPageSize(newSize);
-              setCurrentPage(1);
-            }}
-            pageSizeOptions={[5, 10, 20, 50]}
-          />
-        </div>
+          pageSizeOptions={[5, 10, 20, 50]}
+        />
       </div>
 
       {/* ── 4. OFFCANVAS TẠO YÊU CẦU CÁ NHÂN MỚI (400PX) ── */}
@@ -1273,20 +1474,35 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
             >
               Đóng
             </Button>
-            <Button type="submit" form="create-request-form" variant="primary" style={{ fontWeight: 700 }}>
+            <Button
+              type="submit"
+              form="create-request-form"
+              variant="primary"
+              disabled={isAnnualLeaveQuotaExceeded}
+              title={
+                isAnnualLeaveQuotaExceeded
+                  ? `Tháng ${leaveQuotaSummary.targetMonth}/${leaveQuotaSummary.targetYear} đã hết hoặc không đủ ngày nghỉ phép có lương khả dụng (${leaveQuotaSummary.remainingMonthPaidBefore}/1 ngày). Vui lòng chọn hình thức nghỉ khác.`
+                  : undefined
+              }
+              style={{
+                fontWeight: 700,
+                opacity: isAnnualLeaveQuotaExceeded ? 0.5 : 1,
+                cursor: isAnnualLeaveQuotaExceeded ? 'not-allowed' : 'pointer',
+              }}
+            >
               {editingRequest ? 'Lưu thay đổi' : 'Gửi yêu cầu phê duyệt'}
             </Button>
           </div>
         }
       >
-        {/* Banner thông tin khi ở chế độ chỉnh sửa */}
+        {/* Banner thông tin và Phê duyệt / Từ chối khi ở chế độ chỉnh sửa */}
         {editingRequest && (
           <div
             style={{
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '8px 12px',
+              flexDirection: 'column',
+              gap: '8px',
+              padding: '10px 12px',
               backgroundColor: '#f8fafc',
               borderRadius: '6px',
               border: '1px solid #e2e8f0',
@@ -1294,16 +1510,121 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
               flexShrink: 0,
             }}
           >
-            <div>
-              <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0f172a' }}>
-                Mã: {editingRequest.code}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0f172a' }}>
+                  Mã: {editingRequest.code}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '1px' }}>
+                  Gửi lúc: {editingRequest.createdAt}
+                </div>
               </div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '1px' }}>
-                Gửi lúc: {editingRequest.createdAt}
+              <div>
+                {getStatusBadge(editingRequest.status, editingRequest.statusLabel)}
               </div>
             </div>
-            <div>
-              {getStatusBadge(editingRequest.status, editingRequest.statusLabel)}
+
+            {/* Thao tác Phê duyệt / Từ chối trực tiếp cho cấp quản lý / Nhân sự */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                paddingTop: '8px',
+                borderTop: '1px dashed #cbd5e1',
+              }}
+            >
+              <Button
+                type="button"
+                size="sm"
+                variant="primary"
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`/api/personal-requests/${editingRequest.id}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        status: 'approved',
+                        statusLabel: 'Đã phê duyệt',
+                        leaveCategory,
+                        leaveSession,
+                        leaveFromDate,
+                        leaveToDate,
+                        leaveDays: parseFloat(leaveDays) || (leaveSession === 'all_day' ? 1 : 0.5),
+                        note: formNote.trim() || undefined,
+                      }),
+                    });
+                    if (res.ok) {
+                      const updated = await res.json();
+                      setRequests((prev) =>
+                        prev.map((r) => (r.id === editingRequest.id ? updated : r))
+                      );
+                      setEditingRequest(updated);
+                      window.dispatchEvent(new CustomEvent('decodoor_request_updated', { detail: updated }));
+                    }
+                  } catch {}
+                  setCreateModalOpen(false);
+                  setEditingRequest(null);
+                  if (onShowToast) {
+                    onShowToast(
+                      'success',
+                      'Đã phê duyệt đơn',
+                      `Đơn ${editingRequest.code} đã được phê duyệt. Hệ thống đã tự động cập nhật bảng chấm công và chế độ lương tương ứng.`
+                    );
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  backgroundColor: '#16a34a',
+                  borderColor: '#16a34a',
+                  fontWeight: 700,
+                }}
+              >
+                Phê duyệt đơn
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="danger"
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`/api/personal-requests/${editingRequest.id}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        status: 'rejected',
+                        statusLabel: 'Từ chối duyệt',
+                        leaveCategory,
+                        leaveSession,
+                        leaveFromDate,
+                        leaveToDate,
+                        leaveDays: parseFloat(leaveDays) || (leaveSession === 'all_day' ? 1 : 0.5),
+                        note: formNote.trim() || 'Không phê duyệt đơn xin nghỉ',
+                      }),
+                    });
+                    if (res.ok) {
+                      const updated = await res.json();
+                      setRequests((prev) =>
+                        prev.map((r) => (r.id === editingRequest.id ? updated : r))
+                      );
+                      setEditingRequest(updated);
+                      window.dispatchEvent(new CustomEvent('decodoor_request_updated', { detail: updated }));
+                    }
+                  } catch {}
+                  setCreateModalOpen(false);
+                  setEditingRequest(null);
+                  if (onShowToast) {
+                    onShowToast(
+                      'warning',
+                      'Đã từ chối đơn',
+                      `Đơn ${editingRequest.code} không được duyệt. Nếu nhân viên đi làm sẽ tính công bình thường; nếu vắng mặt thực tế sẽ ghi nhận "Vắng mặt chưa được chấp thuận" chuyển Nhân sự kiểm tra.`
+                    );
+                  }
+                }}
+                style={{ flex: 1, fontWeight: 700 }}
+              >
+                Từ chối duyệt
+              </Button>
             </div>
           </div>
         )}
@@ -1405,55 +1726,162 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
               {/* 2. Form Nghỉ phép */}
               {selectedCreateType === 'leave' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                    <Select
-                      label="Loại nghỉ phép"
-                      value={leaveCategory}
-                      onChange={(e) => setLeaveCategory(e.target.value as any)}
-                    >
-                      <option value="annual">Nghỉ phép năm hưởng nguyên lương</option>
-                      <option value="sick">Nghỉ ốm đau chế độ BHXH</option>
-                      <option value="special">Nghỉ việc riêng có lương theo luật</option>
-                      <option value="unpaid">Nghỉ không hưởng lương</option>
-                    </Select>
+                  <Select
+                    label="Phân loại nghỉ phép"
+                    value={leaveCategory}
+                    onChange={(e) => {
+                      const nextCat = e.target.value as 'annual' | 'sick' | 'special' | 'unpaid';
+                      setLeaveCategory(nextCat);
+                      if (nextCat === 'annual' && onShowToast) {
+                        onShowToast(
+                          'info',
+                          'Kiểm soát quỹ phép năm (Tối đa 12 ngày/năm)',
+                          `Tổng số ngày phép năm còn lại: ${leaveQuotaSummary.remainingYearBefore}/12 ngày • Số ngày nghỉ trong tháng ${leaveQuotaSummary.targetMonth}/${leaveQuotaSummary.targetYear}: ${leaveQuotaSummary.totalMonthWithCurrent} ngày.`
+                        );
+                      }
+                    }}
+                  >
+                    <option value="annual">Nghỉ phép năm hưởng lương (1 ngày/tháng)</option>
+                    <option value="special">Nghỉ hưởng lương theo chế độ</option>
+                    <option value="unpaid">Nghỉ không hưởng lương</option>
+                    <option value="sick">Các loại nghỉ khác theo chính sách công ty</option>
+                  </Select>
 
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr 1fr', gap: '10px' }}>
                     <Select
-                      label="Thời gian trong ngày"
+                      label="Thời gian nghỉ"
                       value={leaveSession}
-                      onChange={(e) => setLeaveSession(e.target.value as any)}
+                      onChange={(e) => {
+                        const nextSes = e.target.value as 'all_day' | 'morning' | 'afternoon';
+                        setLeaveSession(nextSes);
+                        if (nextSes === 'morning' || nextSes === 'afternoon') {
+                          setLeaveToDate(leaveFromDate);
+                        }
+                      }}
                     >
-                      <option value="all_day">Nghỉ cả ngày</option>
-                      <option value="morning">Nghỉ buổi sáng</option>
-                      <option value="afternoon">Nghỉ buổi chiều</option>
+                      <option value="all_day">Cả ngày</option>
+                      <option value="morning">Buổi sáng</option>
+                      <option value="afternoon">Buổi chiều</option>
                     </Select>
-                  </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 100px', gap: '12px' }}>
                     <Input
-                      label="Từ ngày"
+                      label={leaveSession === 'morning' || leaveSession === 'afternoon' ? 'Ngày nghỉ phép' : 'Từ ngày'}
                       required
                       type="text"
                       value={leaveFromDate}
-                      onChange={(e) => setLeaveFromDate(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setLeaveFromDate(val);
+                        if (leaveSession === 'morning' || leaveSession === 'afternoon') {
+                          setLeaveToDate(val);
+                        }
+                      }}
                       placeholder="DD/MM/YYYY"
                     />
                     <Input
                       label="Đến ngày"
-                      required
+                      required={leaveSession === 'all_day'}
+                      disabled={leaveSession === 'morning' || leaveSession === 'afternoon'}
                       type="text"
-                      value={leaveToDate}
-                      onChange={(e) => setLeaveToDate(e.target.value)}
+                      value={leaveSession === 'all_day' ? leaveToDate : leaveFromDate}
+                      onChange={(e) => {
+                        if (leaveSession === 'all_day') {
+                          setLeaveToDate(e.target.value);
+                        }
+                      }}
                       placeholder="DD/MM/YYYY"
-                    />
-                    <Input
-                      label="Số ngày"
-                      required
-                      type="number"
-                      step="0.5"
-                      value={leaveDays}
-                      onChange={(e) => setLeaveDays(e.target.value)}
+                      style={
+                        leaveSession === 'morning' || leaveSession === 'afternoon'
+                          ? {
+                              backgroundColor: '#f1f5f9',
+                              color: '#94a3b8',
+                              cursor: 'not-allowed',
+                            }
+                          : undefined
+                      }
                     />
                   </div>
+
+                  {/* Kiểm soát phép năm (12 ngày/năm • 1 ngày/tháng) */}
+                  {leaveCategory === 'annual' && (
+                    <div
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        backgroundColor: isAnnualLeaveQuotaExceeded ? '#fef2f2' : '#f0fdf4',
+                        border: isAnnualLeaveQuotaExceeded
+                          ? '1px solid #fecaca'
+                          : '1px solid #bbf7d0',
+                        fontSize: '0.78rem',
+                        color: isAnnualLeaveQuotaExceeded ? '#991b1b' : '#166534',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                      }}
+                    >
+                      <div style={{ fontWeight: 800, fontSize: '0.8rem', textTransform: 'uppercase' }}>
+                        Kiểm soát phép năm
+                      </div>
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1fr',
+                          gap: '8px',
+                          backgroundColor: '#ffffff',
+                          padding: '7px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid rgba(0,0,0,0.08)',
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>
+                            Tổng số ngày còn lại ({leaveQuotaSummary.targetYear}):
+                          </div>
+                          <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>
+                            {leaveQuotaSummary.remainingYearBefore} / 12 ngày
+                          </div>
+                          <div
+                            style={{
+                              fontSize: '0.68rem',
+                              color: isAnnualLeaveQuotaExceeded ? '#64748b' : '#15803d',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {isAnnualLeaveQuotaExceeded
+                              ? `Đã nghỉ phép năm: ${leaveQuotaSummary.totalYearPaidAnnualUsed}/12 ngày`
+                              : `Sau đơn này còn: ${leaveQuotaSummary.remainingYearAfter} ngày`}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>
+                            Số ngày nghỉ trong tháng {leaveQuotaSummary.targetMonth}/{leaveQuotaSummary.targetYear}:
+                          </div>
+                          <div
+                            style={{
+                              fontSize: '0.92rem',
+                              fontWeight: 800,
+                              color: isAnnualLeaveQuotaExceeded ? '#dc2626' : '#15803d',
+                            }}
+                          >
+                            Khả dụng: {leaveQuotaSummary.remainingMonthPaidBefore} / 1 ngày
+                          </div>
+                          <div
+                            style={{
+                              fontSize: '0.68rem',
+                              color: isAnnualLeaveQuotaExceeded ? '#dc2626' : '#15803d',
+                              fontWeight: 700,
+                            }}
+                          >
+                            {leaveQuotaSummary.remainingMonthPaidBefore <= 0
+                              ? `Đã hết phép có lương tháng ${leaveQuotaSummary.targetMonth} (Đã nghỉ: ${leaveQuotaSummary.usedPaidInTargetMonth}/1 ngày)`
+                              : leaveQuotaSummary.currentReqDays > leaveQuotaSummary.remainingMonthPaidBefore
+                                ? `Vượt phép có lương khả dụng (Đơn này: ${leaveQuotaSummary.currentReqDays} ngày)`
+                                : `Đã nghỉ phép có lương: ${leaveQuotaSummary.usedPaidInTargetMonth}/1 ngày`}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <Input
                     label="Người tiếp nhận bàn giao công việc"
@@ -1831,19 +2259,54 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                 justifyContent: 'space-between',
               }}
             >
-              <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {viewingRequest.status === 'pending' && (
-                  <Button
-                    type="button"
-                    variant="danger"
-                    onClick={() => {
-                      setRequestToCancel(viewingRequest);
-                      setDetailModalOpen(false);
-                      setConfirmCancelOpen(true);
-                    }}
-                  >
-                    Hủy yêu cầu này
-                  </Button>
+                  <>
+                    <Button
+                      type="button"
+                      variant="danger"
+                      onClick={() => {
+                        setRequestToCancel(viewingRequest);
+                        setDetailModalOpen(false);
+                        setConfirmCancelOpen(true);
+                      }}
+                    >
+                      Hủy yêu cầu này
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(`/api/personal-requests/${viewingRequest.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              status: 'approved',
+                              statusLabel: 'Đã phê duyệt',
+                            }),
+                          });
+                          if (res.ok) {
+                            const updated = await res.json();
+                            setRequests((prev) =>
+                              prev.map((r) => (r.id === viewingRequest.id ? updated : r))
+                            );
+                          }
+                        } catch {}
+                        setDetailModalOpen(false);
+                        if (onShowToast) {
+                          onShowToast(
+                            'success',
+                            'Đã phê duyệt yêu cầu',
+                            `Phiếu yêu cầu ${viewingRequest.code} đã được phê duyệt và tự động đồng bộ sang bảng chấm công.`
+                          );
+                        }
+                      }}
+                      style={{ backgroundColor: '#16a34a', borderColor: '#16a34a' }}
+                    >
+                      Phê duyệt ngay
+                    </Button>
+                  </>
                 )}
               </div>
               <Button type="button" variant="primary" onClick={() => setDetailModalOpen(false)}>

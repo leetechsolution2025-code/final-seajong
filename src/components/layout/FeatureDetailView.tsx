@@ -66,7 +66,7 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
         };
       case 'my_requests':
         return {
-          title: 'Yêu cầu & Đề xuất cá nhân',
+          title: 'Yêu cầu và đề xuất cá nhân',
           groupName: 'CÔNG VIỆC CÁ NHÂN',
           icon: 'bi-file-earmark-plus',
           color: 'amber',

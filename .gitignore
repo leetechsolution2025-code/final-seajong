@@ -11,4 +11,10 @@ dev.db-journal
 database.sqlite
 dev.db
 server.db
+backup_data/*.db
+backup_data/*.db-wal
+backup_data/*.db-shm
+backup_data/.staging/
+
+
 

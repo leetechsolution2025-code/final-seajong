@@ -421,16 +421,20 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
             const syncedLocs: WorkLocationItem[] = catItems.map((cat: any, idx: number) => {
               const catName = String(cat.name).trim();
               const existing = currentLocs.find(
-                (l) => l.name.toLowerCase() === catName.toLowerCase() || String(l.id) === `LOC-${cat.id}`
+                (l) =>
+                  l.code === cat.code ||
+                  l.name.toLowerCase() === catName.toLowerCase() ||
+                  String(l.id) === String(cat.id) ||
+                  String(l.id) === `LOC-${cat.id}`
               );
               if (existing) {
-                return { ...existing, id: `LOC-${cat.id}`, name: catName };
+                return { ...existing, id: String(cat.id), code: cat.code || existing.code, name: catName };
               }
               const isOffice = catName.toLowerCase().includes('văn phòng') || catName.toLowerCase().includes('công ty');
               return {
-                id: `LOC-${cat.id}`,
+                id: String(cat.id),
                 name: catName,
-                code: isOffice ? 'VP_HO' : `NM_0${idx + 1}`,
+                code: cat.code || (isOffice ? 'VP_HO' : `NM_0${idx + 1}`),
                 type: isOffice ? 'office' : 'factory',
                 typeLabel: isOffice ? 'Văn phòng điều hành' : 'Nhà máy sản xuất',
                 address: isOffice ? 'Tầng 8, Tòa nhà Licogi 13, 164 Khuất Duy Tiến, Thanh Xuân, Hà Nội' : 'Khu công nghiệp vừa và nhỏ Phú Diễn, Phường Phú Diễn, Bắc Từ Liêm, Hà Nội',
@@ -489,9 +493,18 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
         return res.json();
       })
       .then((result) => {
-        if (result && typeof result === 'object' && Array.isArray(result.locations) && result.locations.length > 0) {
-          setData(result);
-          setSelectedLocationId((current) => current || result.locations[0].id);
+        const locList = Array.isArray(result)
+          ? result
+          : result && typeof result === 'object' && Array.isArray(result.locations)
+            ? result.locations
+            : [];
+        if (locList.length > 0) {
+          setData((prev) => ({
+            ...prev,
+            ...(result && !Array.isArray(result) ? result : {}),
+            locations: locList,
+          }));
+          setSelectedLocationId((current) => current || locList[0].id);
         } else {
           const cached = localStorage.getItem('seajong_work_locations');
           if (cached) {

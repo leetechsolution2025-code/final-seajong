@@ -36,6 +36,7 @@ import { LogisticsOverviewPage } from './logistics/LogisticsOverviewPage';
 import { ProductionOverviewPage } from './production/ProductionOverviewPage';
 import { QaOverviewPage } from './qa/QaOverviewPage';
 import { PurchaseOverviewPage } from './purchase/PurchaseOverviewPage';
+import { HrOverviewPage } from './hr/HrOverviewPage';
 
 interface CustomerLead {
   id: string;
@@ -150,6 +151,11 @@ export const DepartmentPage: React.FC<{ deptCode?: string }> = ({ deptCode }) =>
   // ── BỘ PHẬN MUA HÀNG (PURCHASE / PROCUREMENT) ──
   if (currentDept === 'purchase' || currentDept === 'procurement' || currentDept === 'mua-hang' || currentDept === 'purchasing') {
     return <PurchaseOverviewPage />;
+  }
+
+  // ── BỘ PHẬN NHÂN SỰ (HR / HÀNH CHÍNH NHÂN SỰ) ──
+  if (currentDept === 'hr' || currentDept === 'nhan-su' || currentDept === 'admin' || currentDept === 'hanh-chinh') {
+    return <HrOverviewPage />;
   }
 
   // === WORKFLOW STEP STATE ===

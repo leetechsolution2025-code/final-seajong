@@ -242,29 +242,24 @@ export const DEALERS_TICKER_ITEMS: TickerItem[] = [
 // ── 9. QUẢN LÝ HỒ SƠ NHÂN SỰ (EMPLOYEES / HR) ──────────────────────────────
 export const EMPLOYEES_TICKER_ITEMS: TickerItem[] = [
   {
-    badge: 'QUY MÔ NHÂN SỰ',
-    badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
-    text: 'Cơ sở dữ liệu trích ngang quản lý 128 cán bộ công nhân viên toàn công ty Seajong tại trụ sở và các phân xưởng',
+    badge: 'ĐỊNH BIÊN NHÂN SỰ',
+    badgeColor: 'bg-rose-50 text-rose-700 border-rose-200 font-bold',
+    text: 'Quản trị tập trung hồ sơ cán bộ công nhân viên, cơ cấu phòng ban và định biên nguồn nhân lực toàn công ty Seajong',
   },
   {
-    badge: 'CHẤM CÔNG & CA LÀM',
-    badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
-    text: 'Ca hành chính: 07:30 – 17:00 • Phân xưởng sản xuất: Ca 1 & Ca 2 duy trì ổn định 100% công suất',
+    badge: 'PHÊ DUYỆT ĐƠN TỪ',
+    badgeColor: 'bg-amber-50 text-amber-800 border-amber-200 font-bold',
+    text: 'Kiểm soát chặt chẽ đơn xin nghỉ phép (định mức 12 ngày/năm, tối đa 1 ngày/tháng), đăng ký đi muộn về sớm và công tác',
   },
   {
     badge: 'HỢP ĐỒNG LAO ĐỘNG',
-    badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-    text: '100% người lao động được ký kết Hợp đồng lao động, rà soát phụ lục định kỳ và lưu trữ hồ sơ số hóa',
+    badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold',
+    text: 'Theo dõi thời hạn Hợp đồng lao động xác định thời hạn, không xác định thời hạn, thử việc và hồ sơ tham gia BHXH',
   },
   {
-    badge: 'CHÍNH SÁCH ĐÃI NGỘ',
-    badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    text: 'Bảo hiểm y tế, BHXH và các chế độ phúc lợi áp dụng đầy đủ theo Bộ luật Lao động và quy chế Seajong',
-  },
-  {
-    badge: 'AN TOÀN PHÂN XƯỞNG',
-    badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
-    text: 'Trang bị 100% bảo hộ lao động đạt tiêu chuẩn kỹ thuật cho công nhân các tổ đúc đồng, gia công cơ khí và mạ PVD',
+    badge: 'TUYỂN DỤNG & ĐÀO TẠO',
+    badgeColor: 'bg-blue-50 text-blue-700 border-blue-200 font-bold',
+    text: 'Đồng bộ quy trình Yêu cầu tuyển dụng → Sàng lọc ứng viên → Lịch phỏng vấn → Theo dõi thử việc và Kế hoạch đào tạo nội bộ',
   },
 ];
 
@@ -891,10 +886,66 @@ export const DynamicTicker: React.FC<DynamicTickerProps> = ({
   // Giải quyết context liên quan mật thiết đến nội dung trang
   const resolvedContext = resolveContext(context, pageTitle, activeMenu, activeDept);
 
-  // Dữ liệu thời gian thực từ cơ sở dữ liệu SQLite cho Ban Giám đốc, Bộ phận QC & Bộ phận Mua hàng
+  // Dữ liệu thời gian thực từ cơ sở dữ liệu SQLite cho Ban Giám đốc, Bộ phận Nhân sự, Bộ phận QC & Bộ phận Mua hàng
   const [liveBoardItems, setLiveBoardItems] = useState<TickerItem[] | null>(null);
+  const [liveHrItems, setLiveHrItems] = useState<TickerItem[] | null>(null);
   const [liveQaItems, setLiveQaItems] = useState<TickerItem[] | null>(null);
   const [liveSuppliersItems, setLiveSuppliersItems] = useState<TickerItem[] | null>(null);
+
+  useEffect(() => {
+    if (resolvedContext === 'employees' && (!items || items.length === 0) && (!customNews || customNews.length === 0)) {
+      Promise.all([
+        fetch('/api/hr/employees?pageSize=200').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        fetch('/api/personal-requests?scope=all').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        fetch('/api/recruitment/requests').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        fetch('/api/recruitment/candidates').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      ]).then(([empRes, reqRes, recReqRes, recCandRes]) => {
+        const emps = Array.isArray(empRes?.employees) ? empRes.employees : [];
+        const reqs = Array.isArray(reqRes) ? reqRes : [];
+        const recReqs = Array.isArray(recReqRes) ? recReqRes : [];
+        const recCands = Array.isArray(recCandRes) ? recCandRes : [];
+        if (emps.length === 0 && reqs.length === 0) return;
+
+        const activeEmps = emps.filter((e: any) => String(e.status || '').toLowerCase() !== 'resigned');
+        const total = activeEmps.length;
+        const probation = activeEmps.filter(
+          (e: any) =>
+            String(e.status || '').toLowerCase() === 'probation' ||
+            String(e.employeeType || '').toLowerCase() === 'probation'
+        ).length;
+        const official = Math.max(0, total - probation);
+        const signed = activeEmps.filter((e: any) => {
+          const ct = String(e.contractType || '').toLowerCase().trim();
+          return ct && ct !== 'unsigned' && ct !== 'chưa ký hợp đồng' && ct !== 'none';
+        }).length;
+        const unsigned = Math.max(0, total - signed);
+        const pendingReqs = reqs.filter((r: any) => String(r.status || '').toLowerCase() === 'pending');
+
+        setLiveHrItems([
+          {
+            badge: 'ĐỊNH BIÊN NHÂN SỰ',
+            badgeColor: 'bg-rose-50 text-rose-700 border-rose-200 font-bold',
+            text: `Tổng số <strong>${total} cán bộ nhân viên</strong> đang làm việc — Nhân sự chính thức: <strong>${official} người</strong> • Đang thử việc: <strong>${probation} người</strong>`,
+          },
+          {
+            badge: 'YÊU CẦU CHỜ DUYỆT',
+            badgeColor: 'bg-amber-50 text-amber-800 border-amber-200 font-bold',
+            text: `Hiện có <strong>${pendingReqs.length} đơn từ &amp; đề xuất cá nhân</strong> đang ở trạng thái <strong>Chờ phê duyệt</strong> cần xử lý`,
+          },
+          {
+            badge: 'HỢP ĐỒNG LAO ĐỘNG',
+            badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold',
+            text: `Đã ký kết <strong>${signed}/${total} hợp đồng lao động</strong> — Cần rà soát / bổ sung hợp đồng: <strong>${unsigned} nhân sự</strong>`,
+          },
+          {
+            badge: 'TUYỂN DỤNG & ĐÀO TẠO',
+            badgeColor: 'bg-blue-50 text-blue-700 border-blue-200 font-bold',
+            text: `Đang triển khai <strong>${recReqs.length} yêu cầu tuyển dụng</strong> và tiếp nhận <strong>${recCands.length} hồ sơ ứng viên</strong> trên hệ thống`,
+          },
+        ]);
+      });
+    }
+  }, [resolvedContext, items, customNews]);
 
   useEffect(() => {
     if (resolvedContext === 'suppliers' && (!items || items.length === 0) && (!customNews || customNews.length === 0)) {
@@ -1071,7 +1122,7 @@ export const DynamicTicker: React.FC<DynamicTickerProps> = ({
         displayItems = PRODUCTS_TICKER_ITEMS;
         break;
       case 'employees':
-        displayItems = EMPLOYEES_TICKER_ITEMS;
+        displayItems = liveHrItems || EMPLOYEES_TICKER_ITEMS;
         break;
       case 'recruitment':
         displayItems = RECRUITMENT_TICKER_ITEMS;

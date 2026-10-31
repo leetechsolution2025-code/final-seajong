@@ -19,6 +19,9 @@ import {
   ArrowClockwise,
   CheckCircle,
   ExclamationCircle,
+  GeoAltFill,
+  Wifi,
+  Crosshair,
 } from 'react-bootstrap-icons';
 
 interface DepartmentItem {
@@ -29,6 +32,24 @@ interface DepartmentItem {
 interface PositionItem {
   code: string;
   name: string;
+}
+
+interface WorkLocationOption {
+  id: string;
+  code: string;
+  name: string;
+  type?: string;
+  typeLabel?: string;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
+  radiusMeters?: number;
+  lanSubnet?: string;
+  primaryWanIp?: string;
+  allowGpsCheckin?: boolean;
+  allowWifiCheckin?: boolean;
+  allowLanCheckin?: boolean;
+  wifiList?: Array<{ ssid: string; ipSubnet?: string }>;
 }
 
 interface EmployeeItem {
@@ -48,6 +69,22 @@ interface EmployeeItem {
   departmentName: string;
   position: string;
   positionTitle: string;
+  workLocation?: string | null;
+  branchCode?: string | null;
+  workLocationName?: string | null;
+  timekeepingConfig?: {
+    code: string;
+    name: string;
+    address?: string;
+    lanSubnet?: string;
+    wifiSsid?: string;
+    latitude?: number;
+    longitude?: number;
+    radiusMeters?: number;
+    allowGpsCheckin?: boolean;
+    allowWifiCheckin?: boolean;
+    allowLanCheckin?: boolean;
+  } | null;
   employeeType: string;
   startDate: string | null;
   contractType?: string | null;
@@ -165,13 +202,26 @@ const renderUnitSuffix = (unit: string) => (
   </span>
 );
 
-export const EmployeesPage: React.FC = () => {
+export interface EmployeesPageProps {
+  embedded?: boolean;
+  tableHidden?: boolean;
+  openAddTrigger?: number;
+  onDataChanged?: () => void;
+}
+
+export const EmployeesPage: React.FC<EmployeesPageProps> = ({
+  embedded = false,
+  tableHidden = false,
+  openAddTrigger = 0,
+  onDataChanged,
+}) => {
   const { setActiveMenuKey } = useDepartment();
   const [search, setSearch] = useState('');
   const [department, setDepartment] = useState('');
   const [status, setStatus] = useState('');
   const [departments, setDepartments] = useState<DepartmentItem[]>([]);
   const [positions, setPositions] = useState<PositionItem[]>([]);
+  const [workLocations, setWorkLocations] = useState<WorkLocationOption[]>([]);
   const [employees, setEmployees] = useState<EmployeeItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -202,6 +252,7 @@ export const EmployeesPage: React.FC = () => {
   const [formCurrentAddress, setFormCurrentAddress] = useState('');
   const [formDeptCode, setFormDeptCode] = useState('hr');
   const [formPosition, setFormPosition] = useState('');
+  const [formWorkLocation, setFormWorkLocation] = useState('lv-20260413-4197-jpme');
   const [formWorkEmail, setFormWorkEmail] = useState('');
   const [formPassword, setFormPassword] = useState('');
   const [formPhone, setFormPhone] = useState('');
@@ -255,12 +306,38 @@ export const EmployeesPage: React.FC = () => {
         }
       })
       .catch(() => {});
+
+    fetch('/api/work-locations')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((res) => {
+        const list = Array.isArray(res)
+          ? res
+          : Array.isArray(res?.locations)
+            ? res.locations
+            : [];
+        if (list.length > 0) {
+          setWorkLocations(list);
+          const defaultLoc =
+            list.find((l: WorkLocationOption) => l.name?.toLowerCase().includes('văn phòng')) ||
+            list[0];
+          if (defaultLoc?.code) {
+            setFormWorkLocation((prev) => prev || defaultLoc.code);
+          }
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Load danh sách nhân viên
   useEffect(() => {
     fetchEmployees();
   }, [search, department, status, page, pageSize]);
+
+  useEffect(() => {
+    if (openAddTrigger > 0) {
+      handleOpenAdd();
+    }
+  }, [openAddTrigger]);
 
   const fetchEmployees = async () => {
     setLoading(true);
@@ -277,6 +354,9 @@ export const EmployeesPage: React.FC = () => {
         const data = await res.json();
         setEmployees(data.employees || []);
         setTotal(data.total || 0);
+        if (Array.isArray(data.workLocations) && data.workLocations.length > 0) {
+          setWorkLocations(data.workLocations);
+        }
       }
     } catch (e) {
       console.error('Fetch employees error:', e);
@@ -298,6 +378,9 @@ export const EmployeesPage: React.FC = () => {
     setFormCurrentAddress('');
     setFormDeptCode(departments[0]?.code || 'hr');
     setFormPosition(positions[0]?.code || 'Nhân viên');
+    const defaultOfficeLoc =
+      workLocations.find((l) => l.name?.toLowerCase().includes('văn phòng')) || workLocations[0];
+    setFormWorkLocation(defaultOfficeLoc?.code || 'lv-20260413-4197-jpme');
     setFormWorkEmail('');
     setFormPassword('');
     setFormPhone('');
@@ -335,6 +418,15 @@ export const EmployeesPage: React.FC = () => {
     setFormCurrentAddress(emp.currentAddress || '');
     setFormDeptCode(emp.departmentCode || departments[0]?.code || 'hr');
     setFormPosition(emp.position || positions[0]?.code || 'Nhân viên');
+    const defaultOfficeLoc =
+      workLocations.find((l) => l.name?.toLowerCase().includes('văn phòng')) || workLocations[0];
+    const resolvedEmpLoc =
+      emp.workLocation && emp.workLocation !== 'main'
+        ? emp.workLocation
+        : emp.branchCode && emp.branchCode !== 'main'
+          ? emp.branchCode
+          : defaultOfficeLoc?.code || 'lv-20260413-4197-jpme';
+    setFormWorkLocation(resolvedEmpLoc);
     setFormWorkEmail(emp.workEmail || '');
     setFormPassword('');
     setFormPhone(emp.phone || '');
@@ -394,6 +486,8 @@ export const EmployeesPage: React.FC = () => {
         currentAddress: formCurrentAddress.trim() || null,
         departmentCode: formDeptCode,
         position: formPosition,
+        workLocation: formWorkLocation,
+        branchCode: formWorkLocation,
         workEmail: formWorkEmail.trim() || generateCleanEmail(formFullName),
         password: formPassword.trim() || undefined,
         phone: formPhone.trim() || null,
@@ -444,6 +538,7 @@ export const EmployeesPage: React.FC = () => {
       setIsAddOpen(false);
       setEditingEmployee(null);
       await fetchEmployees();
+      onDataChanged?.();
     } catch (err: any) {
       console.error('Error saving employee:', err);
       setSaveError(err.message || 'Không thể kết nối đến máy chủ CSDL.');
@@ -481,6 +576,7 @@ export const EmployeesPage: React.FC = () => {
       setIsAddOpen(false);
       setEditingEmployee(null);
       await fetchEmployees();
+      onDataChanged?.();
     } catch (err) {
       console.error('Lỗi khi xóa nhân sự:', err);
       alert('Không thể kết nối máy chủ.');
@@ -574,38 +670,34 @@ export const EmployeesPage: React.FC = () => {
     }
   };
 
-  return (
-    <StandardPage
-      title="Quản lý hồ sơ nhân viên"
-      description="Cơ sở dữ liệu trích ngang toàn bộ cán bộ công nhân viên Công ty Seajong"
-      icon="bi-people"
-      color="rose"
-      tickerContext="employees"
-      useCard={true}
-      cardPadding="p-0"
-      background="#EBF0F5"
-    >
+  const pageContent = (
+      <>
+      {/* Toast thông báo */}
+      {toastMessage && (
+        <div
+          className={`fixed top-16 right-4 z-[60] flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-lg border text-xs font-bold transition-all animate-bounce ${
+            toastMessage.type === 'success'
+              ? 'bg-emerald-600 text-white border-emerald-700'
+              : 'bg-rose-600 text-white border-rose-700'
+          }`}
+        >
+          {toastMessage.type === 'success' ? <CheckCircle size={16} /> : <ExclamationCircle size={16} />}
+          <span>{toastMessage.text}</span>
+        </div>
+      )}
+
       <div
-        className="flex flex-col h-full flex-1 relative overflow-hidden"
+        className={
+          tableHidden
+            ? 'hidden'
+            : 'flex flex-col h-full flex-1 relative overflow-hidden'
+        }
         style={{
           minHeight: 0,
           height: '100%',
           flex: '1 1 0%',
         }}
       >
-        {/* Toast thông báo */}
-        {toastMessage && (
-          <div
-            className={`absolute top-3 right-4 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-lg border text-xs font-bold transition-all animate-bounce ${
-              toastMessage.type === 'success'
-                ? 'bg-emerald-600 text-white border-emerald-700'
-                : 'bg-rose-600 text-white border-rose-700'
-            }`}
-          >
-            {toastMessage.type === 'success' ? <CheckCircle size={16} /> : <ExclamationCircle size={16} />}
-            <span>{toastMessage.text}</span>
-          </div>
-        )}
 
         {/* ── 1. TableToolbar theo chuẩn dự án client-skydoor ── */}
         <TableToolbar
@@ -720,7 +812,15 @@ export const EmployeesPage: React.FC = () => {
                       </div>
                     </td>
                     <td className="font-medium text-slate-800 text-xs">
-                      {emp.departmentName || '—'}
+                      <div className="flex flex-col">
+                        <span>{emp.departmentName || '—'}</span>
+                        {emp.workLocationName && (
+                          <span className="text-[11px] text-slate-400 font-normal flex items-center gap-1 mt-0.5">
+                            <GeoAltFill size={10} className="text-sky-600 shrink-0" />
+                            <span className="truncate">{emp.workLocationName}</span>
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="font-medium text-slate-700 text-xs">
                       {emp.positionTitle || '—'}
@@ -965,6 +1065,81 @@ export const EmployeesPage: React.FC = () => {
             value={formPosition}
             onChange={(e) => setFormPosition(e.target.value)}
           />
+
+          {/* Địa điểm làm việc & Gán thông số chấm công */}
+          <Select
+            label="Địa điểm làm việc"
+            required
+            options={
+              workLocations.length > 0
+                ? workLocations.map((loc) => ({
+                    value: loc.code,
+                    label: loc.name,
+                  }))
+                : [
+                    { value: 'lv-20260413-4197-jpme', label: 'Văn phòng công ty' },
+                    { value: 'lv-20260413-8872-tlvc', label: 'Toàn nhà CT3' },
+                    { value: 'lv-20260413-7770-sqba', label: 'Khu công nghiệp Phú Minh' },
+                  ]
+            }
+            value={formWorkLocation}
+            onChange={(e) => setFormWorkLocation(e.target.value)}
+          />
+
+          {(() => {
+            const selectedLoc =
+              workLocations.find((l) => l.code === formWorkLocation || l.id === formWorkLocation) ||
+              workLocations[0];
+            if (!selectedLoc) return null;
+            const wifiSsid = selectedLoc.wifiList?.[0]?.ssid || 'Seajong_Office_5G';
+            const lanSubnet = selectedLoc.lanSubnet || '192.168.1.0/24';
+            const radius = selectedLoc.radiusMeters || 100;
+            return (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  backgroundColor: '#f0f9ff',
+                  borderRadius: '8px',
+                  border: '1px solid #bae6fd',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '5px',
+                }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-bold text-sky-800 uppercase tracking-wide flex items-center gap-1.5">
+                    <GeoAltFill size={12} className="text-sky-600 shrink-0" />
+                    Thông số chấm công được gán
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-700 border border-sky-200">
+                    Bán kính {radius}m
+                  </span>
+                </div>
+                {selectedLoc.address && (
+                  <div className="text-[11px] text-slate-600 leading-snug">
+                    <span className="font-semibold text-slate-700">Địa chỉ:</span> {selectedLoc.address}
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600">
+                  <span className="inline-flex items-center gap-1">
+                    <Wifi size={11} className="text-emerald-600 shrink-0" />
+                    <span>
+                      LAN: <strong className="font-mono text-slate-800">{lanSubnet}</strong> • WiFi:{' '}
+                      <strong className="text-slate-800">{wifiSsid}</strong>
+                    </span>
+                  </span>
+                  {selectedLoc.latitude && selectedLoc.longitude && (
+                    <span className="inline-flex items-center gap-1">
+                      <Crosshair size={11} className="text-indigo-600 shrink-0" />
+                      <span className="font-mono text-[10.5px] text-slate-700">
+                        GPS: {Number(selectedLoc.latitude).toFixed(4)}, {Number(selectedLoc.longitude).toFixed(4)}
+                      </span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Email công việc */}
           <Input
@@ -1260,6 +1435,32 @@ export const EmployeesPage: React.FC = () => {
         confirmText="Xác nhận xóa"
         cancelText="Hủy bỏ"
       />
+      </>
+  );
+
+  if (embedded) {
+    if (tableHidden) {
+      return <>{pageContent}</>;
+    }
+    return (
+      <div className="flex flex-col h-full flex-1 min-h-0 relative overflow-hidden bg-white">
+        {pageContent}
+      </div>
+    );
+  }
+
+  return (
+    <StandardPage
+      title="Quản lý hồ sơ nhân viên"
+      description="Cơ sở dữ liệu trích ngang toàn bộ cán bộ công nhân viên Công ty Seajong"
+      icon="bi-people"
+      color="rose"
+      tickerContext="employees"
+      useCard={true}
+      cardPadding="p-0"
+      background="#EBF0F5"
+    >
+      {pageContent}
     </StandardPage>
   );
 };

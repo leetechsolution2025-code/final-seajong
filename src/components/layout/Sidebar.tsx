@@ -62,20 +62,12 @@ const DEPT_SIDEBAR_CONFIGS: Record<string, { deptName: string; sections: NavSect
     sections: [
       {
         id: 'recruitment',
-        label: 'Tuyển dụng',
+        label: 'Tuyển dụng và đào tạo',
         icon: 'bi-person-plus',
         items: [
           { id: 'recruitment', name: 'Quản trị tuyển dụng' },
-          { id: 'interviews', name: 'Phỏng vấn ứng viên' },
-        ],
-      },
-      {
-        id: 'training',
-        label: 'Đào tạo và thử việc',
-        icon: 'bi-mortarboard',
-        items: [
-          { id: 'training', name: 'Kế hoạch đào tạo' },
           { id: 'probation', name: 'Theo dõi thử việc' },
+          { id: 'training', name: 'Kế hoạch đào tạo' },
         ],
       },
       {
@@ -93,7 +85,7 @@ const DEPT_SIDEBAR_CONFIGS: Record<string, { deptName: string; sections: NavSect
         label: 'Phúc lợi',
         icon: 'bi-cash-coin',
         items: [
-          { id: 'attendance-payroll', name: 'Chấm công và tính lương' },
+          { id: 'attendance-payroll', name: 'Tổng hợp công và tính lương' },
           { id: 'insurance', name: 'Bảo hiểm' },
           { id: 'salary-adjustments', name: 'Điều chỉnh thu nhập' },
         ],
@@ -572,8 +564,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
     !isSalesDept &&
     !isFinanceDept;
 
-  // Ẩn nhóm "Lưu trữ" ở trang Marketing, Sales, Finance, Logistics và Dealer
-  const isArchiveHidden = isDealer || activeDeptCode === 'marketing' || isSalesDept || isFinanceDept || isLogisticsDept;
+  // Ẩn nhóm "Lưu trữ" ở trang HR (Nhân sự), Marketing, Sales, Finance, Logistics và Dealer
+  const isHrDept = activeDeptCode === 'hr' || activeDeptCode === 'nhan-su' || activeDeptCode === 'admin';
+  const isArchiveHidden =
+    isDealer ||
+    isHrDept ||
+    activeDeptCode === 'marketing' ||
+    isSalesDept ||
+    isFinanceDept ||
+    isLogisticsDept;
 
   return (
     <aside

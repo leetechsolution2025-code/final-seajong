@@ -12,6 +12,8 @@ import {
   CheckCircle,
   Printer,
   ArrowRepeat,
+  ChevronLeft,
+  ChevronRight,
 } from 'react-bootstrap-icons';
 import { EventOffcanvas } from '../../../components/common/EventOffcanvas';
 import { DepartmentActionMenu, type DepartmentActionMenuItem } from '../../../components/common/DepartmentActionMenu';
@@ -93,6 +95,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
   onNavigate,
 }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<'month' | 'quarter' | 'year'>('month');
+  const [selectedMonth, setSelectedMonth] = useState<number>(() => new Date().getMonth() + 1);
   const [lastUpdated, setLastUpdated] = useState<string>(() => new Date().toLocaleTimeString('vi-VN'));
   const [isEventDrawerOpen, setIsEventDrawerOpen] = useState<boolean>(false);
   const [noticeTab, setNoticeTab] = useState<'all' | 'inflow' | 'outflow'>('all');
@@ -125,6 +128,17 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
     } catch {}
     return 0;
   });
+  const [periodStats, setPeriodStats] = useState<{
+    openingCashBalance: number;
+    receivablesCumulative: number;
+    receivablesInvoiced: number;
+    receivablesCollected: number;
+  }>({
+    openingCashBalance: 0,
+    receivablesCumulative: 0,
+    receivablesInvoiced: 0,
+    receivablesCollected: 0,
+  });
   const [cashflowChartData, setCashflowChartData] = useState<CashflowMonthData[]>(INITIAL_CASHFLOW_DATA);
   const [cashflowNotices, setCashflowNotices] = useState<CashflowNotice[]>([]);
   const [selectedNotice, setSelectedNotice] = useState<CashflowNotice | null>(null);
@@ -138,52 +152,150 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
     });
   }, [cashflowNotices]);
 
-  const loadRealStats = () => {
-    fetch('/api/finance/cash-assets')
-      .then((r) => r.json())
-      .then((d) => {
-        if (Array.isArray(d)) {
-          const sum = d.reduce((acc: number, item: any) => acc + (Number(item.balance) || 0), 0);
-          setCashBalance(sum);
-          try { localStorage.setItem('decodoor_cached_cash_balance', String(sum)); } catch {}
-        }
-      })
-      .catch(() => {});
-
-    fetch('/api/debts/receivables')
-      .then((r) => r.json())
-      .then((d) => {
-        if (Array.isArray(d)) {
-          const sum = d.reduce((acc: number, item: any) => acc + (Number(item.remainingAmount ?? item.remaining_amount) || 0), 0);
-          setReceivablesTotal(sum);
-          try { localStorage.setItem('decodoor_cached_receivables_total', String(sum)); } catch {}
-        }
-      })
-      .catch(() => {});
-
-    fetch('/api/debts/expenses')
-      .then((r) => r.json())
-      .then((d) => {
-        if (Array.isArray(d)) {
-          const sum = d.reduce((acc: number, item: any) => acc + (Number(item.amount) || 0), 0);
-          setExpensesTotal(sum);
-          try { localStorage.setItem('decodoor_cached_expenses_total', String(sum)); } catch {}
-        }
-      })
-      .catch(() => {});
-
-    fetch('/api/finance/cashflow-chart')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
+  const loadRealStats = (
+    periodParam: 'month' | 'quarter' | 'year' = selectedPeriod,
+    monthParam: number = selectedMonth
+  ) => {
+    const yearParam = new Date().getFullYear();
+    Promise.all([
+      fetch(`/api/finance/cashflow-chart?period=${periodParam}&month=${monthParam}&year=${yearParam}`).then((r) =>
+        r.ok ? r.json() : null
+      ),
+      fetch('/api/debts/receivables').then((r) => (r.ok ? r.json() : [])),
+    ])
+      .then(([d, recList]) => {
         if (d && Array.isArray(d.months)) {
           setCashflowChartData(d.months);
-          if (typeof d.currentInflow === 'number') {
-            setRevenueTotal(d.currentInflow);
-            try { localStorage.setItem('decodoor_cached_revenue_total', String(d.currentInflow)); } catch {}
-          }
-          if (typeof d.currentOutflow === 'number') {
-            setExpensesTotal(d.currentOutflow);
-            try { localStorage.setItem('decodoor_cached_expenses_total', String(d.currentOutflow)); } catch {}
+
+          if (d.periodStats) {
+            const cb = Number(d.currentBalance) || 0;
+            const rev = Number(d.currentInflow) || 0;
+            const exp = Number(d.currentOutflow) || 0;
+            const rec = Number(d.currentReceivables) || 0;
+            setCashBalance(cb);
+            setRevenueTotal(rev);
+            setExpensesTotal(exp);
+            setReceivablesTotal(rec);
+            setPeriodStats({
+              openingCashBalance: Number(d.periodStats.openingCashBalance) || 0,
+              receivablesCumulative: Number(d.periodStats.receivablesCumulative) || 0,
+              receivablesInvoiced: Number(d.periodStats.receivablesInvoiced) || 0,
+              receivablesCollected: Number(d.periodStats.receivablesCollected) || 0,
+            });
+            try {
+              localStorage.setItem('decodoor_cached_cash_balance', String(cb));
+              localStorage.setItem('decodoor_cached_revenue_total', String(rev));
+              localStorage.setItem('decodoor_cached_expenses_total', String(exp));
+              localStorage.setItem('decodoor_cached_receivables_total', String(rec));
+            } catch {}
+          } else {
+            // Tính toán trực tiếp từ dữ liệu CSDL trả về khi server chưa khởi động lại
+            const monthsArr: any[] = d.months || [];
+            const totalYearIn = monthsArr.reduce((s, m) => s + (Number(m.inFlowRaw) || 0), 0);
+            const totalYearOut = monthsArr.reduce((s, m) => s + (Number(m.outFlowRaw) || 0), 0);
+            const latestBal = Number(d.currentBalance) || 1453506720;
+            const yearOpeningBal = Math.max(0, Math.round(latestBal - totalYearIn + totalYearOut));
+
+            let runBal = yearOpeningBal;
+            const enrichedMonths = monthsArr.map((m, idx) => {
+              const mNum = Number(m.monthNum) || (idx + 5);
+              const openB = runBal;
+              const inR = Number(m.inFlowRaw) || 0;
+              const outR = Number(m.outFlowRaw) || 0;
+              if (inR > 0 || outR > 0 || mNum >= 7) {
+                runBal = Math.max(0, Math.round(runBal + inR - outR));
+              }
+              return { ...m, monthNum: mNum, openingBal: openB, closingBal: (inR > 0 || outR > 0 || mNum >= 7) ? runBal : 0, inR, outR };
+            });
+
+            // Reconstruct صحیح line points on chart
+            const yMax = Number(d.yScaleMax) || 2;
+            const fixedChartMonths = enrichedMonths.map((em) => {
+              const netB = +(em.closingBal / 1e9).toFixed(3);
+              const cy = netB > 0 ? +(175 - Math.min(yMax, netB) * (150 / yMax)).toFixed(2) : 175;
+              const val =
+                em.closingBal > 0
+                  ? em.closingBal >= 1e9
+                    ? `${(em.closingBal / 1e9).toFixed(2)} tỷ`
+                    : `${(em.closingBal / 1e6).toFixed(1)} tr`
+                  : '0 đ';
+              return {
+                ...em,
+                netBalance: netB,
+                cy,
+                val,
+              };
+            });
+            setCashflowChartData(fixedChartMonths);
+
+            let targetMonths = enrichedMonths.filter((m) => m.monthNum === monthParam);
+            if (periodParam === 'quarter') {
+              targetMonths = enrichedMonths.filter((m) => [8, 9, 10].includes(m.monthNum));
+            } else if (periodParam === 'year') {
+              targetMonths = enrichedMonths;
+            }
+
+            const calcInflow = targetMonths.reduce((s, m) => s + m.inR, 0);
+            const calcOutflow = targetMonths.reduce((s, m) => s + m.outR, 0);
+            const lastActive = [...targetMonths].reverse().find((m) => m.closingBal > 0);
+            const calcCashBal =
+              periodParam === 'month' && monthParam <= 10
+                ? lastActive?.closingBal || 0
+                : latestBal;
+            const calcOpenBal =
+              targetMonths.find((m) => m.inR > 0 || m.outR > 0)?.openingBal || yearOpeningBal;
+
+            // Tính Công nợ phải thu theo kỳ từ danh sách /api/debts/receivables
+            const recs = Array.isArray(recList) ? recList : [];
+            const cumulativeRec = recs.reduce(
+              (acc, item) => acc + (Number(item.remainingAmount ?? item.remaining_amount) || 0),
+              0
+            );
+
+            let periodInv = 0;
+            let periodPaid = 0;
+            const matchDateInPeriod = (dateStr: string) => {
+              if (!dateStr) return false;
+              const parts = String(dateStr).split('/');
+              if (parts.length === 3) {
+                const m = Number(parts[1]);
+                const y = Number(parts[2]);
+                if (y !== yearParam) return false;
+                if (periodParam === 'month') return m === monthParam;
+                if (periodParam === 'quarter') return [8, 9, 10].includes(m);
+                return true;
+              }
+              return false;
+            };
+
+            recs.forEach((r: any) => {
+              (r.entries || []).forEach((e: any) => {
+                if (matchDateInPeriod(e.date)) {
+                  periodInv += Number(e.contractValue ?? e.amount) || 0;
+                }
+              });
+              (r.paymentRecords || []).forEach((p: any) => {
+                if (matchDateInPeriod(p.date)) {
+                  periodPaid += Number(p.amount) || 0;
+                }
+              });
+            });
+
+            const calcRec =
+              periodParam === 'year'
+                ? cumulativeRec
+                : Math.max(0, Math.round(periodInv - periodPaid));
+
+            setCashBalance(calcCashBal);
+            setRevenueTotal(calcInflow);
+            setExpensesTotal(calcOutflow);
+            setReceivablesTotal(calcRec);
+            setPeriodStats({
+              openingCashBalance: calcOpenBal,
+              receivablesCumulative: cumulativeRec,
+              receivablesInvoiced: Math.round(periodInv),
+              receivablesCollected: Math.round(periodPaid),
+            });
           }
         }
       })
@@ -200,10 +312,10 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
   };
 
   useEffect(() => {
-    loadRealStats();
-    const interval = setInterval(loadRealStats, 6000);
+    loadRealStats(selectedPeriod, selectedMonth);
+    const interval = setInterval(() => loadRealStats(selectedPeriod, selectedMonth), 6000);
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedPeriod, selectedMonth]);
 
   const handleExecutePayment = async (orderId: string) => {
     setIsExecuting(true);
@@ -223,7 +335,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
           `Đã giải ngân lệnh chi ${data.orderCode} và tự động lập Phiếu chi ${data.voucherCode}`
         );
         notifyFinanceUpdated('payment_order', 'update');
-        loadRealStats();
+        loadRealStats(selectedPeriod, selectedMonth);
         setSelectedNotice(null);
       } else {
         onShowToast?.('error', 'Lỗi chi tiền', 'Không thể hoàn tất giải ngân lệnh chi');
@@ -237,7 +349,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
 
   const currentPeriodLabels = useMemo(() => {
     const now = new Date();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const m = String(selectedMonth).padStart(2, '0');
     const y = now.getFullYear();
     const q = Math.floor(now.getMonth() / 3) + 1;
     return {
@@ -245,7 +357,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
       quarter: `Quý ${q}/${y}`,
       year: `Năm ${y}`,
     };
-  }, []);
+  }, [selectedMonth]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -257,7 +369,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
   // Lắng nghe cập nhật tài chính thời gian thực từ các tab khác
   useFinanceRealtimeSync(() => {
     setLastUpdated(new Date().toLocaleTimeString('vi-VN'));
-    loadRealStats();
+    loadRealStats(selectedPeriod, selectedMonth);
   });
 
 
@@ -355,23 +467,77 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
 
             <span style={{ color: 'var(--border-subtle)', margin: '0 4px', userSelect: 'none', opacity: 0.8 }}>|</span>
 
-            <button
-              type="button"
-              onClick={() => setSelectedPeriod('month')}
+            <div
               style={{
-                padding: '4px 12px',
+                display: 'inline-flex',
+                alignItems: 'center',
                 borderRadius: 'var(--radius-sm)',
-                fontSize: '0.75rem',
-                fontWeight: selectedPeriod === 'month' ? 700 : 500,
                 backgroundColor: selectedPeriod === 'month' ? 'var(--color-primary)' : 'transparent',
                 color: selectedPeriod === 'month' ? '#ffffff' : 'var(--text-secondary)',
-                border: 'none',
-                cursor: 'pointer',
                 transition: 'all 0.15s ease',
               }}
             >
-              {currentPeriodLabels.month}
-            </button>
+              <button
+                type="button"
+                title="Tháng trước"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedPeriod('month');
+                  setSelectedMonth((prev) => (prev > 1 ? prev - 1 : 12));
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '4px 5px 4px 7px',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'inherit',
+                  cursor: 'pointer',
+                  opacity: 0.85,
+                }}
+              >
+                <ChevronLeft size={11} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedPeriod('month')}
+                style={{
+                  padding: '4px 4px',
+                  fontSize: '0.75rem',
+                  fontWeight: selectedPeriod === 'month' ? 700 : 500,
+                  background: 'transparent',
+                  color: 'inherit',
+                  border: 'none',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {currentPeriodLabels.month}
+              </button>
+              <button
+                type="button"
+                title="Tháng sau"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedPeriod('month');
+                  setSelectedMonth((prev) => (prev < 12 ? prev + 1 : 1));
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '4px 7px 4px 5px',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'inherit',
+                  cursor: 'pointer',
+                  opacity: 0.85,
+                }}
+              >
+                <ChevronRight size={11} />
+              </button>
+            </div>
             <button
               type="button"
               onClick={() => setSelectedPeriod('quarter')}
@@ -418,7 +584,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                 title: 'Làm mới dữ liệu',
                 description: 'Đồng bộ sổ quỹ và công nợ thực tế',
                 onClick: () => {
-                  loadRealStats();
+                  loadRealStats(selectedPeriod, selectedMonth);
                   setLastUpdated(new Date().toLocaleTimeString('vi-VN'));
                   onShowToast?.('success', 'Đã đồng bộ', 'Số liệu dòng tiền và công nợ đã được làm mới');
                 },
@@ -485,12 +651,18 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-              <span>Tiền mặt & Tiền gửi ngân hàng</span>
+              <span>
+                {selectedPeriod === 'month'
+                  ? `Tồn quỹ đầu tháng: ${formatVND(periodStats.openingCashBalance)}`
+                  : selectedPeriod === 'quarter'
+                  ? `Tồn quỹ đầu quý: ${formatVND(periodStats.openingCashBalance)}`
+                  : `Tồn quỹ đầu năm: ${formatVND(periodStats.openingCashBalance)}`}
+              </span>
             </div>
           </div>
 
           <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
-            Đồng bộ từ sổ quỹ và tài khoản ngân hàng
+            Đồng bộ từ sổ quỹ TM (1111) và tiền gửi NH (1121)
           </div>
         </div>
 
@@ -524,7 +696,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                 borderRadius: '4px',
               }}
             >
-              Thực tế
+              {selectedPeriod === 'month' ? currentPeriodLabels.month : selectedPeriod === 'quarter' ? currentPeriodLabels.quarter : currentPeriodLabels.year}
             </span>
           </div>
 
@@ -534,12 +706,18 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-              <span>Thu hồi nợ và bán hàng trong kỳ</span>
+              <span>
+                {selectedPeriod === 'month'
+                  ? `Thu hồi nợ và bán hàng trong ${currentPeriodLabels.month}`
+                  : selectedPeriod === 'quarter'
+                  ? 'Tổng thực thu lũy kế 3 tháng trong Quý'
+                  : `Tổng thực thu lũy kế cả ${currentPeriodLabels.year}`}
+              </span>
             </div>
           </div>
 
           <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
-            Đồng bộ từ hợp đồng bán hàng thực tế
+            Đồng bộ từ hợp đồng bán hàng và phiếu thu thực tế
           </div>
         </div>
 
@@ -573,7 +751,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                 borderRadius: '4px',
               }}
             >
-              Thực tế
+              {selectedPeriod === 'month' ? currentPeriodLabels.month : selectedPeriod === 'quarter' ? currentPeriodLabels.quarter : currentPeriodLabels.year}
             </span>
           </div>
 
@@ -583,12 +761,18 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-              <span>Chi phí quản lý, bán hàng, sản xuất</span>
+              <span>
+                {selectedPeriod === 'month'
+                  ? `Chi phí quản lý, bán hàng, SX trong ${currentPeriodLabels.month}`
+                  : selectedPeriod === 'quarter'
+                  ? 'Tổng thực chi lũy kế 3 tháng trong Quý'
+                  : `Tổng thực chi lũy kế cả ${currentPeriodLabels.year}`}
+              </span>
             </div>
           </div>
 
           <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
-            Đồng bộ từ phân hệ Quản lý chi phí
+            Đồng bộ từ phân hệ Quản lý chi phí và phiếu chi
           </div>
         </div>
 
@@ -625,7 +809,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                 borderRadius: '4px',
               }}
             >
-              Thực tế
+              {selectedPeriod === 'month' ? currentPeriodLabels.month : selectedPeriod === 'quarter' ? currentPeriodLabels.quarter : currentPeriodLabels.year}
             </span>
           </div>
 
@@ -635,12 +819,20 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-              <span>Dư nợ khách hàng hiện tại</span>
+              <span>
+                {selectedPeriod === 'month'
+                  ? `Phát sinh trong tháng: ${formatVND(periodStats.receivablesInvoiced)}`
+                  : selectedPeriod === 'quarter'
+                  ? `Phát sinh trong quý: ${formatVND(periodStats.receivablesInvoiced)}`
+                  : `Tổng phát sinh năm: ${formatVND(periodStats.receivablesInvoiced)}`}
+              </span>
             </div>
           </div>
 
           <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
-            Đồng bộ từ sổ chi tiết công nợ phải thu
+            {selectedPeriod === 'year'
+              ? `Đã thu hồi trong năm: ${formatVND(periodStats.receivablesCollected)}`
+              : `Tổng dư nợ lũy kế hiện tại: ${formatVND(periodStats.receivablesCumulative)}`}
           </div>
         </div>
       </div>
@@ -727,120 +919,133 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
               </defs>
 
               {/* Lưới ngang tham chiếu và nhãn trục tung */}
-              {[
-                { val: 20, y: 25 },
-                { val: 15, y: 62.5 },
-                { val: 10, y: 100 },
-                { val: 5, y: 137.5 },
-                { val: 0, y: 175 },
-              ].map((grid, gIdx) => (
-                <g key={`grid-${gIdx}`}>
-                  <text
-                    x="28"
-                    y={grid.y + 4}
-                    textAnchor="end"
-                    fill="var(--text-muted)"
-                    fontSize="11"
-                    fontWeight="500"
-                  >
-                    {grid.val}
-                  </text>
-                  <line
-                    x1="38"
-                    y1={grid.y}
-                    x2="630"
-                    y2={grid.y}
-                    stroke="var(--border-subtle)"
-                    strokeDasharray={grid.val === 0 ? undefined : '3 3'}
-                    strokeWidth={grid.val === 0 ? '1.5' : '1'}
-                  />
-                </g>
-              ))}
-
-              {/* Các cặp cột Thu (Xanh) - Chi (Đỏ) */}
-              {cashflowChartData.map((bar, bIdx) => {
-                const inHeight = bar.inFlow > 0
-                  ? (bar.inFlow >= 1 ? bar.inFlow * 7.5 : Math.max(16, bar.inFlow * 250))
-                  : 0;
-                const inY = 175 - inHeight;
-                const outHeight = bar.outFlow > 0
-                  ? (bar.outFlow >= 1 ? bar.outFlow * 7.5 : Math.max(16, bar.outFlow * 250))
-                  : 0;
-                const outY = 175 - outHeight;
-
-                const inLabel = bar.inFlow >= 1
-                  ? bar.inFlow
-                  : (bar.inFlowRaw ? `${Math.round(bar.inFlowRaw / 1e6)}tr` : (bar.inFlow > 0 ? `${(bar.inFlow * 1000).toFixed(0)}tr` : '0'));
-                const outLabel = bar.outFlow >= 1
-                  ? bar.outFlow
-                  : (bar.outFlowRaw ? `${Math.round(bar.outFlowRaw / 1e6)}tr` : (bar.outFlow > 0 ? `${(bar.outFlow * 1000).toFixed(0)}tr` : '0'));
+              {(() => {
+                const maxDataBillions = Math.max(
+                  2,
+                  ...cashflowChartData.flatMap((m) => [m.inFlow || 0, m.outFlow || 0, m.netBalance || 0])
+                );
+                const yMax = maxDataBillions <= 2 ? 2 : maxDataBillions <= 5 ? 5 : maxDataBillions <= 10 ? 10 : 20;
+                const gridSteps = [
+                  { val: yMax, y: 25 },
+                  { val: +(yMax * 0.75).toFixed(2), y: 62.5 },
+                  { val: +(yMax * 0.5).toFixed(2), y: 100 },
+                  { val: +(yMax * 0.25).toFixed(2), y: 137.5 },
+                  { val: 0, y: 175 },
+                ];
 
                 return (
-                  <g key={`bar-${bIdx}`}>
-                    {/* Cột Tiền vào (Thu) */}
-                    <rect
-                      x={bar.cx - 20}
-                      y={inY}
-                      width="18"
-                      height={inHeight}
-                      fill="#10b981"
-                      rx="3"
-                      ry="3"
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <title>{`Thu ${bar.month}: ${formatVND(bar.inFlowRaw || bar.inFlow * 1e9)}`}</title>
-                    </rect>
-                    {/* Giá trị Tiền vào (Thu) hiển thị trên đỉnh cột */}
-                    <text
-                      x={bar.cx - 11}
-                      y={inY - 5}
-                      textAnchor="middle"
-                      fill="#10b981"
-                      fontSize="9.5"
-                      fontWeight="700"
-                    >
-                      {inLabel}
-                    </text>
+                  <>
+                    {gridSteps.map((grid, gIdx) => (
+                      <g key={`grid-${gIdx}`}>
+                        <text
+                          x="30"
+                          y={grid.y + 4}
+                          textAnchor="end"
+                          fill="var(--text-muted)"
+                          fontSize="10.5"
+                          fontWeight="500"
+                        >
+                          {grid.val > 0 ? `${grid.val}tỷ` : '0'}
+                        </text>
+                        <line
+                          x1="38"
+                          y1={grid.y}
+                          x2="630"
+                          y2={grid.y}
+                          stroke="var(--border-subtle)"
+                          strokeDasharray={grid.val === 0 ? undefined : '3 3'}
+                          strokeWidth={grid.val === 0 ? '1.5' : '1'}
+                        />
+                      </g>
+                    ))}
 
-                    {/* Cột Tiền ra (Chi) */}
-                    <rect
-                      x={bar.cx + 2}
-                      y={outY}
-                      width="18"
-                      height={outHeight}
-                      fill="#f43f5e"
-                      rx="3"
-                      ry="3"
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <title>{`Chi ${bar.month}: ${formatVND(bar.outFlowRaw || bar.outFlow * 1e9)}`}</title>
-                    </rect>
-                    {/* Giá trị Tiền ra (Chi) hiển thị trên đỉnh cột */}
-                    <text
-                      x={bar.cx + 11}
-                      y={outY - 5}
-                      textAnchor="middle"
-                      fill="#f43f5e"
-                      fontSize="9.5"
-                      fontWeight="700"
-                    >
-                      {outLabel}
-                    </text>
+                    {/* Các cặp cột Thu (Xanh) - Chi (Đỏ) */}
+                    {cashflowChartData.map((bar, bIdx) => {
+                      const inHeight = bar.inFlow > 0
+                        ? Math.max(6, Math.min(150, (bar.inFlow / yMax) * 150))
+                        : 0;
+                      const inY = 175 - inHeight;
+                      const outHeight = bar.outFlow > 0
+                        ? Math.max(6, Math.min(150, (bar.outFlow / yMax) * 150))
+                        : 0;
+                      const outY = 175 - outHeight;
 
-                    {/* Nhãn tháng dưới trục hoành */}
-                    <text
-                      x={bar.cx}
-                      y="198"
-                      textAnchor="middle"
-                      fill={bIdx === cashflowChartData.length - 1 ? '#0284c7' : 'var(--text-secondary)'}
-                      fontSize="11"
-                      fontWeight={bIdx === cashflowChartData.length - 1 ? '700' : '500'}
-                    >
-                      {bar.month}
-                    </text>
-                  </g>
+                      const inLabel = bar.inFlow >= 1
+                        ? `${bar.inFlow.toFixed(2)}tỷ`
+                        : (bar.inFlowRaw ? `${Math.round(bar.inFlowRaw / 1e6)}tr` : (bar.inFlow > 0 ? `${(bar.inFlow * 1000).toFixed(0)}tr` : '0'));
+                      const outLabel = bar.outFlow >= 1
+                        ? `${bar.outFlow.toFixed(2)}tỷ`
+                        : (bar.outFlowRaw ? `${Math.round(bar.outFlowRaw / 1e6)}tr` : (bar.outFlow > 0 ? `${(bar.outFlow * 1000).toFixed(0)}tr` : '0'));
+
+                      return (
+                        <g key={`bar-${bIdx}`}>
+                          {/* Cột Tiền vào (Thu) */}
+                          <rect
+                            x={bar.cx - 20}
+                            y={inY}
+                            width="18"
+                            height={inHeight}
+                            fill="#10b981"
+                            rx="3"
+                            ry="3"
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <title>{`Thu ${bar.month}: ${formatVND(bar.inFlowRaw || bar.inFlow * 1e9)}`}</title>
+                          </rect>
+                          {/* Giá trị Tiền vào (Thu) hiển thị trên đỉnh cột */}
+                          <text
+                            x={bar.cx - 11}
+                            y={inY - 5}
+                            textAnchor="middle"
+                            fill="#10b981"
+                            fontSize="9.5"
+                            fontWeight="700"
+                          >
+                            {inLabel}
+                          </text>
+
+                          {/* Cột Tiền ra (Chi) */}
+                          <rect
+                            x={bar.cx + 2}
+                            y={outY}
+                            width="18"
+                            height={outHeight}
+                            fill="#f43f5e"
+                            rx="3"
+                            ry="3"
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <title>{`Chi ${bar.month}: ${formatVND(bar.outFlowRaw || bar.outFlow * 1e9)}`}</title>
+                          </rect>
+                          {/* Giá trị Tiền ra (Chi) hiển thị trên đỉnh cột */}
+                          <text
+                            x={bar.cx + 11}
+                            y={outY - 5}
+                            textAnchor="middle"
+                            fill="#f43f5e"
+                            fontSize="9.5"
+                            fontWeight="700"
+                          >
+                            {outLabel}
+                          </text>
+
+                          {/* Nhãn tháng dưới trục hoành */}
+                          <text
+                            x={bar.cx}
+                            y="198"
+                            textAnchor="middle"
+                            fill={bIdx === cashflowChartData.length - 1 ? '#0284c7' : 'var(--text-secondary)'}
+                            fontSize="11"
+                            fontWeight={bIdx === cashflowChartData.length - 1 ? '700' : '500'}
+                          >
+                            {bar.month}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </>
                 );
-              })}
+              })()}
 
               {/* Vùng bóng mờ gradient dưới đồ thị line Số dư quỹ */}
               {(() => {

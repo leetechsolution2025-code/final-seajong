@@ -5,6 +5,10 @@ import { DepartmentPage } from '../../pages/DepartmentPage';
 
 import { FeatureDetailView } from './FeatureDetailView';
 import { EmployeesPage } from '../../pages/hr/EmployeesPage';
+import { RecruitmentPage } from '../../pages/hr/RecruitmentPage';
+import { ProbationPage } from '../../pages/hr/ProbationPage';
+import { TrainingPage } from '../../pages/hr/TrainingPage';
+import { AttendancePayrollPage } from '../../pages/hr/AttendancePayrollPage';
 import { MarketingProductsPage } from '../../pages/marketing/MarketingProductsPage';
 import { BrandIdentityPage } from '../../pages/marketing/BrandIdentityPage';
 import { MarketingPlanPage } from '../../pages/marketing/MarketingPlanPage';
@@ -52,9 +56,15 @@ import { QaStandardsPage } from '../../pages/qa/QaStandardsPage';
 import { QaDefectsSummaryPage } from '../../pages/qa/QaDefectsSummaryPage';
 import { PurchaseOverviewPage } from '../../pages/purchase/PurchaseOverviewPage';
 import { PurchaseSuppliersPage } from '../../pages/purchase/PurchaseSuppliersPage';
+import { DataManagementPage } from '../../pages/departments/bom/DataManagementPage';
 
 export const DashboardView: React.FC = () => {
   const { activeDeptCode, activeMenuKey } = useDepartment();
+
+  // ── QUẢN TRỊ DỮ LIỆU HỆ THỐNG (ADMIN / BAN GIÁM ĐỐC) ──
+  if (activeMenuKey === 'data-management' || activeMenuKey === 'board_data' || activeMenuKey === 'data') {
+    return <DataManagementPage />;
+  }
 
   // ── CỔNG THÔNG TIN ĐẠI LÝ (DEALER PORTAL) ──
   if (activeDeptCode === 'dealer' || activeDeptCode === 'dai-ly') {
@@ -241,6 +251,17 @@ export const DashboardView: React.FC = () => {
     return <EmployeesPage />;
   }
 
+  // Khi người dùng chọn chức năng Tuyển dụng và đào tạo (chuẩn client-skydoor)
+  if (activeMenuKey === 'recruitment' || activeMenuKey === 'interviews') {
+    return <RecruitmentPage />;
+  }
+  if (activeMenuKey === 'probation') {
+    return <ProbationPage />;
+  }
+  if (activeMenuKey === 'training') {
+    return <TrainingPage />;
+  }
+
   // Khi người dùng chọn chức năng Sổ ghi chép
   if (activeMenuKey === 'notebook' || activeMenuKey === 'journal') {
     return <NotebookView department={activeDeptCode} />;
@@ -312,13 +333,19 @@ export const DashboardView: React.FC = () => {
     return <MyTasksPage />;
   }
 
-  // Khi người dùng chọn Chấm công cá nhân / Quản lý chấm công
+  // Khi người dùng chọn Tổng hợp công và tính lương của bộ phận Nhân sự (chuẩn client-seajong kết nối bộ máy yêu cầu cá nhân)
+  if (
+    activeMenuKey === 'attendance-payroll' ||
+    activeMenuKey === 'payroll'
+  ) {
+    return <AttendancePayrollPage />;
+  }
+
+  // Khi người dùng chọn Chấm công cá nhân
   if (
     activeMenuKey === 'my_attendance' ||
     activeMenuKey === 'my-attendance' ||
-    activeMenuKey === 'attendance' ||
-    activeMenuKey === 'attendance-payroll' ||
-    activeMenuKey === 'payroll'
+    activeMenuKey === 'attendance'
   ) {
     return <MyAttendancePage />;
   }
