@@ -381,15 +381,38 @@ export const UserAuthManagementPage: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
+  // Helper: lấy danh sách key quyền của một mã phòng ban
+  const getDeptPermKeys = useCallback((deptCode: string): string[] => {
+    const group = PERMISSION_GROUPS_BY_DEPT.find((g) => g.deptCode === deptCode);
+    return group ? group.permissions.map((p) => p.key) : [];
+  }, []);
+
+  // Helper: hợp nhất danh sách permissions với các phòng ban có level === 'full'
+  const buildMergedPerms = useCallback(
+    (rawPerms: string[], accessList: DeptAccess[]): string[] => {
+      const permSet = new Set<string>(rawPerms);
+      for (const acc of accessList) {
+        if (acc.level === 'full') {
+          for (const k of getDeptPermKeys(acc.code)) {
+            permSet.add(k);
+          }
+        }
+      }
+      return Array.from(permSet);
+    },
+    [getDeptPermKeys]
+  );
+
   // When selected user changes, update edit states
   useEffect(() => {
     const u = users.find((x) => x.id === selectedId);
     if (!u) return;
 
     setEditRole(u.role);
-    setEditPerms(parseJson<string[]>(u.permissions, []));
-
     const existingAccess = parseJson<DeptAccess[]>(u.deptAccess, []);
+    const rawPerms = parseJson<string[]>(u.permissions, []);
+    setEditPerms(buildMergedPerms(rawPerms, existingAccess));
+
     setEditDeptAccess(
       departments.map((d) => {
         const found = existingAccess.find((x) => x.code === d.code);
@@ -397,7 +420,7 @@ export const UserAuthManagementPage: React.FC = () => {
       })
     );
     setDirty(false);
-  }, [selectedId, users, departments]);
+  }, [selectedId, users, departments, buildMergedPerms]);
 
   const selectedUser = useMemo(
     () => users.find((u) => u.id === selectedId) ?? null,
@@ -412,44 +435,89 @@ export const UserAuthManagementPage: React.FC = () => {
     setSelectedId(u.id);
   };
 
-  const handleTogglePerm = (key: string) => {
-    setEditPerms((prev) =>
-      prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]
+  // Đồng bộ mức độ truy cập phòng ban khi thay đổi danh sách quyền của phòng ban đó
+  const syncDeptAccessFromPerms = (nextPerms: string[], targetDeptCodes?: string[]) => {
+    setEditDeptAccess((prev) =>
+      prev.map((d) => {
+        if (targetDeptCodes && !targetDeptCodes.includes(d.code)) return d;
+        const deptKeys = getDeptPermKeys(d.code);
+        if (deptKeys.length === 0) return d;
+        const selectedCount = deptKeys.filter((k) => nextPerms.includes(k)).length;
+        if (selectedCount === deptKeys.length) {
+          return { ...d, level: 'full' };
+        }
+        if (selectedCount > 0) {
+          return { ...d, level: d.level === 'none' || d.level === 'full' ? 'view' : d.level };
+        }
+        return { ...d, level: d.level === 'full' ? 'view' : d.level };
+      })
     );
+  };
+
+  const handleTogglePerm = (key: string) => {
+    const nextPerms = editPerms.includes(key)
+      ? editPerms.filter((x) => x !== key)
+      : [...editPerms, key];
+    setEditPerms(nextPerms);
+    const ownerGroup = PERMISSION_GROUPS_BY_DEPT.find((g) =>
+      g.permissions.some((p) => p.key === key)
+    );
+    if (ownerGroup) {
+      syncDeptAccessFromPerms(nextPerms, [ownerGroup.deptCode]);
+    }
     setDirty(true);
   };
 
   const handleSelectAllPerms = () => {
-    setEditPerms(SYSTEM_PERMISSIONS.map((p) => p.key));
+    const allKeys = SYSTEM_PERMISSIONS.map((p) => p.key);
+    setEditPerms(allKeys);
+    setEditDeptAccess((prev) => prev.map((d) => ({ ...d, level: 'full' })));
     setDirty(true);
   };
 
   const handleDeselectAllPerms = () => {
     setEditPerms([]);
+    setEditDeptAccess((prev) =>
+      prev.map((d) => ({ ...d, level: d.level === 'full' ? 'view' : d.level }))
+    );
     setDirty(true);
   };
 
   const handleToggleGroupPerms = (groupKeys: string[]) => {
-    setEditPerms((prev) => {
-      const allSelected = groupKeys.every((k) => prev.includes(k));
-      if (allSelected) {
-        return prev.filter((k) => !groupKeys.includes(k));
-      }
-      const next = new Set([...prev, ...groupKeys]);
-      return Array.from(next);
-    });
+    const allSelected = groupKeys.every((k) => editPerms.includes(k));
+    const nextPerms = allSelected
+      ? editPerms.filter((k) => !groupKeys.includes(k))
+      : Array.from(new Set([...editPerms, ...groupKeys]));
+    setEditPerms(nextPerms);
+    const ownerGroup = PERMISSION_GROUPS_BY_DEPT.find((g) =>
+      g.permissions.some((p) => groupKeys.includes(p.key))
+    );
+    if (ownerGroup) {
+      syncDeptAccessFromPerms(nextPerms, [ownerGroup.deptCode]);
+    }
     setDirty(true);
+  };
+
+  const applyDeptLevelToPerms = (code: string, nextLevel: DeptAccess['level']) => {
+    const deptKeys = getDeptPermKeys(code);
+    if (deptKeys.length === 0) return;
+    if (nextLevel === 'full') {
+      // Cấp toàn quyền phòng ban -> Mở toàn bộ quyền nghiệp vụ của phòng ban đó
+      setEditPerms((prev) => Array.from(new Set([...prev, ...deptKeys])));
+    } else if (nextLevel === 'none') {
+      // Thu hồi quyền phòng ban -> Tắt các quyền nghiệp vụ của phòng ban đó
+      setEditPerms((prev) => prev.filter((k) => !deptKeys.includes(k)));
+    }
   };
 
   const handleCycleDeptLevel = (code: string) => {
     const cycle: DeptAccess['level'][] = ['none', 'view', 'full'];
+    const current = editDeptAccess.find((d) => d.code === code)?.level ?? 'none';
+    const nextLevel = cycle[(cycle.indexOf(current) + 1) % 3];
     setEditDeptAccess((prev) =>
-      prev.map((d) => {
-        if (d.code !== code) return d;
-        const nextIndex = (cycle.indexOf(d.level) + 1) % 3;
-        return { ...d, level: cycle[nextIndex] };
-      })
+      prev.map((d) => (d.code === code ? { ...d, level: nextLevel } : d))
     );
+    applyDeptLevelToPerms(code, nextLevel);
     setDirty(true);
   };
 
@@ -457,19 +525,26 @@ export const UserAuthManagementPage: React.FC = () => {
     setEditDeptAccess((prev) =>
       prev.map((d) => (d.code === code ? { ...d, level } : d))
     );
+    applyDeptLevelToPerms(code, level);
     setDirty(true);
   };
 
   const handleSetAllDeptLevel = (level: DeptAccess['level']) => {
     setEditDeptAccess((prev) => prev.map((d) => ({ ...d, level })));
+    if (level === 'full') {
+      setEditPerms(SYSTEM_PERMISSIONS.map((p) => p.key));
+    } else if (level === 'none') {
+      setEditPerms([]);
+    }
     setDirty(true);
   };
 
   const handleReset = () => {
     if (!selectedUser) return;
     setEditRole(selectedUser.role);
-    setEditPerms(parseJson<string[]>(selectedUser.permissions, []));
     const existingAccess = parseJson<DeptAccess[]>(selectedUser.deptAccess, []);
+    const rawPerms = parseJson<string[]>(selectedUser.permissions, []);
+    setEditPerms(buildMergedPerms(rawPerms, existingAccess));
     setEditDeptAccess(
       departments.map((d) => {
         const found = existingAccess.find((x) => x.code === d.code);

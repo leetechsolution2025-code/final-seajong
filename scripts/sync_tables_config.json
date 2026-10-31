@@ -1,0 +1,9 @@
+{
+  "_comment": "Danh sách các bảng dữ liệu muốn đồng bộ từ máy Local lên VPS khi chạy update.sh (khi DB trên VPS đã tồn tại)",
+  "_instructions": "Thêm hoặc bớt tên bảng trong mảng 'tables_to_sync' bên dưới. Các bảng không nằm trong danh sách này trên VPS sẽ được giữ nguyên tuyệt đối.",
+  "tables_to_sync": [
+    "CompanyInfo",
+    "DepartmentCategory"
+  ]
+}
+

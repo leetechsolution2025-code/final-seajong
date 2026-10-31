@@ -173,7 +173,12 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
       const openUpward = spaceBelow < 200 && spaceAbove > spaceBelow;
 
       const maxMenuHeight = Math.min(280, Math.max(140, openUpward ? spaceAbove : spaceBelow));
-      const leftPos = Math.min(rect.left, Math.max(8, viewportWidth - Math.max(rect.width, 220) - 8));
+      const measuredMenuWidth = menuRef.current ? menuRef.current.offsetWidth : rect.width;
+      const effectiveWidth = Math.max(rect.width, measuredMenuWidth);
+      const leftPos =
+        rect.left + effectiveWidth > viewportWidth - 8
+          ? Math.max(8, rect.right - effectiveWidth)
+          : Math.max(8, rect.left);
 
       if (openUpward) {
         setDropdownRect({
@@ -195,6 +200,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     useEffect(() => {
       if (!isOpen) return;
       updateDropdownPosition();
+      const rafId = window.requestAnimationFrame(() => {
+        updateDropdownPosition();
+      });
 
       const handleClickOutside = (e: MouseEvent) => {
         const target = e.target as Node;
@@ -228,6 +236,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
       window.addEventListener('scroll', handleScrollOrResize, true);
 
       return () => {
+        window.cancelAnimationFrame(rafId);
         document.removeEventListener('mousedown', handleClickOutside);
         document.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('resize', handleScrollOrResize);

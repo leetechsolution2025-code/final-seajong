@@ -24,7 +24,9 @@ import {
   BoxArrowRight,
 } from 'react-bootstrap-icons';
 import { Button } from '../../../components/common/Button';
+import { Select } from '../../../components/common/Select';
 import { useToast } from '../../../components/ui/Toast';
+import { useAuth } from '../../../context/AuthContext';
 import { evaluatePunchIn, evaluatePunchOut, calculateShiftCredit } from '../../../utils/timekeepingEvaluator';
 
 export interface TimekeepingRecord {
@@ -127,7 +129,8 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
   user: propUser,
 }) => {
   const { data: session } = useSession();
-  const activeUser = propUser || session?.user;
+  const { user: authUser } = useAuth();
+  const activeUser = propUser || authUser || session?.user;
   const toast = useToast();
 
   const onShowToast = useCallback(
@@ -419,6 +422,20 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
     return outMins < aEndMins ? aEndMins - outMins : 0;
   }, [todayAfternoonOut, shiftHours.afternoonEnd]);
 
+  const [isMobileScreen, setIsMobileScreen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth <= 768;
+    }
+    return false;
+  });
+
+  const [isTabletOrMobile, setIsTabletOrMobile] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth <= 1024;
+    }
+    return false;
+  });
+
   // Kiểm tra thiết bị là Điện thoại di động / iPad / Tablet hay Máy PC / Laptop
   const isMobileOrTabletDevice = useMemo(() => {
     if (typeof window === 'undefined') return false;
@@ -426,8 +443,16 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
     const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Tablet/i;
     const isIPad = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
-    return mobileRegex.test(ua) || isIPad || (isTouch && window.innerWidth <= 1024);
-  }, []);
+    return mobileRegex.test(ua) || isIPad || isTabletOrMobile || (isTouch && window.innerWidth <= 1024);
+  }, [isTabletOrMobile]);
+
+  useEffect(() => {
+    if (isMobileOrTabletDevice && authMode === 'lan') {
+      setAuthMode('gps');
+    } else if (!isMobileOrTabletDevice && authMode === 'gps') {
+      setAuthMode('lan');
+    }
+  }, [isMobileOrTabletDevice, authMode]);
 
   // Điều kiện đáp ứng kết nối mạng / GPS để mở nút chấm công
   const isNetworkReadyForCheckIn = useMemo(() => {
@@ -493,11 +518,35 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       todayLeaveInfo.leaveSession === 'all_day'
   );
 
+  // Trạng thái nhân sự tự động của nhân viên: 'working' (Đang làm việc) | 'temporary_leave' (Tạm nghỉ) | 'resigned' (Đã nghỉ)
+  const isHrResigned = Boolean(
+    dbUser?.status === 'Đã nghỉ việc' ||
+      dbUser?.status === 'resigned' ||
+      activeUser?.status === 'resigned' ||
+      activeUser?.status === 'Đã nghỉ' ||
+      activeUser?.status === 'Đã nghỉ việc'
+  );
+  const isHrTempLeave = Boolean(
+    dbUser?.status === 'Tạm nghỉ' ||
+      dbUser?.status === 'temporary_leave' ||
+      activeUser?.status === 'temporary_leave' ||
+      activeUser?.status === 'Tạm nghỉ'
+  );
+
+  const employeeStatus: 'working' | 'temporary_leave' | 'resigned' = useMemo(() => {
+    if (isHrResigned) return 'resigned';
+    if (isHrTempLeave) return 'temporary_leave';
+    if (todayLeaveInfo && todayLeaveInfo.status === 'approved') return 'temporary_leave';
+    return 'working';
+  }, [isHrResigned, isHrTempLeave, todayLeaveInfo]);
+
+  const isEmployeeInactive = isHrResigned || isHrTempLeave;
+
   // Khoá nút bấm chấm công khi đã quẹt xong ca, hoặc đang nghỉ phép ca đó, hoặc chưa đáp ứng kết nối mạng, hoặc chưa đến giờ / hết giờ ca
-  const isMorningInLocked = hasMorningIn || isMorningEnded || !isNetworkReadyForCheckIn || isTodayMorningLeave;
-  const isMorningCheckOutLocked = hasMorningOut || isMorningEnded || !hasMorningIn || !isNetworkReadyForCheckIn || isTodayMorningLeave;
-  const isAfternoonInLocked = hasAfternoonIn || !isAfternoonReady || !isNetworkReadyForCheckIn || isTodayAfternoonLeave;
-  const isAfternoonCheckOutLocked = hasAfternoonOut || !isAfternoonReady || !hasAfternoonIn || !isNetworkReadyForCheckIn || isTodayAfternoonLeave;
+  const isMorningInLocked = isEmployeeInactive || hasMorningIn || isMorningEnded || !isNetworkReadyForCheckIn || isTodayMorningLeave;
+  const isMorningCheckOutLocked = isEmployeeInactive || hasMorningOut || isMorningEnded || !hasMorningIn || !isNetworkReadyForCheckIn || isTodayMorningLeave;
+  const isAfternoonInLocked = isEmployeeInactive || hasAfternoonIn || !isAfternoonReady || !isNetworkReadyForCheckIn || isTodayAfternoonLeave;
+  const isAfternoonCheckOutLocked = isEmployeeInactive || hasAfternoonOut || !isAfternoonReady || !hasAfternoonIn || !isNetworkReadyForCheckIn || isTodayAfternoonLeave;
 
   // Chức năng chấm công ngoài văn phòng hoặc công trình dự án
   const [isOutsideWork, setIsOutsideWork] = useState<boolean>(false);
@@ -505,31 +554,8 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
 
   const isOutside = authMode === 'outside' || isOutsideWork;
 
-  const [isMobileScreen, setIsMobileScreen] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return window.innerWidth <= 768;
-    }
-    return false;
-  });
-
-  const [isTabletOrMobile, setIsTabletOrMobile] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return window.innerWidth <= 1024;
-    }
-    return false;
-  });
-
   // Trạng thái hiển thị cột bên phải trên điện thoại và iPad/tablet (vuốt phải qua trái để mở, vuốt trái qua phải để ẩn)
   const [showMobileRightColumn, setShowMobileRightColumn] = useState<boolean>(false);
-
-  // Trạng thái nhân sự của nhân viên: 'working' (Đang làm việc) | 'temporary_leave' (Tạm nghỉ) | 'resigned' (Đã nghỉ)
-  const [employeeStatus, setEmployeeStatus] = useState<'working' | 'temporary_leave' | 'resigned'>(() => {
-    if (activeUser?.status === 'temporary_leave' || activeUser?.status === 'Tạm nghỉ') return 'temporary_leave';
-    if (activeUser?.status === 'resigned' || activeUser?.status === 'Đã nghỉ') return 'resigned';
-    return 'working';
-  });
-
-  const isEmployeeInactive = employeeStatus === 'temporary_leave' || employeeStatus === 'resigned';
 
   // Trạng thái toggle đăng ký ăn trưa và ăn tối (Mặc định TẮT cả 2)
   const [registerLunch, setRegisterLunch] = useState<boolean>(() => {
@@ -587,10 +613,12 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
 
     setRecords((prev) => {
       let found = false;
+      let syncedRec: TimekeepingRecord | null = null;
       const updated = prev.map((r) => {
         if (r.dateStr === today) {
           found = true;
-          return { ...r, registeredLunch: nextVal };
+          syncedRec = { ...r, registeredLunch: nextVal };
+          return syncedRec;
         }
         return r;
       });
@@ -599,9 +627,10 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
           dateStr: today,
           registeredLunch: nextVal,
         });
+        syncedRec = newRecord;
         updated.unshift(newRecord);
       }
-      saveRecords(updated);
+      saveRecords(updated, syncedRec ? [syncedRec] : undefined);
       return updated;
     });
 
@@ -641,10 +670,12 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
 
     setRecords((prev) => {
       let found = false;
+      let syncedRec: TimekeepingRecord | null = null;
       const updated = prev.map((r) => {
         if (r.dateStr === today) {
           found = true;
-          return { ...r, registeredDinner: nextVal };
+          syncedRec = { ...r, registeredDinner: nextVal };
+          return syncedRec;
         }
         return r;
       });
@@ -653,9 +684,10 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
           dateStr: today,
           registeredDinner: nextVal,
         });
+        syncedRec = newRecord;
         updated.unshift(newRecord);
       }
-      saveRecords(updated);
+      saveRecords(updated, syncedRec ? [syncedRec] : undefined);
       return updated;
     });
 
@@ -1063,12 +1095,32 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       };
     }
 
-    const morningCheckIn = raw.morningCheckIn || raw.checkInTime || '--:--';
-    const rawCheckOut = raw.checkOutTime || '';
-    const morningCheckOut = raw.morningCheckOut || (rawCheckOut && rawCheckOut < '13:00' ? rawCheckOut : '--:--') || '--:--';
     const rawCheckIn = raw.checkInTime || '';
-    const afternoonCheckIn = raw.afternoonCheckIn || (rawCheckIn && rawCheckIn >= '12:00' ? rawCheckIn : '--:--') || '--:--';
-    const afternoonCheckOut = raw.afternoonCheckOut || rawCheckOut || '--:--';
+    const rawCheckOut = raw.checkOutTime || '';
+    const morningCheckIn =
+      raw.morningCheckIn && raw.morningCheckIn !== '--:--'
+        ? raw.morningCheckIn
+        : rawCheckIn && rawCheckIn < '12:30'
+          ? rawCheckIn
+          : '--:--';
+    const morningCheckOut =
+      raw.morningCheckOut && raw.morningCheckOut !== '--:--'
+        ? raw.morningCheckOut
+        : rawCheckOut && rawCheckOut < '13:00'
+          ? rawCheckOut
+          : '--:--';
+    const afternoonCheckIn =
+      raw.afternoonCheckIn && raw.afternoonCheckIn !== '--:--'
+        ? raw.afternoonCheckIn
+        : rawCheckIn && rawCheckIn >= '12:00'
+          ? rawCheckIn
+          : '--:--';
+    const afternoonCheckOut =
+      raw.afternoonCheckOut && raw.afternoonCheckOut !== '--:--'
+        ? raw.afternoonCheckOut
+        : rawCheckOut && rawCheckOut >= '13:00'
+          ? rawCheckOut
+          : '--:--';
 
     let calculatedMorningLate = 0;
     if (morningCheckIn && morningCheckIn !== '--:--') {
@@ -1364,9 +1416,6 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
 
             if (resolvedUser && isMounted) {
               setDbUser(resolvedUser);
-              if (resolvedUser.status === 'Đã nghỉ việc') setEmployeeStatus('resigned');
-              else if (resolvedUser.status === 'Tạm nghỉ') setEmployeeStatus('temporary_leave');
-              else setEmployeeStatus('working');
             }
           }
         }
@@ -1408,14 +1457,24 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
   }, [activeUser?.id, activeUser?.email]);
 
   // Lưu danh sách vào Backend CSDL thực tế
-  const saveRecords = (newRecords: TimekeepingRecord[]) => {
+  const saveRecords = (newRecords: TimekeepingRecord[], targetToSync?: TimekeepingRecord[]) => {
     setRecords(newRecords);
-    const uid = currentEmployee.id || dbUser?.employeeId || dbUser?.id || activeUser?.id || 'lecongvu@seajong.com';
+    const uid =
+      currentEmployee?.id ||
+      dbUser?.employeeId ||
+      dbUser?.id ||
+      (activeUser as any)?.employee?.id ||
+      activeUser?.id ||
+      activeUser?.email ||
+      'lecongvu@seajong.com';
+
+    const recordsPayload =
+      targetToSync && targetToSync.length > 0 ? targetToSync : newRecords;
 
     fetch('/api/timekeeping', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: uid, records: newRecords }),
+      body: JSON.stringify({ userId: uid, records: recordsPayload }),
     }).catch(() => {});
   };
 
@@ -1531,13 +1590,15 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
 
     const existingIndex = records.findIndex((r) => r.dateStr === todayStr);
     let newRecs: TimekeepingRecord[];
+    let syncedToday: TimekeepingRecord = updatedToday;
     if (existingIndex >= 0) {
       newRecs = [...records];
-      newRecs[existingIndex] = { ...newRecs[existingIndex], ...updatedToday };
+      syncedToday = { ...newRecs[existingIndex], ...updatedToday };
+      newRecs[existingIndex] = syncedToday;
     } else {
       newRecs = [updatedToday, ...records];
     }
-    saveRecords(newRecs);
+    saveRecords(newRecs, [syncedToday]);
   };
 
   // 1. Thao tác: VÀO CA SÁNG hoặc BẮT ĐẦU
@@ -2111,93 +2172,10 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
         flexDirection: 'column',
         gap: '14px',
         width: '100%',
+        flex: 1,
+        minHeight: 0,
       }}
     >
-        {/* Banner cảnh báo khoá chức năng khi nhân viên Tạm nghỉ hoặc Đã nghỉ */}
-        {isEmployeeInactive && (
-          <div
-            style={{
-              backgroundColor: employeeStatus === 'temporary_leave' ? '#fffbeb' : '#fef2f2',
-              border: employeeStatus === 'temporary_leave' ? '1.5px solid #fde68a' : '1.5px solid #fecaca',
-              borderRadius: '10px',
-              padding: '12px 14px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
-            }}
-          >
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                backgroundColor: employeeStatus === 'temporary_leave' ? '#fef3c7' : '#fee2e2',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: employeeStatus === 'temporary_leave' ? '#d97706' : '#dc2626',
-                flexShrink: 0,
-              }}
-            >
-              <LockFill size={18} />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '0.85rem', fontWeight: 800, color: employeeStatus === 'temporary_leave' ? '#92400e' : '#991b1b' }}>
-                Cột chức năng đã bị khoá
-              </div>
-              <div style={{ fontSize: '0.72rem', color: employeeStatus === 'temporary_leave' ? '#b45309' : '#b91c1c', marginTop: '2px', lineHeight: 1.4 }}>
-                Trạng thái nhân viên: <strong>{employeeStatus === 'temporary_leave' ? 'Tạm nghỉ' : 'Đã nghỉ việc'}</strong>. Tất cả chức năng chấm công, quẹt thẻ và đăng ký dịch vụ đã bị vô hiệu hoá.
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Banner thông báo khi hôm nay có đơn Nghỉ phép */}
-        {todayLeaveInfo && (
-          <div
-            style={{
-              backgroundColor: todayLeaveInfo.status === 'approved' ? '#f0fdfa' : '#fffbeb',
-              border: todayLeaveInfo.status === 'approved' ? '1.5px solid #99f6e4' : '1.5px solid #fde68a',
-              borderRadius: '10px',
-              padding: '10px 12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
-            }}
-          >
-            <div
-              style={{
-                width: '34px',
-                height: '34px',
-                borderRadius: '8px',
-                backgroundColor: todayLeaveInfo.status === 'approved' ? '#ccfbf1' : '#fef3c7',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: todayLeaveInfo.status === 'approved' ? '#0f766e' : '#d97706',
-                flexShrink: 0,
-              }}
-            >
-              <CalendarCheck size={17} />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: todayLeaveInfo.status === 'approved' ? '#115e59' : '#92400e' }}>
-                {todayLeaveInfo.status === 'approved' ? 'Đang trong ngày nghỉ phép đã duyệt' : 'Đã gửi đơn xin nghỉ phép hôm nay'}
-              </div>
-              <div style={{ fontSize: '0.72rem', color: todayLeaveInfo.status === 'approved' ? '#0f766e' : '#b45309', marginTop: '2px', lineHeight: 1.35 }}>
-                <strong>{todayLeaveInfo.leaveCategoryLabel}</strong> •{' '}
-                {todayLeaveInfo.leaveSession === 'morning'
-                  ? 'Nghỉ buổi sáng'
-                  : todayLeaveInfo.leaveSession === 'afternoon'
-                    ? 'Nghỉ buổi chiều'
-                    : 'Nghỉ cả ngày (Tự động tắt báo cơm)'}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Banner gợi ý vuốt mở Bảng công trên điện thoại và iPad/tablet */}
         {isTabletOrMobile && (
           <div
@@ -2234,18 +2212,15 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
           </div>
         )}
 
-        {/* VÙNG CHỨC NĂNG CỘT TRÁI - TỰ ĐỘNG KHOÁ KHI TRẠNG THÁI NHÂN VIÊN LÀ TẠM NGHỈ HOẶC ĐÃ NGHỈ */}
+        {/* VÙNG CHỨC NĂNG CỘT TRÁI */}
         <div
           style={{
             display: 'flex',
             flexDirection: 'column',
             gap: '14px',
             width: '100%',
-            pointerEvents: isEmployeeInactive ? 'none' : 'auto',
-            opacity: isEmployeeInactive ? 0.45 : 1,
-            filter: isEmployeeInactive ? 'grayscale(0.6)' : 'none',
-            userSelect: isEmployeeInactive ? 'none' : 'auto',
-            transition: 'opacity 0.2s ease, filter 0.2s ease',
+            flex: 1,
+            minHeight: 0,
           }}
         >
         {/* KHỐI 1: ĐỒNG HỒ ĐIỆN TỬ VÀ 2 THẺ CA SÁNG VÀ CA CHIỀU */}
@@ -2889,6 +2864,8 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
             display: 'flex',
             flexDirection: 'column',
             gap: '10px',
+            flex: 1,
+            minHeight: 0,
           }}
         >
           {/* Thanh chuyển đổi linh hoạt: Mạng LAN, Định vị GPS hoặc Ngoài văn phòng */}
@@ -3031,6 +3008,8 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '8px',
+                flex: 1,
+                minHeight: 0,
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -3115,11 +3094,12 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
               </div>
 
               {/* Bố cục bản đồ vị trí cơ sở và thông số mạng */}
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', marginTop: '2px' }}>
+              <div style={{ flex: 1, minHeight: isMobileScreen ? '80px' : '96px', display: 'flex', gap: '10px', alignItems: 'stretch', marginTop: '2px' }}>
                 <div
                   style={{
-                    width: isMobileScreen ? '96px' : '110px',
-                    height: isMobileScreen ? '80px' : '90px',
+                    width: isMobileScreen ? '96px' : '125px',
+                    minHeight: isMobileScreen ? '80px' : '96px',
+                    height: '100%',
                     borderRadius: '8px',
                     overflow: 'hidden',
                     border: '1px solid #cbd5e1',
@@ -3135,11 +3115,11 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                     marginHeight={0}
                     marginWidth={0}
                     src={`https://maps.google.com/maps?q=${currentCoords.lat},${currentCoords.lng}&z=16&output=embed`}
-                    style={{ border: 0 }}
+                    style={{ border: 0, display: 'block', width: '100%', height: '100%' }}
                   />
                 </div>
 
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                   <div style={{ fontSize: '0.6875rem', color: '#64748b', fontWeight: 700 }}>
                     {lanNetworkInfo.isVerified ? 'CƠ SỞ LÀM VIỆC XÁC THỰC:' : 'TRẠNG THÁI KẾT NỐI:'}
                   </div>
@@ -3190,6 +3170,8 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '8px',
+                flex: 1,
+                minHeight: 0,
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -3248,11 +3230,12 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', marginTop: '2px' }}>
+              <div style={{ flex: 1, minHeight: isMobileScreen ? '80px' : '96px', display: 'flex', gap: '10px', alignItems: 'stretch', marginTop: '2px' }}>
                 <div
                   style={{
-                    width: isMobileScreen ? '96px' : '110px',
-                    height: isMobileScreen ? '80px' : '90px',
+                    width: isMobileScreen ? '96px' : '125px',
+                    minHeight: isMobileScreen ? '80px' : '96px',
+                    height: '100%',
                     borderRadius: '8px',
                     overflow: 'hidden',
                     border: '1px solid #cbd5e1',
@@ -3268,11 +3251,11 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                     marginHeight={0}
                     marginWidth={0}
                     src={`https://maps.google.com/maps?q=${currentCoords.lat},${currentCoords.lng}&z=16&output=embed`}
-                    style={{ border: 0 }}
+                    style={{ border: 0, display: 'block', width: '100%', height: '100%' }}
                   />
                 </div>
 
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                   <div style={{ fontSize: '0.6875rem', color: '#64748b', fontWeight: 700 }}>
                     ĐỊA ĐIỂM THỰC TẾ HIỆN TẠI:
                   </div>
@@ -3313,6 +3296,8 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '8px',
+                flex: 1,
+                minHeight: 0,
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -3347,11 +3332,12 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                 </button>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', marginTop: '2px' }}>
+              <div style={{ flex: 1, minHeight: isMobileScreen ? '80px' : '96px', display: 'flex', gap: '10px', alignItems: 'stretch', marginTop: '2px' }}>
                 <div
                   style={{
-                    width: isMobileScreen ? '96px' : '110px',
-                    height: isMobileScreen ? '80px' : '90px',
+                    width: isMobileScreen ? '96px' : '125px',
+                    minHeight: isMobileScreen ? '80px' : '96px',
+                    height: '100%',
                     borderRadius: '8px',
                     overflow: 'hidden',
                     border: '1px solid #fcd34d',
@@ -3367,11 +3353,11 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                     marginHeight={0}
                     marginWidth={0}
                     src={`https://maps.google.com/maps?q=${currentCoords.lat},${currentCoords.lng}&z=16&output=embed`}
-                    style={{ border: 0 }}
+                    style={{ border: 0, display: 'block', width: '100%', height: '100%' }}
                   />
                 </div>
 
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '4px' }}>
                   <div style={{ fontSize: '0.6875rem', color: '#92400e', fontWeight: 700 }}>
                     TÊN CÔNG TRÌNH HOẶC ĐỊA ĐIỂM:
                   </div>
@@ -3544,27 +3530,15 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                       {currentEmployee.code}
                     </span>
                   )}
-                  <select
-                    value={employeeStatus}
-                    onChange={(e) => {
-                      const nextStatus = e.target.value as 'working' | 'temporary_leave' | 'resigned';
-                      setEmployeeStatus(nextStatus);
-                      if (nextStatus === 'working') {
-                        onShowToast('success', 'Trạng thái nhân sự', 'Đã chuyển sang Đang làm việc. Các chức năng chấm công đã mở lại.');
-                      } else if (nextStatus === 'temporary_leave') {
-                        onShowToast('warning', 'Trạng thái nhân sự', 'Đã chuyển sang Tạm nghỉ. Toàn bộ chức năng cột trái đã bị khoá.');
-                      } else {
-                        onShowToast('error', 'Trạng thái nhân sự', 'Đã chuyển sang Đã nghỉ việc. Toàn bộ chức năng cột trái đã bị khoá.');
-                      }
-                    }}
-                    title="Chuyển đổi trạng thái nhân sự nhân viên"
+                  <span
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
+                      gap: '5px',
                       fontSize: '0.72rem',
                       fontWeight: 700,
-                      padding: '2px 8px',
-                      borderRadius: '12px',
+                      padding: '2px 10px',
+                      borderRadius: '9999px',
                       backgroundColor:
                         employeeStatus === 'working'
                           ? '#dcfce7'
@@ -3583,21 +3557,30 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                           : employeeStatus === 'temporary_leave'
                           ? '1px solid #fde68a'
                           : '1px solid #fca5a5',
-                      cursor: 'pointer',
-                      outline: 'none',
                       fontFamily: "'Roboto Condensed', sans-serif",
+                      userSelect: 'none',
                     }}
                   >
-                    <option value="working" style={{ backgroundColor: '#ffffff', color: '#15803d' }}>
-                      ● Đang làm việc
-                    </option>
-                    <option value="temporary_leave" style={{ backgroundColor: '#ffffff', color: '#b45309' }}>
-                      ⏸ Tạm nghỉ
-                    </option>
-                    <option value="resigned" style={{ backgroundColor: '#ffffff', color: '#b91c1c' }}>
-                      ✖ Đã nghỉ
-                    </option>
-                  </select>
+                    <span
+                      style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        backgroundColor:
+                          employeeStatus === 'working'
+                            ? '#16a34a'
+                            : employeeStatus === 'temporary_leave'
+                            ? '#d97706'
+                            : '#dc2626',
+                        flexShrink: 0,
+                      }}
+                    />
+                    {employeeStatus === 'working'
+                      ? 'Đang làm việc'
+                      : employeeStatus === 'temporary_leave'
+                      ? 'Tạm nghỉ'
+                      : 'Đã nghỉ việc'}
+                  </span>
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '1px', fontWeight: 600 }}>
                   {currentEmployee.role} • {currentEmployee.department}
@@ -3607,38 +3590,25 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
 
             {/* Bộ điều khiển tháng */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569' }}>
-                  Tháng:
-                </span>
-                <select
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  style={{
-                    padding: '5px 10px',
-                    borderRadius: '7px',
-                    border: '1px solid #cbd5e1',
-                    backgroundColor: '#f8fafc',
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
-                    color: '#0f172a',
-                    outline: 'none',
-                    cursor: 'pointer',
-                    fontFamily: "'Roboto Condensed', sans-serif",
-                    minWidth: '54px',
-                    textAlign: 'center',
-                  }}
-                >
-                  {Array.from({ length: currentMonthNum }, (_, i) => i + 1).map((m) => {
-                    const mVal = `${currentYearNum}-${String(m).padStart(2, '0')}`;
-                    return (
-                      <option key={m} value={mVal}>
-                        {m}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
+              <Select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                style={{
+                  minWidth: '104px',
+                  height: '32px',
+                  padding: '4px 28px 4px 10px',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  marginBottom: 0,
+                }}
+                options={Array.from({ length: currentMonthNum }, (_, i) => i + 1).map((m) => {
+                  const mVal = `${currentYearNum}-${String(m).padStart(2, '0')}`;
+                  return {
+                    value: mVal,
+                    label: `Tháng ${m}`,
+                  };
+                })}
+              />
             </div>
           </div>
 
@@ -5605,7 +5575,9 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
             border: '1px solid #e2e8f0',
             boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)',
             overflowY: 'auto',
-            padding: '14px 16px',
+            padding: isMobileScreen
+              ? '12px 12px calc(18px + env(safe-area-inset-bottom, 0px))'
+              : '14px 16px',
             gap: '14px',
           }}
         >

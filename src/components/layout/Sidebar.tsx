@@ -524,9 +524,17 @@ const DEPT_SIDEBAR_CONFIGS: Record<string, { deptName: string; sections: NavSect
   },
 };
 
-export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
   const { activeDeptCode, activeMenuKey, setActiveMenuKey } = useDepartment();
   const { user } = useAuth();
+
+  // Tự động đóng ngăn kéo Sidebar trên màn hình di động khi chọn mục menu
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768 && !collapsed) {
+      onToggle();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeMenuKey, activeDeptCode]);
 
   // Trạng thái mở accordion của các section: chỉ duy nhất 1 section mở tại 1 thời điểm
   const [openSectionId, setOpenSectionId] = useState<string | null>(null);
@@ -579,9 +587,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
 
   return (
     <aside
-      className={`fixed top-16 left-0 bottom-0 z-40 h-[calc(100vh-4rem)] transition-all duration-300 ease-in-out bg-white border-r border-slate-200/80 text-slate-600 flex flex-col select-none ${
-        collapsed ? 'w-18' : 'w-64'
+      className={`fixed top-16 left-0 bottom-0 z-40 h-[calc(100dvh-4rem)] max-h-[calc(100dvh-4rem)] transition-all duration-300 ease-in-out bg-white border-r border-slate-200/80 text-slate-600 flex flex-col select-none ${
+        collapsed
+          ? '-translate-x-full md:translate-x-0 w-64 md:w-18'
+          : 'translate-x-0 w-64 shadow-2xl md:shadow-none'
       }`}
+      style={{
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      }}
     >
       {/* ── 1. Top Slogan (chuẩn client-seajong: không viền dưới, chữ in hoa xám đậm tinh tế) ── */}
       <div className="px-4 pt-3.5 pb-4 mb-1 shrink-0 text-center">
@@ -597,7 +610,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
       </div>
 
       {/* ── 2. Danh sách Menu Điều Hướng Phân Hệ ── */}
-      <div className="flex-1 px-2.5 py-1 flex flex-col overflow-y-auto scrollbar-thin">
+      <div className="flex-1 px-2.5 py-1 flex flex-col overflow-y-auto scrollbar-thin overscroll-contain">
         <div className="space-y-0.5">
           {/* Nút: Tổng quan */}
           <button
@@ -967,7 +980,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
 
         {/* ── 3. Section CÔNG VIỆC CÁ NHÂN (chỉ dành cho nhân viên nội bộ, ẩn đối với đại lý) ── */}
         {!isDealer && (
-          <div className="mt-auto pt-4 pb-3">
+          <div className="mt-auto pt-4 pb-6 md:pb-3">
             {!collapsed ? (
               <p className="px-3 pb-1 mb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest font-sans opacity-75">
                 CÔNG VIỆC CÁ NHÂN

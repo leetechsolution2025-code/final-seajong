@@ -22,20 +22,28 @@ interface Department {
   sortOrder: number;
 }
 
+const SYSTEM_DEPT_CODES = new Set([
+  'board',
+  'hr',
+  'finance',
+  'sales',
+  'marketing',
+  'logistics',
+  'purchase',
+  'qa',
+  'production',
+]);
+
 const DEPT_LABEL: Record<string, string> = {
   board: 'Ban Giám đốc',
   hr: 'Phòng Nhân sự',
   finance: 'Tài chính - Kế toán',
-  admin_ops: 'Hành chính – VP',
-  banhang: 'Bán hàng Showroom',
   sales: 'Phòng Kinh doanh',
   marketing: 'Phòng Marketing',
-  cs: 'CSKH & Bảo hành',
   logistics: 'Kho vận & Logistics',
   purchase: 'Phòng Mua hàng',
   qa: 'Đảm bảo chất lượng',
   production: 'Sản xuất',
-  security: 'Bảo vệ – An ninh',
 };
 
 export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
@@ -62,7 +70,9 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
       })
       .then((res) => {
         if (res?.success && Array.isArray(res.data)) {
-          setDepartments(res.data);
+          setDepartments(
+            res.data.filter((d) => SYSTEM_DEPT_CODES.has((d.code || '').toLowerCase()))
+          );
         }
       })
       .catch(() => {});
@@ -282,11 +292,11 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
           </div>
           )}
 
-          {/* 2. Calculator (bi-calculator) */}
+          {/* 2. Calculator (bi-calculator) - Ẩn trên màn hình điện thoại di động */}
           <button
             type="button"
             onClick={() => setCalcOpen(true)}
-            className="w-[38px] h-[38px] flex items-center justify-center rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer border-0 bg-transparent"
+            className="hidden md:flex w-[38px] h-[38px] items-center justify-center rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer border-0 bg-transparent"
             title="Máy tính (F2)"
           >
             <i className="bi bi-calculator text-[18px]" />

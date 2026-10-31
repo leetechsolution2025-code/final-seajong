@@ -111,6 +111,53 @@ app.get('/api/company', async (req, res) => {
 // -------------------------------------------------------------
 // 2. AUTHENTICATION (Login, Me, Logout)
 // -------------------------------------------------------------
+const DEPT_ALL_PERMISSIONS_MAP = {
+  board: ['approve_request', 'plan', 'task', 'report', 'chat', 'notify'],
+  sales: ['crm', 'sales_orders', 'oem_sales', 'view_prices'],
+  finance: ['approve_budget', 'finance_cashflow', 'finance_debts', 'finance_reports'],
+  logistics: ['logistics_assign', 'logistics_in_out', 'logistics_picking', 'logistics_print'],
+  production: ['prod_orders', 'prod_bom', 'prod_defects'],
+  qa: ['qa_inspect', 'qa_standards', 'qa_defects'],
+  purchase: ['purchase_po', 'purchase_suppliers'],
+  marketing: ['mkt_products', 'mkt_campaigns'],
+  hr: ['hr_profiles', 'hr_payroll'],
+};
+
+function expandPermissionsFromDeptAccess(rawPerms, rawDeptAccess) {
+  let perms = [];
+  if (Array.isArray(rawPerms)) {
+    perms = rawPerms;
+  } else if (typeof rawPerms === 'string' && rawPerms.trim()) {
+    try {
+      perms = JSON.parse(rawPerms);
+    } catch {
+      perms = [];
+    }
+  }
+  let deptAccess = [];
+  if (Array.isArray(rawDeptAccess)) {
+    deptAccess = rawDeptAccess;
+  } else if (typeof rawDeptAccess === 'string' && rawDeptAccess.trim()) {
+    try {
+      deptAccess = JSON.parse(rawDeptAccess);
+    } catch {
+      deptAccess = [];
+    }
+  }
+  const permSet = new Set(Array.isArray(perms) ? perms : []);
+  if (Array.isArray(deptAccess)) {
+    for (const item of deptAccess) {
+      if (typeof item === 'string' && DEPT_ALL_PERMISSIONS_MAP[item]) {
+        for (const p of DEPT_ALL_PERMISSIONS_MAP[item]) permSet.add(p);
+      } else if (item && typeof item === 'object' && item.level === 'full' && item.code) {
+        const deptPerms = DEPT_ALL_PERMISSIONS_MAP[String(item.code).toLowerCase()] || [];
+        for (const p of deptPerms) permSet.add(p);
+      }
+    }
+  }
+  return Array.from(permSet);
+}
+
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -225,7 +272,7 @@ app.post('/api/auth/login', async (req, res) => {
       email: user.email,
       name: user.name || user.customer?.name || user.employee?.fullName || 'Người dùng',
       role: user.role,
-      permissions: user.permissions ? JSON.parse(user.permissions) : [],
+      permissions: expandPermissionsFromDeptAccess(user.permissions, user.deptAccess),
       deptAccess: user.deptAccess ? JSON.parse(user.deptAccess) : (user.role === 'DEALER' ? ['dealer'] : []),
       departmentCode: user.role === 'DEALER' ? 'dealer' : (user.employee?.departmentCode || 'all'),
       position: resolvedPosition,
@@ -326,7 +373,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
         email: user.email,
         name: user.name || user.customer?.name || user.employee?.fullName || 'Người dùng',
         role: user.role,
-        permissions: user.permissions ? JSON.parse(user.permissions) : [],
+        permissions: expandPermissionsFromDeptAccess(user.permissions, user.deptAccess),
         deptAccess: user.deptAccess ? JSON.parse(user.deptAccess) : (user.role === 'DEALER' ? ['dealer'] : []),
         departmentCode: user.role === 'DEALER' ? 'dealer' : (user.employee?.departmentCode || 'all'),
         position: resolvedPosition,
@@ -2881,13 +2928,10 @@ app.delete('/api/hr/employees/:id', async (req, res) => {
 app.get('/api/departments', async (req, res) => {
   try {
     const departments = await prisma.departmentCategory.findMany({
+      where: { isActive: true },
       orderBy: { sortOrder: 'asc' },
     });
-    const result = [
-      ...departments,
-      { code: 'dealer', nameVi: 'Đại lý phân phối', nameEn: 'Dealers', group: 'sales', sortOrder: 999 }
-    ];
-    res.json({ success: true, data: result });
+    res.json({ success: true, data: departments });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -2959,13 +3003,14 @@ app.get('/api/demo-users', async (req, res) => {
 app.get('/api/dashboard/summary', authenticateToken, async (req, res) => {
   try {
     const [departmentCount, employeeCount, warehouseCount, client] = await Promise.all([
-      prisma.departmentCategory.count(),
+      prisma.departmentCategory.count({ where: { isActive: true } }),
       prisma.employee.count(),
       prisma.warehouse.count(),
       prisma.client.findFirst(),
     ]);
 
     const departments = await prisma.departmentCategory.findMany({
+      where: { isActive: true },
       orderBy: { sortOrder: 'asc' },
     });
 
@@ -13906,17 +13951,17 @@ app.get('/api/labor-rules', async (req, res) => {
 
     // Lấy danh sách phòng ban và nhân sự thực tế từ CSDL
     const [departments, employeesCount] = await Promise.all([
-      prisma.departmentCategory.findMany({ select: { code: true, nameVi: true } }),
+      prisma.departmentCategory.findMany({ where: { isActive: true }, select: { code: true, nameVi: true } }),
       prisma.employee.count(),
     ]);
 
     const officeDepts = departments
-      .filter((d) => ['board', 'hr', 'finance', 'sales', 'marketing', 'cs', 'purchase', 'admin_ops', 'banhang'].includes(d.code))
+      .filter((d) => ['board', 'hr', 'finance', 'sales', 'marketing', 'purchase'].includes(d.code))
       .map((d) => d.nameVi)
       .join(', ');
 
     const factoryDepts = departments
-      .filter((d) => ['production', 'logistics', 'security', 'qa'].includes(d.code))
+      .filter((d) => ['production', 'logistics', 'qa'].includes(d.code))
       .map((d) => d.nameVi)
       .join(', ');
 
@@ -14545,6 +14590,7 @@ app.get('/api/board/users', async (req, res) => {
       if (posMap[resolvedPos]) resolvedPos = posMap[resolvedPos];
       return {
         ...u,
+        permissions: JSON.stringify(expandPermissionsFromDeptAccess(u.permissions, u.deptAccess)),
         name: u.name || u.employee?.fullName || u.email.split('@')[0],
         employee: u.employee
           ? {
@@ -14565,7 +14611,7 @@ app.get('/api/board/users', async (req, res) => {
 app.patch('/api/board/users/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const target = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+    const target = await prisma.user.findUnique({ where: { id }, select: { role: true, permissions: true, deptAccess: true } });
     if (!target) return res.status(404).json({ error: 'Không tìm thấy người dùng' });
 
     const body = req.body || {};
@@ -14574,16 +14620,16 @@ app.patch('/api/board/users/:id', async (req, res) => {
     if (body.role && ['USER', 'ADMIN', 'SUPERADMIN'].includes(body.role)) {
       data.role = body.role;
     }
-    if (Array.isArray(body.permissions)) {
-      data.permissions = JSON.stringify(body.permissions);
-    } else if (typeof body.permissions === 'string') {
-      data.permissions = body.permissions;
-    }
+    const nextDeptAccess = body.deptAccess !== undefined ? body.deptAccess : target.deptAccess;
+    const nextPermissions = body.permissions !== undefined ? body.permissions : target.permissions;
+
     if (Array.isArray(body.deptAccess)) {
       data.deptAccess = JSON.stringify(body.deptAccess);
     } else if (typeof body.deptAccess === 'string') {
       data.deptAccess = body.deptAccess;
     }
+    const mergedPermissions = expandPermissionsFromDeptAccess(nextPermissions, nextDeptAccess);
+    data.permissions = JSON.stringify(mergedPermissions);
 
     const updated = await prisma.user.update({
       where: { id },
@@ -17076,10 +17122,10 @@ app.get('/api/timekeeping', async (req, res) => {
         id: a.id,
         dateStr,
         dayOfWeek: getDayOfWeekLabel(d),
-        morningCheckIn: mIn,
-        morningCheckOut: mOut,
-        afternoonCheckIn: aIn,
-        afternoonCheckOut: aOut,
+        morningCheckIn: mIn || '--:--',
+        morningCheckOut: mOut || '--:--',
+        afternoonCheckIn: aIn || '--:--',
+        afternoonCheckOut: aOut || '--:--',
         checkInTime: mIn || aIn,
         checkOutTime: aOut || mOut,
         locationName:
@@ -17169,6 +17215,20 @@ app.post('/api/timekeeping', async (req, res) => {
       return new Date(y, m - 1, d, hh, mm, isNaN(ss) ? 0 : ss, 0);
     };
 
+    const formatLocString = (loc, coords) => {
+      if (typeof loc === 'string' && loc.trim()) return loc.trim();
+      if (typeof coords === 'string' && coords.trim()) return coords.trim();
+      if (
+        coords &&
+        typeof coords === 'object' &&
+        coords.lat !== undefined &&
+        coords.lng !== undefined
+      ) {
+        return `${coords.lat}, ${coords.lng}`;
+      }
+      return null;
+    };
+
     // Đồng bộ tối đa 31 bản ghi gần nhất để đảm bảo tốc độ phản hồi tức thì
     const toSync = records.slice(0, 31);
     for (const rec of toSync) {
@@ -17194,15 +17254,30 @@ app.post('/api/timekeeping', async (req, res) => {
         },
       });
 
+      // Bỏ qua các ngày trống chưa có dữ liệu chấm công nếu chưa tồn tại trong DB
+      const hasAnyData =
+        Boolean(checkInMorning) ||
+        Boolean(checkOutMorning) ||
+        Boolean(checkInAfternoon) ||
+        Boolean(checkOutAfternoon) ||
+        Boolean(rec.registeredLunch) ||
+        Boolean(rec.registeredDinner);
+      if (!existing && !hasAnyData) {
+        continue;
+      }
+
+      const locString = formatLocString(rec.locationName, rec.locationCoords);
+      const coordsString = formatLocString(null, rec.locationCoords) || locString;
+
       const payload = {
         checkInMorning,
         checkOutMorning,
         checkInAfternoon,
         checkOutAfternoon,
-        status: rec.status || 'present',
-        checkInLoc: rec.locationName || rec.locationCoords || null,
-        checkOutLoc: rec.locationCoords || rec.locationName || null,
-        note: rec.note || null,
+        status: typeof rec.status === 'string' && rec.status ? rec.status : 'present',
+        checkInLoc: locString,
+        checkOutLoc: coordsString,
+        note: typeof rec.note === 'string' && rec.note ? rec.note : null,
         registeredLunch: Boolean(rec.registeredLunch),
         registeredDinner: Boolean(rec.registeredDinner),
       };
@@ -22148,6 +22223,44 @@ app.delete('/api/board/data', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Phục vụ thông tin phiên bản build
+app.get('/api/system/version', (req, res) => {
+  try {
+    const distVersionPath = path.join(__dirname, 'dist', 'version.json');
+    const pubVersionPath = path.join(__dirname, 'public', 'version.json');
+    if (fs.existsSync(distVersionPath)) {
+      return res.json(JSON.parse(fs.readFileSync(distVersionPath, 'utf8')));
+    }
+    if (fs.existsSync(pubVersionPath)) {
+      return res.json(JSON.parse(fs.readFileSync(pubVersionPath, 'utf8')));
+    }
+    res.json({ version: '1.0.0', buildTime: new Date().toISOString() });
+  } catch (err) {
+    res.json({ version: '1.0.0' });
+  }
+});
+
+// Phục vụ thư mục public và thư mục build tĩnh dist (Production SPA mode)
+const publicDir = path.join(__dirname, 'public');
+if (fs.existsSync(publicDir)) {
+  app.use(express.static(publicDir));
+}
+
+const distDir = path.join(__dirname, 'dist');
+if (fs.existsSync(distDir)) {
+  app.use(express.static(distDir));
+  app.use((req, res, next) => {
+    if (
+      req.path.startsWith('/api') ||
+      req.path.startsWith('/uploads') ||
+      req.path.startsWith('/documents')
+    ) {
+      return next();
+    }
+    res.sendFile(path.join(distDir, 'index.html'));
+  });
+}
 
 // Start Express Server
 app.listen(PORT, () => {

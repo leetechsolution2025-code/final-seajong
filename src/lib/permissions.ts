@@ -29,23 +29,34 @@ export function isAdminUser(user?: Partial<User> | null): boolean {
 }
 
 /**
- * Đọc mảng quyền chức năng đã cấp cho tài khoản
+ * Bản đồ toàn bộ quyền chức năng nghiệp vụ theo từng phòng ban
  */
-export function parseUserPermissions(user?: Partial<User> | null): string[] {
-  if (!user || !user.permissions) return [];
-  if (Array.isArray(user.permissions)) {
-    return user.permissions.filter((x): x is string => typeof x === 'string');
-  }
-  if (typeof user.permissions === 'string') {
-    try {
-      const parsed = JSON.parse(user.permissions);
-      return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
-    } catch {
-      return [];
-    }
-  }
-  return [];
-}
+export const DEPT_ALL_PERMISSIONS: Record<string, string[]> = {
+  board: ['approve_request', 'plan', 'task', 'report', 'chat', 'notify'],
+  sales: ['crm', 'sales_orders', 'oem_sales', 'view_prices'],
+  finance: ['approve_budget', 'finance_cashflow', 'finance_debts', 'finance_reports'],
+  logistics: ['logistics_assign', 'logistics_in_out', 'logistics_picking', 'logistics_print'],
+  production: ['prod_orders', 'prod_bom', 'prod_defects'],
+  qa: ['qa_inspect', 'qa_standards', 'qa_defects'],
+  purchase: ['purchase_po', 'purchase_suppliers'],
+  marketing: ['mkt_products', 'mkt_campaigns'],
+  hr: ['hr_profiles', 'hr_payroll'],
+};
+
+/**
+ * Bản đồ quyền chức năng đặc thù theo từng phòng ban
+ */
+export const DEPT_SPECIFIC_PERMISSIONS: Record<string, string[]> = {
+  board: ['approve_request', 'plan', 'task'],
+  sales: ['crm', 'sales_orders', 'oem_sales', 'view_prices'],
+  finance: ['approve_budget', 'finance_cashflow', 'finance_debts', 'finance_reports'],
+  logistics: ['logistics_assign', 'logistics_in_out', 'logistics_picking', 'logistics_print'],
+  production: ['prod_orders', 'prod_bom', 'prod_defects'],
+  qa: ['qa_inspect', 'qa_standards', 'qa_defects'],
+  purchase: ['purchase_po', 'purchase_suppliers'],
+  marketing: ['mkt_products', 'mkt_campaigns'],
+  hr: ['hr_profiles', 'hr_payroll'],
+};
 
 /**
  * Đọc mảng quyền truy cập phòng ban đã cấp cho tài khoản
@@ -83,9 +94,51 @@ export function parseUserDeptAccess(user?: Partial<User> | null): DeptAccessEntr
 }
 
 /**
+ * Đọc mảng quyền chức năng đã cấp cho tài khoản
+ * - Bao gồm các quyền được bật trực tiếp trong user.permissions
+ * - Tự động bao gồm toàn bộ quyền nghiệp vụ của các phòng ban mà tài khoản được cấp "Toàn quyền" (level === 'full')
+ */
+export function parseUserPermissions(user?: Partial<User> | null): string[] {
+  if (!user) return [];
+  const permSet = new Set<string>();
+  const rawPerms: unknown = user.permissions;
+
+  if (Array.isArray(rawPerms)) {
+    for (const x of rawPerms) {
+      if (typeof x === 'string' && x.trim()) permSet.add(x);
+    }
+  } else if (typeof rawPerms === 'string' && rawPerms.trim()) {
+    try {
+      const parsed = JSON.parse(rawPerms);
+      if (Array.isArray(parsed)) {
+        for (const x of parsed) {
+          if (typeof x === 'string' && x.trim()) permSet.add(x);
+        }
+      }
+    } catch {
+      // ignore invalid JSON
+    }
+  }
+
+  // Khi tài khoản được cấp "Toàn quyền" (level === 'full') cho một phòng ban,
+  // tự động mở toàn bộ các quyền chức năng nghiệp vụ thuộc phòng ban đó
+  const deptAccess = parseUserDeptAccess(user);
+  for (const entry of deptAccess) {
+    if (entry.level === 'full') {
+      const deptPerms = DEPT_ALL_PERMISSIONS[entry.code] || [];
+      for (const p of deptPerms) {
+        permSet.add(p);
+      }
+    }
+  }
+
+  return Array.from(permSet);
+}
+
+/**
  * Kiểm tra tài khoản có quyền chức năng nghiệp vụ cụ thể hay không
  * - ADMIN mặc định có toàn quyền
- * - USER kiểm tra trực tiếp trong danh sách permissions được cấp
+ * - USER kiểm tra trong danh sách permissions (bao gồm cả quyền từ phòng ban được cấp Toàn quyền)
  */
 export function hasPermission(user: Partial<User> | null | undefined, permKey: string): boolean {
   if (!user) return false;
@@ -107,21 +160,6 @@ export function hasAnyPermission(
   const perms = parseUserPermissions(user);
   return permKeys.some((k) => perms.includes(k));
 }
-
-/**
- * Bản đồ quyền chức năng đặc thù theo từng phòng ban
- */
-export const DEPT_SPECIFIC_PERMISSIONS: Record<string, string[]> = {
-  board: ['approve_request', 'plan', 'task'],
-  sales: ['crm', 'sales_orders', 'oem_sales', 'view_prices'],
-  finance: ['approve_budget', 'finance_cashflow', 'finance_debts', 'finance_reports'],
-  logistics: ['logistics_assign', 'logistics_in_out', 'logistics_picking', 'logistics_print'],
-  production: ['prod_orders', 'prod_bom', 'prod_defects'],
-  qa: ['qa_inspect', 'qa_standards', 'qa_defects'],
-  purchase: ['purchase_po', 'purchase_suppliers'],
-  marketing: ['mkt_products', 'mkt_campaigns'],
-  hr: ['hr_profiles', 'hr_payroll'],
-};
 
 /**
  * Lấy mức độ truy cập ('none' | 'view' | 'full') của người dùng đối với một phòng ban
@@ -587,6 +625,15 @@ export function isMenuLocked(
   const req = getRequiredPermissionsForMenu(deptCode, menuKey);
   if (!req) return false;
   if (req.adminOnly) return !isAdminUser(user);
+
+  // Nếu người dùng đã được cấp "Toàn quyền" (level === 'full') cho phòng ban này trong deptAccess,
+  // mở toàn bộ các mục nghiệp vụ bên trong phòng ban đó
+  const targetDept = normalizeDeptCode(deptCode);
+  const deptAccess = parseUserDeptAccess(user);
+  if (deptAccess.some((d) => d.code === targetDept && d.level === 'full')) {
+    return false;
+  }
+
   return !hasAnyPermission(user, req.keys);
 }
 
