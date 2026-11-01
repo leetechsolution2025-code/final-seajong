@@ -1,5 +1,6 @@
 import React from "react";
 import { cn } from "../../lib/utils";
+import { SwipeableTableProvider, SwipeableTableRow } from "../common/SwipeableTableRow";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface TableColumn<T> {
@@ -30,6 +31,16 @@ export interface TableProps<T> {
   rowKey?: (row: T) => string | number;
   /** Click vào row */
   onRowClick?: (row: T) => void;
+  /** Bấm nút Sửa trên thanh trượt mobile (<= 768px) */
+  onRowEdit?: (row: T) => void;
+  /** Bấm nút Xoá (kèm ConfirmDialog) trên thanh trượt mobile (<= 768px) */
+  onRowDelete?: (row: T) => void | Promise<void>;
+  /** Tiêu đề ConfirmDialog khi xoá dòng */
+  deleteConfirmTitle?: React.ReactNode;
+  /** Nội dung ConfirmDialog khi xoá dòng */
+  deleteConfirmMessage?: (row: T) => React.ReactNode;
+  /** Nhãn nút xác nhận trong ConfirmDialog */
+  deleteConfirmText?: string;
   /** Số skeleton rows khi loading */
   skeletonRows?: number;
   /** Nội dung hiển thị khi không có data */
@@ -103,6 +114,11 @@ export function Table<T>({
   fetching = false,
   rowKey,
   onRowClick,
+  onRowEdit,
+  onRowDelete,
+  deleteConfirmTitle,
+  deleteConfirmMessage,
+  deleteConfirmText,
   skeletonRows = 7,
   emptyIcon = "bi-inbox",
   emptyText = "Không có dữ liệu",
@@ -152,8 +168,35 @@ export function Table<T>({
           border-bottom: 2px solid var(--border) !important;
           box-shadow: 0 2px 4px rgba(0,0,0,0.02);
         }
+        @media (max-width: 768px) {
+          .app-responsive-table-wrapper {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            overflow-x: hidden !important;
+            box-sizing: border-box !important;
+          }
+          .app-responsive-table-wrapper table {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            table-layout: fixed !important;
+            box-sizing: border-box !important;
+          }
+          .app-responsive-table-wrapper table th,
+          .app-responsive-table-wrapper table td {
+            min-width: 0 !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+            padding-left: 8px !important;
+            padding-right: 8px !important;
+            overflow-wrap: break-word;
+            word-break: break-word;
+          }
+        }
       `}</style>
 
+      <SwipeableTableProvider>
       <div
         className={cn(
           "app-responsive-table-wrapper",
@@ -345,12 +388,20 @@ export function Table<T>({
 
                 return (
                   <React.Fragment key={key}>
-                    <tr
+                    <SwipeableTableRow
+                      rowId={key}
                       className={cn(
                         onRowClick ? "app-tbl-row" : undefined,
                         rowClassName ? rowClassName(row, idx) : undefined
                       )}
-                      onClick={onRowClick ? () => onRowClick(row) : undefined}
+                      onRowClick={onRowClick ? () => onRowClick(row) : undefined}
+                      onEdit={onRowEdit ? () => onRowEdit(row) : undefined}
+                      onDelete={onRowDelete ? () => onRowDelete(row) : undefined}
+                      deleteConfirmTitle={deleteConfirmTitle}
+                      deleteConfirmMessage={
+                        deleteConfirmMessage ? deleteConfirmMessage(row) : undefined
+                      }
+                      deleteConfirmText={deleteConfirmText}
                       style={{
                         borderBottom: borderless ? "none" : "1px solid var(--border)",
                         cursor: onRowClick ? "pointer" : undefined,
@@ -397,7 +448,7 @@ export function Table<T>({
                         }
                         return cells;
                       })()}
-                    </tr>
+                    </SwipeableTableRow>
                     {renderExpandedRow && renderExpandedRow(row, idx)}
                   </React.Fragment>
                 );
@@ -406,6 +457,7 @@ export function Table<T>({
           </tbody>
         </table>
       </div>
+      </SwipeableTableProvider>
     </>
   );
 }

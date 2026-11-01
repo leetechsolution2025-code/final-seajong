@@ -106,6 +106,7 @@ export const DocumentApprovalPage: React.FC<DocumentApprovalPageProps> = ({ onSh
       num: 1,
       id: 'pending',
       title: 'Chờ phê duyệt',
+      mobileTitle: 'Chờ duyệt',
       desc: 'Tờ trình và hồ sơ đợi duyệt',
       icon: <HourglassSplit size={17} />,
       hasNewData: approvalCounts.pending > 0,
@@ -116,6 +117,7 @@ export const DocumentApprovalPage: React.FC<DocumentApprovalPageProps> = ({ onSh
       num: 2,
       id: 'approved',
       title: 'Đã phê duyệt',
+      mobileTitle: 'Đã duyệt',
       desc: 'Hồ sơ đã được phê duyệt',
       icon: <CheckCircleFill size={17} />,
       badge: approvalCounts.approved > 0 ? `${approvalCounts.approved}` : undefined,
@@ -125,6 +127,7 @@ export const DocumentApprovalPage: React.FC<DocumentApprovalPageProps> = ({ onSh
       num: 3,
       id: 'rejected',
       title: 'Từ chối',
+      mobileTitle: 'Từ chối',
       desc: 'Hồ sơ bị từ chối / cần sửa đổi',
       icon: <XCircleFill size={17} />,
       badge: approvalCounts.rejected > 0 ? `${approvalCounts.rejected}` : undefined,
@@ -144,6 +147,7 @@ export const DocumentApprovalPage: React.FC<DocumentApprovalPageProps> = ({ onSh
       steps={approvalSteps}
       currentStep={currentStep}
       onStepChange={setCurrentStep}
+      className="bom-approval-step-page"
     >
       <DocumentApprovalView
         currentStep={currentStep}

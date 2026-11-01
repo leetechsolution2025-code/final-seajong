@@ -5,6 +5,7 @@ import { Check2 } from 'react-bootstrap-icons';
 export interface SelectOption {
   value: string;
   label: string;
+  description?: string;
   rightLabel?: React.ReactNode;
   disabled?: boolean;
 }
@@ -12,6 +13,7 @@ export interface SelectOption {
 interface ParsedOptionItem {
   value: string;
   label: React.ReactNode;
+  description?: string;
   rightLabel?: React.ReactNode;
   textLabel: string;
   disabled?: boolean;
@@ -108,8 +110,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
         return options.map((opt) => ({
           value: String(opt.value),
           label: opt.label,
+          description: opt.description,
           rightLabel: opt.rightLabel,
-          textLabel: opt.label,
+          textLabel: opt.description ? `${opt.label} — ${opt.description}` : opt.label,
           disabled: opt.disabled,
         }));
       }
@@ -359,7 +362,18 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
                 flex: 1,
               }}
             >
-              {selectedOption ? selectedOption.label : ''}
+              {selectedOption ? (
+                selectedOption.description ? (
+                  <>
+                    <span style={{ fontWeight: 700 }}>{selectedOption.label}</span>
+                    <span style={{ color: '#64748b', fontWeight: 500 }}> — {selectedOption.description}</span>
+                  </>
+                ) : (
+                  selectedOption.label
+                )
+              ) : (
+                ''
+              )}
             </span>
             {selectedOption?.rightLabel !== undefined && selectedOption?.rightLabel !== null && (
               <span
@@ -498,16 +512,41 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
                         }
                       }}
                     >
-                      <span
+                      <div
                         style={{
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '2px',
+                          minWidth: 0,
                           flex: 1,
                         }}
                       >
-                        {opt.label}
-                      </span>
+                        <span
+                          style={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            fontWeight: opt.description ? 700 : isSelected ? 700 : 500,
+                          }}
+                        >
+                          {opt.label}
+                        </span>
+                        {opt.description && (
+                          <span
+                            style={{
+                              fontSize: '0.75rem',
+                              fontWeight: 400,
+                              color: isSelected ? '#0284c7' : '#64748b',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              lineHeight: 1.35,
+                            }}
+                          >
+                            {opt.description}
+                          </span>
+                        )}
+                      </div>
                       {opt.rightLabel !== undefined && opt.rightLabel !== null ? (
                         <span
                           style={{

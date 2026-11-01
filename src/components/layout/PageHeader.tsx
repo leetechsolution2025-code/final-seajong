@@ -78,19 +78,18 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         <div className="ph-text">
           <div className="flex items-center gap-2.5 flex-wrap">
             <h1 className="page-header-title">{title}</h1>
-            {badge && (
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-semibold border border-slate-200">
-                {badge}
-              </span>
-            )}
           </div>
-          {description && <p className="page-header-desc">{description}</p>}
+          {description && (
+            <p className="page-header-desc" title={description}>
+              {description}
+            </p>
+          )}
         </div>
       </div>
 
       {/* ── RIGHT: Chỉ hiển thị đồng hồ điện tử thời gian thực (TUYỆT ĐỐI KHÔNG CÓ NÚT BẤM) ── */}
-      <div className="page-header-right">
-        <div className="flex flex-col text-right select-none pl-2 border-l border-slate-300/60 hidden sm:flex">
+      <div className="page-header-right hidden sm:flex">
+        <div className="flex flex-col text-right select-none pl-2 border-l border-slate-300/60">
           <span className="page-header-clock font-mono">{timeStr}</span>
           <span className="page-header-date">{dateStr}</span>
         </div>

@@ -10,6 +10,7 @@ export const TrainingPage: React.FC = () => {
       description="Tổ chức các khóa đào tạo hội nhập, chuyên môn sản phẩm, lắp dựng showroom và nâng cao năng lực nhân sự Seajong."
       icon="bi-mortarboard"
       color="rose"
+      className="hr-training-page"
     >
       <TrainingManagementView />
     </StandardPage>

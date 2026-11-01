@@ -608,128 +608,131 @@ export function ProductionBomPage() {
   );
 
   return (
-    <StandardPage
-      title="Xây dựng định mức"
-      description="Thiết lập định mức nguyên vật liệu (BOM) và cấu thành giá bán thành phẩm sản xuất"
-      icon="bi-diagram-3"
-      color="blue"
-      useCard={true}
-      hideTicker={true}
-    >
-      <input
-        type="file"
-        accept=".xlsx, .xls"
-        className="hidden"
-        ref={fileInputRef}
-        onChange={handleImportExcel}
-      />
+    <div className="prod-bom-page h-full">
+      <StandardPage
+        title="Xây dựng định mức"
+        description="Thiết lập định mức nguyên vật liệu (BOM) và cấu thành giá bán thành phẩm sản xuất"
+        icon="bi-diagram-3"
+        color="blue"
+        useCard={true}
+        hideTicker={true}
+      >
+        <input
+          type="file"
+          accept=".xlsx, .xls"
+          className="hidden"
+          ref={fileInputRef}
+          onChange={handleImportExcel}
+        />
 
-      <TableToolbar
-        filters={[
-          {
-            id: "bom-category-filter",
-            value: filterCategoryId,
-            onChange: (val) => {
-              setFilterCategoryId(val);
-              setPage(1);
+        <TableToolbar
+          filters={[
+            {
+              id: "bom-category-filter",
+              value: filterCategoryId,
+              onChange: (val) => {
+                setFilterCategoryId(val);
+                setPage(1);
+              },
+              minWidth: "180px",
+              options: [
+                { label: "Tất cả nhóm hàng", value: "" },
+                ...productGroups.map((g) => ({ label: g.name, value: g.id })),
+              ],
             },
-            minWidth: "180px",
-            options: [
-              { label: "Tất cả nhóm hàng", value: "" },
-              ...productGroups.map((g) => ({ label: g.name, value: g.id })),
-            ],
-          },
-        ]}
-        searchValue={search}
-        onSearchChange={(val) => {
-          setSearch(val);
-          setPage(1);
-        }}
-        searchPlaceholder="Tìm kiếm sản phẩm, mã hàng..."
-        searchMinWidth="220px"
-        actionsAfterSearch={
-          <div className="flex items-center rounded-lg border border-slate-300 bg-white overflow-hidden h-9 focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/15">
-            <input
-              type="text"
-              className="px-3 text-xs text-slate-700 placeholder:text-slate-400 outline-none w-40 bg-transparent"
-              placeholder="Tra cứu mã ĐM..."
-              value={bomCodeQuery}
-              onChange={(e) => setBomCodeQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  searchBomByCode(bomCodeQuery);
+          ]}
+          searchValue={search}
+          onSearchChange={(val) => {
+            setSearch(val);
+            setPage(1);
+          }}
+          searchPlaceholder="Tìm kiếm sản phẩm, mã hàng..."
+          searchMinWidth="220px"
+          actionsAfterSearch={
+            <div className="hidden sm:flex items-center rounded-lg border border-slate-300 bg-white overflow-hidden h-9 focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/15">
+              <input
+                type="text"
+                className="px-3 text-xs text-slate-700 placeholder:text-slate-400 outline-none w-40 bg-transparent"
+                placeholder="Tra cứu mã ĐM..."
+                value={bomCodeQuery}
+                onChange={(e) => setBomCodeQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    searchBomByCode(bomCodeQuery);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => searchBomByCode(bomCodeQuery)}
+                className="px-2.5 h-full bg-slate-50 hover:bg-slate-100 border-l border-slate-200 text-slate-500 hover:text-sky-600 transition-colors cursor-pointer"
+                title="Tìm theo mã định mức"
+              >
+                <Search size={13} />
+              </button>
+            </div>
+          }
+          rightActions={
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Button
+                variant="outline"
+                size="md"
+                className="h-9 px-2.5 sm:px-3 text-xs font-bold whitespace-nowrap"
+                leftIcon={<Upload size={13} />}
+                disabled={saving || !isProdAdmin}
+                title={
+                  !isProdAdmin
+                    ? "Chỉ Quản đốc xưởng sản xuất, Trưởng bộ phận, Trưởng phòng mới có quyền import định mức"
+                    : "Import Excel"
                 }
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => searchBomByCode(bomCodeQuery)}
-              className="px-2.5 h-full bg-slate-50 hover:bg-slate-100 border-l border-slate-200 text-slate-500 hover:text-sky-600 transition-colors cursor-pointer"
-              title="Tìm theo mã định mức"
-            >
-              <Search size={13} />
-            </button>
-          </div>
-        }
-        rightActions={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="md"
-              className="h-9 px-3 text-xs font-bold"
-              leftIcon={<Upload size={13} />}
-              disabled={saving || !isProdAdmin}
-              title={
-                !isProdAdmin
-                  ? "Chỉ Quản đốc xưởng sản xuất, Trưởng bộ phận, Trưởng phòng mới có quyền import định mức"
-                  : "Import Excel"
-              }
-              onClick={() => {
-                if (!isProdAdmin) return;
-                fileInputRef.current?.click();
-              }}
-            >
-              Import Excel
-            </Button>
-            <Button
-              variant="primary"
-              size="md"
-              className="h-9 px-3.5 text-xs font-bold shadow-xs"
-              leftIcon={<PlusLg size={13} />}
-              disabled={!isProdAdmin}
-              onClick={() => {
-                if (!isProdAdmin) return;
-                resetProductForm();
-                setShowAddProduct(true);
-              }}
-            >
-              Thêm sản phẩm
-            </Button>
-          </div>
-        }
-        onRefresh={fetchProducts}
-        menuItems={[
-          {
-            id: "event-calendar",
-            label: "Lịch sự kiện",
-            icon: <CalendarEvent size={15} className="text-sky-600" />,
-            onClick: () => setIsEventCalendarOpen(true),
-          },
-          { id: "div-1", label: "", divider: true, onClick: () => {} },
-          {
-            id: "refresh",
-            label: "Làm mới dữ liệu",
-            icon: <ArrowRepeat size={15} className="text-indigo-600" />,
-            onClick: fetchProducts,
-          },
-        ]}
-      />
+                onClick={() => {
+                  if (!isProdAdmin) return;
+                  fileInputRef.current?.click();
+                }}
+              >
+                <span className="sm:hidden">Import</span>
+                <span className="hidden sm:inline">Import Excel</span>
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                className="h-9 px-2.5 sm:px-3.5 text-xs font-bold shadow-xs whitespace-nowrap"
+                leftIcon={<PlusLg size={13} />}
+                disabled={!isProdAdmin}
+                onClick={() => {
+                  if (!isProdAdmin) return;
+                  resetProductForm();
+                  setShowAddProduct(true);
+                }}
+              >
+                <span className="sm:hidden">Thêm SP</span>
+                <span className="hidden sm:inline">Thêm sản phẩm</span>
+              </Button>
+            </div>
+          }
+          onRefresh={fetchProducts}
+          menuItems={[
+            {
+              id: "event-calendar",
+              label: "Lịch sự kiện",
+              icon: <CalendarEvent size={15} className="text-sky-600" />,
+              onClick: () => setIsEventCalendarOpen(true),
+            },
+            { id: "div-1", label: "", divider: true, onClick: () => {} },
+            {
+              id: "refresh",
+              label: "Làm mới dữ liệu",
+              icon: <ArrowRepeat size={15} className="text-indigo-600" />,
+              onClick: fetchProducts,
+            },
+          ]}
+        />
 
-      {/* SPLIT VIEW: LEFT PRODUCT TABLE & RIGHT BOM EDITOR */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-200 flex-1 min-h-0 overflow-hidden">
-        {/* LEFT COLUMN: PRODUCT LIST */}
-        <div className="lg:col-span-4 flex flex-col min-h-0 h-full overflow-hidden bg-white">
+        {/* SPLIT VIEW: LEFT PRODUCT TABLE & RIGHT BOM EDITOR */}
+        <div className="prod-bom-split flex flex-col lg:grid lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-200 flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
+          {/* LEFT COLUMN: PRODUCT LIST */}
+          <div className="prod-bom-left h-[240px] sm:h-[270px] lg:h-full shrink-0 lg:col-span-4 flex flex-col min-h-0 overflow-hidden bg-white">
           <div className="px-4 py-2.5 bg-slate-50/70 border-t border-b border-slate-200 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-700">
               <i className="bi bi-box-seam text-sky-600"></i>
@@ -822,7 +825,7 @@ export function ProductionBomPage() {
         </div>
 
         {/* RIGHT COLUMN: BOM EDITOR */}
-        <div className="lg:col-span-8 flex flex-col min-h-0 h-full overflow-hidden bg-white">
+        <div className="prod-bom-right flex-1 min-h-[460px] lg:min-h-0 lg:h-full lg:col-span-8 flex flex-col overflow-hidden bg-white">
           {!selectedProduct ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-400 p-8">
               <i className="bi bi-box-seam text-5xl text-slate-300 mb-3"></i>
@@ -1059,7 +1062,7 @@ export function ProductionBomPage() {
                       Thêm vật tư
                     </Button>
                     {showAddMaterialDropdown && (
-                      <div className="absolute right-0 mt-1.5 w-[350px] bg-white rounded-xl border border-slate-200 shadow-xl p-3 z-50">
+                      <div className="absolute right-0 mt-1.5 w-[290px] sm:w-[350px] bg-white rounded-xl border border-slate-200 shadow-xl p-3 z-50">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs font-bold text-slate-700">
                             Chọn vật tư từ kho KVP
@@ -1164,11 +1167,11 @@ export function ProductionBomPage() {
                 <table className="w-full text-left border-collapse" style={{ fontSize: "13px" }}>
                   <thead className="sticky top-0 z-10 bg-white border-b-2 border-slate-200">
                     <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
-                      <th className="py-2.5 px-3 text-center w-14">STT</th>
-                      <th className="py-2.5 px-4 text-left">Tên vật tư & Mã linh kiện</th>
-                      <th className="py-2.5 px-3 text-center w-28">Đơn vị</th>
-                      <th className="py-2.5 px-3 text-center w-32">Số lượng</th>
-                      <th className="py-2.5 px-3 text-center w-24">Thao tác</th>
+                      <th className="hidden sm:table-cell py-2.5 px-3 text-center w-14">STT</th>
+                      <th className="py-2.5 px-2.5 sm:px-4 text-left">Tên vật tư & Mã linh kiện</th>
+                      <th className="hidden sm:table-cell py-2.5 px-3 text-center w-28">Đơn vị</th>
+                      <th className="py-2.5 px-2 sm:px-3 text-center w-24 sm:w-32">Số lượng</th>
+                      <th className="py-2.5 px-2 sm:px-3 text-center w-20 sm:w-24">Thao tác</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1192,19 +1195,24 @@ export function ProductionBomPage() {
                             key={idx}
                             className="hover:bg-slate-50/80 transition-colors border-b border-slate-100"
                           >
-                            <td className="py-2.5 px-3 text-center align-middle text-slate-400 font-semibold">
+                            <td className="hidden sm:table-cell py-2.5 px-3 text-center align-middle text-slate-400 font-semibold">
                               {idx + 1}
                             </td>
-                            <td className="py-2.5 px-4 align-middle">
-                              <div className="font-semibold text-slate-800">
+                            <td className="py-2.5 px-2.5 sm:px-4 align-middle">
+                              <div className="font-semibold text-slate-800 text-xs sm:text-[13px] line-clamp-2">
                                 {row.material?.tenHang || row.tenVatTu || "Chưa xác định"}
                               </div>
-                              <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                                <i className="bi bi-upc-scan mr-1"></i>
-                                {row.material?.code || row.maVatTu || "Không có mã"}
+                              <div className="text-[11px] text-slate-400 font-mono mt-0.5 flex items-center flex-wrap gap-1.5">
+                                <span>
+                                  <i className="bi bi-upc-scan mr-1"></i>
+                                  {row.material?.code || row.maVatTu || "Không có mã"}
+                                </span>
+                                <span className="sm:hidden text-slate-500 font-sans">
+                                  • ĐVT: <strong className="text-slate-700">{row.donViTinh || "cái"}</strong>
+                                </span>
                               </div>
                             </td>
-                            <td className="py-2.5 px-3 align-middle text-center">
+                            <td className="hidden sm:table-cell py-2.5 px-3 align-middle text-center">
                               <input
                                 type="text"
                                 className="w-20 h-8 rounded-lg border border-transparent hover:border-slate-200 focus:border-sky-500 bg-transparent focus:bg-white text-center text-xs text-slate-700 outline-none transition-all"
@@ -1215,10 +1223,10 @@ export function ProductionBomPage() {
                                 }
                               />
                             </td>
-                            <td className="py-2.5 px-3 align-middle text-center">
+                            <td className="py-2.5 px-2 sm:px-3 align-middle text-center">
                               <input
                                 type="number"
-                                className="w-24 h-8 rounded-lg border border-slate-300 bg-white text-center font-bold text-sky-700 text-xs outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15"
+                                className="w-16 sm:w-24 h-8 rounded-lg border border-slate-300 bg-white text-center font-bold text-sky-700 text-xs outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15"
                                 value={row.soLuong}
                                 disabled={!isProdAdmin}
                                 onChange={(e) =>
@@ -1232,8 +1240,8 @@ export function ProductionBomPage() {
                                 step="0.1"
                               />
                             </td>
-                            <td className="py-2.5 px-3 align-middle text-center">
-                              <div className="flex items-center justify-center gap-1.5">
+                            <td className="py-2.5 px-2 sm:px-3 align-middle text-center">
+                              <div className="flex items-center justify-center gap-1 sm:gap-1.5">
                                 <button
                                   type="button"
                                   disabled={isSwapDisabled}
@@ -1627,7 +1635,8 @@ export function ProductionBomPage() {
         isOpen={isEventCalendarOpen}
         onClose={() => setIsEventCalendarOpen(false)}
       />
-    </StandardPage>
+      </StandardPage>
+    </div>
   );
 }
 

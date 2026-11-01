@@ -566,14 +566,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
   const isSalesDept = activeDeptCode === 'sales' || activeDeptCode === 'kd' || activeDeptCode === 'kinh-doanh';
   const isFinanceDept = activeDeptCode === 'finance' || activeDeptCode === 'tai-chinh' || activeDeptCode === 'ke-toan';
 
-  // Nhóm Yêu cầu và duyệt yêu cầu (ẩn ở board, hr, marketing, sales, finance và dealer)
+  // Nhóm Yêu cầu và duyệt yêu cầu (ẩn ở board, hr, marketing, sales, finance, logistics và dealer)
   const showApprovalGroup =
     !isDealer &&
     activeDeptCode !== 'board' &&
     activeDeptCode !== 'hr' &&
     activeDeptCode !== 'marketing' &&
     !isSalesDept &&
-    !isFinanceDept;
+    !isFinanceDept &&
+    !isLogisticsDept;
 
   // Ẩn nhóm "Lưu trữ" ở trang HR (Nhân sự), Marketing, Sales, Finance, Logistics và Dealer
   const isHrDept = activeDeptCode === 'hr' || activeDeptCode === 'nhan-su' || activeDeptCode === 'admin';
@@ -1002,7 +1003,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                 title={collapsed ? 'Danh sách công việc' : undefined}
               >
                 <i
-                  className={`bi bi-list-check text-[17px] shrink-0 ${
+                  className={`bi bi-clipboard2-check text-[17px] shrink-0 ${
                     activeMenuKey === 'my_tasks' ? 'text-blue-600' : 'text-slate-400'
                   }`}
                 />

@@ -110,7 +110,16 @@ export const ModernStepper: React.FC<ModernStepperProps> = ({
                   {/* Step Text Info */}
                   <div className="modern-step-text">
                     <div className="modern-step-title-row">
-                      <span className="modern-step-title">{s.title}</span>
+                      <span className="modern-step-title">
+                        {s.mobileTitle ? (
+                          <>
+                            <span className="hidden md:inline">{s.title}</span>
+                            <span className="inline md:hidden">{s.mobileTitle}</span>
+                          </>
+                        ) : (
+                          s.title
+                        )}
+                      </span>
                       {(() => {
                         if (s.badge === undefined || s.badge === null || (s.badge as unknown) === false) return null;
                         if (typeof s.badge === 'number' && s.badge <= 0) return null;

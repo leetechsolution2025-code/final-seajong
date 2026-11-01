@@ -592,33 +592,34 @@ export function QaStandardsPage() {
   ];
 
   return (
-    <StepPage
-      title="Tiêu chuẩn chất lượng"
-      description="Quản lý bộ tiêu chuẩn kỹ thuật áp dụng cho sản phẩm và vật tư"
-      color="indigo"
-      icon="bi-award"
-      hideTicker={false}
-      tickerContext="qa"
-      steps={steps}
-      currentStep={currentStep}
-      onStepChange={setCurrentStep}
-      stepperExtraRight={
-        <div className="flex items-center gap-2 pr-1">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsEventCalendarOpen(true)}
-            leftIcon={<CalendarEvent className="text-blue-600 shrink-0" size={15} />}
-            className="h-9 px-4 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-[13px] font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer hover:border-slate-300 select-none shrink-0"
-            title="Mở Lịch sự kiện Seajong"
-          >
-            <span className="font-bold text-slate-800 tracking-tight">Lịch sự kiện</span>
-          </Button>
-          <DepartmentActionMenu />
-        </div>
-      }
-    >
-      <div className="flex-1 overflow-y-auto p-4 bg-slate-50/40">
+    <div className="qa-standards-page h-full">
+      <StepPage
+        title="Tiêu chuẩn chất lượng"
+        description="Quản lý bộ tiêu chuẩn kỹ thuật áp dụng cho sản phẩm và vật tư"
+        color="indigo"
+        icon="bi-award"
+        hideTicker={false}
+        tickerContext="qa"
+        steps={steps}
+        currentStep={currentStep}
+        onStepChange={setCurrentStep}
+        stepperExtraRight={
+          <div className="hidden sm:flex items-center gap-2 pr-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEventCalendarOpen(true)}
+              leftIcon={<CalendarEvent className="text-blue-600 shrink-0" size={15} />}
+              className="h-9 px-4 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-[13px] font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer hover:border-slate-300 select-none shrink-0"
+              title="Mở Lịch sự kiện Seajong"
+            >
+              <span className="font-bold text-slate-800 tracking-tight">Lịch sự kiện</span>
+            </Button>
+            <DepartmentActionMenu />
+          </div>
+        }
+      >
+        <div className="flex-1 overflow-y-auto p-2.5 sm:p-4 bg-slate-50/40">
         {/* ════════════════════════════════════════════════════════════
             BƯỚC 1: MUA HÀNG (TIÊU CHUẨN KIỂM ĐỊNH VẬT TƯ NHẬP KHO)
            ════════════════════════════════════════════════════════════ */}
@@ -1022,7 +1023,8 @@ export function QaStandardsPage() {
         isOpen={isEventCalendarOpen}
         onClose={() => setIsEventCalendarOpen(false)}
       />
-    </StepPage>
+      </StepPage>
+    </div>
   );
 }
 

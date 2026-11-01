@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { StepPage } from '../../components/common/StepPage';
 import { Button } from '../../components/common/Button';
 import { Offcanvas } from '../../components/common/Offcanvas';
@@ -152,6 +152,8 @@ const isEmployeeSignedContract = (emp: HrEmployeeRecord): boolean => {
 export const HrOverviewPage: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [activeListTab, setActiveListTab] = useState<'pending_requests' | 'labor_contracts'>('pending_requests');
+  const [mobileSlide, setMobileSlide] = useState<'overview' | 'pending_requests' | 'labor_contracts'>('overview');
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const [chartRange, setChartRange] = useState<'H1' | 'H2' | 'YEAR'>('YEAR');
   const [hoverMonthIdx, setHoverMonthIdx] = useState<number | null>(null);
   const [activeDeptIndex, setActiveDeptIndex] = useState<number>(-1);
@@ -348,7 +350,8 @@ export const HrOverviewPage: React.FC = () => {
   const width = 600;
   const height = 180;
   const paddingX = 28;
-  const paddingY = 24;
+  const paddingTop = 24;
+  const paddingBottom = 34;
   const maxVal = Math.max(...visibleMonths.map((d) => d.totalHeadcount), 10) * 1.18;
   const minVal = 0;
 
@@ -359,7 +362,7 @@ export const HrOverviewPage: React.FC = () => {
 
   const getY = (val: number) => {
     const ratio = (val - minVal) / (maxVal - minVal);
-    return height - paddingY - ratio * (height - paddingY * 2);
+    return height - paddingBottom - ratio * (height - paddingTop - paddingBottom);
   };
 
   const chartPoints = visibleMonths.map((d, i) => ({
@@ -380,13 +383,53 @@ export const HrOverviewPage: React.FC = () => {
 
   const areaD =
     chartPoints.length > 0
-      ? `${pathD} L ${chartPoints[chartPoints.length - 1].x} ${height - paddingY} L ${chartPoints[0].x} ${height - paddingY} Z`
+      ? `${pathD} L ${chartPoints[chartPoints.length - 1].x} ${height - paddingBottom} L ${chartPoints[0].x} ${height - paddingBottom} Z`
       : '';
 
   const activePoint =
     hoverMonthIdx !== null && chartPoints[hoverMonthIdx] ? chartPoints[hoverMonthIdx] : null;
   const isNearTop = activePoint ? activePoint.topPct < 45 : false;
   const tooltipLeftClamped = activePoint ? Math.max(16, Math.min(84, activePoint.leftPct)) : 50;
+
+  // Vuốt ngang trên màn hình điện thoại (<= 768px):
+  // - Vuốt từ phải sang trái (dx < -40): Tổng quan -> Yêu cầu chờ duyệt -> Theo dõi hợp đồng
+  // - Gạt từ trái qua phải (dx > 40): Quay lại màn hình tổng quan
+  const handleMobileTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (typeof window !== 'undefined' && window.innerWidth > 768) return;
+    const t = e.touches[0];
+    if (!t) return;
+    touchStartRef.current = { x: t.clientX, y: t.clientY };
+  };
+
+  const handleMobileTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (typeof window !== 'undefined' && window.innerWidth > 768) return;
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start) return;
+    const t = e.changedTouches[0];
+    if (!t) return;
+
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.15) {
+      if (dx < 0) {
+        // Vuốt từ phải sang trái
+        if (mobileSlide === 'overview') {
+          setMobileSlide('pending_requests');
+          setActiveListTab('pending_requests');
+        } else if (mobileSlide === 'pending_requests') {
+          setMobileSlide('labor_contracts');
+          setActiveListTab('labor_contracts');
+        }
+      } else if (dx > 0) {
+        // Gạt từ trái qua phải -> quay lại màn hình tổng quan
+        if (mobileSlide !== 'overview') {
+          setMobileSlide('overview');
+        }
+      }
+    }
+  };
 
   // Overall stats from real DB
   const activeEmployees = useMemo(
@@ -489,16 +532,16 @@ export const HrOverviewPage: React.FC = () => {
       currentStep={currentStep}
       onStepChange={setCurrentStep}
       stepperExtraRight={
-        <div className="flex items-center gap-2 pr-1">
+        <div className="flex items-center gap-1.5 sm:gap-2 pr-1">
           <Button
             variant="outline"
             size="sm"
             onClick={() => setIsEventCalendarOpen(true)}
             leftIcon={<CalendarEvent className="text-blue-600 shrink-0" size={15} />}
-            className="h-9 px-4 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-[13px] font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer hover:border-slate-300 select-none shrink-0"
+            className="hr-stepper-calendar-btn h-8 w-8 sm:h-9 sm:w-auto !p-0 sm:!px-4 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-[13px] font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer hover:border-slate-300 select-none shrink-0"
             title="Mở Lịch sự kiện Seajong"
           >
-            <span className="font-bold text-slate-800 tracking-tight">Lịch sự kiện</span>
+            <span className="hidden sm:inline font-bold text-slate-800 tracking-tight">Lịch sự kiện</span>
           </Button>
 
           <DepartmentActionMenu />
@@ -509,15 +552,25 @@ export const HrOverviewPage: React.FC = () => {
           BƯỚC 1: DỮ LIỆU TỔNG QUÁT
           ════════════════════════════════════════════════════════════ */}
       {currentStep === 1 && (
-        <div className="mkt-live-charts">
+        <div
+          className="mkt-live-charts hr-overview-live-charts"
+          onTouchStart={handleMobileTouchStart}
+          onTouchEnd={handleMobileTouchEnd}
+        >
           {/* ──── CỘT TRÁI: BIỂU ĐỒ NHÂN SỰ CÁC THÁNG TRONG NĂM ──── */}
-          <div className="flex flex-col h-full min-h-0 pr-0 lg:pr-3 overflow-hidden">
+          <div
+            className={`${
+              mobileSlide === 'overview'
+                ? 'flex hr-mobile-slide-active'
+                : 'hidden md:flex hr-mobile-slide-hidden'
+            } flex-col h-full min-h-0 pr-0 lg:pr-3 overflow-y-auto md:overflow-hidden overflow-x-hidden`}
+          >
             {/* Header Card */}
-            <div className="mkt-chart-header">
-              <div className="min-w-0 pr-2">
+            <div className="mkt-chart-header shrink-0">
+              <div className="min-w-0 pr-0 md:pr-2 flex-1">
                 <h2 className="mkt-chart-title">
-                  <i className="bi bi-graph-up-arrow text-emerald-500" />
-                  <span className="truncate max-w-[380px]">
+                  <i className="bi bi-graph-up-arrow text-emerald-500 shrink-0" />
+                  <span className="truncate">
                     Biểu đồ nhân sự các tháng trong năm 2026
                   </span>
                 </h2>
@@ -526,13 +579,13 @@ export const HrOverviewPage: React.FC = () => {
                 </p>
               </div>
 
-              {/* Action Buttons */}
-              <div className="mkt-chart-actions">
+              {/* Action Buttons (Ẩn trên màn hình điện thoại để không che/cắt tiêu đề biểu đồ) */}
+              <div className="mkt-chart-actions hidden md:flex shrink-0">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={fetchHrData}
-                  className="w-8 h-8 !p-0 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 flex items-center justify-center transition-colors cursor-pointer shadow-2xs"
+                  className="w-8 h-8 !p-0 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 flex items-center justify-center transition-colors cursor-pointer shadow-2xs shrink-0"
                   title="Làm mới dữ liệu nhân sự"
                 >
                   <i className="bi bi-arrow-clockwise text-slate-500" />
@@ -543,15 +596,33 @@ export const HrOverviewPage: React.FC = () => {
                   size="sm"
                   onClick={() => setOpenAddEmpTrigger((prev) => prev + 1)}
                   leftIcon={<i className="bi bi-plus-lg" />}
-                  className="px-3.5 py-1.5 rounded-xl border-0 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  className="px-2.5 sm:px-3.5 py-1.5 rounded-xl border-0 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
                 >
-                  Thêm nhân sự mới
+                  <span className="sm:hidden">Thêm mới</span>
+                  <span className="hidden sm:inline">Thêm nhân sự mới</span>
                 </Button>
               </div>
             </div>
 
             {/* Interactive SVG Area Chart: Biểu đồ nhân sự các tháng trong năm */}
-            <div className="flex-1 flex flex-col min-h-0 bg-slate-50/50 p-3 rounded-2xl border border-slate-200/80">
+            <div className="flex-1 flex flex-col min-h-[220px] md:min-h-0 bg-slate-50/50 p-3 rounded-2xl border border-slate-200/80 relative z-0 overflow-hidden shrink-0 md:shrink">
+              {/* Thanh hiển thị thông tin điểm chạm gọn gàng trên điện thoại (không đè lên đường biểu đồ) */}
+              {activePoint && (
+                <div className="flex md:hidden items-center justify-between gap-1.5 px-2.5 py-1 mb-1.5 rounded-lg bg-white border border-emerald-200/90 shadow-2xs text-[10px] shrink-0">
+                  <span className="font-extrabold text-slate-800 whitespace-nowrap">
+                    {activePoint.data.fullLabel}:{' '}
+                    <span className="text-emerald-700 font-mono">
+                      {activePoint.data.totalHeadcount} NS
+                    </span>
+                  </span>
+                  <span className="text-slate-600 font-semibold truncate">
+                    CT: <b className="font-mono text-slate-900">{activePoint.data.officialCount}</b> • HĐLĐ:{' '}
+                    <b className="font-mono text-slate-900">{activePoint.data.signedContracts}</b> • Mới:{' '}
+                    <b className="font-mono text-emerald-600">+{activePoint.data.newHires}</b>
+                  </span>
+                </div>
+              )}
+
               <div className="flex-1 flex flex-col min-h-0 select-none">
                 <div className="relative flex-1 min-h-[160px] w-full">
                   <svg
@@ -583,7 +654,7 @@ export const HrOverviewPage: React.FC = () => {
 
                     {/* Grid lines */}
                     {[0.25, 0.5, 0.75].map((ratio) => {
-                      const y = height - paddingY - ratio * (height - paddingY * 2);
+                      const y = height - paddingBottom - ratio * (height - paddingTop - paddingBottom);
                       return (
                         <line
                           key={ratio}
@@ -617,9 +688,9 @@ export const HrOverviewPage: React.FC = () => {
                     {activePoint && (
                       <line
                         x1={activePoint.x}
-                        y1={paddingY}
+                        y1={paddingTop}
                         x2={activePoint.x}
-                        y2={height - paddingY}
+                        y2={height - paddingBottom}
                         stroke="#10b981"
                         strokeWidth="1.5"
                         strokeDasharray="3 3"
@@ -636,6 +707,9 @@ export const HrOverviewPage: React.FC = () => {
                       <div
                         key={idx}
                         onMouseEnter={() => setHoverMonthIdx(idx)}
+                        onClick={() =>
+                          setHoverMonthIdx((prev) => (prev === idx ? null : idx))
+                        }
                         className="flex-1 h-full cursor-pointer"
                       />
                     ))}
@@ -680,10 +754,10 @@ export const HrOverviewPage: React.FC = () => {
                     })}
                   </div>
 
-                  {/* Tooltip */}
+                  {/* Tooltip nổi dành cho màn hình máy tính/tablet (ẩn trên điện thoại để không che khuất biểu đồ) */}
                   {activePoint && (
                     <div
-                      className={`absolute z-30 pointer-events-none transition-all duration-150 ease-out ${
+                      className={`hidden md:block absolute z-30 pointer-events-none transition-all duration-150 ease-out ${
                         isNearTop ? 'top-auto' : ''
                       }`}
                       style={{
@@ -751,13 +825,13 @@ export const HrOverviewPage: React.FC = () => {
                 </div>
 
                 {/* Range filter buttons */}
-                <div className="flex items-center justify-between pt-2 border-t border-slate-100 mt-1">
-                  <div className="flex items-center gap-1.5">
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100 mt-1 gap-2 shrink-0">
+                  <div className="hr-range-btn-group flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar max-w-full">
                     {(
                       [
-                        { id: 'H1', label: '6 tháng đầu năm' },
-                        { id: 'H2', label: '6 tháng cuối năm' },
-                        { id: 'YEAR', label: 'Cả năm (12 tháng)' },
+                        { id: 'H1', label: '6 tháng đầu năm', mobileLabel: '6 tháng đầu năm' },
+                        { id: 'H2', label: '6 tháng cuối năm', mobileLabel: '6 tháng cuối năm' },
+                        { id: 'YEAR', label: 'Cả năm (12 tháng)', mobileLabel: 'Cả năm' },
                       ] as const
                     ).map((r) => (
                       <button
@@ -767,18 +841,19 @@ export const HrOverviewPage: React.FC = () => {
                           setChartRange(r.id);
                           setHoverMonthIdx(null);
                         }}
-                        className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-all border cursor-pointer ${
+                        className={`hr-range-btn px-2 sm:px-2.5 py-1 rounded-full text-[11px] font-bold transition-all border cursor-pointer whitespace-nowrap shrink-0 ${
                           chartRange === r.id
-                            ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-2xs'
+                            ? 'is-active border-emerald-500 bg-emerald-50 text-emerald-700 shadow-2xs'
                             : 'border-slate-200 bg-white text-slate-500 hover:text-slate-800'
                         }`}
                       >
-                        {r.label}
+                        <span className="md:hidden">{r.mobileLabel}</span>
+                        <span className="hidden md:inline">{r.label}</span>
                       </button>
                     ))}
                   </div>
 
-                  <div className="text-[11px] text-slate-400 font-medium">
+                  <div className="hidden md:block text-[11px] text-slate-400 font-medium shrink-0 whitespace-nowrap">
                     Dữ liệu: <span className="font-bold text-slate-700">{visibleMonths.length} tháng (2026)</span>
                   </div>
                 </div>
@@ -786,25 +861,25 @@ export const HrOverviewPage: React.FC = () => {
             </div>
 
             {/* Bottom Realtime Summary Feed */}
-            <div className="mt-3 pt-3 border-t border-slate-200 flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
+            <div className="mt-3 pt-3 border-t border-slate-200 flex flex-col gap-2 shrink-0">
+              <div className="flex items-center justify-between gap-1.5">
+                <span className="text-[11px] sm:text-xs font-extrabold text-slate-800 uppercase tracking-wider whitespace-nowrap shrink-0">
                   Cập nhật mới nhất
                 </span>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                   {departmentSummaries.length > 0 && (
-                    <div className="flex items-center gap-1.5 bg-slate-100 p-0.5 rounded-lg">
+                    <div className="hr-dept-switcher flex items-center gap-1 sm:gap-1.5 bg-slate-100 p-0.5 rounded-lg shrink-0">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => setActiveDeptIndex((prev) => Math.max(-1, prev - 1))}
                         disabled={activeDeptIndex === -1}
-                        className="w-5 h-5 !p-0 rounded flex items-center justify-center text-slate-500 hover:text-slate-900 disabled:opacity-30 border-0 bg-transparent cursor-pointer"
+                        className="hr-dept-nav-btn w-5 h-5 !p-0 rounded flex items-center justify-center text-slate-500 hover:text-slate-900 disabled:opacity-30 border-0 bg-transparent cursor-pointer shrink-0"
                       >
                         <i className="bi bi-chevron-left text-[10px]" />
                       </Button>
-                      <span className="text-[11px] font-bold text-slate-600 w-16 text-center font-mono">
+                      <span className="text-[11px] font-bold text-slate-600 px-1 min-w-[74px] whitespace-nowrap text-center font-mono">
                         {activeDeptIndex === -1
                           ? 'Toàn công ty'
                           : `${activeDeptIndex + 1}/${departmentSummaries.length}`}
@@ -818,14 +893,14 @@ export const HrOverviewPage: React.FC = () => {
                           )
                         }
                         disabled={activeDeptIndex >= departmentSummaries.length - 1}
-                        className="w-5 h-5 !p-0 rounded flex items-center justify-center text-slate-500 hover:text-slate-900 disabled:opacity-30 border-0 bg-transparent cursor-pointer"
+                        className="hr-dept-nav-btn w-5 h-5 !p-0 rounded flex items-center justify-center text-slate-500 hover:text-slate-900 disabled:opacity-30 border-0 bg-transparent cursor-pointer shrink-0"
                       >
                         <i className="bi bi-chevron-right text-[10px]" />
                       </Button>
                     </div>
                   )}
 
-                  <span className="text-[10px] font-extrabold bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full border border-emerald-200 flex items-center gap-1.5">
+                  <span className="text-[10px] font-extrabold bg-emerald-50 text-emerald-700 px-2 sm:px-2.5 py-1 rounded-full border border-emerald-200 flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
                     <i
                       className="bi bi-lightning-charge-fill text-emerald-500"
                       style={{ animation: 'pulse-lightning 1.5s infinite' }}
@@ -838,21 +913,21 @@ export const HrOverviewPage: React.FC = () => {
               <div className="mkt-campaign-feed-row p-3 rounded-xl border border-slate-200 bg-white">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <i className="bi bi-building-fill-check text-rose-600 text-sm" />
+                    <i className="bi bi-building-fill-check text-rose-600 text-sm shrink-0" />
                     <span className="text-xs font-extrabold text-slate-900 truncate">
                       {activeDeptSummary ? activeDeptSummary.name : 'Tổng hợp Nhân sự Công ty Seajong'}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 text-[11px] text-slate-500 flex-wrap">
-                    <span className="flex items-center gap-1">
+                  <div className="flex items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 flex-wrap">
+                    <span className="flex items-center gap-1 whitespace-nowrap">
                       <i className="bi bi-people text-emerald-600" />
                       Định biên: {activeDeptSummary ? activeDeptSummary.total : totalEmployeesCount} nhân sự
                     </span>
-                    <span className="flex items-center gap-1">
+                    <span className="flex items-center gap-1 whitespace-nowrap">
                       <i className="bi bi-file-earmark-check text-blue-600" />
                       Đã ký HĐLĐ: {activeDeptSummary ? activeDeptSummary.contracted : signedContractsCount}
                     </span>
-                    <span className="flex items-center gap-1">
+                    <span className="flex items-center gap-1 whitespace-nowrap">
                       <i className="bi bi-hourglass-split text-amber-600" />
                       Đơn chờ duyệt: {pendingRequests.length}
                     </span>
@@ -874,7 +949,7 @@ export const HrOverviewPage: React.FC = () => {
                   </div>
                   <div>
                     <span className="block text-[10px] text-slate-400 font-semibold mb-0.5">Thử việc</span>
-                    <span className="text-sm font-extrabold font-mono text-emerald-600 flex items-center justify-end gap-1">
+                    <span className="text-sm font-extrabold font-mono text-emerald-600 flex items-center justify-center md:justify-end gap-1">
                       <i className="bi bi-person-plus-fill text-xs" />
                       {activeDeptSummary ? activeDeptSummary.probation : probationEmployeesCount}
                     </span>
@@ -885,18 +960,27 @@ export const HrOverviewPage: React.FC = () => {
           </div>
 
           {/* ──── CỘT PHẢI: YÊU CẦU CHỜ DUYỆT & THEO DÕI HỢP ĐỒNG LAO ĐỘNG ──── */}
-          <div className="flex flex-col h-full min-h-0 pl-0 lg:pl-3 border-t lg:border-t-0 lg:border-l border-slate-200 overflow-hidden">
+          <div
+            className={`${
+              mobileSlide !== 'overview'
+                ? 'flex hr-mobile-slide-active'
+                : 'hidden md:flex hr-mobile-slide-hidden'
+            } flex-col h-full min-h-0 pl-0 lg:pl-3 border-t-0 md:border-t lg:border-t-0 lg:border-l border-slate-200 overflow-hidden`}
+          >
             {/* Header Tabs */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 gap-2">
-              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 gap-2 shrink-0">
+              <div className="hr-tab-group w-full sm:w-auto grid grid-cols-2 sm:flex items-center gap-1 sm:gap-1.5 bg-slate-100 p-1 rounded-xl">
                 <Button
                   variant={activeListTab === 'pending_requests' ? 'secondary' : 'ghost'}
                   size="sm"
-                  onClick={() => setActiveListTab('pending_requests')}
-                  leftIcon={<i className="bi bi-clipboard2-check-fill text-amber-600" />}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border-0 cursor-pointer flex items-center gap-1.5 ${
+                  onClick={() => {
+                    setActiveListTab('pending_requests');
+                    setMobileSlide('pending_requests');
+                  }}
+                  leftIcon={<i className="bi bi-clipboard2-check-fill text-amber-600 shrink-0" />}
+                  className={`hr-tab-btn w-full sm:w-auto justify-center whitespace-nowrap px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all border-0 cursor-pointer flex items-center gap-1 sm:gap-1.5 ${
                     activeListTab === 'pending_requests'
-                      ? 'bg-white text-slate-900 shadow-2xs'
+                      ? 'is-active bg-white text-slate-900 shadow-2xs'
                       : 'text-slate-500 hover:text-slate-800 bg-transparent'
                   }`}
                 >
@@ -906,11 +990,14 @@ export const HrOverviewPage: React.FC = () => {
                 <Button
                   variant={activeListTab === 'labor_contracts' ? 'secondary' : 'ghost'}
                   size="sm"
-                  onClick={() => setActiveListTab('labor_contracts')}
-                  leftIcon={<i className="bi bi-file-earmark-medical-fill text-emerald-600" />}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border-0 cursor-pointer flex items-center gap-1.5 ${
+                  onClick={() => {
+                    setActiveListTab('labor_contracts');
+                    setMobileSlide('labor_contracts');
+                  }}
+                  leftIcon={<i className="bi bi-file-earmark-medical-fill text-emerald-600 shrink-0" />}
+                  className={`hr-tab-btn w-full sm:w-auto justify-center whitespace-nowrap px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all border-0 cursor-pointer flex items-center gap-1 sm:gap-1.5 ${
                     activeListTab === 'labor_contracts'
-                      ? 'bg-white text-slate-900 shadow-2xs'
+                      ? 'is-active bg-white text-slate-900 shadow-2xs'
                       : 'text-slate-500 hover:text-slate-800 bg-transparent'
                   }`}
                 >
@@ -918,8 +1005,8 @@ export const HrOverviewPage: React.FC = () => {
                 </Button>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+              <div className="hidden sm:flex items-center gap-2 shrink-0">
+                <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200 whitespace-nowrap">
                   {activeListTab === 'pending_requests'
                     ? `${pendingRequests.length} chờ duyệt`
                     : `${totalEmployeesCount} hợp đồng`}

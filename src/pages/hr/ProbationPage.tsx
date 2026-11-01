@@ -7,7 +7,7 @@ import {
 } from 'react-bootstrap-icons';
 import StandardPage from '../../components/layout/StandardPage';
 import { TableToolbar } from '../../components/common/TableToolbar';
-import { FullWidthTable } from '../../components/common/FullWidthTable';
+import { FullWidthTable, SwipeableTableRow } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
 import { Badge } from '../../components/common/Badge';
 import { Button } from '../../components/common/Button';
@@ -324,6 +324,7 @@ export const ProbationPage: React.FC = () => {
       description="Theo dõi lộ trình thử việc, người hướng dẫn kèm cặp và đánh giá kết quả trước khi ký hợp đồng chính thức."
       icon="bi-person-check"
       color="rose"
+      className="hr-probation-page"
     >
       <div
         style={{
@@ -378,14 +379,16 @@ export const ProbationPage: React.FC = () => {
                 variant="primary"
                 size="sm"
                 onClick={handleOpenCreate}
+                title="Thêm thử việc"
                 style={{ gap: '6px', fontWeight: 700 }}
               >
                 <Plus size={16} />
-                <span>Thêm thử việc</span>
+                <span className="recruitment-btn-label hidden md:inline">Thêm thử việc</span>
               </Button>
               <DeleteButton
                 size="sm"
                 label="Xoá"
+                title="Xoá"
                 itemCount={selectedIds.length}
                 disabled={selectedIds.length === 0}
                 onConfirm={handleBulkDelete}
@@ -447,10 +450,10 @@ export const ProbationPage: React.FC = () => {
                   />
                 </th>
                 <th style={{ padding: '10px 14px', minWidth: '250px' }}>NHÂN SỰ THỬ VIỆC</th>
-                <th style={{ padding: '10px 14px', minWidth: '220px' }}>VỊ TRÍ & PHÒNG BAN</th>
-                <th style={{ padding: '10px 14px', minWidth: '200px' }}>NGƯỜI HƯỚNG DẪN</th>
-                <th style={{ padding: '10px 14px', width: '190px' }}>THỜI GIAN THỬ VIỆC</th>
-                <th style={{ padding: '10px 14px', width: '140px', textAlign: 'center' }}>TRẠNG THÁI</th>
+                <th className="hidden md:table-cell" style={{ padding: '10px 14px', minWidth: '220px' }}>VỊ TRÍ & PHÒNG BAN</th>
+                <th className="hidden md:table-cell" style={{ padding: '10px 14px', minWidth: '200px' }}>NGƯỜI HƯỚNG DẪN</th>
+                <th className="hidden md:table-cell" style={{ padding: '10px 14px', width: '190px' }}>THỜI GIAN THỬ VIỆC</th>
+                <th style={{ padding: '10px 14px', width: '130px', textAlign: 'center' }}>TRẠNG THÁI</th>
               </tr>
             </thead>
             <tbody>
@@ -470,9 +473,22 @@ export const ProbationPage: React.FC = () => {
                 pagedRecords.map((item) => {
                   const isSelected = selectedIds.includes(item.id);
                   return (
-                    <tr
+                    <SwipeableTableRow
                       key={item.id}
+                      rowId={`prob-${item.id}`}
                       onClick={() => handleOpenEdit(item)}
+                      onEdit={() => handleOpenEdit(item)}
+                      onDelete={async () => {
+                        await fetch('/api/admin/hr-items/bulk-delete', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ ids: [item.id] }),
+                        });
+                        await fetchProbationItems();
+                        setSelectedIds((prev) => prev.filter((id) => id !== item.id));
+                      }}
+                      deleteConfirmTitle="Xác nhận xoá hồ sơ thử việc"
+                      deleteConfirmMessage={`Bạn có chắc chắn muốn xoá hồ sơ thử việc của "${item.title}" (${item.code}) khỏi hệ thống?`}
                       style={{
                         borderBottom: '1px solid var(--border-subtle, #f1f5f9)',
                         backgroundColor: isSelected ? '#eff6ff' : 'transparent',
@@ -497,7 +513,7 @@ export const ProbationPage: React.FC = () => {
                         />
                       </td>
                       <td style={{ padding: '10px 14px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px', flexWrap: 'wrap' }}>
                           <span
                             style={{
                               fontFamily: 'monospace',
@@ -515,7 +531,7 @@ export const ProbationPage: React.FC = () => {
                             {item.title}
                           </span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.74rem', color: '#64748b' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.74rem', color: '#64748b', flexWrap: 'wrap' }}>
                           {item.phone && (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                               <Telephone size={11} style={{ color: '#0284c7' }} />
@@ -529,14 +545,26 @@ export const ProbationPage: React.FC = () => {
                             </span>
                           )}
                         </div>
+                        <div className="flex md:hidden flex-col gap-0.5 mt-1 text-[11px] text-slate-500">
+                          <div>
+                            <span className="font-semibold text-slate-700">{item.sub}</span>
+                            {item.department ? ` • ${item.department}` : ''}
+                          </div>
+                          <div>
+                            <span>HD: {item.owner}</span>
+                            {' • '}
+                            <strong className="text-sky-600">{item.progress}%</strong>
+                            {item.date ? ` • ${item.date}` : ''}
+                          </div>
+                        </div>
                       </td>
-                      <td style={{ padding: '10px 14px' }}>
+                      <td className="hidden md:table-cell" style={{ padding: '10px 14px' }}>
                         <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.825rem' }}>
                           {item.sub}
                         </div>
                         <div style={{ fontSize: '0.74rem', color: '#64748b' }}>{item.department}</div>
                       </td>
-                      <td style={{ padding: '10px 14px' }}>
+                      <td className="hidden md:table-cell" style={{ padding: '10px 14px' }}>
                         <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.825rem' }}>
                           {item.owner}
                         </div>
@@ -544,13 +572,13 @@ export const ProbationPage: React.FC = () => {
                           Tiến độ hội nhập: <strong style={{ color: '#0284c7' }}>{item.progress}%</strong>
                         </div>
                       </td>
-                      <td style={{ padding: '10px 14px', fontWeight: 600, color: '#334155', fontSize: '0.8125rem' }}>
+                      <td className="hidden md:table-cell" style={{ padding: '10px 14px', fontWeight: 600, color: '#334155', fontSize: '0.8125rem' }}>
                         {item.date}
                       </td>
                       <td style={{ padding: '10px 14px', textAlign: 'center' }}>
                         {renderStatusBadge(item.status, item.statusLabel)}
                       </td>
-                    </tr>
+                    </SwipeableTableRow>
                   );
                 })
               )}

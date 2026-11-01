@@ -16,7 +16,7 @@ export const MyTasksPage: React.FC<MyTasksPageProps> = ({
     <StandardPage
       title="Danh sách công việc cá nhân"
       description="Quản lý, tiếp nhận và báo cáo tiến độ công việc được giao trong ngày"
-      icon="bi-list-check"
+      icon="bi-clipboard2-check"
       color="blue"
       badge="CÁ NHÂN"
       tickerContext="my_tasks"

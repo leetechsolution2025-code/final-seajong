@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Search, X, ChevronDown } from 'react-bootstrap-icons';
 
 export interface EmployeeItem {
@@ -36,14 +37,18 @@ export async function fetchEmployeesFromDb(): Promise<EmployeeItem[]> {
       if (Array.isArray(boardData) && boardData.length > 0) {
         const realEmps = boardData.filter((u: any) => u.employee);
         const listToUse = realEmps.length > 0 ? realEmps : boardData;
-        const mapped: EmployeeItem[] = listToUse.map((u: any) => ({
-          id: u.id,
-          name: u.employee?.fullName || u.name,
-          department: u.employee?.departmentName || u.department || 'Công ty',
-          position: u.employee?.position || u.position || '',
-          phone: u.employee?.phone || u.phone || '',
-          email: u.email || '',
-        }));
+        const mapped: EmployeeItem[] = listToUse.map((u: any) => {
+          const rawPos = u.employee?.position || u.position || '';
+          const cleanPos = String(rawPos).startsWith('vtr-') ? '' : rawPos;
+          return {
+            id: u.id,
+            name: u.employee?.fullName || u.name,
+            department: u.employee?.departmentName || u.department || 'Công ty',
+            position: cleanPos,
+            phone: u.employee?.phone || u.phone || '',
+            email: u.email || '',
+          };
+        });
         cachedEmployees = mapped;
         listeners.forEach((fn) => fn(mapped));
         listeners.length = 0;
@@ -133,7 +138,49 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
   );
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputWrapperRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [dropdownRect, setDropdownRect] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    minWidth: number;
+    maxHeight: number;
+  } | null>(null);
+
+  const updateDropdownPosition = useCallback(() => {
+    const el = inputWrapperRef.current || containerRef.current;
+    if (!el || typeof window === 'undefined') return;
+    const rect = el.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+    const spaceBelow = viewportHeight - rect.bottom - 8;
+    const spaceAbove = rect.top - 8;
+    const openUpward = spaceBelow < 220 && spaceAbove > spaceBelow;
+    const maxMenuHeight = Math.min(260, Math.max(160, openUpward ? spaceAbove : spaceBelow));
+    const effectiveWidth = Math.max(rect.width, 260);
+    const leftPos =
+      rect.left + effectiveWidth > viewportWidth - 8
+        ? Math.max(8, viewportWidth - effectiveWidth - 8)
+        : Math.max(8, rect.left);
+
+    if (openUpward) {
+      setDropdownRect({
+        bottom: viewportHeight - rect.top + 4,
+        left: leftPos,
+        minWidth: rect.width,
+        maxHeight: maxMenuHeight,
+      });
+    } else {
+      setDropdownRect({
+        top: rect.bottom + 4,
+        left: leftPos,
+        minWidth: rect.width,
+        maxHeight: maxMenuHeight,
+      });
+    }
+  }, []);
 
   // Tải danh sách nhân sự nếu chưa có
   useEffect(() => {
@@ -141,17 +188,33 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
       setStaffData(propEmployees);
       return;
     }
+    let cancelled = false;
     fetchEmployeesFromDb().then((data) => {
-      setStaffData(data);
+      if (!cancelled) {
+        setStaffData(data);
+      }
     });
+    return () => {
+      cancelled = true;
+    };
   }, [propEmployees]);
 
   // Click outside để đóng dropdown
   useEffect(() => {
     if (!isOpen) return;
 
+    updateDropdownPosition();
+    const rafId = window.requestAnimationFrame(() => {
+      updateDropdownPosition();
+    });
+
     const handlePointerDown = (e: MouseEvent | TouchEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(target) &&
+        (!menuRef.current || !menuRef.current.contains(target))
+      ) {
         setIsOpen(false);
       }
     };
@@ -162,20 +225,32 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
       }
     };
 
+    const handleScrollOrResize = (e: Event) => {
+      if (menuRef.current && e.target && menuRef.current.contains(e.target as Node)) {
+        return;
+      }
+      updateDropdownPosition();
+    };
+
     document.addEventListener('mousedown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', handleScrollOrResize);
+    window.addEventListener('scroll', handleScrollOrResize, true);
 
     return () => {
+      window.cancelAnimationFrame(rafId);
       document.removeEventListener('mousedown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', handleScrollOrResize);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
     };
-  }, [isOpen]);
+  }, [isOpen, updateDropdownPosition]);
 
   // Focus ô tìm kiếm khi mở dropdown
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => {
-        searchInputRef.current?.focus();
+        searchInputRef.current?.focus({ preventScroll: true });
       }, 50);
     } else {
       setSearchTerm('');
@@ -286,7 +361,7 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
       )}
 
       {/* Ô input chính */}
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+      <div ref={inputWrapperRef} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
         <input
           type="text"
           className="form-input form-control"
@@ -418,27 +493,33 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
       )}
 
       {/* Dropdown danh sách gợi ý nhân viên nội bộ */}
-      {isOpen && !disabled && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            minWidth: '100%',
-            width: 'max-content',
-            marginTop: '4px',
-            backgroundColor: '#ffffff',
-            border: '1px solid #cbd5e1',
-            borderRadius: '6px',
-            boxShadow: '0 8px 24px -4px rgba(0, 0, 0, 0.18)',
-            zIndex: 1000,
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-            maxHeight: '260px',
-            animation: 'fadeIn 0.12s ease-out',
-          }}
-        >
+      {isOpen &&
+        !disabled &&
+        dropdownRect &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            ref={menuRef}
+            style={{
+              position: 'fixed',
+              top: dropdownRect.top,
+              bottom: dropdownRect.bottom,
+              left: dropdownRect.left,
+              minWidth: dropdownRect.minWidth,
+              width: 'max-content',
+              maxWidth: 'min(420px, calc(100vw - 16px))',
+              backgroundColor: '#ffffff',
+              border: '1px solid #cbd5e1',
+              borderRadius: '10px',
+              boxShadow: '0 12px 28px -4px rgba(15, 23, 42, 0.16), 0 4px 12px -2px rgba(15, 23, 42, 0.08)',
+              zIndex: 100000,
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              maxHeight: dropdownRect.maxHeight,
+              animation: 'fadeIn 0.12s ease-out',
+            }}
+          >
           {/* Ô tìm kiếm lọc theo ký tự */}
           <div
             style={{
@@ -655,7 +736,8 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
               Xong
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

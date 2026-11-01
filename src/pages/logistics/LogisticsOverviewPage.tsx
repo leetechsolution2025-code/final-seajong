@@ -17,7 +17,7 @@ import {
 import { StepPage } from '../../components/common/StepPage';
 import { EventOffcanvas } from '../../components/common/EventOffcanvas';
 import { TableToolbar, type TableToolbarFilter } from '../../components/common/TableToolbar';
-import { FullWidthTable } from '../../components/common/FullWidthTable';
+import { FullWidthTable, SwipeableTableRow } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
 import {
   InventoryToolbar,
@@ -43,6 +43,7 @@ const LOGISTICS_STEPS: ModernStepItem[] = [
     num: 1,
     id: 'tasks',
     title: 'Danh sách công việc',
+    mobileTitle: 'Công việc',
     desc: 'Quản lý các lệnh xuất/nhập kho',
     badge: 'ĐANG XỬ LÝ',
     icon: <ListTask size={16} />,
@@ -51,6 +52,7 @@ const LOGISTICS_STEPS: ModernStepItem[] = [
     num: 2,
     id: 'inventory',
     title: 'Danh sách hàng hoá',
+    mobileTitle: 'Hàng hoá',
     desc: 'Tồn kho thực tế & vị trí lưu trữ',
     badge: 'KHO THỰC TẾ',
     icon: <Boxes size={16} />,
@@ -59,6 +61,7 @@ const LOGISTICS_STEPS: ModernStepItem[] = [
     num: 3,
     id: 'completed',
     title: 'Đã hoàn thành',
+    mobileTitle: 'Hoàn thành',
     desc: 'Lịch sử phiếu kho & nhật ký hoàn tất',
     badge: 'HOÀN TẤT',
     icon: <Check2Circle size={16} />,
@@ -848,6 +851,7 @@ export const LogisticsOverviewPage: React.FC = () => {
 
   return (
     <StepPage
+      className="logistics-mobile-page"
       title="Bộ phận kho vận"
       description="Quản lý dòng chảy hàng hóa, điều phối lệnh xuất nhập kho & cảnh báo an toàn kho thời gian thực"
       icon="bi-box-seam"
@@ -858,16 +862,16 @@ export const LogisticsOverviewPage: React.FC = () => {
       onStepChange={setCurrentStep}
       hideTicker={true}
       stepperExtraRight={
-        <div className="flex items-center gap-2 pr-1">
+        <div className="flex items-center gap-2 pr-0.5 sm:pr-1">
           <Button
             variant="outline"
             size="sm"
             onClick={() => setIsEventCalendarOpen(true)}
             leftIcon={<CalendarEvent className="text-blue-600 shrink-0" size={15} />}
-            className="h-9 px-4 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-[13px] font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer hover:border-slate-300 select-none shrink-0"
+            className="h-8 sm:h-9 px-2.5 sm:px-4 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-[13px] font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer hover:border-slate-300 select-none shrink-0"
             title="Mở Lịch sự kiện Seajong"
           >
-            <span className="font-bold text-slate-800 tracking-tight">Lịch sự kiện</span>
+            <span className="hidden sm:inline font-bold text-slate-800 tracking-tight">Lịch sự kiện</span>
           </Button>
         </div>
       }
@@ -949,19 +953,19 @@ export const LogisticsOverviewPage: React.FC = () => {
             }
             filters={toolbarFilters}
             rightActions={
-              <div className="flex items-center gap-2">
+              <div className={`flex items-center gap-2 ${currentStep === 1 ? 'logistics-toolbar-assign-group flex-1 sm:flex-initial min-w-0' : ''}`}>
                 {currentStep === 1 && (
                   <>
                     <div
                       ref={staffSelectWrapRef}
-                      style={{ width: '205px' }}
+                      className="flex-1 sm:flex-initial sm:w-[205px] min-w-[120px]"
                       title={!isThuKho ? 'Chỉ tài khoản Thủ kho mới có quyền giao việc' : undefined}
                     >
                       <EmployeeSelect
                         multiple={false}
                         value={selectedStaffName}
-                        employees={staffEmployeeItems.length > 0 ? staffEmployeeItems : undefined}
-                        departmentFilter={staffEmployeeItems.length > 0 ? undefined : 'Kho'}
+                        employees={staffEmployeeItems}
+                        departmentFilter="Kho"
                         onChange={(val, selectedObjs) => {
                           setSelectedStaffName(val);
                           const emp = selectedObjs?.[0];
@@ -1038,10 +1042,15 @@ export const LogisticsOverviewPage: React.FC = () => {
           {/* ── BẢNG FULLWIDTHTABLE CHO BƯỚC 1 & 3 (CẤU TẠO NHÓM LỆNH ĐỒNG NHẤT) ── */}
           <FullWidthTable loading={loading}>
             {(currentStep === 1 || currentStep === 3) && (
-              <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+              <table
+                className={`w-full text-left border-collapse logistics-overview-compact-table ${
+                  currentStep === 3 ? 'swipeable-delete-table' : 'keep-mobile-checkbox'
+                }`}
+                style={{ fontSize: '13px' }}
+              >
                 <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
-                  <tr className="text-slate-500 text-[11.5px] uppercase tracking-[0.06em] font-bold">
-                    <th className="py-2.5 px-3 w-10 text-center">
+                  <tr className="text-slate-500 text-[11px] sm:text-[11.5px] uppercase tracking-[0.06em] font-bold">
+                    <th className="py-2.5 px-1.5 sm:px-3 w-7 md:w-10 text-center">
                       <input
                         type="checkbox"
                         className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
@@ -1063,9 +1072,9 @@ export const LogisticsOverviewPage: React.FC = () => {
                         }}
                       />
                     </th>
-                    <th className="py-2.5 px-3.5 w-[50%]">Mã lệnh</th>
-                    <th className="py-2.5 px-3.5 w-[25%]">Loại</th>
-                    <th className="py-2.5 px-3.5 w-[25%] text-center">Trạng thái</th>
+                    <th className="py-2.5 px-2 sm:px-3.5 w-auto md:w-[50%]">Mã lệnh</th>
+                    <th className="hidden md:table-cell py-2.5 px-2.5 sm:px-3.5 w-[25%] whitespace-nowrap">Loại</th>
+                    <th className="hidden md:table-cell py-2.5 px-3.5 w-[25%] text-center whitespace-nowrap">Trạng thái</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1101,6 +1110,142 @@ export const LogisticsOverviewPage: React.FC = () => {
                       const isGroupAllSelected =
                         items.length > 0 && items.every((it: any) => selectedBatchOrders.has(it.id));
 
+                      const groupHeaderInner = (
+                        <div className="flex flex-col justify-center w-full min-w-0">
+                          <div className="flex items-center flex-wrap gap-1.5 sm:gap-2">
+                            <i
+                              className={`bi ${
+                                isCollapsed ? 'bi-caret-right-fill' : 'bi-caret-down-fill'
+                              } text-slate-500 text-xs`}
+                            />
+                            <span className="font-bold text-slate-800 text-[12px]">
+                              <span className="hidden md:inline">
+                                {orderCode.startsWith('QC-')
+                                  ? 'SỐ HIỆU BIÊN BẢN QC: '
+                                  : orderCode.startsWith('ERR-')
+                                  ? 'SỐ HIỆU HỒ SƠ LỖI: '
+                                  : 'SỐ HIỆU ĐƠN HÀNG: '}
+                              </span>
+                              <span className="inline md:hidden">
+                                {orderCode.startsWith('QC-')
+                                  ? 'BIÊN BẢN QC: '
+                                  : orderCode.startsWith('ERR-')
+                                  ? 'HỒ SƠ LỖI: '
+                                  : 'ĐƠN HÀNG: '}
+                              </span>
+                              <span className="text-blue-600 font-mono">{orderCode}</span>
+                            </span>
+
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10.5px] font-semibold ${groupStatusBadgeClass}`}
+                            >
+                              {groupStatusText}
+                            </span>
+
+                            {needsProduction && (
+                              <span
+                                className="inline-flex items-center justify-center gap-1 px-1.5 md:px-2 py-0.5 rounded-full text-[10.5px] font-semibold"
+                                style={{
+                                  backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                                  color: '#b45309',
+                                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                                }}
+                                title="Cần sản xuất"
+                              >
+                                <i className="bi bi-gear-wide-connected text-[11px] md:text-[10px]" />
+                                <span className="hidden md:inline">Cần sản xuất</span>
+                              </span>
+                            )}
+
+                            {latestDate > 0 && (
+                              <span className="hidden md:flex text-slate-500 text-[11px] items-center gap-1">
+                                <i className="bi bi-clock" />
+                                {new Date(latestDate).toLocaleDateString('vi-VN')}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Dòng thông tin phụ: Nhà cung cấp / Đơn mua hàng / Lệnh sản xuất / Khách hàng */}
+                          {isPurchaseOrderGroup ? (
+                            <div className="ml-0 md:ml-5 mt-0.5 flex items-center flex-wrap gap-1 text-slate-500 font-semibold text-[11px]">
+                              {(supplierName || customerName) && (
+                                <>
+                                  <i className="bi bi-person" />
+                                  <span>
+                                    Nhà cung cấp:{' '}
+                                    <strong className="text-slate-800">{supplierName || customerName}</strong>
+                                  </span>
+                                  <span className="mx-1 text-slate-300">|</span>
+                                </>
+                              )}
+                              <i className="bi bi-file-earmark-text" />
+                              <span>
+                                Theo đơn mua hàng:{' '}
+                                <strong className="text-slate-800">{purchaseOrderCode || 'Đang xử lý'}</strong>
+                              </span>
+                              {customerAddress && (
+                                <>
+                                  <span className="mx-1 text-slate-300">|</span>
+                                  <i className="bi bi-geo-alt" />
+                                  <span>{customerAddress}</span>
+                                </>
+                              )}
+                            </div>
+                          ) : (
+                            <>
+                              {isGroupImport && (orderCode.includes('-DH-') || orderCode.startsWith('QC-')) && (
+                                <div className="ml-0 md:ml-5 mt-0.5 text-slate-500 font-semibold text-[11px] flex items-center gap-1">
+                                  <i className="bi bi-file-earmark-text" />
+                                  <span>
+                                    {orderCode.includes('-DH-')
+                                      ? `Theo đơn mua hàng số: ${orderCode.match(/(DH-\d+(-\d+)?)/)?.[0] || orderCode}`
+                                      : (() => {
+                                          const prodOrders = Array.from(
+                                            new Set(items.map((it) => it.productionOrder).filter(Boolean))
+                                          );
+                                          if (prodOrders.length > 0) {
+                                            return `Theo lệnh sản xuất: ${prodOrders.join(', ')}`;
+                                          }
+                                          return `Theo lệnh sản xuất: ${orderCode.replace('QC-', 'LSX-')}`;
+                                        })()}
+                                  </span>
+                                </div>
+                              )}
+
+                              {(() => {
+                                const validCustomer =
+                                  customerName &&
+                                  !customerName.includes('Từ hồ sơ') &&
+                                  !customerName.startsWith('ERR-');
+                                if (!validCustomer && !customerAddress) return null;
+                                return (
+                                  <div className="ml-0 md:ml-5 mt-0.5 flex items-center flex-wrap gap-1 text-slate-500 font-semibold text-[11px]">
+                                    {validCustomer && (
+                                      <>
+                                        <i className="bi bi-person" />
+                                        <span>
+                                          Khách hàng: <strong className="text-slate-800">{customerName}</strong>
+                                        </span>
+                                        {customerAddress && <span className="mx-1 text-slate-300">|</span>}
+                                      </>
+                                    )}
+                                    {!validCustomer && customerAddress && <i className="bi bi-geo-alt" />}
+                                    {customerAddress && <span>{customerAddress}</span>}
+                                  </div>
+                                );
+                              })()}
+                            </>
+                          )}
+
+                          {ghiChu && (
+                            <div className="ml-0 md:ml-5 mt-0.5 text-rose-600 text-[11px] flex items-center gap-1 font-medium">
+                              <i className="bi bi-exclamation-triangle-fill" />
+                              <span>{ghiChu}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+
                       return (
                         <React.Fragment key={`group-${orderCode}`}>
                           {/* ── DÒNG HEADER PHÂN NHÓM ĐƠN HÀNG / QC / HỒ SƠ LỖI (CHUẨN CLIENT-SEAJONG) ── */}
@@ -1117,7 +1262,7 @@ export const LogisticsOverviewPage: React.FC = () => {
                           >
                             {/* Checkbox chọn cả nhóm đơn hàng */}
                             <td
-                              className="py-2 px-3 w-10 text-center align-middle"
+                              className="py-2 px-1.5 sm:px-3 w-7 sm:w-10 text-center align-middle"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <input
@@ -1138,130 +1283,11 @@ export const LogisticsOverviewPage: React.FC = () => {
                               />
                             </td>
 
-                            <td colSpan={3} className="py-2 px-3.5">
-                              <div className="flex flex-col justify-center w-full">
-                                <div className="flex items-center flex-wrap gap-2">
-                                  <i
-                                    className={`bi ${
-                                      isCollapsed ? 'bi-caret-right-fill' : 'bi-caret-down-fill'
-                                    } text-slate-500 text-xs`}
-                                  />
-                                  <span className="font-bold text-slate-800 text-[12px]">
-                                    {orderCode.startsWith('QC-')
-                                      ? 'SỐ HIỆU BIÊN BẢN QC: '
-                                      : orderCode.startsWith('ERR-')
-                                      ? 'SỐ HIỆU HỒ SƠ LỖI: '
-                                      : 'SỐ HIỆU ĐƠN HÀNG: '}
-                                    <span className="text-blue-600 font-mono">{orderCode}</span>
-                                  </span>
-
-                                  <span
-                                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10.5px] font-semibold ${groupStatusBadgeClass}`}
-                                  >
-                                    {groupStatusText}
-                                  </span>
-
-                                  {needsProduction && (
-                                    <span
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold"
-                                      style={{
-                                        backgroundColor: 'rgba(245, 158, 11, 0.15)',
-                                        color: '#b45309',
-                                        border: '1px solid rgba(245, 158, 11, 0.35)',
-                                      }}
-                                    >
-                                      <i className="bi bi-gear-wide-connected text-[10px]" />
-                                      Cần sản xuất
-                                    </span>
-                                  )}
-
-                                  {latestDate > 0 && (
-                                    <span className="text-slate-500 text-[11px] flex items-center gap-1">
-                                      <i className="bi bi-clock" />
-                                      {new Date(latestDate).toLocaleDateString('vi-VN')}
-                                    </span>
-                                  )}
-                                </div>
-
-                                {/* Dòng thông tin phụ: Nhà cung cấp / Đơn mua hàng / Lệnh sản xuất / Khách hàng */}
-                                {isPurchaseOrderGroup ? (
-                                  <div className="ml-5 mt-0.5 flex items-center flex-wrap gap-1 text-slate-500 font-semibold text-[11px]">
-                                    {(supplierName || customerName) && (
-                                      <>
-                                        <i className="bi bi-person" />
-                                        <span>
-                                          Nhà cung cấp:{' '}
-                                          <strong className="text-slate-800">{supplierName || customerName}</strong>
-                                        </span>
-                                        <span className="mx-1 text-slate-300">|</span>
-                                      </>
-                                    )}
-                                    <i className="bi bi-file-earmark-text" />
-                                    <span>
-                                      Theo đơn mua hàng:{' '}
-                                      <strong className="text-slate-800">{purchaseOrderCode || 'Đang xử lý'}</strong>
-                                    </span>
-                                    {customerAddress && (
-                                      <>
-                                        <span className="mx-1 text-slate-300">|</span>
-                                        <i className="bi bi-geo-alt" />
-                                        <span>{customerAddress}</span>
-                                      </>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <>
-                                    {isGroupImport && (orderCode.includes('-DH-') || orderCode.startsWith('QC-')) && (
-                                      <div className="ml-5 mt-0.5 text-slate-500 font-semibold text-[11px] flex items-center gap-1">
-                                        <i className="bi bi-file-earmark-text" />
-                                        <span>
-                                          {orderCode.includes('-DH-')
-                                            ? `Theo đơn mua hàng số: ${orderCode.match(/(DH-\d+(-\d+)?)/)?.[0] || orderCode}`
-                                            : (() => {
-                                                const prodOrders = Array.from(
-                                                  new Set(items.map((it) => it.productionOrder).filter(Boolean))
-                                                );
-                                                if (prodOrders.length > 0) {
-                                                  return `Theo lệnh sản xuất: ${prodOrders.join(', ')}`;
-                                                }
-                                                return `Theo lệnh sản xuất: ${orderCode.replace('QC-', 'LSX-')}`;
-                                              })()}
-                                        </span>
-                                      </div>
-                                    )}
-
-                                    {(() => {
-                                      const validCustomer =
-                                        customerName &&
-                                        !customerName.includes('Từ hồ sơ') &&
-                                        !customerName.startsWith('ERR-');
-                                      if (!validCustomer && !customerAddress) return null;
-                                      return (
-                                        <div className="ml-5 mt-0.5 flex items-center flex-wrap gap-1 text-slate-500 font-semibold text-[11px]">
-                                          {validCustomer && (
-                                            <>
-                                              <i className="bi bi-person" />
-                                              <span>
-                                                Khách hàng: <strong className="text-slate-800">{customerName}</strong>
-                                              </span>
-                                              {customerAddress && <span className="mx-1 text-slate-300">|</span>}
-                                            </>
-                                          )}
-                                          {!validCustomer && customerAddress && <i className="bi bi-geo-alt" />}
-                                          {customerAddress && <span>{customerAddress}</span>}
-                                        </div>
-                                      );
-                                    })()}
-                                  </>
-                                )}
-
-                                {ghiChu && (
-                                  <div className="ml-5 mt-0.5 text-rose-600 text-[11px] flex items-center gap-1 font-medium">
-                                    <i className="bi bi-exclamation-triangle-fill" />
-                                    <span>{ghiChu}</span>
-                                  </div>
-                                )}
-                              </div>
+                            <td colSpan={1} className="table-cell md:hidden py-2 px-2 sm:px-3.5">
+                              {groupHeaderInner}
+                            </td>
+                            <td colSpan={3} className="hidden md:table-cell py-2 px-2 sm:px-3.5">
+                              {groupHeaderInner}
                             </td>
                           </tr>
 
@@ -1276,12 +1302,15 @@ export const LogisticsOverviewPage: React.FC = () => {
 
                               let typeTextClass = 'text-blue-600';
                               let typeLabel = 'Xuất kho';
+                              let mobileCodeBadgeClass = 'bg-blue-50 text-blue-700 border-blue-200/90';
                               if (isImport) {
                                 typeTextClass = 'text-emerald-600';
                                 typeLabel = row.typeLabel?.includes('hàng lỗi') ? 'Nhập hàng lỗi' : 'Nhập kho';
+                                mobileCodeBadgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200/90';
                               } else if (isMaterial) {
                                 typeTextClass = 'text-amber-600';
                                 typeLabel = 'Cấp phát vật tư';
+                                mobileCodeBadgeClass = 'bg-amber-50 text-amber-700 border-amber-200/90';
                               }
 
                               const lowerStatus = String(row.trangThai || '').toLowerCase();
@@ -1333,14 +1362,27 @@ export const LogisticsOverviewPage: React.FC = () => {
                               }
 
                               return (
-                                <tr
+                                <SwipeableTableRow
                                   key={row.id}
+                                  rowId={`log-${row.id}`}
+                                  onEdit={() => handleRowClick(row)}
+                                  onDelete={async () => {
+                                    await fetch('/api/logistics/overview-orders/batch-delete', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ items: [{ id: row.id, type: row.type }] }),
+                                    });
+                                    showToast('success', 'Đã xóa lệnh thành công');
+                                    fetchOverviewOrders(false);
+                                  }}
+                                  deleteConfirmTitle="Xác nhận xóa lệnh"
+                                  deleteConfirmMessage="Bạn có chắc chắn muốn xóa lệnh xuất/nhập kho này? Thao tác này không thể hoàn tác."
                                   onClick={() => handleRowClick(row)}
                                   className="hover:bg-sky-50/40 transition-colors border-b border-slate-100 cursor-pointer bg-white"
                                 >
                                   {/* Cột 1: Checkbox chọn dòng lệnh (hỗ trợ cả Bước 1 & Bước 3) */}
                                   <td
-                                    className="py-2 px-3 w-10 text-center align-middle"
+                                    className="py-2 px-1.5 sm:px-3 w-7 sm:w-10 text-center align-middle"
                                     onClick={(e) => e.stopPropagation()}
                                   >
                                     <input
@@ -1359,30 +1401,28 @@ export const LogisticsOverviewPage: React.FC = () => {
                                   </td>
 
                                   {/* Cột 2: Mã lệnh & Chứng từ / Người phụ trách */}
-                                  <td className="py-2 px-3.5 align-middle">
-                                    <div className="flex items-center flex-wrap gap-2">
-                                      <span className="font-bold text-blue-600 text-[13px] font-mono">
+                                  <td className="py-2 px-2 sm:px-3.5 align-middle max-w-0 md:max-w-none w-full overflow-hidden">
+                                    <div className="flex items-center flex-nowrap md:flex-wrap gap-1.5 sm:gap-2">
+                                      <span
+                                        className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[11.5px] font-bold font-mono shrink-0 whitespace-nowrap ${mobileCodeBadgeClass} md:p-0 md:border-0 md:bg-transparent md:rounded-none md:text-blue-600 md:text-[13px]`}
+                                        title={typeLabel}
+                                      >
                                         {row.exportCode}
                                       </span>
                                       {row.requestedDate && (
-                                        <span className="text-slate-500 text-[11px] flex items-center gap-1">
+                                        <span className="text-slate-500 text-[10.5px] sm:text-[11px] inline-flex items-center gap-1 shrink-0 whitespace-nowrap">
                                           <i className="bi bi-calendar-event" />
                                           {new Date(row.requestedDate).toLocaleDateString('vi-VN')}
-                                          {row.assigneeName && (
-                                            <span className="ml-1 font-semibold text-slate-800">
-                                              | {row.assigneeName}
-                                            </span>
-                                          )}
                                         </span>
                                       )}
-                                      {!row.requestedDate && row.assigneeName && (
-                                        <span className="text-[11px] font-semibold text-slate-700">
+                                      {row.assigneeName && (
+                                        <span className="text-[10.5px] sm:text-[11px] font-semibold text-slate-700 truncate max-w-[80px] sm:max-w-none">
                                           | {row.assigneeName}
                                         </span>
                                       )}
                                       <NewBadge show={!readOrderIds.has(row.id)} />
                                     </div>
-                                    <div className="text-slate-500 text-[12px] truncate max-w-md mt-0.5">
+                                    <div className="text-slate-500 text-[11.5px] sm:text-[12px] truncate sm:max-w-md mt-0.5">
                                       {row.typeLabel}{' '}
                                       {row.code?.startsWith('QC-') ? row.code : row.saleOrderCode || row.code}{' '}
                                       {row.customer &&
@@ -1394,19 +1434,19 @@ export const LogisticsOverviewPage: React.FC = () => {
                                   </td>
 
                                   {/* Cột 3: Loại công việc (Không tô màu nền) */}
-                                  <td className="py-2 px-3.5 align-middle">
-                                    <span className={`text-[12.5px] font-semibold ${typeTextClass}`}>
+                                  <td className="hidden md:table-cell py-2 px-2.5 sm:px-3.5 align-middle whitespace-nowrap">
+                                    <span className={`text-[11.5px] sm:text-[12.5px] font-semibold ${typeTextClass}`}>
                                       {typeLabel}
                                     </span>
                                   </td>
 
                                   {/* Cột 4: Trạng thái (Không tô màu nền) */}
-                                  <td className="py-2 px-3.5 align-middle text-center">
-                                    <span className={`text-[12.5px] font-semibold ${statusTextClass}`}>
+                                  <td className="hidden md:table-cell py-2 px-3.5 align-middle text-center whitespace-nowrap">
+                                    <span className={`text-[11.5px] sm:text-[12.5px] font-semibold ${statusTextClass}`}>
                                       {statusText}
                                     </span>
                                   </td>
-                                </tr>
+                                </SwipeableTableRow>
                               );
                             })}
                         </React.Fragment>
@@ -1518,6 +1558,7 @@ export const LogisticsOverviewPage: React.FC = () => {
                   size="sm"
                   leftIcon={<Printer size={14} />}
                   disabled={!canPrint}
+                  className="!hidden md:!inline-flex"
                   onClick={() => {
                     if (!canPrint) return;
                     setShowPrintLabelModal(true);

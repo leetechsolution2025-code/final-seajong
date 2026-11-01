@@ -20,6 +20,7 @@ const CASHFLOW_STEPS: ModernStepItem[] = [
     num: 1,
     id: 'orders',
     title: 'Duyệt đơn hàng',
+    mobileTitle: 'Đơn hàng',
     desc: 'Đơn hàng & hợp đồng bán lẻ',
     badge: 'BÁN HÀNG',
     icon: <CartCheck size={16} />,
@@ -28,6 +29,7 @@ const CASHFLOW_STEPS: ModernStepItem[] = [
     num: 2,
     id: 'requests',
     title: 'Duyệt yêu cầu',
+    mobileTitle: 'Yêu cầu',
     desc: 'Tờ trình, chi phí & tạm ứng',
     badge: 'ĐỀ XUẤT',
     icon: <ClipboardCheck size={16} />,
@@ -36,6 +38,7 @@ const CASHFLOW_STEPS: ModernStepItem[] = [
     num: 3,
     id: 'inflow',
     title: 'Dòng vào',
+    mobileTitle: 'Dòng vào',
     desc: 'Thu nợ & dòng tiền thu',
     badge: 'TK 111/112',
     icon: <ArrowDownLeftCircle size={16} />,
@@ -44,6 +47,7 @@ const CASHFLOW_STEPS: ModernStepItem[] = [
     num: 4,
     id: 'outflow',
     title: 'Dòng ra',
+    mobileTitle: 'Dòng ra',
     desc: 'Lệnh chi tiền & xuất quỹ',
     badge: 'TK 111/112',
     icon: <ArrowUpRightCircle size={16} />,
@@ -56,24 +60,26 @@ export const FinanceCashflowPage: React.FC<FinanceCashflowPageProps> = ({
   const [currentStep, setCurrentStep] = useState<number>(1);
 
   return (
-    <StepPage
-      title="Theo dõi dòng tiền"
-      description="Giám sát điều hành chu chuyển dòng tiền vào – ra, phê duyệt đơn hàng, kiểm soát giải ngân lệnh chi và thu hồi công nợ thời gian thực"
-      icon="bi-cash-coin"
-      color="emerald"
-      badge="DÒNG TIỀN DOANH NGHIỆP"
-      steps={CASHFLOW_STEPS}
-      currentStep={currentStep}
-      onStepChange={setCurrentStep}
-      tickerContext="cashflow"
-      customTickerNews={CASHFLOW_TICKER_ITEMS}
-    >
-      <CashflowTrackingView
+    <div className="finance-cashflow-page h-full">
+      <StepPage
+        title="Theo dõi dòng tiền"
+        description="Giám sát điều hành chu chuyển dòng tiền vào – ra, phê duyệt đơn hàng, kiểm soát giải ngân lệnh chi và thu hồi công nợ thời gian thực"
+        icon="bi-cash-coin"
+        color="emerald"
+        badge="DÒNG TIỀN DOANH NGHIỆP"
+        steps={CASHFLOW_STEPS}
         currentStep={currentStep}
         onStepChange={setCurrentStep}
-        onShowToast={onShowToast}
-      />
-    </StepPage>
+        tickerContext="cashflow"
+        customTickerNews={CASHFLOW_TICKER_ITEMS}
+      >
+        <CashflowTrackingView
+          currentStep={currentStep}
+          onStepChange={setCurrentStep}
+          onShowToast={onShowToast}
+        />
+      </StepPage>
+    </div>
   );
 };
 

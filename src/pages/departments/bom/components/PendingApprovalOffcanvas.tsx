@@ -76,6 +76,7 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
       title="Hồ sơ chờ phê duyệt"
       description={`${document.code} • ${document.docTypeName}`}
       width="400px"
+      className="bom-approval-offcanvas"
       slidePanel={
         <DocumentChatSlide
           isOpen={isChatOpen}
@@ -85,7 +86,7 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
       }
       footer={
         !isChatOpen ? (
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+          <div className="bom-approval-offcanvas-footer" style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
             <Button
               variant="secondary"
               size="md"

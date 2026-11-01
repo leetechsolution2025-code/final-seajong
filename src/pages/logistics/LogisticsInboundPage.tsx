@@ -5,6 +5,7 @@ import { LogisticsInbound } from '@/components/logistics/inbound/LogisticsInboun
 export const LogisticsInboundPage: React.FC = () => {
   return (
     <StandardPage
+      className="logistics-mobile-page inbound-mobile-page"
       title="Nhập, xuất và kiểm kho"
       description="Quản lý nhập kho, xuất kho và kiểm tra đối soát tồn kho thực tế."
       icon="bi-arrow-down-left-square"

@@ -29,6 +29,8 @@ export interface StandardPageProps {
   customTickerNews?: any[];
   /** Chỉ định context trực tiếp cho Ticker */
   tickerContext?: string;
+  /** ClassName bổ sung */
+  className?: string;
 }
 
 export const StandardPage: React.FC<StandardPageProps> = ({
@@ -50,18 +52,22 @@ export const StandardPage: React.FC<StandardPageProps> = ({
   hideTicker = false,
   customTickerNews,
   tickerContext,
+  className = '',
 }) => {
   return (
     <div
-      className="flex flex-col h-full flex-1 overflow-hidden"
+      className={`is-standard-page flex flex-col h-full flex-1 overflow-hidden ${className}`.trim()}
       style={{
         background,
         height: '100%',
         minHeight: 0,
         maxHeight: '100%',
+        width: '100%',
+        maxWidth: '100%',
+        minWidth: 0,
       }}
     >
-      <div style={{ flexShrink: 0 }}>
+      <div style={{ flexShrink: 0, width: '100%', maxWidth: '100%', minWidth: 0 }}>
         <PageHeader
           title={title}
           description={description}
@@ -87,6 +93,9 @@ export const StandardPage: React.FC<StandardPageProps> = ({
           flex: '1 1 0%',
           minHeight: 0,
           height: '100%',
+          width: '100%',
+          maxWidth: '100%',
+          minWidth: 0,
         }}
       >
         {useCard ? (
@@ -96,6 +105,9 @@ export const StandardPage: React.FC<StandardPageProps> = ({
               flex: '1 1 0%',
               minHeight: 0,
               height: '100%',
+              width: '100%',
+              maxWidth: '100%',
+              minWidth: 0,
               overflow: 'hidden',
             }}
           >
@@ -103,6 +115,9 @@ export const StandardPage: React.FC<StandardPageProps> = ({
               style={{
                 flex: '1 1 0%',
                 minHeight: 0,
+                width: '100%',
+                maxWidth: '100%',
+                minWidth: 0,
                 display: 'flex',
                 flexDirection: 'column',
                 overflow: 'hidden',

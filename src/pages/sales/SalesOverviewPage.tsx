@@ -85,24 +85,26 @@ export const SalesOverviewPage: React.FC<SalesOverviewPageProps> = ({
   };
 
   return (
-    <StandardPage
-      title="Phòng Kinh doanh"
-      description="Quản lý bán hàng, doanh thu và đại lý"
-      color="emerald"
-      icon="bi-graph-up-arrow"
-      badge="SALES"
-      tickerContext="sales"
-      customTickerNews={tickerItems}
-      cardPadding="p-0"
-      useCard={true}
-    >
-      <SalesOverviewView
-        user={currentUserProfile}
-        onShowToast={onShowToast}
-        onNavigate={handleNavigate}
-        onTickerUpdate={setTickerItems}
-      />
-    </StandardPage>
+    <div className="sales-overview-page h-full w-full flex flex-col min-h-0">
+      <StandardPage
+        title="Phòng Kinh doanh"
+        description="Quản lý bán hàng, doanh thu và đại lý"
+        color="emerald"
+        icon="bi-graph-up-arrow"
+        badge="SALES"
+        tickerContext="sales"
+        customTickerNews={tickerItems}
+        cardPadding="p-0"
+        useCard={true}
+      >
+        <SalesOverviewView
+          user={currentUserProfile}
+          onShowToast={onShowToast}
+          onNavigate={handleNavigate}
+          onTickerUpdate={setTickerItems}
+        />
+      </StandardPage>
+    </div>
   );
 };
 

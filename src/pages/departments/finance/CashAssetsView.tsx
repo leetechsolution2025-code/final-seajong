@@ -10,7 +10,7 @@ import {
 } from 'react-bootstrap-icons';
 import { TableToolbar, type TableToolbarFilter } from '../../../components/common/TableToolbar';
 import { Pagination } from '../../../components/common/Pagination';
-import { FullWidthTable } from '../../../components/common/FullWidthTable';
+import { FullWidthTable, SwipeableTableRow } from '../../../components/common/FullWidthTable';
 import { DeleteButton } from '../../../components/common/DeleteButton';
 import { Button } from '../../../components/common/Button';
 import { Badge } from '../../../components/common/Badge';
@@ -597,14 +597,15 @@ export const CashAssetsView: React.FC<CashAssetsViewProps> = ({ onShowToast }) =
         onExportExcel={handleExportExcel}
         onRefresh={() => loadData(false)}
         rightActions={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Button
               variant="primary"
               size="sm"
               leftIcon={<Plus size={16} />}
               onClick={handleOpenCreate}
             >
-              Thêm mới
+              <span className="hidden sm:inline">Thêm mới</span>
+              <span className="sm:hidden">Thêm</span>
             </Button>
 
             <DeleteButton
@@ -672,10 +673,10 @@ export const CashAssetsView: React.FC<CashAssetsViewProps> = ({ onShowToast }) =
                   style={{ cursor: 'pointer' }}
                 />
               </th>
-              <th style={{ minWidth: '260px', padding: '10px 14px' }}>Tên tài sản / Tài khoản</th>
-              <th style={{ minWidth: '220px', padding: '10px 14px', whiteSpace: 'nowrap' }}>Số tài khoản / Chi nhánh</th>
-              <th style={{ width: '160px', padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>Số dư hiện tại</th>
-              <th style={{ width: '180px', padding: '10px 14px', whiteSpace: 'nowrap' }}>Kỳ hạn & Lãi suất</th>
+              <th style={{ padding: '10px 14px' }}>Tên tài sản / Tài khoản</th>
+              <th className="hidden sm:table-cell" style={{ minWidth: '220px', padding: '10px 14px', whiteSpace: 'nowrap' }}>Số tài khoản / Chi nhánh</th>
+              <th style={{ width: '130px', padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>Số dư hiện tại</th>
+              <th className="hidden sm:table-cell" style={{ width: '180px', padding: '10px 14px', whiteSpace: 'nowrap' }}>Kỳ hạn & Lãi suất</th>
             </tr>
           </thead>
           <tbody>
@@ -701,12 +702,26 @@ export const CashAssetsView: React.FC<CashAssetsViewProps> = ({ onShowToast }) =
               pagedItems.map((item, index) => {
                 const isSelected = selectedIds.includes(item.id);
                 return (
-                  <tr
+                  <SwipeableTableRow
                     key={item.id}
+                    rowId={`cash-asset-${item.id}`}
                     onClick={() => {
                       setSelectedItem(item);
                       setIsDetailOpen(true);
                     }}
+                    onEdit={() => {
+                      setSelectedItem(item);
+                      setIsDetailOpen(true);
+                    }}
+                    onDelete={async () => {
+                      await fetch(`/api/finance/cash-assets/${item.id}`, { method: 'DELETE' });
+                      setItems((prev) => prev.filter((x) => x.id !== item.id));
+                      setSelectedIds((prev) => prev.filter((id) => id !== item.id));
+                      notifyFinanceUpdated('cash_assets', 'delete');
+                      onShowToast?.('success', 'Đã xoá tài sản', `Đã xoá tài khoản / sổ quỹ "${cleanAssetName(item.name)}" khỏi cơ sở dữ liệu.`);
+                    }}
+                    deleteConfirmTitle="Xác nhận xoá tài khoản / sổ quỹ"
+                    deleteConfirmMessage={`Bạn có chắc chắn muốn xoá "${cleanAssetName(item.name)}" khỏi cơ sở dữ liệu? Hành động này không thể hoàn tác.`}
                     style={{
                       borderBottom: index < pagedItems.length - 1 ? '1px solid #f1f5f9' : 'none',
                       backgroundColor: isSelected ? 'rgba(23, 92, 211, 0.04)' : 'transparent',
@@ -796,10 +811,15 @@ export const CashAssetsView: React.FC<CashAssetsViewProps> = ({ onShowToast }) =
                           </div>
                         );
                       })()}
+                      <div className="sm:hidden flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[11px] text-slate-500">
+                        {item.accountNumber && <span className="font-mono font-semibold text-slate-700">{item.accountNumber}</span>}
+                        {item.bankName && <span>• {item.bankName}</span>}
+                        {item.type === 'term_deposit' && <span>• {item.termMonths}T ({item.interestRate}%/năm)</span>}
+                      </div>
                     </td>
 
                     {/* Số tài khoản & Ngân hàng */}
-                    <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                    <td className="hidden sm:table-cell" style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
                       <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'monospace' }}>
                         {item.accountNumber || '—'}
                       </div>
@@ -816,7 +836,7 @@ export const CashAssetsView: React.FC<CashAssetsViewProps> = ({ onShowToast }) =
                     </td>
 
                     {/* Kỳ hạn & Lãi suất */}
-                    <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                    <td className="hidden sm:table-cell" style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
                       {item.type === 'term_deposit' ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
                           <span
@@ -876,7 +896,7 @@ export const CashAssetsView: React.FC<CashAssetsViewProps> = ({ onShowToast }) =
                         </span>
                       )}
                     </td>
-                  </tr>
+                  </SwipeableTableRow>
                 );
               })
             )}

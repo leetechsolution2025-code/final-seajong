@@ -471,6 +471,7 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
     >
       {/* 1. RIBBON THÔNG TIN TỔNG QUAN VÀ CÂN ĐỐI PHÁT SINH */}
       <div
+        className="finance-journal-kpi-grid"
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
@@ -697,7 +698,7 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
         actionsAfterSearch={
           <button
             type="button"
-            className="btn btn-outline-secondary btn-sm"
+            className="btn btn-outline-secondary btn-sm !hidden sm:!inline-flex"
             onClick={Object.keys(expandedRowIds).length > 0 ? collapseAll : expandAll}
             title={Object.keys(expandedRowIds).length > 0 ? 'Thu gọn tất cả chi tiết' : 'Mở rộng tất cả chi tiết'}
             style={{
@@ -714,10 +715,11 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
           </button>
         }
         rightActions={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Button
               variant="outline"
               size="sm"
+              className="!hidden sm:!inline-flex"
               onClick={() => setIsPrintModalOpen(true)}
               title="In Sổ nhật ký chung (Mẫu S03a-DN)"
               aria-label="In Sổ nhật ký chung (Mẫu S03a-DN)"
@@ -746,7 +748,8 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
                 borderRadius: '6px',
               }}
             >
-              Thêm bút toán
+              <span className="hidden sm:inline">Thêm bút toán</span>
+              <span className="sm:hidden">Thêm</span>
             </Button>
           </div>
         }
@@ -771,28 +774,29 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
         <table className="custom-table" style={{ width: '100%' }}>
           <thead>
             <tr style={{ textTransform: 'uppercase' }}>
-              <th style={{ width: '40px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 10, fontSize: '0.71875rem' }}>
+              <th style={{ width: '36px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 10, fontSize: '0.71875rem' }}>
                 #
               </th>
-              <th style={{ width: '105px', whiteSpace: 'nowrap', position: 'sticky', top: 0, zIndex: 10, fontSize: '0.71875rem' }}>
+              <th className="hidden sm:table-cell" style={{ width: '105px', whiteSpace: 'nowrap', position: 'sticky', top: 0, zIndex: 10, fontSize: '0.71875rem' }}>
                 Ngày ghi sổ
               </th>
-              <th style={{ width: '180px', minWidth: '180px', whiteSpace: 'nowrap', position: 'sticky', top: 0, zIndex: 10, fontSize: '0.71875rem' }}>
+              <th className="hidden sm:table-cell" style={{ width: '180px', minWidth: '180px', whiteSpace: 'nowrap', position: 'sticky', top: 0, zIndex: 10, fontSize: '0.71875rem' }}>
                 Chứng từ
               </th>
-              <th style={{ minWidth: '280px', position: 'sticky', top: 0, zIndex: 10, fontSize: '0.71875rem' }}>
+              <th style={{ position: 'sticky', top: 0, zIndex: 10, fontSize: '0.71875rem' }}>
                 Diễn giải nghiệp vụ
               </th>
-              <th style={{ width: '90px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 10, fontSize: '0.71875rem' }}>
+              <th className="hidden sm:table-cell" style={{ width: '90px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 10, fontSize: '0.71875rem' }}>
                 Tài khoản
               </th>
-              <th style={{ width: '140px', textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, fontSize: '0.71875rem' }}>
-                Số phát sinh Nợ
+              <th style={{ width: '130px', textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, fontSize: '0.71875rem' }}>
+                <span className="hidden sm:inline">Số phát sinh Nợ</span>
+                <span className="sm:hidden">Số tiền</span>
               </th>
-              <th style={{ width: '140px', textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, fontSize: '0.71875rem' }}>
+              <th className="hidden sm:table-cell" style={{ width: '140px', textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, fontSize: '0.71875rem' }}>
                 Số phát sinh Có
               </th>
-              <th style={{ width: '105px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 10, fontSize: '0.71875rem' }}>
+              <th className="hidden sm:table-cell" style={{ width: '105px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 10, fontSize: '0.71875rem' }}>
                 Phân hệ
               </th>
             </tr>
@@ -833,12 +837,12 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
                     </td>
 
                     {/* Ngày ghi sổ */}
-                    <td style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                    <td className="hidden sm:table-cell" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                       {formatDate(entry.entryDate)}
                     </td>
 
                     {/* Số hiệu chứng từ và Tham chiếu */}
-                    <td style={{ whiteSpace: 'nowrap' }}>
+                    <td className="hidden sm:table-cell" style={{ whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', whiteSpace: 'nowrap' }}>
                         <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-primary)', whiteSpace: 'nowrap' }}>
                           {entry.entryNumber}
@@ -854,10 +858,19 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
                     {/* Diễn giải nghiệp vụ */}
                     <td>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <div className="sm:hidden flex flex-wrap items-center gap-1.5 mb-0.5">
+                          <span className="text-[11px] font-bold font-mono text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+                            {entry.entryNumber}
+                          </span>
+                          <span className="text-[11px] text-slate-500">{formatDate(entry.entryDate)}</span>
+                          <span className="text-[10.5px] font-semibold text-emerald-700">
+                            Nợ {entry.lines.filter((l) => l.type === 'DEBIT').map((l) => l.accountCode).join(',')} / Có {entry.lines.filter((l) => l.type === 'CREDIT').map((l) => l.accountCode).join(',')}
+                          </span>
+                        </div>
                         <span style={{ fontSize: '0.78125rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                           {entry.description}
                         </span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                        <div className="hidden sm:flex" style={{ alignItems: 'center', gap: '6px', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
                           <span>Ngày lập CT: {formatDate(entry.documentDate)}</span>
                           {entry.createdBy && <span>• Lập bởi: {entry.createdBy}</span>}
                         </div>
@@ -865,7 +878,7 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
                     </td>
 
                     {/* Cột mã TK tóm tắt */}
-                    <td style={{ textAlign: 'center' }}>
+                    <td className="hidden sm:table-cell" style={{ textAlign: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.6875rem' }}>
                         <span style={{ color: '#059669', fontWeight: 600 }}>
                           Nợ {entry.lines.filter((l) => l.type === 'DEBIT').map((l) => l.accountCode).join(', ')}
@@ -877,17 +890,17 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
                     </td>
 
                     {/* Tổng Nợ */}
-                    <td style={{ textAlign: 'right', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+                    <td style={{ textAlign: 'right', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                       {formatCurrency(entry.totalAmount)}
                     </td>
 
                     {/* Tổng Có */}
-                    <td style={{ textAlign: 'right', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+                    <td className="hidden sm:table-cell" style={{ textAlign: 'right', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
                       {formatCurrency(entry.totalAmount)}
                     </td>
 
                     {/* Phân hệ / Nguồn */}
-                    <td style={{ textAlign: 'center' }}>
+                    <td className="hidden sm:table-cell" style={{ textAlign: 'center' }}>
                       {getSourceBadge(entry.sourceModule)}
                     </td>
                   </tr>
@@ -905,8 +918,8 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
                         <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
                           <span style={{ fontSize: '0.625rem' }}>↳</span>
                         </td>
-                        <td style={{ color: 'var(--text-muted)' }}></td>
-                        <td>
+                        <td className="hidden sm:table-cell" style={{ color: 'var(--text-muted)' }}></td>
+                        <td className="hidden sm:table-cell">
                           <span
                             style={{
                               fontSize: '0.6875rem',
@@ -920,8 +933,19 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
                             {line.type === 'DEBIT' ? 'Nợ' : 'Có'}
                           </span>
                         </td>
-                        <td style={{ paddingLeft: '24px' }}>
+                        <td style={{ paddingLeft: '12px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                            <div className="sm:hidden flex items-center gap-1.5">
+                              <span
+                                style={{
+                                  fontSize: '0.6875rem',
+                                  fontWeight: 700,
+                                  color: line.type === 'DEBIT' ? '#059669' : '#0284c7',
+                                }}
+                              >
+                                {line.type === 'DEBIT' ? 'Nợ' : 'Có'} TK {line.accountCode}:
+                              </span>
+                            </div>
                             <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
                               {line.description || entry.description}
                             </span>
@@ -932,16 +956,17 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
                             )}
                           </div>
                         </td>
-                        <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        <td className="hidden sm:table-cell" style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text-primary)' }}>
                           {line.accountCode}
                         </td>
-                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: line.type === 'DEBIT' ? '#059669' : 'transparent', fontWeight: line.type === 'DEBIT' ? 600 : 400 }}>
-                          {line.type === 'DEBIT' ? formatCurrency(line.amount) : '-'}
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: line.type === 'DEBIT' ? '#059669' : '#0284c7', fontWeight: 600 }}>
+                          <span className="hidden sm:inline">{line.type === 'DEBIT' ? formatCurrency(line.amount) : '-'}</span>
+                          <span className="sm:hidden">{formatCurrency(line.amount)}</span>
                         </td>
-                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: line.type === 'CREDIT' ? '#0284c7' : 'transparent', fontWeight: line.type === 'CREDIT' ? 600 : 400 }}>
+                        <td className="hidden sm:table-cell" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: line.type === 'CREDIT' ? '#0284c7' : 'transparent', fontWeight: line.type === 'CREDIT' ? 600 : 400 }}>
                           {line.type === 'CREDIT' ? formatCurrency(line.amount) : '-'}
                         </td>
-                        <td style={{ textAlign: 'center', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                        <td className="hidden sm:table-cell" style={{ textAlign: 'center', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
                           {line.accountName}
                         </td>
                       </tr>

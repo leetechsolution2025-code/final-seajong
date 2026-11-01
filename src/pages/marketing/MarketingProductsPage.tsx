@@ -497,12 +497,12 @@ export const MarketingProductsPage: React.FC = () => {
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-50/80 border-b border-slate-200">
-                      <th className="py-2.5 px-3 font-bold text-slate-600 w-16 text-center">ẢNH</th>
-                      <th className="py-2.5 px-3 font-bold text-slate-600">TÊN SẢN PHẨM</th>
-                      <th className="py-2.5 px-3 font-bold text-slate-600">DANH MỤC</th>
-                      <th className="py-2.5 px-3 font-bold text-slate-600">THÔNG SỐ CHÍNH</th>
-                      <th className="py-2.5 px-3 font-bold text-slate-600 text-right">GIÁ NIÊM YẾT</th>
-                      <th className="py-2.5 px-3 font-bold text-slate-600 text-center w-24">THAO TÁC</th>
+                      <th className="py-2.5 px-2 sm:px-3 font-bold text-slate-600 w-12 sm:w-16 text-center">ẢNH</th>
+                      <th className="py-2.5 px-2 sm:px-3 font-bold text-slate-600">TÊN SẢN PHẨM</th>
+                      <th className="hidden sm:table-cell py-2.5 px-3 font-bold text-slate-600">DANH MỤC</th>
+                      <th className="hidden md:table-cell py-2.5 px-3 font-bold text-slate-600">THÔNG SỐ CHÍNH</th>
+                      <th className="py-2.5 px-2 sm:px-3 font-bold text-slate-600 text-right w-28 sm:w-auto">GIÁ NIÊM YẾT</th>
+                      <th className="hidden sm:table-cell py-2.5 px-3 font-bold text-slate-600 text-center w-24">THAO TÁC</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -514,8 +514,8 @@ export const MarketingProductsPage: React.FC = () => {
                           onClick={() => setSelectedProduct(p)}
                           className="hover:bg-slate-50/70 transition-colors cursor-pointer"
                         >
-                          <td className="py-2 px-3 text-center">
-                            <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center p-1 mx-auto overflow-hidden">
+                          <td className="py-2 px-2 sm:px-3 text-center">
+                            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center p-1 mx-auto overflow-hidden">
                               {firstImg ? (
                                 <img src={firstImg} alt="" className="w-full h-full object-contain" />
                               ) : (
@@ -523,7 +523,7 @@ export const MarketingProductsPage: React.FC = () => {
                               )}
                             </div>
                           </td>
-                          <td className="py-2.5 px-3">
+                          <td className="py-2.5 px-2 sm:px-3 min-w-0">
                             <span className="font-bold text-slate-900 block truncate max-w-sm">
                               {p.name}
                             </span>
@@ -531,7 +531,7 @@ export const MarketingProductsPage: React.FC = () => {
                               Cập nhật: {new Date(p.updatedAt).toLocaleDateString('vi-VN')}
                             </span>
                           </td>
-                          <td className="py-2.5 px-3">
+                          <td className="hidden sm:table-cell py-2.5 px-3">
                             <div className="flex items-center gap-1 flex-wrap">
                               {p.categoryNames?.slice(0, 2).map((cn) => (
                                 <span
@@ -543,16 +543,16 @@ export const MarketingProductsPage: React.FC = () => {
                               ))}
                             </div>
                           </td>
-                          <td className="py-2.5 px-3 text-[11px] text-slate-600">
+                          <td className="hidden md:table-cell py-2.5 px-3 text-[11px] text-slate-600">
                             {Object.entries(p.specs || {})
                               .slice(0, 2)
                               .map(([k, v]) => `${k} ${v}`)
                               .join(' • ') || 'Tiêu chuẩn Seajong'}
                           </td>
-                          <td className="py-2.5 px-3 text-right font-extrabold font-mono text-amber-600">
+                          <td className="py-2.5 px-2 sm:px-3 text-right font-extrabold font-mono text-amber-600 whitespace-nowrap">
                             {p.price > 0 ? `${p.price.toLocaleString('vi-VN')} ₫` : 'Liên hệ'}
                           </td>
-                          <td className="py-2.5 px-3 text-center">
+                          <td className="hidden sm:table-cell py-2.5 px-3 text-center">
                             <button
                               type="button"
                               className="px-2.5 py-1 rounded-lg border border-slate-200 text-blue-600 hover:bg-blue-50 font-bold text-[11px] transition-colors cursor-pointer"

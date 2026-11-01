@@ -66,129 +66,133 @@ export function ProductionDefectsPage() {
   const paginatedDefects = filteredDefects.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
-    <StandardPage
-      title="Xử lý hàng lỗi"
-      description="Quản lý và xử lý các sản phẩm lỗi (Bảo hành, Nội bộ & Hàng trả về)"
-      icon="bi-tools"
-      color="blue"
-      useCard={true}
-      hideTicker={true}
-    >
-      <TableToolbar
-        actionsBeforeSearch={
-          <div className="inline-flex items-center gap-1.5">
-            {[
-              { id: 'ALL', label: 'Tất cả' },
-              { id: 'INTERNAL', label: 'Nội bộ' },
-              { id: 'WARRANTY', label: 'Bảo hành' },
-              { id: 'RETURN', label: 'Trả về' },
-            ].map((tab) => (
-              <Button
-                key={tab.id}
-                type="button"
-                size="sm"
-                variant={activeTab === tab.id ? 'primary' : 'outline'}
-                onClick={() => setActiveTab(tab.id as any)}
-              >
-                {tab.label}
-              </Button>
-            ))}
-          </div>
-        }
-        filters={[
-          {
-            id: 'defect-status-filter',
-            value: statusFilter,
-            onChange: setStatusFilter,
-            minWidth: '170px',
-            options: [
-              { label: "Tất cả trạng thái", value: "" },
-              { label: "Chưa xử lý", value: "NEW" },
-              { label: "Đang xử lý", value: "PROCESSING" },
-              { label: "Chờ QC kiểm tra", value: "WAITING_QC" },
-              { label: "Đã xử lý", value: "COMPLETED" }
-            ]
+    <div className="prod-defects-page h-full">
+      <StandardPage
+        title="Xử lý hàng lỗi"
+        description="Quản lý và xử lý các sản phẩm lỗi (Bảo hành, Nội bộ & Hàng trả về)"
+        icon="bi-tools"
+        color="blue"
+        useCard={true}
+        hideTicker={true}
+      >
+        <TableToolbar
+          actionsBeforeSearch={
+            <div className="prod-defects-tabs inline-flex items-center gap-1 sm:gap-1.5">
+              {[
+                { id: 'ALL', label: 'Tất cả' },
+                { id: 'INTERNAL', label: 'Nội bộ' },
+                { id: 'WARRANTY', label: 'Bảo hành' },
+                { id: 'RETURN', label: 'Trả về' },
+              ].map((tab) => (
+                <Button
+                  key={tab.id}
+                  type="button"
+                  size="sm"
+                  className="!px-2 sm:!px-3 whitespace-nowrap"
+                  variant={activeTab === tab.id ? 'primary' : 'outline'}
+                  onClick={() => setActiveTab(tab.id as any)}
+                >
+                  {tab.label}
+                </Button>
+              ))}
+            </div>
           }
-        ]}
-        searchValue={searchQuery}
-        onSearchChange={setSearchQuery}
-        searchPlaceholder="Tìm mã lỗi, sản phẩm, SĐT khách..."
-        searchMinWidth="240px"
-        rightActions={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<PlusLg size={14} />}
-              disabled={!isProdAdmin}
-              title={!isProdAdmin ? "Chỉ Quản đốc xưởng sản xuất, Trưởng bộ phận, Trưởng phòng mới có quyền tạo hồ sơ lỗi" : undefined}
-              onClick={() => {
-                if (!isProdAdmin) return;
-                setIsCreateOffcanvasOpen(true);
-              }}
-            >
-              Tạo hồ sơ lỗi
-            </Button>
-          </div>
-        }
-        onRefresh={fetchDefects}
-        menuItems={[
-          {
-            id: 'event-calendar',
-            label: 'Lịch sự kiện',
-            icon: <CalendarEvent size={15} className="text-sky-600" />,
-            onClick: () => setIsEventCalendarOpen(true),
-          },
-          { id: 'div-1', label: '', divider: true, onClick: () => {} },
-          {
-            id: 'refresh',
-            label: 'Làm mới dữ liệu',
-            icon: <ArrowRepeat size={15} className="text-indigo-600" />,
-            onClick: fetchDefects,
-          },
-        ]}
-      />
+          filters={[
+            {
+              id: 'defect-status-filter',
+              value: statusFilter,
+              onChange: setStatusFilter,
+              minWidth: '170px',
+              options: [
+                { label: "Tất cả trạng thái", value: "" },
+                { label: "Chưa xử lý", value: "NEW" },
+                { label: "Đang xử lý", value: "PROCESSING" },
+                { label: "Chờ QC kiểm tra", value: "WAITING_QC" },
+                { label: "Đã xử lý", value: "COMPLETED" }
+              ]
+            }
+          ]}
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Tìm mã lỗi, sản phẩm, SĐT khách..."
+          searchMinWidth="240px"
+          rightActions={
+            <div className="flex items-center gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<PlusLg size={14} />}
+                disabled={!isProdAdmin}
+                title={!isProdAdmin ? "Chỉ Quản đốc xưởng sản xuất, Trưởng bộ phận, Trưởng phòng mới có quyền tạo hồ sơ lỗi" : undefined}
+                onClick={() => {
+                  if (!isProdAdmin) return;
+                  setIsCreateOffcanvasOpen(true);
+                }}
+              >
+                <span className="sm:hidden">Tạo mới</span>
+                <span className="hidden sm:inline">Tạo hồ sơ lỗi</span>
+              </Button>
+            </div>
+          }
+          onRefresh={fetchDefects}
+          menuItems={[
+            {
+              id: 'event-calendar',
+              label: 'Lịch sự kiện',
+              icon: <CalendarEvent size={15} className="text-sky-600" />,
+              onClick: () => setIsEventCalendarOpen(true),
+            },
+            { id: 'div-1', label: '', divider: true, onClick: () => {} },
+            {
+              id: 'refresh',
+              label: 'Làm mới dữ liệu',
+              icon: <ArrowRepeat size={15} className="text-indigo-600" />,
+              onClick: fetchDefects,
+            },
+          ]}
+        />
 
-      <FullWidthTable loading={loading}>
-        <DefectList data={paginatedDefects} onSelect={id => setSelectedDefectId(id)} />
-      </FullWidthTable>
+        <FullWidthTable loading={loading}>
+          <DefectList data={paginatedDefects} onSelect={id => setSelectedDefectId(id)} />
+        </FullWidthTable>
 
-      <Pagination
-        currentPage={currentPage}
-        totalItems={filteredDefects.length}
-        pageSize={pageSize}
-        onPageChange={setCurrentPage}
-        onPageSizeChange={setPageSize}
-        itemName="hồ sơ"
-      />
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredDefects.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          itemName="hồ sơ"
+        />
 
-      <DefectSummaryOffcanvas
-        defectId={selectedDefectId}
-        defect={defects.find((d: any) => d.id === selectedDefectId)}
-        onClose={() => setSelectedDefectId(null)}
-        onRefresh={fetchDefects}
-        onOpenProcess={() => setIsProcessModalOpen(true)}
-      />
-
-      <CreateDefectOffcanvas
-        show={isCreateOffcanvasOpen}
-        onClose={() => setIsCreateOffcanvasOpen(false)}
-        onRefresh={fetchDefects}
-      />
-
-      {isProcessModalOpen && (
-        <DefectProcessModal
+        <DefectSummaryOffcanvas
           defectId={selectedDefectId}
-          onClose={() => setIsProcessModalOpen(false)}
+          defect={defects.find((d: any) => d.id === selectedDefectId)}
+          onClose={() => setSelectedDefectId(null)}
+          onRefresh={fetchDefects}
+          onOpenProcess={() => setIsProcessModalOpen(true)}
+        />
+
+        <CreateDefectOffcanvas
+          show={isCreateOffcanvasOpen}
+          onClose={() => setIsCreateOffcanvasOpen(false)}
           onRefresh={fetchDefects}
         />
-      )}
 
-      <EventOffcanvas
-        isOpen={isEventCalendarOpen}
-        onClose={() => setIsEventCalendarOpen(false)}
-      />
-    </StandardPage>
+        {isProcessModalOpen && (
+          <DefectProcessModal
+            defectId={selectedDefectId}
+            onClose={() => setIsProcessModalOpen(false)}
+            onRefresh={fetchDefects}
+          />
+        )}
+
+        <EventOffcanvas
+          isOpen={isEventCalendarOpen}
+          onClose={() => setIsEventCalendarOpen(false)}
+        />
+      </StandardPage>
+    </div>
   );
 }
 

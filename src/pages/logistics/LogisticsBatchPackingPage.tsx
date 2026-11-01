@@ -5,6 +5,7 @@ import { LogisticsBatchPacking } from '@/components/logistics/batch-packing/Logi
 export const LogisticsBatchPackingPage: React.FC = () => {
   return (
     <StandardPage
+      className="logistics-mobile-page material-picking-mobile-page"
       title="Gom hàng và dán nhãn"
       description="Gom đơn soạn hàng loạt, đóng gói và in tem dán nhãn vận chuyển."
       icon="bi-box-seam-fill"

@@ -182,11 +182,12 @@ export function CreateDefectOffcanvas({
         `/api/plan-finance/inventory/search?q=${formData.productCode}&limit=5`
       );
       const data = await res.json();
-      if (data.items && data.items.length > 0) {
+      const itemsList = Array.isArray(data) ? data : (data.items || []);
+      if (itemsList.length > 0) {
         const item =
-          data.items.find(
+          itemsList.find(
             (i: any) => (i.code ? i.code.toLowerCase() : '') === formData.productCode.toLowerCase()
-          ) || data.items[0];
+          ) || itemsList[0];
         setFormData((prev) => ({ ...prev, productName: item?.tenHang || '' }));
       }
     } catch (error) {

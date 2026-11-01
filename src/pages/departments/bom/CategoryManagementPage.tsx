@@ -20,6 +20,7 @@ export const CategoryManagementPage: React.FC<CategoryManagementPageProps> = ({
       badge="DANH MỤC HỆ THỐNG"
       tickerContext="categories"
       useCard={false}
+      className="bom-category-page"
     >
       <CategoryManagementView
         onShowToast={onShowToast}

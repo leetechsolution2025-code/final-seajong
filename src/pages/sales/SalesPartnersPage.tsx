@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { StepPage } from '../../components/common/StepPage';
 import { TaskManagementView } from '../../components/common/TaskManagementView';
 import { TableToolbar } from '../../components/common/TableToolbar';
-import { FullWidthTable } from '../../components/common/FullWidthTable';
+import { FullWidthTable, SwipeableTableRow } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
 import { Offcanvas } from '../../components/common/Offcanvas';
 import { Input } from '../../components/common/Input';
@@ -161,10 +161,10 @@ export interface PartnerItem {
 }
 
 const PARTNER_STEPS: ModernStepItem[] = [
-  { num: 1, id: 'care', title: 'Chăm sóc khách hàng', desc: 'Liên hệ & Tư vấn', icon: 'bi-chat-left-dots' },
-  { num: 2, id: 'quote', title: 'Quản lý báo giá', desc: 'Thoả thuận', icon: 'bi-currency-dollar' },
-  { num: 3, id: 'contract', title: 'Theo dõi hợp đồng', desc: 'Ký kết & Hạn mức', icon: 'bi-file-earmark-text' },
-  { num: 4, id: 'construction', title: 'Kế hoạch thi công', desc: 'Thiết kế & Trưng bày', icon: 'bi-tools' },
+  { num: 1, id: 'care', title: 'Chăm sóc khách hàng', mobileTitle: 'Chăm sóc', desc: 'Liên hệ & Tư vấn', icon: 'bi-chat-left-dots' },
+  { num: 2, id: 'quote', title: 'Quản lý báo giá', mobileTitle: 'Báo giá', desc: 'Thoả thuận', icon: 'bi-currency-dollar' },
+  { num: 3, id: 'contract', title: 'Theo dõi hợp đồng', mobileTitle: 'Hợp đồng', desc: 'Ký kết & Hạn mức', icon: 'bi-file-earmark-text' },
+  { num: 4, id: 'construction', title: 'Kế hoạch thi công', mobileTitle: 'Thi công', desc: 'Thiết kế & Trưng bày', icon: 'bi-tools' },
 ];
 
 export const SalesPartnersPage: React.FC = () => {
@@ -799,6 +799,7 @@ export const SalesPartnersPage: React.FC = () => {
   ];
 
   return (
+    <div className="sales-partners-page h-full w-full flex flex-col min-h-0">
     <StepPage
       title="Phát triển mạng lưới đại lý"
       badge="PARTNERS"
@@ -857,7 +858,7 @@ export const SalesPartnersPage: React.FC = () => {
             },
           ]}
           rightActions={
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               {selectedIds.size > 0 && (
                 <DeleteButton
                   size="sm"
@@ -869,6 +870,8 @@ export const SalesPartnersPage: React.FC = () => {
                 variant="primary"
                 size="sm"
                 icon={<Plus className="w-4 h-4" />}
+                title="Thêm mới"
+                aria-label="Thêm mới"
                 onClick={() => {
                   setEditingPartnerId(null);
                   setNewPartner({
@@ -888,7 +891,7 @@ export const SalesPartnersPage: React.FC = () => {
                   setShowAddModal(true);
                 }}
               >
-                Thêm mới
+                <span className="hidden md:inline sales-partner-btn-label">Thêm mới</span>
               </Button>
             </div>
           }
@@ -901,10 +904,10 @@ export const SalesPartnersPage: React.FC = () => {
             loading={loading}
             emptyText={`Không có đối tác nào đang ở bước ${PARTNER_STEPS.find((s) => s.num === currentStep)?.title}`}
           >
-            <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+            <table className="sales-partners-table w-full text-left border-collapse" style={{ fontSize: '13px' }}>
               <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
                 <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
-                  <th className="py-2.5 px-3.5 w-10 text-center">
+                  <th className="py-2.5 px-2.5 sm:px-3.5 w-8 sm:w-10 text-center">
                     <input
                       type="checkbox"
                       checked={
@@ -925,19 +928,19 @@ export const SalesPartnersPage: React.FC = () => {
                   </th>
                   {currentStep === 2 ? (
                     <>
-                      <th className="py-2.5 px-3.5 w-[280px]">Mã hồ sơ & Tên đại lý</th>
-                      <th className="py-2.5 px-3.5 w-[190px]">Mã & Loại báo giá</th>
-                      <th className="py-2.5 px-3.5 w-[160px] text-right">Giá trị dự kiến</th>
-                      <th className="py-2.5 px-3.5 w-[110px] text-center">Chiết khấu</th>
-                      <th className="py-2.5 px-3.5 w-[170px] text-center">Trạng thái</th>
-                      <th className="py-2.5 px-3.5 w-[210px]">Phụ trách</th>
+                      <th className="py-2.5 px-2.5 sm:px-3.5 sm:w-[280px]">Mã hồ sơ & Tên đại lý</th>
+                      <th className="hidden sm:table-cell py-2.5 px-3.5 w-[190px]">Mã & Loại báo giá</th>
+                      <th className="hidden sm:table-cell py-2.5 px-3.5 w-[160px] text-right">Giá trị dự kiến</th>
+                      <th className="hidden sm:table-cell py-2.5 px-3.5 w-[110px] text-center">Chiết khấu</th>
+                      <th className="hidden sm:table-cell py-2.5 px-3.5 w-[170px] text-center">Trạng thái</th>
+                      <th className="hidden sm:table-cell py-2.5 px-3.5 w-[210px]">Phụ trách</th>
                     </>
                   ) : (
                     <>
-                      <th className="py-2.5 px-3.5 w-[290px]">Mã hồ sơ & Tên đại lý</th>
-                      <th className="py-2.5 px-3.5 w-[220px]">Đại diện & Liên hệ</th>
-                      <th className="py-2.5 px-3.5">Nhu cầu hợp tác</th>
-                      <th className="py-2.5 px-3.5 w-[230px]">Phụ trách</th>
+                      <th className="py-2.5 px-2.5 sm:px-3.5 sm:w-[290px]">Mã hồ sơ & Tên đại lý</th>
+                      <th className="hidden sm:table-cell py-2.5 px-3.5 w-[220px]">Đại diện & Liên hệ</th>
+                      <th className="hidden sm:table-cell py-2.5 px-3.5">Nhu cầu hợp tác</th>
+                      <th className="hidden sm:table-cell py-2.5 px-3.5 w-[230px]">Phụ trách</th>
                     </>
                   )}
                 </tr>
@@ -1002,16 +1005,35 @@ export const SalesPartnersPage: React.FC = () => {
                     : 'Đang thoả thuận';
 
                   return (
-                    <tr
+                    <SwipeableTableRow
                       key={p.id}
+                      rowId={`partner-s2-${p.id}`}
                       onClick={() => {
                         setSelectedPartner(p);
                         setShowDetailDrawer(true);
                       }}
                       className="hover:bg-blue-50/40 transition-colors cursor-pointer"
+                      onEdit={() => handleOpenEditPartner(p)}
+                      onDelete={async () => {
+                        const res = await fetch('/api/sales/partners/bulk-delete', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ ids: [p.id] }),
+                        });
+                        if (res.ok) {
+                          setPartners((prev) => prev.filter((item) => item.id !== p.id));
+                          setSelectedIds((prev) => {
+                            const next = new Set(prev);
+                            next.delete(p.id);
+                            return next;
+                          });
+                        }
+                      }}
+                      deleteConfirmTitle="Xác nhận xoá hồ sơ đại lý"
+                      deleteConfirmMessage={`Bạn có chắc chắn muốn xoá hồ sơ đại lý "${p.companyName || p.name}" (${p.code}) không? Hành động này không thể hoàn tác.`}
                     >
                       <td
-                        className="py-2.5 px-3.5 text-center"
+                        className="py-2.5 px-2.5 sm:px-3.5 text-center align-top sm:align-middle pt-3 sm:pt-2.5"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <input
@@ -1029,7 +1051,7 @@ export const SalesPartnersPage: React.FC = () => {
                           className="rounded border-slate-300 text-blue-600 cursor-pointer"
                         />
                       </td>
-                      <td className="py-2.5 px-3">
+                      <td className="py-2.5 px-2.5 sm:px-3 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-mono font-bold text-xs text-blue-600 hover:underline">
                             {p.code}
@@ -1044,11 +1066,44 @@ export const SalesPartnersPage: React.FC = () => {
                         {customerAddress && (
                           <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
                             <GeoAlt className="w-3 h-3 text-rose-500 shrink-0" />
-                            <span>{customerAddress}</span>
+                            <span className="truncate">{customerAddress}</span>
                           </div>
                         )}
+                        {/* Mobile compact info for Step 2 */}
+                        <div className="sm:hidden mt-1.5 pt-1.5 border-t border-dashed border-slate-200 space-y-1 text-[11px]">
+                          <div className="flex items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenQuoteForPartner(p);
+                              }}
+                              className="font-mono font-bold text-blue-600 hover:underline flex items-center gap-1"
+                            >
+                              <FileEarmarkText className="w-3 h-3 shrink-0" />
+                              <span>{p.quoteCode || 'Chưa có BG'}</span>
+                            </button>
+                            <span className="font-mono font-bold text-slate-900">
+                              {Number(p.quoteValue || 0).toLocaleString('vi-VN')} đ{' '}
+                              <span className="text-[10px] font-semibold text-slate-500">
+                                (-{Number(p.discountRate || 0)}%)
+                              </span>
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${statusClass}`}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
+                              {statusLabel}
+                            </span>
+                            <span className="text-[10.5px] text-slate-500">
+                              PT: <strong className="text-slate-700">{p.owner}</strong>
+                            </span>
+                          </div>
+                        </div>
                       </td>
-                      <td className="py-2.5 px-3">
+                      <td className="hidden sm:table-cell py-2.5 px-3">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1073,7 +1128,7 @@ export const SalesPartnersPage: React.FC = () => {
                           </span>
                         </div>
                       </td>
-                      <td className="py-2.5 px-3.5 text-right">
+                      <td className="hidden sm:table-cell py-2.5 px-3.5 text-right">
                         <div className="font-mono font-bold text-slate-900 text-[13px]">
                           {Number(p.quoteValue || 0).toLocaleString('vi-VN')} đ
                         </div>
@@ -1083,12 +1138,12 @@ export const SalesPartnersPage: React.FC = () => {
                           </div>
                         )}
                       </td>
-                      <td className="py-2.5 px-3 text-center">
+                      <td className="hidden sm:table-cell py-2.5 px-3 text-center">
                         <span className="inline-block px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 font-mono font-bold text-xs">
                           {Number(p.discountRate || 0)}%
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 text-center">
+                      <td className="hidden sm:table-cell py-2.5 px-3 text-center">
                         <div className="inline-flex flex-col items-center gap-1">
                           <span
                             className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${statusClass}`}
@@ -1105,7 +1160,7 @@ export const SalesPartnersPage: React.FC = () => {
                           </span>
                         </div>
                       </td>
-                      <td className="py-2.5 px-3">
+                      <td className="hidden sm:table-cell py-2.5 px-3">
                         <div className="font-medium text-slate-800 text-xs">{p.owner}</div>
                         {p.ownerPhone && (
                           <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
@@ -1120,21 +1175,40 @@ export const SalesPartnersPage: React.FC = () => {
                           </div>
                         )}
                       </td>
-                    </tr>
+                    </SwipeableTableRow>
                   );
                 }
 
                 return (
-                  <tr
+                  <SwipeableTableRow
                     key={p.id}
+                    rowId={`partner-s13-${p.id}`}
                     onClick={() => {
                       setSelectedPartner(p);
                       setShowDetailDrawer(true);
                     }}
                     className="hover:bg-blue-50/40 transition-colors cursor-pointer"
+                    onEdit={() => handleOpenEditPartner(p)}
+                    onDelete={async () => {
+                      const res = await fetch('/api/sales/partners/bulk-delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ids: [p.id] }),
+                      });
+                      if (res.ok) {
+                        setPartners((prev) => prev.filter((item) => item.id !== p.id));
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev);
+                          next.delete(p.id);
+                          return next;
+                        });
+                      }
+                    }}
+                    deleteConfirmTitle="Xác nhận xoá hồ sơ đại lý"
+                    deleteConfirmMessage={`Bạn có chắc chắn muốn xoá hồ sơ đại lý "${p.companyName || p.name}" (${p.code}) không? Hành động này không thể hoàn tác.`}
                   >
                     <td
-                      className="py-2.5 px-3.5 text-center"
+                      className="py-2.5 px-2.5 sm:px-3.5 text-center align-top sm:align-middle pt-3 sm:pt-2.5"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <input
@@ -1152,7 +1226,7 @@ export const SalesPartnersPage: React.FC = () => {
                         className="rounded border-slate-300 text-blue-600 cursor-pointer"
                       />
                     </td>
-                    <td className="py-2.5 px-3">
+                    <td className="py-2.5 px-2.5 sm:px-3 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-mono font-bold text-xs text-blue-600 hover:underline">
                           {p.code}
@@ -1189,11 +1263,26 @@ export const SalesPartnersPage: React.FC = () => {
                       {customerAddress && (
                         <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
                           <GeoAlt className="w-3 h-3 text-rose-500 shrink-0" />
-                          <span>{customerAddress}</span>
+                          <span className="truncate">{customerAddress}</span>
                         </div>
                       )}
+                      {/* Mobile compact info for Step 1 & Step 3 */}
+                      <div className="sm:hidden mt-1.5 pt-1.5 border-t border-dashed border-slate-200 space-y-0.5 text-[11px]">
+                        <div className="flex items-center justify-between gap-2 text-slate-600">
+                          <span className="truncate">
+                            ĐD: <strong className="text-slate-800">{p.name}</strong> •{' '}
+                            <span className="font-mono">{p.phone}</span>
+                          </span>
+                          <span className="text-[10.5px] text-slate-500 shrink-0">
+                            PT: <strong className="text-slate-700">{p.owner}</strong>
+                          </span>
+                        </div>
+                        <div className="text-[10.5px] text-slate-500 line-clamp-1">
+                          {p.notes || 'Tư vấn chính sách đại lý & trưng bày mẫu'}
+                        </div>
+                      </div>
                     </td>
-                    <td className="py-2.5 px-3">
+                    <td className="hidden sm:table-cell py-2.5 px-3">
                       <div className="font-medium text-slate-700">{p.name}</div>
                       <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
                         <Telephone className="w-3 h-3 text-emerald-600 shrink-0" />
@@ -1206,12 +1295,12 @@ export const SalesPartnersPage: React.FC = () => {
                         </div>
                       )}
                     </td>
-                    <td className="py-2.5 px-3 text-slate-700 text-xs">
+                    <td className="hidden sm:table-cell py-2.5 px-3 text-slate-700 text-xs">
                       <div className="line-clamp-2 leading-relaxed">
                         {p.notes || 'Tư vấn chính sách đại lý & trưng bày mẫu'}
                       </div>
                     </td>
-                    <td className="py-2.5 px-3">
+                    <td className="hidden sm:table-cell py-2.5 px-3">
                       <div className="font-medium text-slate-800 text-xs">{p.owner}</div>
                       {p.ownerPhone && (
                         <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
@@ -1226,7 +1315,7 @@ export const SalesPartnersPage: React.FC = () => {
                         </div>
                       )}
                     </td>
-                  </tr>
+                  </SwipeableTableRow>
                 );
               })}
             </tbody>
@@ -2079,6 +2168,8 @@ export const SalesPartnersPage: React.FC = () => {
                     </div>
                     <button
                       type="button"
+                      title="Thêm quá trình chăm sóc"
+                      aria-label="Thêm quá trình chăm sóc"
                       onClick={() => {
                         setCareForm({
                           executionTime: getCurrentDateTimeLocal(),
@@ -2094,10 +2185,10 @@ export const SalesPartnersPage: React.FC = () => {
                         });
                         setShowAddCareForm(true);
                       }}
-                      className="btn btn-primary btn-sm px-2.5 py-1 rounded-lg text-white text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                      className="btn btn-primary btn-sm px-2.5 py-1 rounded-lg text-white text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer sales-partner-care-add-btn"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>Thêm</span>
+                      <span className="hidden md:inline sales-partner-btn-label">Thêm</span>
                     </button>
                   </div>
 
@@ -2470,6 +2561,7 @@ export const SalesPartnersPage: React.FC = () => {
         }}
       />
     </StepPage>
+    </div>
   );
 };
 

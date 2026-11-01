@@ -599,6 +599,7 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
 
             <button
               type="button"
+              className="!hidden sm:!inline-flex"
               onClick={() => setIsDataSourcesOpen(true)}
               title="Xem chi tiết các bảng CSDL được kết nối tự động kết xuất báo cáo tài chính"
               style={{
@@ -631,7 +632,7 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
           </div>
         }
         rightActions={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
             <Button
               variant="outline"
               size="sm"
@@ -651,12 +652,14 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
               }}
             >
               {isClosingPeriod ? <ArrowClockwise className="spinner-border spinner-border-sm" size={14} /> : <JournalCheck size={14} />}
-              <span>{isClosingPeriod ? 'Đang kết chuyển...' : 'Chốt sổ & Kết chuyển'}</span>
+              <span className="hidden sm:inline">{isClosingPeriod ? 'Đang kết chuyển...' : 'Chốt sổ & Kết chuyển'}</span>
+              <span className="sm:hidden">{isClosingPeriod ? '...' : 'Chốt sổ'}</span>
             </Button>
 
             <Button
               variant="outline"
               size="sm"
+              className="!hidden sm:!inline-flex"
               onClick={handlePrint}
               style={{
                 height: '34px',
@@ -673,6 +676,7 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
             <Button
               variant="primary"
               size="sm"
+              className="!hidden sm:!inline-flex"
               onClick={handleExportExcel}
               style={{
                 height: '34px',
@@ -698,6 +702,7 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
 
       {/* 3. Tabs Chuyển đổi Biểu mẫu Báo cáo Tài chính */}
       <div
+        className="finance-reports-tabs"
         style={{
           display: 'flex',
           gap: '8px',
@@ -726,8 +731,10 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
             gap: '6px',
           }}
         >
-          <span>Bảng cân đối kế toán</span>
+          <span className="hidden sm:inline">Bảng cân đối kế toán</span>
+          <span className="sm:hidden">Cân đối KT</span>
           <span
+            className="hidden sm:inline"
             style={{
               fontSize: '0.6875rem',
               padding: '1px 6px',
@@ -757,8 +764,10 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
             gap: '6px',
           }}
         >
-          <span>Báo cáo kết quả HĐKD</span>
+          <span className="hidden sm:inline">Báo cáo kết quả HĐKD</span>
+          <span className="sm:hidden">Kết quả KD</span>
           <span
+            className="hidden sm:inline"
             style={{
               fontSize: '0.6875rem',
               padding: '1px 6px',
@@ -788,8 +797,10 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
             gap: '6px',
           }}
         >
-          <span>Lưu chuyển tiền tệ</span>
+          <span className="hidden sm:inline">Lưu chuyển tiền tệ</span>
+          <span className="sm:hidden">Lưu chuyển tiền</span>
           <span
+            className="hidden sm:inline"
             style={{
               fontSize: '0.6875rem',
               padding: '1px 6px',
@@ -819,8 +830,10 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
             gap: '6px',
           }}
         >
-          <span>Chỉ số tài chính và Sức khỏe DN</span>
+          <span className="hidden sm:inline">Chỉ số tài chính và Sức khỏe DN</span>
+          <span className="sm:hidden">Chỉ số TC</span>
           <span
+            className="hidden sm:inline"
             style={{
               fontSize: '0.6875rem',
               padding: '1px 6px',
@@ -869,10 +882,10 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
               <thead>
                 <tr style={{ backgroundColor: 'var(--bg-surface-2)', borderBottom: '1px solid var(--border-default)', textTransform: 'uppercase', fontFamily: "'Roboto Condensed', sans-serif" }}>
                   <th style={{ padding: '8px 12px', textAlign: 'left', width: '45%', position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-surface-2)', boxShadow: '0 1px 0 var(--border-default)', fontFamily: "'Roboto Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.02em' }}>CHỈ TIÊU</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'center', width: '10%', position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-surface-2)', boxShadow: '0 1px 0 var(--border-default)', fontFamily: "'Roboto Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.02em' }}>MÃ SỐ</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'center', width: '12%', position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-surface-2)', boxShadow: '0 1px 0 var(--border-default)', fontFamily: "'Roboto Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.02em' }}>THUYẾT MINH</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'right', width: '16.5%', position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-surface-2)', boxShadow: '0 1px 0 var(--border-default)', fontFamily: "'Roboto Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.02em' }}>SỐ CUỐI KỲ / KỲ NÀY</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'right', width: '16.5%', position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-surface-2)', boxShadow: '0 1px 0 var(--border-default)', fontFamily: "'Roboto Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.02em' }}>SỐ ĐẦU KỲ / KỲ TRƯỚC</th>
+                  <th className="hidden sm:table-cell" style={{ padding: '8px 12px', textAlign: 'center', width: '10%', position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-surface-2)', boxShadow: '0 1px 0 var(--border-default)', fontFamily: "'Roboto Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.02em' }}>MÃ SỐ</th>
+                  <th className="hidden sm:table-cell" style={{ padding: '8px 12px', textAlign: 'center', width: '12%', position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-surface-2)', boxShadow: '0 1px 0 var(--border-default)', fontFamily: "'Roboto Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.02em' }}>THUYẾT MINH</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right', width: '16.5%', position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-surface-2)', boxShadow: '0 1px 0 var(--border-default)', fontFamily: "'Roboto Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.02em' }}>SỐ CUỐI KỲ</th>
+                  <th className="hidden sm:table-cell" style={{ padding: '8px 12px', textAlign: 'right', width: '16.5%', position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-surface-2)', boxShadow: '0 1px 0 var(--border-default)', fontFamily: "'Roboto Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.02em' }}>SỐ ĐẦU KỲ / KỲ TRƯỚC</th>
                 </tr>
               </thead>
               <tbody style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
@@ -961,11 +974,20 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
                               Khởi tạo
                             </span>
                           )}
+                          <div className="sm:hidden flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[11px] font-normal text-slate-500">
+                            <span>Mã: <strong className="font-mono text-slate-700">{row.code}</strong></span>
+                            {row.opening !== 0 && (
+                              <>
+                                <span>•</span>
+                                <span>Đầu kỳ: <strong className="font-mono text-slate-600">{formatMoney(row.opening)}</strong></span>
+                              </>
+                            )}
+                          </div>
                         </td>
-                        <td style={{ padding: '7px 12px', textAlign: 'center', color: row.isEstimated ? '#dc2626' : 'var(--text-secondary)', fontFamily: "'Roboto Condensed', sans-serif", fontWeight: 600, fontSize: '0.8125rem' }}>
+                        <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center', color: row.isEstimated ? '#dc2626' : 'var(--text-secondary)', fontFamily: "'Roboto Condensed', sans-serif", fontWeight: 600, fontSize: '0.8125rem' }}>
                           {row.code}
                         </td>
-                        <td style={{ padding: '7px 12px', textAlign: 'center', color: 'var(--text-secondary)', fontFamily: "'Roboto Condensed', sans-serif", fontSize: '0.8125rem' }}>
+                        <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center', color: 'var(--text-secondary)', fontFamily: "'Roboto Condensed', sans-serif", fontSize: '0.8125rem' }}>
                           {row.note || '-'}
                         </td>
                         <td
@@ -993,6 +1015,7 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
                             letterSpacing: '0.01em',
                             fontSize: '0.84375rem',
                             fontWeight: row.isBold ? 700 : 500,
+                            whiteSpace: 'nowrap',
                             color: row.isEstimated ? '#dc2626' : isTotalRow ? 'var(--color-primary)' : 'var(--text-primary)',
                             cursor: row.isEstimated ? 'help' : (row.breakdown || row.interestBreakdown || row.loanBreakdown) ? 'pointer' : 'default',
                           }}
@@ -1000,6 +1023,7 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
                           {formatMoney(row.closing)}
                         </td>
                         <td
+                          className="hidden sm:table-cell"
                           style={{
                             padding: '7px 12px',
                             textAlign: 'right',
@@ -1024,7 +1048,7 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
       ) : (
         /* Tab Chỉ số tài chính và Sức khỏe DN */
         <div
-          className="custom-scrollbar"
+          className="custom-scrollbar finance-ratios-grid"
           style={{
             flex: '1 1 0%',
             minHeight: 0,

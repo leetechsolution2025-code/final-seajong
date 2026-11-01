@@ -20,7 +20,6 @@ import {
   LockFill,
   ForkKnife,
   ChevronLeft,
-  ChevronRight,
   BoxArrowRight,
 } from 'react-bootstrap-icons';
 import { Button } from '../../../components/common/Button';
@@ -2176,42 +2175,6 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
         minHeight: 0,
       }}
     >
-        {/* Banner gợi ý vuốt mở Bảng công trên điện thoại và iPad/tablet */}
-        {isTabletOrMobile && (
-          <div
-            onClick={() => setShowMobileRightColumn(true)}
-            style={{
-              backgroundColor: '#eff6ff',
-              border: '1px dashed #93c5fd',
-              borderRadius: '8px',
-              padding: '9px 12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              cursor: 'pointer',
-              userSelect: 'none',
-              boxShadow: '0 1px 2px rgba(37, 99, 235, 0.05)',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', color: '#1e40af', fontWeight: 700 }}>
-              <ChevronLeft size={14} /> Vuốt sang trái để xem Bảng công &amp; KPI
-            </div>
-            <span
-              style={{
-                fontSize: '0.6875rem',
-                fontWeight: 800,
-                color: '#2563eb',
-                backgroundColor: '#dbeafe',
-                padding: '2px 8px',
-                borderRadius: '4px',
-              }}
-            >
-              Mở bảng công ›
-            </span>
-          </div>
-        )}
-
         {/* VÙNG CHỨC NĂNG CỘT TRÁI */}
         <div
           style={{
@@ -3429,44 +3392,6 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
             }),
       }}
     >
-        {/* Thanh tiêu đề thao tác đóng trên Mobile / Tablet */}
-        {isTabletOrMobile && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '10px 14px',
-              backgroundColor: '#ffffff',
-              borderRadius: '8px',
-              border: '1px solid #cbd5e1',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: '#1e40af' }}>
-              <ChevronRight size={16} color="#2563eb" /> Vuốt từ trái sang phải để ẩn
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowMobileRightColumn(false)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '5px 12px',
-                borderRadius: '6px',
-                border: '1px solid #cbd5e1',
-                backgroundColor: '#f1f5f9',
-                color: '#0f172a',
-                fontSize: '0.75rem',
-                fontWeight: 800,
-                cursor: 'pointer',
-              }}
-            >
-              <X size={16} /> Đóng bảng
-            </button>
-          </div>
-        )}
         {/* KHỐI 1: THÔNG TIN NHÂN VIÊN VÀ 5 CHỈ SỐ KPI CHẤM CÔNG */}
         <div
           style={{
@@ -3483,14 +3408,14 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
           <div
             style={{
               display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
+              flexWrap: isMobileScreen ? 'nowrap' : 'wrap',
+              alignItems: isMobileScreen ? 'flex-start' : 'center',
               justifyContent: 'space-between',
-              gap: '12px',
+              gap: isMobileScreen ? '8px' : '12px',
             }}
           >
             {/* Thông tin nhân viên */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '240px' }}>
+            <div style={{ display: 'flex', alignItems: isMobileScreen ? 'flex-start' : 'center', gap: isMobileScreen ? '10px' : '12px', minWidth: isMobileScreen ? 0 : '240px', flex: isMobileScreen ? 1 : undefined }}>
               <div
                 style={{
                   width: '38px',
@@ -3506,16 +3431,17 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                   boxShadow: '0 2px 5px rgba(0, 0, 0, 0.15)',
                   letterSpacing: '0.5px',
                   flexShrink: 0,
+                  marginTop: isMobileScreen ? '3px' : 0,
                 }}
               >
                 {currentEmployee.initials}
               </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minHeight: isMobileScreen ? '26px' : undefined }}>
+                  <span style={{ fontSize: isMobileScreen ? '0.98rem' : '1.05rem', fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
                     {currentEmployee.name}
                   </span>
-                  {currentEmployee.code && (
+                  {!isMobileScreen && currentEmployee.code && (
                     <span
                       style={{
                         fontSize: '0.72rem',
@@ -3538,6 +3464,7 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                       fontSize: '0.72rem',
                       fontWeight: 700,
                       padding: '2px 10px',
+                      height: isMobileScreen ? '24px' : undefined,
                       borderRadius: '9999px',
                       backgroundColor:
                         employeeStatus === 'working'
@@ -3582,22 +3509,22 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                       : 'Đã nghỉ việc'}
                   </span>
                 </div>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '1px', fontWeight: 600 }}>
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: isMobileScreen ? '2px' : '1px', fontWeight: 600 }}>
                   {currentEmployee.role} • {currentEmployee.department}
                 </div>
               </div>
             </div>
 
             {/* Bộ điều khiển tháng */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, height: isMobileScreen ? '26px' : undefined }}>
               <Select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
                 style={{
-                  minWidth: '104px',
-                  height: '32px',
-                  padding: '4px 28px 4px 10px',
-                  fontSize: '0.78rem',
+                  minWidth: isMobileScreen ? '92px' : '104px',
+                  height: isMobileScreen ? '26px' : '32px',
+                  padding: isMobileScreen ? '0 26px 0 10px' : '4px 28px 4px 10px',
+                  fontSize: isMobileScreen ? '0.75rem' : '0.78rem',
                   fontWeight: 700,
                   marginBottom: 0,
                 }}
@@ -3736,79 +3663,120 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
               </div>
             </div>
 
-            {/* THẺ 4: ĂN TRƯA */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
-              <div
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '10px',
-                  backgroundColor: '#fff1f2',
-                  border: '1.5px solid #fecdd3',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#e11d48',
-                  flexShrink: 0,
-                }}
-              >
-                <Sun size={16} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>
-                  {totalLunchCount}
-                </div>
+            {isMobileScreen ? (
+              /* THẺ 4 (ĐIỆN THOẠI): GỘP ĂN TRƯA & ĂN TỐI */
+              <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
                 <div
                   style={{
-                    fontSize: '0.65rem',
-                    fontWeight: 700,
-                    color: '#64748b',
-                    letterSpacing: '0.4px',
-                    textTransform: 'uppercase',
-                    marginTop: '1px',
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    backgroundColor: '#fff1f2',
+                    border: '1.5px solid #fecdd3',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#e11d48',
+                    flexShrink: 0,
                   }}
                 >
-                  ĂN TRƯA
+                  <ForkKnife size={16} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>
+                    {totalLunchCount} <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#94a3b8' }}>/</span> {totalDinnerCount}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      color: '#64748b',
+                      letterSpacing: '0.4px',
+                      textTransform: 'uppercase',
+                      marginTop: '1px',
+                    }}
+                  >
+                    ĂN TRƯA / TỐI
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <>
+                {/* THẺ 4: ĂN TRƯA */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                  <div
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '10px',
+                      backgroundColor: '#fff1f2',
+                      border: '1.5px solid #fecdd3',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#e11d48',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Sun size={16} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>
+                      {totalLunchCount}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: '0.65rem',
+                        fontWeight: 700,
+                        color: '#64748b',
+                        letterSpacing: '0.4px',
+                        textTransform: 'uppercase',
+                        marginTop: '1px',
+                      }}
+                    >
+                      ĂN TRƯA
+                    </div>
+                  </div>
+                </div>
 
-            {/* THẺ 5: ĂN TỐI */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
-              <div
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '10px',
-                  backgroundColor: '#f5f3ff',
-                  border: '1.5px solid #ddd6fe',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#6366f1',
-                  flexShrink: 0,
-                }}
-              >
-                <MoonStars size={16} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>
-                  {totalDinnerCount}
+                {/* THẺ 5: ĂN TỐI */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                  <div
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '10px',
+                      backgroundColor: '#f5f3ff',
+                      border: '1.5px solid #ddd6fe',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#6366f1',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <MoonStars size={16} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>
+                      {totalDinnerCount}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: '0.65rem',
+                        fontWeight: 700,
+                        color: '#64748b',
+                        letterSpacing: '0.4px',
+                        textTransform: 'uppercase',
+                        marginTop: '1px',
+                      }}
+                    >
+                      ĂN TỐI
+                    </div>
+                  </div>
                 </div>
-                <div
-                  style={{
-                    fontSize: '0.65rem',
-                    fontWeight: 700,
-                    color: '#64748b',
-                    letterSpacing: '0.4px',
-                    textTransform: 'uppercase',
-                    marginTop: '1px',
-                  }}
-                >
-                  ĂN TỐI
-                </div>
-              </div>
-            </div>
+              </>
+            )}
           </div>
       </div>
 
@@ -3848,23 +3816,37 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
             </div>
 
             {/* Tabs lọc trạng thái */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#f1f5f9', padding: '3px', borderRadius: '8px' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: isMobileScreen ? 'space-between' : 'flex-start',
+                width: isMobileScreen ? '100%' : 'auto',
+                gap: isMobileScreen ? '2px' : '4px',
+                backgroundColor: '#f1f5f9',
+                padding: '3px',
+                borderRadius: '8px',
+              }}
+            >
               <button
                 type="button"
                 onClick={() => setTableFilter('all')}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  padding: '5px 10px',
+                  justifyContent: 'center',
+                  flex: isMobileScreen ? 1 : undefined,
+                  padding: isMobileScreen ? '5px 6px' : '5px 10px',
                   borderRadius: '6px',
                   border: 'none',
                   backgroundColor: tableFilter === 'all' ? '#ffffff' : 'transparent',
                   color: tableFilter === 'all' ? '#0f172a' : '#64748b',
-                  fontSize: '0.75rem',
+                  fontSize: isMobileScreen ? '0.72rem' : '0.75rem',
                   fontWeight: tableFilter === 'all' ? 800 : 600,
                   cursor: 'pointer',
                   boxShadow: tableFilter === 'all' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
                   transition: 'all 0.15s ease',
+                  whiteSpace: 'nowrap',
                 }}
               >
                 <span>Tất cả</span>
@@ -3873,16 +3855,17 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    minWidth: '20px',
-                    height: '20px',
+                    minWidth: '18px',
+                    height: '18px',
                     padding: '0 5px',
-                    borderRadius: '10px',
+                    borderRadius: '9px',
                     fontSize: '0.6875rem',
                     fontWeight: 800,
-                    marginLeft: '6px',
+                    marginLeft: isMobileScreen ? '4px' : '6px',
                     backgroundColor: tableFilter === 'all' ? '#0f172a' : '#e2e8f0',
                     color: tableFilter === 'all' ? '#ffffff' : '#475569',
                     lineHeight: 1,
+                    flexShrink: 0,
                   }}
                 >
                   {fullMonthRecords.length}
@@ -3894,16 +3877,19 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  padding: '5px 10px',
+                  justifyContent: 'center',
+                  flex: isMobileScreen ? 1 : undefined,
+                  padding: isMobileScreen ? '5px 6px' : '5px 10px',
                   borderRadius: '6px',
                   border: 'none',
                   backgroundColor: tableFilter === 'work' ? '#ffffff' : 'transparent',
                   color: tableFilter === 'work' ? '#15803d' : '#64748b',
-                  fontSize: '0.75rem',
+                  fontSize: isMobileScreen ? '0.72rem' : '0.75rem',
                   fontWeight: tableFilter === 'work' ? 800 : 600,
                   cursor: 'pointer',
                   boxShadow: tableFilter === 'work' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
                   transition: 'all 0.15s ease',
+                  whiteSpace: 'nowrap',
                 }}
               >
                 <span>Đi làm</span>
@@ -3912,16 +3898,17 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    minWidth: '20px',
-                    height: '20px',
+                    minWidth: '18px',
+                    height: '18px',
                     padding: '0 5px',
-                    borderRadius: '10px',
+                    borderRadius: '9px',
                     fontSize: '0.6875rem',
                     fontWeight: 800,
-                    marginLeft: '6px',
+                    marginLeft: isMobileScreen ? '4px' : '6px',
                     backgroundColor: tableFilter === 'work' ? '#16a34a' : '#dcfce7',
                     color: tableFilter === 'work' ? '#ffffff' : '#15803d',
                     lineHeight: 1,
+                    flexShrink: 0,
                   }}
                 >
                   {workedDaysCount}
@@ -3933,34 +3920,38 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  padding: '5px 10px',
+                  justifyContent: 'center',
+                  flex: isMobileScreen ? 1 : undefined,
+                  padding: isMobileScreen ? '5px 6px' : '5px 10px',
                   borderRadius: '6px',
                   border: 'none',
                   backgroundColor: tableFilter === 'late_early' ? '#ffffff' : 'transparent',
                   color: tableFilter === 'late_early' ? '#b45309' : '#64748b',
-                  fontSize: '0.75rem',
+                  fontSize: isMobileScreen ? '0.72rem' : '0.75rem',
                   fontWeight: tableFilter === 'late_early' ? 800 : 600,
                   cursor: 'pointer',
                   boxShadow: tableFilter === 'late_early' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
                   transition: 'all 0.15s ease',
+                  whiteSpace: 'nowrap',
                 }}
               >
-                <span>Đi muộn / Về sớm</span>
+                <span>{isMobileScreen ? 'Muộn/Sớm' : 'Đi muộn / Về sớm'}</span>
                 <span
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    minWidth: '20px',
-                    height: '20px',
+                    minWidth: '18px',
+                    height: '18px',
                     padding: '0 5px',
-                    borderRadius: '10px',
+                    borderRadius: '9px',
                     fontSize: '0.6875rem',
                     fontWeight: 800,
-                    marginLeft: '6px',
+                    marginLeft: isMobileScreen ? '4px' : '6px',
                     backgroundColor: tableFilter === 'late_early' ? '#d97706' : '#fef3c7',
                     color: tableFilter === 'late_early' ? '#ffffff' : '#b45309',
                     lineHeight: 1,
+                    flexShrink: 0,
                   }}
                 >
                   {lateEarlyCount}
@@ -3972,16 +3963,19 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  padding: '5px 10px',
+                  justifyContent: 'center',
+                  flex: isMobileScreen ? 1 : undefined,
+                  padding: isMobileScreen ? '5px 6px' : '5px 10px',
                   borderRadius: '6px',
                   border: 'none',
                   backgroundColor: tableFilter === 'ot' ? '#ffffff' : 'transparent',
                   color: tableFilter === 'ot' ? '#4338ca' : '#64748b',
-                  fontSize: '0.75rem',
+                  fontSize: isMobileScreen ? '0.72rem' : '0.75rem',
                   fontWeight: tableFilter === 'ot' ? 800 : 600,
                   cursor: 'pointer',
                   boxShadow: tableFilter === 'ot' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
                   transition: 'all 0.15s ease',
+                  whiteSpace: 'nowrap',
                 }}
               >
                 <span>Tăng ca</span>
@@ -3990,16 +3984,17 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    minWidth: '20px',
-                    height: '20px',
+                    minWidth: '18px',
+                    height: '18px',
                     padding: '0 5px',
-                    borderRadius: '10px',
+                    borderRadius: '9px',
                     fontSize: '0.6875rem',
                     fontWeight: 800,
-                    marginLeft: '6px',
+                    marginLeft: isMobileScreen ? '4px' : '6px',
                     backgroundColor: tableFilter === 'ot' ? '#7e22ce' : '#ede9fe',
                     color: tableFilter === 'ot' ? '#ffffff' : '#6b21a8',
                     lineHeight: 1,
+                    flexShrink: 0,
                   }}
                 >
                   {otOccurrences}
@@ -4041,16 +4036,16 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                     letterSpacing: '0.3px',
                   }}
                 >
-                  <th style={{ padding: '12px 14px', width: '32%', whiteSpace: 'nowrap' }}>
+                  <th style={{ padding: isMobileScreen ? '10px 6px 10px 10px' : '12px 14px', width: isMobileScreen ? '30%' : '32%', whiteSpace: 'nowrap' }}>
                     THỜI GIAN
                   </th>
-                  <th style={{ padding: '12px 8px', width: '26%', whiteSpace: 'nowrap' }}>
-                    SÁNG ({shiftHours.morningStart || '08:00'} - {shiftHours.morningEnd || '12:00'})
+                  <th style={{ padding: isMobileScreen ? '10px 6px' : '12px 8px', width: '26%', whiteSpace: 'nowrap' }}>
+                    {isMobileScreen ? 'SÁNG' : `SÁNG (${shiftHours.morningStart || '08:00'} - ${shiftHours.morningEnd || '12:00'})`}
                   </th>
-                  <th style={{ padding: '12px 8px', width: '26%', whiteSpace: 'nowrap' }}>
-                    CHIỀU ({shiftHours.afternoonStart || '13:30'} - {shiftHours.afternoonEnd || '17:30'})
+                  <th style={{ padding: isMobileScreen ? '10px 6px' : '12px 8px', width: '26%', whiteSpace: 'nowrap' }}>
+                    {isMobileScreen ? 'CHIỀU' : `CHIỀU (${shiftHours.afternoonStart || '13:30'} - ${shiftHours.afternoonEnd || '17:30'})`}
                   </th>
-                  <th style={{ padding: '12px 14px', width: '16%', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <th style={{ padding: isMobileScreen ? '10px 10px 10px 4px' : '12px 14px', width: isMobileScreen ? '18%' : '16%', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     TỔNG CÔNG
                   </th>
                 </tr>
@@ -4090,7 +4085,7 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                         }}
                       >
                         {/* 1. THỜI GIAN */}
-                        <td style={{ padding: '12px 14px', verticalAlign: 'middle' }}>
+                        <td style={{ padding: isMobileScreen ? '10px 6px 10px 10px' : '12px 14px', verticalAlign: 'middle' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ fontWeight: 700, fontSize: '0.8125rem', color: '#1e293b', whiteSpace: 'nowrap' }}>
                               {shortDay}, {formattedDate}
@@ -4153,7 +4148,7 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                         </td>
 
                         {/* 2. SÁNG (08:00 - 12:00) */}
-                        <td style={{ padding: '12px 8px', verticalAlign: 'middle' }}>
+                        <td style={{ padding: isMobileScreen ? '10px 6px' : '12px 8px', verticalAlign: 'middle' }}>
                           {(() => {
                             const hasMorningLeaveShift = Boolean(
                               r.leaveInfo &&
@@ -4367,7 +4362,7 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                         </td>
 
                         {/* 3. CHIỀU (13:30 - 17:30) */}
-                        <td style={{ padding: '12px 8px', verticalAlign: 'middle' }}>
+                        <td style={{ padding: isMobileScreen ? '10px 6px' : '12px 8px', verticalAlign: 'middle' }}>
                           {(() => {
                             const hasAfternoonLeaveShift = Boolean(
                               r.leaveInfo &&
@@ -4594,7 +4589,7 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                         </td>
 
                         {/* 4. TỔNG CÔNG */}
-                        <td style={{ padding: '12px 14px', textAlign: 'right', verticalAlign: 'middle' }}>
+                        <td style={{ padding: isMobileScreen ? '10px 10px 10px 4px' : '12px 14px', textAlign: 'right', verticalAlign: 'middle' }}>
                           <div
                             style={{
                               fontSize: '0.9375rem',
@@ -5140,13 +5135,16 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
           />
 
           <div
+            className="app-custom-drawer"
             style={{
               position: 'fixed',
               top: 0,
               right: 0,
+              left: isMobileScreen ? 0 : undefined,
               bottom: 0,
-              width: '400px',
+              width: isMobileScreen ? '100vw' : '400px',
               maxWidth: '100vw',
+              height: '100dvh',
               backgroundColor: '#ffffff',
               boxShadow: '-6px 0 25px rgba(0, 0, 0, 0.12)',
               zIndex: 1201,
@@ -5517,6 +5515,7 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
             <div
               style={{
                 padding: '10px 14px',
+                paddingBottom: 'max(10px, calc(8px + env(safe-area-inset-bottom, 0px)))',
                 borderTop: '1px solid #e2e8f0',
                 backgroundColor: '#ffffff',
               }}

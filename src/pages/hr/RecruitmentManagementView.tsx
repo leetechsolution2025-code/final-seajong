@@ -13,7 +13,7 @@ import {
   Envelope,
 } from 'react-bootstrap-icons';
 import { TableToolbar } from '../../components/common/TableToolbar';
-import { FullWidthTable } from '../../components/common/FullWidthTable';
+import { FullWidthTable, SwipeableTableRow } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
 import { Badge } from '../../components/common/Badge';
 import { Button } from '../../components/common/Button';
@@ -284,14 +284,14 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
 
     // Lấy danh sách chức vụ thực tế từ CSDL
     fetch('/api/positions')
-      .then((res) => res.json())
+      .then((res) => (res.ok ? res.json() : []))
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
           const names = data.map((p: any) => (typeof p === 'string' ? p : p?.name)).filter(Boolean);
           if (names.length > 0) setPositionList(names);
         }
       })
-      .catch((err) => console.error('Lỗi khi tải danh sách chức vụ:', err));
+      .catch(() => {});
   }, []);
 
   // ─────────────────────────────────────────────────────────────
@@ -1575,14 +1575,16 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                   variant="primary"
                   size="sm"
                   onClick={handleOpenCreateReq}
+                  title="Tạo yêu cầu"
                   style={{ gap: '6px', fontWeight: 700 }}
                 >
                   <Plus size={16} />
-                  <span>Tạo yêu cầu</span>
+                  <span className="recruitment-btn-label hidden md:inline">Tạo yêu cầu</span>
                 </Button>
                 <DeleteButton
                   size="sm"
                   label="Xoá"
+                  title="Xoá"
                   itemCount={selectedReqIds.length}
                   disabled={selectedReqIds.length === 0}
                   onConfirm={handleDeleteSelectedReqs}
@@ -1644,11 +1646,11 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                     />
                   </th>
                   <th style={{ padding: '9px 14px', minWidth: '300px' }}>MÃ VÀ THÔNG TIN TUYỂN DỤNG</th>
-                  <th style={{ padding: '9px 14px', width: '90px', textAlign: 'center' }}>SỐ LƯỢNG</th>
-                  <th style={{ padding: '9px 14px', minWidth: '160px' }}>MỨC LƯƠNG DỰ KIẾN</th>
-                  <th style={{ padding: '9px 14px', width: '105px' }}>NGÀY CẦN</th>
-                  <th style={{ padding: '9px 14px', width: '125px', textAlign: 'center' }}>ƯU TIÊN</th>
-                  <th style={{ padding: '9px 14px', width: '135px', textAlign: 'center' }}>TRẠNG THÁI</th>
+                  <th className="hidden md:table-cell" style={{ padding: '9px 14px', width: '90px', textAlign: 'center' }}>SỐ LƯỢNG</th>
+                  <th className="hidden md:table-cell" style={{ padding: '9px 14px', minWidth: '160px' }}>MỨC LƯƠNG DỰ KIẾN</th>
+                  <th className="hidden md:table-cell" style={{ padding: '9px 14px', width: '105px' }}>NGÀY CẦN</th>
+                  <th className="hidden md:table-cell" style={{ padding: '9px 14px', width: '125px', textAlign: 'center' }}>ƯU TIÊN</th>
+                  <th style={{ padding: '9px 14px', width: '130px', textAlign: 'center' }}>TRẠNG THÁI</th>
                 </tr>
               </thead>
               <tbody>
@@ -1668,8 +1670,22 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                   pagedRequests.map((r) => {
                     const isSelected = selectedReqIds.includes(r.id);
                     return (
-                      <tr
+                      <SwipeableTableRow
                         key={r.id}
+                        rowId={`rec-req-${r.id}`}
+                        onEdit={() => handleOpenEditReq(r)}
+                        onDelete={async () => {
+                          await fetch('/api/recruitment/requests/bulk-delete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ids: [r.id] }),
+                          });
+                          await Promise.all([fetchRequests(), fetchCandidates(), fetchInterviews()]);
+                          setSelectedReqIds((prev) => prev.filter((id) => id !== r.id));
+                          onShowToast?.('success', 'Xoá thành công', `Đã xoá yêu cầu tuyển dụng "${r.position}" (${r.code}).`);
+                        }}
+                        deleteConfirmTitle="Xác nhận xoá yêu cầu tuyển dụng"
+                        deleteConfirmMessage={`Bạn có chắc chắn muốn xoá yêu cầu tuyển dụng "${r.position}" (${r.code}) không? Toàn bộ hồ sơ ứng viên và lịch phỏng vấn liên quan cũng sẽ bị xoá.`}
                         style={{
                           borderBottom: '1px solid var(--border-subtle, #f1f5f9)',
                           backgroundColor: isSelected ? 'var(--color-brand-50, #eff6ff)' : 'transparent',
@@ -1695,7 +1711,7 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                           onClick={() => handleOpenEditReq(r)}
                           title="Nhấp để xem và chỉnh sửa yêu cầu tuyển dụng"
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px', flexWrap: 'wrap' }}>
                             <span style={{ fontWeight: 800, color: 'var(--brand-primary, #2563eb)', fontSize: '0.8125rem' }}>
                               {r.code}
                             </span>
@@ -1725,9 +1741,22 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                             <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '1px' }}>
                               Kinh nghiệm: {r.experienceLevel} • {r.receivedCount} hồ sơ đã nộp
                             </div>
+                            <div className="flex md:hidden flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[11px] text-slate-500">
+                              <span>SL: <strong className="text-slate-700">{r.quantity}</strong></span>
+                              <span>•</span>
+                              <span className="font-bold text-emerald-700">
+                                {(r.salaryRange || '').replace(/\s*[đĐ]|VND/gi, '').trim()}
+                              </span>
+                              {r.deadline && (
+                                <>
+                                  <span>•</span>
+                                  <span>Hạn: {r.deadline}</span>
+                                </>
+                              )}
+                            </div>
                           </div>
                         </td>
-                        <td style={{ padding: '7px 14px', textAlign: 'center' }}>
+                        <td className="hidden md:table-cell" style={{ padding: '7px 14px', textAlign: 'center' }}>
                           <span
                             style={{
                               display: 'inline-block',
@@ -1742,19 +1771,19 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                             {r.quantity}
                           </span>
                         </td>
-                        <td style={{ padding: '7px 14px', fontWeight: 700, color: '#047857' }}>
+                        <td className="hidden md:table-cell" style={{ padding: '7px 14px', fontWeight: 700, color: '#047857' }}>
                           {(r.salaryRange || '').replace(/\s*[đĐ]|VND/gi, '').trim()}
                         </td>
-                        <td style={{ padding: '7px 14px', color: '#64748b', fontSize: '0.85rem' }}>
+                        <td className="hidden md:table-cell" style={{ padding: '7px 14px', color: '#64748b', fontSize: '0.85rem' }}>
                           {r.deadline}
                         </td>
-                        <td style={{ padding: '7px 14px', textAlign: 'center' }}>
+                        <td className="hidden md:table-cell" style={{ padding: '7px 14px', textAlign: 'center' }}>
                           {renderPriorityBadge(r.priority)}
                         </td>
                         <td style={{ padding: '7px 14px', textAlign: 'center' }}>
                           {renderStatusBadge(r.status)}
                         </td>
-                      </tr>
+                      </SwipeableTableRow>
                     );
                   })
                 )}
@@ -1818,14 +1847,16 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                   variant="primary"
                   size="sm"
                   onClick={handleOpenCreateCand}
+                  title="Tiếp nhận ứng viên mới"
                   style={{ gap: '6px', fontWeight: 700 }}
                 >
                   <Plus size={16} />
-                  <span>Tiếp nhận ứng viên mới</span>
+                  <span className="recruitment-btn-label hidden md:inline">Tiếp nhận ứng viên mới</span>
                 </Button>
                 <DeleteButton
                   size="sm"
                   label="Xoá"
+                  title="Xoá"
                   itemCount={selectedCandIds.length}
                   disabled={selectedCandIds.length === 0}
                   onConfirm={handleDeleteSelectedCands}
@@ -1887,9 +1918,9 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                     />
                   </th>
                   <th style={{ padding: '9px 14px', minWidth: '260px' }}>THÔNG TIN ỨNG VIÊN</th>
-                  <th style={{ padding: '9px 14px', minWidth: '240px' }}>KINH NGHIỆM LÀM VIỆC</th>
-                  <th style={{ padding: '9px 14px', width: '130px' }}>NGÀY TIẾP NHẬN</th>
-                  <th style={{ padding: '9px 14px', width: '140px' }}>TRẠNG THÁI</th>
+                  <th className="hidden md:table-cell" style={{ padding: '9px 14px', minWidth: '240px' }}>KINH NGHIỆM LÀM VIỆC</th>
+                  <th className="hidden md:table-cell" style={{ padding: '9px 14px', width: '130px' }}>NGÀY TIẾP NHẬN</th>
+                  <th style={{ padding: '9px 14px', width: '130px' }}>TRẠNG THÁI</th>
                 </tr>
               </thead>
               <tbody>
@@ -1928,7 +1959,7 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                             </span>
                           </td>
                           <td colSpan={4} style={{ padding: '8px 14px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                               <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.85rem' }}>
                                 Vị trí tuyển dụng: {group.position}
                               </span>
@@ -1954,9 +1985,23 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                           group.items.map((c) => {
                             const isSelected = selectedCandIds.includes(c.id);
                             return (
-                              <tr
+                              <SwipeableTableRow
                                 key={c.id}
+                                rowId={`rec-cand-${c.id}`}
                                 onClick={() => handleOpenEditCand(c)}
+                                onEdit={() => handleOpenEditCand(c)}
+                                onDelete={async () => {
+                                  await fetch('/api/recruitment/candidates/bulk-delete', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ ids: [c.id] }),
+                                  });
+                                  await Promise.all([fetchCandidates(), fetchInterviews(), fetchRequests()]);
+                                  setSelectedCandIds((prev) => prev.filter((id) => id !== c.id));
+                                  onShowToast?.('success', 'Xoá ứng viên thành công', `Đã xoá hồ sơ ứng viên "${c.fullName}" (${c.code}).`);
+                                }}
+                                deleteConfirmTitle="Xác nhận xoá ứng viên"
+                                deleteConfirmMessage={`Bạn có chắc chắn muốn xoá ứng viên "${c.fullName}" (${c.code}) không? Toàn bộ lịch phỏng vấn liên quan cũng sẽ bị xoá.`}
                                 title="Nhấn để xem / chỉnh sửa hồ sơ"
                                 style={{
                                   borderBottom: '1px solid var(--border-subtle, #f1f5f9)',
@@ -1983,7 +2028,7 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                                   />
                                 </td>
                                 <td style={{ padding: '8px 14px' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px', flexWrap: 'wrap' }}>
                                     <span style={{ fontWeight: 600, color: '#475569', fontSize: '0.825rem' }}>
                                       {c.code}
                                     </span>
@@ -2004,8 +2049,23 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                                       </span>
                                     )}
                                   </div>
+                                  <div className="flex md:hidden flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[11px] text-slate-500">
+                                    {c.experience && <span>{c.experience}</span>}
+                                    {c.education && (
+                                      <>
+                                        <span>•</span>
+                                        <span>{c.education}</span>
+                                      </>
+                                    )}
+                                    {c.appliedDate && (
+                                      <>
+                                        <span>•</span>
+                                        <span>Nộp: {c.appliedDate}</span>
+                                      </>
+                                    )}
+                                  </div>
                                 </td>
-                                <td style={{ padding: '7px 14px', color: '#475569', fontSize: '0.85rem' }}>
+                                <td className="hidden md:table-cell" style={{ padding: '7px 14px', color: '#475569', fontSize: '0.85rem' }}>
                                   <div>{c.experience}</div>
                                   {c.education && (
                                     <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>
@@ -2013,13 +2073,13 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                                     </div>
                                   )}
                                 </td>
-                                <td style={{ padding: '7px 14px', color: '#64748b', fontSize: '0.85rem' }}>
+                                <td className="hidden md:table-cell" style={{ padding: '7px 14px', color: '#64748b', fontSize: '0.85rem' }}>
                                   {c.appliedDate}
                                 </td>
                                 <td style={{ padding: '7px 14px' }}>
                                   {renderCandidateStatusBadge(c.status, c.statusLabel)}
                                 </td>
-                              </tr>
+                              </SwipeableTableRow>
                             );
                           })}
                       </React.Fragment>
@@ -2084,6 +2144,7 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                 <DeleteButton
                   size="sm"
                   label="Xoá"
+                  title="Xoá"
                   itemCount={selectedIntIds.length}
                   disabled={selectedIntIds.length === 0}
                   onConfirm={handleDeleteSelectedInts}
@@ -2145,8 +2206,8 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                     />
                   </th>
                   <th style={{ padding: '9px 14px', minWidth: '260px' }}>THÔNG TIN PHỎNG VẤN</th>
-                  <th style={{ padding: '9px 14px', minWidth: '160px' }}>THỜI GIAN VÀ ĐỊA ĐIỂM</th>
-                  <th style={{ padding: '9px 14px', minWidth: '220px' }}>HỘI ĐỒNG PHỎNG VẤN</th>
+                  <th className="hidden md:table-cell" style={{ padding: '9px 14px', minWidth: '160px' }}>THỜI GIAN VÀ ĐỊA ĐIỂM</th>
+                  <th className="hidden md:table-cell" style={{ padding: '9px 14px', minWidth: '220px' }}>HỘI ĐỒNG PHỎNG VẤN</th>
                   <th style={{ padding: '9px 14px', width: '90px', textAlign: 'center' }}>ĐIỂM SỐ</th>
                 </tr>
               </thead>
@@ -2186,7 +2247,7 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                             </span>
                           </td>
                           <td colSpan={4} style={{ padding: '8px 14px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                               <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.85rem' }}>
                                 Vị trí tuyển dụng: {group.position}
                               </span>
@@ -2219,9 +2280,23 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                             const candEmail = matchedCand?.email || '';
 
                             return (
-                              <tr
+                              <SwipeableTableRow
                                 key={item.id}
+                                rowId={`rec-int-${item.id}`}
                                 onClick={() => handleOpenEditInt(item)}
+                                onEdit={() => handleOpenEditInt(item)}
+                                onDelete={async () => {
+                                  await fetch('/api/recruitment/interviews/bulk-delete', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ ids: [item.id] }),
+                                  });
+                                  await fetchInterviews();
+                                  setSelectedIntIds((prev) => prev.filter((id) => id !== item.id));
+                                  onShowToast?.('success', 'Xoá lịch phỏng vấn', `Đã xoá lịch phỏng vấn "${item.candidateName}" (${item.code}).`);
+                                }}
+                                deleteConfirmTitle="Xác nhận xoá lịch phỏng vấn"
+                                deleteConfirmMessage={`Bạn có chắc chắn muốn xoá lịch phỏng vấn của "${item.candidateName}" (${item.code}) khỏi hệ thống không?`}
                                 title="Nhấn để xem / cập nhật kết quả phỏng vấn"
                                 style={{
                                   borderBottom: '1px solid var(--border-subtle, #f1f5f9)',
@@ -2272,8 +2347,19 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                                       </span>
                                     )}
                                   </div>
+                                  <div className="flex md:hidden flex-col gap-0.5 mt-1 text-[11px] text-slate-500">
+                                    <div>
+                                      <strong className="text-slate-700">
+                                        {item.interviewTime} - {item.interviewDate}
+                                      </strong>
+                                      {item.location ? ` • 📍 ${item.location}` : ''}
+                                    </div>
+                                    {item.interviewers && (
+                                      <div className="truncate">HĐPV: {item.interviewers}</div>
+                                    )}
+                                  </div>
                                 </td>
-                                <td style={{ padding: '7px 14px' }}>
+                                <td className="hidden md:table-cell" style={{ padding: '7px 14px' }}>
                                   <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.85rem' }}>
                                     {item.interviewTime} - {item.interviewDate}
                                   </div>
@@ -2281,7 +2367,7 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                                     📍 {item.location}
                                   </div>
                                 </td>
-                                <td style={{ padding: '7px 14px', color: '#475569', fontSize: '0.85rem' }}>
+                                <td className="hidden md:table-cell" style={{ padding: '7px 14px', color: '#475569', fontSize: '0.85rem' }}>
                                   {item.interviewers}
                                 </td>
                                 <td style={{ padding: '7px 14px', textAlign: 'center' }}>
@@ -2303,7 +2389,7 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
                                     <span style={{ color: '#94a3b8' }}>-</span>
                                   )}
                                 </td>
-                              </tr>
+                              </SwipeableTableRow>
                             );
                           })}
                       </React.Fragment>

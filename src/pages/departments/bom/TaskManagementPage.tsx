@@ -20,6 +20,7 @@ export const TaskManagementPage: React.FC<TaskManagementPageProps> = ({
       tickerContext="tasks"
       cardPadding="p-0"
       useCard={true}
+      className="bom-task-page"
     >
       <TaskManagementView
         hideTitle={true}

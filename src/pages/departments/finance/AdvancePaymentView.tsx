@@ -415,10 +415,11 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
         searchMinWidth="240px"
         filters={toolbarFilters}
         rightActions={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             {currentStep === 2 && (
               <Button
                 variant="outline"
+                className="!hidden sm:!inline-flex"
                 onClick={() => {
                   if (onShowToast) {
                     onShowToast('info', 'Xuất báo cáo', 'Đang tải về danh sách các khoản tạm ứng đã phê duyệt (Excel).');
@@ -448,7 +449,9 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
                 fontWeight: 600,
               }}
             >
-              <Plus size={16} /> Tạo yêu cầu tạm ứng
+              <Plus size={16} />
+              <span className="hidden sm:inline">Tạo yêu cầu tạm ứng</span>
+              <span className="sm:hidden">Tạo mới</span>
             </Button>
           </div>
         }
@@ -511,27 +514,27 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
                   letterSpacing: '0.03em',
                 }}
               >
-                <th style={{ padding: '8px 14px', width: '50px', textAlign: 'center' }}>STT</th>
-                <th style={{ padding: '8px 14px', minWidth: '320px' }}>Mã phiếu</th>
-                <th style={{ padding: '8px 14px', width: '180px' }}>Người đề xuất</th>
-                <th style={{ padding: '8px 14px', width: '140px', textAlign: 'right' }}>Số tiền tạm ứng</th>
+                <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '50px', textAlign: 'center' }}>STT</th>
+                <th style={{ padding: '8px 14px' }}>Mã phiếu</th>
+                <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '180px' }}>Người đề xuất</th>
+                <th style={{ padding: '8px 14px', width: '130px', textAlign: 'right' }}>Số tiền tạm ứng</th>
                 {currentStep === 1 && (
                   <>
-                    <th style={{ padding: '8px 14px', width: '110px', textAlign: 'center' }}>Ngày yêu cầu</th>
-                    <th style={{ padding: '8px 14px', width: '110px', textAlign: 'center' }}>Hạn hoàn ứng</th>
+                    <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '110px', textAlign: 'center' }}>Ngày yêu cầu</th>
+                    <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '110px', textAlign: 'center' }}>Hạn hoàn ứng</th>
                   </>
                 )}
                 {currentStep === 2 && (
                   <>
-                    <th style={{ padding: '8px 14px', width: '180px' }}>Người duyệt và Ngày duyệt</th>
-                    <th style={{ padding: '8px 14px', width: '110px', textAlign: 'center' }}>Hạn hoàn ứng</th>
+                    <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '180px' }}>Người duyệt và Ngày duyệt</th>
+                    <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '110px', textAlign: 'center' }}>Hạn hoàn ứng</th>
                     <th style={{ padding: '8px 14px', width: '100px', textAlign: 'center' }}>Thao tác</th>
                   </>
                 )}
                 {currentStep === 3 && (
                   <>
-                    <th style={{ padding: '8px 14px', minWidth: '220px' }}>Lý do từ chối</th>
-                    <th style={{ padding: '8px 14px', width: '160px' }}>Người từ chối</th>
+                    <th className="hidden sm:table-cell" style={{ padding: '8px 14px', minWidth: '220px' }}>Lý do từ chối</th>
+                    <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '160px' }}>Người từ chối</th>
                     <th style={{ padding: '8px 14px', width: '100px', textAlign: 'center' }}>Thao tác</th>
                   </>
                 )}
@@ -591,7 +594,7 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
                       }}
                     >
                       {/* 1. STT */}
-                      <td style={{ padding: '7px 14px', textAlign: 'center', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                      <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center', color: 'var(--text-secondary)', fontWeight: 500 }}>
                         {stt}
                       </td>
 
@@ -703,10 +706,21 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
                             <Building size={10} /> {item.project}
                           </div>
                         )}
+                        <div className="sm:hidden flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[11px] text-slate-500">
+                          <span className="font-semibold text-slate-700">{item.employeeName}</span>
+                          <span>•</span>
+                          <span>{item.department}</span>
+                          {item.deadlineRefund && (
+                            <>
+                              <span>•</span>
+                              <span>Hạn: <strong className="font-mono text-amber-700">{item.deadlineRefund}</strong></span>
+                            </>
+                          )}
+                        </div>
                       </td>
 
                       {/* 3. Người đề xuất (Không hiển thị mã nhân viên dưới tên) */}
-                      <td style={{ padding: '7px 14px' }}>
+                      <td className="hidden sm:table-cell" style={{ padding: '7px 14px' }}>
                         <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                           {item.employeeName}
                         </div>
@@ -722,6 +736,7 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
                           textAlign: 'right',
                           fontWeight: 700,
                           fontSize: '0.875rem',
+                          whiteSpace: 'nowrap',
                           color:
                             currentStep === 2
                               ? '#16a34a'
@@ -736,10 +751,10 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
                       {/* CÁC CỘT THEO BƯỚC 1: YÊU CẦU TẠM ỨNG (Bỏ cột thao tác duyệt) */}
                       {currentStep === 1 && (
                         <>
-                          <td style={{ padding: '7px 14px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                             {item.requestedDate}
                           </td>
-                          <td style={{ padding: '7px 14px', textAlign: 'center', color: '#b45309', fontWeight: 600 }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center', color: '#b45309', fontWeight: 600 }}>
                             {item.deadlineRefund}
                           </td>
                         </>
@@ -748,7 +763,7 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
                       {/* CÁC CỘT THEO BƯỚC 2: ĐÃ DUYỆT */}
                       {currentStep === 2 && (
                         <>
-                          <td style={{ padding: '7px 14px' }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '7px 14px' }}>
                             <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.78rem' }}>
                               {item.approver}
                             </div>
@@ -756,7 +771,7 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
                               Duyệt ngày {item.approvedDate}
                             </div>
                           </td>
-                          <td style={{ padding: '7px 14px', textAlign: 'center', color: '#0f172a', fontWeight: 600 }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center', color: '#0f172a', fontWeight: 600 }}>
                             {item.deadlineRefund}
                           </td>
                           <td style={{ padding: '7px 14px', textAlign: 'center' }}>

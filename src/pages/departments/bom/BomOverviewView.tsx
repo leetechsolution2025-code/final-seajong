@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ArrowUpRight,
   Download,
@@ -148,9 +148,9 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
   const company = useCompanyInfo();
   const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false);
   const [reportPeriodType, setReportPeriodType] = useState<'month' | 'quarter' | 'year'>('month');
-  const [reportSelectedMonth, setReportSelectedMonth] = useState<number>(10);
-  const [reportSelectedQuarter, setReportSelectedQuarter] = useState<number>(4);
-  const [reportSelectedYear, setReportSelectedYear] = useState<number>(2026);
+  const [reportSelectedMonth, setReportSelectedMonth] = useState<number>(() => new Date().getMonth() + 1);
+  const [reportSelectedQuarter, setReportSelectedQuarter] = useState<number>(() => Math.floor(new Date().getMonth() / 3) + 1);
+  const [reportSelectedYear, setReportSelectedYear] = useState<number>(() => new Date().getFullYear());
   const [showEventCalendar, setShowEventCalendar] = useState(false);
 
   // 12 Chỉ số tài chính & Sức khỏe doanh nghiệp (từ Hình 2)
@@ -158,9 +158,86 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
   const [selectedRatioCategory, setSelectedRatioCategory] = useState<string>('all');
   const [activeRightCardTab, setActiveRightCardTab] = useState<'ratios' | 'segments'>('ratios');
 
-  // Nạp 12 chỉ số tài chính từ API /api/finance/reports theo thời gian thực
+  // Trạng thái màn hình điện thoại (<= 768px) và hiệu ứng vuốt chuyển màn hình
+  const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= 768 : false,
+  );
+  const [mobileSlide, setMobileSlide] = useState<'overview' | 'ratios'>('overview');
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+
   useEffect(() => {
-    fetch('/api/finance/reports?period=2026-10')
+    const handleResize = () => {
+      const mobile = window.innerWidth <= 768;
+      setIsMobileViewport(mobile);
+      if (!mobile) {
+        setMobileSlide('overview');
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (window.innerWidth > 768) return;
+    const touch = e.touches[0];
+    if (!touch) return;
+    swipeStartRef.current = { x: touch.clientX, y: touch.clientY };
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (window.innerWidth > 768 || !swipeStartRef.current) return;
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    const deltaX = touch.clientX - swipeStartRef.current.x;
+    const deltaY = touch.clientY - swipeStartRef.current.y;
+    swipeStartRef.current = null;
+
+    if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY) * 1.1) {
+      if (deltaX < 0) {
+        // Vuốt từ phải qua trái -> Hiển thị 12 chỉ số tài chính & sức khỏe DN
+        setMobileSlide('ratios');
+      } else {
+        // Vuốt từ trái qua phải -> Quay về màn hình tổng quan
+        setMobileSlide('overview');
+      }
+      setHoveredMonth(null);
+    }
+  }, []);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (window.innerWidth > 768) return;
+    swipeStartRef.current = { x: e.clientX, y: e.clientY };
+  }, []);
+
+  const handleMouseUp = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (window.innerWidth > 768 || !swipeStartRef.current) return;
+    const deltaX = e.clientX - swipeStartRef.current.x;
+    const deltaY = e.clientY - swipeStartRef.current.y;
+    swipeStartRef.current = null;
+
+    if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY) * 1.1) {
+      if (deltaX < 0) {
+        setMobileSlide('ratios');
+      } else {
+        setMobileSlide('overview');
+      }
+      setHoveredMonth(null);
+    }
+  }, []);
+
+  // Nạp 12 chỉ số tài chính từ API /api/finance/reports theo thời gian thực và kỳ được chọn
+  useEffect(() => {
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = String(now.getMonth() + 1).padStart(2, '0');
+    const curQuarter = Math.floor(now.getMonth() / 3) + 1;
+    const periodParam =
+      selectedPeriod === 'month'
+        ? `${curYear}-${curMonth}`
+        : selectedPeriod === 'quarter'
+        ? `${curYear}-Q${curQuarter}`
+        : `${curYear}`;
+    fetch(`/api/finance/reports?period=${periodParam}`)
       .then((res) => {
         if (!res.ok) throw new Error('Không thể nạp báo cáo tài chính');
         return res.json();
@@ -173,7 +250,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
       .catch((err) => {
         console.warn('Lỗi nạp 12 chỉ số tài chính:', err);
       });
-  }, []);
+  }, [selectedPeriod]);
 
   const displayRatioCategories = useMemo(() => {
     if (selectedRatioCategory === 'all') return financialRatios;
@@ -295,6 +372,8 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
       actualRevenue?: number | null;
       seajong?: number | null;
       oem?: number | null;
+      signedSeajong?: number | null;
+      signedOem?: number | null;
       targetUnits: number;
       units: number | null;
       isCurrent: boolean;
@@ -316,205 +395,134 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
     if (bomData?.monthlyChartData && bomData.monthlyChartData.length === 12) {
       return bomData.monthlyChartData;
     }
-    const oemDefaults = [0.42, 0.10, 0.65, 0.50, 0.35, 0.18, 0.52, 0.60, 0.88, 0.82];
-    return plan2026Months.map((m, idx) => ({
-      month: `T${idx + 1}`,
-      monthFull: m.month,
-      plan: Number(m.revenue) || 0,
-      actual: idx <= 9 ? Number((Number(m.revenue) * 0.91).toFixed(2)) : null,
-      planSales: Number(m.revenue) || 0,
-      actualSales: idx <= 9 ? Number((Number(m.revenue) * 0.91).toFixed(2)) : null,
-      planRevenue: Number(m.revenue) || 0,
-      actualRevenue: idx <= 9 ? Number((Number(m.revenue) * 0.84).toFixed(2)) : null,
-      seajong: idx <= 9 ? Number((Number(m.revenue) * 0.84).toFixed(2)) : null,
-      oem: idx <= 9 ? (oemDefaults[idx] ?? 0.50) : null,
-      targetUnits: Number(m.units) || 0,
-      units: idx <= 9 ? Math.round(Number(m.units) * 0.91) : null,
-      isCurrent: idx === 9,
-    }));
+    const curMonthNum = new Date().getMonth() + 1;
+    return plan2026Months.map((m, idx) => {
+      const mNum = idx + 1;
+      const isPastOrCurrent = mNum <= curMonthNum;
+      return {
+        month: `T${mNum}`,
+        monthFull: m.month,
+        plan: Number(m.revenue) || 0,
+        actual: isPastOrCurrent ? 0 : null,
+        planSales: Number(m.revenue) || 0,
+        actualSales: isPastOrCurrent ? 0 : null,
+        planRevenue: Number(m.revenue) || 0,
+        actualRevenue: isPastOrCurrent ? 0 : null,
+        seajong: isPastOrCurrent ? 0 : null,
+        oem: isPastOrCurrent ? 0 : null,
+        signedSeajong: isPastOrCurrent ? 0 : null,
+        signedOem: isPastOrCurrent ? 0 : null,
+        targetUnits: Number(m.units) || 0,
+        units: isPastOrCurrent ? 0 : null,
+        isCurrent: mNum === curMonthNum,
+      };
+    });
   }, [bomData, plan2026Months]);
 
   // Tính toán số liệu Kế hoạch và Thực tế theo kỳ báo cáo từ SQLite DB thực tế
   const periodData = useMemo(() => {
-    const defaultByPeriod =
+    const subLabel =
       selectedPeriod === 'month'
-        ? {
-            targetRev: 1.55,
-            actualRev: 1.57,
-            revRate: '101.9',
-            targetSales: 1.55,
-            actualSales: 1.36,
-            salesRate: '87.7',
-            costTarget: 0.55,
-            costActual: 0.47,
-            costRate: '84.9',
-            costRatio: '29.6%',
-            recTotal: 0.33,
-            recDue: 0.33,
-            recOverdue: 0.0,
-            recSafeRate: '100%',
-            payTotal: 0.63,
-            payDue: 0.63,
-            payOverdue: 0.0,
-            payOnTimeRate: '100%',
-            contracts: '116 đơn hàng',
-          }
+        ? currentPeriodLabels.month
         : selectedPeriod === 'quarter'
-        ? {
-            targetRev: 4.30,
-            actualRev: 2.83,
-            revRate: '65.8',
-            targetSales: 4.30,
-            actualSales: 4.09,
-            salesRate: '95.1',
-            costTarget: 0.95,
-            costActual: 0.76,
-            costRate: '79.9',
-            costRatio: '26.8%',
-            recTotal: 3.39,
-            recDue: 3.39,
-            recOverdue: 0.0,
-            recSafeRate: '100%',
-            payTotal: 4.84,
-            payDue: 4.84,
-            payOverdue: 0.0,
-            payOnTimeRate: '100%',
-            contracts: '251 đơn hàng',
-          }
-        : {
-            targetRev: 12.15,
-            actualRev: 2.93,
-            revRate: '24.1',
-            targetSales: 12.15,
-            actualSales: 4.19,
-            salesRate: '34.5',
-            costTarget: 1.20,
-            costActual: 0.77,
-            costRate: '64.0',
-            costRatio: '26.2%',
-            recTotal: 3.55,
-            recDue: 3.55,
-            recOverdue: 0.0,
-            recSafeRate: '100%',
-            payTotal: 5.74,
-            payDue: 5.74,
-            payOverdue: 0.0,
-            payOnTimeRate: '100%',
-            contracts: '255 đơn hàng',
-          };
+        ? currentPeriodLabels.quarter
+        : currentPeriodLabels.year;
 
     if (bomData?.periodData) {
-      // Nếu server chưa restart và vẫn trả về mẫu cũ (contracts === '18 đơn hàng'), ưu tiên số thực tế từ DB
-      const isLegacyMock = bomData.periodData.contracts === '18 đơn hàng';
       return {
         ...bomData.periodData,
-        revenue: !isLegacyMock && bomData.periodData.revenue
-          ? bomData.periodData.revenue
-          : {
-              target: defaultByPeriod.targetRev,
-              actual: defaultByPeriod.actualRev,
-              rate: defaultByPeriod.revRate,
-            },
-        cost: !isLegacyMock && bomData.periodData.cost
-          ? bomData.periodData.cost
-          : {
-              target: defaultByPeriod.costTarget,
-              actual: defaultByPeriod.costActual,
-              rate: defaultByPeriod.costRate,
-              ratio: defaultByPeriod.costRatio,
-            },
-        receivable: !isLegacyMock && bomData.periodData.receivable
-          ? bomData.periodData.receivable
-          : {
-              total: defaultByPeriod.recTotal,
-              due: defaultByPeriod.recDue,
-              overdue: defaultByPeriod.recOverdue,
-              safeRate: defaultByPeriod.recSafeRate,
-            },
-        payable: !isLegacyMock && bomData.periodData.payable
-          ? bomData.periodData.payable
-          : {
-              total: defaultByPeriod.payTotal,
-              due: defaultByPeriod.payDue,
-              overdue: defaultByPeriod.payOverdue,
-              onTimeRate: defaultByPeriod.payOnTimeRate,
-            },
-        targetSales: !isLegacyMock ? (bomData.periodData.targetSales ?? bomData.periodData.targetRev) : defaultByPeriod.targetSales,
-        actualSales: !isLegacyMock ? (bomData.periodData.actualSales ?? bomData.periodData.actualRev) : defaultByPeriod.actualSales,
-        salesRate: !isLegacyMock ? (bomData.periodData.salesRate ?? bomData.periodData.revRate) : defaultByPeriod.salesRate,
-        targetRev: !isLegacyMock ? bomData.periodData.targetRev : defaultByPeriod.targetRev,
-        actualRev: !isLegacyMock ? bomData.periodData.actualRev : defaultByPeriod.actualRev,
-        revRate: !isLegacyMock ? bomData.periodData.revRate : defaultByPeriod.revRate,
-        contracts: !isLegacyMock ? bomData.periodData.contracts : defaultByPeriod.contracts,
-        overdueDebt: !isLegacyMock ? bomData.periodData.overdueDebt : '0.00 tỷ đồng',
-        subPeriodLabel: selectedPeriod === 'month' ? 'Tháng 10/2026' : selectedPeriod === 'quarter' ? 'Quý 4/2026' : 'Cả năm 2026',
+        revenue: bomData.periodData.revenue || {
+          target: bomData.periodData.targetRev ?? 0.38,
+          actual: bomData.periodData.actualRev ?? 0,
+          rate: bomData.periodData.revRate ?? '0.0',
+        },
+        cost: bomData.periodData.cost || {
+          target: 0.55,
+          actual: 0,
+          rate: '0.0',
+          ratio: '0.0%',
+        },
+        receivable: bomData.periodData.receivable || {
+          total: 0,
+          due: 0,
+          overdue: 0,
+          safeRate: '100%',
+        },
+        payable: bomData.periodData.payable || {
+          total: 0,
+          due: 0,
+          overdue: 0,
+          onTimeRate: '100%',
+        },
+        targetSales: bomData.periodData.targetSales ?? bomData.periodData.targetRev ?? 0.45,
+        actualSales: bomData.periodData.actualSales ?? bomData.periodData.actualRev ?? 0,
+        salesRate: bomData.periodData.salesRate ?? bomData.periodData.revRate ?? '0.0',
+        targetRev: bomData.periodData.targetRev ?? 0.38,
+        actualRev: bomData.periodData.actualRev ?? 0,
+        revRate: bomData.periodData.revRate ?? '0.0',
+        contracts: bomData.periodData.contracts ?? '0 đơn hàng',
+        overdueDebt: bomData.periodData.overdueDebt ?? '0.00 tỷ đồng',
+        subPeriodLabel: subLabel,
       };
     }
+
     return {
       revenue: {
-        target: defaultByPeriod.targetRev,
-        actual: defaultByPeriod.actualRev,
-        rate: defaultByPeriod.revRate,
+        target: 0.38,
+        actual: 0,
+        rate: '0.0',
       },
       cost: {
-        target: defaultByPeriod.costTarget,
-        actual: defaultByPeriod.costActual,
-        rate: defaultByPeriod.costRate,
-        ratio: defaultByPeriod.costRatio,
+        target: 0.55,
+        actual: 0,
+        rate: '0.0',
+        ratio: '0.0%',
       },
       receivable: {
-        total: defaultByPeriod.recTotal,
-        due: defaultByPeriod.recDue,
-        overdue: defaultByPeriod.recOverdue,
-        safeRate: defaultByPeriod.recSafeRate,
+        total: 0,
+        due: 0,
+        overdue: 0,
+        safeRate: '100%',
       },
       payable: {
-        total: defaultByPeriod.payTotal,
-        due: defaultByPeriod.payDue,
-        overdue: defaultByPeriod.payOverdue,
-        onTimeRate: defaultByPeriod.payOnTimeRate,
+        total: 0,
+        due: 0,
+        overdue: 0,
+        onTimeRate: '100%',
       },
-      targetSales: defaultByPeriod.targetSales,
-      actualSales: defaultByPeriod.actualSales,
-      salesRate: defaultByPeriod.salesRate,
-      targetRev: defaultByPeriod.targetRev,
-      actualRev: defaultByPeriod.actualRev,
-      revRate: defaultByPeriod.revRate,
-      targetUnits: 115,
-      actualUnits: 104,
-      unitsRate: '90.4',
-      targetRecovery: 1.43,
-      actualRecovery: 1.51,
-      recoveryRate: '105.6',
-      contracts: defaultByPeriod.contracts,
-      winRate: '84.5%',
+      targetSales: 0.45,
+      actualSales: 0,
+      salesRate: '0.0',
+      targetRev: 0.38,
+      actualRev: 0,
+      revRate: '0.0',
+      targetUnits: 33,
+      actualUnits: 0,
+      unitsRate: '0.0',
+      targetRecovery: 0.35,
+      actualRecovery: 0,
+      recoveryRate: '0.0',
+      contracts: '0 đơn hàng',
+      winRate: '86.5%',
       otdrRate: '98.5',
       otdrStatus: 'Đạt chuẩn cam kết',
       firstPassYield: '99.4% KCS',
       penaltyAmount: '0 đồng',
       grossMargin: '34.5%',
       overdueDebt: '0.00 tỷ đồng',
-      subPeriodLabel: selectedPeriod === 'month' ? 'Tháng 10/2026' : selectedPeriod === 'quarter' ? 'Quý 4/2026' : 'Cả năm 2026',
+      subPeriodLabel: subLabel,
     };
-  }, [bomData, selectedPeriod]);
+  }, [bomData, selectedPeriod, currentPeriodLabels]);
 
   // Tải dữ liệu thống kê tổng quan Ban Giám Đốc từ SQLite DB
   const loadBomStats = useCallback(async () => {
     try {
-      const [res, salesRes] = await Promise.all([
-        fetch(`/api/bom/overview-stats?period=${selectedPeriod}&year=2026`),
-        fetch(`/api/sales/overview-stats?period=${selectedPeriod}&year=2026`),
-      ]);
-      const salesData = salesRes.ok ? await salesRes.json() : null;
+      const now = new Date();
+      const curYear = now.getFullYear();
+      const curMonth = now.getMonth() + 1;
+      const res = await fetch(`/api/bom/overview-stats?period=${selectedPeriod}&year=${curYear}&month=${curMonth}`);
       if (res.ok) {
         const data: BomOverviewApiResponse = await res.json();
-        // Đồng bộ biểu đồ 12 tháng thực tế từ /api/sales/overview-stats nếu có
-        if (salesData?.monthlyChartData && salesData.monthlyChartData.length === 12) {
-          data.monthlyChartData = salesData.monthlyChartData.map((m: any) => ({
-            ...m,
-            actual: m.actualRevenue ?? m.actualSales ?? m.actual ?? 0,
-          }));
-        }
         setBomData(data);
         if (data.plans && data.plans.length === 12) {
           setPlan2026Months(data.plans);
@@ -571,16 +579,17 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
   }, [loadBomStats]);
 
   const handleExport = () => {
+    const now = new Date();
     if (selectedPeriod === 'month') {
       setReportPeriodType('month');
-      setReportSelectedMonth(10);
+      setReportSelectedMonth(now.getMonth() + 1);
     } else if (selectedPeriod === 'quarter') {
       setReportPeriodType('quarter');
-      setReportSelectedQuarter(4);
+      setReportSelectedQuarter(Math.floor(now.getMonth() / 3) + 1);
     } else {
       setReportPeriodType('year');
     }
-    setReportSelectedYear(2026);
+    setReportSelectedYear(now.getFullYear());
     setIsPrintPreviewOpen(true);
   };
 
@@ -636,7 +645,11 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
 
   return (
     <div
-      className="custom-scrollbar"
+      className={`custom-scrollbar bom-overview-root mobile-slide-${mobileSlide}`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -651,6 +664,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
     >
       {/* ── 1. THANH ĐIỀU KHIỂN VÀ BỘ LỌC KỲ BÁO CÁO ── */}
       <div
+        className="bom-overview-control-bar"
         style={{
           display: 'flex',
           flexWrap: 'wrap',
@@ -661,7 +675,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
           borderBottom: '1px solid var(--border-subtle)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="bom-realtime-status" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
               display: 'inline-flex',
@@ -692,8 +706,9 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
         </div>
 
         {/* Nút lọc kỳ báo cáo và Thao tác */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="bom-overview-actions-wrap" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div
+            className="bom-period-pill-group"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -705,6 +720,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
           >
             <button
               type="button"
+              className="bom-calendar-btn"
               onClick={() => setShowEventCalendar(true)}
               style={{
                 padding: '5px 10px',
@@ -735,7 +751,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
               }
             >
               <CalendarEvent size={13} style={{ color: 'var(--color-primary)' }} />
-              <span>Lịch sự kiện</span>
+              <span className="bom-btn-text">Lịch sự kiện</span>
               {todayEventsCount > 0 && (
                 <span
                   style={{
@@ -760,6 +776,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
             </button>
 
             <span
+              className="bom-period-divider"
               style={{
                 color: 'var(--border-strong, #cbd5e1)',
                 padding: '0 4px',
@@ -772,6 +789,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
             </span>
             <button
               type="button"
+              className="bom-period-btn"
               onClick={() => setSelectedPeriod('month')}
               style={{
                 padding: '5px 12px',
@@ -789,6 +807,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
             </button>
             <button
               type="button"
+              className="bom-period-btn"
               onClick={() => setSelectedPeriod('quarter')}
               style={{
                 padding: '5px 12px',
@@ -806,6 +825,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
             </button>
             <button
               type="button"
+              className="bom-period-btn"
               onClick={() => setSelectedPeriod('year')}
               style={{
                 padding: '5px 12px',
@@ -826,17 +846,19 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
           <Button
             variant="secondary"
             size="sm"
+            className="bom-export-btn"
             leftIcon={<Download size={14} />}
             onClick={handleExport}
             title="Xuất báo cáo PDF gửi Hội đồng quản trị và Cổ đông"
           >
-            Xuất báo cáo
+            <span className="bom-btn-text">Xuất báo cáo</span>
           </Button>
         </div>
       </div>
 
       {/* ── 2. HÀNG 4 THẺ CHỈ SỐ KPI THEN CHỐT (EXECUTIVE KPI CARDS) ── */}
       <div
+        className="bom-kpi-grid"
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
@@ -845,6 +867,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
       >
         {/* KPI 1: Doanh thu */}
         <div
+          className="bom-kpi-card"
           style={{
             backgroundColor: 'var(--bg-surface-2)',
             padding: '10px 14px',
@@ -857,11 +880,12 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
             transition: 'transform 0.15s ease, box-shadow 0.15s ease',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+          <div className="bom-kpi-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <span className="bom-kpi-title" style={{ fontSize: '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
               Doanh thu thuần
             </span>
             <span
+              className="bom-kpi-badge"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -879,13 +903,13 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
             </span>
           </div>
 
-          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+          <div className="bom-kpi-value" style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
             {(periodData.revenue?.actual ?? periodData.actualRev).toFixed(2)} <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>tỷ đồng</span>
           </div>
 
           {/* Progress bar so với mục tiêu */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+            <div className="bom-kpi-sub" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
               <span>Mục tiêu: {(periodData.revenue?.target ?? periodData.targetRev).toFixed(1)} tỷ đồng</span>
               <strong style={{ color: '#10b981' }}>{periodData.revenue?.rate ?? periodData.revRate}%</strong>
             </div>
@@ -902,13 +926,14 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
             </div>
           </div>
 
-          <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
+          <div className="bom-kpi-footer" style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
             Doanh số ký: <strong>{(periodData.actualSales ?? 1.41).toFixed(2)} tỷ</strong> • {periodData.contracts || '18 đơn hàng'}
           </div>
         </div>
 
         {/* KPI 2: Chi phí */}
         <div
+          className="bom-kpi-card"
           style={{
             backgroundColor: 'var(--bg-surface-2)',
             padding: '10px 14px',
@@ -920,11 +945,12 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
             boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+          <div className="bom-kpi-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <span className="bom-kpi-title" style={{ fontSize: '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
               Chi phí hoạt động
             </span>
             <span
+              className="bom-kpi-badge"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -941,13 +967,13 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
             </span>
           </div>
 
-          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+          <div className="bom-kpi-value" style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
             {(periodData.cost?.actual ?? 0.18).toFixed(2)} <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>tỷ đồng</span>
           </div>
 
           {/* Progress bar so với hạn mức */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+            <div className="bom-kpi-sub" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
               <span>Hạn mức: {(periodData.cost?.target ?? 0.22).toFixed(2)} tỷ đồng</span>
               <strong style={{ color: '#f59e0b' }}>{periodData.cost?.rate ?? '81.8'}%</strong>
             </div>
@@ -964,13 +990,14 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
             </div>
           </div>
 
-          <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
+          <div className="bom-kpi-footer" style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
             Tỷ lệ chi phí / Doanh thu: <strong>{periodData.cost?.ratio ?? '13.8%'}</strong> (An toàn)
           </div>
         </div>
 
         {/* KPI 3: Nợ phải thu */}
         <div
+          className="bom-kpi-card"
           style={{
             backgroundColor: 'var(--bg-surface-2)',
             padding: '10px 14px',
@@ -982,11 +1009,12 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
             boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+          <div className="bom-kpi-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <span className="bom-kpi-title" style={{ fontSize: '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
               Nợ phải thu khách hàng
             </span>
             <span
+              className="bom-kpi-badge"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -1003,13 +1031,13 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
             </span>
           </div>
 
-          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0284c7', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+          <div className="bom-kpi-value" style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0284c7', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
             {(periodData.receivable?.total ?? 0.42).toFixed(2)} <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>tỷ đồng</span>
           </div>
 
           {/* Progress bar so với mục tiêu */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+            <div className="bom-kpi-sub" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
               <span>Trong hạn: {(periodData.receivable?.due ?? 0.34).toFixed(2)} tỷ</span>
               <strong style={{ color: '#0284c7' }}>{periodData.receivable?.safeRate ?? '81.0%'}</strong>
             </div>
@@ -1026,13 +1054,14 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
             </div>
           </div>
 
-          <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
+          <div className="bom-kpi-footer" style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
             Nợ quá hạn: <strong style={{ color: '#ef4444' }}>{(periodData.receivable?.overdue ?? 0.08).toFixed(2)} tỷ đồng</strong>
           </div>
         </div>
 
         {/* KPI 4: Nợ phải trả */}
         <div
+          className="bom-kpi-card"
           style={{
             backgroundColor: 'var(--bg-surface-2)',
             padding: '10px 14px',
@@ -1044,11 +1073,12 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
             boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+          <div className="bom-kpi-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <span className="bom-kpi-title" style={{ fontSize: '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
               Nợ phải trả nhà cung cấp
             </span>
             <span
+              className="bom-kpi-badge"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -1065,13 +1095,13 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
             </span>
           </div>
 
-          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+          <div className="bom-kpi-value" style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
             {(periodData.payable?.total ?? 0.28).toFixed(2)} <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>tỷ đồng</span>
           </div>
 
           {/* Progress bar */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+            <div className="bom-kpi-sub" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
               <span>Đến hạn trả: {(periodData.payable?.due ?? 0.15).toFixed(2)} tỷ đồng</span>
               <strong style={{ color: '#8b5cf6' }}>{periodData.payable?.onTimeRate ?? '100%'}</strong>
             </div>
@@ -1088,7 +1118,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
             </div>
           </div>
 
-          <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
+          <div className="bom-kpi-footer" style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
             Nợ quá hạn: <strong>0 đồng</strong> • Tín nhiệm tín dụng: <strong>Tốt (AAA)</strong>
           </div>
         </div>
@@ -1096,6 +1126,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
 
       {/* ── 3. HÀNG BIỂU ĐỒ TRỰC QUAN (CHARTS VÀ PRODUCT MIX) ── */}
       <div
+        className="bom-charts-grid"
         style={{
           display: 'grid',
           gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1.2fr)',
@@ -1106,6 +1137,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
       >
         {/* Biểu đồ Cột Diễn biến Doanh số và Sản lượng 10 Tháng */}
         <div
+          className="bom-chart-card"
           style={{
             backgroundColor: 'var(--bg-surface-2)',
             padding: '16px 20px',
@@ -1120,12 +1152,14 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <div>
-              <h3 style={{ fontSize: '0.9375rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 4px 0', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              <h3 style={{ fontSize: '0.9375rem', fontWeight: 800, color: 'var(--text-primary)', margin: isMobileViewport ? 0 : '0 0 4px 0', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                 Diễn biến doanh thu theo kênh năm 2026
               </h3>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
-                Cơ cấu doanh thu thực hiện qua các tháng: Thương hiệu Seajong & Gia công OEM so với Kế hoạch
-              </p>
+              {!isMobileViewport && (
+                <p className="bom-chart-subtitle" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
+                  Cơ cấu doanh thu thực hiện qua các tháng: Thương hiệu Seajong & Gia công OEM so với Kế hoạch
+                </p>
+              )}
             </div>
 
             {/* Toggle loại chỉ số: Doanh thu / Doanh số (Đã bỏ Cả hai) */}
@@ -1188,17 +1222,26 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
             }}
           >
             {(() => {
-              const maxVal = 2.2; // Tỷ đồng tối đa trên trục Y
-              const chartHeight = 180;
-              const baselineY = 220;
-              const startX = 36;
-              const endX = 644;
-              const stepX = (endX - startX) / (monthlyChartData.length - 1);
-              const barWidth = 10;
-              const barGap = 3;
+              const allWithIdx = monthlyChartData.map((item, originalIdx) => ({ ...item, originalIdx }));
+              const currentIdx = allWithIdx.findIndex((m) => m.isCurrent);
+              const mobileEndSlice = currentIdx >= 5 ? currentIdx + 1 : 6;
+              const displayedChartData = isMobileViewport
+                ? allWithIdx.slice(Math.max(0, mobileEndSlice - 6), mobileEndSlice)
+                : allWithIdx;
 
-              // 1. Dữ liệu kế hoạch cả 12 tháng (T1 -> T12) lấy từ SQLite DB
-              const planPoints = monthlyChartData.map((item, idx) => {
+              const svgWidth = isMobileViewport ? 360 : 680;
+              const svgHeight = isMobileViewport ? 225 : 255;
+              const maxVal = isMobileViewport ? 2.08 : 2.2; // Tỷ đồng tối đa trên trục Y
+              const chartHeight = isMobileViewport ? 184 : 180;
+              const baselineY = isMobileViewport ? 198 : 220;
+              const startX = isMobileViewport ? 22 : 36;
+              const endX = isMobileViewport ? 338 : 644;
+              const stepX = (endX - startX) / Math.max(1, displayedChartData.length - 1);
+              const barWidth = isMobileViewport ? 14 : 10;
+              const barGap = isMobileViewport ? 4 : 3;
+
+              // 1. Dữ liệu kế hoạch lấy từ SQLite DB (12 tháng trên Desktop, 6 tháng trên Mobile)
+              const planPoints = displayedChartData.map((item, idx) => {
                 const val = chartMetric === 'revenue' ? (item.planRevenue ?? item.plan) : (item.planSales ?? item.plan);
                 const x = startX + idx * stepX;
                 const y = baselineY - (val / maxVal) * chartHeight;
@@ -1227,25 +1270,25 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
 
               const planCurve = getSmoothCurve(planPoints);
 
-              // 2. Dữ liệu đường line Tổng Doanh thu (T1 -> T10)
+              // 2. Dữ liệu đường line Tổng Doanh thu
               const revenuePoints: Array<{ x: number; y: number; val: number; month: string; idx: number }> = [];
-              // 3. Dữ liệu đường line Tổng Doanh số (T1 -> T10)
+              // 3. Dữ liệu đường line Tổng Doanh số
               const salesPoints: Array<{ x: number; y: number; val: number; month: string; idx: number }> = [];
 
-              monthlyChartData.forEach((item, idx) => {
+              displayedChartData.forEach((item, idx) => {
                 const x = startX + idx * stepX;
                 const revVal = item.actualRevenue !== null && item.actualRevenue !== undefined
                   ? item.actualRevenue
-                  : (idx <= 9 ? (item.actual ?? 1.2) : null);
-                if (revVal !== null) {
+                  : item.actual;
+                if (revVal !== null && revVal !== undefined) {
                   const y = baselineY - (revVal / maxVal) * chartHeight;
                   revenuePoints.push({ x, y, val: revVal, month: item.month, idx });
                 }
 
                 const salesVal = item.actualSales !== null && item.actualSales !== undefined
                   ? item.actualSales
-                  : (idx <= 9 ? Number(((item.actual ?? 1.2) * 1.08).toFixed(2)) : null);
-                if (salesVal !== null) {
+                  : item.actual;
+                if (salesVal !== null && salesVal !== undefined) {
                   const y = baselineY - (salesVal / maxVal) * chartHeight;
                   salesPoints.push({ x, y, val: salesVal, month: item.month, idx });
                 }
@@ -1254,7 +1297,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
               const revenueCurve = getSmoothCurve(revenuePoints);
               const salesCurve = getSmoothCurve(salesPoints);
 
-              const hoveredItem = hoveredMonth !== null ? monthlyChartData[hoveredMonth] : null;
+              const hoveredItem = hoveredMonth !== null ? displayedChartData[hoveredMonth] : null;
               const hoveredPlanPt = hoveredMonth !== null ? planPoints[hoveredMonth] : null;
 
               // Các vạch lưới ngang tham chiếu chuẩn theo tỷ đồng
@@ -1266,11 +1309,17 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
               ];
 
               return (
-                <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 0, flex: 1, display: 'flex', alignItems: 'center' }}>
+                <div style={{ position: 'relative', width: '100%', height: isMobileViewport ? 'auto' : '100%', minHeight: 0, flex: 1, display: 'flex', alignItems: 'center' }}>
                   <svg
-                    viewBox="0 0 680 255"
+                    viewBox={`0 0 ${svgWidth} ${svgHeight}`}
                     preserveAspectRatio="xMidYMid meet"
-                    style={{ width: '100%', height: '100%', maxHeight: '100%', overflow: 'visible' }}
+                    style={{
+                      width: '100%',
+                      height: isMobileViewport ? 'auto' : '100%',
+                      maxHeight: isMobileViewport ? 'none' : '100%',
+                      display: 'block',
+                      overflow: 'visible',
+                    }}
                   >
                     <defs>
                       {/* Gradient Xanh dương cho cột Seajong */}
@@ -1308,49 +1357,57 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
                       return (
                         <g key={`grid-g-${gIdx}`}>
                           <line
-                            x1={startX - 10}
+                            x1={isMobileViewport ? 4 : startX - 10}
                             y1={y}
-                            x2={endX + 10}
+                            x2={isMobileViewport ? svgWidth - 4 : endX + 10}
                             y2={y}
                             stroke="var(--border-subtle)"
                             strokeDasharray="3 3"
                             strokeWidth="1"
                           />
-                          <text
-                            x={startX - 16}
-                            y={y + 3}
-                            textAnchor="end"
-                            fontSize="9"
-                            fill="var(--text-muted)"
-                            fontWeight="500"
-                          >
-                            {grid.label}
-                          </text>
+                          {!isMobileViewport && (
+                            <text
+                              x={startX - 16}
+                              y={y + 3}
+                              textAnchor="end"
+                              fontSize="9"
+                              fill="var(--text-muted)"
+                              fontWeight="500"
+                            >
+                              {grid.label}
+                            </text>
+                          )}
                         </g>
                       );
                     })}
 
                     {/* Đường Baseline trục hoành */}
                     <line
-                      x1={startX - 10}
+                      x1={isMobileViewport ? 4 : startX - 10}
                       y1={baselineY}
-                      x2={endX + 10}
+                      x2={isMobileViewport ? svgWidth - 4 : endX + 10}
                       y2={baselineY}
                       stroke="var(--border-default)"
                       strokeWidth="1"
                     />
 
                     {/* VÙNG VẼ CÁC CỘT BAR (SEAJONG VÀ OEM) THEO THÁNG */}
-                    {monthlyChartData.map((item, idx) => {
+                    {displayedChartData.map((item, idx) => {
                       const x = startX + idx * stepX;
                       const isHovered = hoveredMonth === idx;
 
-                      // Giá trị Seajong và OEM
-                      const seajongVal = item.seajong ?? (idx <= 9 ? Number(((item.actualRevenue ?? 1.2) * 0.9).toFixed(2)) : null);
-                      const oemVal = item.oem ?? (idx <= 9 ? Number(((item.actualRevenue ?? 1.2) * 0.6).toFixed(2)) : null);
+                      // Giá trị Seajong và OEM thực tế từ CSDL theo loại chỉ tiêu đang chọn (Doanh thu / Doanh số)
+                      const seajongVal =
+                        chartMetric === 'sales'
+                          ? (item.signedSeajong ?? item.seajong ?? null)
+                          : (item.seajong ?? null);
+                      const oemVal =
+                        chartMetric === 'sales'
+                          ? (item.signedOem ?? item.oem ?? null)
+                          : (item.oem ?? null);
 
-                      const seajongH = seajongVal !== null ? Math.max(3, (seajongVal / maxVal) * chartHeight) : 0;
-                      const oemH = oemVal !== null ? Math.max(3, (oemVal / maxVal) * chartHeight) : 0;
+                      const seajongH = seajongVal !== null && seajongVal > 0 ? Math.max(3, (seajongVal / maxVal) * chartHeight) : 0;
+                      const oemH = oemVal !== null && oemVal > 0 ? Math.max(3, (oemVal / maxVal) * chartHeight) : 0;
 
                       const seajongX = x - barWidth - barGap / 2;
                       const oemX = x + barGap / 2;
@@ -1358,7 +1415,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
                       return (
                         <g key={`bars-group-${idx}`}>
                           {/* Nền highlight tháng hiện hành */}
-                          {item.isCurrent && (
+                          {!isMobileViewport && item.isCurrent && (
                             <rect
                               x={x - barWidth - 4}
                               y={25}
@@ -1370,7 +1427,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
                           )}
 
                           {/* Cột 1: Seajong (Xanh dương) */}
-                          {seajongVal !== null && (
+                          {seajongH > 0 && (
                             <rect
                               x={seajongX}
                               y={baselineY - seajongH}
@@ -1388,7 +1445,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
                           )}
 
                           {/* Cột 2: OEM (Cam hổ phách) */}
-                          {oemVal !== null && (
+                          {oemH > 0 && (
                             <rect
                               x={oemX}
                               y={baselineY - oemH}
@@ -1418,7 +1475,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
                       filter="url(#redLineShadow)"
                     />
 
-                    {/* Các điểm mốc (Dots) trên đường Kế hoạch MÀU ĐỎ (Đủ 12 tháng) */}
+                    {/* Các điểm mốc (Dots) trên đường Kế hoạch MÀU ĐỎ */}
                     {planPoints.map((pt, pIdx) => (
                       <circle
                         key={`plan-pt-${pIdx}`}
@@ -1485,7 +1542,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
                     {hoveredMonth !== null && hoveredPlanPt && (
                       <line
                         x1={hoveredPlanPt.x}
-                        y1={25}
+                        y1={isMobileViewport ? 18 : 25}
                         x2={hoveredPlanPt.x}
                         y2={baselineY}
                         stroke="#64748b"
@@ -1495,24 +1552,24 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
                       />
                     )}
 
-                    {/* Nhãn 12 tháng dưới trục hoành */}
-                    {monthlyChartData.map((item, idx) => {
+                    {/* Nhãn các tháng dưới trục hoành */}
+                    {displayedChartData.map((item, idx) => {
                       const x = startX + idx * stepX;
                       const isFuture = item.actual === null && item.actualSales === null;
                       return (
                         <g key={`month-lbl-${idx}`}>
                           <text
                             x={x}
-                            y={baselineY + 20}
+                            y={baselineY + (isMobileViewport ? 19 : 20)}
                             textAnchor="middle"
                             fontSize="11"
-                            fontWeight={item.isCurrent ? 800 : isFuture ? 500 : 600}
-                            fill={item.isCurrent ? 'var(--color-primary)' : isFuture ? 'var(--text-muted)' : 'var(--text-secondary)'}
+                            fontWeight={!isMobileViewport && item.isCurrent ? 800 : isFuture ? 500 : 600}
+                            fill={!isMobileViewport && item.isCurrent ? 'var(--color-primary)' : isFuture ? 'var(--text-muted)' : 'var(--text-secondary)'}
                             opacity={isFuture ? 0.65 : 1}
                           >
                             {item.month}
                           </text>
-                          {item.isCurrent && (
+                          {!isMobileViewport && item.isCurrent && (
                             <circle
                               cx={x}
                               cy={baselineY + 28}
@@ -1524,16 +1581,16 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
                       );
                     })}
 
-                    {/* Vùng nhận diện hover chuột mượt mà cho 12 tháng (Invisible hitboxes) */}
-                    {monthlyChartData.map((_item, idx) => {
+                    {/* Vùng nhận diện hover chuột mượt mà (Invisible hitboxes) */}
+                    {displayedChartData.map((_item, idx) => {
                       const x = startX + idx * stepX;
                       return (
                         <rect
                           key={`hit-${idx}`}
                           x={x - stepX / 2}
-                          y={20}
+                          y={isMobileViewport ? 14 : 20}
                           width={stepX}
-                          height={baselineY - 10}
+                          height={baselineY - (isMobileViewport ? 6 : 10)}
                           fill="transparent"
                           style={{ cursor: 'pointer' }}
                           onMouseEnter={() => setHoveredMonth(idx)}
@@ -1545,16 +1602,16 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
 
                   {/* Tooltip nổi khi hover trên biểu đồ cột đôi */}
                   {hoveredItem && hoveredPlanPt && (() => {
-                    const isRightEdge = (hoveredMonth ?? 0) >= 9;
+                    const isRightEdge = (hoveredMonth ?? 0) >= displayedChartData.length - 2;
                     const isLeftEdge = (hoveredMonth ?? 0) <= 1;
                     const transformX = isRightEdge ? '-85%' : isLeftEdge ? '-15%' : '-50%';
                     const arrowLeft = isRightEdge ? '82%' : isLeftEdge ? '18%' : '50%';
 
-                    const hPlan = hoveredItem.planRevenue ?? hoveredItem.plan;
-                    const hActualRev = hoveredItem.actualRevenue ?? (hoveredMonth !== null && hoveredMonth <= 9 ? hoveredItem.actual : null);
-                    const hActualSales = hoveredItem.actualSales ?? (hoveredMonth !== null && hoveredMonth <= 9 ? Number(((hoveredItem.actual ?? 1.2) * 1.08).toFixed(2)) : null);
-                    const hSeajong = hoveredItem.seajong ?? (hoveredMonth !== null && hoveredMonth <= 9 ? Number(((hActualRev ?? 1.2) * 0.9).toFixed(2)) : null);
-                    const hOem = hoveredItem.oem ?? (hoveredMonth !== null && hoveredMonth <= 9 ? Number(((hActualRev ?? 1.2) * 0.6).toFixed(2)) : null);
+                    const hPlan = chartMetric === 'revenue' ? (hoveredItem.planRevenue ?? hoveredItem.plan) : (hoveredItem.planSales ?? hoveredItem.plan);
+                    const hActualRev = hoveredItem.actualRevenue ?? hoveredItem.actual ?? null;
+                    const hActualSales = hoveredItem.actualSales ?? hoveredItem.actual ?? null;
+                    const hSeajong = chartMetric === 'sales' ? (hoveredItem.signedSeajong ?? hoveredItem.seajong ?? null) : (hoveredItem.seajong ?? null);
+                    const hOem = chartMetric === 'sales' ? (hoveredItem.signedOem ?? hoveredItem.oem ?? null) : (hoveredItem.oem ?? null);
 
                     const revRate = hActualRev !== null && hPlan > 0 ? ((hActualRev / hPlan) * 100).toFixed(1) : null;
                     const salesRate = hActualSales !== null && hPlan > 0 ? ((hActualSales / hPlan) * 100).toFixed(1) : null;
@@ -1563,7 +1620,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
                       <div
                         style={{
                           position: 'absolute',
-                          left: `${(hoveredPlanPt.x / 680) * 100}%`,
+                          left: `${(hoveredPlanPt.x / svgWidth) * 100}%`,
                           top: '12%',
                           transform: `translate(${transformX}, -100%)`,
                           backgroundColor: '#ffffff',
@@ -1722,28 +1779,28 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
           </div>
 
           {/* Ghi chú biểu đồ cột đôi và các đường line */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '18px', fontSize: '0.71875rem', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+          <div className="bom-chart-legend" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '18px', fontSize: '0.71875rem', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
               <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#0284c7' }} />
-              Cột Seajong (Thương hiệu)
+              {isMobileViewport ? 'Cột Seajong' : 'Cột Seajong (Thương hiệu)'}
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
               <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#f59e0b' }} />
-              Cột OEM (Gia công)
+              {isMobileViewport ? 'Cột OEM' : 'Cột OEM (Gia công)'}
             </span>
             {chartMetric === 'revenue' ? (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', width: '16px', height: '2px', backgroundColor: '#10b981', position: 'relative' }}>
                   <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '4px', height: '4px', borderRadius: '50%', backgroundColor: '#10b981' }} />
                 </span>
-                Đường Tổng Doanh thu
+                {isMobileViewport ? 'Tổng doanh thu' : 'Đường Tổng Doanh thu'}
               </span>
             ) : (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', width: '16px', height: '2px', backgroundColor: '#8b5cf6', position: 'relative' }}>
                   <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '4px', height: '4px', borderRadius: '50%', backgroundColor: '#8b5cf6' }} />
                 </span>
-                Đường Tổng Doanh số
+                {isMobileViewport ? 'Tổng doanh số' : 'Đường Tổng Doanh số'}
               </span>
             )}
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
@@ -1751,17 +1808,20 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
                 <span style={{ width: '100%', height: '2px', borderTop: '2px dashed #ef4444' }} />
                 <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '4px', height: '4px', borderRadius: '50%', backgroundColor: '#ef4444' }} />
               </span>
-              Chỉ tiêu Kế hoạch năm
+              {isMobileViewport ? 'Chỉ tiêu' : 'Chỉ tiêu Kế hoạch năm'}
             </span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-              <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--color-primary)' }} />
-              Tháng 10 hiện hành
-            </span>
+            {!isMobileViewport && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--color-primary)' }} />
+                Tháng {new Date().getMonth() + 1} hiện hành
+              </span>
+            )}
           </div>
         </div>
 
         {/* Thẻ 12 Chỉ số tài chính & Sức khỏe doanh nghiệp (thay thế Cơ cấu sản phẩm theo Hình 2) */}
         <div
+          className="bom-ratios-card"
           style={{
             backgroundColor: 'var(--bg-surface-2)',
             padding: '16px 20px 18px 20px',

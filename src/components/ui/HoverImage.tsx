@@ -12,11 +12,12 @@ interface HoverImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
 export function HoverImage({ previewSize = 300, images, fallback, onPreviewClick, ...props }: HoverImageProps) {
   const [hover, setHover] = useState(false);
   const [hasError, setHasError] = useState(false);
-  const [coords, setCoords] = useState({ x: 0, y: 0 });
+  const [coords, setCoords] = useState({ x: 0, y: 0, size: previewSize });
   const [mounted, setMounted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [displaySrc, setDisplaySrc] = useState<string | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
   const hoverTimeout = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -45,30 +46,99 @@ export function HoverImage({ previewSize = 300, images, fallback, onPreviewClick
     };
   }, [hover, hasError, imageList.length]);
 
+  const updatePreviewPosition = () => {
+    const rect = imgRef.current?.getBoundingClientRect();
+    if (!rect || typeof window === "undefined") return;
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const isMobile = vw <= 768;
+    const gap = isMobile ? 8 : 12;
+    const margin = isMobile ? 8 : 10;
+
+    // Ưu tiên đặt hình ảnh lớn nằm về bên phải hình ảnh nhỏ
+    let x = rect.right + gap;
+    const availableRight = vw - x - margin;
+    let actualSize = previewSize;
+
+    if (isMobile) {
+      // Trên màn hình điện thoại: luôn đặt bên phải ảnh nhỏ và tự co kích thước để nằm gọn trong màn hình
+      if (availableRight >= 120) {
+        actualSize = Math.min(previewSize, availableRight);
+      } else {
+        actualSize = Math.min(previewSize, vw - margin * 2);
+        x = Math.max(margin, vw - actualSize - margin);
+      }
+    } else {
+      // Trên màn hình lớn: đặt bên phải, nếu tràn màn hình phải và bên trái đủ chỗ thì mới chuyển sang trái
+      if (x + previewSize > vw - margin) {
+        if (rect.left - previewSize - gap >= margin) {
+          x = rect.left - previewSize - gap;
+        } else if (availableRight >= 160) {
+          actualSize = Math.min(previewSize, availableRight);
+        } else {
+          actualSize = Math.min(previewSize, vw - margin * 2);
+          x = Math.max(margin, vw - actualSize - margin);
+        }
+      }
+    }
+
+    let y = rect.top - (actualSize / 2) + (rect.height / 2);
+    if (y < margin) y = margin;
+    if (y + actualSize > vh - margin) {
+      y = Math.max(margin, vh - actualSize - margin);
+    }
+
+    setCoords({ x, y, size: actualSize });
+  };
+
+  useEffect(() => {
+    if (!hover) return;
+    const handleOutsideTouchOrClick = (e: Event) => {
+      const target = e.target as Node | null;
+      if (
+        target &&
+        !imgRef.current?.contains(target) &&
+        !previewRef.current?.contains(target)
+      ) {
+        setHover(false);
+      }
+    };
+    const handleScroll = () => {
+      if (typeof window !== "undefined" && window.innerWidth <= 768) {
+        setHover(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideTouchOrClick);
+    document.addEventListener("touchstart", handleOutsideTouchOrClick, { passive: true });
+    window.addEventListener("scroll", handleScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideTouchOrClick);
+      document.removeEventListener("touchstart", handleOutsideTouchOrClick);
+      window.removeEventListener("scroll", handleScroll, true);
+    };
+  }, [hover]);
+
   const handleMouseEnter = () => {
     if (hasError || imageList.length === 0) return;
     if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
     if (!hover) {
-      const rect = imgRef.current?.getBoundingClientRect();
-      if (rect) {
-        // Calculate optimal position (right side of the thumbnail, or left if not enough space)
-        let x = rect.right + 12;
-        let y = rect.top - (previewSize / 2) + (rect.height / 2);
-        
-        // Adjust if it goes out of the right edge
-        if (x + previewSize > window.innerWidth) {
-          x = rect.left - previewSize - 12;
-        }
-        
-        // Adjust if it goes out of the top or bottom edges
-        if (y < 10) y = 10;
-        if (y + previewSize > window.innerHeight - 10) {
-          y = window.innerHeight - previewSize - 10;
-        }
-
-        setCoords({ x, y });
-      }
+      updatePreviewPosition();
       setHover(true);
+    }
+  };
+
+  const handleThumbnailClick = (e: React.MouseEvent<HTMLImageElement>) => {
+    if (typeof window !== "undefined" && window.innerWidth <= 768) {
+      e.stopPropagation();
+      if (!hasError && imageList.length > 0) {
+        if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+        updatePreviewPosition();
+        setHover(true);
+      }
+    }
+    if (props.onClick) {
+      props.onClick(e);
     }
   };
 
@@ -96,6 +166,8 @@ export function HoverImage({ previewSize = 300, images, fallback, onPreviewClick
     }
     if (onPreviewClick && selectedSrc) {
       onPreviewClick(currentIndex, selectedSrc);
+    } else if (typeof window !== "undefined" && window.innerWidth <= 768 && imageList.length <= 1) {
+      setHover(false);
     }
   };
 
@@ -138,6 +210,7 @@ export function HoverImage({ previewSize = 300, images, fallback, onPreviewClick
         src={currentSrc}
         ref={imgRef}
         onError={handleError}
+        onClick={handleThumbnailClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         style={{
@@ -152,12 +225,13 @@ export function HoverImage({ previewSize = 300, images, fallback, onPreviewClick
       />
       {hover && !hasError && mounted && typeof document !== "undefined" && createPortal(
         <div 
+          ref={previewRef}
           style={{
             position: "fixed",
             top: coords.y,
             left: coords.x,
-            width: previewSize,
-            height: previewSize,
+            width: coords.size,
+            height: coords.size,
             zIndex: 999999,
             borderRadius: 12,
             overflow: "hidden",

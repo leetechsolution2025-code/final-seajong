@@ -27,7 +27,7 @@ import {
   Check2,
 } from 'react-bootstrap-icons';
 import { TableToolbar, type TableToolbarFilter, type TableToolbarMenuItem } from '../../../components/common/TableToolbar';
-import { FullWidthTable } from '../../../components/common/FullWidthTable';
+import { FullWidthTable, SwipeableTableRow } from '../../../components/common/FullWidthTable';
 import { Pagination } from '../../../components/common/Pagination';
 import { Button } from '../../../components/common/Button';
 import { Modal } from '../../../components/common/Modal';
@@ -1462,10 +1462,11 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
         }
         filters={toolbarFilters}
         rightActions={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Button
               variant="outline"
               size="sm"
+              className="!hidden sm:!inline-flex"
               onClick={() => onShowToast?.('info', 'Xuất Excel', 'Đang trích xuất dữ liệu dòng tiền ra file Excel.')}
               leftIcon={<FileEarmarkExcel size={14} color="#16a34a" />}
             >
@@ -1477,9 +1478,10 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                 size="sm"
                 onClick={handleOpenCreateInflowModal}
                 leftIcon={<PlusLg size={14} />}
-                className="!bg-emerald-600 hover:!bg-emerald-700 !text-white"
+                className="!bg-emerald-600 hover:!bg-emerald-700 !text-white !px-2.5 sm:!px-3"
               >
-                Lập phiếu thu
+                <span className="hidden sm:inline">Lập phiếu thu</span>
+                <span className="sm:hidden">Thu</span>
               </Button>
             )}
             {currentStep === 4 && (
@@ -1488,8 +1490,9 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                 size="sm"
                 onClick={handleOpenCreateModal}
                 leftIcon={<PlusLg size={14} />}
+                className="!px-2.5 sm:!px-3"
               >
-                Tạo mới
+                <span className="hidden sm:inline">Tạo mới</span>
               </Button>
             )}
             <Button
@@ -1498,8 +1501,9 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
               disabled={currentSelectedCount === 0}
               onClick={() => setShowDeleteConfirm(true)}
               leftIcon={<Trash size={14} />}
+              className="!px-2.5 sm:!px-3"
             >
-              Xoá{currentSelectedCount > 0 ? ` (${currentSelectedCount})` : ''}
+              <span className="hidden sm:inline">Xoá{currentSelectedCount > 0 ? ` (${currentSelectedCount})` : ''}</span>
             </Button>
           </div>
         }
@@ -1517,7 +1521,7 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
           <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
             <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
               <tr className="text-slate-500 text-[11.5px] uppercase tracking-[0.06em] font-bold">
-                <th className="py-2.5 px-3.5 w-56">
+                <th className="py-2.5 px-3.5 sm:w-56">
                   <div className="flex items-center gap-2.5">
                     <input
                       type="checkbox"
@@ -1535,9 +1539,9 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                     <span>Mã đơn hàng</span>
                   </div>
                 </th>
-                <th className="py-2.5 px-3.5 min-w-[280px]">Thông tin khách hàng</th>
-                <th className="py-2.5 px-3.5 w-44 text-right">Giá trị</th>
-                <th className="py-2.5 px-3.5 w-36 text-center">Trạng thái</th>
+                <th className="hidden sm:table-cell py-2.5 px-3.5 min-w-[280px]">Thông tin khách hàng</th>
+                <th className="hidden sm:table-cell py-2.5 px-3.5 w-44 text-right">Giá trị</th>
+                <th className="hidden sm:table-cell py-2.5 px-3.5 w-36 text-center">Trạng thái</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1549,9 +1553,23 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                 </tr>
               ) : (
                 filteredOrders.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((ord) => (
-                  <tr
+                  <SwipeableTableRow
                     key={ord.id}
+                    rowId={`cf-ord-${ord.id}`}
                     onClick={() => setSelectedOrder(ord)}
+                    onEdit={() => setSelectedOrder(ord)}
+                    onDelete={() => {
+                      setOrders((prev) => prev.filter((o) => o.id !== ord.id));
+                      setSelectedOrderIds((prev) => {
+                        const next = new Set(prev);
+                        next.delete(ord.id);
+                        return next;
+                      });
+                      notifyFinanceUpdated();
+                      onShowToast?.('success', 'Đã xóa đơn hàng', `Đã xóa đơn hàng ${ord.code} khỏi hệ thống.`);
+                    }}
+                    deleteConfirmTitle="Xác nhận xóa dữ liệu đơn hàng"
+                    deleteConfirmMessage={`Bạn có chắc chắn muốn xóa đơn hàng "${ord.code}" của khách hàng "${ord.customerName}" khỏi hệ thống? Dữ liệu sau khi xóa sẽ không thể phục hồi.`}
                     className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 cursor-pointer"
                   >
                     <td className="py-2.5 px-3.5 align-top">
@@ -1566,19 +1584,51 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                             else next.delete(ord.id);
                             setSelectedOrderIds(next);
                           }}
-                          className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                          className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer shrink-0"
                         />
                         <div className="flex-1 min-w-0">
-                          <span className="font-bold text-slate-900 text-[13px] block">
-                            {ord.code}
-                          </span>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-slate-900 text-[13px] block">
+                              {ord.code}
+                            </span>
+                            <span
+                              className={`sm:hidden inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-semibold whitespace-nowrap ${
+                                ord.status === 'cho_duyet'
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  : ord.status === 'da_duyet'
+                                  ? 'bg-sky-50 text-sky-700 border border-sky-200'
+                                  : ord.status === 'dang_san_xuat'
+                                  ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              }`}
+                            >
+                              {ord.status === 'cho_duyet'
+                                ? 'Chờ duyệt'
+                                : ord.status === 'da_duyet'
+                                ? 'Đã phê duyệt'
+                                : ord.status === 'dang_san_xuat'
+                                ? 'Đang sản xuất'
+                                : 'Hoàn tất'}
+                            </span>
+                          </div>
                           <div className="text-[11.5px] text-slate-500 mt-0.5 whitespace-nowrap">
                             Ngày đặt: {ord.orderDate} • Giao: {ord.deliveryDate}
+                          </div>
+                          {/* Tóm tắt hiển thị trên màn hình điện thoại */}
+                          <div className="sm:hidden mt-1 space-y-0.5">
+                            <div className="text-[12px] font-semibold text-slate-800 truncate">
+                              {ord.customerName}
+                              {ord.customerGroup ? ` • ${getCustomerGroupInfo(ord.customerGroup).name}` : ''}
+                            </div>
+                            <div className="flex items-center justify-between text-[11.5px]">
+                              <span className="font-bold text-slate-900">{formatVND(ord.totalAmount)}</span>
+                              <span className="text-emerald-600 font-semibold">Đã thu: {formatVND(ord.paidAmount)}</span>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </td>
-                    <td className="py-2.5 px-3.5 align-top">
+                    <td className="hidden sm:table-cell py-2.5 px-3.5 align-top">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-semibold text-slate-900 text-[13px]">
                           {ord.customerName}
@@ -1598,7 +1648,7 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                         </div>
                       )}
                     </td>
-                    <td className="py-2.5 px-3.5 align-top text-right">
+                    <td className="hidden sm:table-cell py-2.5 px-3.5 align-top text-right">
                       <div className="font-bold text-slate-900 text-[13px]">
                         {formatVND(ord.totalAmount)}
                       </div>
@@ -1606,7 +1656,7 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                         Đã thu: {formatVND(ord.paidAmount)}
                       </div>
                     </td>
-                    <td className="py-2.5 px-3.5 align-top text-center">
+                    <td className="hidden sm:table-cell py-2.5 px-3.5 align-top text-center">
                       <span
                         className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11.5px] font-semibold whitespace-nowrap ${
                           ord.status === 'cho_duyet'
@@ -1627,7 +1677,7 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                           : 'Hoàn tất'}
                       </span>
                     </td>
-                  </tr>
+                  </SwipeableTableRow>
                 ))
               )}
             </tbody>
@@ -1642,7 +1692,7 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
           <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
             <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
               <tr className="text-slate-500 text-[11.5px] uppercase tracking-[0.06em] font-bold">
-                <th className="py-2.5 px-3.5 w-56">
+                <th className="py-2.5 px-3.5 sm:w-56">
                   <div className="flex items-center gap-2.5">
                     <input
                       type="checkbox"
@@ -1660,9 +1710,9 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                     <span>Mã yêu cầu</span>
                   </div>
                 </th>
-                <th className="py-2.5 px-3.5 w-52">Người yêu cầu</th>
-                <th className="py-2.5 px-3.5 min-w-[280px]">Nội dung</th>
-                <th className="py-2.5 px-3.5 w-36 text-center">Trạng thái</th>
+                <th className="hidden sm:table-cell py-2.5 px-3.5 w-52">Người yêu cầu</th>
+                <th className="hidden sm:table-cell py-2.5 px-3.5 min-w-[280px]">Nội dung</th>
+                <th className="hidden sm:table-cell py-2.5 px-3.5 w-36 text-center">Trạng thái</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1674,9 +1724,23 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                 </tr>
               ) : (
                 filteredRequests.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((req) => (
-                  <tr
+                  <SwipeableTableRow
                     key={req.id}
+                    rowId={`cf-req-${req.id}`}
                     onClick={() => setSelectedRequest(req)}
+                    onEdit={() => setSelectedRequest(req)}
+                    onDelete={() => {
+                      setRequests((prev) => prev.filter((r) => r.id !== req.id));
+                      setSelectedRequestIds((prev) => {
+                        const next = new Set(prev);
+                        next.delete(req.id);
+                        return next;
+                      });
+                      notifyFinanceUpdated();
+                      onShowToast?.('success', 'Đã xóa yêu cầu', `Đã xóa yêu cầu đề xuất ${req.code} khỏi hệ thống.`);
+                    }}
+                    deleteConfirmTitle="Xác nhận xóa yêu cầu đề xuất"
+                    deleteConfirmMessage={`Bạn có chắc chắn muốn xóa yêu cầu "${req.code}" (${req.title}) khỏi hệ thống? Dữ liệu sau khi xóa sẽ không thể phục hồi.`}
                     className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 cursor-pointer"
                   >
                     <td className="py-2.5 px-3.5 align-top">
@@ -1691,12 +1755,33 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                             else next.delete(req.id);
                             setSelectedRequestIds(next);
                           }}
-                          className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                          className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer shrink-0"
                         />
                         <div className="flex-1 min-w-0">
-                          <span className="font-bold text-slate-900 text-[13px] block">
-                            {req.code}
-                          </span>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-slate-900 text-[13px] block">
+                              {req.code}
+                            </span>
+                            <span
+                              className={`sm:hidden inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-semibold whitespace-nowrap ${
+                                req.status === 'cho_duyet'
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  : req.status === 'da_duyet'
+                                  ? 'bg-sky-50 text-sky-700 border border-sky-200'
+                                  : req.status === 'da_giai_ngan'
+                                  ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                  : 'bg-rose-50 text-rose-700 border border-rose-200'
+                              }`}
+                            >
+                              {req.status === 'cho_duyet'
+                                ? 'Chờ duyệt chi'
+                                : req.status === 'da_duyet'
+                                ? 'Đã duyệt chi'
+                                : req.status === 'da_giai_ngan'
+                                ? 'Đã lập lệnh chi'
+                                : 'Đã từ chối'}
+                            </span>
+                          </div>
                           <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                             <span
                               className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10.5px] font-semibold ${
@@ -1719,21 +1804,29 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                             </span>
                             <span className="text-[11px] text-slate-400">{req.requestDate}</span>
                           </div>
+                          {/* Tóm tắt hiển thị trên màn hình điện thoại */}
+                          <div className="sm:hidden mt-1 space-y-0.5">
+                            <div className="text-[12px] font-semibold text-slate-800 line-clamp-1">{req.title}</div>
+                            <div className="flex items-center justify-between text-[11.5px]">
+                              <span className="text-slate-500 truncate">{req.proposer} • {req.department}</span>
+                              <span className="font-bold text-emerald-700 shrink-0 ml-2">{formatVND(req.amount)}</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </td>
-                    <td className="py-2.5 px-3.5 align-top">
+                    <td className="hidden sm:table-cell py-2.5 px-3.5 align-top">
                       <div className="font-semibold text-slate-900 text-[13px]">{req.proposer}</div>
                       <div className="text-[11.5px] text-slate-500 mt-0.5">{req.department}</div>
                     </td>
-                    <td className="py-2.5 px-3.5 align-top">
+                    <td className="hidden sm:table-cell py-2.5 px-3.5 align-top">
                       <div className="font-semibold text-slate-900 text-[13px]">{req.title}</div>
                       <div className="text-[11.5px] text-slate-500 mt-0.5">{req.reason}</div>
                       <div className="text-[12px] font-bold text-slate-800 mt-1">
                         Số tiền đề xuất: <span className="text-emerald-700">{formatVND(req.amount)}</span>
                       </div>
                     </td>
-                    <td className="py-2.5 px-3.5 align-top text-center">
+                    <td className="hidden sm:table-cell py-2.5 px-3.5 align-top text-center">
                       <span
                         className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11.5px] font-semibold whitespace-nowrap ${
                           req.status === 'cho_duyet'
@@ -1754,7 +1847,7 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                           : 'Đã từ chối'}
                       </span>
                     </td>
-                  </tr>
+                  </SwipeableTableRow>
                 ))
               )}
             </tbody>
@@ -1769,7 +1862,7 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
           <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
             <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
               <tr className="text-slate-500 text-[11.5px] uppercase tracking-[0.06em] font-bold">
-                <th className="py-2.5 px-3.5 w-56">
+                <th className="py-2.5 px-3.5 sm:w-56">
                   <div className="flex items-center gap-2.5">
                     <input
                       type="checkbox"
@@ -1787,9 +1880,9 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                     <span>Mã hiệu</span>
                   </div>
                 </th>
-                <th className="py-2.5 px-3.5 min-w-[300px]">Nguồn vào</th>
-                <th className="py-2.5 px-3.5 w-48 text-right">Số tiền</th>
-                <th className="py-2.5 px-3.5 w-36 text-center">Trạng thái</th>
+                <th className="hidden sm:table-cell py-2.5 px-3.5 min-w-[300px]">Nguồn vào</th>
+                <th className="hidden sm:table-cell py-2.5 px-3.5 w-48 text-right">Số tiền</th>
+                <th className="hidden sm:table-cell py-2.5 px-3.5 w-36 text-center">Trạng thái</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1801,9 +1894,23 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                 </tr>
               ) : (
                 filteredInflows.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((inf) => (
-                  <tr
+                  <SwipeableTableRow
                     key={inf.id}
+                    rowId={`cf-inf-${inf.id}`}
                     onClick={() => handleOpenInflowDetail(inf)}
+                    onEdit={() => handleOpenInflowDetail(inf)}
+                    onDelete={() => {
+                      setInflows((prev) => prev.filter((x) => x.id !== inf.id));
+                      setSelectedInflowIds((prev) => {
+                        const next = new Set(prev);
+                        next.delete(inf.id);
+                        return next;
+                      });
+                      notifyFinanceUpdated();
+                      onShowToast?.('success', 'Đã xóa phiếu thu', `Đã xóa giao dịch dòng vào ${inf.code} khỏi hệ thống.`);
+                    }}
+                    deleteConfirmTitle="Xác nhận xóa giao dịch dòng vào"
+                    deleteConfirmMessage={`Bạn có chắc chắn muốn xóa giao dịch dòng vào "${inf.code}" (${inf.sourceTitle}) khỏi hệ thống? Dữ liệu sau khi xóa sẽ không thể phục hồi.`}
                     className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 cursor-pointer"
                   >
                     <td className="py-2.5 px-3.5 align-top">
@@ -1818,12 +1925,29 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                             else next.delete(inf.id);
                             setSelectedInflowIds(next);
                           }}
-                          className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                          className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer shrink-0"
                         />
                         <div className="flex-1 min-w-0">
-                          <span className="font-bold text-slate-900 text-[13px] block">
-                            {inf.code}
-                          </span>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-slate-900 text-[13px] block">
+                              {inf.code}
+                            </span>
+                            <span
+                              className={`sm:hidden inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-semibold whitespace-nowrap gap-1 ${
+                                inf.status === 'cho_thu'
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-300'
+                                  : inf.status === 'da_vao_quy'
+                                  ? 'bg-sky-50 text-sky-700 border border-sky-300'
+                                  : 'bg-emerald-50 text-emerald-700 border border-emerald-300'
+                              }`}
+                            >
+                              {inf.status === 'cho_thu'
+                                ? 'Chờ thu'
+                                : inf.status === 'da_vao_quy'
+                                ? 'Đã vào quỹ'
+                                : 'Đã đối soát'}
+                            </span>
+                          </div>
                           {inf.voucherCode && (
                             <span className="text-[11px] text-emerald-700 font-semibold block mt-0.5">
                               ✓ {inf.voucherCode}
@@ -1841,10 +1965,18 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                             </span>
                             <span className="text-[11px] text-slate-400">{inf.date}</span>
                           </div>
+                          {/* Tóm tắt hiển thị trên màn hình điện thoại */}
+                          <div className="sm:hidden mt-1 space-y-0.5">
+                            <div className="text-[12px] font-semibold text-slate-800 line-clamp-1">{inf.sourceTitle}</div>
+                            <div className="flex items-center justify-between text-[11.5px]">
+                              <span className="text-slate-600 truncate">{inf.payerName}</span>
+                              <span className="font-bold text-emerald-600 shrink-0 ml-2">+{formatVND(inf.amount)}</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </td>
-                    <td className="py-2.5 px-3.5 align-top">
+                    <td className="hidden sm:table-cell py-2.5 px-3.5 align-top">
                       <div className="font-semibold text-slate-900 text-[13px]">{inf.sourceTitle}</div>
                       <div className="text-[11.5px] text-slate-600 mt-0.5">
                         Đối tượng nộp: <span className="font-medium text-slate-800">{inf.payerName}</span>
@@ -1856,13 +1988,13 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                         <div className="text-[11.5px] text-slate-400 mt-0.5 line-clamp-1">{inf.note}</div>
                       )}
                     </td>
-                    <td className="py-2.5 px-3.5 align-top text-right">
+                    <td className="hidden sm:table-cell py-2.5 px-3.5 align-top text-right">
                       <div className="font-bold text-emerald-600 text-[13.5px]">
                         +{formatVND(inf.amount)}
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5">Thực thu quỹ</div>
                     </td>
-                    <td className="py-2.5 px-3.5 align-top text-center">
+                    <td className="hidden sm:table-cell py-2.5 px-3.5 align-top text-center">
                       <span
                         className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11.5px] font-semibold whitespace-nowrap gap-1 ${
                           inf.status === 'cho_thu'
@@ -1890,7 +2022,7 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                         )}
                       </span>
                     </td>
-                  </tr>
+                  </SwipeableTableRow>
                 ))
               )}
             </tbody>
@@ -1905,7 +2037,7 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
           <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
             <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
               <tr className="text-slate-500 text-[11.5px] uppercase tracking-[0.06em] font-bold">
-                <th className="py-2.5 px-3.5 w-56">
+                <th className="py-2.5 px-3.5 sm:w-56">
                   <div className="flex items-center gap-2.5">
                     <input
                       type="checkbox"
@@ -1923,9 +2055,9 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                     <span>Mã hiệu</span>
                   </div>
                 </th>
-                <th className="py-2.5 px-3.5 min-w-[300px]">Thông tin chi phí</th>
-                <th className="py-2.5 px-3.5 w-48 text-right">Số tiền</th>
-                <th className="py-2.5 px-3.5 w-36 text-center">Trạng thái</th>
+                <th className="hidden sm:table-cell py-2.5 px-3.5 min-w-[300px]">Thông tin chi phí</th>
+                <th className="hidden sm:table-cell py-2.5 px-3.5 w-48 text-right">Số tiền</th>
+                <th className="hidden sm:table-cell py-2.5 px-3.5 w-36 text-center">Trạng thái</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1937,9 +2069,23 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                 </tr>
               ) : (
                 filteredOutflows.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((out) => (
-                  <tr
+                  <SwipeableTableRow
                     key={out.id}
+                    rowId={`cf-out-${out.id}`}
                     onClick={() => handleOpenOutflowDetail(out)}
+                    onEdit={() => handleOpenOutflowDetail(out)}
+                    onDelete={() => {
+                      setOutflows((prev) => prev.filter((x) => x.id !== out.id));
+                      setSelectedOutflowIds((prev) => {
+                        const next = new Set(prev);
+                        next.delete(out.id);
+                        return next;
+                      });
+                      notifyFinanceUpdated();
+                      onShowToast?.('success', 'Đã xóa lệnh chi', `Đã xóa lệnh chi tiền ${out.code} khỏi hệ thống.`);
+                    }}
+                    deleteConfirmTitle="Xác nhận xóa lệnh chi tiền"
+                    deleteConfirmMessage={`Bạn có chắc chắn muốn xóa lệnh chi tiền "${out.code}" (${out.categoryTitle}) khỏi hệ thống? Dữ liệu sau khi xóa sẽ không thể phục hồi.`}
                     className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 cursor-pointer"
                   >
                     <td className="py-2.5 px-3.5 align-top">
@@ -1954,12 +2100,23 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                             else next.delete(out.id);
                             setSelectedOutflowIds(next);
                           }}
-                          className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                          className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer shrink-0"
                         />
                         <div className="flex-1 min-w-0">
-                          <span className="font-bold text-slate-900 text-[13px] block">
-                            {out.code}
-                          </span>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-slate-900 text-[13px] block">
+                              {out.code}
+                            </span>
+                            <span
+                              className={`sm:hidden inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-semibold whitespace-nowrap ${
+                                out.status === 'cho_chi'
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              }`}
+                            >
+                              {out.status === 'cho_chi' ? 'Chờ giải ngân' : 'Đã xuất quỹ'}
+                            </span>
+                          </div>
                           {out.voucherCode && (
                             <span className="text-[11px] text-emerald-700 font-semibold block mt-0.5">
                               ✓ {out.voucherCode}
@@ -1977,10 +2134,18 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                             </span>
                             <span className="text-[11px] text-slate-400">Hạn: {out.dueDate}</span>
                           </div>
+                          {/* Tóm tắt hiển thị trên màn hình điện thoại */}
+                          <div className="sm:hidden mt-1 space-y-0.5">
+                            <div className="text-[12px] font-semibold text-slate-800 line-clamp-1">{out.categoryTitle}</div>
+                            <div className="flex items-center justify-between text-[11.5px]">
+                              <span className="text-slate-600 truncate">Thụ hưởng: {out.beneficiary}</span>
+                              <span className="font-bold text-rose-600 shrink-0 ml-2">-{formatVND(out.amount)}</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </td>
-                    <td className="py-2.5 px-3.5 align-top">
+                    <td className="hidden sm:table-cell py-2.5 px-3.5 align-top">
                       <div className="font-semibold text-slate-900 text-[13px]">{out.categoryTitle}</div>
                       <div className="text-[11.5px] text-slate-600 mt-0.5">
                         Thụ hưởng: <span className="font-medium text-slate-800">{out.beneficiary}</span>
@@ -1992,7 +2157,7 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                         <div className="text-[11.5px] text-slate-400 mt-0.5 line-clamp-1">{out.note}</div>
                       )}
                     </td>
-                    <td className="py-2.5 px-3.5 align-top text-right">
+                    <td className="hidden sm:table-cell py-2.5 px-3.5 align-top text-right">
                       <div className="font-bold text-rose-600 text-[13.5px]">
                         -{formatVND(out.amount)}
                       </div>
@@ -2002,7 +2167,7 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                         </div>
                       )}
                     </td>
-                    <td className="py-2.5 px-3.5 align-top text-center">
+                    <td className="hidden sm:table-cell py-2.5 px-3.5 align-top text-center">
                       <span
                         className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11.5px] font-semibold whitespace-nowrap ${
                           out.status === 'cho_chi'
@@ -2013,7 +2178,7 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                         {out.status === 'cho_chi' ? 'Chờ giải ngân' : 'Đã xuất quỹ'}
                       </span>
                     </td>
-                  </tr>
+                  </SwipeableTableRow>
                 ))
               )}
             </tbody>

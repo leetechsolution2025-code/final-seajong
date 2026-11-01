@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { StandardPage } from '../../../components/layout/StandardPage';
 import { TableToolbar } from '../../../components/common/TableToolbar';
-import { FullWidthTable } from '../../../components/common/FullWidthTable';
+import { FullWidthTable, SwipeableTableRow } from '../../../components/common/FullWidthTable';
 import { Pagination } from '../../../components/common/Pagination';
 import { Button } from '../../../components/common/Button';
 import { Badge } from '../../../components/common/Badge';
@@ -69,6 +69,8 @@ const TABLE_VI_LABELS: Record<string, string> = {
   LaborHolidayRule: 'Lịch nghỉ Lễ, Tết hưởng nguyên lương',
   LaborLeavePolicy: 'Chính sách nghỉ phép năm & chế độ',
   InsuranceHistory: 'Lịch sử tham gia Bảo hiểm',
+  InsuranceChange: 'Biến động Bảo hiểm (Báo tăng/giảm)',
+  InsuranceBenefit: 'Hồ sơ Chế độ & Trợ cấp Bảo hiểm',
   InsuranceConfig: 'Cấu hình tỷ lệ Bảo hiểm',
   RecruitmentRequest: 'Yêu cầu tuyển dụng',
   Candidate: 'Hồ sơ ứng viên',
@@ -736,12 +738,12 @@ export const DataManagementPage: React.FC = () => {
                 fontWeight: 700,
               }}
             >
-              <th style={{ padding: '10px 12px', width: '56px', textAlign: 'center' }}>STT</th>
+              <th className="hidden sm:table-cell" style={{ padding: '10px 12px', width: '56px', textAlign: 'center' }}>STT</th>
               <th style={{ padding: '10px 14px' }}>TÊN FILE SAO LƯU (.DB)</th>
-              <th style={{ padding: '10px 12px', width: '190px' }}>PHÂN LOẠI</th>
-              <th style={{ padding: '10px 12px', width: '130px', textAlign: 'right' }}>DUNG LƯỢNG</th>
-              <th style={{ padding: '10px 12px', width: '180px', textAlign: 'center' }}>THỜI GIAN TẠO</th>
-              <th style={{ padding: '10px 14px', width: '230px', textAlign: 'right' }}>THAO TÁC</th>
+              <th className="hidden sm:table-cell" style={{ padding: '10px 12px', width: '190px' }}>PHÂN LOẠI</th>
+              <th className="hidden sm:table-cell" style={{ padding: '10px 12px', width: '130px', textAlign: 'right' }}>DUNG LƯỢNG</th>
+              <th className="hidden sm:table-cell" style={{ padding: '10px 12px', width: '180px', textAlign: 'center' }}>THỜI GIAN TẠO</th>
+              <th className="w-[125px] sm:w-[230px]" style={{ padding: '10px 14px', textAlign: 'right' }}>THAO TÁC</th>
             </tr>
           </thead>
           <tbody>
@@ -761,44 +763,55 @@ export const DataManagementPage: React.FC = () => {
                 const isSelected = selectedBackup?.name === item.name;
 
                 return (
-                  <tr
+                  <SwipeableTableRow
                     key={item.name}
+                    rowId={item.name}
+                    editLabel="Phục hồi"
+                    onEdit={() => handleRestoreClick(item.name)}
+                    onDelete={() => executeDelete(item.name)}
+                    deleteConfirmTitle="Xác nhận xóa bản sao lưu"
+                    deleteConfirmMessage={`Bạn có chắc chắn muốn xóa file sao lưu "${item.name}" khỏi máy chủ?`}
                     onClick={() => setSelectedBackup(item)}
                     className={`border-b border-slate-100 transition-colors cursor-pointer ${
                       isSelected ? 'bg-indigo-50/70' : 'hover:bg-slate-50/90'
                     }`}
                     title="Nhấn vào dòng để xem chi tiết hoặc phục hồi bản sao lưu"
                   >
-                    <td className="px-3 py-2.5 text-center text-xs font-mono text-slate-400">{stt}</td>
-                    <td className="px-3.5 py-2.5">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
-                          <i className="bi bi-database-fill-check text-sm" />
+                    <td className="hidden sm:table-cell px-3 py-2.5 text-center text-xs font-mono text-slate-400">{stt}</td>
+                    <td className="px-2.5 sm:px-3.5 py-2.5">
+                      <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                          <i className="bi bi-database-fill-check text-xs sm:text-sm" />
                         </div>
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <div className="text-xs font-bold text-slate-800 font-mono truncate">
                             {item.name}
                           </div>
-                          <div className="text-[11px] text-slate-400">{meta.desc}</div>
+                          <div className="text-[11px] text-slate-400 truncate">{meta.desc}</div>
+                          <div className="flex sm:hidden items-center gap-1.5 mt-0.5 text-[10px] text-slate-500 font-mono">
+                            <span className="font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.2 rounded">{item.size}</span>
+                            <span>•</span>
+                            <span className="truncate">{new Date(item.createdAt).toLocaleDateString('vi-VN')}</span>
+                          </div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="hidden sm:table-cell px-3 py-2.5">
                       <Badge variant={meta.variant}>
                         <i className={`bi ${meta.icon} mr-1`} />
                         {meta.label}
                       </Badge>
                     </td>
-                    <td className="px-3 py-2.5 text-right">
+                    <td className="hidden sm:table-cell px-3 py-2.5 text-right">
                       <span className="text-xs font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                         {item.size}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 text-center text-xs font-mono text-slate-600">
+                    <td className="hidden sm:table-cell px-3 py-2.5 text-center text-xs font-mono text-slate-600">
                       {new Date(item.createdAt).toLocaleString('vi-VN')}
                     </td>
-                    <td className="px-3.5 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="inline-flex items-center justify-end gap-1.5">
+                    <td className="px-2 sm:px-3.5 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="inline-flex items-center justify-end gap-1 sm:gap-1.5">
                         <Button
                           variant="outline"
                           size="sm"
@@ -806,7 +819,7 @@ export const DataManagementPage: React.FC = () => {
                           onClick={(e) => handleDownloadFile(item.name, e)}
                           title="Tải file .db về máy"
                         >
-                          Tải về
+                          <span className="hidden sm:inline">Tải về</span>
                         </Button>
                         <Button
                           variant="primary"
@@ -816,20 +829,20 @@ export const DataManagementPage: React.FC = () => {
                           disabled={busy || inspectingTables}
                           title="Chọn bảng dữ liệu để thay thế từ bản sao lưu này"
                         >
-                          Phục hồi
+                          <span className="hidden sm:inline">Phục hồi</span>
                         </Button>
                         <button
                           type="button"
                           onClick={(e) => handleDeleteClick(item.name, e)}
                           disabled={busy}
-                          className="w-7 h-7 rounded-lg border border-rose-200 bg-rose-50/70 text-rose-600 hover:bg-rose-100 flex items-center justify-center transition-colors cursor-pointer"
+                          className="w-7 h-7 rounded-lg border border-rose-200 bg-rose-50/70 text-rose-600 hover:bg-rose-100 flex items-center justify-center transition-colors cursor-pointer shrink-0"
                           title="Xóa bản sao lưu"
                         >
                           <i className="bi bi-trash text-xs" />
                         </button>
                       </div>
                     </td>
-                  </tr>
+                  </SwipeableTableRow>
                 );
               })
             )}

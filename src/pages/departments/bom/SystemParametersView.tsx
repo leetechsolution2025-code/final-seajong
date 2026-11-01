@@ -457,8 +457,12 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
     );
   };
 
+  // Sub-tab điều hướng 3 mục Thông số hệ thống riêng cho màn hình điện thoại (<= 768px)
+  const [mobileParamTab, setMobileParamTab] = useState<'accounting' | 'gemini' | 'elevenlabs'>('accounting');
+
   return (
     <div
+      className="bom-sys-params-root"
       style={{
         maxWidth: '920px',
         margin: '0 auto',
@@ -470,8 +474,58 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
         paddingBottom: '48px',
       }}
     >
+      {/* ── THANH HEADER + CHUYỂN NHANH 3 MỤC THÔNG SỐ (CHỈ HIỂN THỊ TRÊN ĐIỆN THOẠI <= 768PX) ── */}
+      <div className="bom-sys-mobile-bar">
+        <div className="bom-sys-mobile-bar-top">
+          <span className="bom-sys-mobile-bar-title">Thiết lập thông số hệ thống</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="bom-labor-reset-btn"
+              leftIcon={<ArrowRepeat size={13} />}
+              onClick={handleReset}
+              title="Đặt lại về mặc định"
+            >
+              <span className="bom-hide-mobile">Đặt lại</span>
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              className="bom-labor-save-btn"
+              leftIcon={<Save size={13} />}
+              onClick={handleSave}
+              disabled={isSaving}
+            >
+              {isSaving ? 'Đang lưu...' : 'Lưu'}
+            </Button>
+          </div>
+        </div>
+
+        <div className="bom-labor-mobile-subtabs">
+          {([
+            { id: 'accounting', label: 'Kinh phí chi' },
+            { id: 'gemini', label: 'Gemini AI' },
+            { id: 'elevenlabs', label: 'ElevenLabs' },
+          ] as const).map((item) => {
+            const isAct = mobileParamTab === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setMobileParamTab(item.id)}
+                className={`bom-labor-mobile-subtab-btn ${isAct ? 'active' : ''}`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* 1. KHÓA GOOGLE GEMINI API */}
       <div
+        className={`bom-sys-card ${mobileParamTab !== 'gemini' ? 'bom-labor-card-mobile-hidden' : ''}`}
         style={{
           padding: '24px',
           borderRadius: 'var(--radius-xl)',
@@ -483,7 +537,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
           gap: '16px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+        <div className="bom-sys-card-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div
               style={{
@@ -495,14 +549,15 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                flexShrink: 0,
               }}
             >
               <Cpu size={20} />
             </div>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  Google Gemini API Key (Ưu tiên Flash 2.5)
+                  Google Gemini API Key<span className="bom-hide-mobile"> (Ưu tiên Flash 2.5)</span>
                 </span>
                 {geminiKeysList.length > 0 ? (
                   <span
@@ -538,13 +593,13 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
                   </span>
                 )}
               </div>
-              <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+              <div className="bom-hide-mobile" style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                 Phục vụ trích xuất điều kiện kỹ thuật, tóm tắt HSMT và đánh giá năng lực dự thầu tự động.
               </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <button
               type="button"
               onClick={handleTestGemini}
@@ -619,7 +674,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
               {geminiKeysList.length > 1
-                ? `Đã nhận diện ${geminiKeysList.length} API keys (hệ thống sẽ tự động luân phiên sử dụng)`
+                ? `Đã nhận diện ${geminiKeysList.length} API keys`
                 : geminiKeysList.length === 1
                 ? 'Đã nhận diện 1 API key hợp lệ'
                 : 'Chưa có key nào được nhập'}
@@ -708,6 +763,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
 
       {/* 2. KHÓA ELEVENLABS API */}
       <div
+        className={`bom-sys-card ${mobileParamTab !== 'elevenlabs' ? 'bom-labor-card-mobile-hidden' : ''}`}
         style={{
           padding: '24px',
           borderRadius: 'var(--radius-xl)',
@@ -719,7 +775,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
           gap: '16px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+        <div className="bom-sys-card-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div
               style={{
@@ -731,12 +787,13 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                flexShrink: 0,
               }}
             >
               <Soundwave size={20} />
             </div>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                   ElevenLabs API Key
                 </span>
@@ -774,13 +831,13 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
                   </span>
                 )}
               </div>
-              <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+              <div className="bom-hide-mobile" style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                 Phục vụ phát thanh thông báo điều hành nhà máy, nhắc lịch và trợ lý giọng nói AI.
               </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <button
               type="button"
               onClick={handleTestElevenLabs}
@@ -938,6 +995,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
 
       {/* 3. QUY ĐỊNH MỨC KINH PHÍ KẾ TOÁN ĐƯỢC TỰ ĐỘNG CHI */}
       <div
+        className={`bom-sys-card ${mobileParamTab !== 'accounting' ? 'bom-labor-card-mobile-hidden' : ''}`}
         style={{
           padding: '24px',
           borderRadius: 'var(--radius-xl)',
@@ -950,7 +1008,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
         }}
       >
         {/* Header Card */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+        <div className="bom-sys-card-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div
               style={{
@@ -962,6 +1020,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                flexShrink: 0,
               }}
             >
               <CashCoin size={20} />
@@ -969,9 +1028,10 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  Quy định mức kinh phí Kế toán được tự động chi
+                  Quy định mức kinh phí Kế toán tự động chi
                 </span>
                 <span
+                  className="bom-hide-mobile"
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -1020,7 +1080,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
                   </span>
                 )}
               </div>
-              <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+              <div className="bom-hide-mobile" style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                 Quy định số tiền tối đa cho mỗi lệnh chi và tổng hạn mức trong ngày mà Kế toán trưởng được quyền phê duyệt & xuất quỹ trực tiếp mà không cần trình Ban Giám đốc.
               </div>
             </div>
@@ -1129,7 +1189,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
               ))}
             </div>
 
-            <div style={{ fontSize: '0.7188rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+            <div className="bom-hide-mobile" style={{ fontSize: '0.7188rem', color: 'var(--text-muted)', marginTop: '2px' }}>
               Lệnh chi ≤ số tiền này Kế toán được duyệt & xuất quỹ ngay.
             </div>
           </div>
@@ -1203,7 +1263,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
               ))}
             </div>
 
-            <div style={{ fontSize: '0.7188rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+            <div className="bom-hide-mobile" style={{ fontSize: '0.7188rem', color: 'var(--text-muted)', marginTop: '2px' }}>
               Tổng cộng các lệnh chi tự động trong 1 ngày không vượt quá mức này.
             </div>
           </div>
@@ -1277,7 +1337,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
               ))}
             </div>
 
-            <div style={{ fontSize: '0.7188rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+            <div className="bom-hide-mobile" style={{ fontSize: '0.7188rem', color: 'var(--text-muted)', marginTop: '2px' }}>
               Áp dụng cho tạm ứng phát sinh công tác, cứu hộ giao hàng COD.
             </div>
           </div>
@@ -1285,16 +1345,17 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
 
         {/* Khối Danh mục nghiệp vụ được áp dụng */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingTop: '4px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
             <span style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-              Phạm vi nghiệp vụ chi tiêu được áp dụng cơ chế tự động chi ({accountingAllowedCategories.length}/{DEFAULT_ACCOUNTING_EXPENSE_CATEGORIES.length})
+              Phạm vi nghiệp vụ áp dụng ({accountingAllowedCategories.length}/{DEFAULT_ACCOUNTING_EXPENSE_CATEGORIES.length})
             </span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+            <span className="bom-hide-mobile" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
               Nhấp vào từng dòng để bật/tắt quyền áp dụng
             </span>
           </div>
 
           <div
+            className="bom-sys-cat-grid"
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
@@ -1321,9 +1382,9 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
                   }}
                 >
                   {isChecked ? (
-                    <CheckSquareFill size={15} color="#059669" />
+                    <CheckSquareFill size={15} color="#059669" style={{ flexShrink: 0 }} />
                   ) : (
-                    <Square size={15} color="var(--text-muted)" />
+                    <Square size={15} color="var(--text-muted)" style={{ flexShrink: 0 }} />
                   )}
                   <span
                     style={{
@@ -1348,7 +1409,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
             checked={accountingRequireReceipt}
             onChange={(e) => setAccountingRequireReceipt(e.target.checked)}
             disabled={!accountingAutoEnabled}
-            style={{ cursor: accountingAutoEnabled ? 'pointer' : 'not-allowed', width: '16px', height: '16px' }}
+            style={{ cursor: accountingAutoEnabled ? 'pointer' : 'not-allowed', width: '16px', height: '16px', flexShrink: 0 }}
           />
           <label
             htmlFor="accounting-require-receipt"
@@ -1366,6 +1427,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
 
         {/* Hộp Quy chuẩn thẩm quyền & Bảo đảm an toàn ngân quỹ */}
         <div
+          className="bom-hide-mobile"
           style={{
             padding: '14px 16px',
             borderRadius: 'var(--radius-md)',
@@ -1396,8 +1458,9 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
         </div>
       </div>
 
-      {/* Nút hành động */}
+      {/* Nút hành động (Desktop) */}
       <div
+        className="bom-hide-mobile"
         style={{
           display: 'flex',
           alignItems: 'center',

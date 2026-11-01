@@ -536,6 +536,7 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '100%', backgroundColor: 'var(--bg-app)' }}>
       {/* 1. Header Toolbar */}
       <div
+        className="finance-declaration-header"
         style={{
           display: 'flex',
           justifyContent: 'flex-end',
@@ -547,8 +548,9 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
           gap: '10px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div className="finance-declaration-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', justifyContent: 'flex-end' }}>
           <div
+            className="finance-declaration-period-box"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -560,8 +562,8 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
               fontSize: '0.8125rem',
             }}
           >
-            <Calendar3 size={13} style={{ color: 'var(--text-secondary)' }} />
-            <span style={{ color: 'var(--text-secondary)' }}>Kỳ áp dụng:</span>
+            <Calendar3 size={13} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
+            <span className="hidden sm:inline" style={{ color: 'var(--text-secondary)' }}>Kỳ áp dụng:</span>
             <select
               value={period}
               onChange={(e) => setPeriod(e.target.value)}
@@ -591,13 +593,14 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
           >
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <ArrowClockwise size={14} className={isLoading ? 'spin' : ''} />
-              <span>Tải lại</span>
+              <span className="hidden sm:inline">Tải lại</span>
             </span>
           </Button>
 
           <Button
             variant="ghost"
             size="sm"
+            className="!hidden sm:!inline-flex"
             onClick={handleClearMockData}
             disabled={isLoading || isSaving}
             style={{ color: '#ef4444', borderColor: '#fca5a5' }}
@@ -616,15 +619,16 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
           >
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <Save size={14} />
-              <span>{isSaving ? 'Đang lưu...' : 'Lưu dữ liệu khởi tạo'}</span>
+              <span className="hidden sm:inline">{isSaving ? 'Đang lưu...' : 'Lưu dữ liệu khởi tạo'}</span>
+              <span className="sm:hidden">{isSaving ? '...' : 'Lưu'}</span>
             </span>
           </Button>
         </div>
       </div>
 
       {/* 2. Tổng quan Cân đối Khởi tạo (Header KPI) */}
-      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-default)', backgroundColor: 'var(--bg-surface-1)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+      <div className="finance-declaration-kpi-wrap" style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-default)', backgroundColor: 'var(--bg-surface-1)' }}>
+        <div className="finance-declaration-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
           {/* Card Tài sản */}
           <div
             style={{
@@ -667,6 +671,7 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
 
           {/* Card Cân đối */}
           <div
+            className="finance-declaration-balance-card"
             style={{
               padding: '14px 18px',
               borderRadius: '8px',
@@ -698,6 +703,7 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
 
       {/* 3. Navigation Tabs */}
       <div
+        className="finance-declaration-tabs"
         style={{
           display: 'flex',
           gap: '4px',
@@ -725,7 +731,8 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
           }}
         >
           <Wallet2 size={14} />
-          <span>1. Tiền và Đầu tư tài chính</span>
+          <span className="hidden sm:inline">1. Tiền và Đầu tư tài chính</span>
+          <span className="sm:hidden">1. Tiền tệ</span>
         </button>
 
         <button
@@ -746,7 +753,8 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
           }}
         >
           <CreditCard size={14} />
-          <span>2. Công nợ chi tiết đầu kỳ</span>
+          <span className="hidden sm:inline">2. Công nợ chi tiết đầu kỳ</span>
+          <span className="sm:hidden">2. Công nợ</span>
         </button>
 
         <button
@@ -767,7 +775,8 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
           }}
         >
           <BoxSeam size={14} />
-          <span>3. Hàng tồn kho đầu kỳ</span>
+          <span className="hidden sm:inline">3. Hàng tồn kho đầu kỳ</span>
+          <span className="sm:hidden">3. Tồn kho</span>
         </button>
 
         <button
@@ -788,7 +797,8 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
           }}
         >
           <Building size={14} />
-          <span>4. Tài sản cố định và Dài hạn</span>
+          <span className="hidden sm:inline">4. Tài sản cố định và Dài hạn</span>
+          <span className="sm:hidden">4. TSCĐ</span>
         </button>
 
         <button
@@ -809,12 +819,13 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
           }}
         >
           <PiggyBank size={14} />
-          <span>5. Nguồn vốn và Nợ vay</span>
+          <span className="hidden sm:inline">5. Nguồn vốn và Nợ vay</span>
+          <span className="sm:hidden">5. Nguồn vốn</span>
         </button>
       </div>
 
       {/* 4. Tab Body Content */}
-      <div style={{ flex: 1, padding: '20px', overflowY: 'auto' }}>
+      <div className="finance-declaration-body" style={{ flex: 1, padding: '20px', overflowY: 'auto' }}>
         {/* TAB 1: TIỀN VÀ ĐẦU TƯ TÀI CHÍNH */}
         {activeTab === 'cash-investments' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -861,14 +872,14 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
                   Chưa có tài khoản ngân hàng nào. Bấm "+ Thêm tài khoản" để khai báo.
                 </div>
               ) : (
-                <div style={{ overflowX: 'auto' }}>
+                <div className="table-responsive" style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
                     <thead>
                       <tr style={{ backgroundColor: 'var(--bg-surface-2)', borderBottom: '1px solid var(--border-default)' }}>
                         <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>NGÂN HÀNG / CHI NHÁNH</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>SỐ TÀI KHOẢN</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-secondary)', width: '220px' }}>SỐ DƯ ĐẦU KỲ (VNĐ)</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'center', width: '50px' }}></th>
+                        <th className="hidden sm:table-cell" style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>SỐ TÀI KHOẢN</th>
+                        <th className="w-[135px] sm:w-[220px]" style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-secondary)' }}>SỐ DƯ ĐẦU KỲ (VNĐ)</th>
+                        <th style={{ padding: '8px 6px', textAlign: 'center', width: '36px' }}></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -890,8 +901,25 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
                                 fontSize: '0.8125rem',
                               }}
                             />
+                            <div className="sm:hidden mt-1">
+                              <input
+                                type="text"
+                                value={acc.accountNumber}
+                                onChange={(e) => handleUpdateBankAccount(acc.id, 'accountNumber', e.target.value)}
+                                placeholder="Số tài khoản ngân hàng"
+                                style={{
+                                  width: '100%',
+                                  padding: '4px 8px',
+                                  borderRadius: '4px',
+                                  border: '1px solid var(--border-default)',
+                                  backgroundColor: 'var(--bg-surface-1)',
+                                  color: 'var(--text-secondary)',
+                                  fontSize: '0.75rem',
+                                }}
+                              />
+                            </div>
                           </td>
-                          <td style={{ padding: '8px 12px' }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '8px 12px' }}>
                             <input
                               type="text"
                               value={acc.accountNumber}
@@ -915,7 +943,7 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
                               suffix="đ"
                             />
                           </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                          <td style={{ padding: '8px 6px', textAlign: 'center' }}>
                             <button
                               onClick={() => handleRemoveBankAccount(acc.id)}
                               style={{
@@ -989,15 +1017,15 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
                   Chưa có công nợ khách hàng nào. Bấm "+ Thêm khách hàng" để khai báo số dư đầu kỳ.
                 </div>
               ) : (
-                <div style={{ overflowX: 'auto' }}>
+                <div className="table-responsive" style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
                     <thead>
                       <tr style={{ backgroundColor: 'var(--bg-surface-2)', borderBottom: '1px solid var(--border-default)' }}>
                         <th style={{ padding: '8px 10px', textAlign: 'left', color: 'var(--text-secondary)' }}>KHÁCH HÀNG / DỰ ÁN</th>
-                        <th style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--text-secondary)', width: '180px' }}>GIÁ TRỊ HĐ</th>
-                        <th style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--text-secondary)', width: '180px' }}>ĐÃ THANH TOÁN</th>
-                        <th style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--text-secondary)', width: '180px' }}>CÒN PHẢI THU (VNĐ)</th>
-                        <th style={{ padding: '8px 10px', textAlign: 'center', width: '50px' }}></th>
+                        <th className="hidden sm:table-cell" style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--text-secondary)', width: '180px' }}>GIÁ TRỊ HĐ</th>
+                        <th className="hidden sm:table-cell" style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--text-secondary)', width: '180px' }}>ĐÃ THANH TOÁN</th>
+                        <th className="w-[125px] sm:w-[180px]" style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--text-secondary)' }}>CÒN PHẢI THU (VNĐ)</th>
+                        <th style={{ padding: '8px 6px', textAlign: 'center', width: '36px' }}></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1036,14 +1064,14 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
                               }}
                             />
                           </td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '8px 10px', textAlign: 'right' }}>
                             <NumberInput
                               value={item.contractValue}
                               onValueChange={(val) => handleUpdateCustomerDebt(item.id, 'contractValue', val)}
                               suffix="đ"
                             />
                           </td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '8px 10px', textAlign: 'right' }}>
                             <NumberInput
                               value={item.paidAmount}
                               onValueChange={(val) => handleUpdateCustomerDebt(item.id, 'paidAmount', val)}
@@ -1053,7 +1081,7 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
                           <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--color-primary)' }}>
                             {formatVND(item.remainingAmount)}
                           </td>
-                          <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                          <td style={{ padding: '8px 6px', textAlign: 'center' }}>
                             <button
                               onClick={() => handleRemoveCustomerDebt(item.id)}
                               style={{
@@ -1104,15 +1132,15 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
                   Chưa có công nợ nhà cung cấp nào. Bấm "+ Thêm nhà cung cấp" để khai báo số dư đầu kỳ.
                 </div>
               ) : (
-                <div style={{ overflowX: 'auto' }}>
+                <div className="table-responsive" style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
                     <thead>
                       <tr style={{ backgroundColor: 'var(--bg-surface-2)', borderBottom: '1px solid var(--border-default)' }}>
                         <th style={{ padding: '8px 10px', textAlign: 'left', color: 'var(--text-secondary)' }}>NHÀ CUNG CẤP VẬT TƯ</th>
-                        <th style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--text-secondary)', width: '180px' }}>TỔNG TIỀN MUA</th>
-                        <th style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--text-secondary)', width: '180px' }}>ĐÃ THANH TOÁN</th>
-                        <th style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--text-secondary)', width: '180px' }}>CÒN NỢ NCC (VNĐ)</th>
-                        <th style={{ padding: '8px 10px', textAlign: 'center', width: '50px' }}></th>
+                        <th className="hidden sm:table-cell" style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--text-secondary)', width: '180px' }}>TỔNG TIỀN MUA</th>
+                        <th className="hidden sm:table-cell" style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--text-secondary)', width: '180px' }}>ĐÃ THANH TOÁN</th>
+                        <th className="w-[125px] sm:w-[180px]" style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--text-secondary)' }}>CÒN NỢ NCC (VNĐ)</th>
+                        <th style={{ padding: '8px 6px', textAlign: 'center', width: '36px' }}></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1135,14 +1163,14 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
                               }}
                             />
                           </td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '8px 10px', textAlign: 'right' }}>
                             <NumberInput
                               value={item.totalAmount}
                               onValueChange={(val) => handleUpdateSupplierDebt(item.id, 'totalAmount', val)}
                               suffix="đ"
                             />
                           </td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '8px 10px', textAlign: 'right' }}>
                             <NumberInput
                               value={item.paidAmount}
                               onValueChange={(val) => handleUpdateSupplierDebt(item.id, 'paidAmount', val)}
@@ -1152,7 +1180,7 @@ export const FinancialDataDeclarationView: React.FC<FinancialDataDeclarationView
                           <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#dc2626' }}>
                             {formatVND(item.remainingAmount)}
                           </td>
-                          <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                          <td style={{ padding: '8px 6px', textAlign: 'center' }}>
                             <button
                               onClick={() => handleRemoveSupplierDebt(item.id)}
                               style={{

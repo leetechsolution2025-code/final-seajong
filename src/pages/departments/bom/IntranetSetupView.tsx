@@ -544,6 +544,9 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
       .catch(() => {});
   }, []);
 
+  // Sub-tab điều hướng 4 mục mạng nội bộ riêng cho màn hình điện thoại (<= 768px)
+  const [mobileIntranetTab, setMobileIntranetTab] = useState<'lan' | 'wifi' | 'biometric' | 'gps'>('lan');
+
 
 
   // Ham lay toa do GPS thiet bi hien tai
@@ -1144,6 +1147,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
 
   return (
     <div
+      className="bom-intranet-view-root"
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -1154,6 +1158,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
     >
       {/* ── 1. HEADER: DROPLIST ĐỊA ĐIỂM LÀM VIỆC TỪ DB VÀ NÚT LƯU CẤU HÌNH (CHUẨN HÌNH 2) ── */}
       <div
+        className="bom-intranet-shift-bar"
         style={{
           display: 'flex',
           flexWrap: 'wrap',
@@ -1167,9 +1172,10 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
           boxShadow: '0 1px 4px rgba(59, 130, 246, 0.05)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 auto', minWidth: 0 }}>
+        <div className="bom-labor-shift-left" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 auto', minWidth: 0 }}>
           {/* Icon tròn định vị màu tím xanh nhạt */}
           <div
+            className="bom-labor-shift-icon"
             style={{
               width: '36px',
               height: '36px',
@@ -1188,6 +1194,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
           <div ref={locationDropdownRef} style={{ flex: 1, minWidth: 0, position: 'relative' }}>
             {/* Nhãn thông báo */}
             <div
+              className="bom-labor-shift-label"
               style={{
                 fontSize: '0.65rem',
                 fontWeight: 700,
@@ -1205,6 +1212,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minHeight: '26px' }}>
               <button
                 type="button"
+                className="bom-labor-shift-btn"
                 onClick={() => setIsLocationDropdownOpen((prev) => !prev)}
                 style={{
                   display: 'inline-flex',
@@ -1222,7 +1230,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                 }}
                 title="Nhấp để chọn địa điểm làm việc"
               >
-                <span>{currentActiveLocation?.name || 'Chọn nơi làm việc'}</span>
+                <span className="bom-labor-shift-btn-text">{currentActiveLocation?.name || 'Chọn nơi làm việc'}</span>
                 {isLocationDropdownOpen ? (
                   <ChevronUp size={13} color="#4f46e5" style={{ flexShrink: 0 }} />
                 ) : (
@@ -1231,7 +1239,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
               </button>
 
               {hasChanges && (
-                <Badge variant="warning" style={{ fontSize: '0.6875rem', padding: '1px 6px' }}>
+                <Badge variant="warning" className="bom-hide-mobile" style={{ fontSize: '0.6875rem', padding: '1px 6px' }}>
                   Chưa lưu thay đổi
                 </Badge>
               )}
@@ -1240,6 +1248,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
             {/* Địa chỉ hiển thị bằng một dòng chữ nhỏ ở bên dưới tên địa điểm làm việc */}
             {currentActiveLocation?.address && (
               <div
+                className="bom-labor-shift-scope"
                 style={{
                   fontSize: '0.7188rem',
                   color: '#64748b',
@@ -1261,6 +1270,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
             {/* Popover menu xổ xuống mở rộng hết không gian khả dụng */}
             {isLocationDropdownOpen && (
               <div
+                className="bom-labor-shift-popover"
                 style={{
                   position: 'absolute',
                   top: '100%',
@@ -1359,11 +1369,12 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
         </div>
 
         {/* Cụm nút hành động bên phải: Nút Thông tin địa chỉ và nút Lưu cấu hình */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+        <div className="bom-intranet-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
           <Button
             type="button"
             variant="ghost"
             size="sm"
+            className="bom-labor-reset-btn"
             leftIcon={<GeoAlt size={13} color="#4f46e5" />}
             onClick={() => {
               if (currentActiveLocation) {
@@ -1388,15 +1399,16 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
             }}
             title="Nhấp để thay đổi địa chỉ của nơi làm việc này"
           >
-            Thông tin địa chỉ
+            <span className="bom-hide-mobile">Thông tin địa chỉ</span>
           </Button>
 
-          <div style={{ width: '1px', height: '22px', backgroundColor: '#e2e8f0' }} />
+          <div className="bom-action-divider" style={{ width: '1px', height: '22px', backgroundColor: '#e2e8f0' }} />
 
           <Button
             type="button"
             variant="primary"
             size="sm"
+            className="bom-labor-save-btn"
             leftIcon={<BoxArrowDown size={14} />}
             onClick={handleSaveAll}
             disabled={isSaving}
@@ -1411,7 +1423,11 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
               boxShadow: '0 2px 5px rgba(16, 185, 129, 0.2)',
             }}
           >
-            {isSaving ? 'Đang lưu...' : 'Lưu cấu hình'}
+            {isSaving ? 'Đang lưu...' : (
+              <>
+                Lưu<span className="bom-hide-mobile"> cấu hình</span>
+              </>
+            )}
           </Button>
         </div>
       </div>
@@ -1439,6 +1455,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {/* A. BANNER NHẬN DIỆN MẠNG MÁY ĐANG KẾT NỐI (AUTO DETECT 1-CLICK) */}
           <div
+            className="bom-intranet-detect-banner"
             style={{
               backgroundColor: '#ffffff',
               border: '1.5px solid #38bdf8',
@@ -1452,6 +1469,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
           >
             {/* Thanh trạng thái Tự động quét và đồng bộ mạng IP WAN từ Máy chủ */}
             <div
+              className="bom-intranet-sync-bar"
               style={{
                 padding: '8px 12px',
                 backgroundColor: '#f0fdf4',
@@ -1476,9 +1494,9 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                   }}
                 />
                 <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#166534' }}>
-                  Tự động đồng bộ IP WAN: Đang hoạt động
+                  Tự động đồng bộ IP WAN<span className="bom-hide-mobile">: Đang hoạt động</span>
                 </span>
-                <span style={{ fontSize: '0.72rem', color: '#15803d' }}>
+                <span className="bom-hide-mobile" style={{ fontSize: '0.72rem', color: '#15803d' }}>
                   (Tự động cập nhật khi bật máy PC và chu kỳ 10 phút chống mất chấm công khi modem reset)
                 </span>
                 {serverAutoSyncStatus?.currentWanIp && (
@@ -1498,7 +1516,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                   </span>
                 )}
                 {serverAutoSyncStatus?.lastCheckFormatted && (
-                  <span style={{ fontSize: '0.7rem', color: '#4b5563' }}>
+                  <span className="bom-hide-mobile" style={{ fontSize: '0.7rem', color: '#4b5563' }}>
                     • Lần quét gần nhất: {serverAutoSyncStatus.lastCheckFormatted}
                   </span>
                 )}
@@ -1526,13 +1544,18 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                   padding: '4px 10px',
                 }}
               >
-                {isSyncingServer ? 'Đang đồng bộ...' : 'Đồng bộ máy chủ ngay'}
+                {isSyncingServer ? 'Đang đồng bộ...' : (
+                  <>
+                    Đồng bộ<span className="bom-hide-mobile"> máy chủ ngay</span>
+                  </>
+                )}
               </Button>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div
+                  className="bom-hide-mobile"
                   style={{
                     width: '36px',
                     height: '36px',
@@ -1550,9 +1573,10 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 800, color: '#0f172a' }}>
-                      Nhận diện thông số mạng máy tính đang kết nối
+                      Nhận diện thông số mạng<span className="bom-hide-mobile"> máy tính đang kết nối</span>
                     </h4>
                     <span
+                      className="bom-hide-mobile"
                       style={{
                         fontSize: '0.65rem',
                         fontWeight: 700,
@@ -1566,13 +1590,13 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                       Tự động 1-Click
                     </span>
                   </div>
-                  <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: '#64748b' }}>
+                  <p className="bom-hide-mobile" style={{ margin: '2px 0 0', fontSize: '0.75rem', color: '#64748b' }}>
                     Quét nhanh địa chỉ IP WAN công cộng của máy tính quản trị để áp dụng chuẩn vào cơ sở "{currentActiveLocation.name}"
                   </p>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 <Button
                   type="button"
                   variant="primary"
@@ -1595,7 +1619,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                     padding: '6px 12px',
                   }}
                 >
-                  {isDetectingNetwork ? 'Đang quét...' : '⚡ Quét mạng máy này'}
+                  {isDetectingNetwork ? 'Đang quét...' : 'Quét mạng máy này'}
                 </Button>
 
                 {detectedNetwork?.publicIp && (
@@ -1623,7 +1647,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                         padding: '6px 12px',
                       }}
                     >
-                      Gán IP này cho {currentActiveLocation.name}
+                      Gán IP này<span className="bom-hide-mobile"> cho {currentActiveLocation.name}</span>
                     </Button>
                     <Button
                       type="button"
@@ -1639,7 +1663,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                         padding: '6px 12px',
                       }}
                     >
-                      + Thêm WiFi từ mạng này
+                      + Thêm WiFi<span className="bom-hide-mobile"> từ mạng này</span>
                     </Button>
                   </>
                 )}
@@ -1670,11 +1694,11 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                     <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Subnet nội bộ: </span>
                     <strong style={{ fontSize: '0.8438rem', color: '#334155', fontFamily: 'monospace' }}>{detectedNetwork.localSubnetCandidate}</strong>
                   </div>
-                  <div>
+                  <div className="bom-hide-mobile">
                     <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Nhà mạng: </span>
                     <strong style={{ fontSize: '0.8125rem', color: '#334155' }}>{detectedNetwork.isp}</strong>
                   </div>
-                  <div>
+                  <div className="bom-hide-mobile">
                     <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Độ trễ: </span>
                     <strong style={{ fontSize: '0.8125rem', color: '#16a34a' }}>{detectedNetwork.rttMs} ms</strong>
                   </div>
@@ -1697,7 +1721,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                       }}
                     >
                       <CheckCircle size={12} />
-                      Đang khớp IP WAN của {currentActiveLocation.name}
+                      Đang khớp IP WAN
                     </span>
                   ) : (
                     <span
@@ -1715,7 +1739,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                       }}
                     >
                       <ExclamationTriangle size={12} />
-                      IP khác với cấu hình ({currentActiveLocation.primaryWanIp || 'Chưa đặt'})
+                      IP khác cấu hình ({currentActiveLocation.primaryWanIp || 'Chưa đặt'})
                     </span>
                   )}
                 </div>
@@ -1723,11 +1747,34 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
             )}
           </div>
 
+          {/* ── THANH CHUYỂN NHANH 4 HẠNG MỤC MẠNG NỘI BỘ (CHỈ HIỂN THỊ TRÊN ĐIỆN THOẠI <= 768PX) ── */}
+          <div className="bom-labor-mobile-subtabs">
+            {([
+              { id: 'lan', label: 'Mạng LAN' },
+              { id: 'wifi', label: `WiFi (${currentActiveLocation.wifiList?.length || 0})` },
+              { id: 'biometric', label: `Vân tay (${currentActiveLocation.biometricDevices?.length || 0})` },
+              { id: 'gps', label: 'Định vị GPS' },
+            ] as const).map((item) => {
+              const isAct = mobileIntranetTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setMobileIntranetTab(item.id)}
+                  className={`bom-labor-mobile-subtab-btn ${isAct ? 'active' : ''}`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+
           {/* B. LƯỚI 4 CARD CẤU HÌNH CHUYÊN SÂU */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: '14px' }}>
+          <div className="bom-intranet-cards-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: '14px' }}>
 
             {/* ── CARD 1: MẠNG CÁP LAN VÀ IP WAN CHẤM CÔNG ── */}
             <div
+              className={`bom-labor-card ${mobileIntranetTab !== 'lan' ? 'bom-labor-card-mobile-hidden' : ''}`}
               style={{
                 backgroundColor: '#ffffff',
                 borderRadius: '10px',
@@ -1748,11 +1795,11 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                     <h5 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 800, color: '#0f172a' }}>
                       Mạng máy tính cục bộ
                     </h5>
-                    <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Xác thực máy tính bàn hoặc cắm dây LAN</span>
+                    <span className="bom-labor-card-sub" style={{ fontSize: '0.7rem', color: '#64748b' }}>Xác thực máy tính bàn hoặc cắm dây LAN</span>
                   </div>
                 </div>
 
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, color: '#334155' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, color: '#334155', flexShrink: 0, whiteSpace: 'nowrap' }}>
                   <Toggle
                     checked={currentActiveLocation.allowLanCheckin ?? true}
                     onChange={(checked) =>
@@ -1762,7 +1809,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                       })
                     }
                   />
-                  <span>{currentActiveLocation.allowLanCheckin ? 'Đang bật' : 'Đang tắt'}</span>
+                  <span style={{ whiteSpace: 'nowrap' }}>{currentActiveLocation.allowLanCheckin ? 'Đang bật' : 'Đang tắt'}</span>
                 </label>
               </div>
 
@@ -1780,14 +1827,14 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ fontSize: '0.7813rem', fontWeight: 800, color: '#1e293b' }}>
-                    Chọn phương án quản lý IP mạng văn phòng (Cho máy bàn / laptop):
+                    Chọn phương án quản lý IP mạng văn phòng:
                   </div>
-                  <Badge variant="neutral" style={{ fontSize: '0.625rem', padding: '2px 6px' }}>
+                  <Badge variant="neutral" className="bom-hide-mobile" style={{ fontSize: '0.625rem', padding: '2px 6px' }}>
                     VPS Cloud Ready
                   </Badge>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div className="bom-intranet-ip-mode-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   {/* Option 1: IP Tĩnh */}
                   <div
                     onClick={() => updateCurrentLocField({ ipMode: 'static' })}
@@ -1814,7 +1861,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                       <div style={{ fontSize: '0.7813rem', fontWeight: 800, color: (currentActiveLocation.ipMode || 'dynamic_station') === 'static' ? '#1d4ed8' : '#1e293b' }}>
                         Phương án 1: Đường truyền IP Tĩnh (Static IP)
                       </div>
-                      <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px' }}>
+                      <div className="bom-hide-mobile" style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px' }}>
                         Áp dụng khi công ty đã đăng ký IP tĩnh cố định từ nhà mạng. Không thay đổi khi modem reset.
                       </div>
                     </div>
@@ -1846,7 +1893,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                       <div style={{ fontSize: '0.7813rem', fontWeight: 800, color: (currentActiveLocation.ipMode || 'dynamic_station') === 'dynamic_station' ? '#1d4ed8' : '#1e293b' }}>
                         Phương án 2: Đường truyền IP Động (Dynamic IP)
                       </div>
-                      <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px' }}>
+                      <div className="bom-hide-mobile" style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px' }}>
                         Tự động bắt IP modem gửi lên VPS thông qua tài khoản máy trạm văn phòng được chỉ định.
                       </div>
                     </div>
@@ -1866,7 +1913,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                       onChange={(e) => updateCurrentLocField({ primaryWanIp: e.target.value, staticWanIp: e.target.value })}
                       style={{ marginBottom: 0, fontFamily: 'monospace', fontSize: '0.8125rem' }}
                     />
-                    <span style={{ fontSize: '0.6875rem', color: '#64748b' }}>
+                    <span className="bom-hide-mobile" style={{ fontSize: '0.6875rem', color: '#64748b' }}>
                       ℹ️ Hệ thống VPS sẽ lấy địa chỉ IP này làm căn cứ xác thực cố định vĩnh viễn, không lo modem reset hay mất điện.
                     </span>
                   </div>
@@ -1923,20 +1970,20 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                           }}
                         />
                         <span style={{ fontWeight: 700, color: '#166534' }}>
-                          Máy trạm chỉ định: {currentActiveLocation.syncStationUserName || 'Chưa chỉ định'}
+                          Máy trạm: {currentActiveLocation.syncStationUserName || 'Chưa chỉ định'}
                         </span>
                         {currentActiveLocation.lastHeartbeatTime && (
-                          <span style={{ color: '#4b5563' }}>
+                          <span className="bom-hide-mobile" style={{ color: '#4b5563' }}>
                             • Tín hiệu gần nhất: {currentActiveLocation.lastHeartbeatTime}
                           </span>
                         )}
                       </div>
                       <span style={{ fontWeight: 700, fontFamily: 'monospace', color: '#15803d' }}>
-                        IP WAN hiện tại: {currentActiveLocation.primaryWanIp || 'Chưa có'}
+                        IP WAN: {currentActiveLocation.primaryWanIp || 'Chưa có'}
                       </span>
                     </div>
 
-                    <span style={{ fontSize: '0.6875rem', color: '#475569' }}>
+                    <span className="bom-hide-mobile" style={{ fontSize: '0.6875rem', color: '#475569' }}>
                       🔒 <strong>Bảo mật:</strong> Khi tài khoản này đăng nhập máy tính tại văn phòng, hệ thống tự động bắt IP modem gửi lên VPS mỗi 5 phút. Nhân viên khác hoặc khi mang máy ra ngoài không thể gửi tín hiệu này.
                     </span>
                   </div>
@@ -1955,7 +2002,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                   onChange={(e) => updateCurrentLocField({ lanSubnet: e.target.value })}
                   style={{ marginBottom: 0, fontFamily: 'monospace', fontSize: '0.8125rem' }}
                 />
-                <span style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '2px', display: 'block' }}>
+                <span className="bom-hide-mobile" style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '2px', display: 'block' }}>
                   Áp dụng xác thực cho máy tính để bàn cắm dây mạng LAN nội bộ
                 </span>
               </div>
@@ -1963,6 +2010,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
 
             {/* ── CARD 2: ĐIỂM PHÁT SÓNG WIFI CHẤM CÔNG ── */}
             <div
+              className={`bom-labor-card ${mobileIntranetTab !== 'wifi' ? 'bom-labor-card-mobile-hidden' : ''}`}
               style={{
                 backgroundColor: '#ffffff',
                 borderRadius: '10px',
@@ -1983,17 +2031,17 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                     <h5 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 800, color: '#0f172a' }}>
                       Mạng phát sóng WiFi ({currentActiveLocation.wifiList?.length || 0})
                     </h5>
-                    <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Xác thực SSID và IP WAN của mạng không dây</span>
+                    <span className="bom-labor-card-sub" style={{ fontSize: '0.7rem', color: '#64748b' }}>Xác thực SSID và IP WAN của mạng không dây</span>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, color: '#334155' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, color: '#334155', flexShrink: 0, whiteSpace: 'nowrap' }}>
                     <Toggle
                       checked={currentActiveLocation.allowWifiCheckin}
                       onChange={(checked) => updateCurrentLocField({ allowWifiCheckin: checked })}
                     />
-                    <span>{currentActiveLocation.allowWifiCheckin ? 'Đang bật' : 'Đang tắt'}</span>
+                    <span style={{ whiteSpace: 'nowrap' }}>{currentActiveLocation.allowWifiCheckin ? 'Đang bật' : 'Đang tắt'}</span>
                   </label>
 
                   <Button
@@ -2001,7 +2049,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                     variant="secondary"
                     size="sm"
                     onClick={() => handleOpenAddWifi(currentActiveLocation.id)}
-                    style={{ fontSize: '0.7188rem', fontWeight: 700, padding: '3px 8px' }}
+                    style={{ fontSize: '0.7188rem', fontWeight: 700, padding: '3px 8px', whiteSpace: 'nowrap', flexShrink: 0 }}
                   >
                     + Thêm WiFi
                   </Button>
@@ -2072,6 +2120,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
 
             {/* ── CARD 3: MÁY CHẤM CÔNG VÂN TAY VÀ KHUÔN MẶT ── */}
             <div
+              className={`bom-labor-card ${mobileIntranetTab !== 'biometric' ? 'bom-labor-card-mobile-hidden' : ''}`}
               style={{
                 backgroundColor: '#ffffff',
                 borderRadius: '10px',
@@ -2092,7 +2141,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                     <h5 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 800, color: '#0f172a' }}>
                       Máy chấm công vân tay ({currentActiveLocation.biometricDevices?.length || 0})
                     </h5>
-                    <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Kết nối qua cổng LAN TCP/IP Socket (Port 4370)</span>
+                    <span className="bom-labor-card-sub" style={{ fontSize: '0.7rem', color: '#64748b' }}>Kết nối qua cổng LAN TCP/IP Socket (Port 4370)</span>
                   </div>
                 </div>
 
@@ -2173,6 +2222,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
 
             {/* ── CARD 4: ĐỊNH VỊ GPS VÀ VÙNG CHẤM CÔNG (GEOFENCING) ── */}
             <div
+              className={`bom-labor-card ${mobileIntranetTab !== 'gps' ? 'bom-labor-card-mobile-hidden' : ''}`}
               style={{
                 backgroundColor: '#ffffff',
                 borderRadius: '10px',
@@ -2193,20 +2243,20 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                     <h5 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 800, color: '#0f172a' }}>
                       Định vị GPS và phạm vi chấm công
                     </h5>
-                    <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Chấm công qua vị trí vệ tinh GPS (Geofencing)</span>
+                    <span className="bom-labor-card-sub" style={{ fontSize: '0.7rem', color: '#64748b' }}>Chấm công qua vị trí vệ tinh GPS (Geofencing)</span>
                   </div>
                 </div>
 
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, color: '#334155' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, color: '#334155', flexShrink: 0, whiteSpace: 'nowrap' }}>
                   <Toggle
                     checked={currentActiveLocation.allowGpsCheckin}
                     onChange={(checked) => updateCurrentLocField({ allowGpsCheckin: checked })}
                   />
-                  <span>{currentActiveLocation.allowGpsCheckin ? 'Đang bật' : 'Đang tắt'}</span>
+                  <span style={{ whiteSpace: 'nowrap' }}>{currentActiveLocation.allowGpsCheckin ? 'Đang bật' : 'Đang tắt'}</span>
                 </label>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="bom-intranet-gps-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                     <label style={{ fontSize: '0.7188rem', fontWeight: 700, color: '#334155' }}>Tọa độ GPS (Vĩ độ / Kinh độ):</label>

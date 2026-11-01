@@ -18,6 +18,7 @@ import {
   RejectedDocumentOffcanvas,
 } from './components';
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog';
+import { SwipeableTableProvider, SwipeableTableRow } from '../../../components/common/SwipeableTableRow';
 import { NewBadge } from '../../../components/common/NewBadge';
 import { Input } from '../../../components/common/Input';
 import { Select } from '../../../components/common/Select';
@@ -1049,9 +1050,10 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                 size="md"
                 leftIcon={<CheckCircle size={16} />}
                 onClick={handleBatchApprove}
+                title="Duyệt nhanh các tờ trình đã chọn"
                 style={{ whiteSpace: 'nowrap' }}
               >
-                <span>Duyệt nhanh</span>
+                <span className="recruitment-btn-label">Duyệt nhanh</span>
                 <span
                   style={{
                     display: 'inline-flex',
@@ -1093,7 +1095,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                 whiteSpace: 'nowrap',
               }}
             >
-              <span>Xoá</span>
+              <span className="delete-btn-label">Xoá</span>
               {selectedIds.length > 0 && (
                 <span
                   style={{
@@ -1148,8 +1150,9 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
             width: '100%',
           }}
         >
+          <SwipeableTableProvider>
           <table
-            className="custom-table"
+            className="custom-table bom-approval-table"
             style={{
               width: '100%',
               borderCollapse: 'separate',
@@ -1195,10 +1198,10 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                     aria-label="Chọn tất cả các dòng"
                   />
                 </th>
-                <th style={{ padding: '8px 14px', minWidth: '320px' }}>Tên tờ trình / Hợp đồng</th>
-                <th style={{ padding: '8px 14px', minWidth: '190px' }}>Bộ phận đề xuất</th>
-                <th style={{ padding: '8px 14px', minWidth: '240px' }}>Giá trị và Nội dung chi tiết</th>
-                <th style={{ padding: '8px 14px', minWidth: '140px' }}>
+                <th className="bom-approval-col-title" style={{ padding: '8px 14px', minWidth: '320px' }}>Tên tờ trình / Hợp đồng</th>
+                <th className="hidden md:table-cell" style={{ padding: '8px 14px', minWidth: '190px' }}>Bộ phận đề xuất</th>
+                <th className="hidden md:table-cell" style={{ padding: '8px 14px', minWidth: '240px' }}>Giá trị và Nội dung chi tiết</th>
+                <th className="hidden md:table-cell" style={{ padding: '8px 14px', minWidth: '140px' }}>
                   {currentStep === 1
                     ? 'Ngày trình duyệt'
                     : currentStep === 2
@@ -1212,8 +1215,9 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                 paginatedDocs.map((doc) => {
                   const isSelected = selectedIds.includes(doc.id);
                   return (
-                    <tr
+                    <SwipeableTableRow
                       key={doc.id}
+                      rowId={`approval-doc-${doc.id}`}
                       className={isSelected ? 'is-selected' : ''}
                       onClick={() => {
                         const updatedDoc = { ...doc, isRead: true };
@@ -1224,6 +1228,28 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                           updateItems(items.map((d) => (d.id === doc.id ? updatedDoc : d)));
                         }
                       }}
+                      onEdit={() => {
+                        const updatedDoc = { ...doc, isRead: true };
+                        setOpenChatOnSelect(false);
+                        setSelectedDoc(updatedDoc);
+                        setIsDetailOpen(true);
+                        if (!doc.isRead) {
+                          updateItems(items.map((d) => (d.id === doc.id ? updatedDoc : d)));
+                        }
+                      }}
+                      onDelete={async () => {
+                        const remaining = items.filter((item) => item.id !== doc.id);
+                        updateItems(remaining);
+                        await fetch('/api/approval-documents/batch-delete', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ ids: [doc.id] }),
+                        }).catch(console.error);
+                        setSelectedIds((prev) => prev.filter((id) => id !== doc.id));
+                        onShowToast?.('success', 'Thành công', `Đã xoá tờ trình ${doc.code}`);
+                      }}
+                      deleteConfirmTitle="Xác nhận xoá văn bản trình duyệt"
+                      deleteConfirmMessage={`Bạn có chắc chắn muốn xoá văn bản "${doc.title}" (${doc.code}) khỏi hệ thống? Thao tác này không thể hoàn tác.`}
                       style={{
                         cursor: 'pointer',
                         transition: 'background-color 0.15s ease',
@@ -1245,11 +1271,12 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                       </td>
 
                       {/* Tên tờ trình / Hợp đồng (Dồn kèm Mã và Loại tờ trình, truncate tiêu đề) */}
-                      <td style={{ padding: '8px 14px', maxWidth: '440px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
+                      <td className="bom-approval-col-title" style={{ padding: '8px 14px', maxWidth: '440px' }}>
+                        <div className="bom-approval-cell-inner" style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
                           {/* Dòng 1: Mã tờ trình + Loại tờ trình (kèm chấm đỏ nhấp nháy nếu khẩn cấp) */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'nowrap' }}>
+                          <div className="bom-approval-row-top" style={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' }}>
                             <span
+                              className="bom-approval-code-badge"
                               style={{
                                 fontFamily: 'var(--font-mono, monospace)',
                                 fontWeight: 700,
@@ -1265,6 +1292,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                               {doc.code}
                             </span>
                             <span
+                              className="bom-approval-type-badge"
                               style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
@@ -1295,8 +1323,8 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                                   }}
                                 />
                               )}
-                              <Tag size={11} />
-                              <span>{doc.docTypeName}</span>
+                              <Tag size={11} style={{ flexShrink: 0 }} />
+                              <span className="bom-approval-type-text">{doc.docTypeName}</span>
                             </span>
                             {/* Huy hiệu MỚI: Chỉ hiển thị khi tờ trình chưa được mở xem (!doc.isRead) */}
                             <NewBadge show={!doc.isRead} />
@@ -1305,6 +1333,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                             {(doc.attachmentName || (doc.attachments && doc.attachments.length > 0)) && (
                               <button
                                 type="button"
+                                className="bom-approval-attach-btn"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   openAttachmentInNewTab(doc);
@@ -1328,13 +1357,23 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                                 }}
                               >
                                 <FileEarmarkPdf size={11} style={{ color: '#ef4444' }} />
-                                <span>Xem tệp đính kèm</span>
+                                <span className="hidden md:inline">Xem tệp đính kèm</span>
                               </button>
                             )}
+
+                            {/* Ngày hiển thị góc phải trên cùng của thẻ dòng trên điện thoại (<= 768px) */}
+                            <span className="bom-approval-mobile-top-date">
+                              {currentStep === 1
+                                ? doc.submitDate
+                                : currentStep === 2
+                                  ? doc.approvalDate || doc.submitDate
+                                  : doc.rejectionDate || doc.submitDate}
+                            </span>
                           </div>
 
                           {/* Dòng 2: Tên tờ trình áp dụng TRUNCATE */}
                           <div
+                            className="bom-approval-row-title"
                             title={doc.title}
                             style={{
                               fontWeight: 700,
@@ -1349,11 +1388,60 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                           >
                             {doc.title}
                           </div>
+
+                          {/* Dòng 3 (Chỉ hiển thị trên điện thoại <= 768px): Bộ phận • Người trình + Giá trị & Nút duyệt nhanh */}
+                          <div className="bom-approval-mobile-meta md:hidden">
+                            <span className="bom-approval-mobile-dept">
+                              {doc.department} • {doc.submitter}
+                            </span>
+                            <div className="bom-approval-mobile-sub">
+                              {doc.value > 0 ? (
+                                <span className="bom-approval-mobile-val">
+                                  {doc.value.toLocaleString('vi-VN')} đ
+                                </span>
+                              ) : (
+                                <span className="bom-approval-mobile-summary">
+                                  {doc.valueLabel}
+                                </span>
+                              )}
+                              {currentStep === 1 ? (
+                                <div className="bom-approval-mobile-actions" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    className="bom-approval-quick-btn is-approve"
+                                    onClick={(e) => handleOpenApproveModal(doc, e)}
+                                    title="Phê duyệt nhanh tờ trình này"
+                                  >
+                                    <CheckCircle size={11} />
+                                    <span>Duyệt</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="bom-approval-quick-btn is-reject"
+                                    onClick={(e) => handleOpenRejectModal(doc, e)}
+                                    title="Từ chối tờ trình này"
+                                  >
+                                    <XCircle size={11} />
+                                  </button>
+                                </div>
+                              ) : currentStep === 2 ? (
+                                <span className="bom-approval-mobile-status is-approved">
+                                  <CheckCircle size={10} />
+                                  <span>Đã duyệt</span>
+                                </span>
+                              ) : (
+                                <span className="bom-approval-mobile-status is-rejected">
+                                  <XCircle size={10} />
+                                  <span>Từ chối</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </td>
 
                       {/* Bộ phận đề xuất */}
-                      <td style={{ padding: '8px 14px' }}>
+                      <td className="hidden md:table-cell" style={{ padding: '8px 14px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                           <span style={{ fontWeight: 600, fontSize: '0.84rem', color: 'var(--text-primary)' }}>
                             {doc.department}
@@ -1365,7 +1453,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                       </td>
 
                       {/* Giá trị và Nội dung chi tiết */}
-                      <td style={{ padding: '8px 14px', maxWidth: '320px' }}>
+                      <td className="hidden md:table-cell" style={{ padding: '8px 14px', maxWidth: '320px' }}>
                         {(() => {
                           let methodBadge = '';
                           let cleanSummary = doc.summary || '';
@@ -1440,7 +1528,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                       </td>
 
                       {/* Ngày trình duyệt / phê duyệt */}
-                      <td style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}>
+                      <td className="hidden md:table-cell" style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                           <span style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>
                             {currentStep === 1
@@ -1461,7 +1549,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                           )}
                         </div>
                       </td>
-                    </tr>
+                    </SwipeableTableRow>
                   );
                 })
               ) : (
@@ -1530,6 +1618,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
               )}
             </tbody>
           </table>
+          </SwipeableTableProvider>
         </div>
 
         {/* ── 3. COMPONENT PAGINATION ── */}
@@ -1718,7 +1807,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
         }
       >
         <form onSubmit={handleCreateDocument} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div className="bom-approval-modal-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-secondary)' }}>
                 Mã văn bản trình ký *
@@ -1761,7 +1850,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
             />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div className="bom-approval-modal-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-secondary)' }}>
                 Bộ phận đề xuất *
@@ -1787,7 +1876,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div className="bom-approval-modal-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-secondary)' }}>
                 Người trình duyệt *

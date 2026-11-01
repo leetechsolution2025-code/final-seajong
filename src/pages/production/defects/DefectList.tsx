@@ -87,10 +87,10 @@ export function DefectList({ data, onSelect }: DefectListProps) {
     <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
       <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
         <tr className="text-slate-500 text-[11.5px] uppercase tracking-[0.06em] font-bold">
-          <th className="py-2.5 px-4 text-left" style={{ width: '280px' }}>Mã lỗi & Nguồn</th>
-          <th className="py-2.5 px-4 text-left" style={{ width: '270px' }}>Sản phẩm</th>
-          <th className="py-2.5 px-4 text-left">Mô tả hiện trạng</th>
-          <th className="py-2.5 px-4 text-left" style={{ width: '250px' }}>Người báo cáo & Phụ trách</th>
+          <th className="py-2.5 px-2.5 sm:px-4 text-left sm:w-[280px]">Mã lỗi & Nguồn</th>
+          <th className="py-2.5 px-2.5 sm:px-4 text-left sm:w-[270px]">Sản phẩm</th>
+          <th className="hidden sm:table-cell py-2.5 px-4 text-left">Mô tả hiện trạng</th>
+          <th className="hidden sm:table-cell py-2.5 px-4 text-left" style={{ width: '250px' }}>Người báo cáo & Phụ trách</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-slate-100">
@@ -102,39 +102,45 @@ export function DefectList({ data, onSelect }: DefectListProps) {
               onClick={() => onSelect(defect.id)}
               className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 cursor-pointer"
             >
-              <td className="py-3 px-4 align-middle">
+              <td className="py-2.5 sm:py-3 px-2.5 sm:px-4 align-top sm:align-middle">
                 <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-bold text-slate-900">{defect.code}</span>
+                  <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                    <span className="font-bold text-slate-900 whitespace-nowrap font-mono">{defect.code}</span>
                     {getSourceBadge(defect.source)}
                   </div>
-                  <div className="flex items-center gap-2 text-[11.5px] text-slate-500 mt-0.5">
-                    <span>
+                  <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-[11.5px] text-slate-500 mt-0.5 flex-wrap">
+                    <span className="whitespace-nowrap">
                       {new Date(defect.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}{' '}
                       {new Date(defect.createdAt).toLocaleDateString('vi-VN')}
                     </span>
                     {getStatusBadge(defect.status)}
                   </div>
+                  <div className="sm:hidden text-[11px] text-slate-500 mt-0.5 line-clamp-1">
+                    {displayDesc || 'Không có mô tả'}
+                  </div>
                 </div>
               </td>
-              <td className="py-3 px-4 align-middle" style={{ maxWidth: '270px' }}>
-                <div className="font-semibold text-slate-800 truncate" title={defect.productName}>
+              <td className="py-2.5 sm:py-3 px-2.5 sm:px-4 align-top sm:align-middle max-w-[175px] sm:max-w-[270px]">
+                <div className="font-semibold text-slate-800 line-clamp-2 sm:truncate text-xs sm:text-[13px]" title={defect.productName}>
                   {defect.productName}
                 </div>
-                <div className="text-xs text-slate-500 mt-0.5">
-                  Số lượng:{' '}
+                <div className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
+                  SL:{' '}
                   <span className="font-bold text-rose-600">
                     {String(defect.quantity || 0).padStart(2, '0')}
                   </span>
                 </div>
-                <div className="text-xs text-slate-500 mt-0.5">
+                <div className="hidden sm:block text-xs text-slate-500 mt-0.5">
                   Mã định mức:{' '}
                   <span className="font-medium text-slate-700">
                     {defect.bomCode || 'Không có định mức'}
                   </span>
                 </div>
+                <div className="sm:hidden text-[10.5px] text-slate-400 mt-0.5 truncate">
+                  PT: {defect.assignedTo || defect.reporterName || 'Chưa phân công'}
+                </div>
               </td>
-              <td className="py-3 px-4 align-middle" style={{ maxWidth: '380px' }}>
+              <td className="hidden sm:table-cell py-3 px-4 align-middle" style={{ maxWidth: '380px' }}>
                 <div
                   className="text-xs text-slate-600 leading-relaxed"
                   title={displayDesc}
@@ -149,7 +155,7 @@ export function DefectList({ data, onSelect }: DefectListProps) {
                   {displayDesc || 'Không có mô tả'}
                 </div>
               </td>
-              <td className="py-3 px-4 align-middle">
+              <td className="hidden sm:table-cell py-3 px-4 align-middle">
                 <div className="text-xs font-semibold text-slate-800">
                   {defect.reporterName}{' '}
                   <span className="text-slate-300 mx-1">|</span>{' '}

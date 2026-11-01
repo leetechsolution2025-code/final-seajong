@@ -50,6 +50,8 @@ interface Employee {
   avatarUrl?: string;
   attendance: (AttendanceDayCell | null)[];
   baseSalary?: number;
+  insuranceSalary?: number;
+  isInsuranceEnrolled?: boolean;
   insuranceDeduction?: number;
   advanceDeduction?: number;
   mealAllowance?: number;
@@ -176,12 +178,30 @@ function getStatusStyles(code: string) {
   );
 }
 
-const DayHeader: React.FC<{ day: number; year: number; month: number; currentDay?: number }> = ({
+const DayHeader: React.FC<{ day: number | null; year: number; month: number; currentDay?: number }> = ({
   day,
   year,
   month,
   currentDay,
 }) => {
+  if (day === null) {
+    return (
+      <th
+        className="day-col-header"
+        style={{
+          width: '38px',
+          minWidth: '38px',
+          padding: '6px 2px',
+          textAlign: 'center',
+          borderBottom: '1px solid var(--border-default, #e2e8f0)',
+          backgroundColor: 'var(--bg-surface-2, #f8fafc)',
+          color: 'var(--text-muted, #94a3b8)',
+        }}
+      >
+        <div style={{ fontSize: '11px', fontWeight: 600, opacity: 0.4 }}>—</div>
+      </th>
+    );
+  }
   const dowMap = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
   const date = new Date(year, month - 1, day);
   const dow = dowMap[date.getDay()];
@@ -190,6 +210,7 @@ const DayHeader: React.FC<{ day: number; year: number; month: number; currentDay
 
   return (
     <th
+      className="day-col-header"
       style={{
         width: '38px',
         minWidth: '38px',
@@ -230,6 +251,7 @@ export const AttendancePayrollPage: React.FC = () => {
   const [summaryDate, setSummaryDate] = useState(new Date().toISOString().split('T')[0]);
   const [companyInfo, setCompanyInfo] = useState<any>(null);
   const [positions, setPositions] = useState<{ code: string; name: string }[]>([]);
+  const [employeeInsRate, setEmployeeInsRate] = useState<number>(10.5);
 
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
@@ -281,6 +303,76 @@ export const AttendancePayrollPage: React.FC = () => {
       ? new Date().getDate()
       : -1;
 
+  const [isMobile, setIsMobile] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= 768 : false,
+  );
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const [selectedWeek, setSelectedWeek] = useState<number>(() => {
+    const today = new Date();
+    return Math.min(5, Math.floor((today.getDate() - 1) / 7) + 1);
+  });
+
+  const weekOptions = useMemo(() => {
+    const totalWeeks = Math.ceil(daysInMonthCount / 7);
+    return Array.from({ length: totalWeeks }, (_, idx) => {
+      const w = idx + 1;
+      const startDay = idx * 7 + 1;
+      const endDay = Math.min(daysInMonthCount, w * 7);
+      const days: (number | null)[] = [];
+      for (let d = startDay; d <= startDay + 6; d++) {
+        days.push(d <= daysInMonthCount ? d : null);
+      }
+      return {
+        week: w,
+        startDay,
+        endDay,
+        rangeLabel: `${String(startDay).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`,
+        days,
+      };
+    });
+  }, [daysInMonthCount]);
+
+  useEffect(() => {
+    if (selectedWeek > weekOptions.length) {
+      setSelectedWeek(weekOptions.length);
+    }
+  }, [selectedWeek, weekOptions.length]);
+
+  const activeWeekObj = useMemo(() => {
+    return weekOptions.find((w) => w.week === selectedWeek) || weekOptions[0];
+  }, [weekOptions, selectedWeek]);
+
+  const visibleDaySlots: (number | null)[] = useMemo(() => {
+    if (!isMobile) return daysInMonth;
+    return activeWeekObj ? activeWeekObj.days : daysInMonth.slice(0, 7);
+  }, [isMobile, daysInMonth, activeWeekObj]);
+
+  const weekTouchStartRef = React.useRef<{ x: number; y: number } | null>(null);
+  const handleMatrixTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isMobile) return;
+    const t = e.touches[0];
+    weekTouchStartRef.current = { x: t.clientX, y: t.clientY };
+  };
+  const handleMatrixTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isMobile || !weekTouchStartRef.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - weekTouchStartRef.current.x;
+    const dy = t.clientY - weekTouchStartRef.current.y;
+    weekTouchStartRef.current = null;
+    if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    if (dx < 0 && selectedWeek < weekOptions.length) {
+      setSelectedWeek((prev) => Math.min(weekOptions.length, prev + 1));
+    } else if (dx > 0 && selectedWeek > 1) {
+      setSelectedWeek((prev) => Math.max(1, prev - 1));
+    }
+  };
+
   const monthYearOptions = useMemo(() => {
     const list: { value: string; label: string }[] = [];
     for (let m = 1; m <= 12; m++) {
@@ -295,10 +387,64 @@ export const AttendancePayrollPage: React.FC = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/hr/attendance-payroll?month=${month}&year=${year}`);
+      const [res, insParticipantsRes, insConfigRes] = await Promise.all([
+        fetch(`/api/hr/attendance-payroll?month=${month}&year=${year}`),
+        fetch('/api/hr/insurance/participants').catch(() => null),
+        fetch('/api/hr/insurance/config').catch(() => null),
+      ]);
+
+      let empRate = 10.5;
+      if (insConfigRes && insConfigRes.ok) {
+        const cfg = await insConfigRes.json().catch(() => null);
+        if (cfg && typeof cfg === 'object') {
+          const bhxh = Number(cfg.empBhxhRate ?? cfg.employeeBhxh ?? 8);
+          const bhyt = Number(cfg.empBhytRate ?? cfg.employeeBhyt ?? 1.5);
+          const bhtn = Number(cfg.empBhtnRate ?? cfg.employeeBhtn ?? 1);
+          const totalRate = bhxh + bhyt + bhtn;
+          if (totalRate > 0) {
+            empRate = totalRate;
+            setEmployeeInsRate(totalRate);
+          }
+        }
+      }
+
+      let insParticipants: any[] = [];
+      if (insParticipantsRes && insParticipantsRes.ok) {
+        const list = await insParticipantsRes.json().catch(() => []);
+        if (Array.isArray(list)) insParticipants = list;
+      }
+
       if (res.ok) {
         const result = await res.json();
-        setData(Array.isArray(result.departments) ? result.departments : []);
+        const rawDepts: Department[] = Array.isArray(result.departments) ? result.departments : [];
+        const enrichedDepts = rawDepts.map((dept) => ({
+          ...dept,
+          employees: (dept.employees || []).map((emp) => {
+            const matchedIns = insParticipants.find(
+              (p) =>
+                p.employeeId === emp.id ||
+                p.id === emp.id ||
+                (p.code && emp.code && p.code === emp.code) ||
+                (p.name &&
+                  emp.fullName &&
+                  String(p.name).trim().toLowerCase() === String(emp.fullName).trim().toLowerCase()),
+            );
+            if (matchedIns) {
+              const isEnrolled = Boolean(matchedIns.isInsuranceEnrolled || matchedIns.hasInsurance);
+              const insSalary = Number(matchedIns.insuranceSalary || 0);
+              const empDeduction =
+                isEnrolled && insSalary > 0 ? Math.round((insSalary * empRate) / 100) : 0;
+              return {
+                ...emp,
+                isInsuranceEnrolled: isEnrolled,
+                insuranceSalary: insSalary,
+                insuranceDeduction: empDeduction,
+              };
+            }
+            return emp;
+          }),
+        }));
+        setData(enrichedDepts);
         if (result.stats) setStats(result.stats);
         setIsAccountingApproved(Boolean(result.isAccountingApproved));
         setIsDirectorSubmitted(Boolean(result.isDirectorSubmitted));
@@ -514,6 +660,7 @@ export const AttendancePayrollPage: React.FC = () => {
       num: 1,
       id: 'monthly',
       title: 'Bảng chấm công',
+      mobileTitle: 'Chấm công',
       desc: 'Dữ liệu chấm công chi tiết',
       icon: <Calendar3Range size={16} />,
       badge: `${stats.totalEmployees} NV`,
@@ -524,6 +671,7 @@ export const AttendancePayrollPage: React.FC = () => {
       num: 2,
       id: 'payroll',
       title: 'Bảng lương',
+      mobileTitle: 'Bảng lương',
       desc: 'Tính toán và chi trả thu nhập',
       icon: <CashStack size={16} />,
       badge: isDirectorApproved
@@ -540,6 +688,7 @@ export const AttendancePayrollPage: React.FC = () => {
       num: 3,
       id: 'lunch',
       title: 'Đăng ký ăn trưa',
+      mobileTitle: 'Ăn trưa',
       desc: 'Danh sách đặt cơm hằng ngày',
       icon: <EggFried size={16} />,
       badge: `${totalMealsMonth} suất`,
@@ -557,6 +706,7 @@ export const AttendancePayrollPage: React.FC = () => {
       icon="bi-calculator"
       color="rose"
       hideTicker={true}
+      className="hr-attendance-step-page"
       steps={steps}
       currentStep={currentStepNum}
       onStepChange={(num) => {
@@ -567,6 +717,13 @@ export const AttendancePayrollPage: React.FC = () => {
       }}
     >
       <div
+        className={
+          activeTab === 'monthly' || activeTab === 'lunch'
+            ? 'hr-attendance-matrix-page'
+            : 'hr-payroll-table-page'
+        }
+        onTouchStart={handleMatrixTouchStart}
+        onTouchEnd={handleMatrixTouchEnd}
         style={{
           display: 'flex',
           flexDirection: 'column',
@@ -613,6 +770,12 @@ export const AttendancePayrollPage: React.FC = () => {
                 if (m && y) {
                   setViewDate(new Date(y, m - 1, 1));
                   setCurrentPage(1);
+                  const now = new Date();
+                  if (now.getMonth() + 1 === m && now.getFullYear() === y) {
+                    setSelectedWeek(Math.min(5, Math.floor((now.getDate() - 1) / 7) + 1));
+                  } else {
+                    setSelectedWeek(1);
+                  }
                 }
               },
               minWidth: '145px',
@@ -641,9 +804,12 @@ export const AttendancePayrollPage: React.FC = () => {
                   onClick={handlePublishAttendance}
                   isLoading={loading}
                   leftIcon={<SendCheck size={15} />}
+                  title="Phát hành phiếu chấm công"
                   style={{ fontWeight: 700 }}
                 >
-                  Phát hành phiếu chấm công
+                  <span className="recruitment-btn-label hidden md:inline">
+                    Phát hành phiếu chấm công
+                  </span>
                 </Button>
               </div>
             ) : activeTab === 'payroll' ? (
@@ -654,9 +820,10 @@ export const AttendancePayrollPage: React.FC = () => {
                   onClick={handleCalculatePayroll}
                   disabled={loading}
                   leftIcon={<ArrowRepeat size={14} />}
+                  title="Tính lương"
                   style={{ fontWeight: 700 }}
                 >
-                  Tính lương
+                  <span className="recruitment-btn-label hidden md:inline">Tính lương</span>
                 </Button>
                 <Button
                   variant={isAccountingApproved ? 'secondary' : 'primary'}
@@ -664,9 +831,12 @@ export const AttendancePayrollPage: React.FC = () => {
                   onClick={handleSendToAccounting}
                   disabled={loading || isAccountingApproved}
                   leftIcon={<SendFill size={13} />}
+                  title={isAccountingApproved ? 'Đã chuyển KT' : 'Chuyển kế toán'}
                   style={{ fontWeight: 700 }}
                 >
-                  {isAccountingApproved ? 'Đã chuyển KT' : 'Chuyển kế toán'}
+                  <span className="recruitment-btn-label hidden md:inline">
+                    {isAccountingApproved ? 'Đã chuyển KT' : 'Chuyển kế toán'}
+                  </span>
                 </Button>
                 <Button
                   variant={
@@ -693,15 +863,26 @@ export const AttendancePayrollPage: React.FC = () => {
                       <SendFill size={13} />
                     )
                   }
+                  title={
+                    isDirectorApproved
+                      ? 'Đã duyệt'
+                      : isDirectorSubmitted && isDirectorUser
+                      ? 'Duyệt bảng lương'
+                      : isDirectorSubmitted
+                      ? 'Đã trình BGĐ'
+                      : 'Trình duyệt'
+                  }
                   style={{ fontWeight: 700 }}
                 >
-                  {isDirectorApproved
-                    ? 'Đã duyệt'
-                    : isDirectorSubmitted && isDirectorUser
-                    ? 'Duyệt bảng lương'
-                    : isDirectorSubmitted
-                    ? 'Đã trình BGĐ'
-                    : 'Trình duyệt'}
+                  <span className="recruitment-btn-label hidden md:inline">
+                    {isDirectorApproved
+                      ? 'Đã duyệt'
+                      : isDirectorSubmitted && isDirectorUser
+                      ? 'Duyệt bảng lương'
+                      : isDirectorSubmitted
+                      ? 'Đã trình BGĐ'
+                      : 'Trình duyệt'}
+                  </span>
                 </Button>
                 <Button
                   variant="success"
@@ -709,14 +890,17 @@ export const AttendancePayrollPage: React.FC = () => {
                   onClick={handlePublishPayroll}
                   disabled={loading || !isAccountingApproved}
                   leftIcon={<EnvelopePaper size={14} />}
+                  title="Phát hành phiếu lương"
                   style={{ fontWeight: 700 }}
                 >
-                  Phát hành phiếu lương
+                  <span className="recruitment-btn-label hidden md:inline">
+                    Phát hành phiếu lương
+                  </span>
                 </Button>
               </div>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '150px' }}>
+                <div className="hidden md:block" style={{ width: '150px' }}>
                   <Input
                     type="date"
                     value={summaryDate}
@@ -728,9 +912,10 @@ export const AttendancePayrollPage: React.FC = () => {
                   size="sm"
                   onClick={() => setShowLunchModal(true)}
                   leftIcon={<Calculator size={14} />}
+                  title="Tổng hợp suất ăn"
                   style={{ fontWeight: 700 }}
                 >
-                  Tổng hợp suất ăn
+                  <span className="recruitment-btn-label hidden md:inline">Tổng hợp suất ăn</span>
                 </Button>
               </div>
             )
@@ -744,6 +929,38 @@ export const AttendancePayrollPage: React.FC = () => {
             flexShrink: 0,
           }}
         />
+
+        {/* ── THANH CHỌN TUẦN TRÊN ĐIỆN THOẠI (<= 768px) ── */}
+        {(activeTab === 'monthly' || activeTab === 'lunch') && (
+          <div className="flex md:hidden items-center gap-1 px-2 py-1.5 bg-slate-50 border-b border-slate-200 shrink-0">
+            {weekOptions.map((w) => {
+              const isSelected = activeWeekObj?.week === w.week;
+              return (
+                <button
+                  key={w.week}
+                  type="button"
+                  onClick={() => setSelectedWeek(w.week)}
+                  className={`flex-1 min-w-0 py-1 px-1 rounded-lg text-center transition-all border cursor-pointer ${
+                    isSelected
+                      ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="text-[10.5px] font-bold leading-tight truncate">
+                    Tuần {w.week}
+                  </div>
+                  <div
+                    className={`text-[9px] font-medium leading-tight truncate ${
+                      isSelected ? 'text-sky-100' : 'text-slate-400'
+                    }`}
+                  >
+                    {w.rangeLabel}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* ── THANH CHÚ THÍCH TRẠNG THÁI NHỎ GỌN (Step 1) ── */}
         {activeTab === 'monthly' && (
@@ -853,9 +1070,9 @@ export const AttendancePayrollPage: React.FC = () => {
                   >
                     NHÂN VIÊN
                   </th>
-                  {daysInMonth.map((day) => (
+                  {visibleDaySlots.map((day, slotIdx) => (
                     <DayHeader
-                      key={day}
+                      key={day ?? `empty-${slotIdx}`}
                       day={day}
                       year={year}
                       month={month}
@@ -863,6 +1080,7 @@ export const AttendancePayrollPage: React.FC = () => {
                     />
                   ))}
                   <th
+                    className="hidden md:table-cell"
                     style={{
                       padding: '8px 6px',
                       width: '58px',
@@ -875,6 +1093,7 @@ export const AttendancePayrollPage: React.FC = () => {
                     CÔNG
                   </th>
                   <th
+                    className="hidden md:table-cell"
                     style={{
                       padding: '8px 6px',
                       width: '58px',
@@ -886,6 +1105,7 @@ export const AttendancePayrollPage: React.FC = () => {
                     PHÉP
                   </th>
                   <th
+                    className="hidden md:table-cell"
                     style={{
                       padding: '8px 6px',
                       width: '68px',
@@ -898,6 +1118,7 @@ export const AttendancePayrollPage: React.FC = () => {
                     THÊM GIỜ
                   </th>
                   <th
+                    className="hidden md:table-cell"
                     style={{
                       padding: '8px 8px',
                       width: '74px',
@@ -915,7 +1136,7 @@ export const AttendancePayrollPage: React.FC = () => {
                 {pagedEmployees.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={daysInMonth.length + 5}
+                      colSpan={visibleDaySlots.length + 5}
                       style={{ textAlign: 'center', padding: '36px 20px', color: '#64748b' }}
                     >
                       Không tìm thấy dữ liệu nhân sự phù hợp.
@@ -983,10 +1204,42 @@ export const AttendancePayrollPage: React.FC = () => {
                             >
                               {getPositionName(emp.position)} • {emp.deptName}
                             </span>
+                            <div className="flex md:hidden flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 text-[10px] leading-tight">
+                              <span className="font-bold text-emerald-600">
+                                Công: {cong > 0 ? cong.toFixed(1) : '0'}
+                              </span>
+                              {phep > 0 && (
+                                <span className="font-bold text-blue-600">
+                                  • Phép: {Number.isInteger(phep) ? phep : phep.toFixed(1)}
+                                </span>
+                              )}
+                              {ot > 0 && (
+                                <span className="font-bold text-sky-600">• OT: {ot.toFixed(1)}h</span>
+                              )}
+                              {viPham > 0 && (
+                                <span className="font-bold text-rose-600">• VP: {viPham}p</span>
+                              )}
+                            </div>
                           </div>
                         </td>
 
-                        {daysInMonth.map((day, idx) => {
+                        {visibleDaySlots.map((day, slotIdx) => {
+                          if (day === null) {
+                            return (
+                              <td
+                                key={`empty-${slotIdx}`}
+                                className="day-col-cell"
+                                style={{
+                                  padding: 0,
+                                  textAlign: 'center',
+                                  verticalAlign: 'middle',
+                                  borderBottom: '1px solid var(--border-subtle, #f1f5f9)',
+                                  backgroundColor: 'rgba(248, 250, 252, 0.5)',
+                                }}
+                              />
+                            );
+                          }
+                          const idx = day - 1;
                           const attObj = emp.attendance[idx];
                           const status = attObj?.code;
                           const label = attObj?.label;
@@ -998,6 +1251,7 @@ export const AttendancePayrollPage: React.FC = () => {
                           return (
                             <td
                               key={day}
+                              className="day-col-cell"
                               style={{
                                 padding: 0,
                                 textAlign: 'center',
@@ -1092,6 +1346,7 @@ export const AttendancePayrollPage: React.FC = () => {
                         })}
 
                         <td
+                          className="hidden md:table-cell"
                           style={{
                             textAlign: 'center',
                             verticalAlign: 'middle',
@@ -1104,6 +1359,7 @@ export const AttendancePayrollPage: React.FC = () => {
                           {cong > 0 ? cong.toFixed(1) : '—'}
                         </td>
                         <td
+                          className="hidden md:table-cell"
                           style={{
                             textAlign: 'center',
                             verticalAlign: 'middle',
@@ -1116,6 +1372,7 @@ export const AttendancePayrollPage: React.FC = () => {
                           {phep > 0 ? (Number.isInteger(phep) ? phep : phep.toFixed(1)) : '—'}
                         </td>
                         <td
+                          className="hidden md:table-cell"
                           style={{
                             textAlign: 'center',
                             verticalAlign: 'middle',
@@ -1128,6 +1385,7 @@ export const AttendancePayrollPage: React.FC = () => {
                           {ot > 0 ? ot.toFixed(1) : '—'}
                         </td>
                         <td
+                          className="hidden md:table-cell"
                           style={{
                             textAlign: 'center',
                             verticalAlign: 'middle',
@@ -1173,19 +1431,19 @@ export const AttendancePayrollPage: React.FC = () => {
                   }}
                 >
                   <th style={{ padding: '10px 14px', minWidth: '220px' }}>NHÂN VIÊN</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'right' }}>LƯƠNG CƠ BẢN</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'center' }}>NGÀY CÔNG</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'right' }}>PHỤ CẤP</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'right', color: '#e11d48' }}>
+                  <th className="hidden md:table-cell" style={{ padding: '10px 12px', textAlign: 'right' }}>LƯƠNG CƠ BẢN</th>
+                  <th className="hidden md:table-cell" style={{ padding: '10px 12px', textAlign: 'center' }}>NGÀY CÔNG</th>
+                  <th className="hidden md:table-cell" style={{ padding: '10px 12px', textAlign: 'right' }}>PHỤ CẤP</th>
+                  <th className="hidden md:table-cell" style={{ padding: '10px 12px', textAlign: 'right', color: '#e11d48' }}>
                     KHẤU TRỪ
                   </th>
-                  <th style={{ padding: '10px 12px', textAlign: 'right', color: '#d97706' }}>
+                  <th className="hidden md:table-cell" style={{ padding: '10px 12px', textAlign: 'right', color: '#d97706' }}>
                     LƯƠNG OT
                   </th>
                   <th style={{ padding: '10px 12px', textAlign: 'right', color: '#059669' }}>
                     THỰC LĨNH
                   </th>
-                  <th style={{ padding: '10px 14px', width: '150px', textAlign: 'center' }}>
+                  <th className="hidden md:table-cell" style={{ padding: '10px 14px', width: '150px', textAlign: 'center' }}>
                     TRẠNG THÁI
                   </th>
                 </tr>
@@ -1205,6 +1463,7 @@ export const AttendancePayrollPage: React.FC = () => {
                         style={{
                           display: 'flex',
                           alignItems: 'center',
+                          flexWrap: 'wrap',
                           gap: '8px',
                           fontSize: '12px',
                           fontWeight: 700,
@@ -1297,9 +1556,25 @@ export const AttendancePayrollPage: React.FC = () => {
                             >
                               {getPositionName(emp.position)} • {emp.deptName}
                             </span>
+                            <div className="flex md:hidden flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[11px] text-slate-500">
+                              <span>
+                                Công: <strong className="text-blue-700">{cong.toFixed(1)}</strong>
+                              </span>
+                              <span>•</span>
+                              <span>LCB: {Math.round(salary).toLocaleString('vi-VN')} đ</span>
+                              {khauTru > 0 && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-rose-600">
+                                    KT: -{Math.round(khauTru).toLocaleString('vi-VN')} đ
+                                  </span>
+                                </>
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td
+                          className="hidden md:table-cell"
                           style={{
                             padding: '8px 12px',
                             textAlign: 'right',
@@ -1310,6 +1585,7 @@ export const AttendancePayrollPage: React.FC = () => {
                           {Math.round(salary).toLocaleString('vi-VN')} đ
                         </td>
                         <td
+                          className="hidden md:table-cell"
                           style={{
                             padding: '8px 12px',
                             textAlign: 'center',
@@ -1320,6 +1596,7 @@ export const AttendancePayrollPage: React.FC = () => {
                           {cong.toFixed(1)}
                         </td>
                         <td
+                          className="hidden md:table-cell"
                           style={{
                             padding: '8px 12px',
                             textAlign: 'right',
@@ -1330,6 +1607,7 @@ export const AttendancePayrollPage: React.FC = () => {
                           {Math.round(allowances).toLocaleString('vi-VN')} đ
                         </td>
                         <td
+                          className="hidden md:table-cell"
                           style={{
                             padding: '8px 12px',
                             textAlign: 'right',
@@ -1340,6 +1618,7 @@ export const AttendancePayrollPage: React.FC = () => {
                           {Math.round(khauTru).toLocaleString('vi-VN')} đ
                         </td>
                         <td
+                          className="hidden md:table-cell"
                           style={{
                             padding: '8px 12px',
                             textAlign: 'right',
@@ -1357,11 +1636,35 @@ export const AttendancePayrollPage: React.FC = () => {
                             textAlign: 'right',
                             fontWeight: 700,
                             color: '#059669',
+                            whiteSpace: 'nowrap',
                           }}
                         >
-                          {Math.round(net).toLocaleString('vi-VN')} đ
+                          <div>{Math.round(net).toLocaleString('vi-VN')} đ</div>
+                          <div className="md:hidden mt-1">
+                            {isDirectorApproved ||
+                            emp.payrollStatus === 'Đã duyệt' ||
+                            emp.payrollStatus === 'Giám đốc đã duyệt' ? (
+                              <Badge variant="success" style={{ fontWeight: 700 }}>
+                                Đã duyệt
+                              </Badge>
+                            ) : isDirectorSubmitted ||
+                              emp.payrollStatus === 'Chờ Giám đốc duyệt' ? (
+                              <Badge variant="warning" style={{ fontWeight: 700 }}>
+                                Chờ BGĐ
+                              </Badge>
+                            ) : isAccountingApproved ||
+                              emp.payrollStatus === 'Kế toán đã duyệt' ? (
+                              <Badge variant="brand" style={{ fontWeight: 700 }}>
+                                KT đã duyệt
+                              </Badge>
+                            ) : (
+                              <Badge variant="neutral" style={{ fontWeight: 600 }}>
+                                Bản nháp
+                              </Badge>
+                            )}
+                          </div>
                         </td>
-                        <td style={{ padding: '8px 14px', textAlign: 'center' }}>
+                        <td className="hidden md:table-cell" style={{ padding: '8px 14px', textAlign: 'center' }}>
                           {isDirectorApproved ||
                           emp.payrollStatus === 'Đã duyệt' ||
                           emp.payrollStatus === 'Giám đốc đã duyệt' ? (
@@ -1433,10 +1736,17 @@ export const AttendancePayrollPage: React.FC = () => {
                   >
                     NHÂN VIÊN
                   </th>
-                  {daysInMonth.map((day) => (
-                    <DayHeader key={day} day={day} year={year} month={month} />
+                  {visibleDaySlots.map((day, slotIdx) => (
+                    <DayHeader
+                      key={day ?? `empty-lunch-${slotIdx}`}
+                      day={day}
+                      year={year}
+                      month={month}
+                      currentDay={currentDay}
+                    />
                   ))}
                   <th
+                    className="hidden md:table-cell"
                     style={{
                       padding: '8px 8px',
                       width: '80px',
@@ -1449,6 +1759,7 @@ export const AttendancePayrollPage: React.FC = () => {
                     ĂN TRƯA
                   </th>
                   <th
+                    className="hidden md:table-cell"
                     style={{
                       padding: '8px 8px',
                       width: '80px',
@@ -1511,15 +1822,37 @@ export const AttendancePayrollPage: React.FC = () => {
                           >
                             {emp.deptName}
                           </span>
+                          <div className="flex md:hidden flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 text-[10px] leading-tight">
+                            <span className="font-bold text-rose-600">Trưa: {totalLunch}</span>
+                            <span className="text-slate-300">•</span>
+                            <span className="font-bold text-blue-600">Tối: {totalDinner}</span>
+                          </div>
                         </div>
                       </td>
-                      {daysInMonth.map((day, idx) => {
+                      {visibleDaySlots.map((day, slotIdx) => {
+                        if (day === null) {
+                          return (
+                            <td
+                              key={`empty-lunch-${slotIdx}`}
+                              className="day-col-cell"
+                              style={{
+                                padding: 0,
+                                textAlign: 'center',
+                                verticalAlign: 'middle',
+                                borderBottom: '1px solid var(--border-subtle, #f1f5f9)',
+                                backgroundColor: 'rgba(248, 250, 252, 0.5)',
+                              }}
+                            />
+                          );
+                        }
+                        const idx = day - 1;
                         const attObj = emp.attendance[idx];
                         const date = new Date(year, month - 1, day);
                         const isWeekend = date.getDay() === 0;
                         return (
                           <td
                             key={day}
+                            className="day-col-cell"
                             style={{
                               padding: 0,
                               textAlign: 'center',
@@ -1581,6 +1914,7 @@ export const AttendancePayrollPage: React.FC = () => {
                         );
                       })}
                       <td
+                        className="hidden md:table-cell"
                         style={{
                           textAlign: 'center',
                           verticalAlign: 'middle',
@@ -1592,6 +1926,7 @@ export const AttendancePayrollPage: React.FC = () => {
                         </Badge>
                       </td>
                       <td
+                        className="hidden md:table-cell"
                         style={{
                           textAlign: 'center',
                           verticalAlign: 'middle',
@@ -1685,6 +2020,14 @@ export const AttendancePayrollPage: React.FC = () => {
             }}
           >
             <div className="space-y-3">
+              <div className="md:hidden">
+                <Input
+                  label="Ngày tổng hợp suất ăn"
+                  type="date"
+                  value={summaryDate}
+                  onChange={(e) => setSummaryDate(e.target.value)}
+                />
+              </div>
               <div className="grid grid-cols-2 gap-2.5">
                 <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-between">
                   <span className="text-[12px] font-semibold text-slate-600">Ăn trưa</span>
@@ -1981,7 +2324,9 @@ export const AttendancePayrollPage: React.FC = () => {
                   </span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-slate-100">
-                  <span className="text-slate-500">Khấu trừ BHXH, BHYT, BHTN</span>
+                  <span className="text-slate-500">
+                    Khấu trừ BHXH, BHYT, BHTN (NLĐ đóng {employeeInsRate}%)
+                  </span>
                   <span className="font-bold text-rose-600">
                     -{Math.round(khauTruBH).toLocaleString('vi-VN')} đ
                   </span>

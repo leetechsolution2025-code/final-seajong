@@ -455,6 +455,75 @@ export function SalesPlanPage() {
           background-color: #0d6efd;
           transition: width 0.6s ease;
         }
+
+        /* ── Mobile Deep Customization (<= 768px) for SalesPlanPage ── */
+        @media (max-width: 768px) {
+          .sales-plan-scope .plan-row {
+            padding: 8px !important;
+            gap: 10px !important;
+          }
+          .sales-plan-scope .plan-left-panel,
+          .sales-plan-scope .plan-right-panel {
+            gap: 10px !important;
+          }
+          .sales-plan-scope .plan-subcard-header {
+            padding: 8px 10px !important;
+            flex-wrap: wrap !important;
+            gap: 6px !important;
+            min-height: 38px !important;
+          }
+          .sales-plan-scope .plan-subcard-body {
+            padding: 10px !important;
+          }
+          /* Toolbar compact on mobile */
+          .sales-plan-scope .toolbar-container {
+            padding: 6px 8px !important;
+          }
+          .sales-plan-scope .toolbar-left > div {
+            flex-wrap: wrap !important;
+            gap: 6px !important;
+          }
+          .sales-plan-scope .toolbar-left span {
+            font-size: 11px !important;
+          }
+          .sales-plan-scope .toolbar-right label {
+            white-space: nowrap !important;
+          }
+          /* Compact plan tables on mobile */
+          .sales-plan-scope .compact-plan-table th,
+          .sales-plan-scope .compact-plan-table td {
+            padding: 6px 5px !important;
+            font-size: 11.5px !important;
+          }
+          /* Hide STT column and Note column on 5-col plan tables on mobile so numbers fit 100% */
+          .sales-plan-scope .compact-plan-table th:first-child,
+          .sales-plan-scope .compact-plan-table td:first-child {
+            display: none !important;
+          }
+          .sales-plan-scope .compact-plan-table tr > th:nth-child(3):nth-last-child(3),
+          .sales-plan-scope .compact-plan-table tr > td:nth-child(3):nth-last-child(3) {
+            display: none !important;
+          }
+          .sales-plan-scope .compact-plan-table th:last-child,
+          .sales-plan-scope .compact-plan-table td:last-child {
+            width: 118px !important;
+            padding-right: 8px !important;
+          }
+          .sales-plan-scope .compact-plan-table .input-group-sm > .form-control {
+            font-size: 11.5px !important;
+            padding: 2px 4px !important;
+          }
+          /* 12-month timeline bar in Step 2 */
+          .sales-plan-scope .plan-subcard-header > div[style*="width: 65%"] {
+            width: 100% !important;
+            padding: 4px 2px 14px 2px !important;
+          }
+          .sales-plan-scope .plan-subcard-header > div[style*="width: 65%"] button {
+            width: 22px !important;
+            height: 22px !important;
+            font-size: 10px !important;
+          }
+        }
       `}</style>
     </div>
   );

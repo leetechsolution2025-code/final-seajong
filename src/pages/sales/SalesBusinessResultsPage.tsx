@@ -214,6 +214,7 @@ export const SalesBusinessResultsPage: React.FC = () => {
   ];
 
   return (
+    <div className="sales-results-page h-full w-full flex flex-col min-h-0">
     <StandardPage
       title="Kết quả kinh doanh theo thời gian thực"
       badge="RESULTS"
@@ -235,53 +236,53 @@ export const SalesBusinessResultsPage: React.FC = () => {
           onExportExcel={() => alert('Đang xuất báo cáo kết quả kinh doanh...')}
         />
 
-        <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-2 sm:p-3 space-y-2.5 sm:space-y-3 custom-scrollbar">
           {/* KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-            <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl">
-              <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wide block">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5">
+            <div className="p-2.5 sm:p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl min-w-0">
+              <span className="text-[10px] sm:text-[11px] font-bold text-blue-700 uppercase tracking-wide block truncate">
                 Tổng doanh số ký
               </span>
-              <span className="text-xl font-black text-blue-900 font-mono mt-1 block">
+              <span className="text-sm sm:text-xl font-black text-blue-900 font-mono mt-0.5 sm:mt-1 block truncate">
                 {formatVND(summary.totalSales)}
               </span>
-              <span className="text-[11px] text-blue-600 mt-1 block">
+              <span className="text-[10px] sm:text-[11px] text-blue-600 mt-0.5 sm:mt-1 block truncate">
                 Đã xử lý {summary.totalOrdersCount} đơn hàng
               </span>
             </div>
 
-            <div className="p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-xl">
-              <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wide block">
+            <div className="p-2.5 sm:p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-xl min-w-0">
+              <span className="text-[10px] sm:text-[11px] font-bold text-emerald-700 uppercase tracking-wide block truncate">
                 Doanh thu thực thu
               </span>
-              <span className="text-xl font-black text-emerald-900 font-mono mt-1 block">
+              <span className="text-sm sm:text-xl font-black text-emerald-900 font-mono mt-0.5 sm:mt-1 block truncate">
                 {formatVND(summary.totalRevenue)}
               </span>
-              <span className="text-[11px] text-emerald-600 mt-1 block">
+              <span className="text-[10px] sm:text-[11px] text-emerald-600 mt-0.5 sm:mt-1 block truncate">
                 Tỷ lệ thu tiền: {summary.totalSales > 0 ? Math.round((summary.totalRevenue / summary.totalSales) * 100) : 0}%
               </span>
             </div>
 
-            <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl">
-              <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wide block">
-                Tiến độ chỉ tiêu năm 2026
+            <div className="p-2.5 sm:p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl min-w-0">
+              <span className="text-[10px] sm:text-[11px] font-bold text-amber-700 uppercase tracking-wide block truncate">
+                Tiến độ chỉ tiêu 2026
               </span>
-              <span className="text-xl font-black text-amber-900 font-mono mt-1 block">
+              <span className="text-sm sm:text-xl font-black text-amber-900 font-mono mt-0.5 sm:mt-1 block truncate">
                 {summary.targetRevenue > 0 ? Math.round((summary.totalSales / summary.targetRevenue) * 100) : 0}%
               </span>
-              <span className="text-[11px] text-amber-600 mt-1 block">
+              <span className="text-[10px] sm:text-[11px] text-amber-600 mt-0.5 sm:mt-1 block truncate">
                 Mục tiêu: {formatVND(summary.targetRevenue)}
               </span>
             </div>
 
-            <div className="p-3 bg-purple-50/70 border border-purple-200/80 rounded-xl">
-              <span className="text-[11px] font-bold text-purple-700 uppercase tracking-wide block">
+            <div className="p-2.5 sm:p-3 bg-purple-50/70 border border-purple-200/80 rounded-xl min-w-0">
+              <span className="text-[10px] sm:text-[11px] font-bold text-purple-700 uppercase tracking-wide block truncate">
                 Mạng lưới phân phối
               </span>
-              <span className="text-xl font-black text-purple-900 font-mono mt-1 block">
+              <span className="text-sm sm:text-xl font-black text-purple-900 font-mono mt-0.5 sm:mt-1 block truncate">
                 {summary.dealersCount} Đại lý / KH
               </span>
-              <span className="text-[11px] text-purple-600 mt-1 block">
+              <span className="text-[10px] sm:text-[11px] text-purple-600 mt-0.5 sm:mt-1 block truncate">
                 Độ phủ: 63 tỉnh thành Việt Nam
               </span>
             </div>
@@ -289,25 +290,25 @@ export const SalesBusinessResultsPage: React.FC = () => {
 
           {/* Bảng xếp hạng NVKD */}
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-            <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-              <h4 className="font-bold text-xs uppercase text-slate-700 tracking-wide flex items-center gap-1.5">
-                <Trophy className="w-4 h-4 text-amber-500" />
-                Xếp hạng doanh số nhân sự kinh doanh (Năm 2026)
+            <div className="p-2.5 sm:p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
+              <h4 className="font-bold text-[11px] sm:text-xs uppercase text-slate-700 tracking-wide flex items-center gap-1.5 min-w-0 truncate">
+                <Trophy className="w-4 h-4 text-amber-500 shrink-0" />
+                <span className="truncate">Xếp hạng doanh số nhân sự (2026)</span>
               </h4>
-              <span className="text-[11px] text-slate-500">Đồng bộ từ đơn hàng thực tế</span>
+              <span className="hidden sm:inline text-[11px] text-slate-500 shrink-0">Đồng bộ từ đơn hàng thực tế</span>
             </div>
             <FullWidthTable>
               <table className="w-full text-xs text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-50/60 text-slate-600 border-b border-slate-200 text-[11px] uppercase font-semibold">
-                    <th className="py-2.5 px-3 w-12 text-center">Hạng</th>
-                    <th className="py-2.5 px-3">Họ và tên nhân sự</th>
-                    <th className="py-2.5 px-3">Thị trường phụ trách</th>
-                    <th className="py-2.5 px-3 text-center">Số đơn</th>
-                    <th className="py-2.5 px-3 text-right">Doanh số thực tế</th>
-                    <th className="py-2.5 px-3 text-right">Chỉ tiêu giao</th>
-                    <th className="py-2.5 px-3 text-center">Hoàn thành</th>
-                    <th className="py-2.5 px-3 text-right">Hoa hồng dự tính</th>
+                  <tr className="bg-slate-50/60 text-slate-600 border-b border-slate-200 text-[10.5px] sm:text-[11px] uppercase font-semibold">
+                    <th className="py-2 sm:py-2.5 px-2 sm:px-3 w-9 sm:w-12 text-center">Hạng</th>
+                    <th className="py-2 sm:py-2.5 px-2 sm:px-3">Họ và tên nhân sự</th>
+                    <th className="hidden sm:table-cell py-2.5 px-3">Thị trường phụ trách</th>
+                    <th className="hidden sm:table-cell py-2.5 px-3 text-center">Số đơn</th>
+                    <th className="py-2 sm:py-2.5 px-2 sm:px-3 text-right">Doanh số</th>
+                    <th className="hidden sm:table-cell py-2.5 px-3 text-right">Chỉ tiêu giao</th>
+                    <th className="py-2 sm:py-2.5 px-2 sm:px-3 text-center w-16 sm:w-auto">Đạt</th>
+                    <th className="hidden sm:table-cell py-2.5 px-3 text-right">Hoa hồng dự tính</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -315,26 +316,31 @@ export const SalesBusinessResultsPage: React.FC = () => {
                     .slice((repsPage - 1) * repsPageSize, repsPage * repsPageSize)
                     .map((rep) => (
                     <tr key={rep.stt} className="hover:bg-slate-50/60">
-                      <td className="py-2.5 px-3 text-center">
-                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full font-bold text-xs ${
+                      <td className="py-2 sm:py-2.5 px-2 sm:px-3 text-center">
+                        <span className={`inline-flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full font-bold text-[11px] sm:text-xs ${
                           rep.stt === 1 ? 'bg-amber-100 text-amber-800' : rep.stt === 2 ? 'bg-slate-200 text-slate-800' : 'bg-slate-100 text-slate-600'
                         }`}>
                           {rep.stt}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 font-semibold text-slate-800">{rep.name}</td>
-                      <td className="py-2.5 px-3 text-slate-600">{rep.area}</td>
-                      <td className="py-2.5 px-3 text-center font-mono font-medium">{rep.orders}</td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-blue-700">
+                      <td className="py-2 sm:py-2.5 px-2 sm:px-3 font-semibold text-slate-800">
+                        <div>{rep.name}</div>
+                        <div className="sm:hidden text-[10.5px] font-normal text-slate-500 mt-0.5">
+                          {rep.area} • <span className="font-mono font-semibold text-slate-700">{rep.orders} đơn</span>
+                        </div>
+                      </td>
+                      <td className="hidden sm:table-cell py-2.5 px-3 text-slate-600">{rep.area}</td>
+                      <td className="hidden sm:table-cell py-2.5 px-3 text-center font-mono font-medium">{rep.orders}</td>
+                      <td className="py-2 sm:py-2.5 px-2 sm:px-3 text-right font-mono font-bold text-blue-700 whitespace-nowrap">
                         {formatVND(rep.revenue)}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-slate-600">
+                      <td className="hidden sm:table-cell py-2.5 px-3 text-right font-mono text-slate-600">
                         {formatVND(rep.target)}
                       </td>
-                      <td className="py-2.5 px-3 text-center font-mono font-bold text-emerald-600">
+                      <td className="py-2 sm:py-2.5 px-2 sm:px-3 text-center font-mono font-bold text-emerald-600 whitespace-nowrap">
                         {rep.completion}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-purple-700">
+                      <td className="hidden sm:table-cell py-2.5 px-3 text-right font-mono font-bold text-purple-700">
                         {rep.bonus}
                       </td>
                     </tr>
@@ -360,23 +366,23 @@ export const SalesBusinessResultsPage: React.FC = () => {
 
           {/* Bảng Top Đại lý xuất sắc */}
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-            <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-              <h4 className="font-bold text-xs uppercase text-slate-700 tracking-wide flex items-center gap-1.5">
-                <Building className="w-4 h-4 text-blue-600" />
-                Bảng xếp hạng Đại lý & Khách hàng có doanh số cao nhất năm 2026
+            <div className="p-2.5 sm:p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
+              <h4 className="font-bold text-[11px] sm:text-xs uppercase text-slate-700 tracking-wide flex items-center gap-1.5 min-w-0 truncate">
+                <Building className="w-4 h-4 text-blue-600 shrink-0" />
+                <span className="truncate">Bảng xếp hạng Đại lý & Khách hàng (2026)</span>
               </h4>
-              <span className="text-[11px] text-slate-500">{filteredDealers.length} đại lý / khách hàng</span>
+              <span className="text-[10.5px] sm:text-[11px] text-slate-500 shrink-0">{filteredDealers.length} ĐL/KH</span>
             </div>
             <FullWidthTable>
               <table className="w-full text-xs text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-50/60 text-slate-600 border-b border-slate-200 text-[11px] uppercase font-semibold">
-                    <th className="py-2.5 px-3 w-12 text-center">Top</th>
-                    <th className="py-2.5 px-3">Tên đại lý / Doanh nghiệp</th>
-                    <th className="py-2.5 px-3 w-28">Mã KH</th>
-                    <th className="py-2.5 px-3 text-right">Doanh số lũy kế</th>
-                    <th className="py-2.5 px-3 text-center">Quy mô đơn</th>
-                    <th className="py-2.5 px-3 text-center w-28">Xếp hạng</th>
+                  <tr className="bg-slate-50/60 text-slate-600 border-b border-slate-200 text-[10.5px] sm:text-[11px] uppercase font-semibold">
+                    <th className="py-2 sm:py-2.5 px-2 sm:px-3 w-9 sm:w-12 text-center">Top</th>
+                    <th className="py-2 sm:py-2.5 px-2 sm:px-3">Tên đại lý / Doanh nghiệp</th>
+                    <th className="hidden sm:table-cell py-2.5 px-3 w-28">Mã KH</th>
+                    <th className="py-2 sm:py-2.5 px-2 sm:px-3 text-right">Doanh số lũy kế</th>
+                    <th className="hidden sm:table-cell py-2.5 px-3 text-center">Quy mô đơn</th>
+                    <th className="py-2 sm:py-2.5 px-2 sm:px-3 text-center w-20 sm:w-28">Xếp hạng</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -384,15 +390,20 @@ export const SalesBusinessResultsPage: React.FC = () => {
                     .slice((dealersPage - 1) * dealersPageSize, dealersPage * dealersPageSize)
                     .map((d) => (
                     <tr key={d.rank} className="hover:bg-slate-50/60">
-                      <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-500">{d.rank}</td>
-                      <td className="py-2.5 px-3 font-semibold text-slate-800">{d.name}</td>
-                      <td className="py-2.5 px-3 font-mono text-blue-600 font-semibold">{d.code}</td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700">
+                      <td className="py-2 sm:py-2.5 px-2 sm:px-3 text-center font-mono font-bold text-slate-500">{d.rank}</td>
+                      <td className="py-2 sm:py-2.5 px-2 sm:px-3 font-semibold text-slate-800 min-w-0">
+                        <div className="truncate max-w-[165px] sm:max-w-none">{d.name}</div>
+                        <div className="sm:hidden text-[10.5px] font-normal text-slate-500 mt-0.5">
+                          <span className="font-mono text-blue-600 font-semibold">{d.code}</span> • {d.growth}
+                        </div>
+                      </td>
+                      <td className="hidden sm:table-cell py-2.5 px-3 font-mono text-blue-600 font-semibold">{d.code}</td>
+                      <td className="py-2 sm:py-2.5 px-2 sm:px-3 text-right font-mono font-bold text-emerald-700 whitespace-nowrap">
                         {formatVND(d.revenue)}
                       </td>
-                      <td className="py-2.5 px-3 text-center font-mono font-bold text-blue-600">{d.growth}</td>
-                      <td className="py-2.5 px-3 text-center">
-                        <span className="inline-block px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                      <td className="hidden sm:table-cell py-2.5 px-3 text-center font-mono font-bold text-blue-600">{d.growth}</td>
+                      <td className="py-2 sm:py-2.5 px-2 sm:px-3 text-center">
+                        <span className="inline-block px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-[10.5px] font-bold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
                           {d.status}
                         </span>
                       </td>
@@ -419,6 +430,7 @@ export const SalesBusinessResultsPage: React.FC = () => {
         </div>
       </div>
     </StandardPage>
+    </div>
   );
 };
 

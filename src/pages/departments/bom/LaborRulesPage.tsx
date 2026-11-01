@@ -33,6 +33,7 @@ export const LaborRulesPage: React.FC<LaborRulesPageProps> = ({
       num: 1,
       id: 'labor-rules',
       title: 'Quy chế lao động',
+      mobileTitle: 'Quy chế',
       desc: 'Quy định làm việc và kỷ luật',
       icon: <Book size={16} />,
     },
@@ -40,6 +41,7 @@ export const LaborRulesPage: React.FC<LaborRulesPageProps> = ({
       num: 2,
       id: 'holiday-rules',
       title: 'Quy định nghỉ lễ',
+      mobileTitle: 'Nghỉ lễ',
       desc: 'Lịch nghỉ lễ và phép năm',
       icon: <CalendarCheck size={16} />,
     },
@@ -47,6 +49,7 @@ export const LaborRulesPage: React.FC<LaborRulesPageProps> = ({
       num: 3,
       id: 'intranet-setup',
       title: 'Thiết lập mạng nội bộ',
+      mobileTitle: 'Nội bộ',
       desc: 'Cấu hình LAN và bảo mật',
       icon: <Wifi size={16} />,
     },
@@ -54,6 +57,7 @@ export const LaborRulesPage: React.FC<LaborRulesPageProps> = ({
       num: 4,
       id: 'param-setup',
       title: 'Thiết lập thông số',
+      mobileTitle: 'Thông số',
       desc: 'Tham số hệ thống và API Key',
       icon: <Sliders size={16} />,
     },
@@ -71,9 +75,10 @@ export const LaborRulesPage: React.FC<LaborRulesPageProps> = ({
       steps={laborRulesSteps}
       currentStep={currentStep}
       onStepChange={setCurrentStep}
+      className="bom-labor-rules-page"
     >
       <div
-        className="custom-scrollbar"
+        className="custom-scrollbar bom-labor-rules-body"
         style={{
           flex: '1 1 0%',
           display: 'flex',

@@ -59,6 +59,7 @@ export const SalesInternalReportsPage: React.FC = () => {
     mealCount: 0,
   });
   const [yearlyKpi, setYearlyKpi] = useState<(number | null)[]>(Array(12).fill(null));
+  const [employeeInsRate, setEmployeeInsRate] = useState<number>(10.5);
   const [showRules, setShowRules] = useState<boolean>(false);
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [empDropdownOpen, setEmpDropdownOpen] = useState<boolean>(false);
@@ -94,6 +95,19 @@ export const SalesInternalReportsPage: React.FC = () => {
     fetch("/api/board/categories?type=dia_diem_lam_viec")
       .then((r) => r.json())
       .then((d) => setWorkLocations(Array.isArray(d) ? d : []))
+      .catch(() => {});
+
+    fetch("/api/hr/insurance/config")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d && typeof d === "object") {
+          const bhxh = Number(d.empBhxhRate ?? d.employeeBhxh ?? 8);
+          const bhyt = Number(d.empBhytRate ?? d.employeeBhyt ?? 1.5);
+          const bhtn = Number(d.empBhtnRate ?? d.employeeBhtn ?? 1);
+          const totalEmpRate = bhxh + bhyt + bhtn;
+          if (totalEmpRate > 0) setEmployeeInsRate(totalEmpRate);
+        }
+      })
       .catch(() => {});
 
     fetch("/api/hr/employees?pageSize=1000")
@@ -313,17 +327,24 @@ export const SalesInternalReportsPage: React.FC = () => {
         ? calculatedSalesCommission
         : incomeData.salesCommission || 0;
 
-    const fallbackInsDeduction =
+    const isEnrolled = Boolean(
       displayedEmployee?.isInsuranceEnrolled ||
-      (displayedEmployee?.socialInsuranceNumber &&
-        String(displayedEmployee.socialInsuranceNumber).trim() !== "")
-        ? Math.round((displayedEmployee?.insuranceSalary || 0) * 0.215)
+        (displayedEmployee?.socialInsuranceNumber &&
+          String(displayedEmployee.socialInsuranceNumber).trim() !== "") ||
+        Number(displayedEmployee?.insuranceSalary || 0) > 0
+    );
+    const insSalary = Number(displayedEmployee?.insuranceSalary || 0);
+    const employeeInsDeduction =
+      isEnrolled && insSalary > 0
+        ? Math.round((insSalary * employeeInsRate) / 100)
         : 0;
 
     const insuranceDeduction =
-      incomeData.insuranceDeduction !== undefined && incomeData.insuranceDeduction > 0
-        ? incomeData.insuranceDeduction
-        : fallbackInsDeduction;
+      employeeInsDeduction > 0
+        ? employeeInsDeduction
+        : isEnrolled
+        ? incomeData.insuranceDeduction || 0
+        : 0;
 
     const advanceDeduction = incomeData.advanceDeduction || 0;
 
@@ -340,7 +361,15 @@ export const SalesInternalReportsPage: React.FC = () => {
       totalIncome,
       netIncome,
     };
-  }, [displayedEmployee, incomeData, currentStep, step1KpiConfig, step2KpiConfig, reportMonth]);
+  }, [
+    displayedEmployee,
+    incomeData,
+    currentStep,
+    step1KpiConfig,
+    step2KpiConfig,
+    reportMonth,
+    employeeInsRate,
+  ]);
 
   const getLocationName = (code: string | undefined | null) => {
     if (!code) return "Chưa cập nhật";
@@ -812,29 +841,29 @@ export const SalesInternalReportsPage: React.FC = () => {
       {/* Cột phải (tỷ lệ 7/12) */}
       <div
         className="flex-1 flex flex-col custom-scrollbar min-w-0"
-        style={{ padding: isMobile ? "16px" : "20px 24px" }}
+        style={{ padding: isMobile ? "12px" : "20px 24px" }}
       >
-        <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2 mb-4">
-          <h6 className="font-bold text-slate-800 mb-0 uppercase text-[13px]">
-            Hệ thống đánh giá kết quả công việc
+        <div className="flex flex-row justify-between items-center gap-2 mb-3 sm:mb-4">
+          <h6 className="font-bold text-slate-800 mb-0 uppercase text-[12px] sm:text-[13px] truncate">
+            {isMobile ? "Đánh giá kết quả" : "Hệ thống đánh giá kết quả công việc"}
           </h6>
 
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center justify-end gap-1.5 sm:gap-2 shrink-0">
             <button
               type="button"
               onClick={handlePrevMonth}
-              className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs transition-colors cursor-pointer"
+              className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs transition-colors cursor-pointer"
             >
               <ChevronLeft size={14} />
             </button>
-            <span className="font-bold px-3 py-1 bg-white border border-slate-200 rounded-lg shadow-xs text-slate-800 text-[14px]">
-              Tháng {reportMonth.getMonth() + 1}, {reportMonth.getFullYear()}
+            <span className="font-bold px-2.5 sm:px-3 py-1 bg-white border border-slate-200 rounded-lg shadow-xs text-slate-800 text-[12.5px] sm:text-[14px] whitespace-nowrap">
+              Tháng {reportMonth.getMonth() + 1}/{reportMonth.getFullYear()}
             </span>
             <button
               type="button"
               onClick={handleNextMonth}
               disabled={isNextMonthDisabled}
-              className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               <ChevronRight size={14} />
             </button>
@@ -845,44 +874,44 @@ export const SalesInternalReportsPage: React.FC = () => {
           <div className="flex-1 overflow-auto custom-scrollbar flex flex-col">
             <div className="border border-slate-200/80 rounded-xl overflow-hidden">
               <FullWidthTable>
-                <table className="w-full text-[13px] border-collapse">
+                <table className="w-full text-[12px] sm:text-[13px] border-collapse">
                   <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200">
                     <tr className="h-9">
                       <th
-                        className="text-center uppercase text-[11px] font-bold text-slate-500 px-3"
+                        className="hidden sm:table-cell text-center uppercase text-[11px] font-bold text-slate-500 px-3"
                         style={{ width: "5%", minWidth: "50px" }}
                       >
                         STT
                       </th>
                       <th
-                        className="text-left uppercase text-[11px] font-bold text-slate-500 px-3"
-                        style={{ width: "35%", minWidth: "150px" }}
+                        className="text-left uppercase text-[10.5px] sm:text-[11px] font-bold text-slate-500 px-2 sm:px-3"
+                        style={isMobile ? undefined : { width: "35%", minWidth: "150px" }}
                       >
-                        Tiêu chí đánh giá
+                        Tiêu chí
                       </th>
                       <th
-                        className="text-center uppercase text-[11px] font-bold text-slate-500 px-3"
-                        style={{ width: "15%", minWidth: "80px" }}
+                        className="text-center uppercase text-[10.5px] sm:text-[11px] font-bold text-slate-500 px-1.5 sm:px-3 whitespace-nowrap"
+                        style={isMobile ? undefined : { width: "15%", minWidth: "80px" }}
                       >
                         Chỉ tiêu
                       </th>
                       <th
-                        className="text-center uppercase text-[11px] font-bold text-slate-500 px-3"
-                        style={{ width: "15%", minWidth: "80px" }}
+                        className="text-center uppercase text-[10.5px] sm:text-[11px] font-bold text-slate-500 px-1.5 sm:px-3 whitespace-nowrap"
+                        style={isMobile ? undefined : { width: "15%", minWidth: "80px" }}
                       >
                         Thực tế
                       </th>
                       <th
-                        className="text-center uppercase text-[11px] font-bold text-slate-500 px-3"
-                        style={{ width: "15%", minWidth: "80px" }}
+                        className="text-center uppercase text-[10.5px] sm:text-[11px] font-bold text-slate-500 px-1.5 sm:px-3 whitespace-nowrap"
+                        style={isMobile ? undefined : { width: "15%", minWidth: "80px" }}
                       >
-                        Trọng số
+                        {isMobile ? "T.Số" : "Trọng số"}
                       </th>
                       <th
-                        className="text-center uppercase text-[11px] font-bold text-slate-500 px-3"
-                        style={{ width: "15%", minWidth: "80px" }}
+                        className="text-center uppercase text-[10.5px] sm:text-[11px] font-bold text-slate-500 px-1.5 sm:px-3 whitespace-nowrap"
+                        style={isMobile ? undefined : { width: "15%", minWidth: "80px" }}
                       >
-                        Điểm số
+                        Điểm
                       </th>
                     </tr>
                   </thead>
@@ -902,25 +931,25 @@ export const SalesInternalReportsPage: React.FC = () => {
                             : "text-rose-500";
                       return (
                         <tr key={item.id || idx} className="hover:bg-slate-50/70">
-                          <td className="text-center text-slate-400 py-2.5 px-3">
+                          <td className="hidden sm:table-cell text-center text-slate-400 py-2.5 px-3">
                             {idx + 1}
                           </td>
-                          <td className="font-medium text-slate-800 py-2.5 px-3">
+                          <td className="font-medium text-slate-800 py-2 sm:py-2.5 px-2 sm:px-3">
                             {item.name}
                           </td>
-                          <td className="text-center text-slate-600 py-2.5 px-3">
+                          <td className="text-center text-slate-600 py-2 sm:py-2.5 px-1.5 sm:px-3 font-mono text-[11.5px] sm:text-[13px] whitespace-nowrap">
                             {item.target}
                             {isPercent ? "%" : ""}
                           </td>
-                          <td className="text-center font-medium text-[#003087] py-2.5 px-3">
+                          <td className="text-center font-medium text-[#003087] py-2 sm:py-2.5 px-1.5 sm:px-3 font-mono text-[11.5px] sm:text-[13px] whitespace-nowrap">
                             {item.actual}
                             {isPercent ? "%" : ""}
                           </td>
-                          <td className="text-center text-slate-500 py-2.5 px-3">
+                          <td className="text-center text-slate-500 py-2 sm:py-2.5 px-1.5 sm:px-3 font-mono text-[11.5px] sm:text-[13px] whitespace-nowrap">
                             {item.weight}
                           </td>
                           <td
-                            className={`text-center font-bold py-2.5 px-3 ${scoreColorClass}`}
+                            className={`text-center font-bold py-2 sm:py-2.5 px-1.5 sm:px-3 font-mono text-[11.5px] sm:text-[13px] whitespace-nowrap ${scoreColorClass}`}
                           >
                             {score.toFixed(1)}
                           </td>
@@ -1029,32 +1058,32 @@ export const SalesInternalReportsPage: React.FC = () => {
     <div className="flex flex-col h-full min-h-0">
       <h6 className="font-bold text-[#003087] mb-3 uppercase text-[13px]">{title}</h6>
       <div className="flex-1 overflow-auto custom-scrollbar border border-slate-200 rounded-xl flex flex-col">
-        <table className="w-full text-[13px] border-collapse">
+        <table className="w-full text-[12px] sm:text-[13px] border-collapse">
           <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200">
             <tr className="h-9">
-              <th className="text-center uppercase text-[11px] font-bold text-slate-500 w-[50px] px-2">
+              <th className="hidden sm:table-cell text-center uppercase text-[11px] font-bold text-slate-500 w-[50px] px-2">
                 STT
               </th>
-              <th className="text-left uppercase text-[11px] font-bold text-slate-500 px-2">
+              <th className="text-left uppercase text-[10.5px] sm:text-[11px] font-bold text-slate-500 px-2">
                 Tiêu chí đánh giá
               </th>
-              <th className="text-center uppercase text-[11px] font-bold text-slate-500 w-[140px] px-2">
+              <th className="text-center uppercase text-[10.5px] sm:text-[11px] font-bold text-slate-500 w-[90px] sm:w-[140px] px-1.5 sm:px-2">
                 Chỉ tiêu
               </th>
-              <th className="text-center uppercase text-[11px] font-bold text-slate-500 w-[90px] px-2">
+              <th className="text-center uppercase text-[10.5px] sm:text-[11px] font-bold text-slate-500 w-[68px] sm:w-[90px] px-1.5 sm:px-2">
                 Trọng số
               </th>
-              <th className="text-center uppercase text-[11px] font-bold text-slate-500 w-[44px] px-2"></th>
+              <th className="text-center uppercase text-[11px] font-bold text-slate-500 w-[34px] sm:w-[44px] px-1 sm:px-2"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {configList.map((item, idx) => (
               <tr key={idx} className="hover:bg-slate-50/70">
-                <td className="text-center text-slate-400 py-2 px-2">{idx + 1}</td>
-                <td className="py-2 px-2">
+                <td className="hidden sm:table-cell text-center text-slate-400 py-2 px-2">{idx + 1}</td>
+                <td className="py-1.5 sm:py-2 px-1.5 sm:px-2">
                   <input
                     type="text"
-                    className="w-full h-8 px-2.5 text-center bg-white border border-slate-200 rounded-lg text-[12px] text-slate-800 focus:outline-none focus:border-[#003087]"
+                    className="w-full h-8 px-2 text-center bg-white border border-slate-200 rounded-lg text-[11.5px] sm:text-[12px] text-slate-800 focus:outline-none focus:border-[#003087]"
                     value={item.name || ""}
                     onChange={(e) => {
                       const newData = [...configList];
@@ -1063,10 +1092,10 @@ export const SalesInternalReportsPage: React.FC = () => {
                     }}
                   />
                 </td>
-                <td className="py-2 px-2">
+                <td className="py-1.5 sm:py-2 px-1.5 sm:px-2">
                   <input
                     type="text"
-                    className="w-full h-8 px-2.5 text-center bg-white border border-slate-200 rounded-lg text-[12px] text-slate-800 focus:outline-none focus:border-[#003087]"
+                    className="w-full h-8 px-1.5 sm:px-2.5 text-center bg-white border border-slate-200 rounded-lg text-[11.5px] sm:text-[12px] text-slate-800 focus:outline-none focus:border-[#003087]"
                     value={item.target || ""}
                     onChange={(e) => {
                       const val = e.target.value.replace(/[^0-9]/g, "");
@@ -1079,16 +1108,16 @@ export const SalesInternalReportsPage: React.FC = () => {
                     }}
                   />
                 </td>
-                <td className="py-2 px-2">
+                <td className="py-1.5 sm:py-2 px-1 sm:px-2">
                   <div
                     className={`flex items-center h-8 mx-auto rounded-lg border overflow-hidden ${
                       totalWeight > 100 ? "border-rose-500" : "border-slate-200"
                     }`}
-                    style={{ width: 74 }}
+                    style={{ width: isMobile ? 62 : 74 }}
                   >
                     <input
                       type="text"
-                      className={`w-full h-full text-center bg-white text-[12px] pl-2 pr-1 focus:outline-none ${
+                      className={`w-full h-full text-center bg-white text-[11.5px] sm:text-[12px] pl-1 sm:pl-2 pr-1 focus:outline-none ${
                         totalWeight > 100 ? "text-rose-600 font-semibold" : "text-slate-800"
                       }`}
                       value={String(item.weight).replace(/%/g, "") || ""}
@@ -1100,7 +1129,7 @@ export const SalesInternalReportsPage: React.FC = () => {
                       }}
                     />
                     <span
-                      className={`h-full flex items-center px-1.5 bg-slate-50 border-l text-[12px] ${
+                      className={`h-full flex items-center px-1 sm:px-1.5 bg-slate-50 border-l text-[11.5px] sm:text-[12px] ${
                         totalWeight > 100
                           ? "border-rose-500 text-rose-600"
                           : "border-slate-200 text-slate-500"
@@ -1110,7 +1139,7 @@ export const SalesInternalReportsPage: React.FC = () => {
                     </span>
                   </div>
                 </td>
-                <td className="text-center py-2 px-2">
+                <td className="text-center py-1.5 sm:py-2 px-1 sm:px-2">
                   <button
                     type="button"
                     title="Xóa tiêu chí"
@@ -1154,6 +1183,7 @@ export const SalesInternalReportsPage: React.FC = () => {
   );
 
   return (
+    <div className="sales-internal-reports-page h-full w-full flex flex-col min-h-0">
     <StepPage
       title="Báo cáo nội bộ"
       description="Báo cáo nội bộ phòng kinh doanh"
@@ -1172,38 +1202,38 @@ export const SalesInternalReportsPage: React.FC = () => {
           renderEvaluationView(step2TotalScore, kpiData2, avgData2, step2KpiCriteria, true)}
 
         {currentStep === 3 && isDirectorDirectManagement && (
-          <div className="flex flex-col w-full h-full p-4 md:p-6 overflow-auto">
-            <h6 className="font-bold text-slate-800 mb-4 uppercase text-[13px]">
+          <div className="flex flex-col w-full h-full p-3 md:p-6 overflow-auto">
+            <h6 className="font-bold text-slate-800 mb-3 sm:mb-4 uppercase text-[13px]">
               Cấu hình hệ thống đánh giá
             </h6>
 
-            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 mb-4">
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="flex items-center gap-2">
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 sm:gap-3 mb-4">
+              <div className="flex flex-wrap items-center justify-between sm:justify-start gap-2 sm:gap-4">
+                <div className="flex items-center gap-1.5 sm:gap-2">
                   <button
                     type="button"
                     onClick={handlePrevMonth}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs transition-colors cursor-pointer"
+                    className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs transition-colors cursor-pointer"
                   >
                     <ChevronLeft size={14} />
                   </button>
-                  <span className="font-bold px-3 py-1 bg-white border border-slate-200 rounded-lg shadow-xs text-slate-800 text-[14px]">
-                    Tháng {reportMonth.getMonth() + 1}, {reportMonth.getFullYear()}
+                  <span className="font-bold px-2.5 sm:px-3 py-1 bg-white border border-slate-200 rounded-lg shadow-xs text-slate-800 text-[12.5px] sm:text-[14px] whitespace-nowrap">
+                    Tháng {reportMonth.getMonth() + 1}/{reportMonth.getFullYear()}
                   </span>
                   <button
                     type="button"
                     onClick={handleNextMonth}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs transition-colors cursor-pointer"
+                    className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs transition-colors cursor-pointer"
                   >
                     <ChevronRight size={14} />
                   </button>
                 </div>
 
-                <div className="w-auto">
+                <div className="w-auto whitespace-nowrap">
                   <Toggle
                     checked={applyAllYear}
                     onChange={setApplyAllYear}
-                    label="Áp dụng cho cả năm"
+                    label="Áp dụng cả năm"
                   />
                 </div>
               </div>
@@ -1392,6 +1422,7 @@ export const SalesInternalReportsPage: React.FC = () => {
         </div>
       </Offcanvas>
     </StepPage>
+    </div>
   );
 };
 export default SalesInternalReportsPage;

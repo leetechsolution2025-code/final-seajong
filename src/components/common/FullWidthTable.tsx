@@ -1,4 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { SwipeableTableProvider, SwipeableTableRow } from './SwipeableTableRow';
+
+export { SwipeableTableRow, SwipeableTableProvider };
 
 export interface FullWidthTableProps {
   children: React.ReactNode;
@@ -167,7 +170,9 @@ export const FullWidthTable: React.FC<FullWidthTableProps> = ({
           opacity: 1,
         }}
       >
-        {renderedChildren}
+        <SwipeableTableProvider>
+          {renderedChildren}
+        </SwipeableTableProvider>
       </div>
 
       <style>{`
@@ -221,6 +226,37 @@ export const FullWidthTable: React.FC<FullWidthTableProps> = ({
           height: 0.875rem !important;
           min-width: 0.875rem !important;
           min-height: 0.875rem !important;
+        }
+        @media (max-width: 768px) {
+          .full-width-table-wrapper,
+          .full-width-table-wrapper > .table-responsive {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            overflow-x: hidden !important;
+            box-sizing: border-box !important;
+          }
+          .full-width-table-wrapper table {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            table-layout: fixed !important;
+            box-sizing: border-box !important;
+          }
+          .full-width-table-wrapper table thead th {
+            padding: 7px 8px;
+            min-width: 0 !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+          }
+          .full-width-table-wrapper table tbody td {
+            padding: 8px 8px;
+            min-width: 0 !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+            overflow-wrap: break-word;
+            word-break: break-word;
+          }
         }
       `}</style>
     </div>

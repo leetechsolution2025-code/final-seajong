@@ -5,8 +5,6 @@ import { canExecuteInOut } from "@/lib/logistics-permissions";
 import { useToast }                  from "@/components/ui/Toast";
 import { ConfirmDialog }             from "@/components/ui/ConfirmDialog";
 import { TaoYeuCauMuaHangModal }     from "@/components/plan-finance/mua_hang/TaoYeuCauMuaHangModal";
-import { FilterSelect }              from "@/components/ui/FilterSelect";
-import { SearchInput }               from "@/components/ui/SearchInput";
 import { Pagination }                from "@/components/ui/Pagination";
 import { genDocCode }                from "@/lib/genDocCode";
 import { BaoCaoKiemKhoPreview }      from "@/components/plan-finance/kho_hang/BaoCaoKiemKhoPreview";
@@ -16,6 +14,13 @@ import { BangKeXuatNhapTonModal }    from "@/components/plan-finance/kho_hang/Ba
 import { BangKeNhapKhoModal }        from "@/components/plan-finance/kho_hang/BangKeNhapKhoModal";
 import { BangKeXuatKhoModal }        from "@/components/plan-finance/kho_hang/BangKeXuatKhoModal";
 import type { BaoCaoKiemKhoLine }    from "@/components/plan-finance/kho_hang/BaoCaoKiemKhoPreview";
+import { Input }                     from "@/components/common/Input";
+import { Select }                    from "@/components/common/Select";
+import { DatePicker }                from "@/components/common/DatePicker";
+import { Toggle }                    from "@/components/common/Toggle";
+import { EmployeeSelect }            from "@/components/common/EmployeeSelect";
+import { Button }                    from "@/components/common/Button";
+import { FullWidthTable }            from "@/components/common/FullWidthTable";
 import * as XLSX                     from "xlsx";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -54,11 +59,6 @@ const genSoPhieu = () => genDocCode("KK");
 const fmtN  = (n: number) => n.toLocaleString("vi-VN");
 const fmtVnd = (n: number) => n !== 0 ? n.toLocaleString("vi-VN") + " ₫" : "—";
 const today  = () => new Date().toISOString().slice(0, 10);
-
-const CSS = {
-  label: { display: "block", fontSize: 11.5, fontWeight: 700, color: "var(--muted-foreground)", marginBottom: 5 } as React.CSSProperties,
-  input: { width: "100%", padding: "8px 11px", border: "1px solid var(--border)", borderRadius: 8, fontSize: 13, background: "var(--background)", color: "var(--foreground)", outline: "none", boxSizing: "border-box" as const } as React.CSSProperties,
-};
 
 const statusOf = (row: StockRow): "unknown" | "match" | "under" | "over" => {
   if (row.soLuongThucTe === "") return "unknown";
@@ -331,7 +331,10 @@ export function KiemKhoModal({ onClose, onSaved }: KiemKhoModalProps) {
       const url = warehouseId
         ? `/api/plan-finance/inventory/stock-snapshot?warehouseId=${warehouseId}`
         : `/api/plan-finance/inventory/stock-snapshot`;
-      const data: StockRow[] = await fetch(url).then(r => r.json());
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const raw = await res.json();
+      const data: StockRow[] = Array.isArray(raw) ? raw : (Array.isArray(raw?.items) ? raw.items : []);
       const mapped = data.map(r => ({ ...r, soLuongThucTe: "", ghiChu: "", chuaPhanKho: r.chuaPhanKho ?? false, thongSoKyThuat: r.thongSoKyThuat ?? null })) as StockRow[];
       // Apply dữ liệu từ bản nháp đã lưu (nếu có)
       const pending = pendingDraftLinesRef.current;
@@ -526,8 +529,6 @@ export function KiemKhoModal({ onClose, onSaved }: KiemKhoModalProps) {
     return () => document.removeEventListener("keydown", h);
   }, [onClose, saving]);
 
-  const gridCols = "28px 1fr 55px 80px 60px 80px 80px 90px 32px";
-
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 5000, background: "var(--background)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -560,13 +561,18 @@ export function KiemKhoModal({ onClose, onSaved }: KiemKhoModalProps) {
           {success ? (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", background: "rgba(16,185,129,0.1)", borderRadius: 8, color: "#10b981", fontSize: isPhone ? 11 : 13, fontWeight: 700 }}>
-                <i className="bi bi-check-circle-fill" /> {isPhone ? "Xong!" : "Kiểm kho thành công!"}
+                <i className="bi bi-check2-circle" /> {isPhone ? "Xong!" : "Kiểm kho thành công!"}
               </div>
               {!isPhone && isThuKho && (
-                <button onClick={() => setShowBaoCao(true)}
-                  style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 14px", border: "1px solid #6366f1", background: "rgba(99,102,241,0.08)", color: "#6366f1", fontSize: 12.5, fontWeight: 700, borderRadius: 8, cursor: "pointer" }}>
-                  <i className="bi bi-file-earmark-bar-graph" /> Báo cáo kiểm kho
-                </button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowBaoCao(true)}
+                  leftIcon={<i className="bi bi-file-earmark-bar-graph" />}
+                  style={{ borderColor: "#6366f1", background: "rgba(99,102,241,0.08)", color: "#6366f1", fontWeight: 700 }}
+                >
+                  Báo cáo kiểm kho
+                </Button>
               )}
             </div>
           ) : (
@@ -574,26 +580,51 @@ export function KiemKhoModal({ onClose, onSaved }: KiemKhoModalProps) {
               {!isPhone && (
                 <>
                   <input type="file" accept=".xlsx, .xls" style={{ display: "none" }} ref={fileInputRef} onChange={handleImportExcel} />
-                  <button onClick={() => isThuKho && fileInputRef.current?.click()} disabled={locked || rows.length === 0 || !isThuKho}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => isThuKho && fileInputRef.current?.click()}
+                    disabled={locked || rows.length === 0 || !isThuKho}
                     title={!isThuKho ? "Chỉ tài khoản Thủ kho mới có quyền nhập Excel" : undefined}
-                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", border: "1px solid var(--border)", background: "var(--card)", color: "var(--foreground)", fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: (locked || rows.length === 0 || !isThuKho) ? "not-allowed" : "pointer", opacity: (locked || rows.length === 0 || !isThuKho) ? 0.5 : 1 }}>
-                    <i className="bi bi-file-earmark-excel text-success" /> Nhập Excel
-                  </button>
-                  <button onClick={() => isThuKho && saveDraft()} disabled={savingDraft || locked || rows.length === 0 || !isThuKho}
+                    leftIcon={<i className="bi bi-file-earmark-excel" style={{ color: "#10b981" }} />}
+                    style={{ height: 34, padding: "0 14px", borderRadius: 8 }}
+                  >
+                    Nhập Excel
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => isThuKho && saveDraft()}
+                    disabled={savingDraft || locked || rows.length === 0 || !isThuKho}
+                    isLoading={savingDraft}
                     title={!isThuKho ? "Chỉ tài khoản Thủ kho mới có quyền lưu nháp" : undefined}
-                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", border: "1px solid var(--border)", background: "var(--card)", color: draftId ? "#10b981" : "var(--foreground)", fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: (savingDraft || locked || rows.length === 0 || !isThuKho) ? "not-allowed" : "pointer", opacity: (savingDraft || locked || rows.length === 0 || !isThuKho) ? 0.5 : 1 }}>
-                    {savingDraft ? <i className="bi bi-arrow-repeat" style={{ animation: "spin 1s linear infinite" }} /> : draftId ? <i className="bi bi-cloud-check-fill" style={{ color: "#10b981" }} /> : <i className="bi bi-floppy" />}
+                    leftIcon={draftId ? <i className="bi bi-cloud-check" style={{ color: "#10b981" }} /> : <i className="bi bi-floppy" />}
+                    style={{ height: 34, padding: "0 14px", borderRadius: 8, color: draftId ? "#10b981" : undefined }}
+                  >
                     {savingDraft ? "Lưu..." : "Lưu nháp"}
-                  </button>
+                  </Button>
                 </>
               )}
               {!isMobile && warehouseId && (
-                <button onClick={() => isThuKho && handleSave()} disabled={saving || locked || loading || entered.length === 0 || !isThuKho}
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => isThuKho && handleSave()}
+                  disabled={saving || locked || loading || entered.length === 0 || !isThuKho}
+                  isLoading={saving}
                   title={!isThuKho ? "Chỉ tài khoản Thủ kho mới có quyền xác nhận kiểm kho" : undefined}
-                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 20px", border: "none", background: (saving || locked || loading || entered.length === 0 || !isThuKho) ? "var(--muted)" : "#0ea5e9", color: (saving || locked || loading || entered.length === 0 || !isThuKho) ? "var(--muted-foreground)" : "#fff", fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: (saving || locked || loading || entered.length === 0 || !isThuKho) ? "not-allowed" : "pointer" }}>
-                  {saving ? <i className="bi bi-arrow-repeat" style={{ animation: "spin 1s linear infinite" }} /> : <i className="bi bi-clipboard-check" />}
+                  leftIcon={<i className="bi bi-clipboard-check" />}
+                  style={{
+                    height: 34,
+                    padding: "0 18px",
+                    borderRadius: 8,
+                    background: (saving || locked || loading || entered.length === 0 || !isThuKho) ? "var(--muted)" : "#0ea5e9",
+                    color: (saving || locked || loading || entered.length === 0 || !isThuKho) ? "var(--muted-foreground)" : "#fff",
+                    border: "none",
+                  }}
+                >
                   {saving ? "Xử lý…" : "Xác nhận kiểm kho"}
-                </button>
+                </Button>
               )}
             </>
           )}
@@ -612,157 +643,255 @@ export function KiemKhoModal({ onClose, onSaved }: KiemKhoModalProps) {
         {isMobile && sidebarOpen && (
           <div style={{ position: "fixed", inset: 0, zIndex: 8000, display: "flex" }}>
             <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)" }} onClick={() => setSidebarOpen(false)} />
-            <div style={{ position: "relative", width: isPhone ? "90vw" : 300, maxWidth: 360, height: "100%", background: "var(--card)", display: "flex", flexDirection: "column", overflowY: "auto", zIndex: 1 }}>
-              <div style={{ padding: "14px 16px 10px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <p style={{ margin: 0, fontWeight: 700, fontSize: 13 }}>Thông tin phiếu</p>
-                <button onClick={() => setSidebarOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", padding: "2px 6px" }}><i className="bi bi-x" style={{ fontSize: 18 }} /></button>
-              </div>
-            {/* Số phiếu */}
-            <div>
-              <label style={CSS.label}>Số phiếu kiểm</label>
-              <input value={soChungTu} readOnly style={{ ...CSS.input, background: "var(--muted)", fontFamily: "monospace", fontSize: 12, color: "var(--muted-foreground)", cursor: "default" }} />
-            </div>
-
-            {/* Ngày kiểm + lock */}
-            <div>
-              <label style={CSS.label}>Ngày kiểm kho</label>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <input type="date" value={ngayKiem}
-                  min={lockDate ? today() : undefined} max={lockDate ? today() : undefined}
-                  onChange={e => !lockDate && !locked && setNgayKiem(e.target.value)}
-                  readOnly={lockDate || locked}
-                  style={{ ...CSS.input, flex: 1, cursor: (lockDate || locked) ? "not-allowed" : "text", opacity: (lockDate || locked) ? 0.7 : 1, background: (lockDate || locked) ? "var(--muted)" : CSS.input.background }}
-                />
-                {!locked && (
-                  <span onClick={() => setLockDate(v => !v)}
-                    style={{ position: "relative", display: "inline-block", width: 34, height: 18, borderRadius: 9, flexShrink: 0, background: lockDate ? "#0ea5e9" : "var(--border)", transition: "background 0.2s", cursor: "pointer" }}>
-                    <span style={{ position: "absolute", top: 2, left: lockDate ? 18 : 2, width: 14, height: 14, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.25)", transition: "left 0.2s" }} />
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Người kiểm */}
-            <div>
-              <label style={CSS.label}>Người kiểm kho</label>
-              <input value={nguoiKiem} onChange={e => !locked && setNguoiKiem(e.target.value)} readOnly={locked}
-                placeholder="Họ tên người kiểm" style={{ ...CSS.input, opacity: locked ? 0.7 : 1 }} />
-            </div>
-
-            {/* Ghi chú */}
-            <div>
-              <label style={CSS.label}>Ghi chú</label>
-              <textarea value={ghiChu} onChange={e => !locked && setGhiChu(e.target.value)} readOnly={locked} rows={3}
-                placeholder="Ghi chú kiểm kho..." style={{ ...CSS.input, resize: "vertical", minHeight: 72, opacity: locked ? 0.7 : 1 }} />
-            </div>
-
-            <hr style={{ border: "none", borderTop: "1px solid var(--border)", margin: "4px 0" }} />
-
-            {/* Tóm tắt */}
-            <div>
-              <p style={{ margin: "0 0 10px", fontWeight: 700, fontSize: 12 }}>📊 Tóm tắt kiểm kê</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {[
-                  { label: "Tổng mặt hàng",  value: rows.length,        color: "var(--foreground)" },
-                  { label: "Đã nhập thực tế", value: entered.length,     color: "#0ea5e9" },
-                  { label: "✅ Khớp",          value: matchRows.length,   color: "#10b981" },
-                  { label: "📉 Thiếu (hao hụt)", value: underRows.length, color: "#f43f5e" },
-                  { label: "📈 Thừa",          value: overRows.length,    color: "#f59e0b" },
-                  { label: "⚠️ Dưới tồn tối thiểu", value: belowMinRows.length, color: "#f97316" },
-                ].map(item => (
-                  <div key={item.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5 }}>
-                    <span style={{ color: "var(--muted-foreground)" }}>{item.label}</span>
-                    <span style={{ fontWeight: 800, color: item.color }}>{item.value}</span>
+            <div style={{ position: "relative", width: isPhone ? "100%" : 320, maxWidth: isPhone ? "100%" : 360, height: "100%", background: isPhone ? "var(--background)" : "var(--card)", display: "flex", flexDirection: "column", overflow: "hidden", zIndex: 1 }}>
+              {/* Header đồng bộ với Top Bar bên ngoài */}
+              <div style={{ flexShrink: 0, minHeight: isPhone ? 52 : 54, padding: isPhone ? "0 12px" : "14px 16px 10px", borderBottom: "1px solid var(--border)", background: "var(--card)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                  <div style={{ width: 30, height: 30, borderRadius: 10, background: "rgba(14,165,233,0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <i className="bi bi-file-earmark-text" style={{ fontSize: 15, color: "#0ea5e9" }} />
                   </div>
-                ))}
-
-                {(tongHaoHut > 0 || tongThua > 0) && (
-                  <>
-                    <hr style={{ border: "none", borderTop: "1px solid var(--border)", margin: "2px 0" }} />
-                    {tongHaoHut > 0 && (
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                        <span style={{ color: "var(--muted-foreground)" }}>Giá trị hao hụt</span>
-                        <span style={{ fontWeight: 700, color: "#f43f5e" }}>-{fmtVnd(tongHaoHut)}</span>
-                      </div>
-                    )}
-                    {tongThua > 0 && (
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                        <span style={{ color: "var(--muted-foreground)" }}>Giá trị thừa</span>
-                        <span style={{ fontWeight: 700, color: "#f59e0b" }}>+{fmtVnd(tongThua)}</span>
-                      </div>
-                    )}
-                  </>
-                )}
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ margin: 0, fontWeight: 800, fontSize: 13, color: "var(--foreground)", lineHeight: 1.2 }}>Thông tin phiếu</p>
+                    <p style={{ margin: 0, fontSize: 10.5, color: "var(--muted-foreground)", fontFamily: "monospace" }}>{soChungTu}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSidebarOpen(false)}
+                  style={{ width: 32, height: 32, border: "1px solid var(--border)", background: "var(--muted)", borderRadius: 8, cursor: "pointer", color: "var(--muted-foreground)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <i className="bi bi-x" style={{ fontSize: 18 }} />
+                </button>
               </div>
-            </div>
 
+              {/* Nội dung bên trong có padding chuẩn & chia khối đồng bộ */}
+              <div style={{ flex: 1, overflowY: "auto", padding: isPhone ? "12px" : "16px", display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ background: "var(--card)", borderRadius: 12, border: "1px solid var(--border)", padding: 14, display: "flex", flexDirection: "column", gap: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                  {/* Số phiếu */}
+                  <Input
+                    label="Số phiếu kiểm"
+                    value={soChungTu}
+                    readOnly
+                    style={{ background: "var(--muted)", fontFamily: "monospace", fontSize: 12.5, fontWeight: 600, color: "var(--muted-foreground)", cursor: "default" }}
+                  />
+
+                  {/* Ngày kiểm + lock */}
+                  <div className="form-group">
+                    <label className="form-label">Ngày kiểm kho</label>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <DatePicker
+                          value={ngayKiem}
+                          min={lockDate ? today() : undefined}
+                          max={lockDate ? today() : undefined}
+                          onChange={val => !lockDate && !locked && setNgayKiem(val)}
+                          disabled={lockDate || locked}
+                        />
+                      </div>
+                      {!locked && (
+                        <Toggle
+                          checked={lockDate}
+                          onChange={setLockDate}
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Người kiểm */}
+                  <EmployeeSelect
+                    label="Người kiểm kho"
+                    multiple={false}
+                    departmentFilter="Kho vận"
+                    hidePositionBadge={true}
+                    value={nguoiKiem}
+                    onChange={val => !locked && setNguoiKiem(val)}
+                    disabled={locked}
+                    placeholder="Chọn hoặc tìm nhân sự kho vận..."
+                    searchPlaceholder="Tìm tên nhân viên kho vận..."
+                  />
+
+                  {/* Ghi chú */}
+                  <div className="form-group">
+                    <label className="form-label">Ghi chú</label>
+                    <textarea
+                      className="form-input"
+                      value={ghiChu}
+                      onChange={e => !locked && setGhiChu(e.target.value)}
+                      readOnly={locked}
+                      rows={3}
+                      placeholder="Ghi chú kiểm kho..."
+                      style={{ height: "auto", padding: "8px 12px", resize: "vertical", minHeight: 72, opacity: locked ? 0.7 : 1 }}
+                    />
+                  </div>
+                </div>
+
+                {/* Khối Tóm tắt kiểm kê đồng bộ icon */}
+                <div style={{ background: "var(--card)", borderRadius: 12, border: "1px solid var(--border)", padding: 14, display: "flex", flexDirection: "column", gap: 10, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
+                    <div style={{ width: 26, height: 26, borderRadius: 8, background: "rgba(14,165,233,0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <i className="bi bi-bar-chart-line" style={{ fontSize: 13, color: "#0ea5e9" }} />
+                    </div>
+                    <span style={{ fontWeight: 800, fontSize: 12.5, color: "var(--foreground)" }}>Tóm tắt kiểm kê</span>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {[
+                      { label: "Tổng mặt hàng",      value: rows.length,         color: "#0284c7",           badgeBg: "rgba(14,165,233,0.12)",    icon: "bi-box-seam",             iconColor: "#0284c7", iconBg: "rgba(14,165,233,0.12)" },
+                      { label: "Đã nhập thực tế",    value: entered.length,      color: "#0ea5e9",           badgeBg: "rgba(14,165,233,0.12)",    icon: "bi-clipboard-check",      iconColor: "#0ea5e9", iconBg: "rgba(14,165,233,0.12)" },
+                      { label: "Khớp",               value: matchRows.length,    color: "#10b981",           badgeBg: "rgba(16,185,129,0.12)",    icon: "bi-check2-circle",        iconColor: "#10b981", iconBg: "rgba(16,185,129,0.12)" },
+                      { label: "Thiếu (hao hụt)",    value: underRows.length,    color: "#f43f5e",           badgeBg: "rgba(244,63,94,0.12)",     icon: "bi-dash-circle",          iconColor: "#f43f5e", iconBg: "rgba(244,63,94,0.12)" },
+                      { label: "Thừa",               value: overRows.length,     color: "#f59e0b",           badgeBg: "rgba(245,158,11,0.12)",    icon: "bi-plus-circle",          iconColor: "#f59e0b", iconBg: "rgba(245,158,11,0.12)" },
+                      { label: "Dưới tồn tối thiểu", value: belowMinRows.length, color: "#f97316",           badgeBg: "rgba(249,115,22,0.12)",    icon: "bi-exclamation-triangle", iconColor: "#f97316", iconBg: "rgba(249,115,22,0.12)" },
+                    ].map(item => (
+                      <div key={item.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5, padding: "2px 0" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                          <span style={{ width: 26, height: 26, borderRadius: 7, background: item.iconBg, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <i className={`bi ${item.icon}`} style={{ fontSize: 12.5, color: item.iconColor }} />
+                          </span>
+                          <span style={{ color: "var(--foreground)", fontWeight: 500 }}>{item.label}</span>
+                        </div>
+                        <span style={{ fontWeight: 800, fontSize: 12, color: item.color, background: item.badgeBg, padding: "2px 10px", borderRadius: 12, minWidth: 28, textAlign: "center" }}>
+                          {item.value}
+                        </span>
+                      </div>
+                    ))}
+
+                    {(tongHaoHut > 0 || tongThua > 0) && (
+                      <>
+                        <hr style={{ border: "none", borderTop: "1px solid var(--border)", margin: "4px 0" }} />
+                        {tongHaoHut > 0 && (
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
+                            <span style={{ color: "var(--muted-foreground)" }}>Giá trị hao hụt</span>
+                            <span style={{ fontWeight: 700, color: "#f43f5e" }}>-{fmtVnd(tongHaoHut)}</span>
+                          </div>
+                        )}
+                        {tongThua > 0 && (
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
+                            <span style={{ color: "var(--muted-foreground)" }}>Giá trị thừa</span>
+                            <span style={{ fontWeight: 700, color: "#f59e0b" }}>+{fmtVnd(tongThua)}</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
 
         {/* ── SIDEBAR: desktop only ──────────────────────────────────────────── */}
         {!isMobile && (
-        <div style={{ width: 256, flexShrink: 0, borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", background: "var(--card)", overflowY: "auto" }}>
-          <div style={{ padding: "14px 20px 10px", borderBottom: "1px solid var(--border)" }}>
-            <p style={{ margin: 0, fontWeight: 700, fontSize: 13 }}>Thông tin phiếu</p>
-          </div>
-          <div style={{ flex: 1, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14, overflowY: "auto" }}>
-            {/* Số phiếu */}
-            <div>
-              <label style={CSS.label}>Số phiếu kiểm</label>
-              <input value={soChungTu} readOnly style={{ ...CSS.input, background: "var(--muted)", fontFamily: "monospace", fontSize: 12, color: "var(--muted-foreground)", cursor: "default" }} />
+        <div style={{ width: 272, flexShrink: 0, borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", background: "var(--card)", overflowY: "auto" }}>
+          <div style={{ padding: "14px 16px 10px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(14,165,233,0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <i className="bi bi-file-earmark-text" style={{ fontSize: 13.5, color: "#0ea5e9" }} />
             </div>
+            <p style={{ margin: 0, fontWeight: 800, fontSize: 13, color: "var(--foreground)" }}>Thông tin phiếu</p>
+          </div>
+          <div style={{ flex: 1, padding: "16px", display: "flex", flexDirection: "column", gap: 12, overflowY: "auto" }}>
+            {/* Số phiếu — Input chuẩn */}
+            <Input
+              label="Số phiếu kiểm"
+              value={soChungTu}
+              readOnly
+              disabled
+              style={{
+                backgroundColor: "var(--muted)",
+                color: "var(--muted-foreground)",
+                cursor: "default",
+                fontFamily: "monospace",
+                fontSize: 12.5,
+                fontWeight: 600,
+              }}
+            />
 
-            {/* Ngày kiểm + lock */}
-            <div>
-              <label style={CSS.label}>Ngày kiểm kho</label>
+            {/* Ngày kiểm + lock — DatePicker + Toggle chuẩn */}
+            <div className="form-group">
+              <label className="form-label">Ngày kiểm kho</label>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <input type="date" value={ngayKiem}
-                  min={lockDate ? today() : undefined} max={lockDate ? today() : undefined}
-                  onChange={e => !lockDate && !locked && setNgayKiem(e.target.value)}
-                  readOnly={lockDate || locked}
-                  style={{ ...CSS.input, flex: 1, cursor: (lockDate || locked) ? "not-allowed" : "text", opacity: (lockDate || locked) ? 0.7 : 1, background: (lockDate || locked) ? "var(--muted)" : CSS.input.background }}
+                <DatePicker
+                  value={ngayKiem}
+                  min={lockDate ? today() : undefined}
+                  max={lockDate ? today() : undefined}
+                  onChange={val => !lockDate && !locked && setNgayKiem(val)}
+                  disabled={lockDate || locked}
+                  clearable={false}
+                  className="flex-1"
                 />
                 {!locked && (
-                  <span onClick={() => setLockDate(v => !v)}
-                    style={{ position: "relative", display: "inline-block", width: 34, height: 18, borderRadius: 9, flexShrink: 0, background: lockDate ? "#0ea5e9" : "var(--border)", transition: "background 0.2s", cursor: "pointer" }}>
-                    <span style={{ position: "absolute", top: 2, left: lockDate ? 18 : 2, width: 14, height: 14, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.25)", transition: "left 0.2s" }} />
-                  </span>
+                  <div
+                    style={{ flexShrink: 0 }}
+                    title={lockDate ? "Khoá ngày hôm nay — nhấn để mở" : "Đang mở — nhấn để khoá"}
+                  >
+                    <Toggle checked={lockDate} onChange={setLockDate} />
+                  </div>
                 )}
               </div>
             </div>
 
-            {/* Người kiểm */}
-            <div>
-              <label style={CSS.label}>Người kiểm kho</label>
-              <input value={nguoiKiem} onChange={e => !locked && setNguoiKiem(e.target.value)} readOnly={locked}
-                placeholder="Họ tên người kiểm" style={{ ...CSS.input, opacity: locked ? 0.7 : 1 }} />
-            </div>
+            {/* Người kiểm — EmployeeSelect chuẩn (chỉ nhân sự Kho vận) */}
+            <EmployeeSelect
+              label="Người kiểm kho"
+              multiple={false}
+              departmentFilter="Kho vận"
+              hidePositionBadge={true}
+              value={nguoiKiem}
+              onChange={val => !locked && setNguoiKiem(val)}
+              disabled={locked}
+              placeholder="Chọn người kiểm kho..."
+              searchPlaceholder="Tìm tên nhân viên kho vận..."
+              inputStyle={{ height: 38, borderRadius: "var(--radius-md)" }}
+            />
 
             {/* Ghi chú */}
-            <div>
-              <label style={CSS.label}>Ghi chú</label>
-              <textarea value={ghiChu} onChange={e => !locked && setGhiChu(e.target.value)} readOnly={locked} rows={3}
-                placeholder="Ghi chú kiểm kho..." style={{ ...CSS.input, resize: "vertical", minHeight: 72, opacity: locked ? 0.7 : 1 }} />
+            <div className="form-group">
+              <label className="form-label">Ghi chú</label>
+              <textarea
+                className="form-input"
+                value={ghiChu}
+                onChange={e => !locked && setGhiChu(e.target.value)}
+                readOnly={locked}
+                rows={3}
+                placeholder="Ghi chú kiểm kho..."
+                style={{
+                  height: "auto",
+                  padding: "8px 12px",
+                  resize: "vertical",
+                  minHeight: 72,
+                  lineHeight: 1.5,
+                  opacity: locked ? 0.65 : 1,
+                }}
+              />
             </div>
 
             <hr style={{ border: "none", borderTop: "1px solid var(--border)", margin: "4px 0" }} />
 
             {/* Tóm tắt */}
             <div>
-              <p style={{ margin: "0 0 10px", fontWeight: 700, fontSize: 12 }}>📊 Tóm tắt kiểm kê</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
+                <div style={{ width: 24, height: 24, borderRadius: 7, background: "rgba(14,165,233,0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <i className="bi bi-bar-chart-line" style={{ fontSize: 12.5, color: "#0ea5e9" }} />
+                </div>
+                <span style={{ fontWeight: 800, fontSize: 12.5, color: "var(--foreground)" }}>Tóm tắt kiểm kê</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
                 {[
-                  { label: "Tổng mặt hàng",  value: rows.length,        color: "var(--foreground)" },
-                  { label: "Đã nhập thực tế", value: entered.length,     color: "#0ea5e9" },
-                  { label: "✅ Khớp",          value: matchRows.length,   color: "#10b981" },
-                  { label: "📉 Thiếu (hao hụt)", value: underRows.length, color: "#f43f5e" },
-                  { label: "📈 Thừa",          value: overRows.length,    color: "#f59e0b" },
-                  { label: "⚠️ Dưới tồn tối thiểu", value: belowMinRows.length, color: "#f97316" },
+                  { label: "Tổng mặt hàng",      value: rows.length,         color: "#0284c7",           badgeBg: "rgba(14,165,233,0.12)",    icon: "bi-box-seam",             iconColor: "#0284c7", iconBg: "rgba(14,165,233,0.12)" },
+                  { label: "Đã nhập thực tế",    value: entered.length,      color: "#0ea5e9",           badgeBg: "rgba(14,165,233,0.12)",    icon: "bi-clipboard-check",      iconColor: "#0ea5e9", iconBg: "rgba(14,165,233,0.12)" },
+                  { label: "Khớp",               value: matchRows.length,    color: "#10b981",           badgeBg: "rgba(16,185,129,0.12)",    icon: "bi-check2-circle",        iconColor: "#10b981", iconBg: "rgba(16,185,129,0.12)" },
+                  { label: "Thiếu (hao hụt)",    value: underRows.length,    color: "#f43f5e",           badgeBg: "rgba(244,63,94,0.12)",     icon: "bi-dash-circle",          iconColor: "#f43f5e", iconBg: "rgba(244,63,94,0.12)" },
+                  { label: "Thừa",               value: overRows.length,     color: "#f59e0b",           badgeBg: "rgba(245,158,11,0.12)",    icon: "bi-plus-circle",          iconColor: "#f59e0b", iconBg: "rgba(245,158,11,0.12)" },
+                  { label: "Dưới tồn tối thiểu", value: belowMinRows.length, color: "#f97316",           badgeBg: "rgba(249,115,22,0.12)",    icon: "bi-exclamation-triangle", iconColor: "#f97316", iconBg: "rgba(249,115,22,0.12)" },
                 ].map(item => (
-                  <div key={item.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5 }}>
-                    <span style={{ color: "var(--muted-foreground)" }}>{item.label}</span>
-                    <span style={{ fontWeight: 800, color: item.color }}>{item.value}</span>
+                  <div key={item.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5, padding: "2px 0" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                      <span style={{ width: 24, height: 24, borderRadius: 6, background: item.iconBg, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <i className={`bi ${item.icon}`} style={{ fontSize: 11.5, color: item.iconColor }} />
+                      </span>
+                      <span style={{ color: "var(--muted-foreground)", fontWeight: 500 }}>{item.label}</span>
+                    </div>
+                    <span style={{ fontWeight: 800, fontSize: 12, color: item.color, background: item.badgeBg, padding: "1px 9px", borderRadius: 12, minWidth: 26, textAlign: "center" }}>
+                      {item.value}
+                    </span>
                   </div>
                 ))}
 
@@ -797,15 +926,21 @@ export function KiemKhoModal({ onClose, onSaved }: KiemKhoModalProps) {
           {/* Banner bản nháp */}
           {draftBanner && !draftId && (
             <div style={{ flexShrink: 0, borderBottom: "1px solid var(--border)", padding: "8px 20px", background: "rgba(16,185,129,0.06)", display: "flex", alignItems: "center", gap: 10 }}>
-              <i className="bi bi-cloud-arrow-down-fill" style={{ color: "#10b981", fontSize: 16 }} />
+              <i className="bi bi-cloud-arrow-down" style={{ color: "#10b981", fontSize: 16 }} />
               <div style={{ flex: 1 }}>
                 <span style={{ fontSize: 12.5, fontWeight: 700, color: "#10b981" }}>Có bản nháp chưa hoàn thành</span>
                 <span style={{ fontSize: 11.5, color: "var(--muted-foreground)", marginLeft: 8 }}>{draftBanner.soChungTu ?? draftBanner.id} — đã lưu {new Date(draftBanner.updatedAt).toLocaleString("vi-VN")}</span>
               </div>
-              <button onClick={() => loadDraft(draftBanner.id)} disabled={loadingDraft}
-                style={{ fontSize: 12, fontWeight: 700, padding: "4px 12px", borderRadius: 7, border: "1px solid #10b981", background: "rgba(16,185,129,0.1)", color: "#10b981", cursor: "pointer" }}>
-                {loadingDraft ? "Đang tải...”" : "↩ Tiếp tục"}
-              </button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => loadDraft(draftBanner.id)}
+                disabled={loadingDraft}
+                isLoading={loadingDraft}
+                style={{ fontSize: 12, fontWeight: 700, padding: "4px 12px", borderRadius: 7, borderColor: "#10b981", background: "rgba(16,185,129,0.1)", color: "#10b981", height: 30 }}
+              >
+                {loadingDraft ? "Đang tải..." : "↩ Tiếp tục"}
+              </Button>
               <button onClick={() => setDraftBanner(null)}
                 style={{ fontSize: 11, color: "var(--muted-foreground)", background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
                 bỏ qua
@@ -814,111 +949,267 @@ export function KiemKhoModal({ onClose, onSaved }: KiemKhoModalProps) {
           )}
 
           {/* Filter bar: Warehouse + Category + Status + Search */}
-          <div style={{ flexShrink: 0, borderBottom: "1px solid var(--border)", padding: "10px 20px", display: "flex", alignItems: "center", gap: 8, background: "var(--background)", flexWrap: "nowrap" }}>
-            <div className="d-flex" style={{ gap: 8, flex: "0 0 320px", minWidth: 0 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <FilterSelect
-                  options={warehouses.map(w => ({ label: w.name, value: w.id }))}
+          {isPhone ? (
+            <div style={{ flexShrink: 0, borderBottom: "1px solid var(--border)", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, background: "var(--background)" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1.15fr 1fr 0.95fr", gap: 6, width: "100%" }}>
+                <Select
+                  options={[
+                    { label: "Chọn kho", value: "" },
+                    ...warehouses.map(w => ({ label: w.name, value: w.id })),
+                  ]}
                   value={warehouseId}
-                  onChange={setWarehouseId}
-                  placeholder="Chọn kho"
+                  onChange={e => setWarehouseId(e.target.value)}
                   disabled={locked}
-                  width="100%"
+                  style={{ height: 34, fontSize: 12.5 }}
+                />
+                <Select
+                  options={[
+                    { label: "Danh mục", value: "" },
+                    ...categories.map(c => ({
+                      label: (c as any).level > 0 ? "\u00A0\u00A0\u00A0\u00A0".repeat((c as any).level) + c.name : c.name,
+                      value: (c as any).code || c.id,
+                      disabled: (c as any).isHeader,
+                    })),
+                  ]}
+                  value={filterCat}
+                  onChange={e => setFilterCat(e.target.value)}
+                  disabled={!warehouseId}
+                  style={{ height: 34, fontSize: 12.5 }}
+                />
+                <Select
+                  options={[
+                    { label: "Trạng thái", value: "" },
+                    { label: "Còn hàng", value: "con-hang" },
+                    { label: "Sắp hết", value: "sap-het" },
+                    { label: "Hết hàng", value: "het-hang" },
+                  ]}
+                  value={filterSt}
+                  onChange={e => setFilterSt(e.target.value)}
+                  disabled={!warehouseId}
+                  style={{ height: 34, fontSize: 12.5 }}
                 />
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <FilterSelect
-                  options={categories.map(c => ({ 
-                    label: (c as any).level > 0 ? "\u00A0\u00A0\u00A0\u00A0".repeat((c as any).level) + c.name : c.name, 
-                    value: (c as any).code || c.id,
-                    isHeader: (c as any).isHeader
-                  }))}
-                  value={filterCat}
-                  onChange={setFilterCat}
-                  placeholder="Danh mục"
-                  disabled={!warehouseId}
-                  width="100%"
-                />
+
+              <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Input
+                    value={searchQ}
+                    onChange={e => setSearchQ(e.target.value)}
+                    placeholder="Tìm hàng hoá, SKU..."
+                    disabled={!warehouseId}
+                    leftIcon={<i className="bi bi-search" style={{ fontSize: 13 }} />}
+                    style={{ height: 34, fontSize: 12.5 }}
+                  />
+                </div>
+
+                {(filterCat || filterSt || searchQ) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setFilterCat(""); setFilterSt(""); setSearchQ(""); }}
+                    title="Xóa lọc"
+                    style={{ height: 34, padding: "0 10px", borderRadius: 8, flexShrink: 0 }}
+                  >
+                    <i className="bi bi-x-circle" style={{ fontSize: 13 }} />
+                  </Button>
+                )}
+
+                {warehouseId && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowLichSu(true)}
+                    leftIcon={<i className="bi bi-clock-history" style={{ fontSize: 12 }} />}
+                    style={{ height: 34, padding: "0 10px", borderRadius: 8, flexShrink: 0, whiteSpace: "nowrap" }}
+                  >
+                    Lịch sử
+                  </Button>
+                )}
               </div>
             </div>
+          ) : (
+            <div style={{ flexShrink: 0, borderBottom: "1px solid var(--border)", padding: "10px 20px", display: "flex", alignItems: "center", gap: 8, background: "var(--background)", flexWrap: "nowrap" }}>
+              <div style={{ width: 180, flexShrink: 0 }}>
+                <Select
+                  options={[
+                    { label: "Chọn kho", value: "" },
+                    ...warehouses.map(w => ({ label: w.name, value: w.id })),
+                  ]}
+                  value={warehouseId}
+                  onChange={e => setWarehouseId(e.target.value)}
+                  disabled={locked}
+                />
+              </div>
+              <div style={{ width: 190, flexShrink: 0 }}>
+                <Select
+                  options={[
+                    { label: "Danh mục", value: "" },
+                    ...categories.map(c => ({
+                      label: (c as any).level > 0 ? "\u00A0\u00A0\u00A0\u00A0".repeat((c as any).level) + c.name : c.name,
+                      value: (c as any).code || c.id,
+                      disabled: (c as any).isHeader,
+                    })),
+                  ]}
+                  value={filterCat}
+                  onChange={e => setFilterCat(e.target.value)}
+                  disabled={!warehouseId}
+                />
+              </div>
+              <div style={{ width: 160, flexShrink: 0 }}>
+                <Select
+                  options={[
+                    { label: "Trạng thái", value: "" },
+                    { label: "Còn hàng",  value: "con-hang"  },
+                    { label: "Sắp hết",  value: "sap-het"  },
+                    { label: "Hết hàng",  value: "het-hang" },
+                  ]}
+                  value={filterSt}
+                  onChange={e => setFilterSt(e.target.value)}
+                  disabled={!warehouseId}
+                />
+              </div>
 
-            <div className="d-flex flex-fill" style={{ gap: 8, minWidth: 0 }}>
-              <FilterSelect
-                options={[
-                  { label: "Còn hàng",  value: "con-hang"  },
-                  { label: "Sắp hết",  value: "sap-het"  },
-                  { label: "Hết hàng",  value: "het-hang" },
-                ]}
-                value={filterSt}
-                onChange={setFilterSt}
-                placeholder="Trạng thái"
-                disabled={!warehouseId}
-              />
-              <SearchInput
-                value={searchQ}
-                onChange={setSearchQ}
-                placeholder="Tìm hàng hoá, SKU..."
-                disabled={!warehouseId}
-                style={{ flex: 1, minWidth: 0 }}
-              />
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <Input
+                  value={searchQ}
+                  onChange={e => setSearchQ(e.target.value)}
+                  placeholder="Tìm hàng hoá, SKU..."
+                  disabled={!warehouseId}
+                  leftIcon={<i className="bi bi-search" style={{ fontSize: 14 }} />}
+                />
+              </div>
 
               {(filterCat || filterSt || searchQ) && (
-                <button onClick={() => { setFilterCat(""); setFilterSt(""); setSearchQ(""); }}
-                  style={{ fontSize: 12, color: "var(--muted-foreground)", background: "none", border: "none", cursor: "pointer", padding: "4px 8px", borderRadius: 6, display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "var(--muted)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "none")}>
-                  <i className="bi bi-x-circle" style={{ fontSize: 12 }} /> <span className="d-none d-sm-inline">Xóa lọc</span>
-                </button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setFilterCat(""); setFilterSt(""); setSearchQ(""); }}
+                  leftIcon={<i className="bi bi-x-circle" style={{ fontSize: 12 }} />}
+                  style={{ height: 38, flexShrink: 0 }}
+                >
+                  Xóa lọc
+                </Button>
               )}
 
               {warehouseId && (
-                <button onClick={() => setShowLichSu(true)}
-                  style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", border: "1px solid var(--border)", background: "var(--muted)", color: "var(--muted-foreground)", fontSize: 12, fontWeight: 600, borderRadius: 7, cursor: "pointer", height: 34, flexShrink: 0 }}>
-                  <i className="bi bi-clock-history" style={{ fontSize: 12 }} /> Lịch sử
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowLichSu(true)}
+                  leftIcon={<i className="bi bi-clock-history" style={{ fontSize: 13 }} />}
+                  style={{ height: 38, padding: "0 14px", borderRadius: 8, flexShrink: 0 }}
+                >
+                  Lịch sử
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* Filter tabs + badges */}
+          {isPhone ? (
+            <div style={{ flexShrink: 0, borderBottom: "1px solid var(--border)", padding: "8px 12px", display: "flex", flexDirection: "column", gap: 8, background: "var(--card)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 4, width: "100%", overflowX: "auto", flexWrap: "nowrap", scrollbarWidth: "none" }}>
+                {([
+                  { id: "all",      label: "Tất cả",   icon: "bi-grid",                 count: rows.length,         color: "#0ea5e9" },
+                  { id: "match",    label: "Khớp",     icon: "bi-check2-circle",        count: matchRows.length,    color: "#10b981" },
+                  { id: "under",    label: "Thiếu",    icon: "bi-dash-circle",          count: underRows.length,    color: "#f43f5e" },
+                  { id: "over",     label: "Thừa",     icon: "bi-plus-circle",          count: overRows.length,     color: "#f59e0b" },
+                  { id: "belowMin", label: "Dưới Min", icon: "bi-exclamation-triangle", count: belowMinRows.length, color: "#f97316" },
+                ] as { id: FilterTab; label: string; icon: string; count: number; color: string }[]).map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setFilterTab(tab.id)}
+                    style={{
+                      flex: "1 1 0",
+                      minWidth: "fit-content",
+                      justifyContent: "center",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "5px 6px",
+                      borderRadius: 18,
+                      border: `1px solid ${filterTab === tab.id ? tab.color : "var(--border)"}`,
+                      background: filterTab === tab.id ? `${tab.color}18` : "transparent",
+                      color: filterTab === tab.id ? tab.color : "var(--muted-foreground)",
+                      fontSize: 11,
+                      fontWeight: filterTab === tab.id ? 700 : 500,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                      transition: "all 0.15s",
+                    }}>
+                    {tab.icon && <i className={`bi ${tab.icon}`} style={{ fontSize: 11, color: tab.color }} />}
+                    {tab.label}
+                    <span style={{ background: filterTab === tab.id ? tab.color : "var(--muted)", color: filterTab === tab.id ? "#fff" : "var(--muted-foreground)", borderRadius: 10, padding: "0 5px", fontSize: 10, fontWeight: 700, lineHeight: "16px" }}>
+                      {tab.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {belowMinRows.length > 0 && !locked && isThuKho && (
+                <button
+                  onClick={() => setShowPRModal(true)}
+                  style={{
+                    width: "100%",
+                    justifyContent: "center",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: "#f97316",
+                    background: "rgba(249,115,22,0.08)",
+                    borderRadius: 10,
+                    padding: "6px 12px",
+                    border: "1px solid rgba(249,115,22,0.35)",
+                    cursor: "pointer",
+                  }}>
+                  <i className="bi bi-cart-plus" style={{ fontSize: 13 }} />
+                  Tạo yêu cầu mua hàng ({belowMinRows.length})
                 </button>
               )}
             </div>
-          </div>
+          ) : (
+            <div style={{ flexShrink: 0, borderBottom: "1px solid var(--border)", padding: "10px 20px", display: "flex", alignItems: "center", gap: 8, background: "var(--card)", flexWrap: "wrap" }}>
+              {([ 
+                { id: "all",      label: "Tất cả",   icon: "bi-grid",                 count: rows.length,         color: "#0ea5e9" },
+                { id: "match",    label: "Khớp",     icon: "bi-check2-circle",        count: matchRows.length,    color: "#10b981" },
+                { id: "under",    label: "Thiếu",    icon: "bi-dash-circle",          count: underRows.length,    color: "#f43f5e" },
+                { id: "over",     label: "Thừa",     icon: "bi-plus-circle",          count: overRows.length,     color: "#f59e0b" },
+                { id: "belowMin", label: "Dưới Min", icon: "bi-exclamation-triangle", count: belowMinRows.length, color: "#f97316" },
+              ] as { id: FilterTab; label: string; icon: string; count: number; color: string }[]).map(tab => (
+                <button key={tab.id} onClick={() => setFilterTab(tab.id)}
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 12px", borderRadius: 20, border: `1px solid ${filterTab === tab.id ? tab.color : "var(--border)"}`, background: filterTab === tab.id ? `${tab.color}18` : "transparent", color: filterTab === tab.id ? tab.color : "var(--muted-foreground)", fontSize: 12, fontWeight: filterTab === tab.id ? 700 : 500, cursor: "pointer", transition: "all 0.15s" }}>
+                  {tab.icon && <i className={`bi ${tab.icon}`} style={{ fontSize: 12, color: tab.color }} />}
+                  {tab.label}
+                  <span style={{ background: filterTab === tab.id ? tab.color : "var(--muted)", color: filterTab === tab.id ? "#fff" : "var(--muted-foreground)", borderRadius: 10, padding: "0 6px", fontSize: 11, fontWeight: 700 }}>{tab.count}</span>
+                </button>
+              ))}
 
-          {/* Filter tabs + badges */}
-          <div style={{ flexShrink: 0, borderBottom: "1px solid var(--border)", padding: "10px 20px", display: "flex", alignItems: "center", gap: 8, background: "var(--card)", flexWrap: "wrap" }}>
-            {([ 
-              { id: "all",      label: "Tất cả",      count: rows.length,         color: "var(--foreground)" },
-              { id: "match",    label: "✅ Khớp",       count: matchRows.length,   color: "#10b981" },
-              { id: "under",    label: "📉 Thiếu",      count: underRows.length,   color: "#f43f5e" },
-              { id: "over",     label: "📈 Thừa",       count: overRows.length,    color: "#f59e0b" },
-              { id: "belowMin",    label: "⚠️ Dưới Min",        count: belowMinRows.length, color: "#f97316" },
-            ] as { id: FilterTab; label: string; count: number; color: string }[]).map(tab => (
-              <button key={tab.id} onClick={() => setFilterTab(tab.id)}
-                style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 12px", borderRadius: 20, border: `1px solid ${filterTab === tab.id ? tab.color : "var(--border)"}`, background: filterTab === tab.id ? `${tab.color}18` : "transparent", color: filterTab === tab.id ? tab.color : "var(--muted-foreground)", fontSize: 12, fontWeight: filterTab === tab.id ? 700 : 400, cursor: "pointer", transition: "all 0.15s" }}>
-                {tab.label}
-                <span style={{ background: filterTab === tab.id ? tab.color : "var(--muted)", color: filterTab === tab.id ? "#fff" : "var(--muted-foreground)", borderRadius: 10, padding: "0 6px", fontSize: 11, fontWeight: 700 }}>{tab.count}</span>
-              </button>
-            ))}
-
-            {/* Nút YCMH khi có hàng dưới tồn min */}
-            {belowMinRows.length > 0 && !locked && isThuKho && (
-              <button onClick={() => setShowPRModal(true)}
-                onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.14)"; }}
-                onMouseLeave={e => { e.currentTarget.style.background = "rgba(249,115,22,0.07)"; }}
-                style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 700, color: "#f97316", background: "rgba(249,115,22,0.07)", borderRadius: 20, padding: "4px 14px", border: "1px solid rgba(249,115,22,0.35)", cursor: "pointer", transition: "all 0.15s" }}>
-                <i className="bi bi-cart-plus" style={{ fontSize: 12 }} />
-                Tạo yêu cầu mua hàng ({belowMinRows.length})
-              </button>
-            )}
-          </div>
+              {/* Nút YCMH khi có hàng dưới tồn min */}
+              {belowMinRows.length > 0 && !locked && isThuKho && (
+                <button onClick={() => setShowPRModal(true)}
+                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.14)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "rgba(249,115,22,0.07)"; }}
+                  style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 700, color: "#f97316", background: "rgba(249,115,22,0.07)", borderRadius: 20, padding: "4px 14px", border: "1px solid rgba(249,115,22,0.35)", cursor: "pointer", transition: "all 0.15s" }}>
+                  <i className="bi bi-cart-plus" style={{ fontSize: 12 }} />
+                  Tạo yêu cầu mua hàng ({belowMinRows.length})
+                </button>
+              )}
+            </div>
+          )}
 
 
 
           {/* Table / Card */}
-          <div style={{ flex: 1, overflowY: "auto", paddingTop: isPhone ? 8 : 0, paddingBottom: isMobile ? 72 : 0 }}>
-            {loading ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "24px 0" }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflowY: isPhone ? "auto" : "hidden", paddingTop: isPhone ? 8 : 0, paddingBottom: isMobile ? 72 : 0 }}>
+            {loading && isPhone ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px" }}>
                 {[...Array(6)].map((_, i) => (
                   <div key={i} style={{ height: 40, borderRadius: 8, background: "var(--muted)", animation: "pulse 1.5s infinite", opacity: 1 - i * 0.1 }} />
                 ))}
               </div>
-            ) : rows.length === 0 ? (
+            ) : !loading && rows.length === 0 ? (
               <div style={{ padding: "60px 0", textAlign: "center", color: "var(--muted-foreground)" }}>
                 <i className="bi bi-inbox" style={{ fontSize: 40, display: "block", marginBottom: 14, opacity: 0.3 }} />
                 <p style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>
@@ -927,7 +1218,7 @@ export function KiemKhoModal({ onClose, onSaved }: KiemKhoModalProps) {
               </div>
             ) : isPhone ? (
               /* ══ PHONE: Card view ══ */
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 8 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "4px 12px 12px" }}>
                 {paginatedRows.map((row) => {
                   const st  = statusOf(row);
                   const blm = isBelowMin(row);
@@ -943,16 +1234,16 @@ export function KiemKhoModal({ onClose, onSaved }: KiemKhoModalProps) {
                           <div style={{ fontWeight: 700, fontSize: 14, color: "var(--foreground)", marginBottom: 2 }}>{row.tenHang}</div>
                           {row.maSku && <div style={{ fontSize: 11, color: "var(--muted-foreground)", fontFamily: "monospace" }}>{row.maSku}</div>}
                           {(row.viTriHang || row.viTriCot || row.viTriTang) && (
-                            <div style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 2 }}>
-                              📍 {[row.viTriHang, row.viTriCot, row.viTriTang].filter(Boolean).join("-")}
+                            <div style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>
+                              <i className="bi bi-geo-alt" style={{ fontSize: 10.5, color: "#0ea5e9" }} /> {[row.viTriHang, row.viTriCot, row.viTriTang].filter(Boolean).join("-")}
                             </div>
                           )}
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-                          {st === "match" && <span style={{ fontSize: 11, fontWeight: 700, color: "#10b981", background: "rgba(16,185,129,0.1)", borderRadius: 8, padding: "2px 8px" }}>✅ Khớp</span>}
-                          {st === "under" && <span style={{ fontSize: 11, fontWeight: 700, color: "#f43f5e", background: "rgba(244,63,94,0.1)", borderRadius: 8, padding: "2px 8px" }}>📉 Thiếu</span>}
-                          {st === "over" && <span style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b", background: "rgba(245,158,11,0.1)", borderRadius: 8, padding: "2px 8px" }}>📈 Thừa</span>}
-                          {blm && <span style={{ fontSize: 10, fontWeight: 700, color: "#f97316", background: "rgba(249,115,22,0.1)", borderRadius: 8, padding: "2px 8px" }}>⚠️ Dưới Min</span>}
+                          {st === "match" && <span style={{ fontSize: 11, fontWeight: 700, color: "#10b981", background: "rgba(16,185,129,0.1)", borderRadius: 8, padding: "2px 8px", display: "inline-flex", alignItems: "center", gap: 4 }}><i className="bi bi-check2-circle" style={{ fontSize: 11 }} /> Khớp</span>}
+                          {st === "under" && <span style={{ fontSize: 11, fontWeight: 700, color: "#f43f5e", background: "rgba(244,63,94,0.1)", borderRadius: 8, padding: "2px 8px", display: "inline-flex", alignItems: "center", gap: 4 }}><i className="bi bi-dash-circle" style={{ fontSize: 11 }} /> Thiếu</span>}
+                          {st === "over" && <span style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b", background: "rgba(245,158,11,0.1)", borderRadius: 8, padding: "2px 8px", display: "inline-flex", alignItems: "center", gap: 4 }}><i className="bi bi-plus-circle" style={{ fontSize: 11 }} /> Thừa</span>}
+                          {blm && <span style={{ fontSize: 10, fontWeight: 700, color: "#f97316", background: "rgba(249,115,22,0.1)", borderRadius: 8, padding: "2px 8px", display: "inline-flex", alignItems: "center", gap: 4 }}><i className="bi bi-exclamation-triangle" style={{ fontSize: 10.5 }} /> Dưới Min</span>}
                         </div>
                       </div>
                       {/* Combined Stats and Input row */}
@@ -1000,7 +1291,7 @@ export function KiemKhoModal({ onClose, onSaved }: KiemKhoModalProps) {
                               onClick={() => updateRow(row.inventoryItemId, row.warehouseId, "soLuongThucTe", row.soLuongHeTong as never)}
                               title="Khớp HT"
                               style={{ width: 50, height: 50, borderRadius: 10, border: "1.5px solid rgba(16,185,129,0.4)", background: "rgba(16,185,129,0.08)", color: "#10b981", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, fontSize: 20 }}>
-                              ✓
+                              <i className="bi bi-check-lg" />
                             </button>
                           )}
                           {/* Clear button */}
@@ -1022,137 +1313,179 @@ export function KiemKhoModal({ onClose, onSaved }: KiemKhoModalProps) {
                 })}
               </div>
             ) : (
-              <>
-                {/* Header */}
-                <div style={{ position: "sticky", top: 0, zIndex: 2, background: "var(--card)", borderRadius: "0 0 0 0" }}>
-                  <div style={{ display: "grid", gridTemplateColumns: gridCols, gap: 4, padding: "10px 10px 7px", fontSize: 10.5, fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.05em", background: "var(--muted)", borderRadius: "8px 8px 0 0", marginTop: 16 }}>
-                    <div>#</div>
-                    <div>Hàng hoá</div>
-                    <div style={{ textAlign: "center" }}>ĐVT</div>
-                    <div style={{ textAlign: "right" }}>Tồn HT</div>
-                    <div style={{ textAlign: "right" }}>Tồn Min</div>
-                    <div style={{ textAlign: "center" }}>Thực tế</div>
-                    <div style={{ textAlign: "center" }}>±Chênh</div>
-                    <div style={{ textAlign: "center" }}>Trạng thái</div>
-                    <div />
-                  </div>
-                </div>
+              <FullWidthTable loading={loading} loadingText="Đang tải danh sách kiểm kê...">
+                <table>
+                  <thead>
+                    <tr>
+                      <th style={{ width: 44, textAlign: "center" }}>#</th>
+                      <th>Hàng hoá</th>
+                      <th style={{ width: 80, textAlign: "center" }}>ĐVT</th>
+                      <th style={{ width: 100, textAlign: "right" }}>Tồn HT</th>
+                      <th style={{ width: 90, textAlign: "right" }}>Tồn Min</th>
+                      <th style={{ width: 116, textAlign: "center" }}>Thực tế</th>
+                      <th style={{ width: 100, textAlign: "center" }}>±Chênh</th>
+                      <th style={{ width: 120, textAlign: "center" }}>Trạng thái</th>
+                      <th style={{ width: 44 }} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedRows.map((row, idx) => {
+                      const st   = statusOf(row);
+                      const blm  = isBelowMin(row);
+                      const tt   = row.soLuongThucTe === "" ? null : row.soLuongThucTe as number;
+                      const diff = tt !== null ? tt - row.soLuongHeTong : null;
 
-                {/* Rows */}
-                <div style={{ border: "1px solid var(--border)", borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "visible" }}>
-                  {paginatedRows.map((row, idx) => {
-                    const st   = statusOf(row);
-                    const blm  = isBelowMin(row);
-                    const tt   = row.soLuongThucTe === "" ? null : row.soLuongThucTe as number;
-                    const diff = tt !== null ? tt - row.soLuongHeTong : null;
-                    const cellInput: React.CSSProperties = { width: "100%", padding: "4px 7px", borderWidth: 1, borderStyle: "solid", borderColor: "var(--border)", borderRadius: 6, fontSize: 12, background: "var(--background)", color: "var(--foreground)", outline: "none", boxSizing: "border-box", textAlign: "center" };
-
-                    return (
-                      <div key={`${row.inventoryItemId}_${row.warehouseId}`}
-                        style={{ display: "grid", gridTemplateColumns: gridCols, gap: 4, padding: "6px 10px", borderBottom: "1px solid var(--border)", alignItems: "center",
-                          background: row.chuaPhanKho ? "rgba(139,92,246,0.04)"
-                            : blm ? "rgba(249,115,22,0.03)"
-                            : st === "under" ? "rgba(244,63,94,0.03)"
-                            : st === "over"  ? "rgba(245,158,11,0.03)"
-                            : idx % 2 !== 0  ? "color-mix(in srgb, var(--muted) 25%, transparent)"
-                            : "transparent" }}>
-                        <div style={{ textAlign: "center", fontSize: 11, color: "var(--muted-foreground)", fontWeight: 600 }}>{idx + 1}</div>
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: 12.5 }}>{row.tenHang}</div>
-                          <div style={{ fontSize: 10, color: "var(--muted-foreground)", marginTop: 1 }}>
-                            {row.categoryName || "Chưa phân loại"}{row.maSku ? ` | ${row.maSku}` : ""}
-                          </div>
-                          {(row.viTriHang || row.viTriCot || row.viTriTang) && (
-                            <div style={{ fontSize: 10, color: "var(--muted-foreground)" }}>
-                              📍 {[row.viTriHang, row.viTriCot, row.viTriTang].filter(Boolean).join("-")}
+                      return (
+                        <tr key={`${row.inventoryItemId}_${row.warehouseId}`}
+                          style={{
+                            background: row.chuaPhanKho ? "rgba(139,92,246,0.04)"
+                              : blm ? "rgba(249,115,22,0.03)"
+                              : st === "under" ? "rgba(244,63,94,0.03)"
+                              : st === "over"  ? "rgba(245,158,11,0.03)"
+                              : undefined,
+                          }}>
+                          <td style={{ textAlign: "center", fontSize: 11.5, color: "var(--muted-foreground)", fontWeight: 600 }}>
+                            {(currentPage - 1) * rowsPerPage + idx + 1}
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 600, fontSize: 13 }}>{row.tenHang}</div>
+                            <div style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 2, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                              {row.maSku && (
+                                <span style={{ fontFamily: "monospace", fontSize: 10.5, fontWeight: 700, padding: "1px 6px", borderRadius: 4, background: "rgba(14,165,233,0.1)", color: "#0284c7" }}>
+                                  {row.maSku}
+                                </span>
+                              )}
+                              <span>{row.categoryName || "Chưa phân loại"}</span>
+                              {(row.viTriHang || row.viTriCot || row.viTriTang) && (
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "var(--muted-foreground)" }}>
+                                  <i className="bi bi-geo-alt" style={{ fontSize: 10.5, color: "#0ea5e9" }} />
+                                  {[row.viTriHang, row.viTriCot, row.viTriTang].filter(Boolean).join("-")}
+                                </span>
+                              )}
                             </div>
-                          )}
-                        </div>
-                        <div style={{ textAlign: "center", fontSize: 12, fontWeight: 600, color: "var(--muted-foreground)" }}>{row.donVi ?? "—"}</div>
-                        <div style={{ textAlign: "right", fontSize: 13, fontWeight: 700 }}>{fmtN(row.soLuongHeTong)}</div>
-                        <div style={{ textAlign: "right" }}>
-                          {row.soLuongMin > 0 ? (
-                            <span style={{ fontSize: 12, fontWeight: 700, color: blm ? "#f97316" : "var(--muted-foreground)" }}>{fmtN(row.soLuongMin)}</span>
-                          ) : <span style={{ fontSize: 11, color: "var(--muted-foreground)" }}>—</span>}
-                        </div>
-                        {/* Nhập SL thực tế */}
-                        <input type="number" min={0} placeholder="Nhập..." disabled={locked || !isThuKho}
-                          value={row.soLuongThucTe}
-                          readOnly={!isThuKho}
-                          title={!isThuKho ? "Chỉ tài khoản Thủ kho mới có quyền nhập số lượng thực tế" : undefined}
-                          onChange={e => {
-                            if (!isThuKho) return;
-                            const v = e.target.value === "" ? "" : Math.max(0, parseFloat(e.target.value) || 0);
-                            updateRow(row.inventoryItemId, row.warehouseId, "soLuongThucTe", v as never);
-                          }}
-                          style={{ ...cellInput,
-                            borderColor: st === "under" ? "rgba(244,63,94,0.5)" : st === "over" ? "rgba(245,158,11,0.5)" : blm ? "rgba(249,115,22,0.5)" : "var(--border)",
-                            background: (locked || !isThuKho) ? "var(--muted)" : "var(--background)", cursor: (locked || !isThuKho) ? "not-allowed" : "text",
-                          }} />
-                        {/* Chênh lệch */}
-                        <div style={{ textAlign: "center" }}>
-                          {diff !== null ? (
-                            <span style={{ fontSize: 12, fontWeight: 800, padding: "2px 8px", borderRadius: 12,
-                              background: diff === 0 ? "rgba(16,185,129,0.1)" : diff < 0 ? "rgba(244,63,94,0.1)" : "rgba(245,158,11,0.1)",
-                              color: diff === 0 ? "#10b981" : diff < 0 ? "#f43f5e" : "#f59e0b",
-                            }}>
-                              {diff > 0 ? "+" : ""}{fmtN(diff)}
-                            </span>
-                          ) : <span style={{ fontSize: 11, color: "var(--muted-foreground)" }}>—</span>}
-                        </div>
-                        {/* Badge trạng thái */}
-                        <div style={{ textAlign: "center" }}>
-                          {row.chuaPhanKho ? (
-                            <button
-                              className="assign-popover"
-                              disabled={assigning === row.inventoryItemId || !isThuKho}
-                              onClick={e => {
-                                if (locked || !isThuKho) return;
-                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                setAssignPopover(p => p?.itemId === row.inventoryItemId ? null : { itemId: row.inventoryItemId, top: rect.bottom + 4, left: rect.left });
+                          </td>
+                          <td style={{ textAlign: "center", fontSize: 12, fontWeight: 600, color: "var(--muted-foreground)" }}>
+                            {row.donVi ?? "—"}
+                          </td>
+                          <td style={{ textAlign: "right", fontSize: 13, fontWeight: 700 }}>
+                            {fmtN(row.soLuongHeTong)}
+                          </td>
+                          <td style={{ textAlign: "right" }}>
+                            {row.soLuongMin > 0 ? (
+                              <span style={{ fontSize: 12.5, fontWeight: 700, color: blm ? "#f97316" : "var(--muted-foreground)" }}>{fmtN(row.soLuongMin)}</span>
+                            ) : <span style={{ fontSize: 11, color: "var(--muted-foreground)" }}>—</span>}
+                          </td>
+                          {/* Nhập SL thực tế — dùng Input chuẩn */}
+                          <td>
+                            <Input
+                              type="number"
+                              min={0}
+                              hideZero={false}
+                              numberGroup={false}
+                              placeholder="Nhập..."
+                              disabled={locked || !isThuKho}
+                              value={row.soLuongThucTe}
+                              readOnly={!isThuKho}
+                              title={!isThuKho ? "Chỉ tài khoản Thủ kho mới có quyền nhập số lượng thực tế" : undefined}
+                              onChange={e => {
+                                if (!isThuKho) return;
+                                const v = e.target.value === "" ? "" : Math.max(0, parseFloat(e.target.value) || 0);
+                                updateRow(row.inventoryItemId, row.warehouseId, "soLuongThucTe", v as never);
                               }}
-                              style={{ fontSize: 10, fontWeight: 700, color: "#8b5cf6", background: (assigning === row.inventoryItemId || !isThuKho) ? "rgba(139,92,246,0.06)" : "rgba(139,92,246,0.1)", borderRadius: 10, padding: "2px 7px", border: "1px solid rgba(139,92,246,0.3)", cursor: (locked || !isThuKho) ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
-                              {assigning === row.inventoryItemId ? <i className="bi bi-arrow-repeat" style={{ fontSize: 9, animation: "spin 1s linear infinite" }} /> : <i className="bi bi-boxes" style={{ fontSize: 9 }} />}
-                              Phân kho
+                              style={{
+                                height: 32,
+                                padding: "0 8px",
+                                fontSize: 12.5,
+                                textAlign: "center",
+                                borderColor: st === "under" ? "rgba(244,63,94,0.5)" : st === "over" ? "rgba(245,158,11,0.5)" : blm ? "rgba(249,115,22,0.5)" : "var(--border)",
+                                background: (locked || !isThuKho) ? "var(--muted)" : "var(--background)",
+                                cursor: (locked || !isThuKho) ? "not-allowed" : "text",
+                              }}
+                            />
+                          </td>
+                          {/* Chênh lệch */}
+                          <td style={{ textAlign: "center" }}>
+                            {diff !== null ? (
+                              <span style={{
+                                fontSize: 12, fontWeight: 800, padding: "2px 8px", borderRadius: 12,
+                                background: diff === 0 ? "rgba(16,185,129,0.1)" : diff < 0 ? "rgba(244,63,94,0.1)" : "rgba(245,158,11,0.1)",
+                                color: diff === 0 ? "#10b981" : diff < 0 ? "#f43f5e" : "#f59e0b",
+                              }}>
+                                {diff > 0 ? "+" : ""}{fmtN(diff)}
+                              </span>
+                            ) : <span style={{ fontSize: 11, color: "var(--muted-foreground)" }}>—</span>}
+                          </td>
+                          {/* Badge trạng thái */}
+                          <td style={{ textAlign: "center" }}>
+                            {row.chuaPhanKho ? (
+                              <button
+                                className="assign-popover"
+                                disabled={assigning === row.inventoryItemId || !isThuKho}
+                                onClick={e => {
+                                  if (locked || !isThuKho) return;
+                                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                  setAssignPopover(p => p?.itemId === row.inventoryItemId ? null : { itemId: row.inventoryItemId, top: rect.bottom + 4, left: rect.left });
+                                }}
+                                style={{ fontSize: 10.5, fontWeight: 700, color: "#8b5cf6", background: (assigning === row.inventoryItemId || !isThuKho) ? "rgba(139,92,246,0.06)" : "rgba(139,92,246,0.1)", borderRadius: 10, padding: "2px 8px", border: "1px solid rgba(139,92,246,0.3)", cursor: (locked || !isThuKho) ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
+                                {assigning === row.inventoryItemId ? <i className="bi bi-arrow-repeat" style={{ fontSize: 9, animation: "spin 1s linear infinite" }} /> : <i className="bi bi-boxes" style={{ fontSize: 9 }} />}
+                                Phân kho
+                              </button>
+                            ) : (
+                              <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                                {st === "unknown" && !blm && <span style={{ fontSize: 11, color: "var(--muted-foreground)" }}>—</span>}
+                                {st === "match" && (
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: "#10b981", background: "rgba(16,185,129,0.1)", borderRadius: 10, padding: "2px 8px", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                    <i className="bi bi-check2-circle" style={{ fontSize: 11 }} /> Khớp
+                                  </span>
+                                )}
+                                {st === "under" && (
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: "#f43f5e", background: "rgba(244,63,94,0.1)", borderRadius: 10, padding: "2px 8px", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                    <i className="bi bi-dash-circle" style={{ fontSize: 11 }} /> Thiếu
+                                  </span>
+                                )}
+                                {st === "over" && (
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b", background: "rgba(245,158,11,0.1)", borderRadius: 10, padding: "2px 8px", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                    <i className="bi bi-plus-circle" style={{ fontSize: 11 }} /> Thừa
+                                  </span>
+                                )}
+                                {blm && (
+                                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "#f97316", background: "rgba(249,115,22,0.1)", borderRadius: 10, padding: "2px 8px", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                    <i className="bi bi-exclamation-triangle" style={{ fontSize: 10.5 }} /> Dưới Min
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          {/* Nút clear */}
+                          <td style={{ textAlign: "center" }}>
+                            <button onClick={() => updateRow(row.inventoryItemId, row.warehouseId, "soLuongThucTe", "" as never)}
+                              disabled={locked || row.soLuongThucTe === "" || row.chuaPhanKho || !isThuKho}
+                              title={!isThuKho ? "Chỉ tài khoản Thủ kho mới có quyền điều chỉnh" : (row.chuaPhanKho ? "Hàng chưa phân kho — không thể kiểm" : undefined)}
+                              style={{ width: 26, height: 26, border: "none", background: "transparent", color: (row.soLuongThucTe !== "" && !locked && !row.chuaPhanKho && isThuKho) ? "#f43f5e" : "var(--border)", cursor: (row.soLuongThucTe !== "" && !locked && !row.chuaPhanKho && isThuKho) ? "pointer" : "not-allowed", display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: 6 }}>
+                              <i className="bi bi-x" style={{ fontSize: 14 }} />
                             </button>
-                          ) : (
-                            <>
-                              {st === "unknown" && !blm && <span style={{ fontSize: 11, color: "var(--muted-foreground)" }}>—</span>}
-                              {st === "match"   && <span style={{ fontSize: 11, fontWeight: 700, color: "#10b981" }}>✅ Khớp</span>}
-                              {st === "under"   && <span style={{ fontSize: 11, fontWeight: 700, color: "#f43f5e" }}>📉 Thiếu</span>}
-                              {st === "over"    && <span style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b" }}>📈 Thừa</span>}
-                              {blm && <span style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#f97316" }}>⚠️ Dưới Min</span>}
-                            </>
-                          )}
-                        </div>
-                        {/* Nút clear */}
-                        <button onClick={() => updateRow(row.inventoryItemId, row.warehouseId, "soLuongThucTe", "" as never)}
-                          disabled={locked || row.soLuongThucTe === "" || row.chuaPhanKho || !isThuKho}
-                          title={!isThuKho ? "Chỉ tài khoản Thủ kho mới có quyền điều chỉnh" : (row.chuaPhanKho ? "Hàng chưa phân kho — không thể kiểm" : undefined)}
-                          style={{ width: 26, height: 26, border: "none", background: "transparent", color: (row.soLuongThucTe !== "" && !locked && !row.chuaPhanKho && isThuKho) ? "#f43f5e" : "var(--border)", cursor: (row.soLuongThucTe !== "" && !locked && !row.chuaPhanKho && isThuKho) ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6 }}>
-                          <i className="bi bi-x" style={{ fontSize: 14 }} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </FullWidthTable>
             )}
             
           </div>
 
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="d-flex justify-content-between align-items-center px-4 py-2 border-top" style={{ flexShrink: 0, background: "var(--card)" }}>
-              <span style={{ fontSize: 13, color: "var(--muted-foreground)" }}>
-                {isPhone ? (
-                  <>Hiển thị {Math.min(currentPage * rowsPerPage, filteredRows.length)}/{filteredRows.length}</>
-                ) : (
-                  <>Hiển thị {(currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, filteredRows.length)} trong số {filteredRows.length} mặt hàng</>
-                )}
-              </span>
-              <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
-            </div>
+          {/* Pagination Controls chuẩn Enterprise */}
+          {filteredRows.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              totalItems={filteredRows.length}
+              pageSize={rowsPerPage}
+              totalPages={totalPages}
+              itemName="mặt hàng"
+              onPageChange={setPage}
+              style={{ flexShrink: 0, background: "var(--card)" }}
+            />
           )}
 
           {/* ── MOBILE: bottom toolbar ────────────────────────────────────── */}
@@ -1173,7 +1506,7 @@ export function KiemKhoModal({ onClose, onSaved }: KiemKhoModalProps) {
               </button>
               <button onClick={saveDraft} disabled={savingDraft || locked || rows.length === 0}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", border: "1px solid var(--border)", background: "var(--muted)", color: draftId ? "#10b981" : "var(--foreground)", fontSize: 13, fontWeight: 600, borderRadius: 10, cursor: (savingDraft || locked || rows.length === 0) ? "not-allowed" : "pointer", opacity: (savingDraft || locked || rows.length === 0) ? 0.5 : 1, flexShrink: 0 }}>
-                {savingDraft ? <i className="bi bi-arrow-repeat" style={{ animation: "spin 1s linear infinite" }} /> : draftId ? <i className="bi bi-cloud-check-fill" style={{ color: "#10b981" }} /> : <i className="bi bi-floppy" />}
+                {savingDraft ? <i className="bi bi-arrow-repeat" style={{ animation: "spin 1s linear infinite" }} /> : draftId ? <i className="bi bi-cloud-check" style={{ color: "#10b981" }} /> : <i className="bi bi-floppy" />}
                 Lưu
               </button>
               {warehouseId && (

@@ -24,7 +24,7 @@ import {
 } from 'react-bootstrap-icons';
 import { StepPage } from '@/components/common/StepPage';
 import { TableToolbar } from '@/components/common/TableToolbar';
-import { FullWidthTable } from '@/components/common/FullWidthTable';
+import { FullWidthTable, SwipeableTableRow } from '@/components/common/FullWidthTable';
 import { Pagination } from '@/components/common/Pagination';
 import { Offcanvas } from '@/components/common/Offcanvas';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
@@ -317,6 +317,7 @@ export const PurchaseOverviewPage: React.FC = () => {
         num: 1,
         id: 'requests',
         title: 'Yêu cầu mua hàng',
+        mobileTitle: 'Yêu cầu',
         desc: 'Khởi tạo & duyệt nhu cầu vật tư',
         icon: <FileEarmarkPlus size={16} />,
         badge: `${activeRequests.length} phiếu`,
@@ -325,6 +326,7 @@ export const PurchaseOverviewPage: React.FC = () => {
         num: 2,
         id: 'orders',
         title: 'Đơn hàng',
+        mobileTitle: 'Đơn hàng',
         desc: 'Đặt hàng & theo dõi giao nhận',
         icon: <CartCheck size={16} />,
         badge: `${activeOrders.length} đơn`,
@@ -333,6 +335,7 @@ export const PurchaseOverviewPage: React.FC = () => {
         num: 3,
         id: 'cancelled',
         title: 'Đã huỷ bỏ',
+        mobileTitle: 'Đã huỷ',
         desc: 'Các yêu cầu & đơn mua đã huỷ',
         icon: <XCircle size={16} />,
         badge: `${cancelledItems.length} mục`,
@@ -445,611 +448,694 @@ export const PurchaseOverviewPage: React.FC = () => {
   };
 
   return (
-    <StepPage
-      title="Mua hàng"
-      description="Quản lý yêu cầu vật tư, đơn đặt hàng nhà cung cấp và tiến độ giao nhận"
-      icon="bi-cart3"
-      color="blue"
-      steps={steps}
-      currentStep={currentStep}
-      onStepChange={setCurrentStep}
-      tickerContext="suppliers"
-    >
-      {/* ════════════════════════════════════════════════════════════════════
-          BƯỚC 1: YÊU CẦU MUA HÀNG
-          ════════════════════════════════════════════════════════════════════ */}
-      {currentStep === 1 && (
-        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-          <TableToolbar
-            searchValue={reqSearch}
-            onSearchChange={(val) => {
-              setReqSearch(val);
-              setReqPage(1);
-            }}
-            searchPlaceholder="Tìm mã phiếu, người yêu cầu, lý do..."
-            filters={[
-              {
-                id: 'dept',
-                value: reqDeptFilter,
-                onChange: (val) => {
-                  setReqDeptFilter(val);
-                  setReqPage(1);
+    <div className="purchase-overview-page h-full">
+      <StepPage
+        title="Mua hàng"
+        description="Quản lý yêu cầu vật tư, đơn đặt hàng nhà cung cấp và tiến độ giao nhận"
+        icon="bi-cart3"
+        color="blue"
+        steps={steps}
+        currentStep={currentStep}
+        onStepChange={setCurrentStep}
+        tickerContext="suppliers"
+      >
+        {/* ════════════════════════════════════════════════════════════════════
+            BƯỚC 1: YÊU CẦU MUA HÀNG
+            ════════════════════════════════════════════════════════════════════ */}
+        {currentStep === 1 && (
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <TableToolbar
+              searchValue={reqSearch}
+              onSearchChange={(val) => {
+                setReqSearch(val);
+                setReqPage(1);
+              }}
+              searchPlaceholder="Tìm mã phiếu, người yêu cầu, lý do..."
+              filters={[
+                {
+                  id: 'dept',
+                  value: reqDeptFilter,
+                  onChange: (val) => {
+                    setReqDeptFilter(val);
+                    setReqPage(1);
+                  },
+                  options: deptOptions,
+                  minWidth: '165px',
                 },
-                options: deptOptions,
-                minWidth: '165px',
-              },
-              {
-                id: 'status',
-                value: reqStatusFilter,
-                onChange: (val) => {
-                  setReqStatusFilter(val);
-                  setReqPage(1);
+                {
+                  id: 'status',
+                  value: reqStatusFilter,
+                  onChange: (val) => {
+                    setReqStatusFilter(val);
+                    setReqPage(1);
+                  },
+                  options: [
+                    { value: 'all', label: 'Tất cả trạng thái' },
+                    { value: 'chua-xu-ly', label: 'Chưa xử lý' },
+                    { value: 'dang-xu-ly', label: 'Đang xử lý' },
+                    { value: 'da-xu-ly', label: 'Đã xử lý' },
+                  ],
+                  minWidth: '155px',
                 },
-                options: [
-                  { value: 'all', label: 'Tất cả trạng thái' },
-                  { value: 'chua-xu-ly', label: 'Chưa xử lý' },
-                  { value: 'dang-xu-ly', label: 'Đang xử lý' },
-                  { value: 'da-xu-ly', label: 'Đã xử lý' },
-                ],
-                minWidth: '155px',
-              },
-            ]}
-            rightActions={
-              <div className="flex items-center gap-2">
-                {selectedReqIds.size > 0 && (
-                  <>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      leftIcon={<Check2All size={15} />}
-                      onClick={handleMergeCreateOrder}
-                    >
-                      Tạo đơn ({selectedReqIds.size})
-                    </Button>
+              ]}
+              rightActions={
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  {selectedReqIds.size > 0 && (
+                    <>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        leftIcon={<Check2All size={15} />}
+                        onClick={handleMergeCreateOrder}
+                      >
+                        <span className="sm:hidden">Gộp ({selectedReqIds.size})</span>
+                        <span className="hidden sm:inline">Tạo đơn ({selectedReqIds.size})</span>
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        leftIcon={<Trash size={14} />}
+                        onClick={() => setBulkDeleteReqConfirmOpen(true)}
+                      >
+                        Xoá ({selectedReqIds.size})
+                      </Button>
+                    </>
+                  )}
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    leftIcon={<Plus size={16} />}
+                    onClick={() => setTaoYeuCauOpen(true)}
+                  >
+                    <span className="sm:hidden">Tạo</span>
+                    <span className="hidden sm:inline">Tạo yêu cầu</span>
+                  </Button>
+                </div>
+              }
+              menuItems={[
+                {
+                  id: 'event-calendar',
+                  label: 'Lịch sự kiện',
+                  icon: <Calendar3 size={14} />,
+                  onClick: () => setIsEventCalendarOpen(true),
+                },
+              ]}
+              onRefresh={fetchRequests}
+            />
+
+            <FullWidthTable loading={reqLoading}>
+              <table className="custom-table w-full text-sm text-left border-collapse">
+                <thead className="bg-slate-50/95 border-b border-slate-200/80 text-slate-600 text-[11px] font-bold uppercase tracking-wider sticky top-0 z-10">
+                  <tr>
+                    <th className="py-2.5 sm:py-3 px-2 sm:px-4 w-9 sm:w-11 text-center">
+                      <input
+                        type="checkbox"
+                        className="form-check-input cursor-pointer"
+                        checked={
+                          paginatedRequests.length > 0 &&
+                          paginatedRequests.every((r) => selectedReqIds.has(r.id))
+                        }
+                        onChange={(e) => {
+                          const next = new Set(selectedReqIds);
+                          if (e.target.checked) {
+                            paginatedRequests.forEach((r) => next.add(r.id));
+                          } else {
+                            paginatedRequests.forEach((r) => next.delete(r.id));
+                          }
+                          setSelectedReqIds(next);
+                        }}
+                      />
+                    </th>
+                    <th className="py-2.5 sm:py-3 px-2 sm:px-4">Mã phiếu / Nội dung yêu cầu</th>
+                    <th className="hidden sm:table-cell py-3 px-4">Người yêu cầu</th>
+                    <th className="hidden sm:table-cell py-3 px-4">Thời gian</th>
+                    <th className="hidden sm:table-cell py-3 px-4 text-right">Dự kiến chi phí</th>
+                    <th className="py-2.5 sm:py-3 px-2.5 sm:px-4 text-right sm:text-center">Trạng thái</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {paginatedRequests.length === 0 && !reqLoading ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-slate-400 text-[13px]">
+                        Không có phiếu yêu cầu mua hàng nào phù hợp.
+                      </td>
+                    </tr>
+                  ) : null}
+                  {paginatedRequests.map((req) => {
+                    const st = REQ_STATUS[req.trangThai] || {
+                      label: req.trangThai,
+                      badgeClass: 'bg-slate-100 text-slate-600 border-slate-200',
+                    };
+                    const isChecked = selectedReqIds.has(req.id);
+                    return (
+                      <SwipeableTableRow
+                        key={req.id}
+                        rowId={`pur-req-${req.id}`}
+                        onEdit={() => setSelectedReq(req)}
+                        onDelete={async () => {
+                          await fetch(`/api/plan-finance/purchase-requests/${req.id}`, { method: 'DELETE' });
+                          fetchRequests();
+                        }}
+                        deleteConfirmTitle="Xác nhận xóa yêu cầu mua hàng"
+                        deleteConfirmMessage={`Bạn có chắc chắn muốn xóa phiếu yêu cầu "${req.code || req.id}"? Hành động này không thể hoàn tác.`}
+                        onClick={() => setSelectedReq(req)}
+                        className={`cursor-pointer transition-colors hover:bg-sky-50/40 group ${
+                          isChecked ? 'bg-blue-50/60' : ''
+                        }`}
+                      >
+                        <td
+                          className="py-2.5 sm:py-3 px-2 sm:px-4 w-9 sm:w-11 text-center align-middle"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            className="form-check-input cursor-pointer"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const next = new Set(selectedReqIds);
+                              if (e.target.checked) next.add(req.id);
+                              else next.delete(req.id);
+                              setSelectedReqIds(next);
+                            }}
+                          />
+                        </td>
+                        <td className="py-2.5 sm:py-3 px-2 sm:px-4 align-middle">
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                            <span className="font-mono font-bold text-slate-800 group-hover:text-sky-700 transition-colors text-[12.5px] sm:text-[13px] whitespace-nowrap">
+                              {req.code || req.id.slice(0, 10).toUpperCase()}
+                            </span>
+                            <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-md text-[10px] sm:text-[10.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
+                              {req.soMatHang ?? req.items?.length ?? 0} mặt hàng
+                            </span>
+                          </div>
+                          <div className="text-[11.5px] text-slate-600 sm:text-slate-500 mt-0.5 line-clamp-1">
+                            {req.lyDo || 'Yêu cầu bổ sung vật tư mua hàng'}
+                          </div>
+                          <div className="sm:hidden flex items-center flex-wrap gap-x-1.5 gap-y-0.5 text-[11px] text-slate-500 mt-0.5">
+                            <span className="font-medium text-slate-700">{req.nguoiYeuCau || '—'}</span>
+                            {req.donVi && <span>({req.donVi})</span>}
+                            <span>•</span>
+                            <span>
+                              {req.ngayTao ? new Date(req.ngayTao).toLocaleDateString('vi-VN') : '—'}
+                            </span>
+                            {req.tongDuKien > 0 && (
+                              <>
+                                <span>•</span>
+                                <span className="font-bold text-slate-800">{fmtVnd(req.tongDuKien)}</span>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                        <td className="hidden sm:table-cell py-3 px-4 align-middle">
+                          <div className="font-semibold text-slate-800 text-[12.5px]">
+                            {req.nguoiYeuCau || '—'}
+                          </div>
+                          <div className="text-[11px] text-slate-500">{req.donVi || '—'}</div>
+                        </td>
+                        <td className="hidden sm:table-cell py-3 px-4 align-middle">
+                          <div className="text-[12px] text-slate-700">
+                            Ngày tạo:{' '}
+                            <span className="font-medium">
+                              {req.ngayTao ? new Date(req.ngayTao).toLocaleDateString('vi-VN') : '—'}
+                            </span>
+                          </div>
+                          {req.ngayCanCo && (
+                            <div className="text-[11px] text-amber-700 font-medium">
+                              Cần có: {new Date(req.ngayCanCo).toLocaleDateString('vi-VN')}
+                            </div>
+                          )}
+                        </td>
+                        <td className="hidden sm:table-cell py-3 px-4 align-middle text-right font-bold text-slate-800 text-[12.5px]">
+                          {fmtVnd(req.tongDuKien)}
+                        </td>
+                        <td className="py-2.5 sm:py-3 px-2.5 sm:px-4 align-middle text-right sm:text-center">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-0.5 rounded-full text-[11px] font-bold border whitespace-nowrap ${st.badgeClass}`}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" />
+                            {st.label}
+                          </span>
+                        </td>
+                      </SwipeableTableRow>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </FullWidthTable>
+
+            <Pagination
+              currentPage={reqPage}
+              totalItems={filteredRequests.length}
+              pageSize={reqPageSize}
+              onPageChange={setReqPage}
+              onPageSizeChange={(size) => {
+                setReqPageSize(size);
+                setReqPage(1);
+              }}
+              itemName="phiếu yêu cầu"
+            />
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════════════════════════════
+            BƯỚC 2: ĐƠN MUA HÀNG (PO)
+            ════════════════════════════════════════════════════════════════════ */}
+        {currentStep === 2 && (
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <TableToolbar
+              searchValue={ordSearch}
+              onSearchChange={(val) => {
+                setOrdSearch(val);
+                setOrdPage(1);
+              }}
+              searchPlaceholder="Tìm mã đơn hàng, nhà cung cấp, đơn vị vận chuyển..."
+              filters={[
+                {
+                  id: 'ord-status',
+                  value: ordStatusFilter,
+                  onChange: (val) => {
+                    setOrdStatusFilter(val);
+                    setOrdPage(1);
+                  },
+                  options: [
+                    { value: 'all', label: 'Tất cả trạng thái' },
+                    { value: 'draft', label: 'Đang tạo đơn' },
+                    { value: 'ordered', label: 'Đã đặt hàng' },
+                    { value: 'received', label: 'Đã nhận hàng' },
+                    { value: 'disputed', label: 'Đang khiếu nại' },
+                    { value: 'completed', label: 'Hoàn thành' },
+                    { value: 'paused', label: 'Tạm dừng' },
+                  ],
+                  minWidth: '165px',
+                },
+              ]}
+              rightActions={
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  {selectedOrderIds.size > 0 && (
                     <Button
                       variant="danger"
                       size="sm"
                       leftIcon={<Trash size={14} />}
-                      onClick={() => setBulkDeleteReqConfirmOpen(true)}
+                      onClick={() => setBulkDeleteOrdConfirmOpen(true)}
                     >
-                      Xoá ({selectedReqIds.size})
+                      Xoá ({selectedOrderIds.size})
                     </Button>
-                  </>
-                )}
-                <Button
-                  variant="primary"
-                  size="sm"
-                  leftIcon={<Plus size={16} />}
-                  onClick={() => setTaoYeuCauOpen(true)}
-                >
-                  Tạo yêu cầu
-                </Button>
-              </div>
-            }
-            menuItems={[
-              {
-                id: 'event-calendar',
-                label: 'Lịch sự kiện',
-                icon: <Calendar3 size={14} />,
-                onClick: () => setIsEventCalendarOpen(true),
-              },
-            ]}
-            onRefresh={fetchRequests}
-          />
-
-          <FullWidthTable loading={reqLoading}>
-            <table className="custom-table w-full text-sm text-left border-collapse">
-              <thead className="bg-slate-50/95 border-b border-slate-200/80 text-slate-600 text-[11px] font-bold uppercase tracking-wider sticky top-0 z-10">
-                <tr>
-                  <th className="py-3 px-4 w-11 text-center">
-                    <input
-                      type="checkbox"
-                      className="form-check-input cursor-pointer"
-                      checked={
-                        paginatedRequests.length > 0 &&
-                        paginatedRequests.every((r) => selectedReqIds.has(r.id))
-                      }
-                      onChange={(e) => {
-                        const next = new Set(selectedReqIds);
-                        if (e.target.checked) {
-                          paginatedRequests.forEach((r) => next.add(r.id));
-                        } else {
-                          paginatedRequests.forEach((r) => next.delete(r.id));
-                        }
-                        setSelectedReqIds(next);
-                      }}
-                    />
-                  </th>
-                  <th className="py-3 px-4">Mã phiếu / Nội dung yêu cầu</th>
-                  <th className="py-3 px-4">Người yêu cầu</th>
-                  <th className="py-3 px-4">Thời gian</th>
-                  <th className="py-3 px-4 text-right">Dự kiến chi phí</th>
-                  <th className="py-3 px-4 text-center">Trạng thái</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
-                {paginatedRequests.length === 0 && !reqLoading ? (
-                  <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400 text-[13px]">
-                      Không có phiếu yêu cầu mua hàng nào phù hợp.
-                    </td>
-                  </tr>
-                ) : null}
-                {paginatedRequests.map((req) => {
-                  const st = REQ_STATUS[req.trangThai] || {
-                    label: req.trangThai,
-                    badgeClass: 'bg-slate-100 text-slate-600 border-slate-200',
-                  };
-                  const isChecked = selectedReqIds.has(req.id);
-                  return (
-                    <tr
-                      key={req.id}
-                      onClick={() => setSelectedReq(req)}
-                      className={`cursor-pointer transition-colors hover:bg-sky-50/40 group ${
-                        isChecked ? 'bg-blue-50/60' : ''
-                      }`}
-                    >
-                      <td
-                        className="py-3 px-4 w-11 text-center align-middle"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          className="form-check-input cursor-pointer"
-                          checked={isChecked}
-                          onChange={(e) => {
-                            const next = new Set(selectedReqIds);
-                            if (e.target.checked) next.add(req.id);
-                            else next.delete(req.id);
-                            setSelectedReqIds(next);
-                          }}
-                        />
-                      </td>
-                      <td className="py-3 px-4 align-middle">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-slate-800 group-hover:text-sky-700 transition-colors text-[13px]">
-                            {req.code || req.id.slice(0, 10).toUpperCase()}
-                          </span>
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                            {req.soMatHang ?? req.items?.length ?? 0} mặt hàng
-                          </span>
-                        </div>
-                        <div className="text-[11.5px] text-slate-500 mt-0.5 line-clamp-1">
-                          {req.lyDo || 'Yêu cầu bổ sung vật tư mua hàng'}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 align-middle">
-                        <div className="font-semibold text-slate-800 text-[12.5px]">
-                          {req.nguoiYeuCau || '—'}
-                        </div>
-                        <div className="text-[11px] text-slate-500">{req.donVi || '—'}</div>
-                      </td>
-                      <td className="py-3 px-4 align-middle">
-                        <div className="text-[12px] text-slate-700">
-                          Ngày tạo:{' '}
-                          <span className="font-medium">
-                            {req.ngayTao ? new Date(req.ngayTao).toLocaleDateString('vi-VN') : '—'}
-                          </span>
-                        </div>
-                        {req.ngayCanCo && (
-                          <div className="text-[11px] text-amber-700 font-medium">
-                            Cần có: {new Date(req.ngayCanCo).toLocaleDateString('vi-VN')}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 align-middle text-right font-bold text-slate-800 text-[12.5px]">
-                        {fmtVnd(req.tongDuKien)}
-                      </td>
-                      <td className="py-3 px-4 align-middle text-center">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${st.badgeClass}`}
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                          {st.label}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </FullWidthTable>
-
-          <Pagination
-            currentPage={reqPage}
-            totalItems={filteredRequests.length}
-            pageSize={reqPageSize}
-            onPageChange={setReqPage}
-            onPageSizeChange={(size) => {
-              setReqPageSize(size);
-              setReqPage(1);
-            }}
-            itemName="phiếu yêu cầu"
-          />
-        </div>
-      )}
-
-      {/* ════════════════════════════════════════════════════════════════════
-          BƯỚC 2: ĐƠN MUA HÀNG (PO)
-          ════════════════════════════════════════════════════════════════════ */}
-      {currentStep === 2 && (
-        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-          <TableToolbar
-            searchValue={ordSearch}
-            onSearchChange={(val) => {
-              setOrdSearch(val);
-              setOrdPage(1);
-            }}
-            searchPlaceholder="Tìm mã đơn hàng, nhà cung cấp, đơn vị vận chuyển..."
-            filters={[
-              {
-                id: 'ord-status',
-                value: ordStatusFilter,
-                onChange: (val) => {
-                  setOrdStatusFilter(val);
-                  setOrdPage(1);
-                },
-                options: [
-                  { value: 'all', label: 'Tất cả trạng thái' },
-                  { value: 'draft', label: 'Đang tạo đơn' },
-                  { value: 'ordered', label: 'Đã đặt hàng' },
-                  { value: 'received', label: 'Đã nhận hàng' },
-                  { value: 'disputed', label: 'Đang khiếu nại' },
-                  { value: 'completed', label: 'Hoàn thành' },
-                  { value: 'paused', label: 'Tạm dừng' },
-                ],
-                minWidth: '165px',
-              },
-            ]}
-            rightActions={
-              <div className="flex items-center gap-2">
-                {selectedOrderIds.size > 0 && (
+                  )}
                   <Button
-                    variant="danger"
+                    variant="primary"
                     size="sm"
-                    leftIcon={<Trash size={14} />}
-                    onClick={() => setBulkDeleteOrdConfirmOpen(true)}
+                    leftIcon={<Plus size={16} />}
+                    onClick={() => setTaoDonTrucTiepOpen(true)}
                   >
-                    Xoá ({selectedOrderIds.size})
+                    <span className="sm:hidden">Tạo đơn</span>
+                    <span className="hidden sm:inline">Tạo đơn mua hàng</span>
                   </Button>
-                )}
-                <Button
-                  variant="primary"
-                  size="sm"
-                  leftIcon={<Plus size={16} />}
-                  onClick={() => setTaoDonTrucTiepOpen(true)}
-                >
-                  Tạo đơn mua hàng
-                </Button>
-              </div>
-            }
-            menuItems={[
-              {
-                id: 'event-calendar',
-                label: 'Lịch sự kiện',
-                icon: <Calendar3 size={14} />,
-                onClick: () => setIsEventCalendarOpen(true),
-              },
-            ]}
-            onRefresh={fetchOrders}
-          />
+                </div>
+              }
+              menuItems={[
+                {
+                  id: 'event-calendar',
+                  label: 'Lịch sự kiện',
+                  icon: <Calendar3 size={14} />,
+                  onClick: () => setIsEventCalendarOpen(true),
+                },
+              ]}
+              onRefresh={fetchOrders}
+            />
 
-          <FullWidthTable loading={ordLoading}>
-            <table className="custom-table w-full text-sm text-left border-collapse">
-              <thead className="bg-slate-50/95 border-b border-slate-200/80 text-slate-600 text-[11px] font-bold uppercase tracking-wider sticky top-0 z-10">
-                <tr>
-                  <th className="py-3 px-4 w-11 text-center">
-                    <input
-                      type="checkbox"
-                      className="form-check-input cursor-pointer"
-                      checked={
-                        paginatedOrders.length > 0 &&
-                        paginatedOrders.every((o) => selectedOrderIds.has(o.id))
-                      }
-                      onChange={(e) => {
-                        const next = new Set(selectedOrderIds);
-                        if (e.target.checked) {
-                          paginatedOrders.forEach((o) => next.add(o.id));
-                        } else {
-                          paginatedOrders.forEach((o) => next.delete(o.id));
-                        }
-                        setSelectedOrderIds(next);
-                      }}
-                    />
-                  </th>
-                  <th className="py-3 px-4">Mã đơn hàng</th>
-                  <th className="py-3 px-4">Nhà cung cấp</th>
-                  <th className="py-3 px-4">Đơn vị vận chuyển</th>
-                  <th className="py-3 px-4">Thời gian</th>
-                  <th className="py-3 px-4 text-right">Tổng giá trị</th>
-                  <th className="py-3 px-4 text-center">Trạng thái</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
-                {paginatedOrders.length === 0 && !ordLoading ? (
+            <FullWidthTable loading={ordLoading}>
+              <table className="custom-table w-full text-sm text-left border-collapse">
+                <thead className="bg-slate-50/95 border-b border-slate-200/80 text-slate-600 text-[11px] font-bold uppercase tracking-wider sticky top-0 z-10">
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-400 text-[13px]">
-                      Chưa có đơn mua hàng nào phù hợp.
-                    </td>
-                  </tr>
-                ) : null}
-                {paginatedOrders.map((ord) => {
-                  const st = ORD_STATUS[ord.trangThai] || {
-                    label: ord.trangThai,
-                    badgeClass: 'bg-slate-100 text-slate-600 border-slate-200',
-                  };
-                  const isChecked = selectedOrderIds.has(ord.id);
-                  return (
-                    <tr
-                      key={ord.id}
-                      onClick={() => setSelectedOrder(ord)}
-                      className={`cursor-pointer transition-colors hover:bg-sky-50/40 group ${
-                        isChecked ? 'bg-blue-50/60' : ''
-                      }`}
-                    >
-                      <td
-                        className="py-3 px-4 w-11 text-center align-middle"
-                        onClick={(e) => {
-                          e.stopPropagation();
+                    <th className="py-2.5 sm:py-3 px-2 sm:px-4 w-9 sm:w-11 text-center">
+                      <input
+                        type="checkbox"
+                        className="form-check-input cursor-pointer"
+                        checked={
+                          paginatedOrders.length > 0 &&
+                          paginatedOrders.every((o) => selectedOrderIds.has(o.id))
+                        }
+                        onChange={(e) => {
+                          const next = new Set(selectedOrderIds);
+                          if (e.target.checked) {
+                            paginatedOrders.forEach((o) => next.add(o.id));
+                          } else {
+                            paginatedOrders.forEach((o) => next.delete(o.id));
+                          }
+                          setSelectedOrderIds(next);
                         }}
-                      >
-                        <input
-                          type="checkbox"
-                          className="form-check-input cursor-pointer"
-                          checked={isChecked}
-                          onChange={(e) => {
-                            const next = new Set(selectedOrderIds);
-                            if (e.target.checked) next.add(ord.id);
-                            else next.delete(ord.id);
-                            setSelectedOrderIds(next);
-                          }}
-                        />
-                      </td>
-                      <td className="py-3 px-4 align-middle">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-[#1e5470] bg-sky-50/80 border border-sky-200/70 px-2 py-0.5 rounded-md text-[12.5px]">
-                            {ord.code || ord.id.slice(0, 10).toUpperCase()}
-                          </span>
-                          {ord.items?.length > 0 && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                              {ord.items.length} SP
-                            </span>
-                          )}
-                        </div>
-                        {ord.ghiChu && (
-                          <div className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
-                            {ord.ghiChu}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 align-middle">
-                        <div className="font-semibold text-slate-800 text-[12.5px]">
-                          {ord.supplier?.name || 'Chưa chọn NCC'}
-                        </div>
-                        {ord.supplier?.address && (
-                          <div className="text-[11px] text-slate-500 line-clamp-1">
-                            {ord.supplier.address}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 align-middle">
-                        {ord.carrier ? (
-                          <div>
-                            <div className="font-medium text-slate-800 text-[12px]">
-                              {ord.carrier.name}
-                            </div>
-                            {ord.shippingDepot && (
-                              <div className="text-[11px] text-slate-500 line-clamp-1">
-                                Bến bãi: {ord.shippingDepot}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-[11.5px] text-slate-400 italic">
-                            Chưa gán vận chuyển
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 align-middle">
-                        <div className="text-[12px] text-slate-700">
-                          Đặt:{' '}
-                          <span className="font-medium">
-                            {ord.ngayDat
-                              ? new Date(ord.ngayDat).toLocaleDateString('vi-VN')
-                              : new Date(ord.createdAt).toLocaleDateString('vi-VN')}
-                          </span>
-                        </div>
-                        {ord.ngayNhan && (
-                          <div className="text-[11px] text-blue-600 font-medium">
-                            Giao: {new Date(ord.ngayNhan).toLocaleDateString('vi-VN')}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 align-middle text-right">
-                        <div className="font-bold text-slate-900 text-[13px]">
-                          {fmtVnd(ord.tongTien)}
-                        </div>
-                        {ord.shippingFee > 0 && (
-                          <div className="text-[10.5px] text-slate-500">
-                            + Cước VC: {fmtVnd(ord.shippingFee)}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 align-middle text-center">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${st.badgeClass}`}
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                          {st.label}
-                        </span>
+                      />
+                    </th>
+                    <th className="py-2.5 sm:py-3 px-2 sm:px-4">Mã đơn hàng</th>
+                    <th className="hidden sm:table-cell py-3 px-4">Nhà cung cấp</th>
+                    <th className="hidden sm:table-cell py-3 px-4">Đơn vị vận chuyển</th>
+                    <th className="hidden sm:table-cell py-3 px-4">Thời gian</th>
+                    <th className="py-2.5 sm:py-3 px-2.5 sm:px-4 text-right">Tổng giá trị</th>
+                    <th className="hidden sm:table-cell py-3 px-4 text-center">Trạng thái</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {paginatedOrders.length === 0 && !ordLoading ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-slate-400 text-[13px]">
+                        Chưa có đơn mua hàng nào phù hợp.
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </FullWidthTable>
-
-          <Pagination
-            currentPage={ordPage}
-            totalItems={filteredOrders.length}
-            pageSize={ordPageSize}
-            onPageChange={setOrdPage}
-            onPageSizeChange={(size) => {
-              setOrdPageSize(size);
-              setOrdPage(1);
-            }}
-            itemName="đơn mua hàng"
-          />
-        </div>
-      )}
-
-      {/* ════════════════════════════════════════════════════════════════════
-          BƯỚC 3: ĐÃ HUỶ BỎ
-          ════════════════════════════════════════════════════════════════════ */}
-      {currentStep === 3 && (
-        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-          <TableToolbar
-            searchValue={cancelSearch}
-            onSearchChange={(val) => {
-              setCancelSearch(val);
-              setCancelPage(1);
-            }}
-            searchPlaceholder="Tìm mã phiếu, đơn hàng hoặc đối tác đã huỷ..."
-            filters={[
-              {
-                id: 'cancel-type',
-                value: cancelTypeFilter,
-                onChange: (val) => {
-                  setCancelTypeFilter(val);
-                  setCancelPage(1);
-                },
-                options: [
-                  { value: 'all', label: 'Tất cả phân loại' },
-                  { value: 'order', label: 'Đơn mua hàng đã huỷ' },
-                  { value: 'request', label: 'Yêu cầu bị từ chối' },
-                ],
-                minWidth: '175px',
-              },
-            ]}
-            menuItems={[
-              {
-                id: 'event-calendar',
-                label: 'Lịch sự kiện',
-                icon: <Calendar3 size={14} />,
-                onClick: () => setIsEventCalendarOpen(true),
-              },
-            ]}
-            onRefresh={() => {
-              fetchRequests();
-              fetchOrders();
-            }}
-          />
-
-          <FullWidthTable loading={reqLoading || ordLoading}>
-            <table className="custom-table w-full text-sm text-left border-collapse">
-              <thead className="bg-slate-50/95 border-b border-slate-200/80 text-slate-600 text-[11px] font-bold uppercase tracking-wider sticky top-0 z-10">
-                <tr>
-                  <th className="py-3 px-4">Mã chứng từ</th>
-                  <th className="py-3 px-4">Phân loại</th>
-                  <th className="py-3 px-4">Nội dung / Đối tác</th>
-                  <th className="py-3 px-4">Thời gian</th>
-                  <th className="py-3 px-4 text-right">Giá trị</th>
-                  <th className="py-3 px-4 text-center">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
-                {paginatedCancelled.length === 0 && !reqLoading && !ordLoading ? (
-                  <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400 text-[13px]">
-                      Không có yêu cầu hoặc đơn mua hàng nào đã huỷ.
-                    </td>
-                  </tr>
-                ) : null}
-                {paginatedCancelled.map((it) => (
-                  <tr
-                    key={`${it.itemType}-${it.id}`}
-                    onClick={() => {
-                      if (it.itemType === 'request') setSelectedReq(it.raw);
-                      else setSelectedOrder(it.raw);
-                    }}
-                    className="cursor-pointer transition-colors hover:bg-sky-50/40"
-                  >
-                    <td className="py-3 px-4 align-middle">
-                      <span className="font-mono font-bold text-slate-700 text-[13px]">
-                        {it.code}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 align-middle">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold border ${
-                          it.itemType === 'order'
-                            ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                  ) : null}
+                  {paginatedOrders.map((ord) => {
+                    const st = ORD_STATUS[ord.trangThai] || {
+                      label: ord.trangThai,
+                      badgeClass: 'bg-slate-100 text-slate-600 border-slate-200',
+                    };
+                    const isChecked = selectedOrderIds.has(ord.id);
+                    return (
+                      <SwipeableTableRow
+                        key={ord.id}
+                        rowId={`pur-ord-${ord.id}`}
+                        onEdit={() => setSelectedOrder(ord)}
+                        onDelete={async () => {
+                          await fetch(`/api/plan-finance/purchasing/${ord.id}`, { method: 'DELETE' });
+                          fetchOrders();
+                        }}
+                        deleteConfirmTitle="Xác nhận xóa đơn mua hàng"
+                        deleteConfirmMessage={`Bạn có chắc chắn muốn xóa đơn mua hàng "${ord.code || ord.id}"? Hành động này không thể hoàn tác.`}
+                        onClick={() => setSelectedOrder(ord)}
+                        className={`cursor-pointer transition-colors hover:bg-sky-50/40 group ${
+                          isChecked ? 'bg-blue-50/60' : ''
                         }`}
                       >
-                        {it.itemType === 'order' ? 'Đơn mua hàng' : 'Yêu cầu mua hàng'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 align-middle">
-                      <div className="font-semibold text-slate-800 text-[12.5px]">
-                        {it.partnerOrDept}
-                      </div>
-                      <div className="text-[11px] text-slate-500 line-clamp-1">{it.title}</div>
-                    </td>
-                    <td className="py-3 px-4 align-middle text-[12px] text-slate-600">
-                      {it.date ? new Date(it.date).toLocaleDateString('vi-VN') : '—'}
-                    </td>
-                    <td className="py-3 px-4 align-middle text-right font-bold text-slate-700 text-[12.5px]">
-                      {fmtVnd(it.amount)}
-                    </td>
-                    <td
-                      className="py-3 px-4 align-middle text-center"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                      }}
-                    >
-                      <div className="inline-flex items-center gap-1.5">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          leftIcon={<ArrowCounterclockwise size={12} />}
-                          onClick={() => handleRestoreCancelled(it)}
+                        <td
+                          className="py-2.5 sm:py-3 px-2 sm:px-4 w-9 sm:w-11 text-center align-middle"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                          }}
                         >
-                          Khôi phục
-                        </Button>
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => setConfirmDeleteCancelledItem(it)}
-                          title="Xoá vĩnh viễn"
-                          className="!px-2"
-                        >
-                          <Trash size={13} />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </FullWidthTable>
+                          <input
+                            type="checkbox"
+                            className="form-check-input cursor-pointer"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const next = new Set(selectedOrderIds);
+                              if (e.target.checked) next.add(ord.id);
+                              else next.delete(ord.id);
+                              setSelectedOrderIds(next);
+                            }}
+                          />
+                        </td>
+                        <td className="py-2.5 sm:py-3 px-2 sm:px-4 align-middle">
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                            <span className="font-mono font-bold text-[#1e5470] bg-sky-50/80 border border-sky-200/70 px-1.5 sm:px-2 py-0.5 rounded-md text-[12px] sm:text-[12.5px] whitespace-nowrap">
+                              {ord.code || ord.id.slice(0, 10).toUpperCase()}
+                            </span>
+                            {ord.items?.length > 0 && (
+                              <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap">
+                                {ord.items.length} SP
+                              </span>
+                            )}
+                          </div>
+                          {ord.ghiChu && (
+                            <div className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
+                              {ord.ghiChu}
+                            </div>
+                          )}
+                          <div className="sm:hidden text-[11px] text-slate-600 mt-0.5 truncate max-w-[190px]">
+                            <span className="font-semibold text-slate-800">
+                              {ord.supplier?.name || 'Chưa chọn NCC'}
+                            </span>
+                            <span>
+                              {' '}•{' '}
+                              {ord.ngayDat
+                                ? new Date(ord.ngayDat).toLocaleDateString('vi-VN')
+                                : new Date(ord.createdAt).toLocaleDateString('vi-VN')}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="hidden sm:table-cell py-3 px-4 align-middle">
+                          <div className="font-semibold text-slate-800 text-[12.5px]">
+                            {ord.supplier?.name || 'Chưa chọn NCC'}
+                          </div>
+                          {ord.supplier?.address && (
+                            <div className="text-[11px] text-slate-500 line-clamp-1">
+                              {ord.supplier.address}
+                            </div>
+                          )}
+                        </td>
+                        <td className="hidden sm:table-cell py-3 px-4 align-middle">
+                          {ord.carrier ? (
+                            <div>
+                              <div className="font-medium text-slate-800 text-[12px]">
+                                {ord.carrier.name}
+                              </div>
+                              {ord.shippingDepot && (
+                                <div className="text-[11px] text-slate-500 line-clamp-1">
+                                  Bến bãi: {ord.shippingDepot}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-[11.5px] text-slate-400 italic">
+                              Chưa gán vận chuyển
+                            </span>
+                          )}
+                        </td>
+                        <td className="hidden sm:table-cell py-3 px-4 align-middle">
+                          <div className="text-[12px] text-slate-700">
+                            Đặt:{' '}
+                            <span className="font-medium">
+                              {ord.ngayDat
+                                ? new Date(ord.ngayDat).toLocaleDateString('vi-VN')
+                                : new Date(ord.createdAt).toLocaleDateString('vi-VN')}
+                            </span>
+                          </div>
+                          {ord.ngayNhan && (
+                            <div className="text-[11px] text-blue-600 font-medium">
+                              Giao: {new Date(ord.ngayNhan).toLocaleDateString('vi-VN')}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-2.5 sm:py-3 px-2.5 sm:px-4 align-middle text-right whitespace-nowrap">
+                          <div className="font-bold text-slate-900 text-[12.5px] sm:text-[13px]">
+                            {fmtVnd(ord.tongTien)}
+                          </div>
+                          {ord.shippingFee > 0 && (
+                            <div className="hidden sm:block text-[10.5px] text-slate-500">
+                              + Cước VC: {fmtVnd(ord.shippingFee)}
+                            </div>
+                          )}
+                          <div className="sm:hidden mt-1">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap ${st.badgeClass}`}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" />
+                              {st.label}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="hidden sm:table-cell py-3 px-4 align-middle text-center">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border whitespace-nowrap ${st.badgeClass}`}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" />
+                            {st.label}
+                          </span>
+                        </td>
+                      </SwipeableTableRow>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </FullWidthTable>
 
-          <Pagination
-            currentPage={cancelPage}
-            totalItems={filteredCancelled.length}
-            pageSize={cancelPageSize}
-            onPageChange={setCancelPage}
-            onPageSizeChange={(size) => {
-              setCancelPageSize(size);
-              setCancelPage(1);
-            }}
-            itemName="chứng từ đã huỷ"
-          />
-        </div>
-      )}
+            <Pagination
+              currentPage={ordPage}
+              totalItems={filteredOrders.length}
+              pageSize={ordPageSize}
+              onPageChange={setOrdPage}
+              onPageSizeChange={(size) => {
+                setOrdPageSize(size);
+                setOrdPage(1);
+              }}
+              itemName="đơn mua hàng"
+            />
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════════════════════════════
+            BƯỚC 3: ĐÃ HUỶ BỎ
+            ════════════════════════════════════════════════════════════════════ */}
+        {currentStep === 3 && (
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <TableToolbar
+              searchValue={cancelSearch}
+              onSearchChange={(val) => {
+                setCancelSearch(val);
+                setCancelPage(1);
+              }}
+              searchPlaceholder="Tìm mã phiếu, đơn hàng hoặc đối tác đã huỷ..."
+              filters={[
+                {
+                  id: 'cancel-type',
+                  value: cancelTypeFilter,
+                  onChange: (val) => {
+                    setCancelTypeFilter(val);
+                    setCancelPage(1);
+                  },
+                  options: [
+                    { value: 'all', label: 'Tất cả phân loại' },
+                    { value: 'order', label: 'Đơn mua hàng đã huỷ' },
+                    { value: 'request', label: 'Yêu cầu bị từ chối' },
+                  ],
+                  minWidth: '175px',
+                },
+              ]}
+              menuItems={[
+                {
+                  id: 'event-calendar',
+                  label: 'Lịch sự kiện',
+                  icon: <Calendar3 size={14} />,
+                  onClick: () => setIsEventCalendarOpen(true),
+                },
+              ]}
+              onRefresh={() => {
+                fetchRequests();
+                fetchOrders();
+              }}
+            />
+
+            <FullWidthTable loading={reqLoading || ordLoading}>
+              <table className="custom-table w-full text-sm text-left border-collapse">
+                <thead className="bg-slate-50/95 border-b border-slate-200/80 text-slate-600 text-[11px] font-bold uppercase tracking-wider sticky top-0 z-10">
+                  <tr>
+                    <th className="py-2.5 sm:py-3 px-2.5 sm:px-4">Mã chứng từ</th>
+                    <th className="hidden sm:table-cell py-3 px-4">Phân loại</th>
+                    <th className="hidden sm:table-cell py-3 px-4">Nội dung / Đối tác</th>
+                    <th className="hidden sm:table-cell py-3 px-4">Thời gian</th>
+                    <th className="hidden sm:table-cell py-3 px-4 text-right">Giá trị</th>
+                    <th className="py-2.5 sm:py-3 px-2.5 sm:px-4 text-right sm:text-center">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {paginatedCancelled.length === 0 && !reqLoading && !ordLoading ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-slate-400 text-[13px]">
+                        Không có yêu cầu hoặc đơn mua hàng nào đã huỷ.
+                      </td>
+                    </tr>
+                  ) : null}
+                  {paginatedCancelled.map((it) => (
+                    <SwipeableTableRow
+                      key={`${it.itemType}-${it.id}`}
+                      rowId={`pur-cancel-${it.itemType}-${it.id}`}
+                      editLabel="Khôi phục"
+                      onEdit={() => handleRestoreCancelled(it)}
+                      onDelete={async () => {
+                        if (it.itemType === 'request') {
+                          await fetch(`/api/plan-finance/purchase-requests/${it.id}`, { method: 'DELETE' });
+                          fetchRequests();
+                        } else {
+                          await fetch(`/api/plan-finance/purchasing/${it.id}`, { method: 'DELETE' });
+                          fetchOrders();
+                        }
+                      }}
+                      deleteConfirmTitle="Xác nhận xóa vĩnh viễn"
+                      deleteConfirmMessage={`Bạn có chắc chắn muốn xóa vĩnh viễn "${it.code}"? Hành động này không thể hoàn tác.`}
+                      onClick={() => {
+                        if (it.itemType === 'request') setSelectedReq(it.raw);
+                        else setSelectedOrder(it.raw);
+                      }}
+                      className="cursor-pointer transition-colors hover:bg-sky-50/40"
+                    >
+                      <td className="py-2.5 sm:py-3 px-2.5 sm:px-4 align-middle">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-mono font-bold text-slate-700 text-[12.5px] sm:text-[13px] whitespace-nowrap">
+                            {it.code}
+                          </span>
+                          <span
+                            className={`sm:hidden inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border whitespace-nowrap ${
+                              it.itemType === 'order'
+                                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                            }`}
+                          >
+                            {it.itemType === 'order' ? 'Đơn hàng' : 'Yêu cầu'}
+                          </span>
+                        </div>
+                        <div className="sm:hidden text-[11px] text-slate-500 mt-0.5 line-clamp-1">
+                          <span className="font-medium text-slate-700">{it.partnerOrDept}</span> •{' '}
+                          {it.date ? new Date(it.date).toLocaleDateString('vi-VN') : '—'} •{' '}
+                          <span className="font-bold text-slate-700">{fmtVnd(it.amount)}</span>
+                        </div>
+                      </td>
+                      <td className="hidden sm:table-cell py-3 px-4 align-middle">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold border whitespace-nowrap ${
+                            it.itemType === 'order'
+                              ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}
+                        >
+                          {it.itemType === 'order' ? 'Đơn mua hàng' : 'Yêu cầu mua hàng'}
+                        </span>
+                      </td>
+                      <td className="hidden sm:table-cell py-3 px-4 align-middle">
+                        <div className="font-semibold text-slate-800 text-[12.5px]">
+                          {it.partnerOrDept}
+                        </div>
+                        <div className="text-[11px] text-slate-500 line-clamp-1">{it.title}</div>
+                      </td>
+                      <td className="hidden sm:table-cell py-3 px-4 align-middle text-[12px] text-slate-600">
+                        {it.date ? new Date(it.date).toLocaleDateString('vi-VN') : '—'}
+                      </td>
+                      <td className="hidden sm:table-cell py-3 px-4 align-middle text-right font-bold text-slate-700 text-[12.5px]">
+                        {fmtVnd(it.amount)}
+                      </td>
+                      <td
+                        className="py-2.5 sm:py-3 px-2.5 sm:px-4 align-middle text-right sm:text-center whitespace-nowrap"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                        }}
+                      >
+                        <div className="inline-flex items-center gap-1 sm:gap-1.5">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            leftIcon={<ArrowCounterclockwise size={12} />}
+                            onClick={() => handleRestoreCancelled(it)}
+                          >
+                            <span className="hidden sm:inline">Khôi phục</span>
+                          </Button>
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => setConfirmDeleteCancelledItem(it)}
+                            title="Xoá vĩnh viễn"
+                            className="!px-2"
+                          >
+                            <Trash size={13} />
+                          </Button>
+                        </div>
+                      </td>
+                    </SwipeableTableRow>
+                  ))}
+                </tbody>
+              </table>
+            </FullWidthTable>
+
+            <Pagination
+              currentPage={cancelPage}
+              totalItems={filteredCancelled.length}
+              pageSize={cancelPageSize}
+              onPageChange={setCancelPage}
+              onPageSizeChange={(size) => {
+                setCancelPageSize(size);
+                setCancelPage(1);
+              }}
+              itemName="chứng từ đã huỷ"
+            />
+          </div>
+        )}
 
       {/* ════════════════════════════════════════════════════════════════════
           OFFCANVAS CHI TIẾT YÊU CẦU MUA HÀNG (400px)
@@ -1231,7 +1317,8 @@ export const PurchaseOverviewPage: React.FC = () => {
         isOpen={isEventCalendarOpen}
         onClose={() => setIsEventCalendarOpen(false)}
       />
-    </StepPage>
+      </StepPage>
+    </div>
   );
 };
 

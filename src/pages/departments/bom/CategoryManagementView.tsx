@@ -856,8 +856,9 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
         overflow: 'hidden',
       }}
     >
-      {/* Header cột phải */}
+      {/* Header cột phải (Desktop) */}
       <div
+        className="bom-cat-right-header-desktop"
         style={{
           padding: '14px 20px',
           display: 'flex',
@@ -879,8 +880,87 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
         </div>
       </div>
 
+      {/* Thanh chọn Nhóm danh mục bằng Select dành riêng cho màn hình điện thoại */}
+      <div className="bom-cat-mobile-type-bar">
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Select
+            className="bom-cat-type-select"
+            ariaLabel="Chọn nhóm danh mục"
+            value={selectedTypeId}
+            onChange={(e) => setSelectedTypeId(e.target.value)}
+            leftIcon={
+              <span
+                style={{
+                  color: selectedType?.iconColor || '#5b5ce2',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                }}
+              >
+                {renderTypeIcon(selectedType?.icon || 'folder')}
+              </span>
+            }
+            options={categoryTypes.map((ct) => ({
+              value: ct.id,
+              label: ct.name,
+              rightLabel: ct.id === selectedTypeId ? `${totalCount} mục` : undefined,
+            }))}
+            style={{
+              height: '36px',
+              paddingLeft: '36px',
+              fontWeight: 700,
+              color: '#4f46e5',
+              backgroundColor: 'var(--bg-surface-1)',
+            }}
+          />
+        </div>
+
+        <button
+          type="button"
+          title="Thêm loại danh mục mới"
+          onClick={handleOpenCreateTypeModal}
+          style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid rgba(91, 92, 226, 0.35)',
+            backgroundColor: 'rgba(91, 92, 226, 0.1)',
+            color: '#5b5ce2',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+        >
+          <Plus size={18} />
+        </button>
+
+        <button
+          type="button"
+          title="Xóa nhóm danh mục đang chọn"
+          disabled={!selectedType}
+          onClick={(e) => selectedType && handleDeleteType(selectedType.id, selectedType.name, e)}
+          style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid rgba(239, 68, 68, 0.25)',
+            backgroundColor: 'rgba(239, 68, 68, 0.06)',
+            color: '#ef4444',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: selectedType ? 'pointer' : 'not-allowed',
+            opacity: selectedType ? 1 : 0.4,
+            flexShrink: 0,
+          }}
+        >
+          <Trash2 size={15} />
+        </button>
+      </div>
+
       {/* Dòng tìm kiếm + Nút "+ Thêm mới" trên cùng một dòng */}
-      <div style={{ padding: '12px 20px 14px 20px', display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+      <div className="bom-cat-search-row" style={{ padding: '12px 20px 14px 20px', display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
         <div
           style={{
             flex: 1,
@@ -915,8 +995,10 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
 
         <button
           type="button"
+          className="bom-cat-add-btn"
           disabled={!selectedType}
           onClick={handleOpenCreateItemModal}
+          title="Thêm danh mục mới"
           style={{
             height: '36px',
             display: 'inline-flex',
@@ -937,13 +1019,14 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
           }}
         >
           <Plus size={16} />
-          <span>Thêm mới</span>
+          <span className="bom-cat-add-label">Thêm mới</span>
         </button>
       </div>
 
       {/* Bảng danh sách chi tiết */}
-      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', padding: '0 20px 20px 20px', minHeight: 0, minWidth: 0 }}>
+      <div className="bom-cat-table-wrap" style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', padding: '0 20px 20px 20px', minHeight: 0, minWidth: 0 }}>
         <div
+          className="bom-cat-table-inner"
           style={{
             border: '1px solid var(--border-default)',
             borderRadius: 'var(--radius-md)',
@@ -953,6 +1036,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
         >
           {/* Table Header */}
           <div
+            className="bom-cat-table-header"
             style={{
               display: 'grid',
               gridTemplateColumns: 'minmax(180px, 1fr) 140px 65px 95px 95px',
@@ -967,9 +1051,9 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
             }}
           >
             <div>Tên danh mục</div>
-            <div>Mã định danh</div>
-            <div style={{ textAlign: 'center' }}>Thứ tự</div>
-            <div style={{ textAlign: 'center' }}>Trạng thái</div>
+            <div className="bom-cat-col-desktop">Mã định danh</div>
+            <div className="bom-cat-col-desktop" style={{ textAlign: 'center' }}>Thứ tự</div>
+            <div className="bom-cat-col-desktop" style={{ textAlign: 'center' }}>Trạng thái</div>
             <div style={{ textAlign: 'right' }}>Thao tác</div>
           </div>
 
@@ -994,6 +1078,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
               return (
                 <div
                   key={item.id}
+                  className="bom-cat-table-row"
                   style={{
                     display: 'grid',
                     gridTemplateColumns: 'minmax(180px, 1fr) 140px 65px 95px 95px',
@@ -1013,6 +1098,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                 >
                   {/* Cột 1: Tên danh mục (Hỗ trợ phân cấp thụt đầu dòng + nút thu/mở) */}
                   <div
+                    className="bom-cat-col-name"
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -1066,42 +1152,54 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                       {renderItemIcon(item.iconType)}
                     </div>
 
-                    {/* Tên danh mục */}
-                    <span
-                      style={{
-                        fontSize: '0.875rem',
-                        fontWeight: level === 0 ? 600 : 500,
-                        color: 'var(--text-primary)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                      title={item.name}
-                    >
-                      {item.name}
-                    </span>
+                    {/* Tên danh mục + Mobile Meta */}
+                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0 }}>
+                        <span
+                          style={{
+                            fontSize: '0.875rem',
+                            fontWeight: level === 0 ? 600 : 500,
+                            color: 'var(--text-primary)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                          title={item.name}
+                        >
+                          {item.name}
+                        </span>
 
-                    {/* Badge đếm số lượng danh mục con */}
-                    {hasChildren && (
-                      <span
-                        style={{
-                          fontSize: '0.7rem',
-                          fontWeight: 600,
-                          color: '#5b5ce2',
-                          backgroundColor: 'rgba(91, 92, 226, 0.12)',
-                          padding: '1px 6px',
-                          borderRadius: '10px',
-                          flexShrink: 0,
-                          marginLeft: '4px',
-                        }}
-                      >
-                        {childCount} con
-                      </span>
-                    )}
+                        {/* Badge đếm số lượng danh mục con */}
+                        {hasChildren && (
+                          <span
+                            style={{
+                              fontSize: '0.7rem',
+                              fontWeight: 600,
+                              color: '#5b5ce2',
+                              backgroundColor: 'rgba(91, 92, 226, 0.12)',
+                              padding: '1px 6px',
+                              borderRadius: '10px',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {childCount} con
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="bom-cat-mobile-meta">
+                        {item.code && (
+                          <span className="bom-cat-mobile-code">{item.code}</span>
+                        )}
+                        <span className={`bom-cat-mobile-status ${item.status === 'active' ? 'is-active' : 'is-hidden'}`}>
+                          {item.status === 'active' ? 'Hoạt động' : 'Đang ẩn'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Cột 2: Mã định danh */}
-                  <div style={{ minWidth: 0, paddingRight: '8px' }}>
+                  <div className="bom-cat-col-desktop" style={{ minWidth: 0, paddingRight: '8px' }}>
                     {item.code ? (
                       <span
                         style={{
@@ -1128,12 +1226,12 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                   </div>
 
                   {/* Cột 3: Thứ tự */}
-                  <div style={{ textAlign: 'center', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                  <div className="bom-cat-col-desktop" style={{ textAlign: 'center', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
                     {item.sortOrder}
                   </div>
 
                   {/* Cột 4: Trạng thái */}
-                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                  <div className="bom-cat-col-desktop" style={{ display: 'flex', justifyContent: 'center' }}>
                     {item.status === 'active' ? (
                       <span
                         style={{
@@ -1251,7 +1349,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
             placeholder="VD: Địa điểm làm việc, Ca làm việc..."
           />
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div className="bom-cat-modal-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <Input
               label="Mã định danh"
               required
@@ -1303,7 +1401,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
         isStatic={true}
       >
         <form onSubmit={handleSaveItem} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div className="bom-cat-modal-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <Input
               label="Tên danh mục"
               required
@@ -1325,7 +1423,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
             />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div className="bom-cat-modal-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <Select
               label="Thuộc danh mục cha"
               value={formItemParentId}
@@ -1345,7 +1443,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
             />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div className="bom-cat-modal-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <Input
               label="Thứ tự hiển thị"
               type="number"
@@ -1380,6 +1478,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
 
   return (
     <div
+      className="bom-category-split-grid"
       style={{
         display: 'grid',
         gridTemplateColumns: '3.2fr 8.8fr',
@@ -1395,7 +1494,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
       }}
     >
       <div
-        className="split-card-item split-card-left"
+        className="split-card-item split-card-left bom-category-left-panel"
         style={{
           display: 'flex',
           flexDirection: 'column',
@@ -1412,7 +1511,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
         {renderLeftContent()}
       </div>
       <div
-        className="split-card-item split-card-right"
+        className="split-card-item split-card-right bom-category-right-panel"
         style={{
           display: 'flex',
           flexDirection: 'column',

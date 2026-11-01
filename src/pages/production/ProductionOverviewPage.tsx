@@ -102,192 +102,226 @@ export function ProductionOverviewPage() {
   }, [fetchOrders]);
 
   return (
-    <StandardPage
-      title="Quản trị sản xuất"
-      description="Hệ thống điều hành và giám sát sản xuất Seajong"
-      icon="bi-tools"
-      color="blue"
-      useCard={true}
-    >
-      <TableToolbar
-        filters={[
-          {
-            id: 'prod-order-status',
-            value: filterStatus,
-            onChange: setFilterStatus,
-            minWidth: '170px',
-            options: [
-              { label: 'Tất cả trạng thái', value: '' },
-              { label: 'Chưa thực hiện', value: 'pending' },
-              { label: 'Đang thực hiện', value: 'running' },
-              { label: 'Đã hoàn thành', value: 'completed' },
-            ],
-          },
-        ]}
-        customFilters={
-          <div className="flex items-center gap-3">
-            <div style={{ width: 155 }}>
-              <DatePicker
-                value={filterDate}
-                onChange={setFilterDate}
-                clearable
-                disabled={filterToday}
-                placeholder="Chọn ngày..."
-                style={{ marginBottom: 0, height: '32px' }}
-                title="Lọc theo thời gian"
-              />
-            </div>
+    <div className="prod-overview-page h-full">
+      <StandardPage
+        title="Quản trị sản xuất"
+        description="Hệ thống điều hành và giám sát sản xuất Seajong"
+        icon="bi-tools"
+        color="blue"
+        useCard={true}
+      >
+        <TableToolbar
+          filters={[
+            {
+              id: 'prod-order-status',
+              value: filterStatus,
+              onChange: setFilterStatus,
+              minWidth: '170px',
+              options: [
+                { label: 'Tất cả trạng thái', value: '' },
+                { label: 'Chưa thực hiện', value: 'pending' },
+                { label: 'Đang thực hiện', value: 'running' },
+                { label: 'Đã hoàn thành', value: 'completed' },
+              ],
+            },
+          ]}
+          customFilters={
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="hidden sm:block" style={{ width: 155 }}>
+                <DatePicker
+                  value={filterDate}
+                  onChange={setFilterDate}
+                  clearable
+                  disabled={filterToday}
+                  placeholder="Chọn ngày..."
+                  style={{ marginBottom: 0, height: '32px' }}
+                  title="Lọc theo thời gian"
+                />
+              </div>
 
-            <div className="px-2.5 py-1 rounded-md border border-slate-200 bg-slate-50/70 flex items-center h-[32px]">
-              <Toggle
-                checked={filterToday}
-                onChange={(next) => {
-                  setFilterToday(next);
-                  if (next) setFilterDate('');
-                }}
-                label="Hoàn thành hôm nay"
-              />
+              <div className="px-2 sm:px-2.5 py-1 rounded-md border border-slate-200 bg-slate-50/70 flex items-center h-[32px] whitespace-nowrap">
+                <Toggle
+                  checked={filterToday}
+                  onChange={(next) => {
+                    setFilterToday(next);
+                    if (next) setFilterDate('');
+                  }}
+                  label={
+                    <>
+                      <span className="sm:hidden whitespace-nowrap">Hôm nay</span>
+                      <span className="hidden sm:inline whitespace-nowrap">Hoàn thành hôm nay</span>
+                    </>
+                  }
+                />
+              </div>
             </div>
-          </div>
-        }
-        searchValue={searchQuery}
-        onSearchChange={setSearchQuery}
-        searchPlaceholder="Tìm kiếm lệnh sản xuất, mã đơn hàng, sản phẩm..."
-        searchMinWidth="220px"
-        rightActions={
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon={<PlusLg size={14} />}
-            disabled={!isProdAdmin}
-            title={
-              isProdAdmin
-                ? 'Tạo yêu cầu sản xuất'
-                : 'Chỉ Quản đốc xưởng sản xuất, Trưởng bộ phận, Trưởng phòng mới có quyền tạo yêu cầu sản xuất'
-            }
-            onClick={() => {
-              if (!isProdAdmin) return;
-              setShowCreateRequest(true);
-            }}
-          >
-            Tạo yêu cầu SX
-          </Button>
-        }
-        onRefresh={fetchOrders}
-        menuItems={[
-          {
-            id: 'event-calendar',
-            label: 'Lịch sự kiện',
-            icon: <CalendarEvent size={15} style={{ color: '#0284c7' }} />,
-            onClick: () => setIsEventCalendarOpen(true),
-          },
-          { id: 'div-1', label: '', divider: true, onClick: () => {} },
-          {
-            id: 'refresh',
-            label: 'Làm mới dữ liệu',
-            icon: <i className="bi bi-arrow-repeat" style={{ color: '#8b5cf6' }} />,
-            onClick: fetchOrders,
-          },
-        ]}
-      />
+          }
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Tìm kiếm lệnh sản xuất, mã đơn hàng, sản phẩm..."
+          searchMinWidth="220px"
+          rightActions={
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<PlusLg size={14} />}
+              disabled={!isProdAdmin}
+              title={
+                isProdAdmin
+                  ? 'Tạo yêu cầu sản xuất'
+                  : 'Chỉ Quản đốc xưởng sản xuất, Trưởng bộ phận, Trưởng phòng mới có quyền tạo yêu cầu sản xuất'
+              }
+              onClick={() => {
+                if (!isProdAdmin) return;
+                setShowCreateRequest(true);
+              }}
+            >
+              <span className="sm:hidden">Tạo mới</span>
+              <span className="hidden sm:inline">Tạo yêu cầu SX</span>
+            </Button>
+          }
+          onRefresh={fetchOrders}
+          menuItems={[
+            {
+              id: 'event-calendar',
+              label: 'Lịch sự kiện',
+              icon: <CalendarEvent size={15} style={{ color: '#0284c7' }} />,
+              onClick: () => setIsEventCalendarOpen(true),
+            },
+            { id: 'div-1', label: '', divider: true, onClick: () => {} },
+            {
+              id: 'refresh',
+              label: 'Làm mới dữ liệu',
+              icon: <i className="bi bi-arrow-repeat" style={{ color: '#8b5cf6' }} />,
+              onClick: fetchOrders,
+            },
+          ]}
+        />
 
-      <FullWidthTable loading={loading}>
-        <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
-          <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
-            <tr className="text-slate-500 text-[11.5px] uppercase tracking-[0.06em] font-bold">
-              <th className="py-2.5 px-4 text-left">Mã lệnh sản xuất</th>
-              <th className="py-2.5 px-4 w-56 text-left">Thời gian</th>
-              <th className="py-2.5 px-4 w-48 text-left">Tiến độ</th>
-              <th className="py-2.5 px-4 w-44 text-center">Trạng thái</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {paginatedOrders.length > 0 ? (
-              paginatedOrders.map((order) => {
-                const progress = Math.max(0, Math.min(100, Number(order.progress) || 0));
-                return (
-                  <tr
-                    key={order.id}
-                    onClick={() => {
-                      setSelectedOrderId(order.id);
-                      setShowDetail(true);
-                    }}
-                    className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 cursor-pointer"
-                  >
-                    <td className="py-3 px-4 align-middle">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-sky-700 hover:underline text-[13px] font-mono">
-                          {order.id}
-                        </span>
-                        {order.saleOrderCode && !order.saleOrderCode.startsWith('LSX') && (
-                          <>
-                            <span className="text-slate-300">|</span>
-                            <span className="text-xs text-slate-500">
-                              Đơn hàng:{' '}
-                              <strong className="font-semibold text-slate-700 font-mono">
-                                {order.saleOrderCode}
-                              </strong>
-                            </span>
-                          </>
-                        )}
-                        {order.status === 'pending' && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-200">
-                            Mới
+        <FullWidthTable loading={loading}>
+          <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+            <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
+              <tr className="text-slate-500 text-[11.5px] uppercase tracking-[0.06em] font-bold">
+                <th className="py-2.5 px-2.5 sm:px-4 text-left">Mã lệnh sản xuất</th>
+                <th className="hidden sm:table-cell py-2.5 px-4 w-56 text-left">Thời gian</th>
+                <th className="hidden sm:table-cell py-2.5 px-4 w-48 text-left">Tiến độ</th>
+                <th className="py-2.5 px-2.5 sm:px-4 sm:w-44 text-right sm:text-center">Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {paginatedOrders.length > 0 ? (
+                paginatedOrders.map((order) => {
+                  const progress = Math.max(0, Math.min(100, Number(order.progress) || 0));
+                  return (
+                    <tr
+                      key={order.id}
+                      onClick={() => {
+                        setSelectedOrderId(order.id);
+                        setShowDetail(true);
+                      }}
+                      className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 cursor-pointer"
+                    >
+                      <td className="py-2.5 sm:py-3 px-2.5 sm:px-4 align-middle">
+                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                          <span className="font-bold text-sky-700 hover:underline text-[13px] font-mono whitespace-nowrap">
+                            {order.id}
                           </span>
-                        )}
-                      </div>
-                      <div
-                        className="text-xs text-slate-500 truncate mt-1 max-w-xl"
-                        title={order.itemsDetail || order.name || 'Sản xuất dự trữ hàng hoá'}
-                      >
-                        {order.name || 'Sản xuất dự trữ hàng hoá'}
-                      </div>
-                    </td>
-
-                    <td className="py-3 px-4 align-middle">
-                      <div className="text-xs text-slate-500 mb-1">
-                        <span>Bắt đầu: </span>
-                        <span className="font-semibold text-slate-800">
-                          {order.ngayDat ? new Date(order.ngayDat).toLocaleDateString('vi-VN') : '—'}
-                        </span>
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        <span>Hoàn thành: </span>
-                        <span className="font-bold text-sky-700">
-                          {order.ngayHoanThanh
-                            ? new Date(order.ngayHoanThanh).toLocaleDateString('vi-VN')
-                            : '—'}
-                        </span>
-                      </div>
-                    </td>
-
-                    <td className="py-3 px-4 align-middle">
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden border border-slate-200/60">
-                          <div
-                            className={`h-full rounded-full transition-all duration-300 ${
-                              progress === 100 ? 'bg-emerald-500' : 'bg-sky-600'
-                            }`}
-                            style={{ width: `${progress}%` }}
-                          />
+                          {order.saleOrderCode && !order.saleOrderCode.startsWith('LSX') && (
+                            <>
+                              <span className="text-slate-300 hidden sm:inline">|</span>
+                              <span className="text-[11px] sm:text-xs text-slate-500 whitespace-nowrap">
+                                <span className="hidden sm:inline">Đơn hàng: </span>
+                                <strong className="font-semibold text-slate-700 font-mono">
+                                  {order.saleOrderCode}
+                                </strong>
+                              </span>
+                            </>
+                          )}
+                          {order.status === 'pending' && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-200 whitespace-nowrap">
+                              Mới
+                            </span>
+                          )}
                         </div>
-                        <span
-                          className={`text-xs font-bold font-mono min-w-[34px] text-right ${
-                            progress === 100 ? 'text-emerald-600' : 'text-slate-700'
-                          }`}
+                        <div
+                          className="text-xs text-slate-600 sm:text-slate-500 truncate mt-0.5 sm:mt-1 max-w-[230px] sm:max-w-xl"
+                          title={order.itemsDetail || order.name || 'Sản xuất dự trữ hàng hoá'}
                         >
-                          {progress}%
-                        </span>
-                      </div>
-                    </td>
+                          {order.name || 'Sản xuất dự trữ hàng hoá'}
+                        </div>
+                        <div className="sm:hidden flex items-center flex-wrap gap-x-2 gap-y-1 text-[11px] text-slate-500 mt-1">
+                          <span>
+                            BĐ:{' '}
+                            <strong className="text-slate-700 font-semibold">
+                              {order.ngayDat ? new Date(order.ngayDat).toLocaleDateString('vi-VN') : '—'}
+                            </strong>
+                          </span>
+                          {order.ngayHoanThanh && (
+                            <>
+                              <span>•</span>
+                              <span>
+                                HT:{' '}
+                                <strong className="text-sky-700 font-semibold">
+                                  {new Date(order.ngayHoanThanh).toLocaleDateString('vi-VN')}
+                                </strong>
+                              </span>
+                            </>
+                          )}
+                          <span>•</span>
+                          <span
+                            className={`font-bold font-mono ${
+                              progress === 100 ? 'text-emerald-600' : 'text-sky-700'
+                            }`}
+                          >
+                            {progress}%
+                          </span>
+                        </div>
+                      </td>
 
-                    <td className="py-3 px-4 align-middle text-center">
-                      <StatusBadge status={order.status} />
-                    </td>
-                  </tr>
-                );
-              })
-            ) : (
+                      <td className="hidden sm:table-cell py-3 px-4 align-middle">
+                        <div className="text-xs text-slate-500 mb-1">
+                          <span>Bắt đầu: </span>
+                          <span className="font-semibold text-slate-800">
+                            {order.ngayDat ? new Date(order.ngayDat).toLocaleDateString('vi-VN') : '—'}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          <span>Hoàn thành: </span>
+                          <span className="font-bold text-sky-700">
+                            {order.ngayHoanThanh
+                              ? new Date(order.ngayHoanThanh).toLocaleDateString('vi-VN')
+                              : '—'}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="hidden sm:table-cell py-3 px-4 align-middle">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden border border-slate-200/60">
+                            <div
+                              className={`h-full rounded-full transition-all duration-300 ${
+                                progress === 100 ? 'bg-emerald-500' : 'bg-sky-600'
+                              }`}
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                          <span
+                            className={`text-xs font-bold font-mono min-w-[34px] text-right ${
+                              progress === 100 ? 'text-emerald-600' : 'text-slate-700'
+                            }`}
+                          >
+                            {progress}%
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="py-2.5 sm:py-3 px-2.5 sm:px-4 align-middle text-right sm:text-center">
+                        <StatusBadge status={order.status} />
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
               <tr>
                 <td colSpan={4} className="py-12 text-center text-slate-400">
                   <i className="bi bi-inbox text-2xl block mb-2 opacity-40" />
@@ -325,7 +359,8 @@ export function ProductionOverviewPage() {
         isOpen={isEventCalendarOpen}
         onClose={() => setIsEventCalendarOpen(false)}
       />
-    </StandardPage>
+      </StandardPage>
+    </div>
   );
 }
 

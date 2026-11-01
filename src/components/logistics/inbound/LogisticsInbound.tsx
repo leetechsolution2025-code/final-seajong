@@ -347,7 +347,7 @@ export function LogisticsInbound({ onStatsChange }: { onStatsChange?: (stats: an
           },
         ]}
         actionsAfterSearch={
-          <div className="flex items-center gap-1.5">
+          <div className="hidden md:flex items-center gap-1.5">
             {/* Tải excel mẫu */}
             <button
               type="button"
@@ -414,10 +414,10 @@ export function LogisticsInbound({ onStatsChange }: { onStatsChange?: (stats: an
       {/* ── FullWidthTable chuẩn Enterprise ── */}
       <div className="flex-1 overflow-hidden flex flex-col min-h-0">
         <FullWidthTable loading={loading} emptyText="Không có hàng hoá nào trong kho">
-          <table className="w-full text-left border-collapse" style={{ fontSize: "13px" }}>
+          <table className="w-full text-left border-collapse logistics-overview-compact-table" style={{ fontSize: "13px" }}>
             <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-xs border-b border-slate-200">
               <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
-                <th className="py-2.5 px-3 w-10 text-center">
+                <th className="py-2.5 px-2.5 sm:px-3 w-9 sm:w-10 text-center">
                   <input
                     type="checkbox"
                     className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
@@ -434,11 +434,14 @@ export function LogisticsInbound({ onStatsChange }: { onStatsChange?: (stats: an
                     }}
                   />
                 </th>
-                <th className="py-2.5 px-3.5">Vật tư, hàng hoá</th>
-                <th className="py-2.5 px-3.5 w-32 text-center">Đơn vị tính</th>
-                <th className="py-2.5 px-3.5 w-36 text-right">Tồn kho</th>
-                <th className="py-2.5 px-3.5 w-36 text-right">Đã giữ</th>
-                <th className="py-2.5 px-3.5 w-36 text-right">Thực tồn</th>
+                <th className="py-2.5 px-2.5 sm:px-3.5">Vật tư, hàng hoá</th>
+                <th className="py-2.5 px-2 sm:px-3.5 w-14 md:w-32 text-center whitespace-nowrap">
+                  <span className="hidden md:inline">Đơn vị tính</span>
+                  <span className="inline md:hidden">ĐVT</span>
+                </th>
+                <th className="hidden md:table-cell py-2.5 px-3.5 w-36 text-right">Tồn kho</th>
+                <th className="hidden md:table-cell py-2.5 px-3.5 w-36 text-right">Đã giữ</th>
+                <th className="hidden md:table-cell py-2.5 px-3.5 w-36 text-right">Thực tồn</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
@@ -451,7 +454,7 @@ export function LogisticsInbound({ onStatsChange }: { onStatsChange?: (stats: an
                     key={row.id}
                     className={`hover:bg-slate-50/80 transition-colors ${isSelected ? "bg-blue-50/40" : ""}`}
                   >
-                    <td className="py-2 px-3 text-center">
+                    <td className="py-2 px-2.5 sm:px-3 text-center">
                       <input
                         type="checkbox"
                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
@@ -467,10 +470,10 @@ export function LogisticsInbound({ onStatsChange }: { onStatsChange?: (stats: an
                         }}
                       />
                     </td>
-                    <td className="py-2 px-3.5">
-                      <div className="flex items-center gap-3">
+                    <td className="py-2 px-2.5 sm:px-3.5 max-w-0 md:max-w-none w-full">
+                      <div className="flex items-start sm:items-center gap-2.5 sm:gap-3">
                         <div
-                          className="w-9 h-9 rounded-lg bg-slate-100 overflow-hidden shrink-0 border border-slate-200/60 shadow-2xs flex items-center justify-center"
+                          className="w-9 h-9 rounded-lg bg-slate-100 overflow-hidden shrink-0 border border-slate-200/60 shadow-2xs flex items-center justify-center mt-0.5 sm:mt-0"
                         >
                           {(row.imageUrl || (row.images && row.images.length > 0)) ? (
                             <HoverImage
@@ -483,12 +486,12 @@ export function LogisticsInbound({ onStatsChange }: { onStatsChange?: (stats: an
                             <i className="bi bi-box-seam text-slate-400 text-base" />
                           )}
                         </div>
-                        <div className="flex flex-col min-w-0">
+                        <div className="flex flex-col min-w-0 flex-1">
                           <span className="font-semibold text-slate-900 leading-tight text-[13px] truncate">
                             {row.tenHang}
                           </span>
                           <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-blue-600 font-mono font-medium text-[11px] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                            <span className="text-blue-600 font-mono font-medium text-[11px] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 shrink-0">
                               {row.code || "SKU-AUTO"}
                             </span>
                             <span className="text-slate-400 text-[10px]">•</span>
@@ -496,19 +499,33 @@ export function LogisticsInbound({ onStatsChange }: { onStatsChange?: (stats: an
                               {row.categoryName || row.category?.name || "Chưa phân loại"}
                             </span>
                           </div>
+                          {/* Thông tin tồn kho hiển thị dưới mã hàng hoá trên màn hình điện thoại */}
+                          <div className="flex md:hidden items-center flex-wrap gap-x-2 gap-y-0.5 mt-1 text-[11px]">
+                            <span className="text-slate-500">
+                              Tồn: <strong className="font-mono text-slate-900">{row.soLuong.toLocaleString("vi-VN")}</strong>
+                            </span>
+                            <span className="text-slate-300">•</span>
+                            <span className="text-slate-500">
+                              Giữ: <strong className="font-mono text-rose-700">{reserved.toLocaleString("vi-VN")}</strong>
+                            </span>
+                            <span className="text-slate-300">•</span>
+                            <span className="text-slate-500">
+                              Thực tồn: <strong className="font-mono text-emerald-600">{actual.toLocaleString("vi-VN")}</strong>
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </td>
-                    <td className="py-2 px-3.5 text-center text-slate-600 text-[13px]">
+                    <td className="py-2 px-2 sm:px-3.5 text-center text-slate-600 text-xs sm:text-[13px] whitespace-nowrap">
                       {row.donVi || "Cái"}
                     </td>
-                    <td className="py-2 px-3.5 text-right font-bold text-slate-900 font-mono text-[13px]">
+                    <td className="hidden md:table-cell py-2 px-3.5 text-right font-bold text-slate-900 font-mono text-[13px]">
                       {row.soLuong.toLocaleString("vi-VN")}
                     </td>
-                    <td className="py-2 px-3.5 text-right font-bold font-mono text-[13px] text-rose-700">
+                    <td className="hidden md:table-cell py-2 px-3.5 text-right font-bold font-mono text-[13px] text-rose-700">
                       {reserved.toLocaleString("vi-VN")}
                     </td>
-                    <td className="py-2 px-3.5 text-right font-bold font-mono text-[13px] text-emerald-600">
+                    <td className="hidden md:table-cell py-2 px-3.5 text-right font-bold font-mono text-[13px] text-emerald-600">
                       {actual.toLocaleString("vi-VN")}
                     </td>
                   </tr>

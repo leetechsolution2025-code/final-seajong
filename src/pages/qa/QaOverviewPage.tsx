@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { StepPage } from '@/components/common/StepPage';
 import { TableToolbar } from '@/components/common/TableToolbar';
-import { FullWidthTable } from '@/components/common/FullWidthTable';
+import { FullWidthTable, SwipeableTableRow } from '@/components/common/FullWidthTable';
 import { Pagination } from '@/components/common/Pagination';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
@@ -504,6 +504,7 @@ export const QaOverviewPage: React.FC = () => {
         num: 1,
         id: 'requests',
         title: 'Danh sách yêu cầu',
+        mobileTitle: 'Yêu cầu',
         desc: 'Các phiếu yêu cầu kiểm định chờ thực hiện',
         icon: 'bi-clipboard-data',
         badge: `${pendingInspections.length} phiếu`,
@@ -513,6 +514,7 @@ export const QaOverviewPage: React.FC = () => {
         num: 2,
         id: 'completed',
         title: 'Đã hoàn thành',
+        mobileTitle: 'Hoàn thành',
         desc: 'Các phiếu kiểm định đã hoàn tất đánh giá',
         icon: 'bi-clipboard-check',
         badge: `${completedInspections.length} phiếu`,
@@ -721,206 +723,244 @@ export const QaOverviewPage: React.FC = () => {
   };
 
   return (
-    <StepPage
-      title="Đảm bảo chất lượng"
-      description="Kiểm tra chất lượng vật tư đầu vào, thành phẩm đầu ra, tiêu chuẩn và kiểm soát lỗi"
-      color="blue"
-      icon="bi-patch-check"
-      steps={steps}
-      currentStep={currentStep}
-      onStepChange={setCurrentStep}
-      customTickerNews={qcTickerItems}
-    >
-      <div className="flex flex-col h-full flex-1 overflow-hidden" style={{ minHeight: 0 }}>
-        <TableToolbar
-          filters={[
-            {
-              id: 'qa-dept-filter',
-              value: filterDepartment,
-              onChange: setFilterDepartment,
-              minWidth: '165px',
-              options: [
-                { label: 'Tất cả bộ phận', value: 'ALL' },
-                { label: 'Mua hàng', value: 'MUA_HANG' },
-                { label: 'Sản xuất', value: 'SAN_XUAT' },
-                { label: 'Kho vận', value: 'KHO' },
-              ],
-            },
-            {
-              id: 'qa-type-filter',
-              value: filterType,
-              onChange: setFilterType,
-              minWidth: '165px',
-              options: [
-                { label: 'Tất cả phân loại', value: 'ALL' },
-                { label: 'IQC', value: 'IQC' },
-                { label: 'OQC', value: 'OQC' },
-              ],
-            },
-          ]}
-          searchValue={searchQuery}
-          onSearchChange={setSearchQuery}
-          searchPlaceholder="Tìm kiếm mã phiếu, tài liệu tham chiếu, người yêu cầu..."
-          searchMinWidth="260px"
-          rightActions={
-            selectedRows.length > 0 ? (
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                leftIcon={<Trash size={14} />}
-                onClick={() => setShowBulkDeleteConfirm(true)}
-              >
-                Xoá ({selectedRows.length})
-              </Button>
-            ) : undefined
-          }
-          onRefresh={loadInspections}
-          menuItems={[
-            {
-              id: 'event-calendar',
-              label: 'Lịch sự kiện',
-              icon: <CalendarEvent size={15} className="text-sky-600" />,
-              onClick: () => setIsEventCalendarOpen(true),
-            },
-            { id: 'div-1', label: '', divider: true, onClick: () => {} },
-            {
-              id: 'refresh',
-              label: 'Làm mới dữ liệu',
-              icon: <ArrowRepeat size={15} className="text-indigo-600" />,
-              onClick: loadInspections,
-            },
-          ]}
-        />
+    <div className="qa-overview-page h-full">
+      <StepPage
+        title="Đảm bảo chất lượng"
+        description="Kiểm tra chất lượng vật tư đầu vào, thành phẩm đầu ra, tiêu chuẩn và kiểm soát lỗi"
+        color="blue"
+        icon="bi-patch-check"
+        steps={steps}
+        currentStep={currentStep}
+        onStepChange={setCurrentStep}
+        customTickerNews={qcTickerItems}
+      >
+        <div className="flex flex-col h-full flex-1 overflow-hidden" style={{ minHeight: 0 }}>
+          <TableToolbar
+            filters={[
+              {
+                id: 'qa-dept-filter',
+                value: filterDepartment,
+                onChange: setFilterDepartment,
+                minWidth: '165px',
+                options: [
+                  { label: 'Tất cả bộ phận', value: 'ALL' },
+                  { label: 'Mua hàng', value: 'MUA_HANG' },
+                  { label: 'Sản xuất', value: 'SAN_XUAT' },
+                  { label: 'Kho vận', value: 'KHO' },
+                ],
+              },
+              {
+                id: 'qa-type-filter',
+                value: filterType,
+                onChange: setFilterType,
+                minWidth: '165px',
+                options: [
+                  { label: 'Tất cả phân loại', value: 'ALL' },
+                  { label: 'IQC', value: 'IQC' },
+                  { label: 'OQC', value: 'OQC' },
+                ],
+              },
+            ]}
+            searchValue={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder="Tìm kiếm mã phiếu, tài liệu tham chiếu, người yêu cầu..."
+            searchMinWidth="260px"
+            rightActions={
+              selectedRows.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="danger"
+                  size="sm"
+                  leftIcon={<Trash size={14} />}
+                  onClick={() => setShowBulkDeleteConfirm(true)}
+                >
+                  Xoá ({selectedRows.length})
+                </Button>
+              ) : undefined
+            }
+            onRefresh={loadInspections}
+            menuItems={[
+              {
+                id: 'event-calendar',
+                label: 'Lịch sự kiện',
+                icon: <CalendarEvent size={15} className="text-sky-600" />,
+                onClick: () => setIsEventCalendarOpen(true),
+              },
+              { id: 'div-1', label: '', divider: true, onClick: () => {} },
+              {
+                id: 'refresh',
+                label: 'Làm mới dữ liệu',
+                icon: <ArrowRepeat size={15} className="text-indigo-600" />,
+                onClick: loadInspections,
+              },
+            ]}
+          />
 
-        <FullWidthTable loading={loading}>
-        <table className="w-full text-sm text-left border-collapse">
-          <thead className="bg-slate-50/95 border-b border-slate-200/80 text-slate-600 text-[11px] font-bold uppercase tracking-wider sticky top-0 z-10">
-            <tr>
-              <th className="py-3 px-4 w-11 text-center">
-                <input
-                  type="checkbox"
-                  className="form-check-input cursor-pointer"
-                  checked={
-                    filteredInspections.length > 0 &&
-                    selectedRows.length === filteredInspections.length
-                  }
-                  onChange={handleSelectAll}
-                />
-              </th>
-              <th className="py-3 px-4 w-[280px]">Mã phiếu kiểm định</th>
-              <th className="py-3 px-4">Tài liệu tham chiếu</th>
-              <th className="py-3 px-4 w-[260px]">Người yêu cầu</th>
-              <th className="py-3 px-4 w-[180px]">Thời gian</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 bg-white">
-            {paginatedInspections.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="py-12 text-center text-slate-400">
-                  <div className="flex flex-col items-center justify-center gap-2">
-                    <i className="bi bi-clipboard2-check text-3xl text-slate-300" />
-                    <span className="text-xs font-medium">
-                      {currentStep === 1
-                        ? 'Chưa có phiếu yêu cầu kiểm định nào đang chờ xử lý'
-                        : 'Chưa có phiếu kiểm định nào đã hoàn thành'}
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              paginatedInspections.map((row) => {
-                const isIQC = row.type === 'IQC';
-                const poCode =
-                  row.poNumber ||
-                  row.metadata?.purchaseOrderCode ||
-                  row.metadata?.poNumber ||
-                  '';
-                const prodCode =
-                  row.metadata?.productionOrder ||
-                  row.metadata?.productionOrderCode ||
-                  row.metadata?.customerOrderCode ||
-                  '';
-
-                let docTitle = '';
-                if (isIQC) {
-                  docTitle = poCode
-                    ? `Đơn mua hàng ${poCode}`
-                    : row.product.startsWith('Đơn hàng')
-                    ? row.product
-                    : `Đơn mua vật tư`;
-                } else if (row.metadata?.defectCode) {
-                  docTitle = `Hồ sơ lỗi ${row.metadata.defectCode}`;
-                } else {
-                  docTitle = prodCode
-                    ? `Lệnh sản xuất ${prodCode}`
-                    : row.metadata?.bomCode
-                    ? `Lệnh sản xuất ${row.metadata.bomCode}`
-                    : 'Lệnh sản xuất';
-                }
-
-                return (
-                  <tr
-                    key={row.id}
-                    onClick={() => setSelectedInspection(row)}
-                    className="hover:bg-sky-50/40 transition-colors cursor-pointer group"
-                  >
-                    <td
-                      className="py-3 px-4 text-center align-middle"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <input
-                        type="checkbox"
-                        className="form-check-input cursor-pointer"
-                        checked={selectedRows.includes(row.id)}
-                        onChange={(e) => handleSelectRow(row.id, e)}
-                      />
-                    </td>
-                    <td className="py-3 px-4 align-middle">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-800 group-hover:text-sky-600 transition-colors font-mono text-[13px]">
-                          {row.id}
-                        </span>
-                        {renderTypeBadge(row.type)}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 align-middle">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="font-semibold text-slate-700 text-[13px]">
-                          {docTitle}
-                        </span>
-                        {row.metadata?.supplierName && (
-                          <span className="text-[11px] text-slate-500 truncate max-w-[320px]">
-                            NCC: {row.metadata.supplierName}
-                          </span>
-                        )}
-                        {row.metadata?.assemblyTeam && (
-                          <span className="text-[11px] text-slate-500 truncate max-w-[320px]">
-                            {row.metadata.assemblyTeam}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 align-middle">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="font-semibold text-slate-800 text-[13px]">
-                          {row.inspector}
-                        </span>
-                        <span className="text-[11.5px] text-slate-500">
-                          {row.department}
+          <FullWidthTable loading={loading}>
+            <table className="w-full text-sm text-left border-collapse">
+              <thead className="bg-slate-50/95 border-b border-slate-200/80 text-slate-600 text-[11px] font-bold uppercase tracking-wider sticky top-0 z-10">
+                <tr>
+                  <th className="py-2.5 sm:py-3 px-2 sm:px-4 w-9 sm:w-11 text-center">
+                    <input
+                      type="checkbox"
+                      className="form-check-input cursor-pointer"
+                      checked={
+                        filteredInspections.length > 0 &&
+                        selectedRows.length === filteredInspections.length
+                      }
+                      onChange={handleSelectAll}
+                    />
+                  </th>
+                  <th className="py-2.5 sm:py-3 px-2 sm:px-4 sm:w-[280px]">
+                    <span className="sm:hidden">Phiếu kiểm định / Tài liệu</span>
+                    <span className="hidden sm:inline">Mã phiếu kiểm định</span>
+                  </th>
+                  <th className="hidden sm:table-cell py-3 px-4">Tài liệu tham chiếu</th>
+                  <th className="hidden sm:table-cell py-3 px-4 w-[260px]">Người yêu cầu</th>
+                  <th className="hidden sm:table-cell py-3 px-4 w-[180px]">Thời gian</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {paginatedInspections.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-12 text-center text-slate-400">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <i className="bi bi-clipboard2-check text-3xl text-slate-300" />
+                        <span className="text-xs font-medium">
+                          {currentStep === 1
+                            ? 'Chưa có phiếu yêu cầu kiểm định nào đang chờ xử lý'
+                            : 'Chưa có phiếu kiểm định nào đã hoàn thành'}
                         </span>
                       </div>
-                    </td>
-                    <td className="py-3 px-4 align-middle text-slate-600 text-xs font-mono">
-                      {row.date}
                     </td>
                   </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </FullWidthTable>
+                ) : (
+                  paginatedInspections.map((row) => {
+                    const isIQC = row.type === 'IQC';
+                    const poCode =
+                      row.poNumber ||
+                      row.metadata?.purchaseOrderCode ||
+                      row.metadata?.poNumber ||
+                      '';
+                    const prodCode =
+                      row.metadata?.productionOrder ||
+                      row.metadata?.productionOrderCode ||
+                      row.metadata?.customerOrderCode ||
+                      '';
+
+                    let docTitle = '';
+                    if (isIQC) {
+                      docTitle = poCode
+                        ? `Đơn mua hàng ${poCode}`
+                        : row.product.startsWith('Đơn hàng')
+                        ? row.product
+                        : `Đơn mua vật tư`;
+                    } else if (row.metadata?.defectCode) {
+                      docTitle = `Hồ sơ lỗi ${row.metadata.defectCode}`;
+                    } else {
+                      docTitle = prodCode
+                        ? `Lệnh sản xuất ${prodCode}`
+                        : row.metadata?.bomCode
+                        ? `Lệnh sản xuất ${row.metadata.bomCode}`
+                        : 'Lệnh sản xuất';
+                    }
+
+                    return (
+                      <SwipeableTableRow
+                        key={row.id}
+                        rowId={row.id}
+                        onEdit={() => setSelectedInspection(row)}
+                        onDelete={async () => {
+                          const res = await fetch(`/api/qa/inspections/${row.id}`, {
+                            method: 'DELETE',
+                          });
+                          if (res.ok) {
+                            toastSuccess('Đã xóa', 'Đã xóa phiếu kiểm tra chất lượng');
+                            setInspections((prev) => prev.filter((i) => i.id !== row.id));
+                          } else {
+                            toastError('Lỗi', 'Lỗi khi xóa phiếu kiểm tra');
+                          }
+                        }}
+                        deleteConfirmTitle="Xác nhận xóa phiếu kiểm định"
+                        deleteConfirmMessage={`Bạn có chắc chắn muốn xóa phiếu kiểm tra "${row.id}" này không? Hành động này không thể hoàn tác.`}
+                        onClick={() => setSelectedInspection(row)}
+                        className="hover:bg-sky-50/40 transition-colors cursor-pointer group"
+                      >
+                        <td
+                          className="py-2.5 sm:py-3 px-2 sm:px-4 text-center align-middle"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            className="form-check-input cursor-pointer"
+                            checked={selectedRows.includes(row.id)}
+                            onChange={(e) => handleSelectRow(row.id, e)}
+                          />
+                        </td>
+                        <td className="py-2.5 sm:py-3 px-2 sm:px-4 align-middle">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-slate-800 group-hover:text-sky-600 transition-colors font-mono text-[13px] whitespace-nowrap">
+                              {row.id}
+                            </span>
+                            {renderTypeBadge(row.type)}
+                            {currentStep === 2 && (
+                              <span className="sm:hidden ml-auto">
+                                {renderStatusBadge(row.result)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="sm:hidden mt-1 space-y-0.5">
+                            <div className="text-[12.5px] font-semibold text-slate-800 line-clamp-1">
+                              {docTitle}
+                              {(row.metadata?.supplierName || row.metadata?.assemblyTeam)
+                                ? ` — ${row.metadata?.supplierName || row.metadata?.assemblyTeam}`
+                                : ''}
+                            </div>
+                            <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                              <span className="truncate">
+                                {row.inspector} • {row.department}
+                              </span>
+                              <span className="font-mono shrink-0">{row.date}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="hidden sm:table-cell py-3 px-4 align-middle">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-semibold text-slate-700 text-[13px]">
+                              {docTitle}
+                            </span>
+                            {row.metadata?.supplierName && (
+                              <span className="text-[11px] text-slate-500 truncate max-w-[320px]">
+                                NCC: {row.metadata.supplierName}
+                              </span>
+                            )}
+                            {row.metadata?.assemblyTeam && (
+                              <span className="text-[11px] text-slate-500 truncate max-w-[320px]">
+                                {row.metadata.assemblyTeam}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="hidden sm:table-cell py-3 px-4 align-middle">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-semibold text-slate-800 text-[13px]">
+                              {row.inspector}
+                            </span>
+                            <span className="text-[11.5px] text-slate-500">
+                              {row.department}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="hidden sm:table-cell py-3 px-4 align-middle text-slate-600 text-xs font-mono">
+                          {row.date}
+                        </td>
+                      </SwipeableTableRow>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </FullWidthTable>
 
         <Pagination
           currentPage={currentPage}
@@ -2232,7 +2272,8 @@ export const QaOverviewPage: React.FC = () => {
         isOpen={isEventCalendarOpen}
         onClose={() => setIsEventCalendarOpen(false)}
       />
-    </StepPage>
+      </StepPage>
+    </div>
   );
 };
 

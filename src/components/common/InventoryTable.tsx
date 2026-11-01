@@ -10,6 +10,7 @@ import { FullWidthTable } from './FullWidthTable';
 import { Pagination } from './Pagination';
 import { Button } from './Button';
 import { Offcanvas } from './Offcanvas';
+import { HoverImage } from '../ui/HoverImage';
 
 export interface InventoryWarehouseOption {
   id: string;
@@ -136,7 +137,7 @@ export const InventoryToolbar: React.FC<InventoryToolbarProps> = ({
       searchPlaceholder={searchPlaceholder}
       filters={filters}
       rightActions={
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="hidden md:flex items-center gap-2">
           {extraRightActions}
           {onExportExcel && (
             <Button
@@ -176,16 +177,16 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
 }) => {
   return (
     <FullWidthTable loading={loading}>
-      <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+      <table className="w-full text-left border-collapse logistics-overview-compact-table" style={{ fontSize: '13px' }}>
         <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
-          <tr className="text-slate-500 text-[11.5px] uppercase tracking-[0.06em] font-bold">
-            <th className="py-2.5 px-3.5 min-w-[320px]">Hàng hoá & Quy cách</th>
-            <th className="py-2.5 px-3.5 w-20 text-center">ĐVT</th>
-            <th className="py-2.5 px-3.5 w-32 text-right">Tồn hệ thống</th>
-            <th className="py-2.5 px-3.5 w-28 text-right">Đã giữ</th>
-            <th className="py-2.5 px-3.5 w-32 text-right">Tồn thực tế</th>
-            <th className="py-2.5 px-3.5 w-32 text-right">Giá niêm yết</th>
-            <th className="py-2.5 px-3.5 w-28 text-center">Trạng thái</th>
+          <tr className="text-slate-500 text-[11px] sm:text-[11.5px] uppercase tracking-[0.06em] font-bold">
+            <th className="py-2.5 px-2.5 sm:px-3.5 md:min-w-[320px]">Hàng hoá & Quy cách</th>
+            <th className="py-2.5 px-2 sm:px-3.5 w-14 sm:w-20 text-center whitespace-nowrap">ĐVT</th>
+            <th className="hidden md:table-cell py-2.5 px-3.5 w-32 text-right">Tồn hệ thống</th>
+            <th className="hidden md:table-cell py-2.5 px-3.5 w-28 text-right">Đã giữ</th>
+            <th className="hidden md:table-cell py-2.5 px-3.5 w-32 text-right">Tồn thực tế</th>
+            <th className="hidden md:table-cell py-2.5 px-3.5 w-32 text-right">Giá niêm yết</th>
+            <th className="hidden md:table-cell py-2.5 px-3.5 w-28 text-center">Trạng thái</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -202,33 +203,42 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                 onClick={() => onSelectItem?.(item)}
                 className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 cursor-pointer"
               >
-                <td className="py-2.5 px-3.5 align-top">
-                  <div className="flex items-start gap-3">
+                <td className="py-2.5 px-2.5 sm:px-3.5 align-top max-w-0 md:max-w-none w-full">
+                  <div className="flex items-start gap-2.5 sm:gap-3">
                     {/* Ảnh sản phẩm */}
-                    {item.imageUrl ? (
-                      <img
-                        src={item.imageUrl}
-                        alt={item.tenHang}
-                        className="w-11 h-11 object-cover rounded-lg border border-slate-200 bg-white shrink-0 shadow-xs"
-                        onError={(e) => {
-                          (e.currentTarget as HTMLElement).style.display = 'none';
-                          if (e.currentTarget.nextElementSibling) {
-                            (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'flex';
-                          }
-                        }}
-                      />
-                    ) : null}
                     <div
-                      className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 text-slate-400"
-                      style={{ display: item.imageUrl ? 'none' : 'flex' }}
+                      className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 text-slate-400 overflow-hidden shadow-xs"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      <BoxSeam size={18} />
+                      {item.imageUrl || (item.images && item.images.length > 0) ? (
+                        <HoverImage
+                          src={item.imageUrl || (item.images && item.images[0]) || ''}
+                          images={
+                            item.images && item.images.length > 0
+                              ? item.images
+                              : item.imageUrl
+                              ? [item.imageUrl]
+                              : []
+                          }
+                          alt={item.tenHang}
+                          className="w-full h-full object-cover bg-white"
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            cursor: 'pointer',
+                          }}
+                          fallback={<BoxSeam size={18} />}
+                        />
+                      ) : (
+                        <BoxSeam size={18} />
+                      )}
                     </div>
 
                     {/* Tên hàng hoá, mã SKU, mã phụ và model */}
                     <div className="flex-1 min-w-0">
                       <div
-                        className="font-semibold text-slate-900 text-[13px] leading-snug line-clamp-2"
+                        className="font-semibold text-slate-900 text-[13px] leading-snug truncate md:line-clamp-2 md:whitespace-normal"
                         title={item.tenHang}
                       >
                         {item.tenHang}
@@ -260,16 +270,37 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                           </span>
                         )}
                       </div>
+
+                      {/* Số lượng tồn hiển thị dưới mã hàng hoá trên màn hình điện thoại */}
+                      <div className="flex md:hidden items-center flex-wrap gap-x-2 gap-y-0.5 mt-1 text-[11px]">
+                        <span className="text-slate-500">
+                          Tồn: <strong className="font-mono text-slate-800">{(item.soLuong || 0).toLocaleString('vi-VN')}</strong>
+                        </span>
+                        <span className="text-slate-300">•</span>
+                        <span className="text-slate-500">
+                          Giữ:{' '}
+                          <strong className={`font-mono ${(item.soLuongGiu || 0) > 0 ? 'text-amber-600' : 'text-slate-600'}`}>
+                            {(item.soLuongGiu || 0).toLocaleString('vi-VN')}
+                          </strong>
+                        </span>
+                        <span className="text-slate-300">•</span>
+                        <span className="text-slate-500">
+                          Thực tế:{' '}
+                          <strong className="font-mono text-emerald-700">
+                            {(item.thucTon ?? item.soLuong ?? 0).toLocaleString('vi-VN')}
+                          </strong>
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </td>
-                <td className="py-2.5 px-3.5 align-top text-center text-xs text-slate-600">
+                <td className="py-2.5 px-2 sm:px-3.5 align-top text-center text-xs text-slate-600 whitespace-nowrap">
                   {item.donVi || 'Bộ'}
                 </td>
-                <td className="py-2.5 px-3.5 align-top text-right font-medium text-slate-800 text-xs font-mono">
+                <td className="hidden md:table-cell py-2.5 px-3.5 align-top text-right font-medium text-slate-800 text-xs font-mono">
                   {(item.soLuong || 0).toLocaleString('vi-VN')}
                 </td>
-                <td className="py-2.5 px-3.5 align-top text-right text-xs font-mono font-medium">
+                <td className="hidden md:table-cell py-2.5 px-3.5 align-top text-right text-xs font-mono font-medium">
                   {(item.soLuongGiu || 0) > 0 ? (
                     <span className="text-amber-600 font-semibold">
                       {(item.soLuongGiu || 0).toLocaleString('vi-VN')}
@@ -278,12 +309,12 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                     <span className="text-slate-400">0</span>
                   )}
                 </td>
-                <td className="py-2.5 px-3.5 align-top text-right">
+                <td className="hidden md:table-cell py-2.5 px-3.5 align-top text-right">
                   <div className="font-bold text-slate-900 text-[13.5px] font-mono">
                     {(item.thucTon ?? item.soLuong ?? 0).toLocaleString('vi-VN')}
                   </div>
                 </td>
-                <td className="py-2.5 px-3.5 align-top text-right font-medium text-slate-400 text-xs font-mono">
+                <td className="hidden md:table-cell py-2.5 px-3.5 align-top text-right font-medium text-slate-400 text-xs font-mono">
                   {showPrice && item.giaBanLe ? (
                     <span className="font-semibold text-slate-800">
                       {Number(item.giaBanLe).toLocaleString('vi-VN')} ₫
@@ -294,7 +325,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                     </span>
                   )}
                 </td>
-                <td className="py-2.5 px-3.5 align-top text-center">
+                <td className="hidden md:table-cell py-2.5 px-3.5 align-top text-center">
                   <span
                     className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap ${
                       item.trangThai === 'con-hang'

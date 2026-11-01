@@ -427,12 +427,18 @@ export const UserAuthManagementPage: React.FC = () => {
     [users, selectedId]
   );
 
+  const [mobilePanelTab, setMobilePanelTab] = useState<'left' | 'right'>('left');
+
   const handleSelectUser = (u: UserRow) => {
-    if (u.id === selectedId) return;
+    if (u.id === selectedId) {
+      setMobilePanelTab('right');
+      return;
+    }
     if (dirty && !window.confirm('Bạn có thay đổi chưa lưu. Bạn có muốn bỏ qua không?')) {
       return;
     }
     setSelectedId(u.id);
+    setMobilePanelTab('right');
   };
 
   // Đồng bộ mức độ truy cập phòng ban khi thay đổi danh sách quyền của phòng ban đó
@@ -747,9 +753,9 @@ export const UserAuthManagementPage: React.FC = () => {
       </div>
     </div>
   ) : (
-    <div className="flex flex-col h-full overflow-hidden bg-white">
+    <div className="flex flex-col h-full overflow-hidden bg-white bom-user-auth-right">
       {/* ── User Header Profile Bar ── */}
-      <div className="p-3.5 sm:p-4 border-b border-slate-200/80 bg-slate-50/50 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="p-3.5 sm:p-4 border-b border-slate-200/80 bg-slate-50/50 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bom-user-auth-header">
         <div className="flex items-center gap-3 min-w-0">
           <UserAvatar
             user={{ name: selectedUser.name, email: selectedUser.email }}
@@ -785,7 +791,7 @@ export const UserAuthManagementPage: React.FC = () => {
         </div>
 
         {/* Action / Save Bar */}
-        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center bom-user-auth-actions">
           {dirty && (
             <button
               type="button"
@@ -828,8 +834,8 @@ export const UserAuthManagementPage: React.FC = () => {
       </div>
 
       {/* ── Tabs (Vai trò & Quyền hạn | Truy cập phòng ban) ── */}
-      <div className="px-4 pt-3 pb-0 border-b border-slate-200 bg-white shrink-0 flex items-center justify-between">
-        <div className="flex gap-2">
+      <div className="px-4 pt-3 pb-0 border-b border-slate-200 bg-white shrink-0 flex items-center justify-between bom-user-auth-tabs">
+        <div className="flex gap-2 w-full sm:w-auto">
           <button
             type="button"
             onClick={() => setActiveTab('perms')}
@@ -864,7 +870,7 @@ export const UserAuthManagementPage: React.FC = () => {
         </div>
 
         {dirty && (
-          <span className="text-[11px] font-bold text-amber-600 flex items-center gap-1 pb-2">
+          <span className="hidden sm:flex text-[11px] font-bold text-amber-600 items-center gap-1 pb-2">
             <i className="bi bi-exclamation-circle-fill text-amber-500" />
             Có thay đổi chưa lưu
           </span>
@@ -1249,6 +1255,8 @@ export const UserAuthManagementPage: React.FC = () => {
       hideTicker={true}
       tickerContext="users"
       leftCols={4}
+      mobileActiveTab={mobilePanelTab}
+      onMobileTabChange={setMobilePanelTab}
       leftContent={leftContent}
       rightContent={rightContent}
     />

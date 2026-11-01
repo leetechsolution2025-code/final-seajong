@@ -232,7 +232,7 @@ export const Offcanvas: React.FC<OffcanvasProps> = ({
         {subHeader && <div className="offcanvas-subheader border-b border-slate-200">{subHeader}</div>}
 
         {/* Body */}
-        <div style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: '1 1 0%', minHeight: 0, position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div className={`offcanvas-body ${bodyClassName}`} style={bodyStyle}>
             {children}
           </div>

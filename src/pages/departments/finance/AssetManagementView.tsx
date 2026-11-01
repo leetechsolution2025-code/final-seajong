@@ -8,7 +8,7 @@ import {
   type TableToolbarFilter,
 } from '../../../components/common/TableToolbar';
 import { Pagination } from '../../../components/common/Pagination';
-import { FullWidthTable } from '../../../components/common/FullWidthTable';
+import { FullWidthTable, SwipeableTableRow } from '../../../components/common/FullWidthTable';
 import { DeleteButton } from '../../../components/common/DeleteButton';
 import { Button } from '../../../components/common/Button';
 import { Badge } from '../../../components/common/Badge';
@@ -621,7 +621,7 @@ const FixedAssetsManagementView: React.FC<{ onShowToast?: (type: 'success' | 'er
         onExportExcel={handleExportExcel}
         onRefresh={loadAssets}
         rightActions={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Button
               type="button"
               variant="primary"
@@ -630,7 +630,8 @@ const FixedAssetsManagementView: React.FC<{ onShowToast?: (type: 'success' | 'er
               onClick={handleOpenAddModal}
               style={{ fontWeight: 700, whiteSpace: 'nowrap' }}
             >
-              Thêm mới
+              <span className="hidden sm:inline">Thêm mới</span>
+              <span className="sm:hidden">Thêm</span>
             </Button>
 
             <DeleteButton
@@ -698,12 +699,12 @@ const FixedAssetsManagementView: React.FC<{ onShowToast?: (type: 'success' | 'er
                   style={{ cursor: 'pointer' }}
                 />
               </th>
-              <th style={{ minWidth: '220px', padding: '10px 14px' }}>Tên tài sản</th>
-              <th style={{ width: '160px', padding: '10px 12px' }}>Loại tài sản</th>
-              <th style={{ width: '140px', padding: '10px 14px', textAlign: 'right' }}>Nguyên giá</th>
-              <th style={{ width: '140px', padding: '10px 14px', textAlign: 'right' }}>Giá trị còn lại</th>
-              <th style={{ width: '190px', padding: '10px 14px' }}>Đơn vị sử dụng</th>
-              <th style={{ width: '130px', padding: '10px 14px', textAlign: 'center' }}>Trạng thái</th>
+              <th style={{ padding: '10px 14px' }}>Tên tài sản</th>
+              <th className="hidden sm:table-cell" style={{ width: '160px', padding: '10px 12px' }}>Loại tài sản</th>
+              <th className="hidden sm:table-cell" style={{ width: '140px', padding: '10px 14px', textAlign: 'right' }}>Nguyên giá</th>
+              <th style={{ width: '130px', padding: '10px 14px', textAlign: 'right' }}>Giá trị còn lại</th>
+              <th className="hidden sm:table-cell" style={{ width: '190px', padding: '10px 14px' }}>Đơn vị sử dụng</th>
+              <th className="hidden sm:table-cell" style={{ width: '130px', padding: '10px 14px', textAlign: 'center' }}>Trạng thái</th>
             </tr>
           </thead>
             <tbody>
@@ -729,12 +730,23 @@ const FixedAssetsManagementView: React.FC<{ onShowToast?: (type: 'success' | 'er
               ) : (
                 paginatedAssets.map((asset, index) => {
                   return (
-                    <tr
+                    <SwipeableTableRow
                       key={asset.id}
+                      rowId={`asset-${asset.id}`}
                       onClick={() => {
                         setViewingAsset(asset);
                         setIsDetailOpen(true);
                       }}
+                      onEdit={() => handleOpenEditModal(asset)}
+                      onDelete={async () => {
+                        await fetch(`/api/finance/assets/${asset.id}`, { method: 'DELETE' });
+                        const updated = assets.filter((item) => item.id !== asset.id);
+                        saveAssetsData(updated, 'delete');
+                        setSelectedIds((prev) => prev.filter((id) => id !== asset.id));
+                        onShowToast?.('info', 'Đã xóa tài sản', `Đã xóa tài sản "${asset.name}" (${asset.code}) khỏi cơ sở dữ liệu.`);
+                      }}
+                      deleteConfirmTitle="Xác nhận xóa tài sản"
+                      deleteConfirmMessage={`Bạn có chắc chắn muốn xóa tài sản "${asset.name}" (${asset.code}) khỏi cơ sở dữ liệu? Hành động này không thể hoàn tác.`}
                       style={{
                         borderBottom: index < paginatedAssets.length - 1 ? '1px solid #f1f5f9' : 'none',
                         transition: 'background-color 0.15s ease',
@@ -812,15 +824,20 @@ const FixedAssetsManagementView: React.FC<{ onShowToast?: (type: 'success' | 'er
                             </>
                           )}
                         </div>
+                        <div className="sm:hidden flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[11px] text-slate-500">
+                          <span>NG: <strong className="font-mono text-slate-700">{formatNumberGroup(asset.originalPrice)}</strong></span>
+                          <span>•</span>
+                          <span>{asset.department}</span>
+                        </div>
                       </td>
 
                       {/* Cột 3: Loại tài sản */}
-                      <td style={{ padding: '10px 14px', fontSize: '0.8125rem', color: '#334155', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      <td className="hidden sm:table-cell" style={{ padding: '10px 14px', fontSize: '0.8125rem', color: '#334155', fontWeight: 600, whiteSpace: 'nowrap' }}>
                         {asset.categoryLabel}
                       </td>
 
                       {/* Cột 4: Nguyên giá */}
-                      <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#0f172a', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                      <td className="hidden sm:table-cell" style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#0f172a', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
                         {formatNumberGroup(asset.originalPrice)}
                       </td>
 
@@ -830,7 +847,7 @@ const FixedAssetsManagementView: React.FC<{ onShowToast?: (type: 'success' | 'er
                       </td>
 
                       {/* Cột 6: Đơn vị sử dụng */}
-                      <td style={{ padding: '10px 14px', fontSize: '0.8125rem', color: '#334155', maxWidth: '200px' }}>
+                      <td className="hidden sm:table-cell" style={{ padding: '10px 14px', fontSize: '0.8125rem', color: '#334155', maxWidth: '200px' }}>
                         <div style={{ fontWeight: 600, color: 'var(--text-primary, #0f172a)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.35 }} title={asset.department}>
                           {asset.department}
                         </div>
@@ -842,10 +859,10 @@ const FixedAssetsManagementView: React.FC<{ onShowToast?: (type: 'success' | 'er
                       </td>
 
                       {/* Cột 7: Trạng thái */}
-                      <td style={{ padding: '10px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <td className="hidden sm:table-cell" style={{ padding: '10px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                         {renderStatusBadge(asset.status, asset.statusLabel)}
                       </td>
-                    </tr>
+                    </SwipeableTableRow>
                   );
                 })
               )}

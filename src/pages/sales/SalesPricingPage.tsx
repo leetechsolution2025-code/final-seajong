@@ -18,7 +18,7 @@ import {
 import { StepPage } from '../../components/common/StepPage';
 import type { ModernStepItem } from '../../types';
 import { TableToolbar } from '../../components/common/TableToolbar';
-import { FullWidthTable } from '../../components/common/FullWidthTable';
+import { FullWidthTable, SwipeableTableRow } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
 import { Offcanvas } from '../../components/common/Offcanvas';
 import { Modal } from '../../components/common/Modal';
@@ -747,6 +747,7 @@ export const SalesPricingPage: React.FC = () => {
   }, [productsToPrint]);
 
   return (
+    <div className="sales-pricing-page h-full w-full flex flex-col min-h-0">
     <StepPage
       title="Chính sách bán hàng"
       badge="PRICING"
@@ -787,7 +788,7 @@ export const SalesPricingPage: React.FC = () => {
               },
             ]}
             rightActions={
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 {selectedPolicyIds.length > 0 && (
                   <DeleteButton
                     size="sm"
@@ -804,7 +805,8 @@ export const SalesPricingPage: React.FC = () => {
                   icon={<PlusLg size={13} />}
                   onClick={() => setShowPolicyModal(true)}
                 >
-                  Thêm chính sách
+                  <span className="sm:hidden">Thêm</span>
+                  <span className="hidden sm:inline">Thêm chính sách</span>
                 </Button>
               </div>
             }
@@ -816,10 +818,10 @@ export const SalesPricingPage: React.FC = () => {
               loading={loadingPolicies}
               emptyText="Chưa có văn bản chính sách phù hợp"
             >
-              <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+              <table className="sales-pricing-table w-full text-left border-collapse" style={{ fontSize: '13px' }}>
                 <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
                   <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
-                    <th className="py-2.5 px-3.5 w-10 text-center">
+                    <th className="py-2.5 px-2.5 sm:px-3.5 w-8 sm:w-10 text-center">
                       <input
                         type="checkbox"
                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
@@ -830,12 +832,12 @@ export const SalesPricingPage: React.FC = () => {
                         onChange={handleToggleSelectAllPolicies}
                       />
                     </th>
-                    <th className="py-2.5 px-3.5 w-[60px] text-center">STT</th>
-                    <th className="py-2.5 px-3.5 w-[30%]">Tên văn bản</th>
-                    <th className="py-2.5 px-3.5 w-[15%]">Ngày ban hành</th>
-                    <th className="py-2.5 px-3.5">Tóm tắt nội dung</th>
-                    <th className="py-2.5 px-3.5 w-[140px] text-center">Trạng thái</th>
-                    <th className="py-2.5 px-3.5 w-[55px] text-right"></th>
+                    <th className="hidden sm:table-cell py-2.5 px-3.5 w-[60px] text-center">STT</th>
+                    <th className="py-2.5 px-2.5 sm:px-3.5 sm:w-[30%]">Tên văn bản</th>
+                    <th className="hidden sm:table-cell py-2.5 px-3.5 w-[15%]">Ngày ban hành</th>
+                    <th className="hidden sm:table-cell py-2.5 px-3.5">Tóm tắt nội dung</th>
+                    <th className="py-2.5 px-2 sm:px-3.5 w-[95px] sm:w-[140px] text-center">Trạng thái</th>
+                    <th className="py-2.5 px-2 sm:px-3.5 w-[42px] sm:w-[55px] text-right"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -847,9 +849,36 @@ export const SalesPricingPage: React.FC = () => {
                     </tr>
                   ) : (
                     paginatedPolicyData.map((row, index) => (
-                      <tr key={row.id} className="hover:bg-blue-50/40 transition-colors">
+                      <SwipeableTableRow
+                        key={row.id}
+                        rowId={`policy-${row.id}`}
+                        className="hover:bg-blue-50/40 transition-colors"
+                        onEdit={() => {
+                          setPolName(row.name || '');
+                          setPolDocNo(row.docNo || '');
+                          setPolStatus(row.status || 'Hiệu lực');
+                          setPolSummary(row.summary || '');
+                          setShowPolicyModal(true);
+                        }}
+                        onDelete={async () => {
+                          const res = await fetch('/api/sales/policies', {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ids: [row.id] }),
+                          });
+                          if (res.ok) {
+                            toast.success(`Đã xóa chính sách "${row.name}"`);
+                            setSelectedPolicyIds((prev) => prev.filter((id) => id !== row.id));
+                            fetchPolicies();
+                          } else {
+                            toast.error('Có lỗi xảy ra khi xóa chính sách.');
+                          }
+                        }}
+                        deleteConfirmTitle="Xác nhận xóa chính sách"
+                        deleteConfirmMessage={`Bạn có chắc chắn muốn xóa chính sách "${row.name}" (${row.docNo}) không? Hành động này không thể hoàn tác.`}
+                      >
                         <td
-                          className="py-2.5 px-3.5 text-center"
+                          className="py-2.5 px-2.5 sm:px-3.5 text-center"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <input
@@ -859,20 +888,28 @@ export const SalesPricingPage: React.FC = () => {
                             onChange={() => handleToggleSelectPolicy(row.id)}
                           />
                         </td>
-                        <td className="py-2.5 px-3.5 text-center text-slate-500 font-medium">
+                        <td className="hidden sm:table-cell py-2.5 px-3.5 text-center text-slate-500 font-medium">
                           {(policyPage - 1) * policyLimit + index + 1}
                         </td>
-                        <td className="py-2.5 px-3.5">
+                        <td className="py-2.5 px-2.5 sm:px-3.5 min-w-0">
                           <div className="font-semibold text-[#175cd3] text-[13px]">{row.name}</div>
-                          <div className="text-xs text-slate-400 font-mono mt-0.5">{row.docNo}</div>
+                          <div className="text-xs text-slate-400 font-mono mt-0.5">
+                            {row.docNo}
+                            <span className="sm:hidden"> • {row.date}</span>
+                          </div>
+                          {row.summary && (
+                            <div className="sm:hidden text-[11px] text-slate-500 mt-1 line-clamp-2 leading-snug">
+                              {row.summary}
+                            </div>
+                          )}
                         </td>
-                        <td className="py-2.5 px-3.5 text-slate-600 text-xs font-mono font-medium">
+                        <td className="hidden sm:table-cell py-2.5 px-3.5 text-slate-600 text-xs font-mono font-medium">
                           {row.date}
                         </td>
-                        <td className="py-2.5 px-3.5 text-slate-600 text-xs leading-relaxed">
+                        <td className="hidden sm:table-cell py-2.5 px-3.5 text-slate-600 text-xs leading-relaxed">
                           {row.summary}
                         </td>
-                        <td className="py-2.5 px-3.5 text-center">
+                        <td className="py-2.5 px-2 sm:px-3.5 text-center">
                           <Badge
                             variant={row.status === 'Hiệu lực' ? 'success' : 'neutral'}
                             hasDot
@@ -880,7 +917,7 @@ export const SalesPricingPage: React.FC = () => {
                             {row.status}
                           </Badge>
                         </td>
-                        <td className="py-2.5 px-3.5 text-right">
+                        <td className="py-2.5 px-2 sm:px-3.5 text-right">
                           <Button
                             variant="ghost"
                             size="icon"
@@ -898,7 +935,7 @@ export const SalesPricingPage: React.FC = () => {
                             <Eye size={16} />
                           </Button>
                         </td>
-                      </tr>
+                      </SwipeableTableRow>
                     ))
                   )}
                 </tbody>
@@ -950,7 +987,7 @@ export const SalesPricingPage: React.FC = () => {
               },
             ]}
             rightActions={
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 {selectedPromoIds.length > 0 && (
                   <DeleteButton
                     size="sm"
@@ -967,7 +1004,8 @@ export const SalesPricingPage: React.FC = () => {
                   icon={<PlusLg size={13} />}
                   onClick={() => setShowPromotionModal(true)}
                 >
-                  Thêm khuyến mãi
+                  <span className="sm:hidden">Thêm</span>
+                  <span className="hidden sm:inline">Thêm khuyến mãi</span>
                 </Button>
               </div>
             }
@@ -979,10 +1017,10 @@ export const SalesPricingPage: React.FC = () => {
               loading={loadingPromotions}
               emptyText="Chưa có chương trình khuyến mãi phù hợp"
             >
-              <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+              <table className="sales-pricing-table w-full text-left border-collapse" style={{ fontSize: '13px' }}>
                 <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
                   <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
-                    <th className="py-2.5 px-3.5 w-10 text-center">
+                    <th className="py-2.5 px-2.5 sm:px-3.5 w-8 sm:w-10 text-center">
                       <input
                         type="checkbox"
                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
@@ -993,12 +1031,12 @@ export const SalesPricingPage: React.FC = () => {
                         onChange={handleToggleSelectAllPromos}
                       />
                     </th>
-                    <th className="py-2.5 px-3.5 w-[60px] text-center">STT</th>
-                    <th className="py-2.5 px-3.5 w-[28%]">Tên văn bản</th>
-                    <th className="py-2.5 px-3.5 w-[18%]">Thời gian hiệu lực</th>
-                    <th className="py-2.5 px-3.5">Tóm tắt nội dung</th>
-                    <th className="py-2.5 px-3.5 w-[140px] text-center">Trạng thái</th>
-                    <th className="py-2.5 px-3.5 w-[55px] text-right"></th>
+                    <th className="hidden sm:table-cell py-2.5 px-3.5 w-[60px] text-center">STT</th>
+                    <th className="py-2.5 px-2.5 sm:px-3.5 sm:w-[28%]">Tên văn bản</th>
+                    <th className="hidden sm:table-cell py-2.5 px-3.5 w-[18%]">Thời gian hiệu lực</th>
+                    <th className="hidden sm:table-cell py-2.5 px-3.5">Tóm tắt nội dung</th>
+                    <th className="py-2.5 px-2 sm:px-3.5 w-[95px] sm:w-[140px] text-center">Trạng thái</th>
+                    <th className="py-2.5 px-2 sm:px-3.5 w-[42px] sm:w-[55px] text-right"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1010,9 +1048,36 @@ export const SalesPricingPage: React.FC = () => {
                     </tr>
                   ) : (
                     paginatedPromotionData.map((row, index) => (
-                      <tr key={row.id} className="hover:bg-blue-50/40 transition-colors">
+                      <SwipeableTableRow
+                        key={row.id}
+                        rowId={`promo-${row.id}`}
+                        className="hover:bg-blue-50/40 transition-colors"
+                        onEdit={() => {
+                          setPromoName(row.name || '');
+                          setPromoDocNo(row.docNo || '');
+                          setPromoStatus(row.status || 'Hiệu lực');
+                          setPromoSummary(row.summary || '');
+                          setShowPromotionModal(true);
+                        }}
+                        onDelete={async () => {
+                          const res = await fetch('/api/sales/promotions', {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ids: [row.id] }),
+                          });
+                          if (res.ok) {
+                            toast.success(`Đã xóa chương trình "${row.name}"`);
+                            setSelectedPromoIds((prev) => prev.filter((id) => id !== row.id));
+                            fetchPromotions();
+                          } else {
+                            toast.error('Có lỗi xảy ra khi xóa chương trình khuyến mãi.');
+                          }
+                        }}
+                        deleteConfirmTitle="Xác nhận xóa khuyến mãi"
+                        deleteConfirmMessage={`Bạn có chắc chắn muốn xóa chương trình khuyến mãi "${row.name}" (${row.docNo}) không? Hành động này không thể hoàn tác.`}
+                      >
                         <td
-                          className="py-2.5 px-3.5 text-center"
+                          className="py-2.5 px-2.5 sm:px-3.5 text-center"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <input
@@ -1022,14 +1087,22 @@ export const SalesPricingPage: React.FC = () => {
                             onChange={() => handleToggleSelectPromo(row.id)}
                           />
                         </td>
-                        <td className="py-2.5 px-3.5 text-center text-slate-500 font-medium">
+                        <td className="hidden sm:table-cell py-2.5 px-3.5 text-center text-slate-500 font-medium">
                           {(promotionPage - 1) * promotionLimit + index + 1}
                         </td>
-                        <td className="py-2.5 px-3.5">
+                        <td className="py-2.5 px-2.5 sm:px-3.5 min-w-0">
                           <div className="font-semibold text-[#175cd3] text-[13px]">{row.name}</div>
-                          <div className="text-xs text-slate-400 font-mono mt-0.5">{row.docNo}</div>
+                          <div className="text-xs text-slate-400 font-mono mt-0.5">
+                            {row.docNo}
+                            <span className="sm:hidden"> • {row.startDate} → {row.endDate}</span>
+                          </div>
+                          {row.summary && (
+                            <div className="sm:hidden text-[11px] text-slate-500 mt-1 line-clamp-2 leading-snug">
+                              {row.summary}
+                            </div>
+                          )}
                         </td>
-                        <td className="py-2.5 px-3.5">
+                        <td className="hidden sm:table-cell py-2.5 px-3.5">
                           <div className="text-xs text-slate-600 font-mono">
                             <span className="text-slate-400 font-sans">Bắt đầu:</span>{' '}
                             {row.startDate}
@@ -1039,10 +1112,10 @@ export const SalesPricingPage: React.FC = () => {
                             {row.endDate}
                           </div>
                         </td>
-                        <td className="py-2.5 px-3.5 text-slate-600 text-xs leading-relaxed">
+                        <td className="hidden sm:table-cell py-2.5 px-3.5 text-slate-600 text-xs leading-relaxed">
                           {row.summary}
                         </td>
-                        <td className="py-2.5 px-3.5 text-center">
+                        <td className="py-2.5 px-2 sm:px-3.5 text-center">
                           <Badge
                             variant={row.status === 'Hiệu lực' ? 'success' : 'neutral'}
                             hasDot
@@ -1050,7 +1123,7 @@ export const SalesPricingPage: React.FC = () => {
                             {row.status}
                           </Badge>
                         </td>
-                        <td className="py-2.5 px-3.5 text-right">
+                        <td className="py-2.5 px-2 sm:px-3.5 text-right">
                           <Button
                             variant="ghost"
                             size="icon"
@@ -1068,7 +1141,7 @@ export const SalesPricingPage: React.FC = () => {
                             <Eye size={16} />
                           </Button>
                         </td>
-                      </tr>
+                      </SwipeableTableRow>
                     ))
                   )}
                 </tbody>
@@ -1106,7 +1179,7 @@ export const SalesPricingPage: React.FC = () => {
             onSearchChange={setQuotationSearch}
             actionsBeforeSearch={
               <div
-                className={`inline-flex items-center px-3 h-[34px] rounded-lg border transition-colors ${
+                className={`inline-flex items-center px-2.5 sm:px-3 h-[34px] rounded-lg border transition-colors whitespace-nowrap ${
                   pricingSource === 'oem'
                     ? 'bg-blue-50/80 border-blue-300'
                     : 'bg-slate-50 border-slate-200'
@@ -1140,8 +1213,11 @@ export const SalesPricingPage: React.FC = () => {
                   icon={<Printer size={14} />}
                   onClick={() => setShowPrintModal(true)}
                 >
-                  In báo giá
-                  {selectedProducts.length > 0 ? ` (${selectedProducts.length})` : ''}
+                  <span className="sm:hidden">In{selectedProducts.length > 0 ? ` (${selectedProducts.length})` : ''}</span>
+                  <span className="hidden sm:inline">
+                    In báo giá
+                    {selectedProducts.length > 0 ? ` (${selectedProducts.length})` : ''}
+                  </span>
                 </Button>
               </div>
             }
@@ -1153,10 +1229,10 @@ export const SalesPricingPage: React.FC = () => {
               loading={loadingQuotations}
               emptyText="Không tìm thấy sản phẩm phù hợp"
             >
-              <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+              <table className="sales-pricing-table w-full text-left border-collapse" style={{ fontSize: '13px' }}>
                 <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
                   <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
-                    <th className="py-2.5 px-3.5 w-10 text-center">
+                    <th className="py-2.5 px-2.5 sm:px-3.5 w-8 sm:w-10 text-center">
                       <input
                         type="checkbox"
                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
@@ -1167,10 +1243,10 @@ export const SalesPricingPage: React.FC = () => {
                         onChange={handleToggleSelectAllProducts}
                       />
                     </th>
-                    <th className="py-2.5 px-3.5">Thông tin sản phẩm</th>
-                    <th className="py-2.5 px-3.5 w-[15%] text-center">Quy cách</th>
-                    <th className="py-2.5 px-3.5 w-[18%] text-right">Giá niêm yết</th>
-                    <th className="py-2.5 px-3.5 w-[20%]">Ghi chú</th>
+                    <th className="py-2.5 px-2.5 sm:px-3.5">Thông tin sản phẩm</th>
+                    <th className="hidden sm:table-cell py-2.5 px-3.5 w-[15%] text-center">Quy cách</th>
+                    <th className="py-2.5 px-2.5 sm:px-3.5 w-[115px] sm:w-[18%] text-right">Giá niêm yết</th>
+                    <th className="hidden sm:table-cell py-2.5 px-3.5 w-[20%]">Ghi chú</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1189,17 +1265,17 @@ export const SalesPricingPage: React.FC = () => {
                             onClick={() => toggleCategoryCollapse(row.categoryName)}
                             className="bg-slate-50/90 hover:bg-slate-100/80 cursor-pointer select-none border-y border-slate-200/80 transition-colors"
                           >
-                            <td colSpan={5} className="py-2.5 px-4">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2 font-bold text-[#003087] uppercase text-xs tracking-wide">
+                            <td colSpan={5} className="py-2.5 px-3 sm:px-4">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 font-bold text-[#003087] uppercase text-xs tracking-wide min-w-0 truncate">
                                   {row.isCollapsed ? (
-                                    <ChevronRight size={14} />
+                                    <ChevronRight size={14} className="shrink-0" />
                                   ) : (
-                                    <ChevronDown size={14} />
+                                    <ChevronDown size={14} className="shrink-0" />
                                   )}
-                                  <span>{row.categoryName}</span>
+                                  <span className="truncate">{row.categoryName}</span>
                                 </div>
-                                <Badge variant="neutral">{row.count} sản phẩm</Badge>
+                                <Badge variant="neutral">{row.count} SP</Badge>
                               </div>
                             </td>
                           </tr>
@@ -1218,7 +1294,7 @@ export const SalesPricingPage: React.FC = () => {
                           className="hover:bg-blue-50/40 cursor-pointer transition-colors"
                         >
                           <td
-                            className="py-2.5 px-3.5 text-center"
+                            className="py-2.5 px-2.5 sm:px-3.5 text-center"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <input
@@ -1228,14 +1304,19 @@ export const SalesPricingPage: React.FC = () => {
                               onChange={() => handleToggleSelectProduct(row)}
                             />
                           </td>
-                          <td className="py-2.5 px-3.5">
+                          <td className="py-2.5 px-2.5 sm:px-3.5 min-w-0">
                             <div className="font-semibold text-slate-800 text-[13px]">
                               {row.productName}
                             </div>
-                            <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap mt-0.5">
                               {row.productCode && (
                                 <span className="text-xs text-slate-400 font-mono">
                                   {row.productCode}
+                                </span>
+                              )}
+                              {row.specification && (
+                                <span className="sm:hidden text-[10.5px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-medium">
+                                  {row.specification}
                                 </span>
                               )}
                               {row.bomCode && (
@@ -1250,13 +1331,13 @@ export const SalesPricingPage: React.FC = () => {
                               )}
                             </div>
                           </td>
-                          <td className="py-2.5 px-3.5 text-center text-xs font-medium text-slate-600">
+                          <td className="hidden sm:table-cell py-2.5 px-3.5 text-center text-xs font-medium text-slate-600">
                             {row.specification}
                           </td>
-                          <td className="py-2.5 px-3.5 text-right font-mono font-bold text-rose-600 whitespace-nowrap">
+                          <td className="py-2.5 px-2.5 sm:px-3.5 text-right font-mono font-bold text-rose-600 whitespace-nowrap">
                             {Number(row.listedPrice || 0).toLocaleString('vi-VN')} đ
                           </td>
-                          <td className="py-2.5 px-3.5 text-xs text-slate-400">{row.note}</td>
+                          <td className="hidden sm:table-cell py-2.5 px-3.5 text-xs text-slate-400">{row.note}</td>
                         </tr>
                       );
                     })
@@ -1272,9 +1353,9 @@ export const SalesPricingPage: React.FC = () => {
           STEP 4: KỸ NĂNG MỀM (CẨM NANG + Q&A)
       ═══════════════════════════════════════════════════════════════════════ */}
       {activeStep === 'soft_skills' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 p-2 flex-1 min-h-0 overflow-hidden bg-slate-50/50">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 p-2 flex-1 min-h-0 overflow-y-auto lg:overflow-hidden bg-slate-50/50">
           {/* Cột trái: Cẩm nang Kỹ năng mềm */}
-          <div className="lg:col-span-5 flex flex-col min-h-0 bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
+          <div className="lg:col-span-5 flex flex-col min-h-[280px] lg:min-h-0 bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2 shrink-0 bg-slate-50/60">
               <i className="bi bi-book-half text-blue-600 text-base" />
               <h5 className="font-bold text-slate-800 text-sm m-0">Cẩm nang Kỹ năng mềm</h5>
@@ -1309,13 +1390,13 @@ export const SalesPricingPage: React.FC = () => {
           </div>
 
           {/* Cột phải: Danh sách Q&A xử lý tình huống */}
-          <div className="lg:col-span-7 flex flex-col min-h-0 bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
+          <div className="lg:col-span-7 flex flex-col min-h-[340px] lg:min-h-0 bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
             <TableToolbar
               searchPlaceholder="Tìm kiếm câu hỏi..."
               searchValue={qaSearch}
               onSearchChange={setQaSearch}
               rightActions={
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2">
                   {selectedQaIds.length > 0 && (
                     <DeleteButton
                       size="sm"
@@ -1332,7 +1413,8 @@ export const SalesPricingPage: React.FC = () => {
                     icon={<PlusLg size={13} />}
                     onClick={() => setShowQaModal(true)}
                   >
-                    Thêm câu hỏi
+                    <span className="sm:hidden">Thêm</span>
+                    <span className="hidden sm:inline">Thêm câu hỏi</span>
                   </Button>
                 </div>
               }
@@ -2578,6 +2660,7 @@ export const SalesPricingPage: React.FC = () => {
         />
       )}
     </StepPage>
+    </div>
   );
 };
 

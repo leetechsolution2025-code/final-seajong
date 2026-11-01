@@ -185,6 +185,34 @@ export function LogisticsMaterialPicking() {
     }
   }, [isManager]);
 
+  // Tự động thu phóng (zoom) vừa vặn lại màn hình điện thoại (đặc biệt trên iPhone/iOS Safari) sau khi nhập xong và nhấn "Xong"
+  const resetMobileViewportZoom = () => {
+    if (typeof window === "undefined" || window.innerWidth > 768) return;
+    setTimeout(() => {
+      const active = document.activeElement;
+      if (
+        active &&
+        (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT")
+      ) {
+        return;
+      }
+      const viewportMeta = document.querySelector('meta[name="viewport"]');
+      if (viewportMeta) {
+        viewportMeta.setAttribute(
+          "content",
+          "width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover"
+        );
+        window.scrollTo({ left: 0, top: window.scrollY, behavior: "instant" as ScrollBehavior });
+        setTimeout(() => {
+          viewportMeta.setAttribute(
+            "content",
+            "width=device-width, initial-scale=1.0, viewport-fit=cover"
+          );
+        }, 350);
+      }
+    }, 60);
+  };
+
   const openAssignModal = (ticketIds: string | string[]) => {
     setTicketIdsToAssign(Array.isArray(ticketIds) ? ticketIds : [ticketIds]);
     setAssignModalOpen(true);
@@ -757,23 +785,23 @@ export function LogisticsMaterialPicking() {
           </p>
         </div>
       ) : (
-        <table className="w-full text-left border-collapse" style={{ width: "100%", minWidth: "100%", fontSize: "13px" }}>
+        <table className="w-full text-left border-collapse table-fixed md:table-auto logistics-overview-compact-table" style={{ width: "100%", minWidth: "100%", fontSize: "13px" }}>
           {/* Header duy nhất 1 dòng */}
           <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
             <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
-              <th className="py-2.5 px-3 w-10 text-center border-0 align-middle">
+              <th className="py-2.5 px-2.5 md:px-3 w-9 md:w-10 text-center border-0 align-middle">
                 <i className="bi bi-check-all text-sm" />
               </th>
-              <th className="py-2.5 px-3.5 min-w-[280px] border-0 align-middle">
+              <th className="py-2.5 px-3 md:px-3.5 md:min-w-[280px] border-0 align-middle">
                 Mặt hàng
               </th>
-              <th className="py-2.5 px-3.5 whitespace-nowrap min-w-[150px] text-center border-0 align-middle">
+              <th className="hidden md:table-cell py-2.5 px-3.5 whitespace-nowrap min-w-[150px] text-center border-0 align-middle">
                 {isManager ? "Yêu cầu | Thực tồn" : "Số lượng yêu cầu"}
               </th>
-              <th className="py-2.5 px-3.5 w-28 text-center border-0 align-middle">
+              <th className="hidden md:table-cell py-2.5 px-3.5 w-28 text-center border-0 align-middle">
                 Đã nhặt
               </th>
-              <th className="py-2.5 px-3.5 border-0 align-middle">
+              <th className="hidden md:table-cell py-2.5 px-3.5 border-0 align-middle">
                 {viewMode === "by-order" ? "Trạng thái" : "Chi tiết theo phiếu"}
               </th>
             </tr>
@@ -798,6 +826,140 @@ export function LogisticsMaterialPicking() {
                 const isOrderPicking = partiallyPickedCount > 0 && !isOrderDone;
                 const hasPendingInput = order.items.some(it => pickedQuantities[it.ticketItemId] !== undefined);
 
+                const hasMobileOrderMeta =
+                  Boolean(order.ticketCode && order.ticketCode !== order.code) ||
+                  Boolean(isManager && order.customerName);
+
+                const orderHeaderInner = (
+                  <div className="flex items-center justify-between gap-2 w-full">
+                    <div className="flex flex-col md:flex-row md:items-center md:flex-wrap gap-1.5 md:gap-2 min-w-0 flex-1">
+                      {/* Dòng 1 trên mobile: Mũi tên + LỆNH: DBH-... */}
+                      <div className="order-1 md:order-1 flex items-center flex-wrap gap-1.5 md:gap-2">
+                        {/* Nút mũi tên ẩn/hiện vật tư trong lệnh */}
+                        <button
+                          type="button"
+                          className="w-6 h-6 rounded-md bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 flex items-center justify-center text-slate-600 transition-all shadow-2xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleOrder(order.id);
+                          }}
+                          title={isCollapsed ? "Hiện vật tư trong lệnh" : "Ẩn vật tư trong lệnh"}
+                        >
+                          <i className={`bi bi-chevron-${isCollapsed ? 'right' : 'down'} text-[11px] font-bold`} />
+                        </button>
+
+                        <span className="text-slate-800 font-bold text-xs uppercase tracking-wide">
+                          LỆNH: <span className="text-blue-600 font-mono font-bold text-xs">{order.code}</span>
+                        </span>
+                      </div>
+
+                      {/* Dòng 2 trên mobile: Trạng thái + Phân công (trên desktop đứng sau thông tin lệnh) */}
+                      <div className="order-2 md:order-3 flex items-center flex-wrap gap-1.5 md:gap-2">
+                        {/* Badge trạng thái */}
+                        {isOrderDone ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <i className="bi bi-check-circle-fill text-[11px]" /> Đã nhặt đủ
+                          </span>
+                        ) : isOrderPicking ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                            <i className="bi bi-exclamation-triangle-fill text-[11px]" /> Đang nhặt / Thiếu
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                            <i className="bi bi-circle text-[10px]" /> Chưa thực hiện
+                          </span>
+                        )}
+
+                        {/* Phân công (chỉ hiển thị cho Thủ kho) */}
+                        {isManager && (
+                          order.assignedTo ? (
+                            <span 
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openAssignModal(order.id);
+                              }}
+                              title="Nhấn để phân công lại"
+                            >
+                              <i className="bi bi-person-fill text-[11px]" />
+                              {order.assignedTo}
+                            </span>
+                          ) : (
+                            <button 
+                              type="button"
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-white text-blue-600 border border-blue-200 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer shadow-2xs"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openAssignModal(order.id);
+                              }}
+                            >
+                              <i className="bi bi-person-plus text-[11px]" />
+                              Phân công
+                            </button>
+                          )
+                        )}
+                      </div>
+
+                      {/* Dòng 3 trên mobile: Mã lệnh (CP-...) + Khách hàng (trên desktop đứng giữa LỆNH và Trạng thái) */}
+                      <div className={`order-3 md:order-2 ${hasMobileOrderMeta ? "flex" : "hidden md:flex"} items-center flex-wrap gap-1.5 md:gap-2`}>
+                        {order.ticketCode && order.ticketCode !== order.code && (
+                          <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-blue-50 text-blue-700 border border-blue-200/80">
+                            {order.ticketCode}
+                          </span>
+                        )}
+
+                        {isManager && order.customerName && (
+                          <span className="text-slate-500 text-xs font-normal">
+                            Khách hàng: <b className="text-slate-800 font-medium">{order.customerName}</b>
+                          </span>
+                        )}
+
+                        {order.ngayGiao && (
+                          <span className="hidden md:inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/80">
+                            <span>{getRelativeDateText(new Date(order.ngayGiao).toLocaleDateString('vi-VN'))}</span>
+                          </span>
+                        )}
+
+                        <span className="hidden md:inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-white text-slate-700 border border-slate-200 shadow-2xs">
+                          {order.items.length} vật tư
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                      {/* Nút ẩn/hiện nhanh vật tư */}
+                      <span className="hidden md:inline text-slate-400 text-xs font-normal">
+                        {isCollapsed ? "(Đang ẩn vật tư)" : "(Đang hiển thị vật tư)"}
+                      </span>
+
+                      <button 
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); if (canPick) handleOrderCompleteClick(order); }} 
+                        className={`inline-flex items-center justify-center gap-1.5 w-8 h-8 md:w-auto md:h-auto md:px-3.5 md:py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                          canPick
+                            ? "text-white hover:brightness-95 active:scale-95 cursor-pointer" 
+                            : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-75"
+                        }`}
+                        style={
+                          canPick
+                            ? {
+                                backgroundColor: "var(--color-primary, #0284c7)",
+                                borderColor: "var(--color-primary, #0284c7)",
+                                boxShadow: "0 0 10px rgba(2, 132, 199, 0.3)",
+                              }
+                            : undefined
+                        }
+                        disabled={!canPick}
+                        title={!canPick ? "Chưa được cấp quyền Cấp phát vật tư & gom hàng" : hasPendingInput ? "Báo cáo hoàn tất nhặt vật tư cho lệnh này" : "Báo cáo"}
+                        aria-label="Báo cáo"
+                      >
+                        <i className="bi bi-send text-xs md:text-[11px]" />
+                        <span className="hidden md:inline">Báo cáo</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+
                 return (
                   <React.Fragment key={order.id}>
                     {/* Header phân nhóm cho từng Lệnh xuất kho */}
@@ -805,114 +967,11 @@ export function LogisticsMaterialPicking() {
                       className="bg-slate-100/90 hover:bg-slate-200/70 cursor-pointer border-t border-b border-slate-200 transition-colors"
                       onClick={() => toggleOrder(order.id)}
                     >
-                      <td colSpan={5} className="py-2.5 px-3">
-                        <div className="flex items-center justify-between flex-wrap gap-2 w-full">
-                          <div className="flex items-center flex-wrap gap-2">
-                            {/* Nút mũi tên ẩn/hiện vật tư trong lệnh */}
-                            <button
-                              type="button"
-                              className="w-6 h-6 rounded-md bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 flex items-center justify-center text-slate-600 transition-all shadow-2xs"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleOrder(order.id);
-                              }}
-                              title={isCollapsed ? "Hiện vật tư trong lệnh" : "Ẩn vật tư trong lệnh"}
-                            >
-                              <i className={`bi bi-chevron-${isCollapsed ? 'right' : 'down'} text-[11px] font-bold`} />
-                            </button>
-
-                            <span className="text-slate-800 font-bold text-xs uppercase tracking-wide">
-                              LỆNH: <span className="text-blue-600 font-mono font-bold text-xs">{order.code}</span>
-                            </span>
-
-                            {order.ticketCode && order.ticketCode !== order.code && (
-                              <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-blue-50 text-blue-700 border border-blue-200/80">
-                                {order.ticketCode}
-                              </span>
-                            )}
-
-                            {isManager && order.customerName && (
-                              <span className="text-slate-500 text-xs font-normal">
-                                Khách hàng: <b className="text-slate-800 font-medium">{order.customerName}</b>
-                              </span>
-                            )}
-
-                            {order.ngayGiao && (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/80">
-                                <span>{getRelativeDateText(new Date(order.ngayGiao).toLocaleDateString('vi-VN'))}</span>
-                              </span>
-                            )}
-
-                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-white text-slate-700 border border-slate-200 shadow-2xs">
-                              {order.items.length} vật tư
-                            </span>
-
-                            {/* Badge trạng thái */}
-                            {isOrderDone ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                <i className="bi bi-check-circle-fill text-[11px]" /> Đã nhặt đủ
-                              </span>
-                            ) : isOrderPicking ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                                <i className="bi bi-exclamation-triangle-fill text-[11px]" /> Đang nhặt / Thiếu
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                                <i className="bi bi-circle text-[10px]" /> Chưa thực hiện
-                              </span>
-                            )}
-
-                            {/* Phân công (chỉ hiển thị cho Thủ kho) */}
-                            {isManager && (
-                              order.assignedTo ? (
-                                <span 
-                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openAssignModal(order.id);
-                                  }}
-                                  title="Nhấn để phân công lại"
-                                >
-                                  <i className="bi bi-person-fill text-[11px]" />
-                                  {order.assignedTo}
-                                </span>
-                              ) : (
-                                <button 
-                                  type="button"
-                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-white text-blue-600 border border-blue-200 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer shadow-2xs"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openAssignModal(order.id);
-                                  }}
-                                >
-                                  <i className="bi bi-person-plus text-[11px]" />
-                                  Phân công
-                                </button>
-                              )
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-3">
-                            {/* Nút ẩn/hiện nhanh vật tư */}
-                            <span className="text-slate-400 text-xs font-normal">
-                              {isCollapsed ? "(Đang ẩn vật tư)" : "(Đang hiển thị vật tư)"}
-                            </span>
-
-                            <button 
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); if (canPick) handleOrderCompleteClick(order); }} 
-                              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold shadow-xs transition-all ${
-                                hasPendingInput && canPick
-                                  ? "bg-blue-600 text-white hover:bg-blue-700 active:scale-95 cursor-pointer shadow-blue-500/20" 
-                                  : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-75"
-                              }`}
-                              disabled={!hasPendingInput || !canPick}
-                              title={!canPick ? "Chưa được cấp quyền Cấp phát vật tư & gom hàng" : hasPendingInput ? "Báo cáo hoàn tất nhặt vật tư cho lệnh này" : "Chưa có thay đổi số lượng để báo cáo"}
-                            >
-                              <i className="bi bi-send text-[11px]" /> Báo cáo
-                            </button>
-                          </div>
-                        </div>
+                      <td colSpan={2} className="table-cell md:hidden py-2.5 px-3">
+                        {orderHeaderInner}
+                      </td>
+                      <td colSpan={5} className="hidden md:table-cell py-2.5 px-3">
+                        {orderHeaderInner}
                       </td>
                     </tr>
 
@@ -950,8 +1009,8 @@ export function LogisticsMaterialPicking() {
                           </td>
 
                           {/* Thông tin mặt hàng */}
-                          <td className="py-2.5 px-3.5 align-middle">
-                            <div className="flex items-center gap-3">
+                          <td className="py-2.5 px-3 md:px-3.5 align-middle overflow-hidden">
+                            <div className="flex items-start md:items-center gap-2.5 md:gap-3">
                               <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200/70 flex items-center justify-center overflow-hidden shrink-0">
                                 {(it.imageUrl || (it.images && it.images.length > 0)) ? (
                                   <HoverImage 
@@ -964,7 +1023,7 @@ export function LogisticsMaterialPicking() {
                                   <i className="bi bi-box-seam text-slate-400 text-base" />
                                 )}
                               </div>
-                              <div className="min-w-0">
+                              <div className="min-w-0 flex-1">
                                 <div className={`font-semibold text-[13px] truncate ${isFullyPicked ? "text-emerald-800" : isPicked ? "text-amber-800" : "text-slate-900"}`}>
                                   {it.tenHang}
                                 </div>
@@ -985,13 +1044,64 @@ export function LogisticsMaterialPicking() {
                                       Chưa gán vị trí
                                     </span>
                                   )}
+                                  {/* Badge trạng thái trên mobile */}
+                                  <span className="inline-flex md:hidden">
+                                    {isFullyPicked ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                        <i className="bi bi-check-circle-fill text-[10px]" /> Đủ hàng ({currentInputQty}/{it.soLuongYeuCau})
+                                      </span>
+                                    ) : isPicked ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                        <i className="bi bi-exclamation-triangle-fill text-[10px]" /> Thiếu hàng ({currentInputQty}/{it.soLuongYeuCau})
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                                        <i className="bi bi-clock text-[10px]" /> Chờ nhặt
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                                {/* Nội dung số lượng dưới badge Chờ nhặt trên màn hình điện thoại */}
+                                <div className="flex md:hidden items-center flex-wrap gap-x-3 gap-y-1 mt-1.5 text-[11px] text-slate-500">
+                                  <span className="inline-flex items-center">
+                                    <span>Yêu cầu: <b className="font-mono font-bold text-slate-800">{it.soLuongYeuCau}</b></span>
+                                    {isManager && (
+                                      <>
+                                        <span className="text-slate-300 mx-1.5">|</span>
+                                        <b className="font-mono font-bold text-emerald-600" title="Số lượng thực tồn kho">{it.thucTon ?? 0}</b>
+                                      </>
+                                    )}
+                                  </span>
+                                  <span className="inline-flex items-center gap-1.5">
+                                    <span>Đã nhặt:</span>
+                                    <input
+                                      type="number"
+                                      inputMode="numeric"
+                                      className={`w-14 h-6 px-1 text-center font-mono font-bold text-xs rounded border outline-none transition-all ${
+                                        isFullyPicked
+                                          ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                                          : isPicked
+                                          ? "border-amber-500 bg-amber-50 text-amber-800"
+                                          : "border-slate-300 bg-white text-slate-700"
+                                      } ${isEdited ? "ring-1 ring-amber-300" : ""}`}
+                                      value={currentInputQty > 0 ? currentInputQty : ""}
+                                      onChange={e => handleOrderItemQuantityChange(it.ticketItemId, e.target.value, it.soLuongYeuCau)}
+                                      onBlur={resetMobileViewportZoom}
+                                      onKeyDown={e => {
+                                        if (e.key === "Enter") e.currentTarget.blur();
+                                      }}
+                                      onClick={e => e.stopPropagation()}
+                                      min={0}
+                                      max={it.soLuongYeuCau}
+                                    />
+                                  </span>
                                 </div>
                               </div>
                             </div>
                           </td>
 
                           {/* Yêu cầu (và Thực tồn nếu là Thủ kho) */}
-                          <td className="text-center py-2.5 px-3.5 align-middle whitespace-nowrap">
+                          <td className="hidden md:table-cell text-center py-2.5 px-3.5 align-middle whitespace-nowrap">
                             <span className="inline-block min-w-[28px] px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-mono font-bold text-sm">
                               {it.soLuongYeuCau}
                             </span>
@@ -1006,7 +1116,7 @@ export function LogisticsMaterialPicking() {
                           </td>
 
                           {/* Ô nhập số lượng Đã nhặt */}
-                          <td className="text-center py-2.5 px-3.5 align-middle">
+                          <td className="hidden md:table-cell text-center py-2.5 px-3.5 align-middle">
                             <input 
                               type="number"
                               className={`w-20 h-8 text-center font-mono font-bold text-sm rounded-lg border outline-none transition-all ${
@@ -1024,7 +1134,7 @@ export function LogisticsMaterialPicking() {
                           </td>
 
                           {/* Trạng thái mặt hàng */}
-                          <td className="py-2.5 px-3.5 align-middle">
+                          <td className="hidden md:table-cell py-2.5 px-3.5 align-middle">
                             {isFullyPicked ? (
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                                 <i className="bi bi-check-circle-fill text-[11px]" /> Đủ hàng ({currentInputQty}/{it.soLuongYeuCau})
@@ -1052,119 +1162,140 @@ export function LogisticsMaterialPicking() {
                   {(() => {
                     const ticketIdsForDate = Array.from(new Set((groupedItems[dateStr] || []).flatMap(item => item.orders.map((o: any) => o.id))));
                     const dateAssignees = Array.from(new Set((groupedItems[dateStr] || []).flatMap(item => item.orders.map((o: any) => o.assignedTo).filter(Boolean))));
+                    const dateHeaderInner = (
+                      <div className="flex items-center justify-between gap-2 w-full">
+                        <div className="flex flex-col md:flex-row md:items-center md:flex-wrap gap-1.5 md:gap-2 min-w-0 flex-1">
+                          {/* Dòng 1 trên mobile: Ngày giao + Hạn + Số mặt hàng */}
+                          <div className="flex items-center flex-wrap gap-1.5 md:gap-2">
+                            <i className={`bi bi-chevron-${collapsedDates.has(dateStr) ? 'right' : 'down'} text-secondary me-1`} style={{ fontSize: 12 }} />
+                            
+                            {(() => {
+                              const dates = (groupedItems[dateStr] || []).flatMap(i => i.orders.map(o => o.createdAt)).filter((d): d is string => !!d);
+                              dates.sort();
+                              const groupCreatedAtStr = dates.length > 0 ? new Date(dates[0]).toLocaleDateString('vi-VN') : "Không rõ";
+                              return (
+                                <span className="text-slate-600 text-xs font-medium">Ngày giao: <b className="text-slate-900">{groupCreatedAtStr}</b></span>
+                              );
+                            })()}
+
+                            <span className="hidden md:inline text-slate-300">|</span>
+
+                            <span 
+                              className={`hidden md:inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/80 transition-colors ${isManager ? "cursor-pointer hover:bg-rose-100" : ""}`} 
+                              title={isManager ? "Nhấn để thay đổi Hạn hoàn thành" : undefined}
+                              onClick={(e) => {
+                                if (!isManager) return;
+                                e.stopPropagation();
+                                const picker = document.getElementById(`date-picker-${dateStr}`) as HTMLInputElement;
+                                if (picker) {
+                                  try { picker.showPicker(); } catch (err) { picker.click(); }
+                                }
+                              }}
+                            >
+                              <span>{getRelativeDateText(dateStr)}</span>
+                              {isManager && (
+                                <input 
+                                  type="date" 
+                                  id={`date-picker-${dateStr}`}
+                                  style={{ opacity: 0, position: 'absolute', width: 0, height: 0, left: 0, top: 0 }}
+                                  onChange={(e) => handleUpdateDeadline(dateStr, e.target.value)}
+                                />
+                              )}
+                            </span>
+
+                            <span className="hidden md:inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-white text-slate-700 border border-slate-200 shadow-2xs">
+                              {groupedItems[dateStr].length} mặt hàng
+                            </span>
+                          </div>
+
+                          {/* Dòng 2 trên mobile: Trạng thái (Chưa thực hiện) + Phân công */}
+                          <div className="flex items-center flex-wrap gap-1.5 md:gap-2">
+                            {(() => {
+                              const groupItems = groupedItems[dateStr];
+                              let pickedCount = 0;
+                              let fullyPickedCount = 0;
+                              groupItems.forEach(item => {
+                                const qty = pickedQuantities[item.id] !== undefined ? pickedQuantities[item.id] : (item.tongDaNhat || 0);
+                                if (qty > 0) {
+                                  pickedCount++;
+                                  if (qty >= item.tongSoLuong) {
+                                    fullyPickedCount++;
+                                  }
+                                }
+                              });
+                              const isGroupFullyPicked = fullyPickedCount === groupItems.length;
+                              const isGroupPicked = pickedCount > 0;
+                              return isGroupFullyPicked ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  <i className="bi bi-check-circle-fill" /> Đã thực hiện | Đủ hàng
+                                </span>
+                              ) : isGroupPicked ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                                  <i className="bi bi-exclamation-triangle-fill" /> Đã thực hiện | Thiếu hàng
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-200 text-slate-600">
+                                  <i className="bi bi-circle" /> Chưa thực hiện
+                                </span>
+                              );
+                            })()}
+
+                            {isManager && (
+                              dateAssignees.length > 0 ? (
+                                <span 
+                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openAssignModal(ticketIdsForDate);
+                                  }}
+                                  title="Nhấn để phân công lại"
+                                >
+                                  <i className="bi bi-person-fill" />
+                                  {dateAssignees.join(", ")}
+                                </span>
+                              ) : (
+                                <button 
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold text-blue-600 border border-blue-200 bg-white hover:bg-blue-50 transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openAssignModal(ticketIdsForDate);
+                                  }}
+                                >
+                                  <i className="bi bi-person-plus" />
+                                  Phân công
+                                </button>
+                              )
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="shrink-0 flex items-center">
+                          <button 
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); if (canPick) handleCompleteClick(dateStr); }} 
+                            className="inline-flex items-center justify-center gap-1.5 w-8 h-8 md:w-auto md:h-auto md:px-3.5 md:py-1.5 rounded-lg text-xs font-semibold text-white hover:brightness-95 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                            style={{
+                              backgroundColor: "var(--color-primary, #0284c7)",
+                              borderColor: "var(--color-primary, #0284c7)",
+                              boxShadow: "0 0 10px rgba(2, 132, 199, 0.3)",
+                            }}
+                            disabled={!canPick}
+                            title={!canPick ? "Chưa được cấp quyền Cấp phát vật tư & gom hàng" : "Báo cáo"}
+                            aria-label="Báo cáo"
+                          >
+                            <i className="bi bi-send text-xs" />
+                            <span className="hidden md:inline">Báo cáo</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
                     return (
                       <tr className="bg-slate-100/80 cursor-pointer border-t border-slate-200" onClick={() => toggleDate(dateStr)}>
-                        <td colSpan={5} className="py-2.5 px-3.5 font-bold text-slate-800 border-b border-slate-200">
-                          <div className="flex items-center justify-between flex-wrap gap-2 w-full">
-                            <div className="flex items-center flex-wrap gap-2">
-                              <i className={`bi bi-chevron-${collapsedDates.has(dateStr) ? 'right' : 'down'} text-secondary me-2`} style={{ fontSize: 12 }} />
-                              
-                              {(() => {
-                                const dates = (groupedItems[dateStr] || []).flatMap(i => i.orders.map(o => o.createdAt)).filter((d): d is string => !!d);
-                                dates.sort();
-                                const groupCreatedAtStr = dates.length > 0 ? new Date(dates[0]).toLocaleDateString('vi-VN') : "Không rõ";
-                                return (
-                                  <span className="text-slate-600 text-xs font-medium">Ngày giao: <b className="text-slate-900">{groupCreatedAtStr}</b></span>
-                                );
-                              })()}
-
-                              <span className="text-slate-300">|</span>
-
-                              <span 
-                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/80 transition-colors ${isManager ? "cursor-pointer hover:bg-rose-100" : ""}`} 
-                                title={isManager ? "Nhấn để thay đổi Hạn hoàn thành" : undefined}
-                                onClick={(e) => {
-                                  if (!isManager) return;
-                                  e.stopPropagation();
-                                  const picker = document.getElementById(`date-picker-${dateStr}`) as HTMLInputElement;
-                                  if (picker) {
-                                    try { picker.showPicker(); } catch (err) { picker.click(); }
-                                  }
-                                }}
-                              >
-                                <span>{getRelativeDateText(dateStr)}</span>
-                                {isManager && (
-                                  <input 
-                                    type="date" 
-                                    id={`date-picker-${dateStr}`}
-                                    style={{ opacity: 0, position: 'absolute', width: 0, height: 0, left: 0, top: 0 }}
-                                    onChange={(e) => handleUpdateDeadline(dateStr, e.target.value)}
-                                  />
-                                )}
-                              </span>
-
-                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-white text-slate-700 border border-slate-200 shadow-2xs">
-                                {groupedItems[dateStr].length} mặt hàng
-                              </span>
-
-                              {(() => {
-                                const groupItems = groupedItems[dateStr];
-                                let pickedCount = 0;
-                                let fullyPickedCount = 0;
-                                groupItems.forEach(item => {
-                                  const qty = pickedQuantities[item.id] !== undefined ? pickedQuantities[item.id] : (item.tongDaNhat || 0);
-                                  if (qty > 0) {
-                                    pickedCount++;
-                                    if (qty >= item.tongSoLuong) {
-                                      fullyPickedCount++;
-                                    }
-                                  }
-                                });
-                                const isGroupFullyPicked = fullyPickedCount === groupItems.length;
-                                const isGroupPicked = pickedCount > 0;
-                                return isGroupFullyPicked ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                    <i className="bi bi-check-circle-fill" /> Đã thực hiện | Đủ hàng
-                                  </span>
-                                ) : isGroupPicked ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
-                                    <i className="bi bi-exclamation-triangle-fill" /> Đã thực hiện | Thiếu hàng
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-200 text-slate-600">
-                                    <i className="bi bi-circle" /> Chưa thực hiện
-                                  </span>
-                                );
-                              })()}
-
-                              {isManager && (
-                                dateAssignees.length > 0 ? (
-                                  <span 
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openAssignModal(ticketIdsForDate);
-                                    }}
-                                    title="Nhấn để phân công lại"
-                                  >
-                                    <i className="bi bi-person-fill" />
-                                    {dateAssignees.join(", ")}
-                                  </span>
-                                ) : (
-                                  <button 
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold text-blue-600 border border-blue-200 bg-white hover:bg-blue-50 transition-colors"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openAssignModal(ticketIdsForDate);
-                                    }}
-                                  >
-                                    <i className="bi bi-person-plus" />
-                                    Phân công
-                                  </button>
-                                )
-                              )}
-                            </div>
-                            <div>
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); if (canPick) handleCompleteClick(dateStr); }} 
-                                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-40 disabled:cursor-not-allowed shadow-xs transition-colors"
-                                disabled={!canPick || !groupedItems[dateStr]?.some(item => isBatchItemEdited(item))}
-                                title={!canPick ? "Chưa được cấp quyền Cấp phát vật tư & gom hàng" : undefined}
-                              >
-                                <i className="bi bi-send" /> Báo cáo
-                              </button>
-                            </div>
-                          </div>
+                        <td colSpan={2} className="table-cell md:hidden py-2.5 px-3 font-bold text-slate-800 border-b border-slate-200">
+                          {dateHeaderInner}
+                        </td>
+                        <td colSpan={5} className="hidden md:table-cell py-2.5 px-3.5 font-bold text-slate-800 border-b border-slate-200">
+                          {dateHeaderInner}
                         </td>
                       </tr>
                     );
@@ -1202,8 +1333,8 @@ export function LogisticsMaterialPicking() {
                         </td>
 
                         {/* Mặt hàng */}
-                        <td className="py-2.5 px-3.5 align-middle">
-                          <div className="flex items-center gap-3">
+                        <td className="py-2.5 px-3 md:px-3.5 align-middle overflow-hidden">
+                          <div className="flex items-start md:items-center gap-2.5 md:gap-3">
                             <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200/70 flex items-center justify-center overflow-hidden shrink-0">
                               {(item.imageUrl || (item.images && item.images.length > 0)) ? (
                                 <HoverImage 
@@ -1216,7 +1347,7 @@ export function LogisticsMaterialPicking() {
                                 <i className="bi bi-box-seam text-slate-400 text-base" />
                               )}
                             </div>
-                            <div className="min-w-0">
+                            <div className="min-w-0 flex-1">
                               <div className={`font-semibold text-[13px] truncate ${isFullyPicked ? "text-emerald-800" : isPicked ? "text-amber-800" : "text-slate-900"}`}>
                                 {item.tenHang}
                               </div>
@@ -1246,12 +1377,65 @@ export function LogisticsMaterialPicking() {
                                   </span>
                                 )}
                               </div>
+                              {/* Hiển thị các nội dung số lượng trong bảng xuống dưới badge Chờ nhặt trên màn hình điện thoại */}
+                              <div className="flex md:hidden items-center flex-wrap gap-x-3 gap-y-1 mt-1.5 text-[11px] text-slate-500">
+                                <span className="inline-flex items-center">
+                                  <span>Yêu cầu: <b className="font-mono font-bold text-slate-800">{item.tongSoLuong}</b></span>
+                                  {isManager && (
+                                    <>
+                                      <span className="text-slate-300 mx-1.5">|</span>
+                                      <b className="font-mono font-bold text-emerald-600" title="Số lượng thực tồn kho">{item.thucTon ?? 0}</b>
+                                    </>
+                                  )}
+                                </span>
+                                <span className="inline-flex items-center gap-1.5">
+                                  <span>Đã nhặt:</span>
+                                  <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    className={`w-14 h-6 px-1 text-center font-mono font-bold text-xs rounded border outline-none transition-all ${
+                                      isFullyPicked
+                                        ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                                        : isPicked
+                                        ? "border-amber-500 bg-amber-50 text-amber-800"
+                                        : "border-slate-300 bg-white text-slate-700"
+                                    } ${isEdited ? "ring-1 ring-amber-300" : ""}`}
+                                    value={currentInputQty > 0 ? currentInputQty : ""}
+                                    onChange={e => handleQuantityChange(item, e.target.value)}
+                                    onBlur={resetMobileViewportZoom}
+                                    onKeyDown={e => {
+                                      if (e.key === "Enter") e.currentTarget.blur();
+                                    }}
+                                    onClick={e => e.stopPropagation()}
+                                    min={0}
+                                    max={item.tongSoLuong}
+                                  />
+                                </span>
+                              </div>
+                              {/* Hiển thị thông tin các mã lệnh xuống dòng bên dưới, áp dụng truncate trên màn hình điện thoại */}
+                              {item.orders && item.orders.length > 0 && (
+                                <div
+                                  className="block md:hidden mt-1 text-[11px] text-slate-500 truncate"
+                                  title={item.orders.map(o => {
+                                    const oQty = pickedQuantities[o.ticketItemId] !== undefined ? pickedQuantities[o.ticketItemId] : (o.daNhatTrongDon || 0);
+                                    return `${o.code} (${oQty > 0 ? `${oQty}/${o.soLuongTrongDon}` : o.soLuongTrongDon})`;
+                                  }).join(", ")}
+                                >
+                                  <span className="text-slate-400">Mã lệnh: </span>
+                                  <span className="font-mono font-medium text-slate-700">
+                                    {item.orders.map((o, idx) => {
+                                      const oQty = pickedQuantities[o.ticketItemId] !== undefined ? pickedQuantities[o.ticketItemId] : (o.daNhatTrongDon || 0);
+                                      return `${idx > 0 ? ", " : ""}${o.code} (${oQty > 0 ? `${oQty}/${o.soLuongTrongDon}` : o.soLuongTrongDon})`;
+                                    }).join("")}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </td>
 
                         {/* Yêu cầu (và Thực tồn nếu là Thủ kho) */}
-                        <td className="text-center py-2.5 px-3.5 align-middle whitespace-nowrap">
+                        <td className="hidden md:table-cell text-center py-2.5 px-3.5 align-middle whitespace-nowrap">
                           <span className="inline-block min-w-[28px] px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-mono font-bold text-sm">
                             {item.tongSoLuong}
                           </span>
@@ -1266,7 +1450,7 @@ export function LogisticsMaterialPicking() {
                         </td>
 
                         {/* Đã nhặt */}
-                        <td className="text-center py-2.5 px-3.5 align-middle">
+                        <td className="hidden md:table-cell text-center py-2.5 px-3.5 align-middle">
                           <input 
                             type="number"
                             className={`w-20 h-8 text-center font-mono font-bold text-sm rounded-lg border outline-none transition-all ${
@@ -1284,7 +1468,7 @@ export function LogisticsMaterialPicking() {
                         </td>
 
                         {/* Chi tiết theo phiếu */}
-                        <td className="py-2.5 px-3.5 align-middle">
+                        <td className="hidden md:table-cell py-2.5 px-3.5 align-middle">
                           <div className="flex flex-wrap gap-1.5">
                             {item.orders.map((o, idx) => {
                               const oQty = pickedQuantities[o.ticketItemId] !== undefined ? pickedQuantities[o.ticketItemId] : (o.daNhatTrongDon || 0);
@@ -1330,7 +1514,11 @@ export function LogisticsMaterialPicking() {
   );
 
   return (
-    <div className="flex flex-col h-full flex-1 overflow-hidden" style={{ minHeight: 0 }}>
+    <div
+      className="flex flex-col h-full flex-1 overflow-hidden"
+      style={{ minHeight: 0 }}
+      onBlurCapture={resetMobileViewportZoom}
+    >
       {headerContent}
       
       <div className="flex-1 overflow-hidden flex flex-col min-h-0">

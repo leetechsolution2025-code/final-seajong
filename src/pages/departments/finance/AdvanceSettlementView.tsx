@@ -655,6 +655,7 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
     >
       {/* 1. KHỐI THỐNG KÊ TỔNG QUAN (KPI CARDS) */}
       <div
+        className="finance-settlement-kpi-grid"
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
@@ -774,6 +775,7 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
         actionsAfterSearch={
           <Button
             variant="secondary"
+            className="!hidden sm:!inline-flex"
             onClick={() => toggleAllExpand(!areAllExpanded)}
             style={{
               display: 'inline-flex',
@@ -791,9 +793,10 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
           </Button>
         }
         rightActions={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Button
               variant="secondary"
+              className="!hidden sm:!inline-flex"
               onClick={() => {
                 onShowToast?.('info', 'Xuất Excel', 'Đang trích xuất danh sách hoàn tạm ứng ra file Excel...');
               }}
@@ -822,7 +825,9 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
                 whiteSpace: 'nowrap',
               }}
             >
-              <Plus size={16} /> Lập phiếu hoàn ứng
+              <Plus size={16} />
+              <span className="hidden sm:inline">Lập phiếu hoàn ứng</span>
+              <span className="sm:hidden">Hoàn ứng</span>
             </Button>
           </div>
         }
@@ -883,15 +888,15 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
                   letterSpacing: '0.03em',
                 }}
               >
-                <th style={{ padding: '8px 14px', width: '55px', textAlign: 'center' }}>STT</th>
-                <th style={{ padding: '8px 14px', minWidth: '300px' }}>Mã phiếu / Nội dung tạm ứng và Dự án</th>
-                <th style={{ padding: '8px 14px', width: '220px' }}>Người xin tạm ứng</th>
-                <th style={{ padding: '8px 14px', width: '135px', textAlign: 'right' }}>Số tiền tạm ứng</th>
-                <th style={{ padding: '8px 14px', width: '145px', textAlign: 'right' }}>Thực chi quyết toán</th>
-                <th style={{ padding: '8px 14px', width: '160px', textAlign: 'right' }}>Chênh lệch thu / bù</th>
-                <th style={{ padding: '8px 14px', width: '115px', textAlign: 'center' }}>Hạn hoàn ứng</th>
-                <th style={{ padding: '8px 14px', width: '140px', textAlign: 'center' }}>Trạng thái</th>
-                <th style={{ padding: '8px 14px', width: '110px', textAlign: 'center' }}>Thao tác</th>
+                <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '55px', textAlign: 'center' }}>STT</th>
+                <th style={{ padding: '8px 14px' }}>Mã phiếu / Nội dung</th>
+                <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '220px' }}>Người xin tạm ứng</th>
+                <th style={{ padding: '8px 14px', width: '130px', textAlign: 'right' }}>Số tiền tạm ứng</th>
+                <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '145px', textAlign: 'right' }}>Thực chi quyết toán</th>
+                <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '160px', textAlign: 'right' }}>Chênh lệch thu / bù</th>
+                <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '115px', textAlign: 'center' }}>Hạn hoàn ứng</th>
+                <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '140px', textAlign: 'center' }}>Trạng thái</th>
+                <th style={{ padding: '8px 14px', width: '90px', textAlign: 'center' }}>Thao tác</th>
               </tr>
             </thead>
 
@@ -960,7 +965,7 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
                           }}
                         >
                           {/* Nút toggle và STT nhóm */}
-                          <td style={{ padding: '7px 14px', textAlign: 'center' }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center' }}>
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                               <Button
                                 type="button"
@@ -1009,13 +1014,18 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
                                 [{group.items.map((it) => it.advanceCode).join(', ')}]
                               </span>
                             </div>
+                            <div className="sm:hidden flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[11px] text-slate-600">
+                              <span className="font-bold text-slate-800">{group.employeeName}</span>
+                              <span>•</span>
+                              <span>Thực chi: <strong className="font-mono text-emerald-700">{formatCurrency(group.totalActualSpent)}</strong></span>
+                            </div>
                             <div style={{ fontSize: '0.71875rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                               Nhấn để {isExpanded ? 'thu gọn' : 'mở rộng xem chi tiết từng khoản'}
                             </div>
                           </td>
 
                           {/* Tên nhân viên và Bộ phận */}
-                          <td style={{ padding: '7px 14px' }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '7px 14px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <div
                                 style={{
@@ -1046,7 +1056,7 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
                           </td>
 
                           {/* Tổng tiền tạm ứng */}
-                          <td style={{ padding: '7px 14px', textAlign: 'right' }}>
+                          <td style={{ padding: '7px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                             <div style={{ fontWeight: 700, fontSize: '0.84375rem', color: 'var(--text-primary)' }}>
                               {formatCurrency(group.totalAdvance)}
                             </div>
@@ -1056,7 +1066,7 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
                           </td>
 
                           {/* Tổng thực chi quyết toán */}
-                          <td style={{ padding: '7px 14px', textAlign: 'right' }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'right' }}>
                             <div style={{ fontWeight: 700, fontSize: '0.84375rem', color: '#059669' }}>
                               {formatCurrency(group.totalActualSpent)}
                             </div>
@@ -1066,12 +1076,12 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
                           </td>
 
                           {/* Tổng chênh lệch thu / bù */}
-                          <td style={{ padding: '7px 14px', textAlign: 'right' }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'right' }}>
                             {renderDifferenceBadge(group.totalAdvance, group.totalActualSpent, 'processing')}
                           </td>
 
                           {/* Tiến độ hoàn ứng */}
-                          <td style={{ padding: '7px 14px', textAlign: 'center' }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center' }}>
                             <span
                               style={{
                                 display: 'inline-flex',
@@ -1089,7 +1099,7 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
                           </td>
 
                           {/* Trạng thái tổng hợp */}
-                          <td style={{ padding: '7px 14px', textAlign: 'center' }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center' }}>
                             {group.overdueCount > 0 ? (
                               <span
                                 style={{
@@ -1179,7 +1189,7 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
                               }}
                             >
                               {/* Sub STT */}
-                              <td style={{ padding: '7px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
+                              <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
                                 <span
                                   style={{
                                     fontSize: '0.71875rem',
@@ -1264,10 +1274,15 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
                                 >
                                   <Building size={10} /> Dự án: <strong style={{ color: 'var(--text-primary)' }}>{subItem.project}</strong>
                                 </div>
+                                <div className="sm:hidden flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[11px] text-slate-600">
+                                  <span>Thực chi: <strong className="font-mono text-emerald-700">{subItem.actualSpent > 0 ? formatCurrency(subItem.actualSpent) : '—'}</strong></span>
+                                  <span>•</span>
+                                  <span>Hạn: <strong className="font-mono text-slate-700">{subItem.deadlineRefund}</strong></span>
+                                </div>
                               </td>
 
                               {/* Người duyệt và Ngày duyệt giải ngân */}
-                              <td style={{ padding: '7px 14px', verticalAlign: 'middle' }}>
+                              <td className="hidden sm:table-cell" style={{ padding: '7px 14px', verticalAlign: 'middle' }}>
                                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                                   Duyệt: <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{subItem.approver}</span>
                                 </div>
@@ -1277,14 +1292,14 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
                               </td>
 
                               {/* Tiền tạm ứng */}
-                              <td style={{ padding: '7px 14px', textAlign: 'right', verticalAlign: 'middle' }}>
+                              <td style={{ padding: '7px 14px', textAlign: 'right', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
                                 <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--text-primary)' }}>
                                   {formatCurrency(subItem.advanceAmount)}
                                 </div>
                               </td>
 
                               {/* Thực chi */}
-                              <td style={{ padding: '7px 14px', textAlign: 'right', verticalAlign: 'middle' }}>
+                              <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'right', verticalAlign: 'middle' }}>
                                 <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: subItem.actualSpent > 0 ? '#059669' : 'var(--text-muted)' }}>
                                   {subItem.actualSpent > 0 ? formatCurrency(subItem.actualSpent) : '—'}
                                 </div>
@@ -1296,12 +1311,12 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
                               </td>
 
                               {/* Chênh lệch thu / bù */}
-                              <td style={{ padding: '7px 14px', textAlign: 'right', verticalAlign: 'middle' }}>
+                              <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'right', verticalAlign: 'middle' }}>
                                 {renderDifferenceBadge(subItem.advanceAmount, subItem.actualSpent, subItem.status)}
                               </td>
 
                               {/* Hạn hoàn ứng */}
-                              <td style={{ padding: '7px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
+                              <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
                                 <div
                                   style={{
                                     fontSize: '0.78125rem',
@@ -1314,7 +1329,7 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
                               </td>
 
                               {/* Trạng thái */}
-                              <td style={{ padding: '7px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
+                              <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
                                 {renderStatusBadge(subItem.status)}
                               </td>
 
@@ -1408,7 +1423,7 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
                       }}
                     >
                       {/* STT */}
-                      <td style={{ padding: '7px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
+                      <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
                         <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{stt}</span>
                       </td>
 
@@ -1478,10 +1493,15 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
                         >
                           <Building size={10} /> Dự án: <strong style={{ color: 'var(--text-primary)' }}>{singleItem.project}</strong>
                         </div>
+                        <div className="sm:hidden flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[11px] text-slate-600">
+                          <span className="font-semibold text-slate-800">{singleItem.employeeName}</span>
+                          <span>•</span>
+                          <span>Thực chi: <strong className="font-mono text-emerald-700">{singleItem.actualSpent > 0 ? formatCurrency(singleItem.actualSpent) : '—'}</strong></span>
+                        </div>
                       </td>
 
                       {/* Người xin tạm ứng và Bộ phận */}
-                      <td style={{ padding: '7px 14px', verticalAlign: 'middle' }}>
+                      <td className="hidden sm:table-cell" style={{ padding: '7px 14px', verticalAlign: 'middle' }}>
                         <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.8125rem' }}>
                           {singleItem.employeeName}
                         </div>
@@ -1491,14 +1511,14 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
                       </td>
 
                       {/* Tiền tạm ứng */}
-                      <td style={{ padding: '7px 14px', textAlign: 'right', verticalAlign: 'middle' }}>
+                      <td style={{ padding: '7px 14px', textAlign: 'right', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
                         <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--text-primary)' }}>
                           {formatCurrency(singleItem.advanceAmount)}
                         </div>
                       </td>
 
                       {/* Thực chi */}
-                      <td style={{ padding: '7px 14px', textAlign: 'right', verticalAlign: 'middle' }}>
+                      <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'right', verticalAlign: 'middle' }}>
                         <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: singleItem.actualSpent > 0 ? '#059669' : 'var(--text-muted)' }}>
                           {singleItem.actualSpent > 0 ? formatCurrency(singleItem.actualSpent) : '—'}
                         </div>
@@ -1510,12 +1530,12 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
                       </td>
 
                       {/* Chênh lệch thu / bù */}
-                      <td style={{ padding: '7px 14px', textAlign: 'right', verticalAlign: 'middle' }}>
+                      <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'right', verticalAlign: 'middle' }}>
                         {renderDifferenceBadge(singleItem.advanceAmount, singleItem.actualSpent, singleItem.status)}
                       </td>
 
                       {/* Hạn hoàn ứng */}
-                      <td style={{ padding: '7px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
+                      <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
                         <div
                           style={{
                             fontSize: '0.78125rem',
@@ -1528,7 +1548,7 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
                       </td>
 
                       {/* Trạng thái */}
-                      <td style={{ padding: '7px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
+                      <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
                         {renderStatusBadge(singleItem.status)}
                       </td>
 

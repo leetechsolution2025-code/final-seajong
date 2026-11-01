@@ -38,6 +38,7 @@ export const RecruitmentPage: React.FC = () => {
       num: 1,
       id: 'recruitment-requests',
       title: 'Yêu cầu tuyển dụng',
+      mobileTitle: 'Yêu cầu',
       desc: 'Nhu cầu định biên các bộ phận',
       icon: <PersonPlus size={16} />,
       badge: `${counts.requests} yêu cầu`,
@@ -48,6 +49,7 @@ export const RecruitmentPage: React.FC = () => {
       num: 2,
       id: 'recruitment-candidates',
       title: 'Danh sách ứng viên',
+      mobileTitle: 'Ứng viên',
       desc: 'Hồ sơ CV và sàng lọc ứng viên',
       icon: <PersonBadge size={16} />,
       badge: `${counts.candidates} hồ sơ`,
@@ -58,6 +60,7 @@ export const RecruitmentPage: React.FC = () => {
       num: 3,
       id: 'recruitment-interviews',
       title: 'Danh sách phỏng vấn',
+      mobileTitle: 'Phỏng vấn',
       desc: 'Lịch phỏng vấn và đánh giá kết quả',
       icon: <CalendarCheck size={16} />,
       badge: `${counts.interviews} lịch PV`,
@@ -75,6 +78,7 @@ export const RecruitmentPage: React.FC = () => {
       steps={steps}
       currentStep={currentStep}
       onStepChange={(step) => setCurrentStep(Number(step))}
+      className="hr-recruitment-step-page"
     >
       <RecruitmentManagementView
         currentStep={currentStep}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   CashCoin,
   ArrowUpRight,
@@ -99,6 +99,37 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
   const [lastUpdated, setLastUpdated] = useState<string>(() => new Date().toLocaleTimeString('vi-VN'));
   const [isEventDrawerOpen, setIsEventDrawerOpen] = useState<boolean>(false);
   const [noticeTab, setNoticeTab] = useState<'all' | 'inflow' | 'outflow'>('all');
+
+  // Responsive state cho màn hình điện thoại (<= 768px)
+  const [isMobileView, setIsMobileView] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+  );
+  const [mobileSlide, setMobileSlide] = useState<1 | 2>(1);
+  const touchStartXRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileView(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const handleMobileTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isMobileView) return;
+    touchStartXRef.current = e.touches[0]?.clientX ?? null;
+  };
+
+  const handleMobileTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isMobileView || touchStartXRef.current === null) return;
+    const endX = e.changedTouches[0]?.clientX ?? touchStartXRef.current;
+    const deltaX = endX - touchStartXRef.current;
+    if (Math.abs(deltaX) > 50) {
+      if (deltaX < 0 && mobileSlide === 1) setMobileSlide(2);
+      else if (deltaX > 0 && mobileSlide === 2) setMobileSlide(1);
+    }
+    touchStartXRef.current = null;
+  };
 
   const [cashBalance, setCashBalance] = useState<number>(() => {
     try {
@@ -376,11 +407,13 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
   return (
     <div
       className="custom-scrollbar"
+      onTouchStart={handleMobileTouchStart}
+      onTouchEnd={handleMobileTouchEnd}
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: '14px',
-        padding: '16px 20px 24px 20px',
+        gap: isMobileView ? '10px' : '14px',
+        padding: isMobileView ? '10px 10px 16px 10px' : '16px 20px 24px 20px',
         backgroundColor: 'var(--bg-surface-1)',
         height: '100%',
         maxHeight: '100%',
@@ -395,47 +428,51 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
           flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: '10px',
-          paddingBottom: '12px',
+          gap: isMobileView ? '6px' : '10px',
+          paddingBottom: isMobileView ? '8px' : '12px',
           borderBottom: '1px solid var(--border-subtle)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '4px 10px',
-              borderRadius: '20px',
-              backgroundColor: 'rgba(16, 185, 129, 0.1)',
-              color: '#10b981',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-            }}
-          >
-            <span
+        {!isMobileView && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div
               style={{
-                width: '7px',
-                height: '7px',
-                borderRadius: '50%',
-                backgroundColor: '#10b981',
-                boxShadow: '0 0 6px #10b981',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 10px',
+                borderRadius: '20px',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                color: '#10b981',
+                fontSize: '0.75rem',
+                fontWeight: 700,
               }}
-            />
-            Dữ liệu thời gian thực
+            >
+              <span
+                style={{
+                  width: '7px',
+                  height: '7px',
+                  borderRadius: '50%',
+                  backgroundColor: '#10b981',
+                  boxShadow: '0 0 6px #10b981',
+                }}
+              />
+              Dữ liệu thời gian thực
+            </div>
+            <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+              Cập nhật tự động lúc <strong>{lastUpdated}</strong>
+            </span>
           </div>
-          <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-            Cập nhật tự động lúc <strong>{lastUpdated}</strong>
-          </span>
-        </div>
+        )}
 
         {/* Nút lọc kỳ và Thao tác */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: isMobileView ? '100%' : 'auto' }}>
           <div
             style={{
-              display: 'inline-flex',
+              display: isMobileView ? 'flex' : 'inline-flex',
               alignItems: 'center',
+              justifyContent: isMobileView ? 'space-between' : undefined,
+              width: isMobileView ? '100%' : 'auto',
               backgroundColor: 'var(--bg-surface-2)',
               padding: '3px',
               borderRadius: 'var(--radius-md)',
@@ -446,11 +483,13 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
             <button
               type="button"
               onClick={() => setIsEventDrawerOpen(true)}
+              title="Lịch sự kiện"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: '5px',
-                padding: '4px 10px',
+                padding: isMobileView ? '5px 8px' : '4px 10px',
                 borderRadius: 'var(--radius-sm)',
                 fontSize: '0.75rem',
                 fontWeight: isEventDrawerOpen ? 700 : 500,
@@ -459,18 +498,21 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                 border: 'none',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
+                flexShrink: 0,
               }}
             >
               <CalendarEvent size={13} color="var(--color-primary)" />
-              Lịch sự kiện
+              {!isMobileView && 'Lịch sự kiện'}
             </button>
 
-            <span style={{ color: 'var(--border-subtle)', margin: '0 4px', userSelect: 'none', opacity: 0.8 }}>|</span>
+            <span style={{ color: 'var(--border-subtle)', margin: isMobileView ? '0 2px' : '0 4px', userSelect: 'none', opacity: 0.8 }}>|</span>
 
             <div
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
+                justifyContent: 'center',
+                flex: isMobileView ? 1 : undefined,
                 borderRadius: 'var(--radius-sm)',
                 backgroundColor: selectedPeriod === 'month' ? 'var(--color-primary)' : 'transparent',
                 color: selectedPeriod === 'month' ? '#ffffff' : 'var(--text-secondary)',
@@ -489,7 +531,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '4px 5px 4px 7px',
+                  padding: isMobileView ? '4px 4px' : '4px 5px 4px 7px',
                   background: 'transparent',
                   border: 'none',
                   color: 'inherit',
@@ -504,7 +546,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                 onClick={() => setSelectedPeriod('month')}
                 style={{
                   padding: '4px 4px',
-                  fontSize: '0.75rem',
+                  fontSize: isMobileView ? '0.72rem' : '0.75rem',
                   fontWeight: selectedPeriod === 'month' ? 700 : 500,
                   background: 'transparent',
                   color: 'inherit',
@@ -527,7 +569,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '4px 7px 4px 5px',
+                  padding: isMobileView ? '4px 4px' : '4px 7px 4px 5px',
                   background: 'transparent',
                   border: 'none',
                   color: 'inherit',
@@ -542,15 +584,17 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
               type="button"
               onClick={() => setSelectedPeriod('quarter')}
               style={{
-                padding: '4px 12px',
+                padding: isMobileView ? '4px 8px' : '4px 12px',
+                flex: isMobileView ? 1 : undefined,
                 borderRadius: 'var(--radius-sm)',
-                fontSize: '0.75rem',
+                fontSize: isMobileView ? '0.72rem' : '0.75rem',
                 fontWeight: selectedPeriod === 'quarter' ? 700 : 500,
                 backgroundColor: selectedPeriod === 'quarter' ? 'var(--color-primary)' : 'transparent',
                 color: selectedPeriod === 'quarter' ? '#ffffff' : 'var(--text-secondary)',
                 border: 'none',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
+                whiteSpace: 'nowrap',
               }}
             >
               {currentPeriodLabels.quarter}
@@ -559,335 +603,357 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
               type="button"
               onClick={() => setSelectedPeriod('year')}
               style={{
-                padding: '4px 12px',
+                padding: isMobileView ? '4px 8px' : '4px 12px',
+                flex: isMobileView ? 1 : undefined,
                 borderRadius: 'var(--radius-sm)',
-                fontSize: '0.75rem',
+                fontSize: isMobileView ? '0.72rem' : '0.75rem',
                 fontWeight: selectedPeriod === 'year' ? 700 : 500,
                 backgroundColor: selectedPeriod === 'year' ? 'var(--color-primary)' : 'transparent',
                 color: selectedPeriod === 'year' ? '#ffffff' : 'var(--text-secondary)',
                 border: 'none',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
+                whiteSpace: 'nowrap',
               }}
             >
               {currentPeriodLabels.year}
             </button>
           </div>
 
-          {/* Nút Ba Chấm ở cuối thanh công cụ (không dùng border) */}
-          <DepartmentActionMenu
-            noBorder={true}
-            extraItems={[
-              {
-                id: 'refresh-data',
-                icon: <ArrowRepeat className="text-emerald-600 text-[15px] shrink-0" />,
-                title: 'Làm mới dữ liệu',
-                description: 'Đồng bộ sổ quỹ và công nợ thực tế',
-                onClick: () => {
-                  loadRealStats(selectedPeriod, selectedMonth);
-                  setLastUpdated(new Date().toLocaleTimeString('vi-VN'));
-                  onShowToast?.('success', 'Đã đồng bộ', 'Số liệu dòng tiền và công nợ đã được làm mới');
+          {/* Nút Ba Chấm ở cuối thanh công cụ (chỉ hiển thị trên Desktop) */}
+          {!isMobileView && (
+            <DepartmentActionMenu
+              noBorder={true}
+              extraItems={[
+                {
+                  id: 'refresh-data',
+                  icon: <ArrowRepeat className="text-emerald-600 text-[15px] shrink-0" />,
+                  title: 'Làm mới dữ liệu',
+                  description: 'Đồng bộ sổ quỹ và công nợ thực tế',
+                  onClick: () => {
+                    loadRealStats(selectedPeriod, selectedMonth);
+                    setLastUpdated(new Date().toLocaleTimeString('vi-VN'));
+                    onShowToast?.('success', 'Đã đồng bộ', 'Số liệu dòng tiền và công nợ đã được làm mới');
+                  },
                 },
-              },
-              {
-                id: 'print-overview',
-                icon: <Printer className="text-blue-600 text-[15px] shrink-0" />,
-                title: 'In báo cáo tổng quan',
-                description: 'Xuất bản in tổng quan tài chính',
-                onClick: () => {
-                  window.print();
+                {
+                  id: 'print-overview',
+                  icon: <Printer className="text-blue-600 text-[15px] shrink-0" />,
+                  title: 'In báo cáo tổng quan',
+                  description: 'Xuất bản in tổng quan tài chính',
+                  onClick: () => {
+                    window.print();
+                  },
                 },
-              },
-            ]}
-          />
+              ]}
+            />
+          )}
         </div>
       </div>
 
       {/* ── 2. HÀNG 4 THẺ CHỈ SỐ KPI TÀI CHÍNH THEN CHỐT ── */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-          gap: '12px',
-        }}
-      >
-        {/* KPI 1: Số dư khả dụng */}
+      {(!isMobileView || mobileSlide === 1) && (
         <div
           style={{
-            backgroundColor: 'var(--bg-surface-2)',
-            padding: '12px 16px',
-            borderRadius: 'var(--radius-lg)',
-            border: '1px solid var(--border-subtle)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '6px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+            display: 'grid',
+            gridTemplateColumns: isMobileView ? 'repeat(2, minmax(0, 1fr))' : 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: isMobileView ? '8px' : '12px',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Bank size={14} color="#0284c7" /> Số dư tồn quỹ
-            </span>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '2px',
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                color: '#10b981',
-                backgroundColor: 'rgba(16, 185, 129, 0.12)',
-                padding: '1px 6px',
-                borderRadius: '4px',
-              }}
-            >
-              Thực tế
-            </span>
-          </div>
-
-          <div style={{ fontSize: '1.375rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-            {formatVND(cashBalance)}
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-              <span>
-                {selectedPeriod === 'month'
-                  ? `Tồn quỹ đầu tháng: ${formatVND(periodStats.openingCashBalance)}`
-                  : selectedPeriod === 'quarter'
-                  ? `Tồn quỹ đầu quý: ${formatVND(periodStats.openingCashBalance)}`
-                  : `Tồn quỹ đầu năm: ${formatVND(periodStats.openingCashBalance)}`}
+          {/* KPI 1: Số dư khả dụng */}
+          <div
+            style={{
+              backgroundColor: 'var(--bg-surface-2)',
+              padding: isMobileView ? '10px' : '12px 16px',
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid var(--border-subtle)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: isMobileView ? '4px' : '6px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+              minWidth: 0,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: isMobileView ? '0.72rem' : '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <Bank size={isMobileView ? 12 : 14} color="#0284c7" className="shrink-0" /> Số dư tồn quỹ
               </span>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '2px',
+                  fontSize: isMobileView ? '0.6rem' : '0.6875rem',
+                  fontWeight: 700,
+                  color: '#10b981',
+                  backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                  padding: isMobileView ? '1px 4px' : '1px 6px',
+                  borderRadius: '4px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
+                Thực tế
+              </span>
+            </div>
+
+            <div style={{ fontSize: isMobileView ? '0.95rem' : '1.375rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {formatVND(cashBalance)}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: isMobileView ? '0.625rem' : '0.6875rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {selectedPeriod === 'month'
+                    ? `Đầu tháng: ${formatVND(periodStats.openingCashBalance)}`
+                    : selectedPeriod === 'quarter'
+                    ? `Đầu quý: ${formatVND(periodStats.openingCashBalance)}`
+                    : `Đầu năm: ${formatVND(periodStats.openingCashBalance)}`}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ fontSize: isMobileView ? '0.625rem' : '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {isMobileView ? 'Sổ quỹ TM (1111) & NH (1121)' : 'Đồng bộ từ sổ quỹ TM (1111) và tiền gửi NH (1121)'}
             </div>
           </div>
 
-          <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
-            Đồng bộ từ sổ quỹ TM (1111) và tiền gửi NH (1121)
-          </div>
-        </div>
-
-        {/* KPI 2: Dòng tiền thực thu */}
-        <div
-          style={{
-            backgroundColor: 'var(--bg-surface-2)',
-            padding: '12px 16px',
-            borderRadius: 'var(--radius-lg)',
-            border: '1px solid var(--border-subtle)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '6px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <CashCoin size={14} color="#10b981" /> Tổng thực thu
-            </span>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '2px',
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                color: '#10b981',
-                backgroundColor: 'rgba(16, 185, 129, 0.12)',
-                padding: '1px 6px',
-                borderRadius: '4px',
-              }}
-            >
-              {selectedPeriod === 'month' ? currentPeriodLabels.month : selectedPeriod === 'quarter' ? currentPeriodLabels.quarter : currentPeriodLabels.year}
-            </span>
-          </div>
-
-          <div style={{ fontSize: '1.375rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-            {formatVND(revenueTotal)}
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-              <span>
-                {selectedPeriod === 'month'
-                  ? `Thu hồi nợ và bán hàng trong ${currentPeriodLabels.month}`
-                  : selectedPeriod === 'quarter'
-                  ? 'Tổng thực thu lũy kế 3 tháng trong Quý'
-                  : `Tổng thực thu lũy kế cả ${currentPeriodLabels.year}`}
+          {/* KPI 2: Dòng tiền thực thu */}
+          <div
+            style={{
+              backgroundColor: 'var(--bg-surface-2)',
+              padding: isMobileView ? '10px' : '12px 16px',
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid var(--border-subtle)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: isMobileView ? '4px' : '6px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+              minWidth: 0,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: isMobileView ? '0.72rem' : '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <CashCoin size={isMobileView ? 12 : 14} color="#10b981" className="shrink-0" /> Tổng thực thu
               </span>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '2px',
+                  fontSize: isMobileView ? '0.6rem' : '0.6875rem',
+                  fontWeight: 700,
+                  color: '#10b981',
+                  backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                  padding: isMobileView ? '1px 4px' : '1px 6px',
+                  borderRadius: '4px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
+                {selectedPeriod === 'month' ? currentPeriodLabels.month : selectedPeriod === 'quarter' ? currentPeriodLabels.quarter : currentPeriodLabels.year}
+              </span>
+            </div>
+
+            <div style={{ fontSize: isMobileView ? '0.95rem' : '1.375rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {formatVND(revenueTotal)}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: isMobileView ? '0.625rem' : '0.6875rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {selectedPeriod === 'month'
+                    ? `Thu hồi nợ & bán hàng ${currentPeriodLabels.month}`
+                    : selectedPeriod === 'quarter'
+                    ? 'Lũy kế 3 tháng trong Quý'
+                    : `Lũy kế cả ${currentPeriodLabels.year}`}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ fontSize: isMobileView ? '0.625rem' : '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {isMobileView ? 'Từ HĐ bán hàng & phiếu thu' : 'Đồng bộ từ hợp đồng bán hàng và phiếu thu thực tế'}
             </div>
           </div>
 
-          <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
-            Đồng bộ từ hợp đồng bán hàng và phiếu thu thực tế
-          </div>
-        </div>
-
-        {/* KPI 3: Tổng giải ngân và Chi phí */}
-        <div
-          style={{
-            backgroundColor: 'var(--bg-surface-2)',
-            padding: '12px 16px',
-            borderRadius: 'var(--radius-lg)',
-            border: '1px solid var(--border-subtle)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '6px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <CashStack size={14} color="#f43f5e" /> Tổng thực chi
-            </span>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '2px',
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                color: '#10b981',
-                backgroundColor: 'rgba(16, 185, 129, 0.12)',
-                padding: '1px 6px',
-                borderRadius: '4px',
-              }}
-            >
-              {selectedPeriod === 'month' ? currentPeriodLabels.month : selectedPeriod === 'quarter' ? currentPeriodLabels.quarter : currentPeriodLabels.year}
-            </span>
-          </div>
-
-          <div style={{ fontSize: '1.375rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-            {formatVND(expensesTotal)}
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-              <span>
-                {selectedPeriod === 'month'
-                  ? `Chi phí quản lý, bán hàng, SX trong ${currentPeriodLabels.month}`
-                  : selectedPeriod === 'quarter'
-                  ? 'Tổng thực chi lũy kế 3 tháng trong Quý'
-                  : `Tổng thực chi lũy kế cả ${currentPeriodLabels.year}`}
+          {/* KPI 3: Tổng giải ngân và Chi phí */}
+          <div
+            style={{
+              backgroundColor: 'var(--bg-surface-2)',
+              padding: isMobileView ? '10px' : '12px 16px',
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid var(--border-subtle)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: isMobileView ? '4px' : '6px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+              minWidth: 0,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: isMobileView ? '0.72rem' : '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <CashStack size={isMobileView ? 12 : 14} color="#f43f5e" className="shrink-0" /> Tổng thực chi
               </span>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '2px',
+                  fontSize: isMobileView ? '0.6rem' : '0.6875rem',
+                  fontWeight: 700,
+                  color: '#10b981',
+                  backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                  padding: isMobileView ? '1px 4px' : '1px 6px',
+                  borderRadius: '4px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
+                {selectedPeriod === 'month' ? currentPeriodLabels.month : selectedPeriod === 'quarter' ? currentPeriodLabels.quarter : currentPeriodLabels.year}
+              </span>
+            </div>
+
+            <div style={{ fontSize: isMobileView ? '0.95rem' : '1.375rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {formatVND(expensesTotal)}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: isMobileView ? '0.625rem' : '0.6875rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {selectedPeriod === 'month'
+                    ? `Chi phí QL, BH, SX ${currentPeriodLabels.month}`
+                    : selectedPeriod === 'quarter'
+                    ? 'Lũy kế 3 tháng trong Quý'
+                    : `Lũy kế cả ${currentPeriodLabels.year}`}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ fontSize: isMobileView ? '0.625rem' : '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {isMobileView ? 'Từ Quản lý chi phí & phiếu chi' : 'Đồng bộ từ phân hệ Quản lý chi phí và phiếu chi'}
             </div>
           </div>
 
-          <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
-            Đồng bộ từ phân hệ Quản lý chi phí và phiếu chi
-          </div>
-        </div>
-
-        {/* KPI 4: Công nợ phải thu */}
-        <div
-          onClick={() => onNavigate?.('debt-cost-mgmt')}
-          style={{
-            backgroundColor: 'var(--bg-surface-2)',
-            padding: '12px 16px',
-            borderRadius: 'var(--radius-lg)',
-            border: '1px solid var(--border-subtle)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '6px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-            cursor: onNavigate ? 'pointer' : 'default',
-          }}
-          title={onNavigate ? 'Nhấp để xem chi tiết Quản lý Công nợ' : undefined}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <CreditCard size={14} color="#8b5cf6" /> Công nợ phải thu
-            </span>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '2px',
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                color: '#0284c7',
-                backgroundColor: 'rgba(2, 132, 199, 0.12)',
-                padding: '1px 6px',
-                borderRadius: '4px',
-              }}
-            >
-              {selectedPeriod === 'month' ? currentPeriodLabels.month : selectedPeriod === 'quarter' ? currentPeriodLabels.quarter : currentPeriodLabels.year}
-            </span>
-          </div>
-
-          <div style={{ fontSize: '1.375rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-            {formatVND(receivablesTotal)}
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-              <span>
-                {selectedPeriod === 'month'
-                  ? `Phát sinh trong tháng: ${formatVND(periodStats.receivablesInvoiced)}`
-                  : selectedPeriod === 'quarter'
-                  ? `Phát sinh trong quý: ${formatVND(periodStats.receivablesInvoiced)}`
-                  : `Tổng phát sinh năm: ${formatVND(periodStats.receivablesInvoiced)}`}
+          {/* KPI 4: Công nợ phải thu */}
+          <div
+            onClick={() => onNavigate?.('debt-cost-mgmt')}
+            style={{
+              backgroundColor: 'var(--bg-surface-2)',
+              padding: isMobileView ? '10px' : '12px 16px',
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid var(--border-subtle)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: isMobileView ? '4px' : '6px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+              cursor: onNavigate ? 'pointer' : 'default',
+              minWidth: 0,
+            }}
+            title={onNavigate ? 'Nhấp để xem chi tiết Quản lý Công nợ' : undefined}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: isMobileView ? '0.72rem' : '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <CreditCard size={isMobileView ? 12 : 14} color="#8b5cf6" className="shrink-0" /> Công nợ phải thu
+              </span>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '2px',
+                  fontSize: isMobileView ? '0.6rem' : '0.6875rem',
+                  fontWeight: 700,
+                  color: '#0284c7',
+                  backgroundColor: 'rgba(2, 132, 199, 0.12)',
+                  padding: isMobileView ? '1px 4px' : '1px 6px',
+                  borderRadius: '4px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
+                {selectedPeriod === 'month' ? currentPeriodLabels.month : selectedPeriod === 'quarter' ? currentPeriodLabels.quarter : currentPeriodLabels.year}
               </span>
             </div>
-          </div>
 
-          <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
-            {selectedPeriod === 'year'
-              ? `Đã thu hồi trong năm: ${formatVND(periodStats.receivablesCollected)}`
-              : `Tổng dư nợ lũy kế hiện tại: ${formatVND(periodStats.receivablesCumulative)}`}
+            <div style={{ fontSize: isMobileView ? '0.95rem' : '1.375rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {formatVND(receivablesTotal)}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: isMobileView ? '0.625rem' : '0.6875rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {selectedPeriod === 'month'
+                    ? `Phát sinh: ${formatVND(periodStats.receivablesInvoiced)}`
+                    : selectedPeriod === 'quarter'
+                    ? `Phát sinh quý: ${formatVND(periodStats.receivablesInvoiced)}`
+                    : `Phát sinh năm: ${formatVND(periodStats.receivablesInvoiced)}`}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ fontSize: isMobileView ? '0.625rem' : '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {selectedPeriod === 'year'
+                ? `Đã thu hồi: ${formatVND(periodStats.receivablesCollected)}`
+                : `Dư nợ lũy kế: ${formatVND(periodStats.receivablesCumulative)}`}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* ── 3. KHỐI BIỂU ĐỒ TRỰC QUAN (DÒNG TIỀN VÀO - RA VÀ TUỔI NỢ PHẢI THU) ── */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1.2fr)',
-          gap: '14px',
+          gridTemplateColumns: isMobileView ? 'minmax(0, 1fr)' : 'minmax(0, 1.8fr) minmax(0, 1.2fr)',
+          gap: isMobileView ? '10px' : '14px',
           flex: 1,
-          minHeight: '320px',
+          minHeight: isMobileView ? 'auto' : '320px',
         }}
       >
         {/* Biểu đồ Dòng tiền Thu - Chi theo tháng */}
         <div
           style={{
             backgroundColor: 'var(--bg-surface-2)',
-            padding: '16px 20px',
+            padding: isMobileView ? '12px 12px' : '16px 20px',
             borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--border-subtle)',
-            display: 'flex',
+            display: !isMobileView || mobileSlide === 1 ? 'flex' : 'none',
             flexDirection: 'column',
-            gap: '10px',
+            gap: isMobileView ? '8px' : '10px',
             boxSizing: 'border-box',
             height: '100%',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
             <div>
-              <h3 style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 2px 0', textTransform: 'uppercase', letterSpacing: '0.025em' }}>
+              <h3 style={{ fontSize: isMobileView ? '0.8125rem' : '0.875rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 2px 0', textTransform: 'uppercase', letterSpacing: '0.025em' }}>
                 Diễn biến dòng tiền thu - chi 6 tháng gần nhất
               </h3>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
-                So sánh Dòng tiền vào, Dòng tiền ra và Số dư quỹ tích lũy
-              </p>
+              {!isMobileView && (
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
+                  So sánh Dòng tiền vào, Dòng tiền ra và Số dư quỹ tích lũy
+                </p>
+              )}
             </div>
 
-            {/* Chú giải Legend */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '0.75rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#10b981' }} />
-                <span style={{ color: 'var(--text-secondary)' }}>Tiền vào</span>
+            {/* Chú giải Legend (trên Desktop hiển thị ở header) */}
+            {!isMobileView && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#10b981' }} />
+                  <span style={{ color: 'var(--text-secondary)' }}>Tiền vào</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#f43f5e' }} />
+                  <span style={{ color: 'var(--text-secondary)' }}>Tiền ra</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ width: '16px', height: '2px', backgroundColor: '#0284c7', position: 'relative' }}>
+                    <span style={{ position: 'absolute', top: '-3px', left: '4px', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#0284c7' }} />
+                  </span>
+                  <span style={{ color: 'var(--text-secondary)', marginLeft: '4px' }}>Số dư quỹ</span>
+                </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#f43f5e' }} />
-                <span style={{ color: 'var(--text-secondary)' }}>Tiền ra</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ width: '16px', height: '2px', backgroundColor: '#0284c7', position: 'relative' }}>
-                  <span style={{ position: 'absolute', top: '-3px', left: '4px', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#0284c7' }} />
-                </span>
-                <span style={{ color: 'var(--text-secondary)', marginLeft: '4px' }}>Số dư quỹ</span>
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Vùng vẽ biểu đồ Bar Chart + Trendline Line Số dư quỹ bằng SVG thống nhất */}
@@ -896,17 +962,17 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
               position: 'relative',
               width: '100%',
               flex: 1,
-              minHeight: 0,
+              minHeight: isMobileView ? '205px' : 0,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              paddingTop: '8px',
+              paddingTop: isMobileView ? '2px' : '8px',
             }}
           >
             <svg
-              viewBox="0 0 650 230"
+              viewBox={isMobileView ? '52 10 560 198' : '0 0 650 230'}
               preserveAspectRatio="xMidYMid meet"
-              style={{ width: '100%', height: '100%', overflow: 'visible' }}
+              style={{ width: '100%', height: isMobileView ? '205px' : '100%', overflow: 'visible' }}
             >
               <defs>
                 <linearGradient id="fundBalanceAreaGrad" x1="0" y1="0" x2="0" y2="1">
@@ -937,20 +1003,22 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                   <>
                     {gridSteps.map((grid, gIdx) => (
                       <g key={`grid-${gIdx}`}>
-                        <text
-                          x="30"
-                          y={grid.y + 4}
-                          textAnchor="end"
-                          fill="var(--text-muted)"
-                          fontSize="10.5"
-                          fontWeight="500"
-                        >
-                          {grid.val > 0 ? `${grid.val}tỷ` : '0'}
-                        </text>
+                        {!isMobileView && (
+                          <text
+                            x="30"
+                            y={grid.y + 4}
+                            textAnchor="end"
+                            fill="var(--text-muted)"
+                            fontSize="10.5"
+                            fontWeight="500"
+                          >
+                            {grid.val > 0 ? `${grid.val}tỷ` : '0'}
+                          </text>
+                        )}
                         <line
-                          x1="38"
+                          x1={isMobileView ? '55' : '38'}
                           y1={grid.y}
-                          x2="630"
+                          x2={isMobileView ? '608' : '630'}
                           y2={grid.y}
                           stroke="var(--border-subtle)"
                           strokeDasharray={grid.val === 0 ? undefined : '3 3'}
@@ -1038,7 +1106,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                             fontSize="11"
                             fontWeight={bIdx === cashflowChartData.length - 1 ? '700' : '500'}
                           >
-                            {bar.month}
+                            {isMobileView ? bar.month.replace(' (HT)', '') : bar.month}
                           </text>
                         </g>
                       );
@@ -1092,22 +1160,42 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
               ))}
             </svg>
           </div>
+
+          {/* Chú giải Legend ở chân thẻ biểu đồ trên Mobile */}
+          {isMobileView && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', fontSize: '0.72rem', paddingTop: '6px', borderTop: '1px dashed var(--border-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span style={{ width: '9px', height: '9px', borderRadius: '2px', backgroundColor: '#10b981' }} />
+                <span style={{ color: 'var(--text-secondary)' }}>Tiền vào</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span style={{ width: '9px', height: '9px', borderRadius: '2px', backgroundColor: '#f43f5e' }} />
+                <span style={{ color: 'var(--text-secondary)' }}>Tiền ra</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span style={{ width: '14px', height: '2px', backgroundColor: '#0284c7', position: 'relative' }}>
+                  <span style={{ position: 'absolute', top: '-2.5px', left: '3.5px', width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#0284c7' }} />
+                </span>
+                <span style={{ color: 'var(--text-secondary)', marginLeft: '2px' }}>Số dư quỹ</span>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Phân tích Tuổi nợ phải thu */}
+        {/* Phân tích Tuổi nợ phải thu / Thông báo dòng tiền */}
         <div
           style={{
             backgroundColor: 'var(--bg-surface-2)',
-            padding: '16px 20px',
+            padding: isMobileView ? '12px 12px' : '16px 20px',
             borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--border-subtle)',
-            display: 'flex',
+            display: !isMobileView || mobileSlide === 2 ? 'flex' : 'none',
             flexDirection: 'column',
             gap: '12px',
             boxSizing: 'border-box',
             height: '100%',
             maxHeight: '100%',
-            minHeight: 0,
+            minHeight: isMobileView ? '380px' : 0,
             overflow: 'hidden',
           }}
         >

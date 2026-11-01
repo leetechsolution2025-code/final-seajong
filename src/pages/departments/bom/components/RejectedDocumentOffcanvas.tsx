@@ -73,6 +73,7 @@ export const RejectedDocumentOffcanvas: React.FC<RejectedDocumentOffcanvasProps>
       title="Hồ sơ từ chối phê duyệt"
       description={`${document.code} • ${document.docTypeName}`}
       width="400px"
+      className="bom-approval-offcanvas"
       slidePanel={
         <DocumentChatSlide
           isOpen={isChatOpen}
@@ -82,7 +83,7 @@ export const RejectedDocumentOffcanvas: React.FC<RejectedDocumentOffcanvasProps>
       }
       footer={
         !isChatOpen ? (
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+          <div className="bom-approval-offcanvas-footer" style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
             <Button
               variant="secondary"
               size="md"

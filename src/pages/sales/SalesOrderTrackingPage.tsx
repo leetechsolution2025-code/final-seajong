@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { StepPage } from '../../components/common/StepPage';
 import { TableToolbar } from '../../components/common/TableToolbar';
-import { FullWidthTable } from '../../components/common/FullWidthTable';
+import { FullWidthTable, SwipeableTableRow } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
 import { Button } from '../../components/common/Button';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
@@ -151,6 +151,7 @@ const STEP_ITEMS: ModernStepItem[] = [
     num: 3,
     id: 'DEALER_ORDER',
     title: 'Đơn hàng từ đại lý',
+    mobileTitle: 'Đơn đại lý',
     desc: 'Đơn đại lý tự lập & gửi lên',
     icon: 'bi-buildings',
   },
@@ -546,6 +547,70 @@ export const SalesOrderTrackingPage: React.FC = () => {
     if (currentStep === 5) fetchDefects();
   }, [currentStep]);
 
+  const handleEditSingleOrder = (order: SaleOrder) => {
+    setActiveCustomerForNew((order.customer as any) || null);
+    setEditingOrderForModal({
+      ...order,
+      items: (order.saleOrderItems || []).map((it: any) => ({
+        ...it,
+        donVi: it.donViTinh || it.donVi || 'Bộ',
+      })),
+    });
+    setShowCreateOrderModal(true);
+  };
+
+  const handleDeleteOrderById = async (orderId: string) => {
+    try {
+      await fetch(`/api/plan-finance/sales/${orderId}`, { method: 'DELETE' });
+      setSelectedOrderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
+      setSelectedDealerOrderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
+      fetchOrders();
+      fetchDealerOrders();
+    } catch (e) {
+      console.error('Lỗi xoá đơn hàng:', e);
+    }
+  };
+
+  const handleDeleteQuotationById = async (quotationId: string) => {
+    try {
+      await fetch(`/api/plan-finance/quotations/${quotationId}`, { method: 'DELETE' });
+      setSelectedQuotationIds((prev) => {
+        const next = new Set(prev);
+        next.delete(quotationId);
+        return next;
+      });
+      fetchQuotations();
+    } catch (e) {
+      console.error('Lỗi xoá báo giá:', e);
+    }
+  };
+
+  const handleDeleteDefectById = async (defectId: string) => {
+    try {
+      await fetch('/api/production/defects', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [defectId] }),
+      });
+      setSelectedDefectIds((prev) => {
+        const next = new Set(prev);
+        next.delete(defectId);
+        return next;
+      });
+      fetchDefects();
+    } catch (e) {
+      console.error('Lỗi xoá hồ sơ trả về:', e);
+    }
+  };
+
   useEffect(() => {
     if (showCustomerSelect) {
       fetchCustomersForDrawer(customerSearch);
@@ -700,1678 +765,1796 @@ export const SalesOrderTrackingPage: React.FC = () => {
   }, [quotationTotal, quotations.length, orderTotal, orders.length, omnichannelOrders.length, defects.length]);
 
   return (
-    <StepPage
-      title="Theo dõi đơn hàng"
-      description="Lập báo giá, xử lý đơn hàng bán lẻ, gom đơn đa kênh và xử lý hàng trả về"
-      color="emerald"
-      icon="bi-cart-check"
-      badge="ORDERS"
-      steps={STEP_ITEMS}
-      currentStep={currentStep}
-      onStepChange={setCurrentStep}
-      hideTicker={true}
-      customTickerNews={tickerItems}
-    >
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-white">
-        {/* ══════════════════════════════════════════════════════════════════════
+    <div className="sales-orders-page h-full w-full flex flex-col min-h-0">
+      <StepPage
+        title="Theo dõi đơn hàng"
+        description="Lập báo giá, xử lý đơn hàng bán lẻ, gom đơn đa kênh và xử lý hàng trả về"
+        color="emerald"
+        icon="bi-cart-check"
+        badge="ORDERS"
+        steps={STEP_ITEMS}
+        currentStep={currentStep}
+        onStepChange={setCurrentStep}
+        hideTicker={true}
+        customTickerNews={tickerItems}
+      >
+        <div className="flex-1 flex flex-col h-full overflow-hidden bg-white">
+          {/* ══════════════════════════════════════════════════════════════════════
             STEP 1: BÁO GIÁ (QUOTATION)
             ══════════════════════════════════════════════════════════════════════ */}
-        {currentStep === 1 && (
-          <div className="flex-1 flex flex-col h-full overflow-hidden">
-            <TableToolbar
-              showMenu={false}
-              searchPlaceholder="Tìm mã báo giá, tên KH, SĐT..."
-              searchValue={quotationSearch}
-              onSearchChange={(v) => {
-                setQuotationSearch(v);
-                setQuotationPage(1);
-              }}
-              filters={[
-                {
-                  id: 'status',
-                  ariaLabel: 'Trạng thái',
-                  value: quotationStatusFilter,
-                  onChange: (val) => {
-                    setQuotationStatusFilter(val);
-                    setQuotationPage(1);
+          {currentStep === 1 && (
+            <div className="flex-1 flex flex-col h-full overflow-hidden">
+              <TableToolbar
+                showMenu={false}
+                searchPlaceholder="Tìm mã báo giá, tên KH, SĐT..."
+                searchValue={quotationSearch}
+                onSearchChange={(v) => {
+                  setQuotationSearch(v);
+                  setQuotationPage(1);
+                }}
+                filters={[
+                  {
+                    id: 'status',
+                    ariaLabel: 'Trạng thái',
+                    value: quotationStatusFilter,
+                    onChange: (val) => {
+                      setQuotationStatusFilter(val);
+                      setQuotationPage(1);
+                    },
+                    options: [
+                      { value: '', label: 'Tất cả trạng thái' },
+                      { value: 'draft', label: 'Bản nháp' },
+                      { value: 'sent', label: 'Đang thương thảo' },
+                      { value: 'won', label: 'Thành công' },
+                      { value: 'lost', label: 'Thất bại' },
+                      { value: 'paused', label: 'Tạm dừng' },
+                      { value: 'cancelled', label: 'Huỷ bỏ' },
+                    ],
                   },
-                  options: [
-                    { value: '', label: 'Tất cả trạng thái' },
-                    { value: 'draft', label: 'Bản nháp' },
-                    { value: 'sent', label: 'Đang thương thảo' },
-                    { value: 'won', label: 'Thành công' },
-                    { value: 'lost', label: 'Thất bại' },
-                    { value: 'paused', label: 'Tạm dừng' },
-                    { value: 'cancelled', label: 'Huỷ bỏ' },
-                  ],
-                },
-                {
-                  id: 'time',
-                  ariaLabel: 'Thời gian',
-                  value: quotationTimeFilter,
-                  onChange: (val) => {
-                    setQuotationTimeFilter(val);
-                    setQuotationPage(1);
+                  {
+                    id: 'time',
+                    ariaLabel: 'Thời gian',
+                    value: quotationTimeFilter,
+                    onChange: (val) => {
+                      setQuotationTimeFilter(val);
+                      setQuotationPage(1);
+                    },
+                    options: [
+                      { value: '', label: 'Tất cả thời gian' },
+                      { value: 'today', label: 'Hôm nay' },
+                      { value: 'yesterday', label: 'Hôm qua' },
+                      { value: 'this_week', label: 'Tuần này' },
+                      { value: 'this_month', label: 'Tháng này' },
+                      { value: 'this_year', label: 'Năm nay' },
+                    ],
                   },
-                  options: [
-                    { value: '', label: 'Tất cả thời gian' },
-                    { value: 'today', label: 'Hôm nay' },
-                    { value: 'yesterday', label: 'Hôm qua' },
-                    { value: 'this_week', label: 'Tuần này' },
-                    { value: 'this_month', label: 'Tháng này' },
-                    { value: 'this_year', label: 'Năm nay' },
-                  ],
-                },
-              ]}
-              rightActions={
-                <div className="flex items-center gap-2">
-                  {selectedQuotationIds.size > 0 && (
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={() => setConfirmDeleteQuotation(true)}
-                    >
-                      <Trash className="w-3.5 h-3.5 mr-1" />
-                      Xoá ({selectedQuotationIds.size})
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
-                    onClick={() => setShowOrderCameraScanner(true)}
-                  >
-                    <Camera className="w-3.5 h-3.5 mr-1 text-emerald-600" />
-                    Quét đơn
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    className="bg-[#003087] hover:bg-[#00256c] text-white border-[#003087]"
-                    onClick={() => {
-                      setCustomerDrawerMode('quotation');
-                      setShowCustomerSelect(true);
-                    }}
-                  >
-                    <Plus className="w-4 h-4 mr-1" />
-                    Thêm mới
-                  </Button>
-                </div>
-              }
-            />
-
-            {/* Hint matched customers if no quotation found */}
-            {quotationSearch && quotations.length === 0 && quotationMatchingCustomers.length > 0 && (
-              <div className="mx-3 my-2 p-2.5 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-900 flex flex-col gap-1.5">
-                <div className="flex items-center gap-1.5 font-semibold">
-                  <ExclamationTriangle className="w-4 h-4 text-amber-600" />
-                  Tìm thấy {quotationMatchingCustomers.length} khách hàng khớp từ khoá &ldquo;{quotationSearch}&rdquo; (chưa lập báo giá):
-                </div>
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {quotationMatchingCustomers.map((c) => (
-                    <div
-                      key={c.id}
-                      className="bg-white px-2.5 py-1 rounded border border-amber-300 flex items-center gap-2 shadow-xs"
-                    >
-                      <span className="font-bold text-slate-800">{c.name}</span>
-                      {c.dienThoai && <span className="text-slate-500">📞 {c.dienThoai}</span>}
-                      <button
-                        onClick={() => handleSelectCustomerForAction(c)}
-                        className="text-xs bg-[#003087] text-white px-2 py-0.5 rounded font-medium hover:bg-blue-900 cursor-pointer"
+                ]}
+                rightActions={
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    {selectedQuotationIds.size > 0 && (
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => setConfirmDeleteQuotation(true)}
+                        title={`Xoá (${selectedQuotationIds.size})`}
                       >
-                        + Tạo báo giá ngay
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                        <Trash className="w-3.5 h-3.5 md:mr-1" />
+                        <span className="sales-order-btn-label hidden md:inline">Xoá ({selectedQuotationIds.size})</span>
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
+                      onClick={() => setShowOrderCameraScanner(true)}
+                      title="Quét đơn bằng camera"
+                    >
+                      <Camera className="w-3.5 h-3.5 md:mr-1 text-emerald-600" />
+                      <span className="sales-order-btn-label hidden md:inline">Quét đơn</span>
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      className="bg-[#003087] hover:bg-[#00256c] text-white border-[#003087]"
+                      onClick={() => {
+                        setCustomerDrawerMode('quotation');
+                        setShowCustomerSelect(true);
+                      }}
+                      title="Thêm báo giá mới"
+                    >
+                      <Plus className="w-4 h-4 md:mr-1" />
+                      <span className="sales-order-btn-label hidden md:inline">Thêm mới</span>
+                    </Button>
+                  </div>
+                }
+              />
 
-            {/* Quotations Table */}
-            <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-              <FullWidthTable loading={quotationLoading}>
-                <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
-                  <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
-                    <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
-                      <th className="py-2.5 px-3.5 w-10 text-center">
-                        <input
-                          type="checkbox"
-                          checked={quotations.length > 0 && quotations.every((q) => selectedQuotationIds.has(q.id))}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedQuotationIds(new Set(quotations.map((q) => q.id)));
-                            } else {
-                              setSelectedQuotationIds(new Set());
-                            }
-                          }}
-                          className="rounded border-slate-300 text-sky-600 cursor-pointer"
-                        />
-                      </th>
-                      <th className="py-2.5 px-3.5 w-44">Số báo giá</th>
-                      <th className="py-2.5 px-3.5">Khách hàng</th>
-                      <th className="py-2.5 px-3.5 text-right w-44">Giá trị (đ)</th>
-                      <th className="py-2.5 px-3.5 text-center w-44">Trạng thái</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {quotations.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="py-12 text-center text-slate-400">
-                          <i className="bi bi-inbox text-2xl block mb-2 opacity-30" />
-                          Không tìm thấy báo giá nào phù hợp
-                        </td>
-                      </tr>
-                    ) : (
-                      quotations.map((q) => (
-                        <tr
-                          key={q.id}
-                          className="hover:bg-slate-50/80 transition-colors cursor-pointer border-b border-slate-100"
-                          onClick={() => setSelectedQuotation(q)}
+              {/* Hint matched customers if no quotation found */}
+              {quotationSearch && quotations.length === 0 && quotationMatchingCustomers.length > 0 && (
+                <div className="mx-3 my-2 p-2.5 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-900 flex flex-col gap-1.5">
+                  <div className="flex items-center gap-1.5 font-semibold">
+                    <ExclamationTriangle className="w-4 h-4 text-amber-600" />
+                    Tìm thấy {quotationMatchingCustomers.length} khách hàng khớp từ khoá &ldquo;{quotationSearch}&rdquo; (chưa lập báo giá):
+                  </div>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {quotationMatchingCustomers.map((c) => (
+                      <div
+                        key={c.id}
+                        className="bg-white px-2.5 py-1 rounded border border-amber-300 flex items-center gap-2 shadow-xs"
+                      >
+                        <span className="font-bold text-slate-800">{c.name}</span>
+                        {c.dienThoai && <span className="text-slate-500">📞 {c.dienThoai}</span>}
+                        <button
+                          onClick={() => handleSelectCustomerForAction(c)}
+                          className="text-xs bg-[#003087] text-white px-2 py-0.5 rounded font-medium hover:bg-blue-900 cursor-pointer"
                         >
-                          <td className="py-2.5 px-3.5 text-center" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="checkbox"
-                              checked={selectedQuotationIds.has(q.id)}
-                              onChange={(e) => {
-                                const next = new Set(selectedQuotationIds);
-                                if (e.target.checked) next.add(q.id);
-                                else next.delete(q.id);
-                                setSelectedQuotationIds(next);
-                              }}
-                              className="rounded border-slate-300 text-sky-600 cursor-pointer"
-                            />
-                          </td>
-                          <td className="py-2.5 px-3.5">
-                            <div>
-                              <span className="font-bold text-[#003087] hover:underline cursor-pointer text-[13px]">
-                                {q.code || 'QUO-CHUA-MA'}
-                              </span>
-                              <div className="text-slate-400 text-[11px] mt-0.5">
-                                Ngày tạo: {q.createdAt ? new Date(q.createdAt).toLocaleDateString('vi-VN') : '—'}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-3.5">
-                            <div>
-                              <div className="font-semibold text-slate-800 text-[13px]">
-                                {q.customer?.name || 'Khách hàng vãng lai'}
-                              </div>
-                              <div className="text-slate-400 text-[11px] mt-0.5 max-w-md truncate">
-                                {q.customer?.address || (q.customer?.dienThoai ? `SĐT: ${q.customer.dienThoai}` : 'Chưa cập nhật địa chỉ')}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-3.5 text-right font-bold text-slate-900 text-[13px]">
-                            {(q.thanhTien ?? q.tongTien ?? 0).toLocaleString('vi-VN')}
-                          </td>
-                          <td className="py-2.5 px-3.5 text-center">
-                            <StatusBadge status={q.trangThai} />
+                          + Tạo báo giá ngay
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Quotations Table */}
+              <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                <FullWidthTable loading={quotationLoading}>
+                  <table className="sales-orders-table w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+                    <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
+                      <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
+                        <th className="py-2.5 px-2.5 sm:px-3.5 w-8 sm:w-10 text-center">
+                          <input
+                            type="checkbox"
+                            checked={quotations.length > 0 && quotations.every((q) => selectedQuotationIds.has(q.id))}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedQuotationIds(new Set(quotations.map((q) => q.id)));
+                              } else {
+                                setSelectedQuotationIds(new Set());
+                              }
+                            }}
+                            className="rounded border-slate-300 text-sky-600 cursor-pointer"
+                          />
+                        </th>
+                        <th className="py-2.5 px-2.5 sm:px-3.5 sm:w-44">Số báo giá</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5">Khách hàng</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5 text-right w-44">Giá trị (đ)</th>
+                        <th className="py-2.5 px-2.5 sm:px-3.5 text-center w-28 sm:w-44">Trạng thái</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {quotations.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-12 text-center text-slate-400">
+                            <i className="bi bi-inbox text-2xl block mb-2 opacity-30" />
+                            Không tìm thấy báo giá nào phù hợp
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </FullWidthTable>
-            </div>
-
-            {/* Quotation Footer Pagination */}
-            <Pagination
-              currentPage={quotationPage}
-              totalPages={Math.max(1, Math.ceil((quotationTotal || quotations.length) / quotationPageSize))}
-              totalItems={quotationTotal || quotations.length}
-              pageSize={quotationPageSize}
-              itemName="báo giá"
-              onPageChange={setQuotationPage}
-              onPageSizeChange={(sz) => {
-                setQuotationPageSize(sz);
-                setQuotationPage(1);
-              }}
-              pageSizeOptions={[5, 10, 20, 50]}
-            />
-          </div>
-        )}
-
-        {/* ══════════════════════════════════════════════════════════════════════
-            STEP 2: ĐƠN HÀNG (ORDER - DEFAULT ACTIVE STEP)
-            ══════════════════════════════════════════════════════════════════════ */}
-        {currentStep === 2 && (
-          <div className="flex-1 flex flex-col h-full overflow-hidden">
-            <TableToolbar
-              showMenu={false}
-              searchPlaceholder="Tìm mã đơn, tên KH, mã KH, SĐT..."
-              searchValue={orderSearch}
-              onSearchChange={(v) => {
-                setOrderSearch(v);
-                setOrderPage(1);
-              }}
-              filters={[
-                {
-                  id: 'status',
-                  ariaLabel: 'Trạng thái',
-                  value: orderStatusFilter,
-                  onChange: (val) => {
-                    setOrderStatusFilter(val);
-                    setOrderPage(1);
-                  },
-                  options: [
-                    { value: '', label: 'Tất cả trạng thái' },
-                    { value: 'pending', label: 'Chờ duyệt' },
-                    { value: 'approved', label: 'Đã phê duyệt' },
-                    { value: 'active', label: 'Đang thực hiện' },
-                    { value: 'completed', label: 'Hoàn tất' },
-                    { value: 'done', label: 'Hoàn thành' },
-                    { value: 'cancelled', label: 'Huỷ bỏ' },
-                  ],
-                },
-                {
-                  id: 'time',
-                  ariaLabel: 'Thời gian',
-                  value: orderTimeFilter,
-                  onChange: (val) => {
-                    setOrderTimeFilter(val);
-                    setOrderPage(1);
-                  },
-                  options: [
-                    { value: '', label: 'Tất cả thời gian' },
-                    { value: 'today', label: 'Hôm nay' },
-                    { value: 'yesterday', label: 'Hôm qua' },
-                    { value: 'this_week', label: 'Tuần này' },
-                    { value: 'this_month', label: 'Tháng này' },
-                    { value: 'this_year', label: 'Năm nay' },
-                  ],
-                },
-              ]}
-              rightActions={
-                <div className="flex items-center gap-2">
-                  {selectedOrderIds.size > 0 && (
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={() => setConfirmDeleteOrder(true)}
-                    >
-                      <Trash className="w-3.5 h-3.5 mr-1" />
-                      Xoá ({selectedOrderIds.size})
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
-                    onClick={() => setShowOrderCameraScanner(true)}
-                  >
-                    <Camera className="w-3.5 h-3.5 mr-1 text-emerald-600" />
-                    Quét đơn
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    className="bg-[#003087] hover:bg-[#00256c] text-white border-[#003087]"
-                    onClick={() => {
-                      setCustomerDrawerMode('order');
-                      setShowCustomerSelect(true);
-                    }}
-                  >
-                    <Plus className="w-4 h-4 mr-1" />
-                    Thêm mới
-                  </Button>
-                </div>
-              }
-            />
-
-            {/* Hint matched customers if no order found */}
-            {orderSearch && orders.length === 0 && orderMatchingCustomers.length > 0 && (
-              <div className="mx-3 my-2 p-2.5 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-900 flex flex-col gap-1.5">
-                <div className="flex items-center gap-1.5 font-semibold">
-                  <ExclamationTriangle className="w-4 h-4 text-amber-600" />
-                  Tìm thấy {orderMatchingCustomers.length} khách hàng khớp từ khoá &ldquo;{orderSearch}&rdquo; (chưa có đơn hàng):
-                </div>
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {orderMatchingCustomers.map((c) => (
-                    <div
-                      key={c.id}
-                      className="bg-white px-2.5 py-1 rounded border border-amber-300 flex items-center gap-2 shadow-xs"
-                    >
-                      <span className="font-bold text-slate-800">{c.name}</span>
-                      {c.dienThoai && <span className="text-slate-500">📞 {c.dienThoai}</span>}
-                      <button
-                        onClick={() => handleSelectCustomerForAction(c)}
-                        className="text-xs bg-[#003087] text-white px-2 py-0.5 rounded font-medium hover:bg-blue-900 cursor-pointer"
-                      >
-                        + Tạo đơn hàng ngay
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Orders Table */}
-            <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-              <FullWidthTable loading={orderLoading}>
-                <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
-                  <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
-                    <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
-                      <th className="py-2.5 px-3.5 w-10 text-center">
-                        <input
-                          type="checkbox"
-                          checked={orders.length > 0 && orders.every((o) => selectedOrderIds.has(o.id))}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedOrderIds(new Set(orders.map((o) => o.id)));
-                            } else {
-                              setSelectedOrderIds(new Set());
-                            }
-                          }}
-                          className="rounded border-slate-300 text-sky-600 cursor-pointer"
-                        />
-                      </th>
-                      <th className="py-2.5 px-3.5 w-44">Mã đơn hàng</th>
-                      <th className="py-2.5 px-3.5">Khách hàng</th>
-                      <th className="py-2.5 px-3.5 w-36">Ngày tạo đơn</th>
-                      <th className="py-2.5 px-3.5 w-36">Ngày giao hàng</th>
-                      <th className="py-2.5 px-3.5 text-right w-44">Giá trị (đ)</th>
-                      <th className="py-2.5 px-3.5 text-center w-36">Trạng thái</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {orders.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="py-12 text-center text-slate-400">
-                          <i className="bi bi-inbox text-2xl block mb-2 opacity-30" />
-                          Không tìm thấy đơn hàng nào phù hợp
-                        </td>
-                      </tr>
-                    ) : (
-                      orders.map((o) => (
-                        <tr
-                          key={o.id}
-                          className="hover:bg-slate-50/80 transition-colors cursor-pointer border-b border-slate-100"
-                          onClick={() => setSelectedOrder(o)}
-                        >
-                          <td className="py-2.5 px-3.5 text-center" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="checkbox"
-                              checked={selectedOrderIds.has(o.id)}
-                              onChange={(e) => {
-                                const next = new Set(selectedOrderIds);
-                                if (e.target.checked) next.add(o.id);
-                                else next.delete(o.id);
-                                setSelectedOrderIds(next);
-                              }}
-                              className="rounded border-slate-300 text-sky-600 cursor-pointer"
-                            />
-                          </td>
-                          <td className="py-2.5 px-3.5">
-                            <span className="font-bold text-[#003087] hover:underline cursor-pointer text-[13px]">
-                              {o.code}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3.5">
-                            <div>
-                              <div className="font-semibold text-slate-900 text-[13px]">
-                                {o.customer?.name || 'Khách vãng lai'}
-                              </div>
-                              <div className="text-slate-400 text-[11px] mt-0.5 truncate max-w-sm">
-                                {o.customer?.address || (o.customer?.dienThoai ? `SĐT: ${o.customer.dienThoai}` : 'Không rõ địa chỉ')}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-3.5 text-slate-600 text-[13px]">
-                            {o.ngayDat ? new Date(o.ngayDat).toLocaleDateString('vi-VN') : (o.createdAt ? new Date(o.createdAt).toLocaleDateString('vi-VN') : '—')}
-                          </td>
-                          <td className="py-2.5 px-3.5 text-slate-600 text-[13px]">
-                            {o.ngayGiao ? new Date(o.ngayGiao).toLocaleDateString('vi-VN') : '—'}
-                          </td>
-                          <td className="py-2.5 px-3.5 text-right font-bold text-slate-900 text-[13px]">
-                            {Number(o.tongTien || 0).toLocaleString('vi-VN')}
-                          </td>
-                          <td className="py-2.5 px-3.5 text-center">
-                            <StatusBadge status={o.trangThai} />
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </FullWidthTable>
-            </div>
-
-            {/* Order Footer Pagination */}
-            <Pagination
-              currentPage={orderPage}
-              totalPages={Math.max(1, Math.ceil((orderTotal || orders.length) / orderPageSize))}
-              totalItems={orderTotal || orders.length}
-              pageSize={orderPageSize}
-              itemName="đơn hàng"
-              onPageChange={setOrderPage}
-              onPageSizeChange={(sz) => {
-                setOrderPageSize(sz);
-                setOrderPage(1);
-              }}
-              pageSizeOptions={[5, 10, 20, 50]}
-            />
-          </div>
-        )}
-
-        {/* ══════════════════════════════════════════════════════════════════════
-            STEP 3: ĐƠN HÀNG TỪ ĐẠI LÝ (DEALER PORTAL ORDERS)
-            ══════════════════════════════════════════════════════════════════════ */}
-        {currentStep === 3 && (
-          <div className="flex-1 flex flex-col h-full overflow-hidden">
-            <TableToolbar
-              showMenu={false}
-              searchPlaceholder="Tìm mã đơn đại lý, tên đại lý, mã ĐL, SĐT..."
-              searchValue={dealerOrderSearch}
-              onSearchChange={(v) => {
-                setDealerOrderSearch(v);
-                setDealerOrderPage(1);
-              }}
-              filters={[
-                {
-                  id: 'dealer-status',
-                  ariaLabel: 'Trạng thái',
-                  value: dealerOrderStatusFilter,
-                  onChange: (val) => {
-                    setDealerOrderStatusFilter(val);
-                    setDealerOrderPage(1);
-                  },
-                  options: [
-                    { value: '', label: 'Tất cả trạng thái' },
-                    { value: 'pending', label: 'Chưa xử lý' },
-                    { value: 'approved', label: 'Đã xử lý' },
-                    { value: 'rejected', label: 'Từ chối' },
-                  ],
-                },
-                {
-                  id: 'dealer-time',
-                  ariaLabel: 'Thời gian',
-                  value: dealerOrderTimeFilter,
-                  onChange: (val) => {
-                    setDealerOrderTimeFilter(val);
-                    setDealerOrderPage(1);
-                  },
-                  options: [
-                    { value: '', label: 'Tất cả thời gian' },
-                    { value: 'today', label: 'Hôm nay' },
-                    { value: 'yesterday', label: 'Hôm qua' },
-                    { value: 'this_week', label: 'Tuần này' },
-                    { value: 'this_month', label: 'Tháng này' },
-                    { value: 'this_year', label: 'Năm nay' },
-                  ],
-                },
-              ]}
-              rightActions={
-                <div className="flex items-center gap-2">
-                  {selectedDealerOrderIds.size > 0 && (
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={() => setConfirmDeleteDealerOrder(true)}
-                    >
-                      <Trash className="w-3.5 h-3.5 mr-1" />
-                      Xoá ({selectedDealerOrderIds.size})
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-slate-300 text-slate-700 bg-white hover:bg-slate-50"
-                    onClick={() => fetchDealerOrders()}
-                  >
-                    <ArrowRepeat className={`w-3.5 h-3.5 mr-1 ${dealerOrderLoading ? 'animate-spin' : ''}`} />
-                    Làm mới
-                  </Button>
-                </div>
-              }
-            />
-
-            {/* Dealer Orders Table */}
-            <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-              <FullWidthTable loading={dealerOrderLoading}>
-                <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
-                  <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
-                    <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
-                      <th className="py-2.5 px-3.5 w-10 text-center">
-                        <input
-                          type="checkbox"
-                          checked={dealerOrders.length > 0 && dealerOrders.every((o) => selectedDealerOrderIds.has(o.id))}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedDealerOrderIds(new Set(dealerOrders.map((o) => o.id)));
-                            } else {
-                              setSelectedDealerOrderIds(new Set());
-                            }
-                          }}
-                          className="rounded border-slate-300 text-sky-600 cursor-pointer"
-                        />
-                      </th>
-                      <th className="py-2.5 px-3.5 w-48">Mã đơn đại lý</th>
-                      <th className="py-2.5 px-3.5">Đại lý & Thông tin nhận hàng</th>
-                      <th className="py-2.5 px-3.5">Nội dung yêu cầu</th>
-                      <th className="py-2.5 px-3.5 w-32">Ngày gửi</th>
-                      <th className="py-2.5 px-3.5 w-32">Ngày giao</th>
-                      <th className="py-2.5 px-3.5 text-right w-40">Giá trị (đ)</th>
-                      <th className="py-2.5 px-3.5 text-center w-36">Trạng thái</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {dealerOrders.filter((o) => o.trangThai !== 'draft').length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="py-12 text-center text-slate-400">
-                          <i className="bi bi-inbox text-2xl block mb-2 opacity-30" />
-                          Chưa có đơn hàng nào từ đại lý gửi lên hệ thống
-                        </td>
-                      </tr>
-                    ) : (
-                      dealerOrders
-                        .filter((o) => o.trangThai !== 'draft')
-                        .map((o) => {
-                          const itemsList = o.saleOrderItems || [];
-                          const totalQty = itemsList.reduce((s: number, it: any) => s + (Number(it.soLuong) || 1), 0);
-                          const requestContent =
-                            (o.ghiChu && o.ghiChu.trim()) ||
-                            (itemsList[0]?.tenHang
-                              ? `Đặt mua ${itemsList[0].tenHang}${itemsList.length > 1 ? ` (+${itemsList.length - 1} SP)` : ''}`
-                              : 'Đặt hàng theo danh mục đại lý');
-                          return (
-                            <tr
-                              key={o.id}
-                              className="hover:bg-slate-50/80 transition-colors cursor-pointer border-b border-slate-100"
-                              onClick={() => setSelectedOrder(o)}
-                            >
-                              <td className="py-2.5 px-3.5 text-center" onClick={(e) => e.stopPropagation()}>
-                                <input
-                                  type="checkbox"
-                                  checked={selectedDealerOrderIds.has(o.id)}
-                                  onChange={(e) => {
-                                    const next = new Set(selectedDealerOrderIds);
-                                    if (e.target.checked) next.add(o.id);
-                                    else next.delete(o.id);
-                                    setSelectedDealerOrderIds(next);
-                                  }}
-                                  className="rounded border-slate-300 text-sky-600 cursor-pointer"
-                                />
-                              </td>
-                              <td className="py-2.5 px-3.5">
-                                <div className="font-bold text-[#003087] hover:underline cursor-pointer text-[13px] whitespace-nowrap">
-                                  {o.code}
-                                </div>
-                                <div className="text-slate-400 text-[11px] mt-0.5 truncate">
-                                  Người lập: {o.nguoiDatHang || o.customer?.name || 'Đại lý'}
-                                </div>
-                              </td>
-                              <td className="py-2.5 px-3.5">
-                                <div>
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="font-semibold text-slate-900 text-[13px]">
-                                      {o.customer?.name || o.nguoiNhan || 'Đại lý Seajong'}
-                                    </span>
-                                    {o.customer?.code && (
-                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-                                        {o.customer.code}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="text-slate-400 text-[11px] mt-0.5 truncate max-w-xs">
-                                    {o.diaChiGiaoHang || o.customer?.address || (o.soDienThoai || o.customer?.dienThoai ? `SĐT: ${o.soDienThoai || o.customer?.dienThoai}` : 'Chưa cập nhật địa chỉ')}
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="py-2.5 px-3.5">
-                                <div className="font-medium text-slate-800 text-[12.5px] truncate max-w-xs" title={requestContent}>
-                                  {requestContent}
-                                </div>
-                                <div className="text-slate-400 text-[11px] mt-0.5">
-                                  {itemsList.length} mặt hàng · Tổng SL: <strong>{totalQty}</strong>
-                                </div>
-                              </td>
-                              <td className="py-2.5 px-3.5 text-slate-600 text-[13px]">
-                                {o.ngayDat ? new Date(o.ngayDat).toLocaleDateString('vi-VN') : (o.createdAt ? new Date(o.createdAt).toLocaleDateString('vi-VN') : '—')}
-                              </td>
-                              <td className="py-2.5 px-3.5 text-slate-600 text-[13px]">
-                                {o.ngayGiao ? new Date(o.ngayGiao).toLocaleDateString('vi-VN') : '—'}
-                              </td>
-                              <td className="py-2.5 px-3.5 text-right font-bold text-slate-900 text-[13px]">
-                                {Number(o.tongTien || 0).toLocaleString('vi-VN')}
-                              </td>
-                              <td className="py-2.5 px-3.5 text-center">
-                                <DealerOrderStatusBadge status={o.trangThai} />
-                              </td>
-                            </tr>
-                          );
-                        })
-                    )}
-                  </tbody>
-                </table>
-              </FullWidthTable>
-            </div>
-
-            {/* Dealer Order Footer Pagination */}
-            <Pagination
-              currentPage={dealerOrderPage}
-              totalPages={Math.max(1, Math.ceil((dealerOrderTotal || dealerOrders.length) / dealerOrderPageSize))}
-              totalItems={dealerOrderTotal || dealerOrders.length}
-              pageSize={dealerOrderPageSize}
-              itemName="đơn đại lý"
-              onPageChange={setDealerOrderPage}
-              onPageSizeChange={(sz) => {
-                setDealerOrderPageSize(sz);
-                setDealerOrderPage(1);
-              }}
-              pageSizeOptions={[5, 10, 20, 50]}
-            />
-          </div>
-        )}
-
-        {/* ══════════════════════════════════════════════════════════════════════
-            STEP 4: BÁN HÀNG ĐA KÊNH (OMNICHANNEL)
-            ══════════════════════════════════════════════════════════════════════ */}
-        {currentStep === 4 && (
-          <div className="flex-1 flex flex-col h-full overflow-hidden">
-            {/* Omnichannel Orders Toolbar */}
-            <TableToolbar
-              showMenu={false}
-              searchPlaceholder="Tìm mã đơn sàn, mã vận đơn, khách hàng..."
-              searchValue={omnichannelSearch}
-              onSearchChange={setOmnichannelSearch}
-              filters={[
-                {
-                  id: 'channel',
-                  ariaLabel: 'Kênh bán',
-                  value: omnichannelChannelFilter,
-                  onChange: setOmnichannelChannelFilter,
-                  options: [
-                    { value: 'all', label: 'Tất cả kênh' },
-                    { value: 'Shopee', label: 'Shopee Mall' },
-                    { value: 'TikTok', label: 'TikTok Shop' },
-                    { value: 'Website', label: 'Website Seajong' },
-                  ],
-                },
-                {
-                  id: 'status',
-                  ariaLabel: 'Trạng thái',
-                  value: omnichannelStatusFilter,
-                  onChange: setOmnichannelStatusFilter,
-                  options: [
-                    { value: 'all', label: 'Tất cả trạng thái' },
-                    { value: 'Đã xác nhận', label: 'Đã xác nhận' },
-                    { value: 'Đang giao hàng', label: 'Đang giao hàng' },
-                    { value: 'Hoàn tất', label: 'Hoàn tất' },
-                  ],
-                },
-              ]}
-              rightActions={
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-slate-300 text-slate-700 bg-white hover:bg-slate-50"
-                    onClick={() => alert('Cấu hình kết nối API Shopee Open Platform & TikTok Shop Partner')}
-                  >
-                    <Sliders className="w-3.5 h-3.5 mr-1" />
-                    Cấu hình sàn
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    className="bg-[#003087] hover:bg-[#00256c] text-white border-[#003087]"
-                    disabled={isSyncingChannels}
-                    onClick={() => {
-                      setIsSyncingChannels(true);
-                      setTimeout(() => {
-                        setIsSyncingChannels(false);
-                        fetchOmnichannelOrders();
-                        alert('Đã đồng bộ đơn hàng mới nhất từ Shopee và TikTok Shop!');
-                      }, 1000);
-                    }}
-                  >
-                    <ArrowRepeat className={`w-3.5 h-3.5 mr-1 ${isSyncingChannels ? 'animate-spin' : ''}`} />
-                    {isSyncingChannels ? 'Đang đồng bộ...' : 'Đồng bộ ngay'}
-                  </Button>
-                </div>
-              }
-            />
-
-            {/* Omnichannel Orders Table */}
-            <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-              <FullWidthTable loading={omnichannelLoading}>
-                <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
-                  <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
-                    <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
-                      <th className="py-2.5 px-3.5 w-10 text-center">
-                        <input
-                          type="checkbox"
-                          className="rounded border-slate-300 text-sky-600 cursor-pointer"
-                          checked={omnichannelOrders.length > 0 && selectedOmniIds.length === omnichannelOrders.length}
-                          onChange={(e) => {
-                            if (e.target.checked) setSelectedOmniIds(omnichannelOrders.map((o) => o.id));
-                            else setSelectedOmniIds([]);
-                          }}
-                        />
-                      </th>
-                      <th className="py-2.5 px-3.5 w-60">Kênh & Mã đơn</th>
-                      <th className="py-2.5 px-3.5">Khách hàng</th>
-                      <th className="py-2.5 px-3.5 text-right w-36">Tổng tiền</th>
-                      <th className="py-2.5 px-3.5 text-center w-36">Trạng thái</th>
-                      <th className="py-2.5 px-3.5 w-32">Đặt hàng</th>
-                      <th className="py-2.5 px-3.5 w-32">Giao hàng</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {(() => {
-                      const filtered = omnichannelOrders.filter((o) => {
-                        const matchSearch =
-                          !omnichannelSearch ||
-                          o.externalId.toLowerCase().includes(omnichannelSearch.toLowerCase()) ||
-                          o.customer.toLowerCase().includes(omnichannelSearch.toLowerCase()) ||
-                          (o.trackingCode || '').toLowerCase().includes(omnichannelSearch.toLowerCase());
-                        const matchStatus =
-                          omnichannelStatusFilter === 'all' || o.status === omnichannelStatusFilter;
-                        return matchSearch && matchStatus;
-                      });
-                      const start = (omnichannelPage - 1) * omnichannelPageSize;
-                      const pageSlice = filtered.slice(start, start + omnichannelPageSize);
-
-                      if (pageSlice.length === 0) {
-                        return (
-                          <tr>
-                            <td colSpan={7} className="py-12 text-center text-slate-400">
-                              <i className="bi bi-inbox text-2xl block mb-2 opacity-30" />
-                              Không tìm thấy đơn hàng đa kênh nào phù hợp
-                            </td>
-                          </tr>
-                        );
-                      }
-
-                      return pageSlice.map((row) => {
-                        const isShopee = row.channel.includes('Shopee');
-                        const isTikTok = row.channel.includes('TikTok');
-                        return (
-                          <tr key={row.id} className="hover:bg-slate-50/80 transition-colors border-b border-slate-100">
-                            <td className="py-2.5 px-3.5 text-center" onClick={(e) => e.stopPropagation()}>
+                      ) : (
+                        quotations.map((q) => (
+                          <SwipeableTableRow
+                            key={q.id}
+                            rowId={q.id}
+                            onRowClick={() => setSelectedQuotation(q)}
+                            onEdit={() => {
+                              setActiveCustomerForNew((q.customer as any) || null);
+                              setShowCreateQuotationModal(true);
+                            }}
+                            onDelete={() => handleDeleteQuotationById(q.id)}
+                            deleteConfirmTitle="Xác nhận xoá báo giá"
+                            deleteConfirmMessage={`Bạn có chắc chắn muốn xoá báo giá "${q.code || 'QUO-CHUA-MA'}" không? Thao tác này không thể hoàn tác.`}
+                            deleteConfirmText="Xoá báo giá"
+                            className="hover:bg-slate-50/80 transition-colors cursor-pointer border-b border-slate-100"
+                          >
+                            <td className="py-2.5 px-2.5 sm:px-3.5 text-center" onClick={(e) => e.stopPropagation()}>
                               <input
                                 type="checkbox"
-                                className="rounded border-slate-300 text-sky-600 cursor-pointer"
-                                checked={selectedOmniIds.includes(row.id)}
-                                onChange={() => {
-                                  setSelectedOmniIds((prev) =>
-                                    prev.includes(row.id) ? prev.filter((x) => x !== row.id) : [...prev, row.id]
-                                  );
+                                checked={selectedQuotationIds.has(q.id)}
+                                onChange={(e) => {
+                                  const next = new Set(selectedQuotationIds);
+                                  if (e.target.checked) next.add(q.id);
+                                  else next.delete(q.id);
+                                  setSelectedQuotationIds(next);
                                 }}
+                                className="rounded border-slate-300 text-sky-600 cursor-pointer"
                               />
                             </td>
-                            <td className="py-2.5 px-3.5">
-                              <div className="flex items-center gap-2.5">
-                                <div
-                                  className="rounded-full flex items-center justify-center flex-shrink-0"
-                                  style={{
-                                    width: 26,
-                                    height: 26,
-                                    background: isShopee ? '#ee4d2d' : isTikTok ? '#000000' : '#003087',
-                                    color: 'white',
-                                  }}
-                                >
-                                  <Shop style={{ fontSize: 12 }} />
+                            <td className="py-2.5 px-2.5 sm:px-3.5 min-w-0">
+                              <div>
+                                <div className="flex items-center justify-between gap-1.5">
+                                  <span className="font-bold text-[#003087] hover:underline cursor-pointer text-[13px] truncate">
+                                    {q.code || 'QUO-CHUA-MA'}
+                                  </span>
+                                  <span className="sm:hidden text-[10.5px] text-slate-400 shrink-0">
+                                    {q.createdAt ? new Date(q.createdAt).toLocaleDateString('vi-VN') : '—'}
+                                  </span>
                                 </div>
-                                <div className="flex flex-col">
-                                  <code className="text-[#003087] font-bold text-[13px] whitespace-nowrap">
-                                    {row.externalId}
-                                  </code>
-                                  <span className="text-slate-500 text-[11px] font-medium mt-0.5">{row.channel}</span>
+                                <div className="hidden sm:block text-slate-400 text-[11px] mt-0.5">
+                                  Ngày tạo: {q.createdAt ? new Date(q.createdAt).toLocaleDateString('vi-VN') : '—'}
+                                </div>
+                                {/* Mobile summary: 1 dòng gọn gàng Tên KH + Giá trị */}
+                                <div className="sm:hidden mt-0.5 flex items-center justify-between gap-2">
+                                  <span className="font-semibold text-slate-800 text-xs truncate">
+                                    {q.customer?.name || 'Khách hàng vãng lai'}
+                                  </span>
+                                  <span className="font-mono font-bold text-slate-900 text-xs shrink-0">
+                                    {(q.thanhTien ?? q.tongTien ?? 0).toLocaleString('vi-VN')} đ
+                                  </span>
                                 </div>
                               </div>
                             </td>
-                            <td className="py-2.5 px-3.5">
-                              <div className="flex flex-col">
-                                <span className="font-semibold text-slate-800 text-[13px]">{row.customer}</span>
-                                <small className="text-slate-400 text-[11px] truncate max-w-sm" title={row.address}>
-                                  {row.address}
-                                </small>
+                            <td className="hidden sm:table-cell py-2.5 px-3.5">
+                              <div>
+                                <div className="font-semibold text-slate-800 text-[13px]">
+                                  {q.customer?.name || 'Khách hàng vãng lai'}
+                                </div>
+                                <div className="text-slate-400 text-[11px] mt-0.5 max-w-md truncate">
+                                  {q.customer?.address || (q.customer?.dienThoai ? `SĐT: ${q.customer.dienThoai}` : 'Chưa cập nhật địa chỉ')}
+                                </div>
                               </div>
                             </td>
-                            <td className="py-2.5 px-3.5 text-right font-bold text-slate-900 text-[13px]">
-                              {Number(row.amount || 0).toLocaleString('vi-VN')}đ
+                            <td className="hidden sm:table-cell py-2.5 px-3.5 text-right font-bold text-slate-900 text-[13px]">
+                              {(q.thanhTien ?? q.tongTien ?? 0).toLocaleString('vi-VN')}
                             </td>
-                            <td className="py-2.5 px-3.5 text-center">
-                              <StatusBadge status={row.status} />
+                            <td className="py-2.5 px-2.5 sm:px-3.5 text-center">
+                              <StatusBadge status={q.trangThai} />
                             </td>
-                            <td className="py-2.5 px-3.5 text-slate-500 text-[12px]">
-                              {row.createdAt ? new Date(row.createdAt).toLocaleDateString('vi-VN') : '—'}
-                            </td>
-                            <td className="py-2.5 px-3.5 text-slate-500 text-[12px]">
-                              {row.shippingDate
-                                ? new Date(row.shippingDate).toLocaleDateString('vi-VN')
-                                : row.createdAt
-                                ? new Date(row.createdAt).toLocaleDateString('vi-VN')
-                                : '—'}
-                            </td>
-                          </tr>
-                        );
-                      });
-                    })()}
-                  </tbody>
-                </table>
-              </FullWidthTable>
-            </div>
-
-            {(() => {
-              const filtered = omnichannelOrders.filter((o) => {
-                const matchSearch =
-                  !omnichannelSearch ||
-                  o.externalId.toLowerCase().includes(omnichannelSearch.toLowerCase()) ||
-                  o.customer.toLowerCase().includes(omnichannelSearch.toLowerCase()) ||
-                  (o.trackingCode || '').toLowerCase().includes(omnichannelSearch.toLowerCase());
-                const matchStatus =
-                  omnichannelStatusFilter === 'all' || o.status === omnichannelStatusFilter;
-                return matchSearch && matchStatus;
-              });
-              return (
-                <Pagination
-                  currentPage={omnichannelPage}
-                  totalPages={Math.max(1, Math.ceil(filtered.length / omnichannelPageSize))}
-                  totalItems={filtered.length}
-                  pageSize={omnichannelPageSize}
-                  itemName="đơn đa kênh"
-                  onPageChange={setOmnichannelPage}
-                  onPageSizeChange={(sz) => {
-                    setOmnichannelPageSize(sz);
-                    setOmnichannelPage(1);
-                  }}
-                  pageSizeOptions={[5, 10, 20, 50]}
-                />
-              );
-            })()}
-          </div>
-        )}
-
-        {/* ══════════════════════════════════════════════════════════════════════
-            STEP 5: HÀNG TRẢ VỀ (RETURN & WARRANTY)
-            ══════════════════════════════════════════════════════════════════════ */}
-        {currentStep === 5 && (
-          <div className="flex-1 flex flex-col h-full overflow-hidden">
-            <TableToolbar
-              showMenu={false}
-              searchPlaceholder="Tìm mã phiếu, khách hàng, sản phẩm..."
-              searchValue={defectSearch}
-              onSearchChange={setDefectSearch}
-              filters={[
-                {
-                  id: 'status',
-                  ariaLabel: 'Trạng thái',
-                  value: defectStatusFilter,
-                  onChange: setDefectStatusFilter,
-                  options: [
-                    { value: 'all', label: 'Tất cả trạng thái' },
-                    { value: 'NEW', label: 'Chưa xử lý' },
-                    { value: 'TECH_EVALUATING', label: 'Đang chẩn đoán' },
-                    { value: 'WAITING_QC', label: 'Chờ QC kiểm tra' },
-                    { value: 'WAITING_INVENTORY', label: 'Chờ nhập kho' },
-                    { value: 'COMPLETED', label: 'Đã xử lý' },
-                  ],
-                },
-                {
-                  id: 'source',
-                  ariaLabel: 'Nguồn phát sinh',
-                  value: defectSourceFilter,
-                  onChange: setDefectSourceFilter,
-                  options: [
-                    { value: 'all', label: 'Tất cả nguồn' },
-                    { value: 'RETURN', label: 'Hàng trả về' },
-                    { value: 'WARRANTY', label: 'Bảo hành' },
-                    { value: 'INTERNAL', label: 'Nội bộ' },
-                  ],
-                },
-              ]}
-              rightActions={
-                <div className="flex items-center gap-2">
-                  {selectedDefectIds.size > 0 && (
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={() => setConfirmDeleteDefects(true)}
-                    >
-                      <Trash className="w-3.5 h-3.5 mr-1" />
-                      Xoá ({selectedDefectIds.size})
-                    </Button>
-                  )}
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    className="bg-[#003087] hover:bg-[#00256c] text-white border-[#003087]"
-                    onClick={() => alert('Mở phiếu tạo hồ sơ đổi trả / hàng bảo hành mới')}
-                  >
-                    <Plus className="w-4 h-4 mr-1" />
-                    Tạo mới
-                  </Button>
-                </div>
-              }
-            />
-
-            {/* Defects Table */}
-            <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-              <FullWidthTable loading={defectLoading}>
-                <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
-                  <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
-                    <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
-                      <th className="py-2.5 px-3.5 w-11 text-center">
-                        <input
-                          type="checkbox"
-                          checked={defects.length > 0 && defects.every((d) => selectedDefectIds.has(d.id))}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedDefectIds(new Set(defects.map((d) => d.id)));
-                            } else {
-                              setSelectedDefectIds(new Set());
-                            }
-                          }}
-                          className="rounded border-slate-300 text-sky-600 cursor-pointer"
-                        />
-                      </th>
-                      <th className="py-2.5 px-3.5 w-36">Mã lỗi</th>
-                      <th className="py-2.5 px-3.5">Khách hàng</th>
-                      <th className="py-2.5 px-3.5 w-36">Đơn hàng</th>
-                      <th className="py-2.5 px-3.5 w-36">Ngày tạo</th>
-                      <th className="py-2.5 px-3.5">Mô tả lỗi</th>
-                      <th className="py-2.5 px-3.5 text-center w-32">Trạng thái</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {(() => {
-                      const filtered = defects.filter((d) => {
-                        const matchSearch =
-                          !defectSearch ||
-                          d.code.toLowerCase().includes(defectSearch.toLowerCase()) ||
-                          (d.customerName || '').toLowerCase().includes(defectSearch.toLowerCase()) ||
-                          (d.productName || '').toLowerCase().includes(defectSearch.toLowerCase());
-                        const matchStatus =
-                          defectStatusFilter === 'all' || d.status === defectStatusFilter;
-                        const matchSource =
-                          defectSourceFilter === 'all' || d.source === defectSourceFilter;
-                        return matchSearch && matchStatus && matchSource;
-                      });
-
-                      const start = (defectPage - 1) * defectPageSize;
-                      const pageSlice = filtered.slice(start, start + defectPageSize);
-
-                      if (pageSlice.length === 0) {
-                        return (
-                          <tr>
-                            <td colSpan={7} className="py-12 text-center text-slate-400">
-                              <i className="bi bi-inbox text-2xl block mb-2 opacity-30" />
-                              Chưa có hồ sơ hàng trả về nào
-                            </td>
-                          </tr>
-                        );
-                      }
-
-                      return pageSlice.map((row) => (
-                        <tr
-                          key={row.id}
-                          className="hover:bg-slate-50/80 cursor-pointer transition-colors border-b border-slate-100"
-                          onClick={() => setSelectedDefect(row)}
-                        >
-                          <td className="py-2.5 px-3.5 text-center" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="checkbox"
-                              checked={selectedDefectIds.has(row.id)}
-                              onChange={(e) => {
-                                const next = new Set(selectedDefectIds);
-                                if (e.target.checked) next.add(row.id);
-                                else next.delete(row.id);
-                                setSelectedDefectIds(next);
-                              }}
-                              className="rounded border-slate-300 text-sky-600 cursor-pointer"
-                            />
-                          </td>
-                          <td className="py-2.5 px-3.5">
-                            <div>
-                              <div className="font-bold text-[#003087] hover:underline cursor-pointer text-[13px]">
-                                {row.code || 'ERR-—'}
-                              </div>
-                              <div className="mt-1">
-                                <span className="inline-block px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-normal">
-                                  {row.source === 'RETURN' ? 'Trả về' : row.source === 'WARRANTY' ? 'Bảo hành' : 'Nội bộ'}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-3.5">
-                            <div>
-                              <div className="font-semibold text-slate-900 text-[13px]">{row.customerName || '—'}</div>
-                              <div className="text-slate-400 text-[11px] mt-0.5 truncate">{row.customerAddress || '—'}</div>
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-3.5 text-slate-800 text-[13px] font-medium">
-                            {row.orderNumber || '—'}
-                          </td>
-                          <td className="py-2.5 px-3.5 text-slate-600 text-[13px]">
-                            {row.createdAt ? new Date(row.createdAt).toLocaleDateString('vi-VN') : '—'}
-                          </td>
-                          <td className="py-2.5 px-3.5">
-                            <span className="text-slate-500 text-[12px] truncate inline-block max-w-[260px]" title={row.description}>
-                              {row.description || '—'}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3.5 text-center">
-                            <StatusBadge status={row.status} />
-                          </td>
-                        </tr>
-                      ));
-                    })()}
-                  </tbody>
-                </table>
-              </FullWidthTable>
-            </div>
-
-            {/* Defect Footer */}
-            {(() => {
-              const filtered = defects.filter((d) => {
-                const matchSearch =
-                  !defectSearch ||
-                  d.code.toLowerCase().includes(defectSearch.toLowerCase()) ||
-                  (d.customerName || '').toLowerCase().includes(defectSearch.toLowerCase()) ||
-                  (d.productName || '').toLowerCase().includes(defectSearch.toLowerCase());
-                const matchStatus =
-                  defectStatusFilter === 'all' || d.status === defectStatusFilter;
-                const matchSource =
-                  defectSourceFilter === 'all' || d.source === defectSourceFilter;
-                return matchSearch && matchStatus && matchSource;
-              });
-              return (
-                <Pagination
-                  currentPage={defectPage}
-                  totalPages={Math.max(1, Math.ceil(filtered.length / defectPageSize))}
-                  totalItems={filtered.length}
-                  pageSize={defectPageSize}
-                  itemName="hồ sơ"
-                  onPageChange={setDefectPage}
-                  onPageSizeChange={(sz) => {
-                    setDefectPageSize(sz);
-                    setDefectPage(1);
-                  }}
-                  pageSizeOptions={[5, 10, 20, 50]}
-                />
-              );
-            })()}
-          </div>
-        )}
-      </div>
-
-      {/* ══════════════════════════════════════════════════════════════════════
-          OFFCANVAS: CHỌN KHÁCH HÀNG (Áp dụng component Offcanvas dùng chung)
-          ══════════════════════════════════════════════════════════════════════ */}
-      <Offcanvas
-        isOpen={showCustomerSelect}
-        onClose={() => setShowCustomerSelect(false)}
-        title={customerDrawerMode === 'order' ? 'Chọn khách hàng tạo đơn hàng' : 'Chọn khách hàng lập báo giá'}
-        description="Mạng lưới 345 đại lý & khách hàng toàn quốc"
-        icon={null}
-        width="400px"
-        bodyClassName="p-0 flex flex-col"
-        subHeader={
-          <div>
-            {/* Tabs Đại lý vs Vãng lai */}
-            <div className="p-3 bg-slate-100 flex gap-2 border-b border-slate-200">
-              <button
-                className={`flex-1 py-2 text-[13.5px] font-bold rounded-lg transition-all cursor-pointer ${
-                  customerTab === 'dai_ly'
-                    ? 'bg-white text-[#003087] shadow-xs border border-slate-300'
-                    : 'text-slate-600 hover:bg-white/60'
-                }`}
-                onClick={() => setCustomerTab('dai_ly')}
-              >
-                Hệ thống Đại lý ({customerTab === 'dai_ly' ? customersList.length : '343'})
-              </button>
-              <button
-                className={`flex-1 py-2 text-[13.5px] font-bold rounded-lg transition-all cursor-pointer ${
-                  customerTab === 'vang_lai'
-                    ? 'bg-white text-[#003087] shadow-xs border border-slate-300'
-                    : 'text-slate-600 hover:bg-white/60'
-                }`}
-                onClick={() => setCustomerTab('vang_lai')}
-              >
-                Khách vãng lai / Khách lẻ
-              </button>
-            </div>
-
-            {/* Ô tìm kiếm khách hàng */}
-            <div className="p-3 bg-white border-b border-slate-200">
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                <input
-                  type="text"
-                  placeholder="Tìm tên đại lý, số điện thoại, mã KH..."
-                  value={customerSearch}
-                  onChange={(e) => setCustomerSearch(e.target.value)}
-                  className="w-full pl-10 pr-3.5 py-2 text-[13.5px] rounded-lg border border-slate-300 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
-                />
+                          </SwipeableTableRow>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </FullWidthTable>
               </div>
-            </div>
-          </div>
-        }
-      >
-        <div className="flex-1 flex flex-col h-full overflow-hidden">
-          {customerTab === 'vang_lai' && (
-            <div className="p-3 bg-blue-50/70 border-b border-blue-100 shrink-0">
-              <button
-                onClick={() => {
-                  handleSelectCustomerForAction({
-                    id: `walkin-${Date.now()}`,
-                    code: 'KH-VL',
-                    name: 'Khách hàng vãng lai mới',
-                    nhom: 'ca-nhan',
-                  });
+
+              {/* Quotation Footer Pagination */}
+              <Pagination
+                currentPage={quotationPage}
+                totalPages={Math.max(1, Math.ceil((quotationTotal || quotations.length) / quotationPageSize))}
+                totalItems={quotationTotal || quotations.length}
+                pageSize={quotationPageSize}
+                itemName="báo giá"
+                onPageChange={setQuotationPage}
+                onPageSizeChange={(sz) => {
+                  setQuotationPageSize(sz);
+                  setQuotationPage(1);
                 }}
-                className="w-full flex items-center justify-between p-3 rounded-xl border border-blue-200 bg-white hover:bg-blue-50 text-blue-900 transition-all font-semibold text-sm text-left shadow-xs cursor-pointer"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full bg-[#003087] text-white flex items-center justify-center font-bold text-sm shrink-0">
-                    +
-                  </div>
-                  <div>
-                    <div className="font-bold text-[14px]">Tạo nhanh khách vãng lai mới</div>
-                    <div className="text-xs text-slate-500 font-normal">Nhập thông tin trực tiếp trên phiếu</div>
-                  </div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-blue-700 shrink-0" />
-              </button>
+                pageSizeOptions={[5, 10, 20, 50]}
+              />
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto p-2.5 divide-y divide-slate-100">
-            {loadingCustomers ? (
-              <div className="py-12 text-center text-sm text-slate-400">Đang nạp danh sách khách hàng...</div>
-            ) : customersList.length === 0 ? (
-              <div className="py-12 text-center text-sm text-slate-400">Không tìm thấy khách hàng nào</div>
-            ) : (
-              customersList.map((c) => {
-                const grp = getCustomerGroupInfo(c.nhom);
-                return (
-                  <div
-                    key={c.id}
-                    onClick={() => handleSelectCustomerForAction(c)}
-                    className="p-3 rounded-xl hover:bg-slate-50 cursor-pointer transition-all flex items-start justify-between group"
-                  >
-                    <div className="flex-1 min-w-0 pr-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-900 text-[14px] truncate">{c.name}</span>
-                        <span
-                          className="text-[11px] px-1.5 py-0.5 rounded font-bold"
-                          style={{ backgroundColor: grp.badgeBg, color: grp.badgeText }}
-                        >
-                          {grp.name}
-                        </span>
-                      </div>
-                      {c.dienThoai && (
-                        <div className="text-[12.5px] text-slate-600 mt-1">📞 {c.dienThoai}</div>
-                      )}
-                      {c.address && (
-                        <div className="text-[12.5px] text-slate-500 truncate mt-0.5">📍 {c.address}</div>
-                      )}
-                    </div>
+          {/* ══════════════════════════════════════════════════════════════════════
+            STEP 2: ĐƠN HÀNG (ORDER - DEFAULT ACTIVE STEP)
+            ══════════════════════════════════════════════════════════════════════ */}
+          {currentStep === 2 && (
+            <div className="flex-1 flex flex-col h-full overflow-hidden">
+              <TableToolbar
+                showMenu={false}
+                searchPlaceholder="Tìm mã đơn, tên KH, mã KH, SĐT..."
+                searchValue={orderSearch}
+                onSearchChange={(v) => {
+                  setOrderSearch(v);
+                  setOrderPage(1);
+                }}
+                filters={[
+                  {
+                    id: 'status',
+                    ariaLabel: 'Trạng thái',
+                    value: orderStatusFilter,
+                    onChange: (val) => {
+                      setOrderStatusFilter(val);
+                      setOrderPage(1);
+                    },
+                    options: [
+                      { value: '', label: 'Tất cả trạng thái' },
+                      { value: 'pending', label: 'Chờ duyệt' },
+                      { value: 'approved', label: 'Đã phê duyệt' },
+                      { value: 'active', label: 'Đang thực hiện' },
+                      { value: 'completed', label: 'Hoàn tất' },
+                      { value: 'done', label: 'Hoàn thành' },
+                      { value: 'cancelled', label: 'Huỷ bỏ' },
+                    ],
+                  },
+                  {
+                    id: 'time',
+                    ariaLabel: 'Thời gian',
+                    value: orderTimeFilter,
+                    onChange: (val) => {
+                      setOrderTimeFilter(val);
+                      setOrderPage(1);
+                    },
+                    options: [
+                      { value: '', label: 'Tất cả thời gian' },
+                      { value: 'today', label: 'Hôm nay' },
+                      { value: 'yesterday', label: 'Hôm qua' },
+                      { value: 'this_week', label: 'Tuần này' },
+                      { value: 'this_month', label: 'Tháng này' },
+                      { value: 'this_year', label: 'Năm nay' },
+                    ],
+                  },
+                ]}
+                rightActions={
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    {selectedOrderIds.size > 0 && (
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => setConfirmDeleteOrder(true)}
+                        title={`Xoá (${selectedOrderIds.size})`}
+                      >
+                        <Trash className="w-3.5 h-3.5 md:mr-1" />
+                        <span className="sales-order-btn-label hidden md:inline">Xoá ({selectedOrderIds.size})</span>
+                      </Button>
+                    )}
                     <Button
-                      size="sm"
                       variant="outline"
-                      className="opacity-0 group-hover:opacity-100 text-xs px-3 h-8 border-blue-400 text-blue-700 font-semibold transition-opacity"
+                      size="sm"
+                      className="border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
+                      onClick={() => setShowOrderCameraScanner(true)}
+                      title="Quét đơn bằng camera"
                     >
-                      Chọn
+                      <Camera className="w-3.5 h-3.5 md:mr-1 text-emerald-600" />
+                      <span className="sales-order-btn-label hidden md:inline">Quét đơn</span>
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      className="bg-[#003087] hover:bg-[#00256c] text-white border-[#003087]"
+                      onClick={() => {
+                        setCustomerDrawerMode('order');
+                        setShowCustomerSelect(true);
+                      }}
+                      title="Thêm đơn hàng mới"
+                    >
+                      <Plus className="w-4 h-4 md:mr-1" />
+                      <span className="sales-order-btn-label hidden md:inline">Thêm mới</span>
                     </Button>
                   </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      </Offcanvas>
+                }
+              />
 
-      {/* ══════════════════════════════════════════════════════════════════════
+              {/* Hint matched customers if no order found */}
+              {orderSearch && orders.length === 0 && orderMatchingCustomers.length > 0 && (
+                <div className="mx-3 my-2 p-2.5 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-900 flex flex-col gap-1.5">
+                  <div className="flex items-center gap-1.5 font-semibold">
+                    <ExclamationTriangle className="w-4 h-4 text-amber-600" />
+                    Tìm thấy {orderMatchingCustomers.length} khách hàng khớp từ khoá &ldquo;{orderSearch}&rdquo; (chưa có đơn hàng):
+                  </div>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {orderMatchingCustomers.map((c) => (
+                      <div
+                        key={c.id}
+                        className="bg-white px-2.5 py-1 rounded border border-amber-300 flex items-center gap-2 shadow-xs"
+                      >
+                        <span className="font-bold text-slate-800">{c.name}</span>
+                        {c.dienThoai && <span className="text-slate-500">📞 {c.dienThoai}</span>}
+                        <button
+                          onClick={() => handleSelectCustomerForAction(c)}
+                          className="text-xs bg-[#003087] text-white px-2 py-0.5 rounded font-medium hover:bg-blue-900 cursor-pointer"
+                        >
+                          + Tạo đơn hàng ngay
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Orders Table */}
+              <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                <FullWidthTable loading={orderLoading}>
+                  <table className="sales-orders-table w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+                    <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
+                      <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
+                        <th className="py-2.5 px-2.5 sm:px-3.5 w-8 sm:w-10 text-center">
+                          <input
+                            type="checkbox"
+                            checked={orders.length > 0 && orders.every((o) => selectedOrderIds.has(o.id))}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedOrderIds(new Set(orders.map((o) => o.id)));
+                              } else {
+                                setSelectedOrderIds(new Set());
+                              }
+                            }}
+                            className="rounded border-slate-300 text-sky-600 cursor-pointer"
+                          />
+                        </th>
+                        <th className="py-2.5 px-2.5 sm:px-3.5 sm:w-44">Mã đơn hàng</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5">Khách hàng</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5 w-36">Ngày tạo đơn</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5 w-36">Ngày giao hàng</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5 text-right w-44">Giá trị (đ)</th>
+                        <th className="py-2.5 px-2.5 sm:px-3.5 text-center w-28 sm:w-36">Trạng thái</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {orders.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-12 text-center text-slate-400">
+                            <i className="bi bi-inbox text-2xl block mb-2 opacity-30" />
+                            Không tìm thấy đơn hàng nào phù hợp
+                          </td>
+                        </tr>
+                      ) : (
+                        orders.map((o) => (
+                          <SwipeableTableRow
+                            key={o.id}
+                            rowId={o.id}
+                            onRowClick={() => setSelectedOrder(o)}
+                            onEdit={() => handleEditSingleOrder(o)}
+                            onDelete={() => handleDeleteOrderById(o.id)}
+                            deleteConfirmTitle="Xác nhận xoá đơn hàng"
+                            deleteConfirmMessage={`Bạn có chắc chắn muốn xoá đơn hàng "${o.code}" (${o.customer?.name || 'Khách vãng lai'}) không? Thao tác này không thể hoàn tác.`}
+                            deleteConfirmText="Xoá đơn hàng"
+                            className="hover:bg-slate-50/80 transition-colors cursor-pointer border-b border-slate-100"
+                          >
+                            <td className="py-2.5 px-2.5 sm:px-3.5 text-center" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={selectedOrderIds.has(o.id)}
+                                onChange={(e) => {
+                                  const next = new Set(selectedOrderIds);
+                                  if (e.target.checked) next.add(o.id);
+                                  else next.delete(o.id);
+                                  setSelectedOrderIds(next);
+                                }}
+                                className="rounded border-slate-300 text-sky-600 cursor-pointer"
+                              />
+                            </td>
+                            <td className="py-2.5 px-2.5 sm:px-3.5 min-w-0">
+                              <div className="flex items-center justify-between gap-1.5">
+                                <span className="font-bold text-[#003087] hover:underline cursor-pointer text-[13px] truncate">
+                                  {o.code}
+                                </span>
+                                <span className="sm:hidden text-[10.5px] text-slate-400 shrink-0">
+                                  {o.ngayDat ? new Date(o.ngayDat).toLocaleDateString('vi-VN') : (o.createdAt ? new Date(o.createdAt).toLocaleDateString('vi-VN') : '—')}
+                                </span>
+                              </div>
+                              {/* Mobile summary: 1 dòng gọn gàng Tên KH + Tổng tiền */}
+                              <div className="sm:hidden mt-0.5 flex items-center justify-between gap-2">
+                                <span className="font-semibold text-slate-900 text-xs truncate">
+                                  {o.customer?.name || 'Khách vãng lai'}
+                                </span>
+                                <span className="font-mono font-bold text-slate-900 text-xs shrink-0">
+                                  {Number(o.tongTien || 0).toLocaleString('vi-VN')} đ
+                                </span>
+                              </div>
+                            </td>
+                            <td className="hidden sm:table-cell py-2.5 px-3.5">
+                              <div>
+                                <div className="font-semibold text-slate-900 text-[13px]">
+                                  {o.customer?.name || 'Khách vãng lai'}
+                                </div>
+                                <div className="text-slate-400 text-[11px] mt-0.5 truncate max-w-sm">
+                                  {o.customer?.address || (o.customer?.dienThoai ? `SĐT: ${o.customer.dienThoai}` : 'Không rõ địa chỉ')}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="hidden sm:table-cell py-2.5 px-3.5 text-slate-600 text-[13px]">
+                              {o.ngayDat ? new Date(o.ngayDat).toLocaleDateString('vi-VN') : (o.createdAt ? new Date(o.createdAt).toLocaleDateString('vi-VN') : '—')}
+                            </td>
+                            <td className="hidden sm:table-cell py-2.5 px-3.5 text-slate-600 text-[13px]">
+                              {o.ngayGiao ? new Date(o.ngayGiao).toLocaleDateString('vi-VN') : '—'}
+                            </td>
+                            <td className="hidden sm:table-cell py-2.5 px-3.5 text-right font-bold text-slate-900 text-[13px]">
+                              {Number(o.tongTien || 0).toLocaleString('vi-VN')}
+                            </td>
+                            <td className="py-2.5 px-2.5 sm:px-3.5 text-center">
+                              <StatusBadge status={o.trangThai} />
+                            </td>
+                          </SwipeableTableRow>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </FullWidthTable>
+              </div>
+
+              {/* Order Footer Pagination */}
+              <Pagination
+                currentPage={orderPage}
+                totalPages={Math.max(1, Math.ceil((orderTotal || orders.length) / orderPageSize))}
+                totalItems={orderTotal || orders.length}
+                pageSize={orderPageSize}
+                itemName="đơn hàng"
+                onPageChange={setOrderPage}
+                onPageSizeChange={(sz) => {
+                  setOrderPageSize(sz);
+                  setOrderPage(1);
+                }}
+                pageSizeOptions={[5, 10, 20, 50]}
+              />
+            </div>
+          )}
+
+          {/* ══════════════════════════════════════════════════════════════════════
+            STEP 3: ĐƠN HÀNG TỪ ĐẠI LÝ (DEALER PORTAL ORDERS)
+            ══════════════════════════════════════════════════════════════════════ */}
+          {currentStep === 3 && (
+            <div className="flex-1 flex flex-col h-full overflow-hidden">
+              <TableToolbar
+                showMenu={false}
+                searchPlaceholder="Tìm mã đơn đại lý, tên đại lý, mã ĐL, SĐT..."
+                searchValue={dealerOrderSearch}
+                onSearchChange={(v) => {
+                  setDealerOrderSearch(v);
+                  setDealerOrderPage(1);
+                }}
+                filters={[
+                  {
+                    id: 'dealer-status',
+                    ariaLabel: 'Trạng thái',
+                    value: dealerOrderStatusFilter,
+                    onChange: (val) => {
+                      setDealerOrderStatusFilter(val);
+                      setDealerOrderPage(1);
+                    },
+                    options: [
+                      { value: '', label: 'Tất cả trạng thái' },
+                      { value: 'pending', label: 'Chưa xử lý' },
+                      { value: 'approved', label: 'Đã xử lý' },
+                      { value: 'rejected', label: 'Từ chối' },
+                    ],
+                  },
+                  {
+                    id: 'dealer-time',
+                    ariaLabel: 'Thời gian',
+                    value: dealerOrderTimeFilter,
+                    onChange: (val) => {
+                      setDealerOrderTimeFilter(val);
+                      setDealerOrderPage(1);
+                    },
+                    options: [
+                      { value: '', label: 'Tất cả thời gian' },
+                      { value: 'today', label: 'Hôm nay' },
+                      { value: 'yesterday', label: 'Hôm qua' },
+                      { value: 'this_week', label: 'Tuần này' },
+                      { value: 'this_month', label: 'Tháng này' },
+                      { value: 'this_year', label: 'Năm nay' },
+                    ],
+                  },
+                ]}
+                rightActions={
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    {selectedDealerOrderIds.size > 0 && (
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => setConfirmDeleteDealerOrder(true)}
+                        title={`Xoá (${selectedDealerOrderIds.size})`}
+                      >
+                        <Trash className="w-3.5 h-3.5 md:mr-1" />
+                        <span className="sales-order-btn-label hidden md:inline">Xoá ({selectedDealerOrderIds.size})</span>
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-slate-300 text-slate-700 bg-white hover:bg-slate-50"
+                      onClick={() => fetchDealerOrders()}
+                      title="Làm mới"
+                    >
+                      <ArrowRepeat className={`w-3.5 h-3.5 md:mr-1 ${dealerOrderLoading ? 'animate-spin' : ''}`} />
+                      <span className="sales-order-btn-label hidden md:inline">Làm mới</span>
+                    </Button>
+                  </div>
+                }
+              />
+
+              {/* Dealer Orders Table */}
+              <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                <FullWidthTable loading={dealerOrderLoading}>
+                  <table className="sales-orders-table w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+                    <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
+                      <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
+                        <th className="py-2.5 px-2.5 sm:px-3.5 w-8 sm:w-10 text-center">
+                          <input
+                            type="checkbox"
+                            checked={dealerOrders.length > 0 && dealerOrders.every((o) => selectedDealerOrderIds.has(o.id))}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedDealerOrderIds(new Set(dealerOrders.map((o) => o.id)));
+                              } else {
+                                setSelectedDealerOrderIds(new Set());
+                              }
+                            }}
+                            className="rounded border-slate-300 text-sky-600 cursor-pointer"
+                          />
+                        </th>
+                        <th className="py-2.5 px-2.5 sm:px-3.5 sm:w-48">Mã đơn đại lý</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5">Đại lý & Thông tin nhận hàng</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5">Nội dung yêu cầu</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5 w-32">Ngày gửi</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5 w-32">Ngày giao</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5 text-right w-40">Giá trị (đ)</th>
+                        <th className="py-2.5 px-2.5 sm:px-3.5 text-center w-28 sm:w-36">Trạng thái</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {dealerOrders.filter((o) => o.trangThai !== 'draft').length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-12 text-center text-slate-400">
+                            <i className="bi bi-inbox text-2xl block mb-2 opacity-30" />
+                            Chưa có đơn hàng nào từ đại lý gửi lên hệ thống
+                          </td>
+                        </tr>
+                      ) : (
+                        dealerOrders
+                          .filter((o) => o.trangThai !== 'draft')
+                          .map((o) => {
+                            const itemsList = o.saleOrderItems || [];
+                            const totalQty = itemsList.reduce((s: number, it: any) => s + (Number(it.soLuong) || 1), 0);
+                            const requestContent =
+                              (o.ghiChu && o.ghiChu.trim()) ||
+                              (itemsList[0]?.tenHang
+                                ? `Đặt mua ${itemsList[0].tenHang}${itemsList.length > 1 ? ` (+${itemsList.length - 1} SP)` : ''}`
+                                : 'Đặt hàng theo danh mục đại lý');
+                            return (
+                              <SwipeableTableRow
+                                key={o.id}
+                                rowId={o.id}
+                                onRowClick={() => setSelectedOrder(o)}
+                                onEdit={() => handleEditSingleOrder(o)}
+                                onDelete={() => handleDeleteOrderById(o.id)}
+                                deleteConfirmTitle="Xác nhận xoá đơn hàng đại lý"
+                                deleteConfirmMessage={`Bạn có chắc chắn muốn xoá đơn hàng đại lý "${o.code}" không? Thao tác này không thể hoàn tác.`}
+                                deleteConfirmText="Xoá đơn hàng"
+                                className="hover:bg-slate-50/80 transition-colors cursor-pointer border-b border-slate-100"
+                              >
+                                <td className="py-2.5 px-2.5 sm:px-3.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedDealerOrderIds.has(o.id)}
+                                    onChange={(e) => {
+                                      const next = new Set(selectedDealerOrderIds);
+                                      if (e.target.checked) next.add(o.id);
+                                      else next.delete(o.id);
+                                      setSelectedDealerOrderIds(next);
+                                    }}
+                                    className="rounded border-slate-300 text-sky-600 cursor-pointer"
+                                  />
+                                </td>
+                                <td className="py-2.5 px-2.5 sm:px-3.5 min-w-0">
+                                  <div className="font-bold text-[#003087] hover:underline cursor-pointer text-[13px] whitespace-nowrap">
+                                    {o.code}
+                                  </div>
+                                  <div className="text-slate-400 text-[11px] mt-0.5 truncate">
+                                    Người lập: {o.nguoiDatHang || o.customer?.name || 'Đại lý'}
+                                  </div>
+                                  {/* Mobile summary */}
+                                  <div className="sm:hidden mt-1 space-y-0.5">
+                                    <div className="font-semibold text-slate-900 text-xs truncate">
+                                      {o.customer?.name || o.nguoiNhan || 'Đại lý Seajong'}
+                                    </div>
+                                    <div className="text-[11px] text-slate-500 truncate">
+                                      {requestContent} ({totalQty} SP)
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2 text-[11px]">
+                                      <span className="text-slate-400">
+                                        {o.ngayDat ? new Date(o.ngayDat).toLocaleDateString('vi-VN') : '—'}
+                                      </span>
+                                      <span className="font-mono font-bold text-slate-900">
+                                        {Number(o.tongTien || 0).toLocaleString('vi-VN')} đ
+                                      </span>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="hidden sm:table-cell py-2.5 px-3.5">
+                                  <div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-semibold text-slate-900 text-[13px]">
+                                        {o.customer?.name || o.nguoiNhan || 'Đại lý Seajong'}
+                                      </span>
+                                      {o.customer?.code && (
+                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                                          {o.customer.code}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-slate-400 text-[11px] mt-0.5 truncate max-w-xs">
+                                      {o.diaChiGiaoHang || o.customer?.address || (o.soDienThoai || o.customer?.dienThoai ? `SĐT: ${o.soDienThoai || o.customer?.dienThoai}` : 'Chưa cập nhật địa chỉ')}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="hidden sm:table-cell py-2.5 px-3.5">
+                                  <div className="font-medium text-slate-800 text-[12.5px] truncate max-w-xs" title={requestContent}>
+                                    {requestContent}
+                                  </div>
+                                  <div className="text-slate-400 text-[11px] mt-0.5">
+                                    {itemsList.length} mặt hàng · Tổng SL: <strong>{totalQty}</strong>
+                                  </div>
+                                </td>
+                                <td className="hidden sm:table-cell py-2.5 px-3.5 text-slate-600 text-[13px]">
+                                  {o.ngayDat ? new Date(o.ngayDat).toLocaleDateString('vi-VN') : (o.createdAt ? new Date(o.createdAt).toLocaleDateString('vi-VN') : '—')}
+                                </td>
+                                <td className="hidden sm:table-cell py-2.5 px-3.5 text-slate-600 text-[13px]">
+                                  {o.ngayGiao ? new Date(o.ngayGiao).toLocaleDateString('vi-VN') : '—'}
+                                </td>
+                                <td className="hidden sm:table-cell py-2.5 px-3.5 text-right font-bold text-slate-900 text-[13px]">
+                                  {Number(o.tongTien || 0).toLocaleString('vi-VN')}
+                                </td>
+                                <td className="py-2.5 px-2.5 sm:px-3.5 text-center">
+                                  <DealerOrderStatusBadge status={o.trangThai} />
+                                </td>
+                              </SwipeableTableRow>
+                            );
+                          })
+                      )}
+                    </tbody>
+                  </table>
+                </FullWidthTable>
+              </div>
+
+              {/* Dealer Order Footer Pagination */}
+              <Pagination
+                currentPage={dealerOrderPage}
+                totalPages={Math.max(1, Math.ceil((dealerOrderTotal || dealerOrders.length) / dealerOrderPageSize))}
+                totalItems={dealerOrderTotal || dealerOrders.length}
+                pageSize={dealerOrderPageSize}
+                itemName="đơn đại lý"
+                onPageChange={setDealerOrderPage}
+                onPageSizeChange={(sz) => {
+                  setDealerOrderPageSize(sz);
+                  setDealerOrderPage(1);
+                }}
+                pageSizeOptions={[5, 10, 20, 50]}
+              />
+            </div>
+          )}
+
+          {/* ══════════════════════════════════════════════════════════════════════
+            STEP 4: BÁN HÀNG ĐA KÊNH (OMNICHANNEL)
+            ══════════════════════════════════════════════════════════════════════ */}
+          {currentStep === 4 && (
+            <div className="flex-1 flex flex-col h-full overflow-hidden">
+              {/* Omnichannel Orders Toolbar */}
+              <TableToolbar
+                showMenu={false}
+                searchPlaceholder="Tìm mã đơn sàn, mã vận đơn, khách hàng..."
+                searchValue={omnichannelSearch}
+                onSearchChange={setOmnichannelSearch}
+                filters={[
+                  {
+                    id: 'channel',
+                    ariaLabel: 'Kênh bán',
+                    value: omnichannelChannelFilter,
+                    onChange: setOmnichannelChannelFilter,
+                    options: [
+                      { value: 'all', label: 'Tất cả kênh' },
+                      { value: 'Shopee', label: 'Shopee Mall' },
+                      { value: 'TikTok', label: 'TikTok Shop' },
+                      { value: 'Website', label: 'Website Seajong' },
+                    ],
+                  },
+                  {
+                    id: 'status',
+                    ariaLabel: 'Trạng thái',
+                    value: omnichannelStatusFilter,
+                    onChange: setOmnichannelStatusFilter,
+                    options: [
+                      { value: 'all', label: 'Tất cả trạng thái' },
+                      { value: 'Đã xác nhận', label: 'Đã xác nhận' },
+                      { value: 'Đang giao hàng', label: 'Đang giao hàng' },
+                      { value: 'Hoàn tất', label: 'Hoàn tất' },
+                    ],
+                  },
+                ]}
+                rightActions={
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-slate-300 text-slate-700 bg-white hover:bg-slate-50"
+                      onClick={() => alert('Cấu hình kết nối API Shopee Open Platform & TikTok Shop Partner')}
+                      title="Cấu hình sàn"
+                    >
+                      <Sliders className="w-3.5 h-3.5 md:mr-1" />
+                      <span className="sales-order-btn-label hidden md:inline">Cấu hình sàn</span>
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      className="bg-[#003087] hover:bg-[#00256c] text-white border-[#003087]"
+                      disabled={isSyncingChannels}
+                      title="Đồng bộ đơn hàng đa kênh"
+                      onClick={() => {
+                        setIsSyncingChannels(true);
+                        setTimeout(() => {
+                          setIsSyncingChannels(false);
+                          fetchOmnichannelOrders();
+                          alert('Đã đồng bộ đơn hàng mới nhất từ Shopee và TikTok Shop!');
+                        }, 1000);
+                      }}
+                    >
+                      <ArrowRepeat className={`w-3.5 h-3.5 md:mr-1 ${isSyncingChannels ? 'animate-spin' : ''}`} />
+                      <span className="sales-order-btn-label hidden md:inline">{isSyncingChannels ? 'Đang đồng bộ...' : 'Đồng bộ ngay'}</span>
+                    </Button>
+                  </div>
+                }
+              />
+
+              {/* Omnichannel Orders Table */}
+              <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                <FullWidthTable loading={omnichannelLoading}>
+                  <table className="sales-orders-table w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+                    <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
+                      <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
+                        <th className="py-2.5 px-2.5 sm:px-3.5 w-8 sm:w-10 text-center">
+                          <input
+                            type="checkbox"
+                            className="rounded border-slate-300 text-sky-600 cursor-pointer"
+                            checked={omnichannelOrders.length > 0 && selectedOmniIds.length === omnichannelOrders.length}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedOmniIds(omnichannelOrders.map((o) => o.id));
+                              else setSelectedOmniIds([]);
+                            }}
+                          />
+                        </th>
+                        <th className="py-2.5 px-2.5 sm:px-3.5 sm:w-60">Kênh & Mã đơn</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5">Khách hàng</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5 text-right w-36">Tổng tiền</th>
+                        <th className="py-2.5 px-2.5 sm:px-3.5 text-center w-28 sm:w-36">Trạng thái</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5 w-32">Đặt hàng</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5 w-32">Giao hàng</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(() => {
+                        const filtered = omnichannelOrders.filter((o) => {
+                          const matchSearch =
+                            !omnichannelSearch ||
+                            o.externalId.toLowerCase().includes(omnichannelSearch.toLowerCase()) ||
+                            o.customer.toLowerCase().includes(omnichannelSearch.toLowerCase()) ||
+                            (o.trackingCode || '').toLowerCase().includes(omnichannelSearch.toLowerCase());
+                          const matchStatus =
+                            omnichannelStatusFilter === 'all' || o.status === omnichannelStatusFilter;
+                          return matchSearch && matchStatus;
+                        });
+                        const start = (omnichannelPage - 1) * omnichannelPageSize;
+                        const pageSlice = filtered.slice(start, start + omnichannelPageSize);
+
+                        if (pageSlice.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={7} className="py-12 text-center text-slate-400">
+                                <i className="bi bi-inbox text-2xl block mb-2 opacity-30" />
+                                Không tìm thấy đơn hàng đa kênh nào phù hợp
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return pageSlice.map((row) => {
+                          const isShopee = row.channel.includes('Shopee');
+                          const isTikTok = row.channel.includes('TikTok');
+                          return (
+                            <SwipeableTableRow
+                              key={row.id}
+                              rowId={`omnichannel-${row.id}`}
+                              className="hover:bg-slate-50/80 transition-colors border-b border-slate-100"
+                              onEdit={() => {
+                                alert(`Chi tiết đơn hàng đa kênh ${row.externalId} (${row.channel}) — Khách hàng: ${row.customer}`);
+                              }}
+                              onDelete={async () => {
+                                setOmnichannelOrders((prev) => prev.filter((item) => item.id !== row.id));
+                                setSelectedOmniIds((prev) => prev.filter((id) => id !== row.id));
+                              }}
+                              deleteConfirmTitle="Xác nhận xoá đơn đa kênh"
+                              deleteConfirmMessage={`Bạn có chắc chắn muốn xoá đơn hàng đa kênh "${row.externalId}" (${row.channel}) của khách hàng "${row.customer}" không? Hành động này không thể hoàn tác.`}
+                            >
+                              <td className="py-2.5 px-2.5 sm:px-3.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  className="rounded border-slate-300 text-sky-600 cursor-pointer"
+                                  checked={selectedOmniIds.includes(row.id)}
+                                  onChange={() => {
+                                    setSelectedOmniIds((prev) =>
+                                      prev.includes(row.id) ? prev.filter((x) => x !== row.id) : [...prev, row.id]
+                                    );
+                                  }}
+                                />
+                              </td>
+                              <td className="py-2.5 px-2.5 sm:px-3.5 min-w-0">
+                                <div className="flex items-start gap-2">
+                                  <div
+                                    className="rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                                    style={{
+                                      width: 24,
+                                      height: 24,
+                                      background: isShopee ? '#ee4d2d' : isTikTok ? '#000000' : '#003087',
+                                      color: 'white',
+                                    }}
+                                  >
+                                    <Shop style={{ fontSize: 11 }} />
+                                  </div>
+                                  <div className="flex flex-col min-w-0 flex-1">
+                                    <code className="text-[#003087 content-code] font-bold text-[12.5px] sm:text-[13px] truncate">
+                                      {row.externalId}
+                                    </code>
+                                    <span className="text-slate-500 text-[11px] font-medium">{row.channel}</span>
+                                    {/* Mobile summary */}
+                                    <div className="sm:hidden mt-1 space-y-0.5">
+                                      <div className="font-semibold text-slate-800 text-xs truncate">{row.customer}</div>
+                                      <div className="flex items-center justify-between gap-2 text-[11px]">
+                                        <span className="text-slate-400">
+                                          {row.createdAt ? new Date(row.createdAt).toLocaleDateString('vi-VN') : '—'}
+                                        </span>
+                                        <span className="font-mono font-bold text-slate-900">
+                                          {Number(row.amount || 0).toLocaleString('vi-VN')} đ
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="hidden sm:table-cell py-2.5 px-3.5">
+                                <div className="flex flex-col">
+                                  <span className="font-semibold text-slate-800 text-[13px]">{row.customer}</span>
+                                  <small className="text-slate-400 text-[11px] truncate max-w-sm" title={row.address}>
+                                    {row.address}
+                                  </small>
+                                </div>
+                              </td>
+                              <td className="hidden sm:table-cell py-2.5 px-3.5 text-right font-bold text-slate-900 text-[13px]">
+                                {Number(row.amount || 0).toLocaleString('vi-VN')}đ
+                              </td>
+                              <td className="py-2.5 px-2.5 sm:px-3.5 text-center">
+                                <StatusBadge status={row.status} />
+                              </td>
+                              <td className="hidden sm:table-cell py-2.5 px-3.5 text-slate-500 text-[12px]">
+                                {row.createdAt ? new Date(row.createdAt).toLocaleDateString('vi-VN') : '—'}
+                              </td>
+                              <td className="hidden sm:table-cell py-2.5 px-3.5 text-slate-500 text-[12px]">
+                                {row.shippingDate
+                                  ? new Date(row.shippingDate).toLocaleDateString('vi-VN')
+                                  : row.createdAt
+                                    ? new Date(row.createdAt).toLocaleDateString('vi-VN')
+                                    : '—'}
+                              </td>
+                            </SwipeableTableRow>
+                          );
+                        });
+                      })()}
+                    </tbody>
+                  </table>
+                </FullWidthTable>
+              </div>
+
+              {(() => {
+                const filtered = omnichannelOrders.filter((o) => {
+                  const matchSearch =
+                    !omnichannelSearch ||
+                    o.externalId.toLowerCase().includes(omnichannelSearch.toLowerCase()) ||
+                    o.customer.toLowerCase().includes(omnichannelSearch.toLowerCase()) ||
+                    (o.trackingCode || '').toLowerCase().includes(omnichannelSearch.toLowerCase());
+                  const matchStatus =
+                    omnichannelStatusFilter === 'all' || o.status === omnichannelStatusFilter;
+                  return matchSearch && matchStatus;
+                });
+                return (
+                  <Pagination
+                    currentPage={omnichannelPage}
+                    totalPages={Math.max(1, Math.ceil(filtered.length / omnichannelPageSize))}
+                    totalItems={filtered.length}
+                    pageSize={omnichannelPageSize}
+                    itemName="đơn đa kênh"
+                    onPageChange={setOmnichannelPage}
+                    onPageSizeChange={(sz) => {
+                      setOmnichannelPageSize(sz);
+                      setOmnichannelPage(1);
+                    }}
+                    pageSizeOptions={[5, 10, 20, 50]}
+                  />
+                );
+              })()}
+            </div>
+          )}
+
+          {/* ══════════════════════════════════════════════════════════════════════
+            STEP 5: HÀNG TRẢ VỀ (RETURN & WARRANTY)
+            ══════════════════════════════════════════════════════════════════════ */}
+          {currentStep === 5 && (
+            <div className="flex-1 flex flex-col h-full overflow-hidden">
+              <TableToolbar
+                showMenu={false}
+                searchPlaceholder="Tìm mã phiếu, khách hàng, sản phẩm..."
+                searchValue={defectSearch}
+                onSearchChange={setDefectSearch}
+                filters={[
+                  {
+                    id: 'status',
+                    ariaLabel: 'Trạng thái',
+                    value: defectStatusFilter,
+                    onChange: setDefectStatusFilter,
+                    options: [
+                      { value: 'all', label: 'Tất cả trạng thái' },
+                      { value: 'NEW', label: 'Chưa xử lý' },
+                      { value: 'TECH_EVALUATING', label: 'Đang chẩn đoán' },
+                      { value: 'WAITING_QC', label: 'Chờ QC kiểm tra' },
+                      { value: 'WAITING_INVENTORY', label: 'Chờ nhập kho' },
+                      { value: 'COMPLETED', label: 'Đã xử lý' },
+                    ],
+                  },
+                  {
+                    id: 'source',
+                    ariaLabel: 'Nguồn phát sinh',
+                    value: defectSourceFilter,
+                    onChange: setDefectSourceFilter,
+                    options: [
+                      { value: 'all', label: 'Tất cả nguồn' },
+                      { value: 'RETURN', label: 'Hàng trả về' },
+                      { value: 'WARRANTY', label: 'Bảo hành' },
+                      { value: 'INTERNAL', label: 'Nội bộ' },
+                    ],
+                  },
+                ]}
+                rightActions={
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    {selectedDefectIds.size > 0 && (
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => setConfirmDeleteDefects(true)}
+                        title={`Xoá (${selectedDefectIds.size})`}
+                      >
+                        <Trash className="w-3.5 h-3.5 md:mr-1" />
+                        <span className="sales-order-btn-label hidden md:inline">Xoá ({selectedDefectIds.size})</span>
+                      </Button>
+                    )}
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      className="bg-[#003087] hover:bg-[#00256c] text-white border-[#003087]"
+                      onClick={() => alert('Mở phiếu tạo hồ sơ đổi trả / hàng bảo hành mới')}
+                      title="Tạo hồ sơ đổi trả / bảo hành mới"
+                    >
+                      <Plus className="w-4 h-4 md:mr-1" />
+                      <span className="sales-order-btn-label hidden md:inline">Tạo mới</span>
+                    </Button>
+                  </div>
+                }
+              />
+
+              {/* Defects Table */}
+              <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                <FullWidthTable loading={defectLoading}>
+                  <table className="sales-orders-table w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+                    <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
+                      <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
+                        <th className="py-2.5 px-2.5 sm:px-3.5 w-8 sm:w-11 text-center">
+                          <input
+                            type="checkbox"
+                            checked={defects.length > 0 && defects.every((d) => selectedDefectIds.has(d.id))}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedDefectIds(new Set(defects.map((d) => d.id)));
+                              } else {
+                                setSelectedDefectIds(new Set());
+                              }
+                            }}
+                            className="rounded border-slate-300 text-sky-600 cursor-pointer"
+                          />
+                        </th>
+                        <th className="py-2.5 px-2.5 sm:px-3.5 sm:w-36">Mã lỗi</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5">Khách hàng</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5 w-36">Đơn hàng</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5 w-36">Ngày tạo</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5">Mô tả lỗi</th>
+                        <th className="py-2.5 px-2.5 sm:px-3.5 text-center w-28 sm:w-32">Trạng thái</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(() => {
+                        const filtered = defects.filter((d) => {
+                          const matchSearch =
+                            !defectSearch ||
+                            d.code.toLowerCase().includes(defectSearch.toLowerCase()) ||
+                            (d.customerName || '').toLowerCase().includes(defectSearch.toLowerCase()) ||
+                            (d.productName || '').toLowerCase().includes(defectSearch.toLowerCase());
+                          const matchStatus =
+                            defectStatusFilter === 'all' || d.status === defectStatusFilter;
+                          const matchSource =
+                            defectSourceFilter === 'all' || d.source === defectSourceFilter;
+                          return matchSearch && matchStatus && matchSource;
+                        });
+
+                        const start = (defectPage - 1) * defectPageSize;
+                        const pageSlice = filtered.slice(start, start + defectPageSize);
+
+                        if (pageSlice.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={7} className="py-12 text-center text-slate-400">
+                                <i className="bi bi-inbox text-2xl block mb-2 opacity-30" />
+                                Chưa có hồ sơ hàng trả về nào
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return pageSlice.map((row) => (
+                          <SwipeableTableRow
+                            key={row.id}
+                            rowId={row.id}
+                            onRowClick={() => setSelectedDefect(row)}
+                            onEdit={() => setSelectedDefect(row)}
+                            onDelete={() => handleDeleteDefectById(row.id)}
+                            deleteConfirmTitle="Xác nhận xoá hồ sơ trả về"
+                            deleteConfirmMessage={`Bạn có chắc chắn muốn xoá hồ sơ "${row.code}" không? Thao tác này không thể hoàn tác.`}
+                            deleteConfirmText="Xoá hồ sơ"
+                            className="hover:bg-slate-50/80 cursor-pointer transition-colors border-b border-slate-100"
+                          >
+                            <td className="py-2.5 px-2.5 sm:px-3.5 text-center" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={selectedDefectIds.has(row.id)}
+                                onChange={(e) => {
+                                  const next = new Set(selectedDefectIds);
+                                  if (e.target.checked) next.add(row.id);
+                                  else next.delete(row.id);
+                                  setSelectedDefectIds(next);
+                                }}
+                                className="rounded border-slate-300 text-sky-600 cursor-pointer"
+                              />
+                            </td>
+                            <td className="py-2.5 px-2.5 sm:px-3.5 min-w-0">
+                              <div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold text-[#003087] hover:underline cursor-pointer text-[13px]">
+                                    {row.code || 'ERR-—'}
+                                  </span>
+                                  <span className="inline-block px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-normal">
+                                    {row.source === 'RETURN' ? 'Trả về' : row.source === 'WARRANTY' ? 'Bảo hành' : 'Nội bộ'}
+                                  </span>
+                                </div>
+                                {/* Mobile summary */}
+                                <div className="sm:hidden mt-1 space-y-0.5">
+                                  <div className="font-semibold text-slate-900 text-xs truncate">
+                                    {row.customerName || '—'} {row.orderNumber ? `• #${row.orderNumber}` : ''}
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 truncate">
+                                    {row.description || '—'}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="hidden sm:table-cell py-2.5 px-3.5">
+                              <div>
+                                <div className="font-semibold text-slate-900 text-[13px]">{row.customerName || '—'}</div>
+                                <div className="text-slate-400 text-[11px] mt-0.5 truncate">{row.customerAddress || '—'}</div>
+                              </div>
+                            </td>
+                            <td className="hidden sm:table-cell py-2.5 px-3.5 text-slate-800 text-[13px] font-medium">
+                              {row.orderNumber || '—'}
+                            </td>
+                            <td className="hidden sm:table-cell py-2.5 px-3.5 text-slate-600 text-[13px]">
+                              {row.createdAt ? new Date(row.createdAt).toLocaleDateString('vi-VN') : '—'}
+                            </td>
+                            <td className="hidden sm:table-cell py-2.5 px-3.5">
+                              <span className="text-slate-500 text-[12px] truncate inline-block max-w-[260px]" title={row.description}>
+                                {row.description || '—'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-2.5 sm:px-3.5 text-center">
+                              <StatusBadge status={row.status} />
+                            </td>
+                          </SwipeableTableRow>
+                        ));
+                      })()}
+                    </tbody>
+                  </table>
+                </FullWidthTable>
+              </div>
+
+              {/* Defect Footer */}
+              {(() => {
+                const filtered = defects.filter((d) => {
+                  const matchSearch =
+                    !defectSearch ||
+                    d.code.toLowerCase().includes(defectSearch.toLowerCase()) ||
+                    (d.customerName || '').toLowerCase().includes(defectSearch.toLowerCase()) ||
+                    (d.productName || '').toLowerCase().includes(defectSearch.toLowerCase());
+                  const matchStatus =
+                    defectStatusFilter === 'all' || d.status === defectStatusFilter;
+                  const matchSource =
+                    defectSourceFilter === 'all' || d.source === defectSourceFilter;
+                  return matchSearch && matchStatus && matchSource;
+                });
+                return (
+                  <Pagination
+                    currentPage={defectPage}
+                    totalPages={Math.max(1, Math.ceil(filtered.length / defectPageSize))}
+                    totalItems={filtered.length}
+                    pageSize={defectPageSize}
+                    itemName="hồ sơ"
+                    onPageChange={setDefectPage}
+                    onPageSizeChange={(sz) => {
+                      setDefectPageSize(sz);
+                      setDefectPage(1);
+                    }}
+                    pageSizeOptions={[5, 10, 20, 50]}
+                  />
+                );
+              })()}
+            </div>
+          )}
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+          OFFCANVAS: CHỌN KHÁCH HÀNG (Áp dụng component Offcanvas dùng chung)
+          ══════════════════════════════════════════════════════════════════════ */}
+        <Offcanvas
+          isOpen={showCustomerSelect}
+          onClose={() => setShowCustomerSelect(false)}
+          title={customerDrawerMode === 'order' ? 'Chọn khách hàng tạo đơn hàng' : 'Chọn khách hàng lập báo giá'}
+          description="Mạng lưới 345 đại lý & khách hàng toàn quốc"
+          icon={null}
+          width="400px"
+          bodyClassName="p-0 flex flex-col"
+          subHeader={
+            <div>
+              {/* Tabs Đại lý vs Vãng lai */}
+              <div className="p-3 bg-slate-100 flex gap-2 border-b border-slate-200">
+                <button
+                  className={`flex-1 py-2 text-[13.5px] font-bold rounded-lg transition-all cursor-pointer ${customerTab === 'dai_ly'
+                      ? 'bg-white text-[#003087] shadow-xs border border-slate-300'
+                      : 'text-slate-600 hover:bg-white/60'
+                    }`}
+                  onClick={() => setCustomerTab('dai_ly')}
+                >
+                  Hệ thống Đại lý ({customerTab === 'dai_ly' ? customersList.length : '343'})
+                </button>
+                <button
+                  className={`flex-1 py-2 text-[13.5px] font-bold rounded-lg transition-all cursor-pointer ${customerTab === 'vang_lai'
+                      ? 'bg-white text-[#003087] shadow-xs border border-slate-300'
+                      : 'text-slate-600 hover:bg-white/60'
+                    }`}
+                  onClick={() => setCustomerTab('vang_lai')}
+                >
+                  Khách vãng lai / Khách lẻ
+                </button>
+              </div>
+
+              {/* Ô tìm kiếm khách hàng */}
+              <div className="p-3 bg-white border-b border-slate-200">
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                  <input
+                    type="text"
+                    placeholder="Tìm tên đại lý, số điện thoại, mã KH..."
+                    value={customerSearch}
+                    onChange={(e) => setCustomerSearch(e.target.value)}
+                    className="w-full pl-10 pr-3.5 py-2 text-[13.5px] rounded-lg border border-slate-300 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                  />
+                </div>
+              </div>
+            </div>
+          }
+        >
+          <div className="flex-1 flex flex-col h-full overflow-hidden">
+            {customerTab === 'vang_lai' && (
+              <div className="p-3 bg-blue-50/70 border-b border-blue-100 shrink-0">
+                <button
+                  onClick={() => {
+                    handleSelectCustomerForAction({
+                      id: `walkin-${Date.now()}`,
+                      code: 'KH-VL',
+                      name: 'Khách hàng vãng lai mới',
+                      nhom: 'ca-nhan',
+                    });
+                  }}
+                  className="w-full flex items-center justify-between p-3 rounded-xl border border-blue-200 bg-white hover:bg-blue-50 text-blue-900 transition-all font-semibold text-sm text-left shadow-xs cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full bg-[#003087] text-white flex items-center justify-center font-bold text-sm shrink-0">
+                      +
+                    </div>
+                    <div>
+                      <div className="font-bold text-[14px]">Tạo nhanh khách vãng lai mới</div>
+                      <div className="text-xs text-slate-500 font-normal">Nhập thông tin trực tiếp trên phiếu</div>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-blue-700 shrink-0" />
+                </button>
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto p-2.5 divide-y divide-slate-100">
+              {loadingCustomers ? (
+                <div className="py-12 text-center text-sm text-slate-400">Đang nạp danh sách khách hàng...</div>
+              ) : customersList.length === 0 ? (
+                <div className="py-12 text-center text-sm text-slate-400">Không tìm thấy khách hàng nào</div>
+              ) : (
+                customersList.map((c) => {
+                  const grp = getCustomerGroupInfo(c.nhom);
+                  return (
+                    <div
+                      key={c.id}
+                      onClick={() => handleSelectCustomerForAction(c)}
+                      className="p-3 rounded-xl hover:bg-slate-50 cursor-pointer transition-all flex items-start justify-between group"
+                    >
+                      <div className="flex-1 min-w-0 pr-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900 text-[14px] truncate">{c.name}</span>
+                          <span
+                            className="text-[11px] px-1.5 py-0.5 rounded font-bold"
+                            style={{ backgroundColor: grp.badgeBg, color: grp.badgeText }}
+                          >
+                            {grp.name}
+                          </span>
+                        </div>
+                        {c.dienThoai && (
+                          <div className="text-[12.5px] text-slate-600 mt-1">📞 {c.dienThoai}</div>
+                        )}
+                        {c.address && (
+                          <div className="text-[12.5px] text-slate-500 truncate mt-0.5">📍 {c.address}</div>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="opacity-0 group-hover:opacity-100 text-xs px-3 h-8 border-blue-400 text-blue-700 font-semibold transition-opacity"
+                      >
+                        Chọn
+                      </Button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </Offcanvas>
+
+        {/* ══════════════════════════════════════════════════════════════════════
           MODAL: LẬP BÁO GIÁ (BAO GIA SANITARY MODAL - TỪ CLIENT-SEAJONG)
           ══════════════════════════════════════════════════════════════════════ */}
-      <BaoGiaSanitaryModal
-        open={showCreateQuotationModal}
-        onClose={() => {
-          setShowCreateQuotationModal(false);
-        }}
-        customer={activeCustomerForNew as any}
-        type={customerTab === 'vang_lai' ? 'retail' : 'agency'}
-        onSaved={() => {
-          fetchQuotations();
-          fetchOrders();
-        }}
-      />
+        <BaoGiaSanitaryModal
+          open={showCreateQuotationModal}
+          onClose={() => {
+            setShowCreateQuotationModal(false);
+          }}
+          customer={activeCustomerForNew as any}
+          type={customerTab === 'vang_lai' ? 'retail' : 'agency'}
+          onSaved={() => {
+            fetchQuotations();
+            fetchOrders();
+          }}
+        />
 
-      {/* ══════════════════════════════════════════════════════════════════════
+        {/* ══════════════════════════════════════════════════════════════════════
           MODAL: TẠO ĐƠN HÀNG MỚI (LẬP ĐƠN BÁN HÀNG SO - TỪ CLIENT-SEAJONG)
           ══════════════════════════════════════════════════════════════════════ */}
-      <TaoDonHangModal
-        open={showCreateOrderModal}
-        onClose={() => {
-          setShowCreateOrderModal(false);
-          setEditingOrderForModal(null);
-        }}
-        customer={activeCustomerForNew as any}
-        editOrder={editingOrderForModal}
-        type={editingOrderForModal ? 'agency' : customerTab === 'vang_lai' ? 'retail' : 'agency'}
-        onSaved={() => {
-          fetchOrders();
-          fetchDealerOrders();
-          fetchQuotations();
-        }}
-      />
+        <TaoDonHangModal
+          open={showCreateOrderModal}
+          onClose={() => {
+            setShowCreateOrderModal(false);
+            setEditingOrderForModal(null);
+          }}
+          customer={activeCustomerForNew as any}
+          editOrder={editingOrderForModal}
+          type={editingOrderForModal ? 'agency' : customerTab === 'vang_lai' ? 'retail' : 'agency'}
+          onSaved={() => {
+            fetchOrders();
+            fetchDealerOrders();
+            fetchQuotations();
+          }}
+        />
 
-      {/* ══════════════════════════════════════════════════════════════════════
+        {/* ══════════════════════════════════════════════════════════════════════
           OFFCANVAS: CHI TIẾT ĐƠN HÀNG (Áp dụng component Offcanvas dùng chung)
           ══════════════════════════════════════════════════════════════════════ */}
-      <Offcanvas
-        isOpen={Boolean(selectedOrder)}
-        onClose={() => setSelectedOrder(null)}
-        title="Thông tin đơn hàng"
-        description={
-          selectedOrder
-            ? `${selectedOrder.code} • Ngày đặt: ${selectedOrder.ngayDat ? new Date(selectedOrder.ngayDat).toLocaleDateString('vi-VN') : '—'}`
-            : undefined
-        }
-        width="400px"
-        bodyClassName="p-4 space-y-4"
-        footer={
-          <div className="w-full flex items-center justify-end gap-2">
-            {selectedOrder && (selectedOrder.trangThai === 'pending' || selectedOrder.trangThai === 'draft') && (
-              <>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  disabled={updatingOrderStatus}
-                  onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'rejected')}
-                  className="text-[13px] font-semibold"
-                >
-                  Từ chối
+        <Offcanvas
+          isOpen={Boolean(selectedOrder)}
+          onClose={() => setSelectedOrder(null)}
+          title="Thông tin đơn hàng"
+          description={
+            selectedOrder
+              ? `${selectedOrder.code} • Ngày đặt: ${selectedOrder.ngayDat ? new Date(selectedOrder.ngayDat).toLocaleDateString('vi-VN') : '—'}`
+              : undefined
+          }
+          width="400px"
+          bodyClassName="p-4 space-y-4"
+          footer={
+            <div className="w-full flex items-center justify-end gap-2">
+              {selectedOrder && (selectedOrder.trangThai === 'pending' || selectedOrder.trangThai === 'draft') && (
+                <>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    disabled={updatingOrderStatus}
+                    onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'rejected')}
+                    className="text-[13px] font-semibold"
+                  >
+                    Từ chối
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={updatingOrderStatus}
+                    onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'approved')}
+                    className="bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white text-[13px] font-semibold"
+                  >
+                    Xác nhận xử lý
+                  </Button>
+                </>
+              )}
+              <Button
+                variant="primary"
+                size="sm"
+                className="bg-[#003087] hover:bg-[#00256c] border-[#003087] text-white text-[13px] font-semibold"
+                onClick={() => {
+                  if (!selectedOrder) return;
+                  setActiveCustomerForNew((selectedOrder.customer as any) || null);
+                  setEditingOrderForModal({
+                    ...selectedOrder,
+                    items: (selectedOrder.saleOrderItems || []).map((it: any) => ({
+                      ...it,
+                      donVi: it.donViTinh || it.donVi || 'Bộ',
+                    })),
+                  });
+                  setSelectedOrder(null);
+                  setShowCreateOrderModal(true);
+                }}
+              >
+                Chi tiết
+              </Button>
+            </div>
+          }
+        >
+          {selectedOrder && (
+            <div className="space-y-4 text-[13.5px]">
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] uppercase font-bold text-slate-400">Khách hàng / Đại lý</span>
+                  {selectedOrder.orderSource === 'dealer_portal' || (selectedOrder.code || '').startsWith('DH-DL-') ? (
+                    <DealerOrderStatusBadge status={selectedOrder.trangThai} />
+                  ) : (
+                    <StatusBadge status={selectedOrder.trangThai} />
+                  )}
+                </div>
+                <div className="font-bold text-[15px] text-slate-900">{selectedOrder.customer?.name || 'Khách vãng lai'}</div>
+                {selectedOrder.customer?.dienThoai && <div className="text-slate-600 text-xs">📞 {selectedOrder.customer.dienThoai}</div>}
+                {selectedOrder.customer?.address && <div className="text-slate-500 text-xs">📍 {selectedOrder.customer.address}</div>}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                <div>
+                  <span className="text-[11px] uppercase font-bold text-slate-400 block">Ngày giao dự kiến</span>
+                  <span className="font-semibold text-slate-800 text-[13px]">
+                    {selectedOrder.ngayGiao ? new Date(selectedOrder.ngayGiao).toLocaleDateString('vi-VN') : 'Giao ngay'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[11px] uppercase font-bold text-slate-400 block">Nhân viên phụ trách</span>
+                  <span className="font-semibold text-slate-800 text-[13px]">{selectedOrder.nguoiPhuTrach || 'Phạm Quang Việt'}</span>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 space-y-1.5 font-medium text-[13.5px]">
+                <div className="flex justify-between text-slate-700">
+                  <span>Tổng tiền đơn hàng:</span>
+                  <span className="font-bold text-slate-900">{formatVND(selectedOrder.tongTien)}</span>
+                </div>
+                <div className="flex justify-between text-emerald-800">
+                  <span>Đã thanh toán:</span>
+                  <span className="font-bold">{formatVND(selectedOrder.daThanhToan)}</span>
+                </div>
+                <div className="flex justify-between text-rose-700 border-t border-emerald-200/60 pt-1.5">
+                  <span>Còn nợ công nợ:</span>
+                  <span className="font-bold">{formatVND(Math.max(0, selectedOrder.tongTien - selectedOrder.daThanhToan))}</span>
+                </div>
+              </div>
+
+              {selectedOrder.ghiChu && (
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[13px]">
+                  <span className="font-bold block mb-0.5">Ghi chú:</span>
+                  {selectedOrder.ghiChu}
+                </div>
+              )}
+
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <div className="p-3 bg-slate-100 font-bold text-slate-800 text-[13.5px] flex items-center justify-between">
+                  <span>Chi tiết mặt hàng</span>
+                  <span className="text-xs font-semibold text-slate-500">
+                    {(selectedOrder.saleOrderItems || []).length} mặt hàng
+                  </span>
+                </div>
+                <div className="p-3.5 space-y-2.5">
+                  {(selectedOrder.saleOrderItems || []).length === 0 ? (
+                    <div className="text-xs text-slate-400 italic py-2 text-center">
+                      Chưa có danh sách mặt hàng chi tiết
+                    </div>
+                  ) : (
+                    (selectedOrder.saleOrderItems || []).map((item: any, idx: number) => {
+                      let extraNote = '';
+                      if (item.ghiChu) {
+                        try {
+                          const parsed = JSON.parse(item.ghiChu);
+                          const parts = [parsed.code, parsed.khoTen, parsed.dinhMucTen].filter(Boolean);
+                          extraNote = parts.join(' · ');
+                        } catch {
+                          extraNote = item.ghiChu;
+                        }
+                      }
+                      const lineTotal = item.thanhTien ?? (Number(item.soLuong || 0) * Number(item.donGia || 0));
+                      return (
+                        <div
+                          key={item.id || idx}
+                          className="flex justify-between items-start gap-3 border-b border-slate-100 last:border-b-0 pb-2.5 last:pb-0"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-slate-900 text-[13.5px] leading-snug">
+                              {item.tenHang || 'Sản phẩm Seajong'}
+                            </div>
+                            <div className="text-xs text-slate-500 mt-0.5">
+                              SL: <strong>{item.soLuong || 1} {item.donViTinh || 'Bộ'}</strong> · Đơn giá: {formatVND(item.donGia || 0)}
+                            </div>
+                            {extraNote && (
+                              <div className="text-[11px] text-slate-400 mt-0.5 truncate" title={extraNote}>
+                                {extraNote}
+                              </div>
+                            )}
+                          </div>
+                          <span className="font-bold text-slate-800 text-[13.5px] whitespace-nowrap">
+                            {formatVND(lineTotal)}
+                          </span>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </Offcanvas>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+          MODAL: QUÉT ĐƠN HÀNG AI / CAMERA (ORDER CAMERA SCANNER)
+          ══════════════════════════════════════════════════════════════════════ */}
+        {showOrderCameraScanner && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-xs" onClick={() => setShowOrderCameraScanner(false)} />
+            <div className="relative w-full max-w-lg bg-white rounded-xl shadow-2xl border border-slate-200 z-10 flex flex-col overflow-hidden">
+              <div className="p-4 border-b border-slate-200 bg-emerald-50 flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-emerald-950 flex items-center gap-2">
+                    <Camera className="w-5 h-5 text-emerald-600" />
+                    Quét Đơn Hàng Bằng AI & Camera
+                  </h3>
+                  <p className="text-xs text-emerald-700">Tự động nhận diện ảnh chụp đơn Zalo, toa hàng viết tay</p>
+                </div>
+                <button onClick={() => setShowOrderCameraScanner(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded">
+                  <XLg className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-6 text-center space-y-4">
+                <div className="border-2 border-dashed border-emerald-300 rounded-xl p-8 bg-emerald-50/40 flex flex-col items-center justify-center gap-3">
+                  <CloudUpload className="w-12 h-12 text-emerald-600" />
+                  <div>
+                    <div className="text-sm font-bold text-slate-900">Kéo thả ảnh đơn hàng hoặc nhấn để tải lên</div>
+                    <div className="text-xs text-slate-500 mt-1">Hỗ trợ JPG, PNG, ảnh chụp màn hình Zalo</div>
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    id="order-upload-input"
+                    onChange={() => {
+                      handleOrderScanned({
+                        customer: {
+                          id: 'cmubd5buw00cn8ohlkjk7d3op',
+                          name: 'Đại lý Nguyễn Thanh Phúc',
+                          dienThoai: '0988.777.666',
+                          address: 'Thị Trấn Củ Chi, TP. Hồ Chí Minh',
+                          nhom: 'dai-ly',
+                        },
+                        items: [
+                          { productCode: 'SJ-9900', productName: 'Sen cây phím đàn LED Seajong SJ-9900', quantity: 3, unitPrice: 5450000, discount: 35 },
+                          { productCode: 'SJ-612', productName: 'Vòi lavabo nóng lạnh đồng mạ PVD SJ-612', quantity: 5, unitPrice: 1600000, discount: 35 },
+                        ],
+                        ghiChu: 'Quét thành công từ ảnh chụp toa đặt hàng Zalo',
+                      });
+                    }}
+                  />
+                  <label
+                    htmlFor="order-upload-input"
+                    className="cursor-pointer inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-all"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    Chọn tệp ảnh tải lên
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-center gap-3 pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      handleOrderScanned({
+                        customer: {
+                          id: 'cmubd5buw00cn8ohlkjk7d3op',
+                          name: 'Đại lý Nguyễn Thanh Phúc',
+                          dienThoai: '0988.777.666',
+                          address: 'Thị Trấn Củ Chi, TP. Hồ Chí Minh',
+                          nhom: 'dai-ly',
+                        },
+                        items: [
+                          { productCode: 'SJ-9900', productName: 'Sen cây phím đàn LED Seajong SJ-9900', quantity: 3, unitPrice: 5450000, discount: 35 },
+                          { productCode: 'SJ-612', productName: 'Vòi lavabo nóng lạnh đồng mạ PVD SJ-612', quantity: 5, unitPrice: 1600000, discount: 35 },
+                        ],
+                        ghiChu: 'Mẫu đơn hàng nhận diện AI tự động',
+                      });
+                    }}
+                  >
+                    Dùng ảnh mẫu thử nghiệm
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════════
+          CONFIRM DIALOGS
+          ══════════════════════════════════════════════════════════════════════ */}
+        <ConfirmDialog
+          isOpen={confirmDeleteOrder}
+          title="Xác nhận xoá đơn hàng"
+          message={`Bạn có chắc chắn muốn xoá ${selectedOrderIds.size} đơn hàng đã chọn không? Thao tác này không thể hoàn tác.`}
+          confirmText="Xoá vĩnh viễn"
+          variant="danger"
+          onConfirm={handleDeleteSelectedOrders}
+          onClose={() => setConfirmDeleteOrder(false)}
+        />
+
+        <ConfirmDialog
+          isOpen={confirmDeleteDealerOrder}
+          title="Xác nhận xoá đơn hàng đại lý"
+          message={`Bạn có chắc chắn muốn xoá ${selectedDealerOrderIds.size} đơn hàng đại lý đã chọn không? Thao tác này không thể hoàn tác.`}
+          confirmText="Xoá vĩnh viễn"
+          variant="danger"
+          onConfirm={handleDeleteSelectedDealerOrders}
+          onClose={() => setConfirmDeleteDealerOrder(false)}
+        />
+
+        <ConfirmDialog
+          isOpen={confirmDeleteQuotation}
+          title="Xác nhận xoá báo giá"
+          message={`Bạn có chắc chắn muốn xoá ${selectedQuotationIds.size} báo giá đã chọn không?`}
+          confirmText="Xoá báo giá"
+          variant="danger"
+          onConfirm={handleDeleteSelectedQuotations}
+          onClose={() => setConfirmDeleteQuotation(false)}
+        />
+
+        <ConfirmDialog
+          isOpen={confirmDeleteDefects}
+          title="Xác nhận xoá hồ sơ trả về"
+          message={`Bạn có chắc chắn muốn xoá ${selectedDefectIds.size} hồ sơ hàng trả về đã chọn không?`}
+          confirmText="Xoá hồ sơ"
+          variant="danger"
+          onConfirm={handleDeleteSelectedDefects}
+          onClose={() => setConfirmDeleteDefects(false)}
+        />
+
+        {/* ══════════════════════════════════════════════════════════════════════
+          MODAL: IN PHIẾU ĐƠN HÀNG (PRINT PREVIEW)
+          ══════════════════════════════════════════════════════════════════════ */}
+        {showPrintOrderModal && selectedOrder && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-xs" onClick={() => setShowPrintOrderModal(false)} />
+            <div className="relative w-full max-w-2xl bg-white rounded-xl shadow-2xl p-6 z-10 flex flex-col space-y-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-start border-b pb-4">
+                <div>
+                  <h2 className="text-base font-black text-[#003087]">CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM</h2>
+                  <p className="text-xs text-slate-500">Chuyên thiết bị vệ sinh, sen vòi phòng tắm cao cấp</p>
+                  <p className="text-xs text-slate-500">Hotline: 1900.8888 · Website: seajong.vn</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-bold text-slate-900 font-mono">{selectedOrder.code}</div>
+                  <div className="text-xs text-slate-400">Ngày: {selectedOrder.ngayDat ? new Date(selectedOrder.ngayDat).toLocaleDateString('vi-VN') : '—'}</div>
+                </div>
+              </div>
+
+              <div className="text-center py-2">
+                <h1 className="text-lg font-black text-slate-900 uppercase tracking-wide">PHIẾU ĐẶT HÀNG & XUẤT KHO</h1>
+              </div>
+
+              <div className="text-xs space-y-1 bg-slate-50 p-3 rounded border">
+                <div><strong>Đại lý / Khách hàng:</strong> {selectedOrder.customer?.name || 'Khách vãng lai'}</div>
+                <div><strong>Địa chỉ giao hàng:</strong> {selectedOrder.customer?.address || 'Tại kho Seajong'}</div>
+                <div><strong>Số điện thoại:</strong> {selectedOrder.customer?.dienThoai || '—'}</div>
+              </div>
+
+              <table className="w-full text-xs border border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-800 border-b">
+                    <th className="p-2 border text-center">STT</th>
+                    <th className="p-2 border text-left">Tên sản phẩm</th>
+                    <th className="p-2 border text-center">ĐVT</th>
+                    <th className="p-2 border text-center">Số lượng</th>
+                    <th className="p-2 border text-right">Đơn giá</th>
+                    <th className="p-2 border text-right">Thành tiền</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(selectedOrder.saleOrderItems || []).length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-3 border text-center text-slate-400 italic">
+                        Chưa có danh sách mặt hàng chi tiết
+                      </td>
+                    </tr>
+                  ) : (
+                    (selectedOrder.saleOrderItems || []).map((item: any, idx: number) => {
+                      const lineTotal = item.thanhTien ?? (Number(item.soLuong || 0) * Number(item.donGia || 0));
+                      return (
+                        <tr key={item.id || idx}>
+                          <td className="p-2 border text-center">{idx + 1}</td>
+                          <td className="p-2 border font-medium">{item.tenHang || 'Sản phẩm Seajong'}</td>
+                          <td className="p-2 border text-center">{item.donViTinh || 'Bộ'}</td>
+                          <td className="p-2 border text-center font-bold">{item.soLuong || 1}</td>
+                          <td className="p-2 border text-right">{formatVND(item.donGia || 0)}</td>
+                          <td className="p-2 border text-right font-bold">{formatVND(lineTotal)}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+
+              <div className="text-right text-xs space-y-1">
+                <div><strong>Tổng cộng tiền hàng:</strong> {formatVND(selectedOrder.tongTien)}</div>
+                <div><strong>Đã thanh toán:</strong> {formatVND(selectedOrder.daThanhToan)}</div>
+                <div className="text-sm font-bold text-rose-700">
+                  <strong>Còn nợ:</strong> {formatVND(Math.max(0, selectedOrder.tongTien - selectedOrder.daThanhToan))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 text-center text-xs pt-6">
+                <div>
+                  <div className="font-bold">Người lập phiếu</div>
+                  <div className="text-slate-400 mt-12">(Ký, họ tên)</div>
+                </div>
+                <div>
+                  <div className="font-bold">Thủ kho</div>
+                  <div className="text-slate-400 mt-12">(Ký, họ tên)</div>
+                </div>
+                <div>
+                  <div className="font-bold">Đại diện khách hàng</div>
+                  <div className="text-slate-400 mt-12">(Ký, họ tên)</div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setShowPrintOrderModal(false)}>
+                  Đóng
                 </Button>
                 <Button
                   variant="primary"
                   size="sm"
-                  disabled={updatingOrderStatus}
-                  onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'approved')}
-                  className="bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white text-[13px] font-semibold"
+                  className="bg-[#003087] text-white"
+                  onClick={() => {
+                    window.print();
+                  }}
                 >
-                  Xác nhận xử lý
+                  <Printer className="w-3.5 h-3.5 mr-1" />
+                  In ngay
                 </Button>
-              </>
-            )}
-            <Button
-              variant="primary"
-              size="sm"
-              className="bg-[#003087] hover:bg-[#00256c] border-[#003087] text-white text-[13px] font-semibold"
-              onClick={() => {
-                if (!selectedOrder) return;
-                setActiveCustomerForNew((selectedOrder.customer as any) || null);
-                setEditingOrderForModal({
-                  ...selectedOrder,
-                  items: (selectedOrder.saleOrderItems || []).map((it: any) => ({
-                    ...it,
-                    donVi: it.donViTinh || it.donVi || 'Bộ',
-                  })),
-                });
-                setSelectedOrder(null);
-                setShowCreateOrderModal(true);
-              }}
-            >
-              Chi tiết
-            </Button>
-          </div>
-        }
-      >
-        {selectedOrder && (
-          <div className="space-y-4 text-[13.5px]">
-            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] uppercase font-bold text-slate-400">Khách hàng / Đại lý</span>
-                {selectedOrder.orderSource === 'dealer_portal' || (selectedOrder.code || '').startsWith('DH-DL-') ? (
-                  <DealerOrderStatusBadge status={selectedOrder.trangThai} />
-                ) : (
-                  <StatusBadge status={selectedOrder.trangThai} />
-                )}
-              </div>
-              <div className="font-bold text-[15px] text-slate-900">{selectedOrder.customer?.name || 'Khách vãng lai'}</div>
-              {selectedOrder.customer?.dienThoai && <div className="text-slate-600 text-xs">📞 {selectedOrder.customer.dienThoai}</div>}
-              {selectedOrder.customer?.address && <div className="text-slate-500 text-xs">📍 {selectedOrder.customer.address}</div>}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-              <div>
-                <span className="text-[11px] uppercase font-bold text-slate-400 block">Ngày giao dự kiến</span>
-                <span className="font-semibold text-slate-800 text-[13px]">
-                  {selectedOrder.ngayGiao ? new Date(selectedOrder.ngayGiao).toLocaleDateString('vi-VN') : 'Giao ngay'}
-                </span>
-              </div>
-              <div>
-                <span className="text-[11px] uppercase font-bold text-slate-400 block">Nhân viên phụ trách</span>
-                <span className="font-semibold text-slate-800 text-[13px]">{selectedOrder.nguoiPhuTrach || 'Phạm Quang Việt'}</span>
-              </div>
-            </div>
-
-            <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 space-y-1.5 font-medium text-[13.5px]">
-              <div className="flex justify-between text-slate-700">
-                <span>Tổng tiền đơn hàng:</span>
-                <span className="font-bold text-slate-900">{formatVND(selectedOrder.tongTien)}</span>
-              </div>
-              <div className="flex justify-between text-emerald-800">
-                <span>Đã thanh toán:</span>
-                <span className="font-bold">{formatVND(selectedOrder.daThanhToan)}</span>
-              </div>
-              <div className="flex justify-between text-rose-700 border-t border-emerald-200/60 pt-1.5">
-                <span>Còn nợ công nợ:</span>
-                <span className="font-bold">{formatVND(Math.max(0, selectedOrder.tongTien - selectedOrder.daThanhToan))}</span>
-              </div>
-            </div>
-
-            {selectedOrder.ghiChu && (
-              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[13px]">
-                <span className="font-bold block mb-0.5">Ghi chú:</span>
-                {selectedOrder.ghiChu}
-              </div>
-            )}
-
-            <div className="border border-slate-200 rounded-xl overflow-hidden">
-              <div className="p-3 bg-slate-100 font-bold text-slate-800 text-[13.5px] flex items-center justify-between">
-                <span>Chi tiết mặt hàng</span>
-                <span className="text-xs font-semibold text-slate-500">
-                  {(selectedOrder.saleOrderItems || []).length} mặt hàng
-                </span>
-              </div>
-              <div className="p-3.5 space-y-2.5">
-                {(selectedOrder.saleOrderItems || []).length === 0 ? (
-                  <div className="text-xs text-slate-400 italic py-2 text-center">
-                    Chưa có danh sách mặt hàng chi tiết
-                  </div>
-                ) : (
-                  (selectedOrder.saleOrderItems || []).map((item: any, idx: number) => {
-                    let extraNote = '';
-                    if (item.ghiChu) {
-                      try {
-                        const parsed = JSON.parse(item.ghiChu);
-                        const parts = [parsed.code, parsed.khoTen, parsed.dinhMucTen].filter(Boolean);
-                        extraNote = parts.join(' · ');
-                      } catch {
-                        extraNote = item.ghiChu;
-                      }
-                    }
-                    const lineTotal = item.thanhTien ?? (Number(item.soLuong || 0) * Number(item.donGia || 0));
-                    return (
-                      <div
-                        key={item.id || idx}
-                        className="flex justify-between items-start gap-3 border-b border-slate-100 last:border-b-0 pb-2.5 last:pb-0"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-slate-900 text-[13.5px] leading-snug">
-                            {item.tenHang || 'Sản phẩm Seajong'}
-                          </div>
-                          <div className="text-xs text-slate-500 mt-0.5">
-                            SL: <strong>{item.soLuong || 1} {item.donViTinh || 'Bộ'}</strong> · Đơn giá: {formatVND(item.donGia || 0)}
-                          </div>
-                          {extraNote && (
-                            <div className="text-[11px] text-slate-400 mt-0.5 truncate" title={extraNote}>
-                              {extraNote}
-                            </div>
-                          )}
-                        </div>
-                        <span className="font-bold text-slate-800 text-[13.5px] whitespace-nowrap">
-                          {formatVND(lineTotal)}
-                        </span>
-                      </div>
-                    );
-                  })
-                )}
               </div>
             </div>
           </div>
         )}
-      </Offcanvas>
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          MODAL: QUÉT ĐƠN HÀNG AI / CAMERA (ORDER CAMERA SCANNER)
-          ══════════════════════════════════════════════════════════════════════ */}
-      {showOrderCameraScanner && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3">
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs" onClick={() => setShowOrderCameraScanner(false)} />
-          <div className="relative w-full max-w-lg bg-white rounded-xl shadow-2xl border border-slate-200 z-10 flex flex-col overflow-hidden">
-            <div className="p-4 border-b border-slate-200 bg-emerald-50 flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-emerald-950 flex items-center gap-2">
-                  <Camera className="w-5 h-5 text-emerald-600" />
-                  Quét Đơn Hàng Bằng AI & Camera
-                </h3>
-                <p className="text-xs text-emerald-700">Tự động nhận diện ảnh chụp đơn Zalo, toa hàng viết tay</p>
-              </div>
-              <button onClick={() => setShowOrderCameraScanner(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded">
-                <XLg className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-6 text-center space-y-4">
-              <div className="border-2 border-dashed border-emerald-300 rounded-xl p-8 bg-emerald-50/40 flex flex-col items-center justify-center gap-3">
-                <CloudUpload className="w-12 h-12 text-emerald-600" />
-                <div>
-                  <div className="text-sm font-bold text-slate-900">Kéo thả ảnh đơn hàng hoặc nhấn để tải lên</div>
-                  <div className="text-xs text-slate-500 mt-1">Hỗ trợ JPG, PNG, ảnh chụp màn hình Zalo</div>
-                </div>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  id="order-upload-input"
-                  onChange={() => {
-                    handleOrderScanned({
-                      customer: {
-                        id: 'cmubd5buw00cn8ohlkjk7d3op',
-                        name: 'Đại lý Nguyễn Thanh Phúc',
-                        dienThoai: '0988.777.666',
-                        address: 'Thị Trấn Củ Chi, TP. Hồ Chí Minh',
-                        nhom: 'dai-ly',
-                      },
-                      items: [
-                        { productCode: 'SJ-9900', productName: 'Sen cây phím đàn LED Seajong SJ-9900', quantity: 3, unitPrice: 5450000, discount: 35 },
-                        { productCode: 'SJ-612', productName: 'Vòi lavabo nóng lạnh đồng mạ PVD SJ-612', quantity: 5, unitPrice: 1600000, discount: 35 },
-                      ],
-                      ghiChu: 'Quét thành công từ ảnh chụp toa đặt hàng Zalo',
-                    });
-                  }}
-                />
-                <label
-                  htmlFor="order-upload-input"
-                  className="cursor-pointer inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-all"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  Chọn tệp ảnh tải lên
-                </label>
-              </div>
-
-              <div className="flex items-center justify-center gap-3 pt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    handleOrderScanned({
-                      customer: {
-                        id: 'cmubd5buw00cn8ohlkjk7d3op',
-                        name: 'Đại lý Nguyễn Thanh Phúc',
-                        dienThoai: '0988.777.666',
-                        address: 'Thị Trấn Củ Chi, TP. Hồ Chí Minh',
-                        nhom: 'dai-ly',
-                      },
-                      items: [
-                        { productCode: 'SJ-9900', productName: 'Sen cây phím đàn LED Seajong SJ-9900', quantity: 3, unitPrice: 5450000, discount: 35 },
-                        { productCode: 'SJ-612', productName: 'Vòi lavabo nóng lạnh đồng mạ PVD SJ-612', quantity: 5, unitPrice: 1600000, discount: 35 },
-                      ],
-                      ghiChu: 'Mẫu đơn hàng nhận diện AI tự động',
-                    });
-                  }}
-                >
-                  Dùng ảnh mẫu thử nghiệm
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════════════
-          CONFIRM DIALOGS
-          ══════════════════════════════════════════════════════════════════════ */}
-      <ConfirmDialog
-        isOpen={confirmDeleteOrder}
-        title="Xác nhận xoá đơn hàng"
-        message={`Bạn có chắc chắn muốn xoá ${selectedOrderIds.size} đơn hàng đã chọn không? Thao tác này không thể hoàn tác.`}
-        confirmText="Xoá vĩnh viễn"
-        variant="danger"
-        onConfirm={handleDeleteSelectedOrders}
-        onClose={() => setConfirmDeleteOrder(false)}
-      />
-
-      <ConfirmDialog
-        isOpen={confirmDeleteDealerOrder}
-        title="Xác nhận xoá đơn hàng đại lý"
-        message={`Bạn có chắc chắn muốn xoá ${selectedDealerOrderIds.size} đơn hàng đại lý đã chọn không? Thao tác này không thể hoàn tác.`}
-        confirmText="Xoá vĩnh viễn"
-        variant="danger"
-        onConfirm={handleDeleteSelectedDealerOrders}
-        onClose={() => setConfirmDeleteDealerOrder(false)}
-      />
-
-      <ConfirmDialog
-        isOpen={confirmDeleteQuotation}
-        title="Xác nhận xoá báo giá"
-        message={`Bạn có chắc chắn muốn xoá ${selectedQuotationIds.size} báo giá đã chọn không?`}
-        confirmText="Xoá báo giá"
-        variant="danger"
-        onConfirm={handleDeleteSelectedQuotations}
-        onClose={() => setConfirmDeleteQuotation(false)}
-      />
-
-      <ConfirmDialog
-        isOpen={confirmDeleteDefects}
-        title="Xác nhận xoá hồ sơ trả về"
-        message={`Bạn có chắc chắn muốn xoá ${selectedDefectIds.size} hồ sơ hàng trả về đã chọn không?`}
-        confirmText="Xoá hồ sơ"
-        variant="danger"
-        onConfirm={handleDeleteSelectedDefects}
-        onClose={() => setConfirmDeleteDefects(false)}
-      />
-
-      {/* ══════════════════════════════════════════════════════════════════════
-          MODAL: IN PHIẾU ĐƠN HÀNG (PRINT PREVIEW)
-          ══════════════════════════════════════════════════════════════════════ */}
-      {showPrintOrderModal && selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3">
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs" onClick={() => setShowPrintOrderModal(false)} />
-          <div className="relative w-full max-w-2xl bg-white rounded-xl shadow-2xl p-6 z-10 flex flex-col space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-start border-b pb-4">
-              <div>
-                <h2 className="text-base font-black text-[#003087]">CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM</h2>
-                <p className="text-xs text-slate-500">Chuyên thiết bị vệ sinh, sen vòi phòng tắm cao cấp</p>
-                <p className="text-xs text-slate-500">Hotline: 1900.8888 · Website: seajong.vn</p>
-              </div>
-              <div className="text-right">
-                <div className="text-sm font-bold text-slate-900 font-mono">{selectedOrder.code}</div>
-                <div className="text-xs text-slate-400">Ngày: {selectedOrder.ngayDat ? new Date(selectedOrder.ngayDat).toLocaleDateString('vi-VN') : '—'}</div>
-              </div>
-            </div>
-
-            <div className="text-center py-2">
-              <h1 className="text-lg font-black text-slate-900 uppercase tracking-wide">PHIẾU ĐẶT HÀNG & XUẤT KHO</h1>
-            </div>
-
-            <div className="text-xs space-y-1 bg-slate-50 p-3 rounded border">
-              <div><strong>Đại lý / Khách hàng:</strong> {selectedOrder.customer?.name || 'Khách vãng lai'}</div>
-              <div><strong>Địa chỉ giao hàng:</strong> {selectedOrder.customer?.address || 'Tại kho Seajong'}</div>
-              <div><strong>Số điện thoại:</strong> {selectedOrder.customer?.dienThoai || '—'}</div>
-            </div>
-
-            <table className="w-full text-xs border border-collapse">
-              <thead>
-                <tr className="bg-slate-100 text-slate-800 border-b">
-                  <th className="p-2 border text-center">STT</th>
-                  <th className="p-2 border text-left">Tên sản phẩm</th>
-                  <th className="p-2 border text-center">ĐVT</th>
-                  <th className="p-2 border text-center">Số lượng</th>
-                  <th className="p-2 border text-right">Đơn giá</th>
-                  <th className="p-2 border text-right">Thành tiền</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(selectedOrder.saleOrderItems || []).length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="p-3 border text-center text-slate-400 italic">
-                      Chưa có danh sách mặt hàng chi tiết
-                    </td>
-                  </tr>
-                ) : (
-                  (selectedOrder.saleOrderItems || []).map((item: any, idx: number) => {
-                    const lineTotal = item.thanhTien ?? (Number(item.soLuong || 0) * Number(item.donGia || 0));
-                    return (
-                      <tr key={item.id || idx}>
-                        <td className="p-2 border text-center">{idx + 1}</td>
-                        <td className="p-2 border font-medium">{item.tenHang || 'Sản phẩm Seajong'}</td>
-                        <td className="p-2 border text-center">{item.donViTinh || 'Bộ'}</td>
-                        <td className="p-2 border text-center font-bold">{item.soLuong || 1}</td>
-                        <td className="p-2 border text-right">{formatVND(item.donGia || 0)}</td>
-                        <td className="p-2 border text-right font-bold">{formatVND(lineTotal)}</td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-
-            <div className="text-right text-xs space-y-1">
-              <div><strong>Tổng cộng tiền hàng:</strong> {formatVND(selectedOrder.tongTien)}</div>
-              <div><strong>Đã thanh toán:</strong> {formatVND(selectedOrder.daThanhToan)}</div>
-              <div className="text-sm font-bold text-rose-700">
-                <strong>Còn nợ:</strong> {formatVND(Math.max(0, selectedOrder.tongTien - selectedOrder.daThanhToan))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4 text-center text-xs pt-6">
-              <div>
-                <div className="font-bold">Người lập phiếu</div>
-                <div className="text-slate-400 mt-12">(Ký, họ tên)</div>
-              </div>
-              <div>
-                <div className="font-bold">Thủ kho</div>
-                <div className="text-slate-400 mt-12">(Ký, họ tên)</div>
-              </div>
-              <div>
-                <div className="font-bold">Đại diện khách hàng</div>
-                <div className="text-slate-400 mt-12">(Ký, họ tên)</div>
-              </div>
-            </div>
-
-            <div className="pt-4 border-t flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => setShowPrintOrderModal(false)}>
-                Đóng
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                className="bg-[#003087] text-white"
-                onClick={() => {
-                  window.print();
-                }}
-              >
-                <Printer className="w-3.5 h-3.5 mr-1" />
-                In ngay
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Offcanvas Lịch Sự Kiện Đa Năng Chuẩn client-skydoor ── */}
-      <EventOffcanvas
-        isOpen={isEventCalendarOpen}
-        onClose={() => setIsEventCalendarOpen(false)}
-      />
-    </StepPage>
+        {/* ── Offcanvas Lịch Sự Kiện Đa Năng Chuẩn client-skydoor ── */}
+        <EventOffcanvas
+          isOpen={isEventCalendarOpen}
+          onClose={() => setIsEventCalendarOpen(false)}
+        />
+      </StepPage>
+    </div>
   );
 };
 

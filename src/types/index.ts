@@ -73,6 +73,7 @@ export interface ModernStepItem {
   num: number;
   id: string;
   title: string;
+  mobileTitle?: string;
   desc?: string;
   icon?: React.ReactNode;
   locked?: boolean;

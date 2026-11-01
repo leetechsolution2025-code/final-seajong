@@ -7,17 +7,17 @@ import {
   Tools,
   Briefcase,
   Layers,
-  X,
   ExclamationCircle,
 } from 'react-bootstrap-icons';
 import { TableToolbar } from '../../components/common/TableToolbar';
-import { FullWidthTable } from '../../components/common/FullWidthTable';
+import { FullWidthTable, SwipeableTableRow } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
 import { Badge } from '../../components/common/Badge';
 import { Button } from '../../components/common/Button';
 import { Select } from '../../components/common/Select';
 import { EmployeeSelect } from '../../components/common/EmployeeSelect';
 import { Modal } from '../../components/common/Modal';
+import { Offcanvas } from '../../components/common/Offcanvas';
 import { DeleteButton } from '../../components/common/DeleteButton';
 import { DepartmentSelect } from '../../components/common/DepartmentSelect';
 
@@ -498,9 +498,10 @@ export const TrainingManagementView: React.FC<TrainingManagementViewProps> = ({ 
               size="sm"
               leftIcon={<Plus size={16} />}
               onClick={handleOpenCreate}
+              title="Lập khóa đào tạo"
               style={{ whiteSpace: 'nowrap' }}
             >
-              Lập khóa đào tạo
+              <span className="recruitment-btn-label hidden md:inline">Lập khóa đào tạo</span>
             </Button>
 
             <DeleteButton
@@ -571,8 +572,8 @@ export const TrainingManagementView: React.FC<TrainingManagementViewProps> = ({ 
                 />
               </th>
               <th style={{ padding: '10px 14px' }}>KHÓA ĐÀO TẠO VÀ PHÂN LOẠI</th>
-              <th style={{ width: '260px', padding: '10px 14px' }}>ĐỐI TƯỢNG THAM GIA</th>
-              <th style={{ width: '260px', padding: '10px 14px' }}>ĐƠN VỊ PHỤ TRÁCH</th>
+              <th className="hidden md:table-cell" style={{ width: '260px', padding: '10px 14px' }}>ĐỐI TƯỢNG THAM GIA</th>
+              <th className="hidden md:table-cell" style={{ width: '260px', padding: '10px 14px' }}>ĐƠN VỊ PHỤ TRÁCH</th>
             </tr>
           </thead>
           <tbody>
@@ -600,8 +601,18 @@ export const TrainingManagementView: React.FC<TrainingManagementViewProps> = ({ 
               pagedCourses.map((course) => {
                 const isSelected = selectedIds.includes(course.id);
                 return (
-                  <tr
+                  <SwipeableTableRow
                     key={course.id}
+                    rowId={`course-${course.id}`}
+                    onEdit={() => handleOpenEdit(course)}
+                    onDelete={async () => {
+                      await fetch(`/api/training/courses/${course.id}`, { method: 'DELETE' });
+                      await fetchCourses();
+                      setSelectedIds((prev) => prev.filter((id) => id !== course.id));
+                      onShowToast?.('success', 'Đã xóa khóa đào tạo', `Đã xóa khóa "${course.title}" khỏi hệ thống.`);
+                    }}
+                    deleteConfirmTitle="Xác nhận xoá kế hoạch đào tạo"
+                    deleteConfirmMessage={`Bạn có chắc chắn muốn xóa khóa đào tạo "${course.title}" (${course.code}) khỏi cơ sở dữ liệu? Hành động này không thể hoàn tác.`}
                     style={{
                       borderBottom: '1px solid var(--border-subtle, #f1f5f9)',
                       backgroundColor: isSelected ? 'var(--bg-surface-3, #f5f3ff)' : 'transparent',
@@ -670,10 +681,29 @@ export const TrainingManagementView: React.FC<TrainingManagementViewProps> = ({ 
                             Mục tiêu: {course.objectives}
                           </span>
                         )}
+                        <div className="flex md:hidden flex-col gap-0.5 mt-0.5 text-[11px] text-slate-500">
+                          <div className="truncate">
+                            <span className="font-semibold text-slate-700">{course.targetAudience}</span>
+                            {course.targetDept ? ` (${course.targetDept})` : ''}
+                            {' • '}
+                            <span className="font-semibold text-purple-600">
+                              Sĩ số: {course.enrolledCount}/{course.maxParticipants}
+                            </span>
+                          </div>
+                          {course.instructorName && (
+                            <div className="truncate">
+                              GV: <span className="font-semibold text-slate-700">{course.instructorName}</span>
+                              {' • '}
+                              <span>
+                                {course.instructorInfo || (course.instructorType === 'external' ? 'Chuyên gia ngoài' : 'Cán bộ nội bộ')}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
 
-                    <td style={{ padding: '10px 14px', width: '260px', overflow: 'hidden' }}>
+                    <td className="hidden md:table-cell" style={{ padding: '10px 14px', width: '260px', overflow: 'hidden' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
                         <span
                           style={{
@@ -721,7 +751,7 @@ export const TrainingManagementView: React.FC<TrainingManagementViewProps> = ({ 
                       </div>
                     </td>
 
-                    <td style={{ padding: '10px 14px', width: '260px', overflow: 'hidden' }}>
+                    <td className="hidden md:table-cell" style={{ padding: '10px 14px', width: '260px', overflow: 'hidden' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                         <div
                           style={{
@@ -771,7 +801,7 @@ export const TrainingManagementView: React.FC<TrainingManagementViewProps> = ({ 
                         </div>
                       </div>
                     </td>
-                  </tr>
+                  </SwipeableTableRow>
                 );
               })
             )}
@@ -796,93 +826,61 @@ export const TrainingManagementView: React.FC<TrainingManagementViewProps> = ({ 
         }}
       />
 
-      {isOffcanvasOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 9999,
-            display: 'flex',
-            justifyContent: 'flex-end',
-            backgroundColor: 'rgba(15, 23, 42, 0.45)',
-            backdropFilter: 'blur(2px)',
-          }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setIsOffcanvasOpen(false);
-          }}
-        >
+      <Offcanvas
+        isOpen={isOffcanvasOpen}
+        onClose={() => setIsOffcanvasOpen(false)}
+        icon={<Book size={20} />}
+        title={editingCourse ? 'Chỉnh sửa khóa đào tạo' : 'Lập khóa đào tạo mới'}
+        description={
+          editingCourse
+            ? `Mã: ${editingCourse.code}`
+            : 'Chương trình đào tạo nâng cao chuyên môn Seajong'
+        }
+        position="right"
+        width="400px"
+        footer={
           <div
             style={{
-              width: '400px',
-              maxWidth: '90vw',
-              height: '100%',
-              backgroundColor: '#ffffff',
-              boxShadow: '-4px 0 25px rgba(0,0,0,0.15)',
               display: 'flex',
-              flexDirection: 'column',
-              animation: 'slideLeft 0.25s ease',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: '8px',
+              width: '100%',
             }}
           >
-            <div
+            <Button
+              variant="outline"
+              size="sm"
+              type="button"
+              onClick={() => setIsOffcanvasOpen(false)}
+              disabled={submitting}
+            >
+              Hủy bỏ
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              type="submit"
+              form="training-course-form"
+              disabled={submitting}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '14px 16px',
-                borderBottom: '1px solid #e2e8f0',
-                backgroundColor: 'var(--bg-surface-2, #f8fafc)',
+                fontWeight: 700,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '6px',
-                    backgroundColor: 'var(--color-primary, #0284c7)',
-                    color: '#ffffff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Book size={16} />
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: '#0f172a' }}>
-                    {editingCourse ? 'Chỉnh sửa khóa đào tạo' : 'Lập khóa đào tạo mới'}
-                  </h3>
-                  <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                    {editingCourse ? `Mã: ${editingCourse.code}` : 'Chương trình đào tạo nâng cao chuyên môn Seajong'}
-                  </span>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsOffcanvasOpen(false)}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#64748b',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  borderRadius: '4px',
-                }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form
-              onSubmit={handleSaveCourse}
-              style={{
-                flex: 1,
-                overflowY: 'auto',
-                padding: '16px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '12px',
-              }}
-            >
+              {submitting ? 'Đang lưu...' : editingCourse ? 'Lưu thay đổi' : 'Tạo khóa đào tạo'}
+            </Button>
+          </div>
+        }
+      >
+        <form
+          id="training-course-form"
+          onSubmit={handleSaveCourse}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+          }}
+        >
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#1e293b', marginBottom: '5px' }}>
                   Loại hình đào tạo <span style={{ color: '#e11d48' }}>*</span>
@@ -1241,43 +1239,8 @@ export const TrainingManagementView: React.FC<TrainingManagementViewProps> = ({ 
                   }}
                 />
               </div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'flex-end',
-                  gap: '8px',
-                  paddingTop: '12px',
-                  borderTop: '1px solid #e2e8f0',
-                  marginTop: 'auto',
-                }}
-              >
-                <Button
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  onClick={() => setIsOffcanvasOpen(false)}
-                  disabled={submitting}
-                >
-                  Hủy bỏ
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  type="submit"
-                  disabled={submitting}
-                  style={{
-                    fontWeight: 700,
-                  }}
-                >
-                  {submitting ? 'Đang lưu...' : editingCourse ? 'Lưu thay đổi' : 'Tạo khóa đào tạo'}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+        </form>
+      </Offcanvas>
 
       {isDeleteModalOpen && courseToDelete && (
         <Modal

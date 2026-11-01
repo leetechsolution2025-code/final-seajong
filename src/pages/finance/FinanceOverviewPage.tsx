@@ -12,21 +12,23 @@ export const FinanceOverviewPage: React.FC<FinanceOverviewPageProps> = ({
   onNavigate,
 }) => {
   return (
-    <StandardPage
-      title="Tổng quan Tài chính – Kế toán"
-      description="Trung tâm điều hành dòng tiền, giám sát quỹ tiền mặt, ngân hàng, công nợ và lệnh chi tiền"
-      icon="bi-speedometer2"
-      color="blue"
-      badge="ĐIỀU HÀNH DÒNG TIỀN"
-      tickerContext="finance"
-      cardPadding="p-0"
-      useCard={true}
-    >
-      <FinanceOverviewView
-        onShowToast={onShowToast}
-        onNavigate={onNavigate}
-      />
-    </StandardPage>
+    <div className="finance-overview-page h-full">
+      <StandardPage
+        title="Tổng quan Tài chính – Kế toán"
+        description="Trung tâm điều hành dòng tiền, giám sát quỹ tiền mặt, ngân hàng, công nợ và lệnh chi tiền"
+        icon="bi-speedometer2"
+        color="blue"
+        badge="ĐIỀU HÀNH DÒNG TIỀN"
+        tickerContext="finance"
+        cardPadding="p-0"
+        useCard={true}
+      >
+        <FinanceOverviewView
+          onShowToast={onShowToast}
+          onNavigate={onNavigate}
+        />
+      </StandardPage>
+    </div>
   );
 };
 

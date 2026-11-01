@@ -1040,37 +1040,41 @@ export const DynamicTicker: React.FC<DynamicTickerProps> = ({
 
   useEffect(() => {
     if (resolvedContext === 'board' && (!items || items.length === 0) && (!customNews || customNews.length === 0)) {
-      fetch('/api/bom/overview-stats?period=month&year=2026')
+      const now = new Date();
+      const curM = now.getMonth() + 1;
+      const curY = now.getFullYear();
+      const mStr = String(curM).padStart(2, '0');
+      fetch(`/api/bom/overview-stats?period=month&year=${curY}&month=${curM}`)
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (!data || !data.periodData) return;
           const p = data.periodData;
-          const rev = p.revenue || { actual: 1.30, target: 1.55, rate: '83.9' };
-          const cost = p.cost || { actual: 0.18, target: 0.22, ratio: '13.8%' };
-          const rec = p.receivable || { total: 0.42, due: 0.34, safeRate: '81.0%' };
-          const pay = p.payable || { total: 0.28, due: 0.15, onTimeRate: '100%' };
-          const m10 = (data.monthlyChartData && data.monthlyChartData[9]) || { seajong: 1.30, oem: 0.82 };
+          const rev = p.revenue || { actual: 0, target: 0.38, rate: '0.0' };
+          const cost = p.cost || { actual: 0, target: 0.55, ratio: '0.0%' };
+          const rec = p.receivable || { total: 0, due: 0, safeRate: '100%' };
+          const pay = p.payable || { total: 0, due: 0, onTimeRate: '100%' };
+          const mCur = (data.monthlyChartData && data.monthlyChartData[curM - 1]) || { seajong: 0, oem: 0 };
 
           setLiveBoardItems([
             {
-              badge: 'DOANH THU THUẦN T10',
+              badge: `DOANH THU THUẦN T${curM}`,
               badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-              text: `Doanh thu thực hiện: <strong>${Number(rev.actual).toFixed(2)} tỷ đồng</strong> (Đạt <strong>${rev.rate}%</strong> KH) • Doanh số ký: <strong>${(p.actualSales ?? 1.41).toFixed(2)} tỷ đồng</strong> (${p.contracts ?? '18 đơn hàng'})`,
+              text: `Doanh thu thực hiện: <strong>${Number(rev.actual).toFixed(2)} tỷ đồng</strong> (Đạt <strong>${rev.rate}%</strong> KH) • Doanh số ký: <strong>${Number(p.actualSales ?? 0).toFixed(2)} tỷ đồng</strong> (${p.contracts ?? '0 đơn hàng'})`,
             },
             {
               badge: 'CƠ CẤU 2 KÊNH',
               badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
-              text: `Thương hiệu Seajong: <strong>${Number(m10.seajong ?? 1.30).toFixed(2)} tỷ đồng</strong> • Gia công OEM: <strong>${Number(m10.oem ?? 0.82).toFixed(2)} tỷ đồng</strong> trong tháng 10/2026`,
+              text: `Thương hiệu Seajong: <strong>${Number(mCur.seajong ?? 0).toFixed(2)} tỷ đồng</strong> • Gia công OEM: <strong>${Number(mCur.oem ?? 0).toFixed(2)} tỷ đồng</strong> trong tháng ${mStr}/${curY}`,
             },
             {
               badge: 'CHI PHÍ HOẠT ĐỘNG',
               badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
-              text: `Chi phí thực tế: <strong>${Number(cost.actual).toFixed(2)} tỷ đồng</strong> / Hạn mức ${Number(cost.target).toFixed(2)} tỷ • Tỷ lệ CP/DT: <strong>${cost.ratio || '13.8%'}</strong> (An toàn tối ưu)`,
+              text: `Chi phí thực tế: <strong>${Number(cost.actual).toFixed(2)} tỷ đồng</strong> / Hạn mức ${Number(cost.target).toFixed(2)} tỷ • Tỷ lệ CP/DT: <strong>${cost.ratio || '0.0%'}</strong> (An toàn tối ưu)`,
             },
             {
               badge: 'CÔNG NỢ KHÁCH HÀNG',
               badgeColor: 'bg-sky-50 text-sky-700 border-sky-200',
-              text: `Tổng nợ phải thu: <strong>${Number(rec.total).toFixed(2)} tỷ đồng</strong> (Trong hạn: ${Number(rec.due).toFixed(2)} tỷ, Quá hạn: ${Number(rec.overdue ?? 0.08).toFixed(2)} tỷ, Tỷ lệ an toàn: <strong>${rec.safeRate || '81.0%'}</strong>)`,
+              text: `Tổng nợ phải thu: <strong>${Number(rec.total).toFixed(2)} tỷ đồng</strong> (Trong hạn: ${Number(rec.due).toFixed(2)} tỷ, Quá hạn: ${Number(rec.overdue ?? 0).toFixed(2)} tỷ, Tỷ lệ an toàn: <strong>${rec.safeRate || '100%'}</strong>)`,
             },
             {
               badge: 'CÔNG NỢ NHÀ CUNG CẤP',
@@ -1085,7 +1089,7 @@ export const DynamicTicker: React.FC<DynamicTickerProps> = ({
             {
               badge: 'VẬN HÀNH & KCS',
               badgeColor: 'bg-teal-50 text-teal-700 border-teal-200',
-              text: `Giao hàng đúng hạn OTDR: <strong>${p.otdrRate || '98.5'}%</strong> • KCS chất lượng xuất xưởng: <strong>${p.firstPassYield || '99.4%'}</strong> • Hệ số thanh toán: <strong>208.64 lần</strong>`,
+              text: `Giao hàng đúng hạn OTDR: <strong>${p.otdrRate || '98.5'}%</strong> • KCS chất lượng xuất xưởng: <strong>${p.firstPassYield || '99.4%'}</strong> • Hệ số thanh toán: <strong>2.33 lần</strong>`,
             },
           ]);
         })
@@ -1189,7 +1193,7 @@ export const DynamicTicker: React.FC<DynamicTickerProps> = ({
   }
 
   return (
-    <div className="h-8 bg-white/95 backdrop-blur-xs border-b border-slate-200/90 text-slate-700 flex items-center px-3.5 overflow-hidden text-xs select-none shadow-2xs">
+    <div className="dynamic-ticker-bar h-8 bg-white/95 backdrop-blur-xs border-b border-slate-200/90 text-slate-700 flex items-center px-3.5 overflow-hidden text-xs select-none shadow-2xs">
       {/* Icon announcement (speaker) */}
       <div className="flex items-center gap-2 pr-3 border-r border-slate-200 shrink-0 z-20 bg-white">
         <div

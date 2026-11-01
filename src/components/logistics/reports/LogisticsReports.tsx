@@ -297,19 +297,19 @@ export const LogisticsReports: React.FC<LogisticsReportsProps> = ({ currentStep 
 
         {/* FullWidthTable */}
         <FullWidthTable loading={xntLoading}>
-          <table className="w-full text-left border-collapse" style={{ width: "100%", minWidth: "1050px", fontSize: "13px" }}>
+          <table className="w-full text-left border-collapse logistics-overview-compact-table md:min-w-[1050px]" style={{ width: "100%", fontSize: "13px" }}>
             <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 shadow-2xs">
               <tr className="text-slate-600 text-[11px] uppercase tracking-[0.05em] font-bold">
-                <th rowSpan={2} className="py-2.5 px-3 w-12 text-center align-middle">STT</th>
-                <th rowSpan={2} className="py-2.5 px-4 w-[260px] max-w-[260px] align-middle">HÀNG HÓA</th>
-                <th rowSpan={2} className="py-2.5 px-3 w-16 text-center align-middle">ĐVT</th>
-                <th rowSpan={2} className="py-2.5 px-3 w-28 text-right text-purple-700 align-middle whitespace-nowrap">GIÁ VỐN (Đ)</th>
-                <th colSpan={2} className="py-2 px-3 text-center border-b border-slate-200/80 whitespace-nowrap">TỒN ĐẦU KỲ</th>
-                <th colSpan={2} className="py-2 px-3 text-center border-b border-slate-200/80 whitespace-nowrap">NHẬP TRONG KỲ</th>
-                <th colSpan={2} className="py-2 px-3 text-center border-b border-slate-200/80 whitespace-nowrap">XUẤT TRONG KỲ</th>
-                <th colSpan={2} className="py-2 px-3 text-center border-b border-slate-200/80 whitespace-nowrap">TỒN CUỐI KỲ</th>
+                <th rowSpan={2} className="py-2.5 px-2 sm:px-3 w-9 sm:w-12 text-center align-middle">STT</th>
+                <th rowSpan={2} className="py-2.5 px-2.5 sm:px-4 md:w-[260px] md:max-w-[260px] align-middle">HÀNG HÓA</th>
+                <th rowSpan={2} className="py-2.5 px-2 sm:px-3 w-12 sm:w-16 text-center align-middle">ĐVT</th>
+                <th rowSpan={2} className="hidden md:table-cell py-2.5 px-3 w-28 text-right text-purple-700 align-middle whitespace-nowrap">GIÁ VỐN (Đ)</th>
+                <th colSpan={2} className="hidden md:table-cell py-2 px-3 text-center border-b border-slate-200/80 whitespace-nowrap">TỒN ĐẦU KỲ</th>
+                <th colSpan={2} className="hidden md:table-cell py-2 px-3 text-center border-b border-slate-200/80 whitespace-nowrap">NHẬP TRONG KỲ</th>
+                <th colSpan={2} className="hidden md:table-cell py-2 px-3 text-center border-b border-slate-200/80 whitespace-nowrap">XUẤT TRONG KỲ</th>
+                <th colSpan={2} className="hidden md:table-cell py-2 px-3 text-center border-b border-slate-200/80 whitespace-nowrap">TỒN CUỐI KỲ</th>
               </tr>
-              <tr className="text-slate-500 text-[10px] uppercase tracking-wider font-bold bg-slate-50">
+              <tr className="hidden md:table-row text-slate-500 text-[10px] uppercase tracking-wider font-bold bg-slate-50">
                 <th className="py-1.5 px-3 w-22 text-right whitespace-nowrap">SỐ LƯỢNG</th>
                 <th className="py-1.5 px-3 w-28 text-right whitespace-nowrap">THÀNH TIỀN</th>
                 <th className="py-1.5 px-3 w-22 text-right whitespace-nowrap">SỐ LƯỢNG</th>
@@ -342,10 +342,10 @@ export const LogisticsReports: React.FC<LogisticsReportsProps> = ({ currentStep 
 
                   return (
                     <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
-                      <td className="py-2.5 px-3 text-center text-slate-400 text-xs font-mono">
+                      <td className="py-2.5 px-2 sm:px-3 text-center text-slate-400 text-xs font-mono align-top md:align-middle">
                         {(xntPage - 1) * xntPageSize + idx + 1}
                       </td>
-                      <td className="py-2.5 px-4 max-w-[260px]">
+                      <td className="py-2.5 px-2.5 sm:px-4 md:max-w-[260px] max-w-0 overflow-hidden">
                         <div
                           className="font-semibold text-slate-900 text-[13px] truncate"
                           title={item.tenHang}
@@ -361,39 +361,53 @@ export const LogisticsReports: React.FC<LogisticsReportsProps> = ({ currentStep 
                             </>
                           )}
                         </div>
+                        {/* Chi tiết Xuất-Nhập-Tồn rút gọn trên Mobile */}
+                        <div className="block md:hidden mt-1.5 pt-1.5 border-t border-slate-100 text-[11px] space-y-0.5">
+                          <div className="flex items-center flex-wrap gap-x-2.5 gap-y-0.5 text-slate-600">
+                            <span>Đầu: <b className="font-mono text-slate-800">{tonDau.toLocaleString("vi-VN")}</b></span>
+                            <span>Nhập: <b className="font-mono text-emerald-700">+{nhap.toLocaleString("vi-VN")}</b></span>
+                            <span>Xuất: <b className="font-mono text-amber-700">-{xuat.toLocaleString("vi-VN")}</b></span>
+                            <span>Cuối: <b className="font-mono text-blue-700">{tonCuoi.toLocaleString("vi-VN")}</b></span>
+                          </div>
+                          <div className="flex items-center flex-wrap gap-x-2.5 text-slate-500">
+                            <span>Giá vốn: <b className="font-mono text-purple-700">{giaVon.toLocaleString("vi-VN")}đ</b></span>
+                            <span>•</span>
+                            <span>Giá trị tồn: <b className="font-mono text-slate-800">{ttTonCuoi.toLocaleString("vi-VN")}đ</b></span>
+                          </div>
+                        </div>
                       </td>
-                      <td className="py-2.5 px-3 text-center text-slate-600 text-xs">
+                      <td className="py-2.5 px-2 sm:px-3 text-center text-slate-600 text-xs align-top md:align-middle">
                         {item.donVi}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-medium text-purple-700">
+                      <td className="hidden md:table-cell py-2.5 px-3 text-right font-mono font-medium text-purple-700">
                         {giaVon.toLocaleString("vi-VN")}
                       </td>
                       {/* TỒN ĐẦU KỲ */}
-                      <td className="py-2.5 px-3 text-right font-mono font-medium text-slate-700">
+                      <td className="hidden md:table-cell py-2.5 px-3 text-right font-mono font-medium text-slate-700">
                         {tonDau.toLocaleString("vi-VN")}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-medium text-slate-700">
+                      <td className="hidden md:table-cell py-2.5 px-3 text-right font-mono font-medium text-slate-700">
                         {ttTonDau.toLocaleString("vi-VN")}
                       </td>
                       {/* NHẬP TRONG KỲ */}
-                      <td className="py-2.5 px-3 text-right font-mono font-medium text-emerald-700">
+                      <td className="hidden md:table-cell py-2.5 px-3 text-right font-mono font-medium text-emerald-700">
                         {nhap.toLocaleString("vi-VN")}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-medium text-emerald-700">
+                      <td className="hidden md:table-cell py-2.5 px-3 text-right font-mono font-medium text-emerald-700">
                         {ttNhap.toLocaleString("vi-VN")}
                       </td>
                       {/* XUẤT TRONG KỲ */}
-                      <td className="py-2.5 px-3 text-right font-mono font-medium text-amber-700">
+                      <td className="hidden md:table-cell py-2.5 px-3 text-right font-mono font-medium text-amber-700">
                         {xuat.toLocaleString("vi-VN")}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-medium text-amber-700">
+                      <td className="hidden md:table-cell py-2.5 px-3 text-right font-mono font-medium text-amber-700">
                         {ttXuat.toLocaleString("vi-VN")}
                       </td>
                       {/* TỒN CUỐI KỲ */}
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                      <td className="hidden md:table-cell py-2.5 px-3 text-right font-mono font-bold text-slate-900">
                         {tonCuoi.toLocaleString("vi-VN")}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                      <td className="hidden md:table-cell py-2.5 px-3 text-right font-mono font-bold text-slate-900">
                         {ttTonCuoi.toLocaleString("vi-VN")}
                       </td>
                     </tr>
@@ -403,7 +417,20 @@ export const LogisticsReports: React.FC<LogisticsReportsProps> = ({ currentStep 
             </tbody>
             {xntItems.length > 0 && (
               <tfoot className="sticky bottom-0 z-10 bg-slate-100/95 backdrop-blur-xs font-bold text-slate-900 text-xs border-t-2 border-slate-200">
-                <tr>
+                <tr className="table-row md:hidden">
+                  <td colSpan={3} className="py-2 px-3">
+                    <div className="flex items-center justify-between flex-wrap gap-1.5 text-[11px]">
+                      <span className="uppercase tracking-wider text-slate-700">TỔNG CỘNG:</span>
+                      <div className="flex items-center flex-wrap gap-x-2.5">
+                        <span>Đầu: <b className="font-mono">{xntTotals.tonDau.toLocaleString("vi-VN")}</b></span>
+                        <span className="text-emerald-800">Nhập: <b className="font-mono">+{xntTotals.nhap.toLocaleString("vi-VN")}</b></span>
+                        <span className="text-amber-800">Xuất: <b className="font-mono">-{xntTotals.xuat.toLocaleString("vi-VN")}</b></span>
+                        <span className="text-blue-900">Cuối: <b className="font-mono">{xntTotals.tonCuoi.toLocaleString("vi-VN")}</b> ({xntTotals.ttTonCuoi.toLocaleString("vi-VN")}đ)</span>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+                <tr className="hidden md:table-row">
                   <td colSpan={4} className="py-2.5 px-4 text-center tracking-wider uppercase">
                     TỔNG CỘNG
                   </td>
@@ -556,18 +583,18 @@ export const LogisticsReports: React.FC<LogisticsReportsProps> = ({ currentStep 
 
         {/* FullWidthTable */}
         <FullWidthTable loading={tkLoading}>
-          <table className="w-full text-left border-collapse" style={{ width: "100%", minWidth: "100%", fontSize: "13px" }}>
+          <table className="w-full text-left border-collapse logistics-overview-compact-table" style={{ width: "100%", fontSize: "13px" }}>
             <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 shadow-2xs">
               <tr className="text-slate-600 text-[11px] uppercase tracking-[0.05em] font-bold">
-                <th rowSpan={2} className="py-2.5 px-3 w-12 text-center align-middle">STT</th>
-                <th rowSpan={2} className="py-2.5 px-3.5 w-36 align-middle whitespace-nowrap">CHỨNG TỪ</th>
-                <th rowSpan={2} className="py-2.5 px-3.5 min-w-[260px] align-middle">DIỄN GIẢI NGHIỆP VỤ</th>
-                <th rowSpan={2} className="py-2.5 px-3 w-16 text-center align-middle">ĐVT</th>
-                <th colSpan={2} className="py-2 px-3 text-center border-b border-slate-200/80 whitespace-nowrap">SỐ LƯỢNG</th>
-                <th rowSpan={2} className="py-2.5 px-3.5 w-28 text-right font-bold text-slate-800 align-middle whitespace-nowrap">TỒN KHO</th>
-                <th rowSpan={2} className="py-2.5 px-3.5 w-40 align-middle whitespace-nowrap">NGƯỜI LẬP / GIAO NHẬN</th>
+                <th rowSpan={2} className="py-2.5 px-2 sm:px-3 w-9 sm:w-12 text-center align-middle">STT</th>
+                <th rowSpan={2} className="py-2.5 px-2.5 sm:px-3.5 md:w-36 align-middle whitespace-nowrap">CHỨNG TỪ</th>
+                <th rowSpan={2} className="hidden md:table-cell py-2.5 px-3.5 min-w-[260px] align-middle">DIỄN GIẢI NGHIỆP VỤ</th>
+                <th rowSpan={2} className="hidden md:table-cell py-2.5 px-3 w-16 text-center align-middle">ĐVT</th>
+                <th colSpan={2} className="hidden md:table-cell py-2 px-3 text-center border-b border-slate-200/80 whitespace-nowrap">SỐ LƯỢNG</th>
+                <th rowSpan={2} className="hidden md:table-cell py-2.5 px-3.5 w-28 text-right font-bold text-slate-800 align-middle whitespace-nowrap">TỒN KHO</th>
+                <th rowSpan={2} className="hidden md:table-cell py-2.5 px-3.5 w-40 align-middle whitespace-nowrap">NGƯỜI LẬP / GIAO NHẬN</th>
               </tr>
-              <tr className="text-slate-500 text-[10px] uppercase tracking-wider font-bold bg-slate-50">
+              <tr className="hidden md:table-row text-slate-500 text-[10px] uppercase tracking-wider font-bold bg-slate-50">
                 <th className="py-1.5 px-3 w-24 text-right text-emerald-700 whitespace-nowrap">NHẬP</th>
                 <th className="py-1.5 px-3 w-24 text-right text-amber-700 whitespace-nowrap">XUẤT</th>
               </tr>
@@ -583,33 +610,48 @@ export const LogisticsReports: React.FC<LogisticsReportsProps> = ({ currentStep 
               ) : (
                 tkLines.map((line, idx) => (
                   <tr key={line.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
-                    <td className="py-2.5 px-3 text-center text-slate-400 text-xs font-mono">
+                    <td className="py-2.5 px-2 sm:px-3 text-center text-slate-400 text-xs font-mono align-top md:align-middle">
                       {(tkPage - 1) * tkPageSize + idx + 1}
                     </td>
-                    <td className="py-2.5 px-3.5">
-                      <div className="font-mono font-semibold text-xs text-blue-600 whitespace-nowrap">
-                        {line.soChungTu}
+                    <td className="py-2.5 px-2.5 sm:px-3.5">
+                      <div className="flex items-center justify-between md:block gap-2">
+                        <div className="font-mono font-semibold text-xs text-blue-600 whitespace-nowrap">
+                          {line.soChungTu}
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-mono md:mt-0.5 whitespace-nowrap">
+                          {line.ngayChungTu}
+                        </div>
                       </div>
-                      <div className="text-[11px] text-slate-400 font-mono mt-0.5 whitespace-nowrap">
-                        {line.ngayChungTu}
+                      <div className="block md:hidden mt-1 space-y-1 text-xs">
+                        <div className="text-slate-800 font-medium">{line.dienGiai}</div>
+                        <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-600">
+                          {line.nhap > 0 && (
+                            <span>Nhập: <b className="font-mono text-emerald-700">+{line.nhap.toLocaleString("vi-VN")} {line.donVi}</b></span>
+                          )}
+                          {line.xuat > 0 && (
+                            <span>Xuất: <b className="font-mono text-amber-700">-{line.xuat.toLocaleString("vi-VN")} {line.donVi}</b></span>
+                          )}
+                          <span>Tồn: <b className="font-mono text-slate-900">{line.ton.toLocaleString("vi-VN")} {line.donVi}</b></span>
+                          <span className="text-slate-500">• <i className="bi bi-person" /> {line.nguoiThucHien}</span>
+                        </div>
                       </div>
                     </td>
-                    <td className="py-2.5 px-3.5 text-slate-800 font-medium">
+                    <td className="hidden md:table-cell py-2.5 px-3.5 text-slate-800 font-medium">
                       {line.dienGiai}
                     </td>
-                    <td className="py-2.5 px-3 text-center text-slate-600 text-xs">
+                    <td className="hidden md:table-cell py-2.5 px-3 text-center text-slate-600 text-xs">
                       {line.donVi}
                     </td>
-                    <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700">
+                    <td className="hidden md:table-cell py-2.5 px-3 text-right font-mono font-bold text-emerald-700">
                       {line.nhap > 0 ? `+${line.nhap.toLocaleString("vi-VN")}` : "-"}
                     </td>
-                    <td className="py-2.5 px-3 text-right font-mono font-bold text-amber-700">
+                    <td className="hidden md:table-cell py-2.5 px-3 text-right font-mono font-bold text-amber-700">
                       {line.xuat > 0 ? `-${line.xuat.toLocaleString("vi-VN")}` : "-"}
                     </td>
-                    <td className="py-2.5 px-3.5 text-right font-mono font-bold text-slate-900">
+                    <td className="hidden md:table-cell py-2.5 px-3.5 text-right font-mono font-bold text-slate-900">
                       {line.ton.toLocaleString("vi-VN")}
                     </td>
-                    <td className="py-2.5 px-3.5 text-slate-700 text-xs font-medium whitespace-nowrap">
+                    <td className="hidden md:table-cell py-2.5 px-3.5 text-slate-700 text-xs font-medium whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
                         <i className="bi bi-person text-slate-400" />
                         <span>{line.nguoiThucHien}</span>
@@ -709,16 +751,16 @@ export const LogisticsReports: React.FC<LogisticsReportsProps> = ({ currentStep 
 
       {/* FullWidthTable */}
       <FullWidthTable loading={kkLoading}>
-        <table className="w-full text-left border-collapse" style={{ width: "100%", minWidth: "100%", fontSize: "13px" }}>
+        <table className="w-full text-left border-collapse logistics-overview-compact-table" style={{ width: "100%", fontSize: "13px" }}>
           <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
             <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
-              <th className="py-2.5 px-3 w-12 text-center border-0 align-middle">STT</th>
-              <th className="py-2.5 px-3.5 min-w-[280px] border-0 align-middle">MÃ PHIẾU KIỂM</th>
-              <th className="py-2.5 px-3 w-28 text-center border-0 align-middle whitespace-nowrap">NGÀY KIỂM</th>
-              <th className="py-2.5 px-3.5 w-44 border-0 align-middle whitespace-nowrap">HỘI ĐỒNG KIỂM KÊ</th>
-              <th className="py-2.5 px-3 w-24 text-center border-0 align-middle whitespace-nowrap">SỐ MẶT HÀNG</th>
-              <th className="py-2.5 px-3 w-24 text-center border-0 align-middle text-emerald-700 whitespace-nowrap">SỐ KHỚP</th>
-              <th className="py-2.5 px-3 min-w-[100px] w-28 text-center border-0 align-middle text-rose-700 whitespace-nowrap">SỐ LỆCH</th>
+              <th className="py-2.5 px-2 sm:px-3 w-9 sm:w-12 text-center border-0 align-middle">STT</th>
+              <th className="py-2.5 px-2.5 sm:px-3.5 md:min-w-[280px] border-0 align-middle">MÃ PHIẾU KIỂM</th>
+              <th className="hidden md:table-cell py-2.5 px-3 w-28 text-center border-0 align-middle whitespace-nowrap">NGÀY KIỂM</th>
+              <th className="hidden md:table-cell py-2.5 px-3.5 w-44 border-0 align-middle whitespace-nowrap">HỘI ĐỒNG KIỂM KÊ</th>
+              <th className="hidden md:table-cell py-2.5 px-3 w-24 text-center border-0 align-middle whitespace-nowrap">SỐ MẶT HÀNG</th>
+              <th className="hidden md:table-cell py-2.5 px-3 w-24 text-center border-0 align-middle text-emerald-700 whitespace-nowrap">SỐ KHỚP</th>
+              <th className="hidden md:table-cell py-2.5 px-3 min-w-[100px] w-28 text-center border-0 align-middle text-rose-700 whitespace-nowrap">SỐ LỆCH</th>
             </tr>
           </thead>
           <tbody>
@@ -732,10 +774,10 @@ export const LogisticsReports: React.FC<LogisticsReportsProps> = ({ currentStep 
             ) : (
               kkItems.map((item, idx) => (
                 <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
-                  <td className="py-2.5 px-3 text-center text-slate-400 text-xs font-mono">
+                  <td className="py-2.5 px-2 sm:px-3 text-center text-slate-400 text-xs font-mono align-top md:align-middle">
                     {(kkPage - 1) * kkPageSize + idx + 1}
                   </td>
-                  <td className="py-2.5 px-3.5">
+                  <td className="py-2.5 px-2.5 sm:px-3.5">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono font-bold text-xs text-blue-600 hover:text-blue-800 transition-colors">
                         {item.soChungTu}
@@ -757,27 +799,49 @@ export const LogisticsReports: React.FC<LogisticsReportsProps> = ({ currentStep 
                     <div className="font-semibold text-slate-800 text-xs mt-1">
                       {item.tenDot}
                     </div>
-                    <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-500">
+                    <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-500 flex-wrap">
                       <i className="bi bi-building text-slate-400 text-[10px]" />
                       <span>{item.khoTen}</span>
+                      <span className="md:hidden text-slate-300">•</span>
+                      <span className="md:hidden font-mono">{item.ngayKiem}</span>
+                    </div>
+                    {/* Chi tiết kiểm kê rút gọn trên Mobile */}
+                    <div className="block md:hidden mt-1.5 pt-1.5 border-t border-slate-100 text-[11px] space-y-0.5">
+                      <div className="text-slate-600">
+                        Hội đồng: <b className="text-slate-800">{item.nguoiKiem}</b> ({item.thanhVien})
+                      </div>
+                      <div className="flex items-center flex-wrap gap-x-3 text-slate-600">
+                        <span>Mặt hàng: <b className="font-mono text-slate-900">{item.tongMatHang}</b></span>
+                        <span>Khớp: <b className="font-mono text-emerald-700">{item.soKhop}</b></span>
+                        <span>
+                          Lệch:{' '}
+                          {item.lechThua + item.lechThieu > 0 ? (
+                            <b className="font-mono text-rose-600">
+                              {item.lechThua + item.lechThieu} ({item.giaTriLech})
+                            </b>
+                          ) : (
+                            <b className="font-mono text-slate-500">0</b>
+                          )}
+                        </span>
+                      </div>
                     </div>
                   </td>
-                  <td className="py-2.5 px-3 text-center text-slate-700 text-xs font-mono whitespace-nowrap">
+                  <td className="hidden md:table-cell py-2.5 px-3 text-center text-slate-700 text-xs font-mono whitespace-nowrap">
                     {item.ngayKiem}
                   </td>
-                  <td className="py-2.5 px-3.5 text-xs">
+                  <td className="hidden md:table-cell py-2.5 px-3.5 text-xs">
                     <div className="font-medium text-slate-800">{item.nguoiKiem}</div>
                     <div className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[180px]" title={item.thanhVien}>
                       {item.thanhVien}
                     </div>
                   </td>
-                  <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-800">
+                  <td className="hidden md:table-cell py-2.5 px-3 text-center font-mono font-bold text-slate-800">
                     {item.tongMatHang}
                   </td>
-                  <td className="py-2.5 px-3 text-center font-mono font-bold text-emerald-700 bg-emerald-50/20">
+                  <td className="hidden md:table-cell py-2.5 px-3 text-center font-mono font-bold text-emerald-700 bg-emerald-50/20">
                     {item.soKhop}
                   </td>
-                  <td className="py-2 px-3 text-center align-middle whitespace-nowrap bg-rose-50/20">
+                  <td className="hidden md:table-cell py-2 px-3 text-center align-middle whitespace-nowrap bg-rose-50/20">
                     {item.lechThua + item.lechThieu > 0 ? (
                       <div className="flex flex-col items-center justify-center">
                         <span className="font-mono font-bold text-rose-600 text-xs leading-none whitespace-nowrap">

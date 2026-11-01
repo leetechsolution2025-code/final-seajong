@@ -122,6 +122,7 @@ export function CarrierDetailOffcanvas({
 
       {/* Panel */}
       <motion.div
+        className="app-custom-drawer"
         initial={{ x: "100%" }}
         animate={{ x: 0 }}
         exit={{ x: "100%" }}

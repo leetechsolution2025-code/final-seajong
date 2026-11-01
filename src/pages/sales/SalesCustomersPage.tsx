@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { StandardPage } from '../../components/layout/StandardPage';
 import { TableToolbar } from '../../components/common/TableToolbar';
-import { FullWidthTable } from '../../components/common/FullWidthTable';
+import { FullWidthTable, SwipeableTableRow } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
 import { Button } from '../../components/common/Button';
 import { Offcanvas } from '../../components/common/Offcanvas';
@@ -601,6 +601,7 @@ export const SalesCustomersPage: React.FC = () => {
   };
 
   return (
+    <div className="sales-customers-page h-full w-full flex flex-col min-h-0">
     <StandardPage
       title="Khách hàng và đại lý"
       badge="DEALERS"
@@ -644,7 +645,7 @@ export const SalesCustomersPage: React.FC = () => {
             },
           ]}
           customFilters={
-            <div style={{ width: '230px' }}>
+            <div className="hidden sm:block" style={{ width: '230px' }}>
               <EmployeeSelect
                 multiple={false}
                 value={employeeFilter}
@@ -662,7 +663,7 @@ export const SalesCustomersPage: React.FC = () => {
             </div>
           }
           rightActions={
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               {selectedIds.size > 0 && (
                 <Button
                   variant="danger"
@@ -679,7 +680,8 @@ export const SalesCustomersPage: React.FC = () => {
                 icon={<Plus className="w-4 h-4" />}
                 onClick={handleOpenAdd}
               >
-                Thêm đại lý mới
+                <span className="sm:hidden">Thêm</span>
+                <span className="hidden sm:inline">Thêm đại lý mới</span>
               </Button>
             </div>
           }
@@ -693,10 +695,10 @@ export const SalesCustomersPage: React.FC = () => {
             loading={loading}
             emptyText="Không tìm thấy đại lý nào phù hợp với điều kiện lọc"
           >
-            <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+            <table className="sales-customers-table w-full text-left border-collapse" style={{ fontSize: '13px' }}>
               <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
                 <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
-                  <th className="py-2.5 px-3.5 w-10 text-center">
+                  <th className="py-2.5 px-2.5 sm:px-3.5 w-8 sm:w-10 text-center">
                     <input
                       type="checkbox"
                       checked={
@@ -715,11 +717,11 @@ export const SalesCustomersPage: React.FC = () => {
                       className="rounded border-slate-300 text-blue-600 cursor-pointer"
                     />
                   </th>
-                  <th className="py-2.5 px-3.5">Mã, Tên đại lý & Địa chỉ</th>
-                  <th className="py-2.5 px-3.5">Người đại diện</th>
-                  <th className="py-2.5 px-3.5 text-right">Cam kết doanh số</th>
-                  <th className="py-2.5 px-3.5 text-right">Hạn mức nợ</th>
-                  <th className="py-2.5 px-3.5 w-[230px]">Người phụ trách</th>
+                  <th className="py-2.5 px-2.5 sm:px-3.5">Mã, Tên đại lý & Địa chỉ</th>
+                  <th className="hidden sm:table-cell py-2.5 px-3.5">Người đại diện</th>
+                  <th className="hidden sm:table-cell py-2.5 px-3.5 text-right">Cam kết doanh số</th>
+                  <th className="hidden sm:table-cell py-2.5 px-3.5 text-right">Hạn mức nợ</th>
+                  <th className="hidden sm:table-cell py-2.5 px-3.5 w-[230px]">Người phụ trách</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -731,16 +733,35 @@ export const SalesCustomersPage: React.FC = () => {
                   const ownerEmail =
                     c.nguoiChamSoc?.workEmail || c.nguoiChamSoc?.personalEmail || '';
                   return (
-                    <tr
+                    <SwipeableTableRow
                       key={c.id}
+                      rowId={`customer-${c.id}`}
                       onClick={() => {
                         setSelectedCustomer(c);
                         setShowDrawer(true);
                       }}
                       className="hover:bg-blue-50/40 transition-colors cursor-pointer"
+                      onEdit={() => handleOpenEdit(c)}
+                      onDelete={async () => {
+                        const res = await fetch('/api/plan-finance/customers/bulk-delete', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ ids: [c.id] }),
+                        });
+                        if (res.ok) {
+                          setSelectedIds((prev) => {
+                            const next = new Set(prev);
+                            next.delete(c.id);
+                            return next;
+                          });
+                          fetchCustomers();
+                        }
+                      }}
+                      deleteConfirmTitle="Xác nhận xoá đại lý"
+                      deleteConfirmMessage={`Bạn có chắc chắn muốn xoá đại lý "${c.name}" (${c.code || c.id.slice(-4).toUpperCase()}) không? Hành động này không thể hoàn tác.`}
                     >
                       <td
-                        className="py-2.5 px-3.5 text-center"
+                        className="py-2.5 px-2.5 sm:px-3.5 text-center align-top sm:align-middle pt-3 sm:pt-2.5"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <input
@@ -758,7 +779,7 @@ export const SalesCustomersPage: React.FC = () => {
                           className="rounded border-slate-300 text-blue-600 cursor-pointer"
                         />
                       </td>
-                      <td className="py-2.5 px-3.5">
+                      <td className="py-2.5 px-2.5 sm:px-3.5 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-mono font-bold text-xs text-blue-600 hover:underline">
                             {c.code || `KH-${c.id.slice(-4).toUpperCase()}`}
@@ -791,7 +812,7 @@ export const SalesCustomersPage: React.FC = () => {
                             title={c.address}
                           >
                             <GeoAlt className="w-3 h-3 text-rose-500 shrink-0" />
-                            <span className="truncate max-w-[380px]">{c.address}</span>
+                            <span className="truncate max-w-[300px] sm:max-w-[380px]">{c.address}</span>
                           </div>
                         ) : (
                           <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
@@ -799,8 +820,36 @@ export const SalesCustomersPage: React.FC = () => {
                             <span>Chưa cập nhật địa chỉ</span>
                           </div>
                         )}
+                        {/* Mobile compact info */}
+                        <div className="sm:hidden mt-1.5 pt-1.5 border-t border-dashed border-slate-200 space-y-0.5 text-[11px]">
+                          <div className="flex items-center justify-between gap-2 text-slate-600">
+                            <span className="truncate">
+                              ĐD: <strong className="text-slate-800">{repDisplayName}</strong>
+                              {c.dienThoai ? ` • ${c.dienThoai}` : ''}
+                            </span>
+                            {c.nguoiChamSoc?.fullName && (
+                              <span className="text-[10.5px] text-slate-500 shrink-0">
+                                PT: <strong className="text-slate-700">{c.nguoiChamSoc.fullName}</strong>
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-between gap-2 text-[10.5px]">
+                            <span className="text-slate-500">
+                              Cam kết:{' '}
+                              <strong className="font-mono text-slate-800">
+                                {hasSalesCommitment(c) ? formatVND(c.doanhSoCamKet) : 'Không CK'}
+                              </strong>
+                            </span>
+                            <span className="text-slate-500">
+                              Hạn mức nợ:{' '}
+                              <strong className="font-mono text-blue-700">
+                                {formatVND(c.hanMucCongNo)}
+                              </strong>
+                            </span>
+                          </div>
+                        </div>
                       </td>
-                      <td className="py-2.5 px-3.5">
+                      <td className="hidden sm:table-cell py-2.5 px-3.5">
                         <div className="text-slate-700 font-medium">
                           {repDisplayName}
                         </div>
@@ -828,15 +877,15 @@ export const SalesCustomersPage: React.FC = () => {
                           </div>
                         )}
                       </td>
-                      <td className="py-2.5 px-3.5 text-right font-mono font-bold text-slate-800">
+                      <td className="hidden sm:table-cell py-2.5 px-3.5 text-right font-mono font-bold text-slate-800">
                         {hasSalesCommitment(c)
                           ? formatVND(c.doanhSoCamKet)
                           : 'Không cam kết'}
                       </td>
-                      <td className="py-2.5 px-3.5 text-right font-mono text-slate-600 font-medium">
+                      <td className="hidden sm:table-cell py-2.5 px-3.5 text-right font-mono text-slate-600 font-medium">
                         {formatVND(c.hanMucCongNo)}
                       </td>
-                      <td className="py-2.5 px-3.5">
+                      <td className="hidden sm:table-cell py-2.5 px-3.5">
                         {c.nguoiChamSoc?.fullName ? (
                           <>
                             <div className="font-medium text-slate-800 text-xs">
@@ -859,7 +908,7 @@ export const SalesCustomersPage: React.FC = () => {
                           <span className="text-xs text-slate-400 italic">Chưa phân công</span>
                         )}
                       </td>
-                    </tr>
+                    </SwipeableTableRow>
                   );
                 })}
               </tbody>
@@ -1435,6 +1484,7 @@ export const SalesCustomersPage: React.FC = () => {
         </form>
       </Offcanvas>
     </StandardPage>
+    </div>
   );
 };
 

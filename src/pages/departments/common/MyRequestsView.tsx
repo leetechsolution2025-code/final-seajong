@@ -15,7 +15,7 @@ import { Button } from '../../../components/common/Button';
 import { DeleteButton } from '../../../components/common/DeleteButton';
 import { Badge } from '../../../components/common/Badge';
 import { TableToolbar, type TableToolbarFilter } from '../../../components/common/TableToolbar';
-import { FullWidthTable } from '../../../components/common/FullWidthTable';
+import { FullWidthTable, SwipeableTableRow } from '../../../components/common/FullWidthTable';
 import { Pagination } from '../../../components/common/Pagination';
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog';
 import { Offcanvas } from '../../../components/common/Offcanvas';
@@ -1177,6 +1177,7 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
 
   return (
     <div
+      className="my-requests-mobile-page"
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -1202,16 +1203,17 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
         filters={toolbarFilters}
         style={{ marginBottom: 0, padding: '16px 20px 12px 20px' }}
         rightActions={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="flex items-center gap-1.5 md:gap-2">
             <Button
               type="button"
               variant="primary"
               size="sm"
               leftIcon={<Plus size={16} />}
               onClick={() => handleOpenCreateModal('late_early')}
+              title="Tạo mới"
               style={{ fontWeight: 700, whiteSpace: 'nowrap' }}
             >
-              Tạo mới
+              <span className="hidden md:inline">Tạo mới</span>
             </Button>
 
             <DeleteButton
@@ -1219,6 +1221,7 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
               itemCount={selectedIds.length}
               disabled={selectedIds.length === 0}
               onConfirm={handleConfirmBulkDelete}
+              title="Xóa"
               dialogTitle="Xác nhận xóa yêu cầu cá nhân"
               dialogMessage={
                 selectedIds.length > 0
@@ -1265,7 +1268,7 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                 letterSpacing: '0.05em',
               }}
             >
-              <th style={{ padding: '12px 14px', width: '44px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+              <th className="!px-2 md:!px-[14px] !py-2.5 md:!py-3 w-9 md:w-[44px] text-center whitespace-nowrap">
                 <input
                   type="checkbox"
                   checked={pagedList.length > 0 && pagedList.every((item) => selectedIds.includes(item.id))}
@@ -1274,11 +1277,11 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                   title="Chọn tất cả trên trang này"
                 />
               </th>
-              <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Nội dung yêu cầu</th>
-              <th style={{ padding: '12px 14px', width: '150px', minWidth: '140px', whiteSpace: 'nowrap' }}>Thời gian gửi</th>
-              <th style={{ padding: '12px 14px', width: '130px', minWidth: '120px', textAlign: 'right', whiteSpace: 'nowrap' }}>Số tiền VND</th>
-              <th style={{ padding: '12px 14px', width: '220px', minWidth: '200px', whiteSpace: 'nowrap' }}>Người phê duyệt</th>
-              <th style={{ padding: '12px 14px', width: '130px', minWidth: '120px', textAlign: 'center', whiteSpace: 'nowrap' }}>Trạng thái</th>
+              <th className="!px-2.5 md:!px-[14px] !py-2.5 md:!py-3 whitespace-nowrap">Nội dung yêu cầu</th>
+              <th className="hidden md:table-cell" style={{ padding: '12px 14px', width: '150px', minWidth: '140px', whiteSpace: 'nowrap' }}>Thời gian gửi</th>
+              <th className="hidden md:table-cell" style={{ padding: '12px 14px', width: '130px', minWidth: '120px', textAlign: 'right', whiteSpace: 'nowrap' }}>Số tiền VND</th>
+              <th className="hidden md:table-cell" style={{ padding: '12px 14px', width: '220px', minWidth: '200px', whiteSpace: 'nowrap' }}>Người phê duyệt</th>
+              <th className="hidden md:table-cell" style={{ padding: '12px 14px', width: '130px', minWidth: '120px', textAlign: 'center', whiteSpace: 'nowrap' }}>Trạng thái</th>
             </tr>
           </thead>
           <tbody>
@@ -1302,9 +1305,28 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                     : undefined;
 
                 return (
-                  <tr
+                  <SwipeableTableRow
                     key={item.id}
+                    rowId={`my-req-${item.id}`}
                     onClick={() => handleOpenEditModal(item)}
+                    onEdit={() => handleOpenEditModal(item)}
+                    onDelete={async () => {
+                      const res = await fetch('/api/personal-requests/batch-delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ids: [item.id] }),
+                      });
+                      if (res.ok) {
+                        notifyFinanceUpdated('personal_requests', 'delete');
+                        window.dispatchEvent(new CustomEvent('decodoor_approval_documents_updated'));
+                        window.dispatchEvent(new CustomEvent('decodoor_finance_cashflow_updated'));
+                        setRequests((prev) => prev.filter((r) => r.id !== item.id));
+                        setSelectedIds((prev) => prev.filter((id) => id !== item.id));
+                        onShowToast?.('success', 'Xóa thành công', `Đã xóa yêu cầu ${item.code}`);
+                      }
+                    }}
+                    deleteConfirmTitle="Xác nhận xóa yêu cầu cá nhân"
+                    deleteConfirmMessage={`Bạn có chắc chắn muốn xóa yêu cầu "${item.title}" (${item.code}) khỏi hệ thống? Dữ liệu sau khi xóa sẽ không thể phục hồi.`}
                     style={{
                       borderBottom: '1px solid var(--border-subtle, #f1f5f9)',
                       backgroundColor: isChecked ? 'rgba(37, 99, 235, 0.05)' : 'transparent',
@@ -1319,7 +1341,7 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                     }}
                   >
                     <td
-                      style={{ padding: '12px 14px', textAlign: 'center', width: '44px' }}
+                      className="!px-2 md:!px-[14px] !py-2.5 md:!py-3 text-center w-9 md:w-[44px] align-top md:align-middle"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <input
@@ -1329,8 +1351,8 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                         style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--primary-color, #2563eb)' }}
                       />
                     </td>
-                    <td style={{ padding: '12px 14px', maxWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                    <td className="!px-2.5 md:!px-[14px] !py-2.5 md:!py-3" style={{ maxWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
                         <span
                           style={{
                             fontFamily: "'Roboto Condensed', sans-serif",
@@ -1346,6 +1368,9 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                           {item.code}
                         </span>
                         {getTypeBadge(item.type)}
+                        <span className="md:hidden ml-auto">
+                          {getStatusBadge(item.status, item.statusLabel)}
+                        </span>
                       </div>
                       <div
                         style={{
@@ -1375,11 +1400,30 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                       >
                         {item.content}
                       </div>
+                      {/* Thông tin rút gọn hiển thị trên màn hình điện thoại (< 768px) */}
+                      <div className="flex md:hidden items-center flex-wrap gap-x-2 gap-y-0.5 mt-1.5 pt-1 border-t border-slate-100 text-[11.5px] text-slate-500">
+                        <span>{item.createdAt}</span>
+                        {hasAmount && displayAmount !== undefined && (
+                          <>
+                            <span className="text-slate-300">•</span>
+                            <span>
+                              Số tiền:{' '}
+                              <b style={{ color: item.type === 'refund' ? '#16a34a' : '#0f172a' }}>
+                                {formatNumberGroup(displayAmount)} đ
+                              </b>
+                            </span>
+                          </>
+                        )}
+                        <span className="text-slate-300">•</span>
+                        <span>
+                          Duyệt: <b className="text-slate-700">{parseApprover(item.approver).name}</b>
+                        </span>
+                      </div>
                     </td>
-                    <td style={{ padding: '12px 14px', color: '#475569', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                    <td className="hidden md:table-cell" style={{ padding: '12px 14px', color: '#475569', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
                       {item.createdAt}
                     </td>
-                    <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>
+                    <td className="hidden md:table-cell" style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>
                       {hasAmount && displayAmount !== undefined ? (
                         <span style={{ color: item.type === 'refund' ? '#16a34a' : '#0f172a' }}>
                           {formatNumberGroup(displayAmount)}
@@ -1388,7 +1432,7 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                         <span style={{ color: '#cbd5e1' }}>—</span>
                       )}
                     </td>
-                    <td style={{ padding: '12px 14px', width: '220px', minWidth: '200px', whiteSpace: 'nowrap' }}>
+                    <td className="hidden md:table-cell" style={{ padding: '12px 14px', width: '220px', minWidth: '200px', whiteSpace: 'nowrap' }}>
                       {(() => {
                         const { name, role } = parseApprover(item.approver);
                         return (
@@ -1405,10 +1449,10 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                         );
                       })()}
                     </td>
-                    <td style={{ padding: '12px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                    <td className="hidden md:table-cell" style={{ padding: '12px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                       {getStatusBadge(item.status, item.statusLabel)}
                     </td>
-                  </tr>
+                  </SwipeableTableRow>
                 );
               })
             )}

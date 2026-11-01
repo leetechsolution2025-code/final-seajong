@@ -8,6 +8,13 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PhieuNhapKhoPreview } from "./PhieuNhapKhoPreview";
 import { LichSuNhapKhoOffcanvas } from "./LichSuNhapKhoOffcanvas";
 import { genDocCode } from "@/lib/genDocCode";
+import { Input } from "@/components/common/Input";
+import { Select } from "@/components/common/Select";
+import { DatePicker } from "@/components/common/DatePicker";
+import { Toggle } from "@/components/common/Toggle";
+import { EmployeeSelect } from "@/components/common/EmployeeSelect";
+import { Button } from "@/components/common/Button";
+import { NumberInput } from "@/components/common/NumberInput";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Warehouse { id: string; code: string | null; name: string; isActive: boolean; }
@@ -596,15 +603,16 @@ export function NhapKhoModal({
       clearTimeout(searchTimers.current[lineId]);
       return;
     }
-    setLines(ls => ls.map(l => l.id === lineId ? { ...l, itemSearch: q, showSugg: true } : l));
+    setLines(ls => ls.map(l => l.id === lineId ? { ...l, itemSearch: q, item: null, showSugg: true } : l));
     clearTimeout(searchTimers.current[lineId]);
     searchTimers.current[lineId] = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/plan-finance/inventory/search?q=${encodeURIComponent(q)}&limit=8`);
-        const data: ItemSuggestion[] = await res.json();
-        setLines(ls => ls.map(l => l.id === lineId ? { ...l, suggestions: Array.isArray(data) ? data : [] } : l));
+        const res = await fetch(`/api/plan-finance/inventory/search?q=${encodeURIComponent(q)}&limit=10`);
+        const raw = await res.json();
+        const data: ItemSuggestion[] = Array.isArray(raw) ? raw : (raw?.items || raw?.data || []);
+        setLines(ls => ls.map(l => l.id === lineId ? { ...l, suggestions: data, showSugg: true } : l));
       } catch { /* ignore */ }
-    }, 250);
+    }, 180);
   };
 
   const selectItem = (lineId: string, item: ItemSuggestion) =>
@@ -712,7 +720,8 @@ export function NhapKhoModal({
     if (!isThuKho) { toast.error("Không có quyền", "Chỉ tài khoản Thủ kho mới có quyền nhập kho."); return; }
     if (!toWarehouseId) { toast.error("Thiếu thông tin", "Vui lòng chọn kho nhập"); return; }
     if (!validLines.length) { toast.error("Chưa có hàng hoá", "Cần ít nhất 1 dòng hàng hoá hợp lệ"); return; }
-    const missingPos = validLines.some(l => !l.viTriHang && !l.viTriCot && !l.viTriTang);
+    const isMobileScreen = typeof window !== "undefined" && window.innerWidth <= 768;
+    const missingPos = !isMobileScreen && validLines.some(l => !l.viTriHang && !l.viTriCot && !l.viTriTang);
     if (missingPos) { setConfirmOpen(true); } else { doSave(); }
   };
 
@@ -753,16 +762,100 @@ export function NhapKhoModal({
 
         /* SPECIFIC MOBILE TWEAKS */
         @media (max-width: 768px) {
-          .nk-sidebar-grid { grid-template-columns: 1fr !important; }
-          .nk-sidebar { max-height: none !important; }
+          .nk-top-bar { padding: 10px 12px !important; gap: 8px !important; }
+          .nk-top-brand { order: 1; flex: 1; min-width: 0 !important; }
+          .nk-top-title { min-width: 0 !important; }
+          .nk-top-actions { display: contents !important; }
+          .nk-top-close { order: 2; margin-left: auto !important; flex-shrink: 0; }
+          .nk-mode-select {
+            order: 3;
+            width: 100% !important;
+            margin-top: 2px !important;
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 4px !important;
+          }
+          .nk-mode-select button {
+            padding: 6px 8px !important;
+            font-size: 12px !important;
+          }
+          .nk-po-select {
+            order: 4;
+            width: 100% !important;
+            margin-top: 2px !important;
+          }
+          .nk-po-select > div,
+          .nk-po-select .form-group,
+          .nk-po-select .select-container,
+          .nk-po-select .form-select,
+          .nk-po-select select {
+            width: 100% !important;
+            min-width: 0 !important;
+          }
+          .nk-selected-badge {
+            display: none !important;
+          }
+
+          .nk-sidebar {
+            max-height: 44vh !important;
+            overflow-y: auto !important;
+          }
+          .nk-sidebar-inner {
+            padding: 10px 12px !important;
+            gap: 10px !important;
+          }
+          .nk-sidebar-header-toggle.is-collapsed {
+            padding-bottom: 0 !important;
+            border-bottom: none !important;
+          }
+          .nk-sidebar-grid { grid-template-columns: 1fr !important; gap: 10px !important; }
           .nk-sidebar-collapsed { display: none !important; }
+
+          .nk-table-wrapper {
+            padding: 12px !important;
+          }
+          .nk-pane-header {
+            gap: 6px !important;
+            margin-bottom: 10px !important;
+          }
+          .nk-table-inner {
+            overflow-x: visible !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+            padding-bottom: 0 !important;
+          }
+          .nk-table-inner > div {
+            min-width: 0 !important;
+            width: 100% !important;
+          }
+          .nk-table-header {
+            display: none !important;
+          }
+          .nk-lines-container {
+            border-top: 1px solid var(--border) !important;
+            border-radius: 8px !important;
+          }
+          .nk-line-row-desktop {
+            display: none !important;
+          }
+          .nk-line-row-mobile {
+            display: flex !important;
+          }
+          .nk-add-line-wrapper {
+            padding-left: 40px !important;
+          }
+          .nk-bottom-toolbar {
+            padding: 10px 12px !important;
+          }
         }
       `}</style>
 
       {/* ═══ TOP BAR ═══════════════════════════════════════════════════════ */}
       <div className="nk-top-bar" style={{ flexShrink: 0, minHeight: 64, borderBottom: "1px solid rgba(0,0,0,0.08)", padding: "12px 24px", display: "flex", alignItems: "center", gap: 16, background: "var(--card)" }}>
         {/* Left: Icon & Title */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: "fit-content" }}>
+        <div className="nk-top-brand" style={{ display: "flex", alignItems: "center", gap: 12, minWidth: "fit-content" }}>
           <div style={{ width: 40, height: 40, borderRadius: 12, background: "linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(16,185,129,0.05) 100%)", border: "1px solid rgba(16,185,129,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <i className="bi bi-box-arrow-in-down" style={{ fontSize: 20, color: "#059669" }} />
           </div>
@@ -799,39 +892,35 @@ export function NhapKhoModal({
 
           {/* PO select */}
           {mode === "po" && (
-            <div className="nk-po-select position-relative" style={{ display: "flex", alignItems: "center" }}>
+            <div className="nk-po-select position-relative" style={{ display: "flex", alignItems: "center", position: "relative" }}>
               {poLoading ? (
                 <div style={{ fontSize: 13, color: "var(--muted-foreground)", padding: "0 10px" }}>
                   <i className="bi bi-arrow-repeat" style={{ animation: "spin 1s linear infinite" }} /> Đang tải…
                 </div>
               ) : (
-                <div className="position-relative">
-                  <select
+                <div className="position-relative" style={{ position: "relative", width: 280 }}>
+                  <Select
                     value={selectedPO?.id ?? ""}
                     onChange={e => onSelectPOById(e.target.value)}
+                    options={[
+                      { value: "", label: "Chọn đơn mua hàng" },
+                      ...(poList.length === 0
+                        ? [{ value: "__empty__", label: "Không có đơn hàng", disabled: true }]
+                        : poList.map(po => ({
+                            value: po.id,
+                            label: `${po.code ?? po.id}${po.supplier?.name ? ` — ${po.supplier.name}` : ""}`,
+                          }))),
+                    ]}
                     style={{
-                      height: 38, padding: "0 36px 0 16px",
-                      border: `1px solid ${selectedPO ? "rgba(16,185,129,0.4)" : "var(--border)"}`,
-                      borderRadius: 10,
+                      height: 38,
+                      borderColor: selectedPO ? "rgba(16,185,129,0.4)" : "var(--border)",
                       background: selectedPO ? "rgba(16,185,129,0.05)" : "var(--background)",
                       color: selectedPO ? "#059669" : "var(--foreground)",
-                      fontSize: 13, fontWeight: selectedPO ? 600 : 400,
-                      outline: "none", cursor: "pointer",
-                      width: 280, transition: "all 0.2s",
-                      appearance: "none", textOverflow: "ellipsis"
+                      fontWeight: selectedPO ? 600 : 400,
                     }}
-                  >
-                    <option value="">Chọn đơn mua hàng</option>
-                    {poList.length === 0 && <option disabled value="">Không có đơn hàng</option>}
-                    {poList.map(po => (
-                      <option key={po.id} value={po.id}>
-                        {po.code ?? po.id}{po.supplier?.name ? ` — ${po.supplier.name}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <i className="bi bi-chevron-down position-absolute" style={{ right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 12, pointerEvents: "none", color: selectedPO ? "#059669" : "var(--muted-foreground)" }} />
+                  />
                   {selectedPO && (
-                    <span className="position-absolute" style={{ top: -10, right: -10, fontSize: 10, color: "#fff", fontWeight: 600, background: "#10b981", borderRadius: 20, padding: "2px 8px", boxShadow: "0 2px 4px rgba(16, 185, 129, 0.3)", zIndex: 10 }}>
+                    <span className="nk-selected-badge position-absolute" style={{ position: "absolute", top: -10, right: -10, fontSize: 10, color: "#fff", fontWeight: 600, background: "#10b981", borderRadius: 20, padding: "2px 8px", boxShadow: "0 2px 4px rgba(16, 185, 129, 0.3)", zIndex: 10 }}>
                       <i className="bi bi-check" style={{ marginRight: 2 }} />Đã chọn
                     </span>
                   )}
@@ -842,45 +931,44 @@ export function NhapKhoModal({
 
           {/* WO / Return select */}
           {(mode === "production" || mode === "return") && (
-            <div className="nk-po-select position-relative" style={{ display: "flex", alignItems: "center" }}>
+            <div className="nk-po-select position-relative" style={{ display: "flex", alignItems: "center", position: "relative" }}>
               {woLoading ? (
                 <div style={{ fontSize: 13, color: "var(--muted-foreground)", padding: "0 10px" }}>
                   <i className="bi bi-arrow-repeat" style={{ animation: "spin 1s linear infinite" }} /> Đang tải…
                 </div>
               ) : (
-                <div className="position-relative">
-                  <select
+                <div className="position-relative" style={{ position: "relative", width: 290 }}>
+                  <Select
                     value={selectedWO?.id ?? ""}
                     onChange={e => onSelectWOById(e.target.value)}
+                    options={[
+                      {
+                        value: "",
+                        label: mode === "return" ? "-- Chọn lệnh hàng trả lại --" : "-- Chọn lệnh chờ nhập --",
+                      },
+                      ...(filteredWOList.length === 0
+                        ? [
+                            {
+                              value: "__empty__",
+                              label: mode === "return" ? "Không có lệnh hàng trả lại" : "Không có lệnh chờ nhập",
+                              disabled: true,
+                            },
+                          ]
+                        : filteredWOList.map(wo => ({
+                            value: wo.id,
+                            label: wo.title.replace("Yêu cầu ", ""),
+                          }))),
+                    ]}
                     style={{
-                      height: 38, padding: "0 36px 0 16px",
-                      border: `1px solid ${selectedWO ? "rgba(16,185,129,0.4)" : "var(--border)"}`,
-                      borderRadius: 10,
+                      height: 38,
+                      borderColor: selectedWO ? "rgba(16,185,129,0.4)" : "var(--border)",
                       background: selectedWO ? "rgba(16,185,129,0.05)" : "var(--background)",
                       color: selectedWO ? "#059669" : "var(--foreground)",
-                      fontSize: 13, fontWeight: selectedWO ? 600 : 400,
-                      outline: "none", cursor: "pointer",
-                      width: 290, transition: "all 0.2s",
-                      appearance: "none", textOverflow: "ellipsis"
+                      fontWeight: selectedWO ? 600 : 400,
                     }}
-                  >
-                    <option value="">
-                      {mode === "return" ? "-- Chọn lệnh hàng trả lại --" : "-- Chọn lệnh chờ nhập --"}
-                    </option>
-                    {filteredWOList.length === 0 && (
-                      <option disabled value="">
-                        {mode === "return" ? "Không có lệnh hàng trả lại" : "Không có lệnh chờ nhập"}
-                      </option>
-                    )}
-                    {filteredWOList.map(wo => (
-                      <option key={wo.id} value={wo.id}>
-                        {wo.title.replace("Yêu cầu ", "")}
-                      </option>
-                    ))}
-                  </select>
-                  <i className="bi bi-chevron-down position-absolute" style={{ right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 12, pointerEvents: "none", color: selectedWO ? "#059669" : "var(--muted-foreground)" }} />
+                  />
                   {selectedWO && (
-                    <span className="position-absolute" style={{ top: -10, right: -10, fontSize: 10, color: "#fff", fontWeight: 600, background: "#10b981", borderRadius: 20, padding: "2px 8px", boxShadow: "0 2px 4px rgba(16, 185, 129, 0.3)", zIndex: 10 }}>
+                    <span className="nk-selected-badge position-absolute" style={{ position: "absolute", top: -10, right: -10, fontSize: 10, color: "#fff", fontWeight: 600, background: "#10b981", borderRadius: 20, padding: "2px 8px", boxShadow: "0 2px 4px rgba(16, 185, 129, 0.3)", zIndex: 10 }}>
                       <i className="bi bi-check" style={{ marginRight: 2 }} />Đã chọn
                     </span>
                   )}
@@ -894,9 +982,18 @@ export function NhapKhoModal({
           {/* Desktop Actions */}
           <div className="nk-top-actions-desktop" style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {success && (
-              <button onClick={() => setShowPreview(true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", borderWidth: "1.5px", borderStyle: "solid", borderColor: "#10b981", background: "rgba(16,185,129,0.1)", color: "#10b981", fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: "pointer" }}>
-                <i className="bi bi-printer" style={{ fontSize: 14 }} /> In phiếu nhập kho
-              </button>
+              <Button
+                variant="outline"
+                onClick={() => setShowPreview(true)}
+                leftIcon={<i className="bi bi-printer" style={{ fontSize: 14 }} />}
+                style={{
+                  borderColor: "#10b981",
+                  background: "rgba(16,185,129,0.1)",
+                  color: "#10b981",
+                }}
+              >
+                In phiếu nhập kho
+              </Button>
             )}
             {!success && (() => {
               const canSave = !saving
@@ -904,37 +1001,35 @@ export function NhapKhoModal({
                 && !(mode === "po" && !selectedPO)
                 && isThuKho;
               return (
-                <button
+                <Button
+                  variant="success"
                   onClick={handleSave}
                   disabled={!canSave}
+                  isLoading={saving}
                   title={
                     !isThuKho ? "Chỉ tài khoản Thủ kho mới có quyền nhập kho" :
                       mode === "po" && !selectedPO ? "Vui lòng chọn đơn mua hàng" :
                         validLines.length === 0 ? "Chưa có hàng hoá nào trong bảng" : undefined
                   }
+                  leftIcon={<i className="bi bi-check2-all" style={{ fontSize: 14 }} />}
                   style={{
-                    display: "flex", alignItems: "center", gap: 6,
-                    padding: "7px 20px", border: "none", borderRadius: 8,
                     background: canSave ? "#10b981" : "var(--muted)",
                     color: canSave ? "#fff" : "var(--muted-foreground)",
-                    fontSize: 13, fontWeight: 700,
-                    cursor: canSave ? "pointer" : "not-allowed",
-                    opacity: canSave ? 1 : 0.6,
-                    transition: "all 0.15s",
-                    whiteSpace: "nowrap"
+                    borderColor: canSave ? "#10b981" : "var(--border)",
                   }}
                 >
-                  {saving
-                    ? <i className="bi bi-arrow-repeat" style={{ animation: "spin 1s linear infinite" }} />
-                    : <i className="bi bi-check2-all" style={{ fontSize: 14 }} />}
                   Xác nhận
-                </button>
+                </Button>
               );
             })()}
 
-            <button onClick={() => setShowLichSu(true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", borderWidth: "1.5px", borderStyle: "solid", borderColor: "var(--border)", background: "var(--muted)", color: "var(--foreground)", fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: "pointer", whiteSpace: "nowrap" }}>
-              <i className="bi bi-clock-history" style={{ fontSize: 14 }} /> Lịch sử
-            </button>
+            <Button
+              variant="secondary"
+              onClick={() => setShowLichSu(true)}
+              leftIcon={<i className="bi bi-clock-history" style={{ fontSize: 14 }} />}
+            >
+              Lịch sử
+            </Button>
           </div>
 
           <div style={{ width: 1, height: 24, background: "var(--border)", margin: "0 4px" }} className="d-none d-lg-block" />
@@ -963,11 +1058,11 @@ export function NhapKhoModal({
 
 
           {/* Form fields */}
-          <div style={{ padding: "16px 14px", display: "flex", flexDirection: "column", gap: 14, flex: 1, minHeight: 0 }}>
+          <div className="nk-sidebar-inner" style={{ padding: "16px 14px", display: "flex", flexDirection: "column", gap: 14, flex: 1, minHeight: 0 }}>
 
             {/* Header nhóm (Clickable on mobile) */}
             <div 
-              className="nk-sidebar-header-toggle"
+              className={`nk-sidebar-header-toggle ${!isSidebarOpen ? 'is-collapsed' : ''}`}
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 10, borderBottom: "1px solid var(--border)", cursor: "pointer" }}
             >
@@ -982,14 +1077,12 @@ export function NhapKhoModal({
 
             <div className={`nk-sidebar-content ${!isSidebarOpen ? 'nk-sidebar-collapsed' : ''}`} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div className="nk-sidebar-grid" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {/* Số phiếu */}
-              <div>
-                <label style={CSS.label}>Số phiếu nhập</label>
-                <input
+                {/* Số phiếu */}
+                <Input
+                  label="Số phiếu nhập"
                   value={soChungTu}
                   readOnly
                   style={{
-                    ...CSS.input,
                     background: "var(--muted)",
                     color: "var(--muted-foreground)",
                     cursor: "default",
@@ -997,155 +1090,122 @@ export function NhapKhoModal({
                     fontSize: 12,
                   }}
                 />
-              </div>
 
-              {/* Số biên bản QC */}
-              <div>
-                <label style={CSS.label}>Số biên bản QC</label>
-                <input
+                {/* Số biên bản QC */}
+                <Input
+                  label="Số biên bản QC"
                   value={soBienBanQC}
-                  onChange={e => setSoBienBanQC(e.target.value)}
+                  onChange={e => !success && setSoBienBanQC(e.target.value)}
+                  readOnly={success}
                   placeholder="Nhập số BB QC (nếu có)"
-                  style={CSS.input}
                 />
-              </div>
 
-              {/* Thời gian */}
-              <div>
-                <label style={CSS.label}>Thời gian</label>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  {/* Date input */}
-                  <input
-                    type="date"
-                    value={ngayNhap}
-                    min={lockDate ? new Date().toISOString().slice(0, 10) : undefined}
-                    max={lockDate ? new Date().toISOString().slice(0, 10) : undefined}
-                    onChange={e => !lockDate && setNgayNhap(e.target.value)}
-                    readOnly={lockDate}
-                    style={{
-                      ...CSS.input,
-                      flex: 1,
-                      cursor: lockDate ? "not-allowed" : "text",
-                      opacity: lockDate ? 0.7 : 1,
-                      background: lockDate ? "var(--muted)" : CSS.input.background,
-                    }}
-                  />
-                  {/* iOS-style switch */}
-                  <label
-                    title={lockDate ? "Khoá ngày hôm nay — nhấn để mở" : "Đang mở — nhấn để khoá"}
-                    style={{ display: "flex", alignItems: "center", cursor: "pointer", flexShrink: 0 }}
-                  >
-                    <span
-                      onClick={() => setLockDate(v => !v)}
-                      style={{
-                        position: "relative", display: "inline-block",
-                        width: 34, height: 18, borderRadius: 9, flexShrink: 0,
-                        background: lockDate ? "#10b981" : "var(--border)",
-                        transition: "background 0.2s",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <span style={{
-                        position: "absolute",
-                        top: 2, left: lockDate ? 18 : 2,
-                        width: 14, height: 14, borderRadius: "50%",
-                        background: "#fff",
-                        boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
-                        transition: "left 0.2s",
-                      }} />
-                    </span>
-                  </label>
+                {/* Thời gian */}
+                <div className="form-group">
+                  <label className="form-label">Thời gian</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <DatePicker
+                        value={ngayNhap}
+                        min={lockDate ? new Date().toISOString().slice(0, 10) : undefined}
+                        max={lockDate ? new Date().toISOString().slice(0, 10) : undefined}
+                        onChange={val => !lockDate && !success && setNgayNhap(val)}
+                        disabled={lockDate || success}
+                      />
+                    </div>
+                    <Toggle
+                      checked={lockDate}
+                      onChange={setLockDate}
+                      disabled={success}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {/* Loại nhập kho */}
-              <div>
-                <label style={CSS.label}>Loại nhập kho</label>
-                <div style={{ position: "relative" }}>
-                  <select
-                    value={loaiNhapKho}
-                    onChange={e => !success && setLoaiNhapKho(e.target.value)}
-                    disabled={success}
-                    style={{ ...CSS.input, appearance: "none", opacity: success ? 0.65 : 1, cursor: success ? "not-allowed" : "pointer" }}
-                  >
-                    <option value="Nhập mua hàng">Nhập mua hàng</option>
-                    <option value="Nhập từ sản xuất">Nhập từ sản xuất</option>
-                    <option value="Nhập kho thu hồi">Nhập kho thu hồi</option>
-                    <option value="Nhập kho hàng lỗi">Nhập kho hàng lỗi</option>
-                    <option value="Nhập kho hàng trả lại">Nhập kho hàng trả lại</option>
-                    <option value="Nhập hàng hoàn trả">Nhập hàng hoàn trả</option>
-                    <option value="Nhập nội bộ">Nhập nội bộ</option>
-                    <option value="Khác">Khác</option>
-                  </select>
-                  <i className="bi bi-chevron-down position-absolute" style={{ right: 12, top: "50%", transform: "translateY(-50%)", fontSize: 12, pointerEvents: "none", color: "var(--muted-foreground)" }} />
-                </div>
-              </div>
+                {/* Loại nhập kho */}
+                <Select
+                  label="Loại nhập kho"
+                  value={loaiNhapKho}
+                  onChange={e => !success && setLoaiNhapKho(e.target.value)}
+                  disabled={success}
+                  options={[
+                    { value: "Nhập mua hàng", label: "Nhập mua hàng" },
+                    { value: "Nhập từ sản xuất", label: "Nhập từ sản xuất" },
+                    { value: "Nhập kho thu hồi", label: "Nhập kho thu hồi" },
+                    { value: "Nhập kho hàng lỗi", label: "Nhập kho hàng lỗi" },
+                    { value: "Nhập kho hàng trả lại", label: "Nhập kho hàng trả lại" },
+                    { value: "Nhập hàng hoàn trả", label: "Nhập hàng hoàn trả" },
+                    { value: "Nhập nội bộ", label: "Nhập nội bộ" },
+                    { value: "Khác", label: "Khác" },
+                  ]}
+                />
 
-              {/* Kho nhập */}
-              <div>
-                <label style={CSS.label}>Kho nhập <span style={{ color: "#f43f5e" }}>*</span></label>
-                <select
+                {/* Kho nhập */}
+                <Select
+                  label="Kho nhập"
+                  required
                   value={toWarehouseId}
                   onChange={e => !success && setToWarehouseId(e.target.value)}
                   disabled={success}
-                  style={{ ...CSS.input, appearance: "none", borderColor: toWarehouseId ? "rgba(16,185,129,0.5)" : "var(--border)", opacity: success ? 0.65 : 1, cursor: success ? "not-allowed" : "pointer" }}
-                >
-                  <option value="">Chọn kho</option>
-                  {warehouses.map(w => (
-                    <option key={w.id} value={w.id}>{w.name}</option>
-                  ))}
-                </select>
-              </div>
+                  options={[
+                    { value: "", label: "Chọn kho" },
+                    ...warehouses.map(w => ({ value: w.id, label: w.name })),
+                  ]}
+                  style={{
+                    borderColor: toWarehouseId ? "rgba(16,185,129,0.5)" : "var(--border)",
+                  }}
+                />
 
-              {/* Chi phí vận chuyển */}
-              <div>
-                <label style={CSS.label}>Chi phí vận chuyển (đ)</label>
-                <CurrencyInput
+                {/* Chi phí vận chuyển */}
+                <NumberInput
+                  label="Chi phí vận chuyển"
                   value={chiPhiVanChuyen}
-                  onChange={v => !success && setChiPhiVanChuyen(v)}
+                  onValueChange={v => !success && setChiPhiVanChuyen(v)}
                   readOnly={success}
+                  disabled={success}
+                  suffix="₫"
                   placeholder="0"
-                  style={{ ...CSS.input, opacity: success ? 0.65 : 1, cursor: success ? "default" : "text" }}
                 />
-              </div>
 
-              {/* Người thực hiện */}
-              <div>
-                <label style={CSS.label}>Người thực hiện</label>
-                <input
+                {/* Người thực hiện */}
+                <EmployeeSelect
+                  label="Người thực hiện"
+                  multiple={false}
+                  departmentFilter="Kho vận"
+                  hidePositionBadge={true}
                   value={nguoiThucHien}
-                  onChange={e => !success && setNguoiThucHien(e.target.value)}
+                  onChange={val => !success && setNguoiThucHien(val)}
+                  disabled={success}
+                  placeholder="Chọn hoặc tìm nhân sự kho vận..."
+                  searchPlaceholder="Tìm tên nhân viên kho vận..."
+                />
+              </div>
+
+              {/* Lý do */}
+              <div className="nk-sidebar-full-row form-group">
+                <label className="form-label">Lý do nhập kho</label>
+                <textarea
+                  className="form-input"
+                  value={lyDo}
+                  onChange={e => !success && setLyDo(e.target.value)}
                   readOnly={success}
-                  placeholder="Tên thủ kho / người nhập"
-                  style={{ ...CSS.input, opacity: success ? 0.65 : 1, cursor: success ? "default" : "text" }}
+                  rows={2}
+                  style={{ height: "auto", padding: "8px 12px", resize: success ? "none" : "vertical", lineHeight: 1.5, opacity: success ? 0.65 : 1, cursor: success ? "default" : "text" }}
+                />
+              </div>
+
+              {/* Ghi chú — chiếm hết không gian còn lại */}
+              <div className="nk-sidebar-full-row form-group" style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+                <label className="form-label">Ghi chú</label>
+                <textarea
+                  className="form-input"
+                  value={ghiChu}
+                  onChange={e => !success && setGhiChu(e.target.value)}
+                  readOnly={success}
+                  placeholder="Ghi chú thêm..."
+                  style={{ height: "auto", padding: "8px 12px", flex: 1, resize: "none", lineHeight: 1.5, opacity: success ? 0.65 : 1, cursor: success ? "default" : "text" }}
                 />
               </div>
             </div>
-
-            {/* Lý do */}
-            <div className="nk-sidebar-full-row">
-              <label style={CSS.label}>Lý do nhập kho</label>
-              <textarea
-                value={lyDo}
-                onChange={e => !success && setLyDo(e.target.value)}
-                readOnly={success}
-                rows={2}
-                style={{ ...CSS.input, resize: success ? "none" : "vertical", lineHeight: 1.5, opacity: success ? 0.65 : 1, cursor: success ? "default" : "text" }}
-              />
-            </div>
-
-            {/* Ghi chú — chiếm hết không gian còn lại */}
-            <div className="nk-sidebar-full-row" style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
-              <label style={CSS.label}>Ghi chú</label>
-              <textarea
-                value={ghiChu}
-                onChange={e => !success && setGhiChu(e.target.value)}
-                readOnly={success}
-                placeholder="Ghi chú thêm..."
-                style={{ ...CSS.input, flex: 1, resize: "none", lineHeight: 1.5, opacity: success ? 0.65 : 1, cursor: success ? "default" : "text" }}
-              />
-            </div>
-          </div>
           </div>
         </div>
 
@@ -1193,7 +1253,7 @@ export function NhapKhoModal({
 
           <div className="nk-table-inner">
             {/* Table header — 2 dòng, merge cột SL + merge cột Vị trí */}
-            <div style={{ background: "var(--muted)", borderRadius: "8px 8px 0 0", overflow: "hidden" }}>
+            <div className="nk-table-header" style={{ background: "var(--muted)", borderRadius: "8px 8px 0 0", overflow: "hidden" }}>
             {/* Dòng 1: nhãn nhóm */}
             <div style={{
               display: "grid",
@@ -1238,7 +1298,7 @@ export function NhapKhoModal({
 
 
           {/* Lines */}
-          <div style={{ border: "1px solid var(--border)", borderTop: "none", borderRadius: "0 0 8px 8px" }}>
+          <div className="nk-lines-container" style={{ border: "1px solid var(--border)", borderTop: "none", borderRadius: "0 0 8px 8px" }}>
             {lines.map((line, idx) => (
               <LineRow key={line.id} line={line} idx={idx}
                 tongTien={tongTien} tongSL={tongSL} chiPhiVanChuyen={chiPhiVanChuyen}
@@ -1250,7 +1310,7 @@ export function NhapKhoModal({
                 locked={success}
               />
             ))}
-            <div style={{ padding: "8px 10px", borderTop: "1px dashed var(--border)" }}>
+            <div className="nk-add-line-wrapper" style={{ padding: "8px 10px", borderTop: "1px dashed var(--border)" }}>
               {!success ? (
                 <button onClick={addLine}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = "#10b981"; e.currentTarget.style.color = "#10b981"; }}
@@ -1272,33 +1332,50 @@ export function NhapKhoModal({
 
       {/* ═══ BOTTOM TOOLBAR (MOBILE ONLY) ════════════════════════════════════ */}
       <div className="nk-bottom-toolbar" style={{ display: "none", padding: "12px 16px", borderTop: "1px solid var(--border)", background: "var(--card)", gap: 8, flexShrink: 0 }}>
+        <Button
+          variant="secondary"
+          onClick={() => setShowLichSu(true)}
+          leftIcon={<i className="bi bi-clock-history" style={{ fontSize: 14 }} />}
+          style={{ flex: 1 }}
+        >
+          Lịch sử
+        </Button>
         {success && (
-          <button onClick={() => setShowPreview(true)} style={{ display: "flex", flex: 1, justifyContent: "center", alignItems: "center", gap: 6, padding: "10px 16px", borderWidth: "1.5px", borderStyle: "solid", borderColor: "#10b981", background: "rgba(16,185,129,0.1)", color: "#10b981", fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: "pointer" }}>
-            <i className="bi bi-printer" style={{ fontSize: 14 }} /> In phiếu
-          </button>
+          <Button
+            variant="outline"
+            onClick={() => setShowPreview(true)}
+            leftIcon={<i className="bi bi-printer" style={{ fontSize: 14 }} />}
+            style={{
+              flex: 2,
+              borderColor: "#10b981",
+              background: "rgba(16,185,129,0.1)",
+              color: "#10b981",
+            }}
+          >
+            In phiếu nhập kho
+          </Button>
         )}
         {!success && (() => {
           const canSave = !saving && validLines.length > 0 && !(mode === "po" && !selectedPO) && isThuKho;
           return (
-            <button onClick={handleSave} disabled={!canSave}
+            <Button
+              variant="success"
+              onClick={handleSave}
+              disabled={!canSave}
+              isLoading={saving}
               title={!isThuKho ? "Chỉ tài khoản Thủ kho mới có quyền nhập kho" : undefined}
+              leftIcon={<i className="bi bi-check2-all" style={{ fontSize: 14 }} />}
               style={{
-                display: "flex", flex: 2, justifyContent: "center", alignItems: "center", gap: 6,
-                padding: "10px 20px", border: "none", borderRadius: 8,
+                flex: 2,
                 background: canSave ? "#10b981" : "var(--muted)",
                 color: canSave ? "#fff" : "var(--muted-foreground)",
-                fontSize: 13, fontWeight: 700,
-                cursor: canSave ? "pointer" : "not-allowed", opacity: canSave ? 1 : 0.6, transition: "all 0.15s",
+                borderColor: canSave ? "#10b981" : "var(--border)",
               }}
             >
-              {saving ? <i className="bi bi-arrow-repeat" style={{ animation: "spin 1s linear infinite" }} /> : <i className="bi bi-check2-all" style={{ fontSize: 14 }} />}
               Xác nhận
-            </button>
+            </Button>
           );
         })()}
-        <button onClick={() => setShowLichSu(true)} style={{ display: "flex", flex: 1, justifyContent: "center", alignItems: "center", gap: 6, padding: "10px 16px", borderWidth: "1.5px", borderStyle: "solid", borderColor: "var(--border)", background: "var(--muted)", color: "var(--foreground)", fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: "pointer" }}>
-          <i className="bi bi-clock-history" style={{ fontSize: 14 }} /> Lịch sử
-        </button>
       </div>
 
       {/* Confirm khi thiếu vị trí kho */}
@@ -1359,10 +1436,9 @@ function LineRow({ line, idx, onItemSearch, onSelectItem, onUpdate, onRemove, ca
   chiPhiVanChuyen: number;
 }) {
   const cellInput: React.CSSProperties = {
-    width: "100%", padding: "6px 8px", borderWidth: 1, borderStyle: "solid", borderColor: "var(--border)",
-    borderRadius: 6, fontSize: 12.5, background: locked ? "var(--muted)" : "var(--background)",
+    width: "100%", height: 32, padding: "0 8px", fontSize: 12.5,
+    background: locked ? "var(--muted)" : "var(--background)",
     color: locked ? "var(--muted-foreground)" : "var(--foreground)",
-    outline: "none", boxSizing: "border-box",
     cursor: locked ? "default" : "text",
   };
   const soLuong = line.soLuongThucTe ?? line.soLuong;
@@ -1371,41 +1447,190 @@ function LineRow({ line, idx, onItemSearch, onSelectItem, onUpdate, onRemove, ca
   const giaVonDonVi = soLuong > 0 ? (thanhTien + phanBo) / soLuong : 0;
 
   return (
-    <div style={{
-      display: "grid",
-      gridTemplateColumns: "28px 1fr 60px 70px 70px 60px 60px 60px 100px 100px 100px 32px",
-      gap: 5, padding: "7px 10px",
-      borderTop: idx === 0 ? "none" : "1px solid var(--border)",
-      alignItems: "center",
-      background: line.item ? "var(--background)" : `color-mix(in srgb, var(--muted) 20%, var(--background))`,
-    }}>
-      <div style={{ textAlign: "center", fontSize: 11.5, color: "var(--muted-foreground)", fontWeight: 600 }}>{idx + 1}</div>
+    <>
+      <div className="nk-line-row-desktop" style={{
+        display: "grid",
+        gridTemplateColumns: "28px 1fr 60px 70px 70px 60px 60px 60px 100px 100px 100px 32px",
+        gap: 5, padding: "7px 10px",
+        borderTop: idx === 0 ? "none" : "1px solid var(--border)",
+        alignItems: "center",
+        background: line.item ? "var(--background)" : `color-mix(in srgb, var(--muted) 20%, var(--background))`,
+      }}>
+        <div style={{ textAlign: "center", fontSize: 11.5, color: "var(--muted-foreground)", fontWeight: 600 }}>{idx + 1}</div>
 
-      {/* Item search */}
-      <div style={{ minWidth: 0 }}>
-        <div style={{ position: "relative" }}>
-          <input value={line.itemSearch}
-            onChange={e => !locked && onItemSearch(e.target.value)}
-            onFocus={() => { if (line.itemSearch && !locked) onUpdate("showSugg", true); }}
-            readOnly={locked}
-            placeholder="Tìm hoặc nhập tên hàng..." style={{ ...cellInput, paddingRight: line.item ? 26 : 8, borderColor: line.item ? "rgba(16,185,129,0.4)" : "var(--border)" }} />
-          {line.item && <i className="bi bi-check-circle-fill" style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#10b981", pointerEvents: "none" }} />}
-          {line.showSugg && line.suggestions.length > 0 && (
-            <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, zIndex: 200, background: "var(--card)", borderWidth: 1, borderStyle: "solid", borderColor: "var(--border)", borderRadius: 7, boxShadow: "0 4px 14px rgba(0,0,0,0.12)", maxHeight: 180, overflowY: "auto" }}>
-              {line.suggestions.map(s => (
-                <div key={s.id} onClick={() => onSelectItem(s)}
-                  style={{ padding: "7px 11px", cursor: "pointer", borderBottom: "1px solid var(--border)", transition: "background 0.1s" }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "var(--muted)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                  <div style={{ fontWeight: 600, fontSize: 12.5 }}>{s.tenHang}</div>
-                  <div style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{s.code ?? ""} · {s.donVi ?? ""} · {s.giaNhap > 0 ? s.giaNhap.toLocaleString("vi-VN") + " ₫" : "—"}</div>
-                </div>
-              ))}
+        {/* Item search */}
+        <div style={{ minWidth: 0 }}>
+          <div style={{ position: "relative" }}>
+            <Input
+              value={line.itemSearch}
+              onChange={e => !locked && onItemSearch(e.target.value)}
+              onFocus={() => {
+                if (!locked && line.itemSearch.trim()) {
+                  onUpdate("showSugg", true);
+                  if (line.suggestions.length === 0) onItemSearch(line.itemSearch);
+                }
+              }}
+              onBlur={() => setTimeout(() => onUpdate("showSugg", false), 180)}
+              readOnly={locked}
+              placeholder="Tìm hoặc nhập tên hàng..."
+              style={{ ...cellInput, paddingRight: line.item ? 26 : 8, borderColor: line.item ? "rgba(16,185,129,0.4)" : "var(--border)" }}
+            />
+            {line.item && <i className="bi bi-check-circle-fill" style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#10b981", pointerEvents: "none" }} />}
+            {line.showSugg && line.suggestions.length > 0 && (
+              <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, zIndex: 200, background: "var(--card)", borderWidth: 1, borderStyle: "solid", borderColor: "var(--border)", borderRadius: 7, boxShadow: "0 4px 14px rgba(0,0,0,0.12)", maxHeight: 220, overflowY: "auto" }}>
+                {line.suggestions.map(s => (
+                  <div key={s.id}
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => onSelectItem(s)}
+                    style={{ padding: "7px 11px", cursor: "pointer", borderBottom: "1px solid var(--border)", transition: "background 0.1s" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "var(--muted)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                    <div style={{ fontWeight: 600, fontSize: 12.5 }}>{s.tenHang}</div>
+                    <div style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{[s.code, s.donVi].filter(Boolean).join(" · ")}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {(line.bomCode || line.dinhMucTen) && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 4, paddingLeft: 2 }}>
+              {line.bomCode && (
+                <span style={{ 
+                  display: "inline-flex", alignItems: "center", gap: 3,
+                  fontSize: 10.5, fontWeight: 700, 
+                  color: "#2563eb", background: "rgba(37,99,235,0.08)", 
+                  border: "1px solid rgba(37,99,235,0.2)",
+                  padding: "1px 6px", borderRadius: 4 
+                }}>
+                  <i className="bi bi-diagram-3" style={{ fontSize: 10 }} />
+                  {line.bomCode}
+                </span>
+              )}
+              {line.dinhMucTen && (
+                <span style={{ fontSize: 11, color: "var(--muted-foreground)", fontStyle: "italic", lineHeight: 1.2 }}>
+                  {line.dinhMucTen}
+                </span>
+              )}
             </div>
           )}
         </div>
+
+        {/* ĐVT */}
+        <div style={{ textAlign: "center", fontSize: 12, color: "var(--muted-foreground)", fontWeight: 600 }}>{line.item?.donVi ?? "—"}</div>
+
+        {/* SL theo chứng từ */}
+        <Input
+          type="number"
+          min={0}
+          hideZero={false}
+          numberGroup={false}
+          value={line.soLuong}
+          onChange={e => !locked && onUpdate("soLuong", Math.max(0, parseFloat(e.target.value) || 0))}
+          readOnly={locked}
+          style={{ ...cellInput, textAlign: "center", background: locked ? "var(--muted)" : "color-mix(in srgb, var(--muted) 60%, var(--background))", color: "var(--muted-foreground)" }}
+          title="Số lượng theo chứng từ"
+        />
+
+        {/* SL thực tế nhập */}
+        <Input
+          type="number"
+          min={0}
+          hideZero={false}
+          numberGroup={false}
+          value={line.soLuongThucTe ?? line.soLuong}
+          onChange={e => !locked && onUpdate("soLuongThucTe", Math.max(0, parseFloat(e.target.value) || 0))}
+          readOnly={locked}
+          style={{
+            ...cellInput, textAlign: "center",
+            borderColor: !locked && (line.soLuongThucTe ?? line.soLuong) !== line.soLuong ? "#f59e0b" : "var(--border)",
+            fontWeight: !locked && (line.soLuongThucTe ?? line.soLuong) !== line.soLuong ? 700 : 400,
+            color: locked ? "var(--muted-foreground)" : (line.soLuongThucTe ?? line.soLuong) !== line.soLuong ? "#f59e0b" : "var(--foreground)",
+          }}
+          title="Số lượng thực tế nhập kho"
+        />
+
+        {/* Vị trí kho */}
+        <Input placeholder="Hàng" value={line.viTriHang} onChange={e => !locked && onUpdate("viTriHang", e.target.value)} readOnly={locked} style={{ ...cellInput, textAlign: "center" }} title="Hàng" />
+        <Input placeholder="Cột" value={line.viTriCot} onChange={e => !locked && onUpdate("viTriCot", e.target.value)} readOnly={locked} style={{ ...cellInput, textAlign: "center" }} title="Cột" />
+        <Input placeholder="Tầng" value={line.viTriTang} onChange={e => !locked && onUpdate("viTriTang", e.target.value)} readOnly={locked} style={{ ...cellInput, textAlign: "center" }} title="Tầng" />
+
+        {/* Đơn giá */}
+        <Input value="***" readOnly title="Bảo mật giá" style={{ ...cellInput, textAlign: "right", background: "var(--muted)", color: "var(--muted-foreground)", cursor: "not-allowed" }} />
+
+        {/* Giá vốn */}
+        <div style={{ textAlign: "right", fontSize: 12.5, fontWeight: 700, color: "var(--muted-foreground)" }}>
+          ***
+        </div>
+
+        {/* Thành tiền */}
+        <div style={{ textAlign: "right", fontSize: 12.5, fontWeight: 700, color: "var(--muted-foreground)" }}>
+          ***
+        </div>
+
+        {/* Remove */}
+        <button onClick={onRemove} disabled={!canRemove || locked}
+          onMouseEnter={e => { if (canRemove && !locked) e.currentTarget.style.background = "rgba(244,63,94,0.1)"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+          style={{ width: 26, height: 26, border: "none", background: "transparent", color: (canRemove && !locked) ? "#f43f5e" : "var(--border)", cursor: (canRemove && !locked) ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, transition: "background 0.15s" }}>
+          <i className="bi bi-trash3" style={{ fontSize: 12 }} />
+        </button>
+      </div>
+
+      {/* Mobile card layout (<= 768px only) */}
+      <div className="nk-line-row-mobile" style={{
+        display: "none", flexDirection: "column", gap: 8, padding: "10px",
+        borderTop: idx === 0 ? "none" : "1px solid var(--border)",
+        background: line.item ? "var(--background)" : `color-mix(in srgb, var(--muted) 20%, var(--background))`,
+      }}>
+        {/* Row 1: # + Item search + Remove */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{
+            width: 24, height: 24, borderRadius: 6, background: "var(--muted)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", flexShrink: 0
+          }}>
+            {idx + 1}
+          </div>
+
+          <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
+            <Input
+              value={line.itemSearch}
+              onChange={e => !locked && onItemSearch(e.target.value)}
+              onFocus={() => {
+                if (!locked && line.itemSearch.trim()) {
+                  onUpdate("showSugg", true);
+                  if (line.suggestions.length === 0) onItemSearch(line.itemSearch);
+                }
+              }}
+              onBlur={() => setTimeout(() => onUpdate("showSugg", false), 180)}
+              readOnly={locked}
+              placeholder="Tìm hoặc nhập tên hàng..."
+              style={{ ...cellInput, paddingRight: line.item ? 26 : 8, borderColor: line.item ? "rgba(16,185,129,0.4)" : "var(--border)" }}
+            />
+            {line.item && <i className="bi bi-check-circle-fill" style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#10b981", pointerEvents: "none" }} />}
+            {line.showSugg && line.suggestions.length > 0 && (
+              <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, zIndex: 200, background: "var(--card)", borderWidth: 1, borderStyle: "solid", borderColor: "var(--border)", borderRadius: 7, boxShadow: "0 4px 14px rgba(0,0,0,0.12)", maxHeight: 220, overflowY: "auto" }}>
+                {line.suggestions.map(s => (
+                  <div key={s.id}
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => onSelectItem(s)}
+                    style={{ padding: "7px 11px", cursor: "pointer", borderBottom: "1px solid var(--border)", transition: "background 0.1s" }}>
+                    <div style={{ fontWeight: 600, fontSize: 12.5 }}>{s.tenHang}</div>
+                    <div style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{[s.code, s.donVi].filter(Boolean).join(" · ")}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button onClick={onRemove} disabled={!canRemove || locked}
+            style={{ width: 28, height: 28, border: "none", background: "transparent", color: (canRemove && !locked) ? "#f43f5e" : "var(--border)", cursor: (canRemove && !locked) ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, flexShrink: 0 }}>
+            <i className="bi bi-trash3" style={{ fontSize: 13 }} />
+          </button>
+        </div>
+
         {(line.bomCode || line.dinhMucTen) && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 4, paddingLeft: 2 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: -2, paddingLeft: 30 }}>
             {line.bomCode && (
               <span style={{ 
                 display: "inline-flex", alignItems: "center", gap: 3,
@@ -1425,63 +1650,60 @@ function LineRow({ line, idx, onItemSearch, onSelectItem, onUpdate, onRemove, ca
             )}
           </div>
         )}
+
+        {/* Row 2: ĐVT + SL Theo CT + SL Thực tế (căn thẳng lề trái theo ô nhập tên hàng hoá) */}
+        <div style={{ display: "grid", gridTemplateColumns: "72px 1fr 1fr", gap: 8, paddingLeft: 30 }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", marginBottom: 3 }}>ĐVT</div>
+            <Input
+              value={line.item?.donVi ?? "—"}
+              readOnly
+              title="Đơn vị tính"
+              style={{
+                ...cellInput,
+                textAlign: "center",
+                background: "var(--muted)",
+                color: "var(--muted-foreground)",
+                fontWeight: 600,
+                cursor: "default",
+              }}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", marginBottom: 3 }}>SL Theo CT</div>
+            <Input
+              type="number"
+              min={0}
+              hideZero={false}
+              numberGroup={false}
+              value={line.soLuong}
+              onChange={e => !locked && onUpdate("soLuong", Math.max(0, parseFloat(e.target.value) || 0))}
+              readOnly={locked}
+              style={{ ...cellInput, textAlign: "center", background: locked ? "var(--muted)" : "color-mix(in srgb, var(--muted) 60%, var(--background))", color: "var(--muted-foreground)" }}
+              title="Số lượng theo chứng từ"
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", marginBottom: 3 }}>SL Thực tế</div>
+            <Input
+              type="number"
+              min={0}
+              hideZero={false}
+              numberGroup={false}
+              value={line.soLuongThucTe ?? line.soLuong}
+              onChange={e => !locked && onUpdate("soLuongThucTe", Math.max(0, parseFloat(e.target.value) || 0))}
+              readOnly={locked}
+              style={{
+                ...cellInput, textAlign: "center",
+                borderColor: !locked && (line.soLuongThucTe ?? line.soLuong) !== line.soLuong ? "#f59e0b" : "var(--border)",
+                fontWeight: !locked && (line.soLuongThucTe ?? line.soLuong) !== line.soLuong ? 700 : 400,
+                color: locked ? "var(--muted-foreground)" : (line.soLuongThucTe ?? line.soLuong) !== line.soLuong ? "#f59e0b" : "var(--foreground)",
+              }}
+              title="Số lượng thực tế nhập kho"
+            />
+          </div>
+        </div>
       </div>
-
-      {/* ĐVT */}
-      <div style={{ textAlign: "center", fontSize: 12, color: "var(--muted-foreground)", fontWeight: 600 }}>{line.item?.donVi ?? "—"}</div>
-
-      {/* SL theo chứng từ */}
-      <input
-        type="number" min={0}
-        value={line.soLuong}
-        onChange={e => !locked && onUpdate("soLuong", Math.max(0, parseFloat(e.target.value) || 0))}
-        readOnly={locked}
-        style={{ ...cellInput, textAlign: "center", background: locked ? "var(--muted)" : "color-mix(in srgb, var(--muted) 60%, var(--background))", color: "var(--muted-foreground)" }}
-        title="Số lượng theo chứng từ"
-      />
-
-      {/* SL thực tế nhập */}
-      <input
-        type="number" min={0}
-        value={line.soLuongThucTe ?? line.soLuong}
-        onChange={e => !locked && onUpdate("soLuongThucTe", Math.max(0, parseFloat(e.target.value) || 0))}
-        readOnly={locked}
-        style={{
-          ...cellInput, textAlign: "center",
-          borderColor: !locked && (line.soLuongThucTe ?? line.soLuong) !== line.soLuong ? "#f59e0b" : "var(--border)",
-          fontWeight: !locked && (line.soLuongThucTe ?? line.soLuong) !== line.soLuong ? 700 : 400,
-          color: locked ? "var(--muted-foreground)" : (line.soLuongThucTe ?? line.soLuong) !== line.soLuong ? "#f59e0b" : "var(--foreground)",
-        }}
-        title="Số lượng thực tế nhập kho"
-      />
-
-      {/* Vị trí kho */}
-      <input placeholder="Hàng" value={line.viTriHang} onChange={e => !locked && onUpdate("viTriHang", e.target.value)} readOnly={locked} style={{ ...cellInput, textAlign: "center" }} title="Hàng" />
-      <input placeholder="Cột" value={line.viTriCot} onChange={e => !locked && onUpdate("viTriCot", e.target.value)} readOnly={locked} style={{ ...cellInput, textAlign: "center" }} title="Cột" />
-      <input placeholder="Tầng" value={line.viTriTang} onChange={e => !locked && onUpdate("viTriTang", e.target.value)} readOnly={locked} style={{ ...cellInput, textAlign: "center" }} title="Tầng" />
-
-      {/* Đơn giá */}
-      <div style={{ ...cellInput, textAlign: "right", background: locked ? "var(--muted)" : "var(--background)", color: "var(--muted-foreground)", display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
-        ***
-      </div>
-
-      {/* Giá vốn */}
-      <div style={{ textAlign: "right", fontSize: 12.5, fontWeight: 700, color: "var(--muted-foreground)" }}>
-        ***
-      </div>
-
-      {/* Thành tiền */}
-      <div style={{ textAlign: "right", fontSize: 12.5, fontWeight: 700, color: "var(--muted-foreground)" }}>
-        ***
-      </div>
-
-      {/* Remove */}
-      <button onClick={onRemove} disabled={!canRemove || locked}
-        onMouseEnter={e => { if (canRemove && !locked) e.currentTarget.style.background = "rgba(244,63,94,0.1)"; }}
-        onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
-        style={{ width: 26, height: 26, border: "none", background: "transparent", color: (canRemove && !locked) ? "#f43f5e" : "var(--border)", cursor: (canRemove && !locked) ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, transition: "background 0.15s" }}>
-        <i className="bi bi-trash3" style={{ fontSize: 12 }} />
-      </button>
-    </div>
+    </>
   );
 }

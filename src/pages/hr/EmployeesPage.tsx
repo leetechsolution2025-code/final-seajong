@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { StandardPage } from '../../components/layout/StandardPage';
 import { TableToolbar } from '../../components/common/TableToolbar';
-import { FullWidthTable } from '../../components/common/FullWidthTable';
+import { FullWidthTable, SwipeableTableRow } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
 import { Avatar } from '../../components/common/Avatar';
 import { Button } from '../../components/common/Button';
@@ -690,7 +690,7 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({
         className={
           tableHidden
             ? 'hidden'
-            : 'flex flex-col h-full flex-1 relative overflow-hidden'
+            : 'hr-employees-mobile-wrap flex flex-col h-full flex-1 relative overflow-hidden'
         }
         style={{
           minHeight: 0,
@@ -744,6 +744,7 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({
               size="sm"
               onClick={handleOpenAdd}
               leftIcon={<Plus size={16} />}
+              title="Thêm mới"
               style={{
                 backgroundColor: 'var(--color-primary, #0284c7)',
                 color: '#fff',
@@ -754,7 +755,7 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({
                 fontWeight: 600,
               }}
             >
-              Thêm mới
+              <span className="recruitment-btn-label hidden md:inline">Thêm mới</span>
             </Button>
           }
           showMenu={true}
@@ -770,11 +771,11 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({
             <thead>
               <tr>
                 <th>Nhân viên</th>
-                <th>Phòng ban</th>
-                <th>Chức vụ</th>
-                <th style={{ width: 130 }}>Loại NV</th>
-                <th style={{ width: 130 }}>Ngày vào làm</th>
-                <th style={{ width: 150 }} className="text-center">Trạng thái</th>
+                <th className="hidden md:table-cell">Phòng ban</th>
+                <th className="hidden md:table-cell">Chức vụ</th>
+                <th style={{ width: 130 }} className="hidden md:table-cell">Loại NV</th>
+                <th style={{ width: 130 }} className="hidden md:table-cell">Ngày vào làm</th>
+                <th style={{ width: 140 }} className="text-center hidden md:table-cell">Trạng thái</th>
               </tr>
             </thead>
             <tbody>
@@ -790,28 +791,59 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({
                 </tr>
               ) : (
                 employees.map((emp) => (
-                  <tr
+                  <SwipeableTableRow
                     key={emp.id}
+                    rowId={emp.id}
+                    onEdit={() => handleOpenEdit(emp)}
+                    onDelete={async () => {
+                      const res = await fetch(`/api/hr/employees/${emp.id}`, {
+                        method: 'DELETE',
+                      });
+                      if (res.ok) {
+                        await fetchEmployees();
+                        onDataChanged?.();
+                      }
+                    }}
+                    deleteConfirmTitle="Xác nhận xóa nhân sự"
+                    deleteConfirmMessage={`Bạn có chắc chắn muốn xóa nhân sự "${emp.fullName}" (${emp.code})? Hành động này không thể hoàn tác.`}
                     onClick={() => handleOpenEdit(emp)}
                     className="hover:bg-slate-50 cursor-pointer transition-colors"
                     title={`Bấm để xem và chỉnh sửa hồ sơ nhân sự ${emp.fullName}`}
                   >
                     <td>
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-start md:items-center gap-2.5">
                         {/* Avatar chuẩn Seajong: chữ cái đầu từ Họ + chữ cái đầu từ Tên */}
                         <Avatar name={emp.fullName} size="md" />
 
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-bold text-slate-900 text-xs truncate">
-                            {emp.fullName}
-                          </span>
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-slate-900 text-xs truncate">
+                              {emp.fullName}
+                            </span>
+                            <span className="md:hidden shrink-0 scale-90 origin-left">
+                              {getStatusBadge(emp.status)}
+                            </span>
+                          </div>
                           <span className="text-[11px] text-slate-400 truncate">
                             {emp.code} • {emp.workEmail || emp.phone || '—'}
                           </span>
+                          <div className="flex md:hidden flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-1 text-[11px] text-slate-500">
+                            <span className="font-semibold text-slate-700">{emp.positionTitle || 'Nhân viên'}</span>
+                            <span>•</span>
+                            <span>{emp.departmentName || '—'}</span>
+                            {emp.startDate && (
+                              <>
+                                <span>•</span>
+                                <span className="font-mono text-[10.5px]">
+                                  {new Date(emp.startDate).toLocaleDateString('vi-VN')}
+                                </span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </td>
-                    <td className="font-medium text-slate-800 text-xs">
+                    <td className="hidden md:table-cell font-medium text-slate-800 text-xs">
                       <div className="flex flex-col">
                         <span>{emp.departmentName || '—'}</span>
                         {emp.workLocationName && (
@@ -822,19 +854,19 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({
                         )}
                       </div>
                     </td>
-                    <td className="font-medium text-slate-700 text-xs">
+                    <td className="hidden md:table-cell font-medium text-slate-700 text-xs">
                       {emp.positionTitle || '—'}
                     </td>
-                    <td>
+                    <td className="hidden md:table-cell">
                       {getEmployeeTypeBadge(emp.employeeType)}
                     </td>
-                    <td className="text-slate-600 text-xs font-mono">
+                    <td className="hidden md:table-cell text-slate-600 text-xs font-mono">
                       {emp.startDate ? new Date(emp.startDate).toLocaleDateString('vi-VN') : '—'}
                     </td>
-                    <td className="text-center">
+                    <td className="text-center hidden md:table-cell">
                       {getStatusBadge(emp.status)}
                     </td>
-                  </tr>
+                  </SwipeableTableRow>
                 ))
               )}
             </tbody>

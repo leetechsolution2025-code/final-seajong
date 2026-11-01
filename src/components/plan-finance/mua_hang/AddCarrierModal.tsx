@@ -168,6 +168,7 @@ export function AddCarrierModal({ onClose, onSaved, carrierId, onDelete }: AddCa
 
       {/* Offcanvas Drawer rộng 400px */}
       <motion.div
+        className="app-custom-drawer"
         initial={{ x: "100%" }}
         animate={{ x: 0 }}
         exit={{ x: "100%" }}

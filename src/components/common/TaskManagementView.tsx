@@ -12,6 +12,11 @@ import {
 import { Pagination } from './Pagination';
 import { Offcanvas } from './Offcanvas';
 import { Select } from './Select';
+import { Input } from './Input';
+import { DatePicker } from './DatePicker';
+import { EmployeeSelect } from './EmployeeSelect';
+import { SwipeableTableProvider, SwipeableTableRow } from './SwipeableTableRow';
+import { useAuth } from '../../context/AuthContext';
 
 export interface TaskManagementViewProps {
   title?: string;
@@ -120,9 +125,11 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
     (subtitle && subtitle.toLowerCase().includes('nhiệm vụ cá nhân'))
   );
 
+  const { user: authUser } = useAuth();
+
   // Lấy thông tin tài khoản người dùng đang đăng nhập
   const currentLoggedInUser = useMemo(() => {
-    let u: any = propUser;
+    let u: any = propUser || authUser;
     if (!u || !u.name) {
       try {
         const saved = localStorage.getItem('decodoor_session');
@@ -140,7 +147,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
       position: u?.position || '',
       code: u?.code || '',
     };
-  }, [propUser]);
+  }, [propUser, authUser]);
 
   // Kiểm tra công việc có được giao cho người dùng hiện tại thực hiện hay không
   const isAssignedToCurrentUser = (taskAssignee?: string, currentUserName?: string): boolean => {
@@ -165,8 +172,22 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
     );
   };
 
-  // Chế độ xem: Gantt mặc định hoặc Bảng
+  // Chế độ xem: Gantt mặc định trên máy tính, tự động chuyển sang Bảng trên màn hình điện thoại (<= 768px)
   const [viewMode, setViewMode] = useState<'gantt' | 'list'>(initialViewMode);
+  const [isMobileView, setIsMobileView] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleResize = () => {
+      setIsMobileView(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const effectiveViewMode: 'gantt' | 'list' = isMobileView ? 'list' : viewMode;
 
   // Phân loại công tác: Tất cả | Đấu thầu | Sản xuất | Khác
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'bidding' | 'production' | 'other'>(initialCategory);
@@ -213,6 +234,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
   const [newTaskCategory, setNewTaskCategory] = useState<'bidding' | 'production' | 'other'>('bidding');
   const [newTaskProject, setNewTaskProject] = useState<string>('');
   const [newTaskAssignee, setNewTaskAssignee] = useState<string>('');
+  const [newTaskAssigneeDept, setNewTaskAssigneeDept] = useState<string>('');
   const [newTaskStartDate, setNewTaskStartDate] = useState<string>('2026-10-04');
   const [newTaskEndDate, setNewTaskEndDate] = useState<string>('2026-10-10');
   const [newTaskPriority, setNewTaskPriority] = useState<string>('medium');
@@ -541,11 +563,15 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
     };
   }, [propTasks, department, assignee, userId]);
 
-  // Danh sách công việc cơ sở: Nếu ở chế độ "Công việc của tôi", chỉ lấy các công việc được giao cho cá nhân người dùng
+  // Danh sách công việc cơ sở: Nếu ở chế độ "Công việc của tôi", lấy các công việc được giao cho hoặc giao bởi cá nhân người dùng
   const myTasksBase = useMemo(() => {
     if (!isOnlyMyTasks) return tasks;
-    if (!currentLoggedInUser.name) return [];
-    return tasks.filter((t) => isAssignedToCurrentUser(t.assignee, currentLoggedInUser.name));
+    if (!currentLoggedInUser.name) return tasks;
+    return tasks.filter(
+      (t) =>
+        isAssignedToCurrentUser(t.assignee, currentLoggedInUser.name) ||
+        isAssignedToCurrentUser(t.assigner, currentLoggedInUser.name)
+    );
   }, [tasks, isOnlyMyTasks, currentLoggedInUser.name]);
 
   // Đếm số lượng công việc theo từng phân loại nghiệp vụ
@@ -640,9 +666,20 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
     }>();
 
     filteredTasks.forEach((task) => {
-      const cCode = task.contractCode ? task.contractCode.trim() : (task.project ? `DỰ ÁN: ${task.project.trim()}` : 'NHIỆM VỤ NỘI BỘ');
-      const cCust = task.customerName ? task.customerName.trim() : (task.project ? task.project.trim() : 'Nội bộ công ty');
-      const cAddr = task.customerAddress ? task.customerAddress.trim() : '';
+      const hasContract = Boolean(task.contractCode && task.contractCode.trim());
+      const cCode = hasContract
+        ? task.contractCode!.trim()
+        : task.project && task.project.trim()
+          ? task.project.trim()
+          : 'NHIỆM VỤ NỘI BỘ';
+      const cCust = task.customerName && task.customerName.trim()
+        ? task.customerName.trim()
+        : task.project && task.project.trim()
+          ? task.project.trim()
+          : 'Nội bộ công ty';
+      const cAddr = task.customerAddress && task.customerAddress.trim()
+        ? task.customerAddress.trim()
+        : task.department || 'Công ty Cổ phần Seajong Việt Nam';
 
       if (!map.has(cCode)) {
         map.set(cCode, {
@@ -670,11 +707,12 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
     return Array.from(map.values()).map((grp) => {
       const totalProg = grp.tasks.reduce((sum, t) => sum + (t.progress || 0), 0);
       const avgProgress = grp.tasks.length > 0 ? Math.round(totalProg / grp.tasks.length) : 0;
+      const hasExplicitContract = grp.tasks.some((t) => Boolean(t.contractCode && t.contractCode.trim())) || grp.tasks.length === 0;
       const isOrderGroup =
         grp.contractCode.startsWith('ĐH-') ||
         grp.contractCode.startsWith('DH-') ||
         grp.tasks.some((t) => t.category === 'order');
-      const groupPrefix = isOrderGroup ? 'ĐƠN HÀNG' : 'HỢP ĐỒNG';
+      const groupPrefix = !hasExplicitContract ? 'HẠNG MỤC' : isOrderGroup ? 'ĐƠN HÀNG' : 'HỢP ĐỒNG';
       const displayCode = grp.contractCode;
 
       return {
@@ -1117,10 +1155,12 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
 
   // Xoá một công việc đơn lẻ
   const [isDeletingTask, setIsDeletingTask] = useState<boolean>(false);
-  const handleDeleteSingleTask = async (task: UserTaskItem) => {
+  const handleDeleteSingleTask = async (task: UserTaskItem, skipConfirm?: boolean) => {
     if (!task) return;
-    const confirmMsg = `Bạn có chắc chắn muốn xoá công việc "${task.title}" (${task.code}) khỏi hệ thống?\nThao tác này không thể hoàn tác!`;
-    if (!window.confirm(confirmMsg)) return;
+    if (!skipConfirm) {
+      const confirmMsg = `Bạn có chắc chắn muốn xoá công việc "${task.title}" (${task.code}) khỏi hệ thống?\nThao tác này không thể hoàn tác!`;
+      if (!window.confirm(confirmMsg)) return;
+    }
 
     setIsDeletingTask(true);
     try {
@@ -1166,30 +1206,42 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
     if (readOnly || !allowAdd) return;
     if (!newTaskTitle.trim()) return;
 
-    const taskAssignee = newTaskAssignee.trim() || assignee || (
+    const taskAssignee = newTaskAssignee.trim() || assignee || currentLoggedInUser.name || (
       newTaskCategory === 'bidding' ? 'Phòng Kinh doanh và Đấu thầu' :
       newTaskCategory === 'production' ? 'Xưởng Sản xuất Mộc 1' : 'Khác'
     );
+    const taskDept = newTaskAssigneeDept || department || currentLoggedInUser.department || 'Phòng Kinh doanh';
+    const taskAssigner = currentLoggedInUser.name || 'Ban Giám đốc';
     const taskCatLabel = newTaskCategory === 'bidding' ? 'Đấu thầu' : newTaskCategory === 'production' ? 'Sản xuất' : 'Khác';
     const taskCodePrefix = newTaskCategory === 'bidding' ? 'DT' : newTaskCategory === 'production' ? 'SX' : 'KH';
+    const generatedCode = `${taskCodePrefix}-2026-${Date.now().toString().slice(-3)}`;
     const defaultProject = newTaskProject.trim() || (
       newTaskCategory === 'bidding' ? 'Dự án thầu công trình' :
       newTaskCategory === 'production' ? 'Lệnh sản xuất nhà máy' : 'Công việc nghiệp vụ khác'
     );
 
+    const syncTimelineToDate = (dateStr?: string) => {
+      if (!dateStr) return;
+      const parts = parseDateParts(dateStr);
+      if (parts.year && parts.month) {
+        setCurrentYear(parts.year);
+        setCurrentMonth(parts.month);
+      }
+    };
+
     if (propTasks) {
       const createdItem: UserTaskItem = {
         id: String(Date.now()),
-        code: `${taskCodePrefix}-2026-${Date.now().toString().slice(-3)}`,
+        code: generatedCode,
         title: newTaskTitle.trim(),
         project: defaultProject,
-        department: department || 'bom',
+        department: taskDept,
         assignee: taskAssignee,
-        assigner: 'Ban Giám đốc',
+        assigner: taskAssigner,
         startDate: newTaskStartDate,
         endDate: newTaskEndDate,
         priority: newTaskPriority,
-        priorityLabel: newTaskPriority === 'urgent' ? 'Khẩn cấp' : newTaskPriority === 'high' ? 'Ưu tiên cao' : 'Trung bình',
+        priorityLabel: newTaskPriority === 'urgent' ? 'Khẩn cấp' : newTaskPriority === 'high' ? 'Ưu tiên cao' : newTaskPriority === 'low' ? 'Thấp' : 'Trung bình',
         progress: 0,
         status: 'not_started',
         statusLabel: 'Chưa thực hiện',
@@ -1202,10 +1254,12 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
       const updated = [createdItem, ...tasks];
       setTasks(updated);
       if (onTasksChange) onTasksChange(updated);
+      syncTimelineToDate(newTaskStartDate);
       setIsAddModalOpen(false);
       setNewTaskTitle('');
       setNewTaskProject('');
       setNewTaskAssignee('');
+      setNewTaskAssigneeDept('');
       setNewTaskContractCode('');
       setNewTaskCustomerName('');
       setNewTaskDesc('');
@@ -1219,15 +1273,16 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        code: generatedCode,
         title: newTaskTitle.trim(),
-        project: newTaskProject.trim() || (newTaskCategory === 'bidding' ? 'Dự án thầu công trình' : 'Lệnh sản xuất nhà máy'),
-        department: department || 'bom',
+        project: defaultProject,
+        department: taskDept,
         assignee: taskAssignee,
-        assigner: 'Ban Giám đốc',
+        assigner: taskAssigner,
         startDate: newTaskStartDate,
         endDate: newTaskEndDate,
         priority: newTaskPriority,
-        priorityLabel: newTaskPriority === 'urgent' ? 'Khẩn cấp' : newTaskPriority === 'high' ? 'Ưu tiên cao' : 'Trung bình',
+        priorityLabel: newTaskPriority === 'urgent' ? 'Khẩn cấp' : newTaskPriority === 'high' ? 'Ưu tiên cao' : newTaskPriority === 'low' ? 'Thấp' : 'Trung bình',
         progress: 0,
         status: 'not_started',
         statusLabel: 'Chưa thực hiện',
@@ -1238,19 +1293,28 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
         description: newTaskDesc.trim(),
       }),
     })
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error('Không thể tạo công việc mới');
+        return res.json();
+      })
       .then((createdItem) => {
+        if (createdItem && createdItem.id) {
+          setTasks((prev) => [createdItem, ...prev.filter((t) => t.id !== createdItem.id)]);
+          if (onTasksChange) {
+            onTasksChange([createdItem, ...tasks.filter((t) => t.id !== createdItem.id)]);
+          }
+        }
+        syncTimelineToDate(newTaskStartDate);
         setIsAddModalOpen(false);
         setNewTaskTitle('');
         setNewTaskProject('');
         setNewTaskAssignee('');
+        setNewTaskAssigneeDept('');
         setNewTaskContractCode('');
         setNewTaskCustomerName('');
         setNewTaskDesc('');
         fetchTasks();
-        if (onTasksChange && createdItem) {
-          onTasksChange([createdItem, ...tasks]);
-        }
+        window.dispatchEvent(new Event('decodoor_user_tasks_updated'));
         if (onShowToast) {
           onShowToast('success', 'Thêm công việc', 'Đã thêm mới công việc thành công');
         }
@@ -1276,6 +1340,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
           ======================================================== */}
       {!hideHeader && (
         <div
+        className="task-mgmt-toolbar"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -1289,9 +1354,9 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
         }}
       >
         {/* Cụm trái: Icon, Tiêu đề, Badge số lượng, Điều hướng tháng, Lọc người thực hiện, Hộp tìm kiếm */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 0%', minWidth: 0, flexWrap: 'wrap' }}>
+        <div className="task-mgmt-toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 0%', minWidth: 0, flexWrap: 'wrap' }}>
           {!hideTitle && title && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div className="task-mgmt-title-block" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <ListTask size={18} style={{ color: '#6366f1', flexShrink: 0 }} />
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1325,6 +1390,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
 
           {/* Icon next, prev chuyển đổi các tháng */}
           <div
+            className="task-mgmt-month-nav"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -1397,6 +1463,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
           {!isCurrentMonthActive && (
             <button
               type="button"
+              className="task-mgmt-today-btn"
               onClick={() => {
                 setCurrentYear(realCurrentYear);
                 setCurrentMonth(realCurrentMonth);
@@ -1423,6 +1490,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
           {!isOnlyMyTasks && !hideAssigneeFilter && (
             <div
               ref={assigneeDropdownRef}
+              className="task-mgmt-assignee-filter"
             style={{
               position: 'relative',
               width: '185px',
@@ -1502,6 +1570,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                   top: 'calc(100% + 4px)',
                   left: 0,
                   width: '320px',
+                  maxWidth: 'calc(100vw - 24px)',
                   maxHeight: '280px',
                   overflowY: 'auto',
                   backgroundColor: '#ffffff',
@@ -1635,7 +1704,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
           )}
 
           {/* Hộp tìm kiếm bo góc gọn gàng dãn full dòng */}
-          <div style={{ position: 'relative', flex: '1 1 200px', minWidth: '150px' }}>
+          <div className="task-mgmt-search-box" style={{ position: 'relative', flex: '1 1 200px', minWidth: '150px' }}>
             <Search
               size={13}
               style={{
@@ -1670,12 +1739,14 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
         </div>
 
         {/* Cụm phải: Nút thêm việc, Bộ chuyển đổi Bảng / Gantt, Dropdown Trạng thái */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+        <div className="task-mgmt-toolbar-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
           {allowAdd && !readOnly && (
             <button
               type="button"
               onClick={() => setIsAddModalOpen(true)}
-              className="btn btn-primary"
+              className="btn btn-primary task-mgmt-add-btn"
+              title="Thêm việc"
+              aria-label="Thêm việc"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -1689,14 +1760,15 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                 whiteSpace: 'nowrap',
               }}
             >
-              <Plus size={15} />
-              <span>Thêm việc</span>
+              <Plus size={16} />
+              <span className="hidden md:inline">Thêm việc</span>
             </button>
           )}
 
           {/* Segmented control: Bảng hoặc Gantt */}
           {!hideViewModeSwitcher && (
             <div
+              className="task-mgmt-view-switcher !hidden md:!inline-flex"
               style={{
                 display: 'inline-flex',
                 padding: '2px',
@@ -1765,7 +1837,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
           )}
 
           {/* Dropdown Bộ lọc tiến độ chuẩn component Select: Tất cả, Quá hạn, Chậm tiến độ, Đúng tiến độ */}
-          <div style={{ width: '145px', flexShrink: 0 }}>
+          <div className="task-mgmt-status-select" style={{ width: '145px', flexShrink: 0 }}>
             <Select
               value={statusFilter}
               onChange={(e) => {
@@ -1799,6 +1871,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
           ======================================================== */}
       {!hideStatusLegend && !isScheduleStatusMode && (
         <div
+          className="task-mgmt-legend-bar !hidden md:!flex"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -1814,7 +1887,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
             flexWrap: 'wrap',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: '#475569' }}>
+          <div className="task-mgmt-legend-summary" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: '#475569', flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 700, color: '#0f172a' }}>
               Tổng hợp đồng triển khai: <span style={{ color: '#2563eb' }}>{contractGroups.length}</span> hợp đồng
             </span>
@@ -1823,12 +1896,13 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
               Tổng đầu việc: <strong style={{ color: '#0f172a' }}>{contractGroups.reduce((sum, g) => sum + g.tasks.length, 0)}</strong> hạng mục
             </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          <div className="task-mgmt-legend-items" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
             {executionStatusItems.map((item) => {
               const isSelected = executionStatusFilter === item.key;
               return (
                 <div
                   key={item.key}
+                  className="task-mgmt-legend-pill"
                   onClick={() => {
                     setExecutionStatusFilter((prev) => (prev === item.key ? 'all' : item.key));
                     setCurrentPage(1);
@@ -1873,7 +1947,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
       {/* ========================================================
           3. NỘI DUNG CHÍNH: BIỂU ĐỒ GANTT HOẶC BẢNG DANH SÁCH
           ======================================================== */}
-      {viewMode === 'gantt' ? (
+      {effectiveViewMode === 'gantt' ? (
         /* ======================== CHẾ ĐỘ BIỂU ĐỒ GANTT ======================== */
         <div
           className="custom-scrollbar"
@@ -2131,7 +2205,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                 </div>
               ) : contractGroups.length === 0 ? (
                 <div style={{ padding: '60px 20px', textAlign: 'center', color: '#64748b' }}>
-                  <ListTask size={48} style={{ color: '#cbd5e1', marginBottom: '14px' }} />
+                  <ListTask size={48} style={{ color: '#cbd5e1', margin: '0 auto 14px auto', display: 'block' }} />
                   <div style={{ fontSize: '1rem', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>
                     Chưa có công việc nào trong cơ sở dữ liệu
                   </div>
@@ -2758,8 +2832,9 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
               minHeight: 0,
             }}
           >
+            <SwipeableTableProvider>
             <table
-              className="data-table"
+              className="data-table task-mgmt-data-table"
               style={{
                 width: '100%',
                 borderCollapse: 'collapse',
@@ -2782,32 +2857,32 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                     zIndex: 2,
                   }}
                 >
-                  <th style={{ padding: '8px 10px', width: '45px', textAlign: 'center' }}>STT</th>
-                  <th style={{ padding: '8px 10px', width: '120px', whiteSpace: 'nowrap' }}>MÃ VIỆC</th>
+                  <th className="hidden md:table-cell" style={{ padding: '8px 10px', width: '45px', textAlign: 'center' }}>STT</th>
+                  <th className="hidden md:table-cell" style={{ padding: '8px 10px', width: '120px', whiteSpace: 'nowrap' }}>MÃ VIỆC</th>
                   <th style={{ padding: '8px 10px' }}>CÔNG VIỆC VÀ DỰ ÁN</th>
-                  <th style={{ padding: '8px 10px', width: '170px' }}>
+                  <th className="hidden md:table-cell" style={{ padding: '8px 10px', width: '170px' }}>
                     {isScheduleStatusMode ? 'TÌNH TRẠNG TIẾN ĐỘ' : 'ĐƠN VỊ PHỤ TRÁCH'}
                   </th>
-                  <th style={{ padding: '8px 10px', width: '125px' }}>TIẾN ĐỘ</th>
-                  <th style={{ padding: '8px 10px', width: '95px' }}>HẠN CHÓT</th>
-                  <th style={{ padding: '8px 10px', width: '130px' }}>TRẠNG THÁI</th>
+                  <th className="hidden md:table-cell" style={{ padding: '8px 10px', width: '125px' }}>TIẾN ĐỘ</th>
+                  <th className="hidden md:table-cell" style={{ padding: '8px 10px', width: '95px' }}>HẠN CHÓT</th>
+                  <th className="hidden md:table-cell" style={{ padding: '8px 10px', width: '130px' }}>TRẠNG THÁI</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>
+                    <td colSpan={isMobileView ? 1 : 7} style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>
                       Đang nạp dữ liệu công việc...
                     </td>
                   </tr>
                 ) : paginatedContractGroups.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ padding: '60px 20px', textAlign: 'center', color: '#64748b' }}>
-                      <ListTask size={48} style={{ color: '#cbd5e1', marginBottom: '14px' }} />
+                    <td colSpan={isMobileView ? 1 : 7} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748b' }}>
+                      <ListTask size={48} style={{ color: '#cbd5e1', margin: '0 auto 14px auto', display: 'block' }} />
                       <div style={{ fontSize: '1rem', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>
                         Chưa có công việc nào trong cơ sở dữ liệu
                       </div>
-                      <div style={{ fontSize: '0.825rem', color: '#64748b', maxWidth: '420px', margin: '0 auto 16px auto', lineHeight: 1.5 }}>
+                      <div style={{ fontSize: '0.825rem', color: '#64748b', maxWidth: '420px', margin: '0 auto 16px auto', lineHeight: 1.5, whiteSpace: 'normal' }}>
                         Dữ liệu công việc thực tế sẽ được lưu trữ và hiển thị tại đây. Bấm nút bên dưới để khởi tạo công việc đầu tiên.
                       </div>
                       {allowAdd && !readOnly && (
@@ -2857,10 +2932,10 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                           }}
                           title={`Nhấn để xem chi tiết ${groupPrefix.toLowerCase()} ${displayCode}`}
                         >
-                          <td colSpan={hideCategoryBadge ? 7 : 8} style={{ padding: '8px 12px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <td colSpan={isMobileView ? 1 : 7} style={{ padding: '8px 12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minWidth: 0 }}>
+                              <div style={{ minWidth: 0, width: '100%' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                   <span
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -2874,6 +2949,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                                       transition: 'transform 0.2s',
                                       padding: '2px',
                                       borderRadius: '4px',
+                                      flexShrink: 0,
                                     }}
                                     onMouseEnter={(e) => {
                                       e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.08)';
@@ -2891,18 +2967,23 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                                       fontSize: '0.8125rem',
                                       color: '#0f172a',
                                       letterSpacing: '0.02em',
+                                      wordBreak: 'break-word',
                                     }}
                                   >
                                     {groupPrefix}: {displayCode}
                                   </span>
-                                  <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>
+                                  <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>
                                     ({group.tasks.length} công việc con)
                                   </span>
                                 </div>
-                                <div style={{ fontSize: '0.7rem', color: '#475569', marginTop: '2px', paddingLeft: '21px' }}>
+                                <div style={{ fontSize: '0.7rem', color: '#475569', marginTop: '2px', paddingLeft: '21px', whiteSpace: 'normal', wordBreak: 'break-word' }}>
                                   <span style={{ fontWeight: 400, color: '#475569' }}>{group.customerName}</span>
-                                  <span style={{ margin: '0 5px', color: '#94a3b8' }}>|</span>
-                                  <span>{group.customerAddress}</span>
+                                  {group.customerAddress && (
+                                    <>
+                                      <span style={{ margin: '0 5px', color: '#94a3b8' }}>|</span>
+                                      <span>{group.customerAddress}</span>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -2914,13 +2995,23 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                           group.tasks.map((task, idx) => {
                             const dueInfo = getDueInfo(task);
                             const scheduleStatus = getTaskScheduleStatus(task);
+                            const statusDisplay = getStatusDisplay(task);
 
                             // Phân giải tên và phòng ban người thực hiện
                             const assigneeInfo = formatAssigneeDisplay(task.assignee, task.department);
 
                             return (
-                              <tr
+                              <SwipeableTableRow
                                 key={task.id}
+                                rowId={`task-${task.id}`}
+                                deleteConfirmTitle="Xác nhận xoá công việc"
+                                deleteConfirmMessage={`Bạn có chắc chắn muốn xoá công việc "${task.title}" (${task.code}) khỏi hệ thống? Thao tác này không thể hoàn tác.`}
+                                onEdit={() => {
+                                  setSelectedTask(task);
+                                  setUpdatingProgress(task.progress);
+                                  setIsDrawerOpen(true);
+                                }}
+                                onDelete={!readOnly ? () => handleDeleteSingleTask(task, true) : undefined}
                                 onClick={() => {
                                   setSelectedTask(task);
                                   setUpdatingProgress(task.progress);
@@ -2935,12 +3026,12 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                               >
                                 {/* Cột 1: STT */}
-                                <td style={{ padding: '8px 10px', textAlign: 'center', color: '#94a3b8' }}>
+                                <td className="hidden md:table-cell" style={{ padding: '8px 10px', textAlign: 'center', color: '#94a3b8' }}>
                                   {idx + 1}
                                 </td>
 
                                 {/* Cột 2: MÃ VIỆC (không xuống dòng) và Ngày bắt đầu ở dưới */}
-                                <td style={{ padding: '8px 10px', minWidth: '120px', whiteSpace: 'nowrap' }}>
+                                <td className="hidden md:table-cell" style={{ padding: '8px 10px', minWidth: '120px', whiteSpace: 'nowrap' }}>
                                   <div style={{ fontWeight: 700, color: '#1e40af', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
                                     {task.code}
                                   </div>
@@ -2952,8 +3043,10 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                                 </td>
 
                                 {/* Cột 4: CÔNG VIỆC VÀ DỰ ÁN */}
-                                <td style={{ padding: '8px 10px', maxWidth: '320px' }}>
+                                <td className="task-mgmt-col-work" style={{ padding: '8px 10px', maxWidth: isMobileView ? 'none' : '320px' }}>
+                                  {/* Giao diện máy tính (giữ nguyên) */}
                                   <div
+                                    className="hidden md:block"
                                     style={{
                                       color: '#1e293b',
                                       fontWeight: 400,
@@ -2972,10 +3065,121 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                                       </span>
                                     )}
                                   </div>
+
+                                  {/* Giao diện điện thoại (<= 768px) */}
+                                  <div className="flex flex-col gap-1 md:hidden" style={{ minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                        <span
+                                          style={{
+                                            fontSize: '0.68rem',
+                                            fontWeight: 700,
+                                            color: '#1e40af',
+                                            backgroundColor: '#eff6ff',
+                                            border: '1px solid #bfdbfe',
+                                            padding: '1px 6px',
+                                            borderRadius: '4px',
+                                            whiteSpace: 'nowrap',
+                                          }}
+                                        >
+                                          {task.code}
+                                        </span>
+                                        <span
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            fontSize: '0.65rem',
+                                            fontWeight: 700,
+                                            color: statusDisplay.dotColor,
+                                          }}
+                                        >
+                                          <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: statusDisplay.dotColor }} />
+                                          {statusDisplay.label}
+                                        </span>
+                                      </div>
+
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        {scheduleStatus === 'overdue' && (
+                                          <span
+                                            style={{
+                                              fontSize: '0.65rem',
+                                              fontWeight: 700,
+                                              color: '#dc2626',
+                                              backgroundColor: '#fef2f2',
+                                              border: '1px solid #fecaca',
+                                              padding: '1px 6px',
+                                              borderRadius: '4px',
+                                              whiteSpace: 'nowrap',
+                                            }}
+                                          >
+                                            Quá hạn
+                                          </span>
+                                        )}
+                                        {scheduleStatus === 'delayed' && (
+                                          <span
+                                            style={{
+                                              fontSize: '0.65rem',
+                                              fontWeight: 700,
+                                              color: '#c2410c',
+                                              backgroundColor: '#fff7ed',
+                                              border: '1px solid #fed7aa',
+                                              padding: '1px 6px',
+                                              borderRadius: '4px',
+                                              whiteSpace: 'nowrap',
+                                            }}
+                                          >
+                                            Chậm tiến độ
+                                          </span>
+                                        )}
+                                        <span
+                                          style={{
+                                            fontSize: '0.72rem',
+                                            fontWeight: 800,
+                                            color: task.progress === 100 ? '#10b981' : '#2563eb',
+                                          }}
+                                        >
+                                          {task.progress}%
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div
+                                      style={{
+                                        color: '#0f172a',
+                                        fontWeight: 700,
+                                        fontSize: '0.8rem',
+                                        lineHeight: 1.35,
+                                        whiteSpace: 'normal',
+                                        wordBreak: 'break-word',
+                                      }}
+                                    >
+                                      {task.title}
+                                    </div>
+
+                                    <div
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        flexWrap: 'wrap',
+                                        fontSize: '0.68rem',
+                                        color: '#64748b',
+                                      }}
+                                    >
+                                      <span>
+                                        Hạn: <strong style={{ color: dueInfo.color }}>{dueInfo.dueLabel}</strong> ({dueInfo.subText})
+                                      </span>
+                                      <span>•</span>
+                                      <span>
+                                        Phụ trách: <strong style={{ color: '#334155' }}>{assigneeInfo.name}</strong>
+                                      </span>
+                                    </div>
+                                  </div>
                                 </td>
 
                                 {/* Cột 5: ĐƠN VỊ PHỤ TRÁCH HOẶC TÌNH TRẠNG TIẾN ĐỘ */}
-                                <td style={{ padding: '8px 10px', minWidth: '160px' }}>
+                                <td className="hidden md:table-cell" style={{ padding: '8px 10px', minWidth: '160px' }}>
                                   {isScheduleStatusMode ? (
                                     <div>
                                       {scheduleStatus === 'overdue' && (
@@ -3007,7 +3211,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                                 </td>
 
                                 {/* Cột 6: TIẾN ĐỘ */}
-                                <td style={{ padding: '8px 10px' }}>
+                                <td className="hidden md:table-cell" style={{ padding: '8px 10px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <div
                                       style={{
@@ -3047,7 +3251,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                                 </td>
 
                                 {/* Cột 7: HẠN CHÓT */}
-                                <td style={{ padding: '8px 10px' }}>
+                                <td className="hidden md:table-cell" style={{ padding: '8px 10px' }}>
                                   <div style={{ fontWeight: 700, color: dueInfo.color, fontSize: '0.75rem' }}>
                                     {dueInfo.dueLabel}
                                   </div>
@@ -3057,7 +3261,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                                 </td>
 
                                 {/* Cột 8: TRẠNG THÁI (Chỉ hiển thị Quá hạn, Chậm tiến độ. Đúng tiến độ không cần hiển thị) */}
-                                <td style={{ padding: '8px 10px', minWidth: '125px' }}>
+                                <td className="hidden md:table-cell" style={{ padding: '8px 10px', minWidth: '125px' }}>
                                   {scheduleStatus === 'overdue' ? (
                                     <span
                                       style={{
@@ -3098,7 +3302,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                                     </span>
                                   ) : null}
                                 </td>
-                              </tr>
+                              </SwipeableTableRow>
                             );
                           })}
                       </React.Fragment>
@@ -3107,10 +3311,11 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                 )}
               </tbody>
             </table>
+            </SwipeableTableProvider>
           </div>
 
           {/* Phân trang */}
-          <div style={{ padding: '8px 16px 12px 16px', borderTop: '1px solid #e2e8f0', flexShrink: 0 }}>
+          <div className="task-mgmt-pagination-wrap" style={{ padding: '8px 16px 12px 16px', borderTop: '1px solid #e2e8f0', flexShrink: 0 }}>
             <Pagination
               currentPage={currentPage}
               totalItems={contractGroups.length}
@@ -3795,298 +4000,114 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
       </Offcanvas>
 
       {/* ========================================================
-          5. MODAL TẠO CÔNG VIỆC MỚI
+          5. OFFCANVAS TẠO CÔNG VIỆC MỚI RỘNG 400PX
           ======================================================== */}
-      {isAddModalOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            padding: '20px',
-          }}
-          onClick={() => setIsAddModalOpen(false)}
+      <Offcanvas
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        title="Giao việc mới và Theo dõi tiến độ"
+        description="Khởi tạo đầu việc mới và phân công thực hiện"
+        width="400px"
+        confirmText="Tạo công việc"
+        cancelText="Hủy bỏ"
+        confirmForm="create-task-offcanvas-form"
+        onCancel={() => setIsAddModalOpen(false)}
+      >
+        <form
+          id="create-task-offcanvas-form"
+          onSubmit={handleCreateTask}
+          style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
         >
-          <div
-            style={{
-              backgroundColor: '#ffffff',
-              borderRadius: '10px',
-              border: '1px solid #cbd5e1',
-              width: '100%',
-              maxWidth: '520px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              fontFamily: "'Roboto Condensed', sans-serif",
+          <Input
+            label="Tiêu đề công việc"
+            required
+            placeholder="Nhập tên nhiệm vụ cần thực hiện..."
+            value={newTaskTitle}
+            onChange={(e) => setNewTaskTitle(e.target.value)}
+          />
+
+          <EmployeeSelect
+            label="Người phụ trách"
+            multiple={false}
+            value={newTaskAssignee}
+            onChange={(val, selected) => {
+              setNewTaskAssignee(val);
+              if (selected && selected.length > 0 && selected[0].department) {
+                setNewTaskAssigneeDept(selected[0].department);
+              }
             }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header Modal */}
-            <div
-              style={{
-                padding: '12px 18px',
-                borderBottom: '1px solid #e2e8f0',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                backgroundColor: '#f8fafc',
-              }}
-            >
-              <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#0f172a' }}>
-                Giao việc mới và Theo dõi tiến độ
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsAddModalOpen(false)}
-                style={{
-                  border: 'none',
-                  backgroundColor: 'transparent',
-                  color: '#94a3b8',
-                  cursor: 'pointer',
-                  fontSize: '1.25rem',
-                  lineHeight: 1,
-                }}
-              >
-                &times;
-              </button>
-            </div>
+            placeholder="Chọn người phụ trách..."
+            searchPlaceholder="Tìm tên nhân viên, bộ phận..."
+          />
 
-            {/* Form Body */}
-            <form onSubmit={handleCreateTask} style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
-                  Tiêu đề công việc *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Nhập tên nhiệm vụ cần thực hiện..."
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '7px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
-                    backgroundColor: '#ffffff',
-                    color: '#0f172a',
-                    fontSize: '0.78rem',
-                    boxSizing: 'border-box',
-                    fontFamily: "'Roboto Condensed', sans-serif",
-                  }}
-                />
-              </div>
+          <Input
+            label="Dự án hoặc Hạng mục"
+            placeholder="Ví dụ: Thi công quầy kệ & trưng bày showroom Seajong..."
+            value={newTaskProject}
+            onChange={(e) => setNewTaskProject(e.target.value)}
+          />
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
-                  Đơn vị hoặc Người phụ trách
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ví dụ: Nguyễn Văn Thành, Đội thi công Showroom..."
-                  value={newTaskAssignee}
-                  onChange={(e) => setNewTaskAssignee(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '7px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
-                    backgroundColor: '#ffffff',
-                    color: '#0f172a',
-                    fontSize: '0.78rem',
-                    boxSizing: 'border-box',
-                    fontFamily: "'Roboto Condensed', sans-serif",
-                  }}
-                />
-              </div>
+          <Input
+            label="Mã Hợp đồng (Tùy chọn)"
+            placeholder="Ví dụ: 0261029-003/HDDL-SEAJONG"
+            value={newTaskContractCode}
+            onChange={(e) => setNewTaskContractCode(e.target.value)}
+          />
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
-                  Dự án hoặc Hạng mục
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ví dụ: Thi công quầy kệ & trưng bày showroom Seajong..."
-                  value={newTaskProject}
-                  onChange={(e) => setNewTaskProject(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '7px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
-                    backgroundColor: '#ffffff',
-                    color: '#0f172a',
-                    fontSize: '0.78rem',
-                    boxSizing: 'border-box',
-                    fontFamily: "'Roboto Condensed', sans-serif",
-                  }}
-                />
-              </div>
+          <Input
+            label="Khách hàng / Đại lý (Tùy chọn)"
+            placeholder="Ví dụ: Cửa hàng thiết bị vệ sinh Hoàng Hải..."
+            value={newTaskCustomerName}
+            onChange={(e) => setNewTaskCustomerName(e.target.value)}
+          />
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
-                    Mã Hợp đồng (Tùy chọn)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Ví dụ: 0261029-003/HDDL-SEAJONG"
-                    value={newTaskContractCode}
-                    onChange={(e) => setNewTaskContractCode(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '7px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
-                      backgroundColor: '#ffffff',
-                      color: '#0f172a',
-                      fontSize: '0.78rem',
-                      boxSizing: 'border-box',
-                      fontFamily: "'Roboto Condensed', sans-serif",
-                    }}
-                  />
-                </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <DatePicker
+              label="Ngày bắt đầu"
+              value={newTaskStartDate}
+              onChange={(val) => setNewTaskStartDate(val)}
+              clearable={false}
+            />
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
-                    Khách hàng / Đại lý (Tùy chọn)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Ví dụ: Cửa hàng thiết bị vệ sinh Hoàng Hải..."
-                    value={newTaskCustomerName}
-                    onChange={(e) => setNewTaskCustomerName(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '7px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
-                      backgroundColor: '#ffffff',
-                      color: '#0f172a',
-                      fontSize: '0.78rem',
-                      boxSizing: 'border-box',
-                      fontFamily: "'Roboto Condensed', sans-serif",
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
-                    Ngày bắt đầu
-                  </label>
-                  <input
-                    type="date"
-                    value={newTaskStartDate}
-                    onChange={(e) => setNewTaskStartDate(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '7px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
-                      backgroundColor: '#ffffff',
-                      color: '#0f172a',
-                      fontSize: '0.78rem',
-                      boxSizing: 'border-box',
-                      fontFamily: "'Roboto Condensed', sans-serif",
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
-                    Hạn hoàn thành
-                  </label>
-                  <input
-                    type="date"
-                    value={newTaskEndDate}
-                    onChange={(e) => setNewTaskEndDate(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '7px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
-                      backgroundColor: '#ffffff',
-                      color: '#0f172a',
-                      fontSize: '0.78rem',
-                      boxSizing: 'border-box',
-                      fontFamily: "'Roboto Condensed', sans-serif",
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
-                  Mức độ ưu tiên
-                </label>
-                <Select
-                  value={newTaskPriority}
-                  onChange={(e) => setNewTaskPriority(e.target.value)}
-                  options={[
-                    { value: 'urgent', label: 'Khẩn cấp' },
-                    { value: 'high', label: 'Ưu tiên cao' },
-                    { value: 'medium', label: 'Trung bình' },
-                    { value: 'low', label: 'Thấp' },
-                  ]}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
-                  Mô tả chi tiết công việc
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Ghi chú nội dung yêu cầu, mục tiêu hoàn thành..."
-                  value={newTaskDesc}
-                  onChange={(e) => setNewTaskDesc(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '7px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
-                    backgroundColor: '#ffffff',
-                    color: '#0f172a',
-                    fontSize: '0.78rem',
-                    boxSizing: 'border-box',
-                    fontFamily: "'Roboto Condensed', sans-serif",
-                    resize: 'vertical',
-                  }}
-                />
-              </div>
-
-              {/* Footer Modal */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px' }}>
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="btn btn-secondary"
-                  style={{ padding: '6px 14px', borderRadius: '6px', fontSize: '0.78rem' }}
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  style={{ padding: '6px 14px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 600 }}
-                >
-                  Tạo công việc
-                </button>
-              </div>
-            </form>
+            <DatePicker
+              label="Hạn hoàn thành"
+              value={newTaskEndDate}
+              onChange={(val) => setNewTaskEndDate(val)}
+              clearable={false}
+            />
           </div>
-        </div>
-      )}
+
+          <Select
+            label="Mức độ ưu tiên"
+            value={newTaskPriority}
+            onChange={(e) => setNewTaskPriority(e.target.value)}
+            options={[
+              { value: 'urgent', label: 'Khẩn cấp' },
+              { value: 'high', label: 'Ưu tiên cao' },
+              { value: 'medium', label: 'Trung bình' },
+              { value: 'low', label: 'Thấp' },
+            ]}
+          />
+
+          <div className="form-group">
+            <label className="form-label">Mô tả chi tiết công việc</label>
+            <textarea
+              className="form-input"
+              rows={3}
+              placeholder="Ghi chú nội dung yêu cầu, mục tiêu hoàn thành..."
+              value={newTaskDesc}
+              onChange={(e) => setNewTaskDesc(e.target.value)}
+              style={{
+                height: 'auto',
+                lineHeight: 1.5,
+                padding: '8px 12px',
+                resize: 'vertical',
+                minHeight: '76px',
+              }}
+            />
+          </div>
+        </form>
+      </Offcanvas>
     </div>
   );
 };

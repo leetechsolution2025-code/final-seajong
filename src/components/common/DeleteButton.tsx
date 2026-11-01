@@ -105,10 +105,10 @@ export const DeleteButton: React.FC<DeleteButtonProps> = ({
           gap: '6px',
           ...style,
         }}
-        className={className}
+        className={`toolbar-delete-btn ${className}`.trim()}
         title={title}
       >
-        <span>{label}</span>
+        <span className="delete-btn-label">{label}</span>
         {hasCount && (
           <span
             style={{

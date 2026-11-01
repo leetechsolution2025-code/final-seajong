@@ -16,6 +16,7 @@ export interface SplitLayoutPageProps {
   rightContent?: ReactNode;
   /** Tab hiển thị trên giao diện mobile ("left" hoặc "right") */
   mobileActiveTab?: 'left' | 'right';
+  onMobileTabChange?: (tab: 'left' | 'right') => void;
   leftTabLabel?: string;
   rightTabLabel?: string;
   padding?: string | number;
@@ -37,6 +38,7 @@ export const SplitLayoutPage: React.FC<SplitLayoutPageProps> = ({
   rightTopContent,
   rightContent,
   mobileActiveTab,
+  onMobileTabChange,
   leftTabLabel = 'Danh sách',
   rightTabLabel = 'Cấu hình chi tiết',
   padding = 8,
@@ -58,6 +60,10 @@ export const SplitLayoutPage: React.FC<SplitLayoutPageProps> = ({
   }, []);
 
   const activeTab = mobileActiveTab !== undefined ? mobileActiveTab : internalTab;
+  const handleSwitchMobileTab = (tab: 'left' | 'right') => {
+    setInternalTab(tab);
+    onMobileTabChange?.(tab);
+  };
   const gapValue = typeof gap === 'number' ? `${gap}px` : gap;
   const paddingValue = typeof padding === 'number' ? `${padding}px` : padding;
 
@@ -99,13 +105,13 @@ export const SplitLayoutPage: React.FC<SplitLayoutPageProps> = ({
         }}
       >
         {/* Mobile Tab Switcher */}
-        {mobileActiveTab === undefined && isMobile && (
+        {(mobileActiveTab === undefined || onMobileTabChange !== undefined) && isMobile && (
           <div
             className="flex p-1 mb-2 bg-white rounded-xl border border-slate-200/80 shadow-2xs shrink-0"
           >
             <button
               type="button"
-              onClick={() => setInternalTab('left')}
+              onClick={() => handleSwitchMobileTab('left')}
               className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'left'
                   ? 'bg-indigo-600 text-white shadow-xs'
@@ -117,7 +123,7 @@ export const SplitLayoutPage: React.FC<SplitLayoutPageProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => setInternalTab('right')}
+              onClick={() => handleSwitchMobileTab('right')}
               className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'right'
                   ? 'bg-indigo-600 text-white shadow-xs'

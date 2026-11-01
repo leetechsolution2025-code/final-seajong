@@ -27,6 +27,7 @@ export const LogisticsReportsPage: React.FC = () => {
       num: 3,
       id: 'kiem-kho',
       title: 'Báo cáo kiểm kho',
+      mobileTitle: 'Kiểm kho',
       desc: 'Biên bản đối soát thực tế và cân bằng sổ sách',
       icon: 'bi-clipboard-check',
       badge: 'ĐỐI SOÁT',
@@ -35,6 +36,7 @@ export const LogisticsReportsPage: React.FC = () => {
 
   return (
     <StepPage
+      className="logistics-mobile-page"
       title="Báo cáo kho"
       description="Báo cáo tổng hợp xuất nhập tồn, biến động chi tiết thẻ kho và nhật ký đối soát kiểm kê kho"
       icon="bi-bar-chart-line"

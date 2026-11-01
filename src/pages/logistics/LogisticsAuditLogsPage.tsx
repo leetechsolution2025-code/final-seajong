@@ -347,6 +347,7 @@ export const LogisticsAuditLogsPage: React.FC = () => {
 
   return (
     <StandardPage
+      className="logistics-mobile-page"
       title="Nhật ký hoạt động kho"
       description="Biên bản đối soát nhập xuất, kiểm kê định kỳ và đối chiếu số dư sổ sách"
       icon="bi-journal-text"
@@ -536,13 +537,13 @@ export const LogisticsAuditLogsPage: React.FC = () => {
         {/* FullWidthTable */}
         <FullWidthTable loading={loading}>
           <table
-            className="w-full text-left border-collapse"
-            style={{ width: '100%', minWidth: '100%', fontSize: '13px' }}
+            className="w-full text-left border-collapse logistics-overview-compact-table"
+            style={{ width: '100%', fontSize: '13px' }}
           >
             <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
               <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
                 {/* 1. Cột Checkbox */}
-                <th className="py-2.5 px-3 w-10 text-center border-0 align-middle">
+                <th className="py-2.5 px-2 sm:px-3 w-8 sm:w-10 text-center border-0 align-middle">
                   <input
                     type="checkbox"
                     checked={isAllSelected}
@@ -553,12 +554,12 @@ export const LogisticsAuditLogsPage: React.FC = () => {
                 </th>
 
                 {/* 2. Cột Chi tiết biến động kho */}
-                <th className="py-2.5 px-4 min-w-[360px] border-0 align-middle">
+                <th className="py-2.5 px-2.5 sm:px-4 md:min-w-[360px] border-0 align-middle">
                   CHI TIẾT BIẾN ĐỘNG KHO
                 </th>
 
                 {/* 3. Cột Ghi chú & diễn giải */}
-                <th className="py-2.5 px-4 min-w-[320px] border-0 align-middle">
+                <th className="hidden md:table-cell py-2.5 px-4 min-w-[320px] border-0 align-middle">
                   GHI CHÚ & DIỄN GIẢI
                 </th>
               </tr>
@@ -589,7 +590,7 @@ export const LogisticsAuditLogsPage: React.FC = () => {
                       }`}
                     >
                       {/* 1. Checkbox */}
-                      <td className="py-3 px-3 text-center align-top pt-3.5">
+                      <td className="py-3 px-2 sm:px-3 text-center align-top pt-3.5">
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -600,8 +601,8 @@ export const LogisticsAuditLogsPage: React.FC = () => {
                       </td>
 
                       {/* 2. Chi tiết biến động kho */}
-                      <td className="py-3 px-4 align-top">
-                        <div className="flex items-start gap-2.5">
+                      <td className="py-3 px-2.5 sm:px-4 align-top">
+                        <div className="flex items-start gap-2 sm:gap-2.5">
                           {/* Nút Chevron không có border, xoay mượt mà */}
                           {hasMultiple ? (
                             <button
@@ -621,26 +622,44 @@ export const LogisticsAuditLogsPage: React.FC = () => {
                           )}
 
                           <div className="flex-1 min-w-0">
-                            {/* Dòng 1: Mã phiếu + Badge loại hoạt động */}
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-mono font-bold text-sm text-indigo-700 tracking-tight">
-                                {item.soChungTu}
-                              </span>
-                              <span
-                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-                                  isNhap
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                                    : isXuat
-                                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                                    : isDieuChinh
-                                    ? 'bg-purple-50 text-purple-700 border-purple-200'
-                                    : isLuanChuyen
-                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                    : 'bg-slate-50 text-slate-700 border-slate-200'
-                                }`}
+                            {/* Dòng 1: Mã phiếu + Badge loại hoạt động + Nút Xoá trên Mobile */}
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                <span className="font-mono font-bold text-sm text-indigo-700 tracking-tight">
+                                  {item.soChungTu}
+                                </span>
+                                <span
+                                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                                    isNhap
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                                      : isXuat
+                                      ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                      : isDieuChinh
+                                      ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                      : isLuanChuyen
+                                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                      : 'bg-slate-50 text-slate-700 border-slate-200'
+                                  }`}
+                                >
+                                  {item.activityLabel}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setConfirmDialog({
+                                    isOpen: true,
+                                    title: 'Xác nhận xoá hoạt động kho',
+                                    message: `Bạn có chắc chắn muốn xoá chứng từ ${item.soChungTu} (${item.activityLabel}) khỏi cơ sở dữ liệu? Thao tác này không thể hoàn tác.`,
+                                    targetId: item.soChungTu || item.id,
+                                    isBatch: false,
+                                  })
+                                }
+                                className="md:hidden p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
+                                title={`Xoá chứng từ ${item.soChungTu}`}
                               >
-                                {item.activityLabel}
-                              </span>
+                                <i className="bi bi-trash text-sm" />
+                              </button>
                             </div>
 
                             {/* Dòng 2: Thời gian • Người thực hiện */}
@@ -764,12 +783,46 @@ export const LogisticsAuditLogsPage: React.FC = () => {
                                 })}
                               </div>
                             )}
+
+                            {/* Ghi chú & diễn giải hiển thị gọn trên Mobile */}
+                            <div className="block md:hidden mt-2 pt-2 border-t border-slate-100">
+                              <div className="text-xs text-slate-700 font-medium leading-relaxed">
+                                {item.lyDo}
+                              </div>
+                              {(item.orderCode || item.customerName || item.customerAddress) && (
+                                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-600">
+                                  {item.orderCode && (
+                                    <span className="inline-flex items-center gap-1">
+                                      <i className="bi bi-receipt text-slate-400 text-[10px]" />
+                                      <span>Đơn:</span>
+                                      <b className="font-mono font-semibold text-blue-600">
+                                        {item.orderCode}
+                                      </b>
+                                    </span>
+                                  )}
+                                  {item.customerName && (
+                                    <span className="inline-flex items-center gap-1">
+                                      <i className="bi bi-person text-slate-400 text-[10px]" />
+                                      <b className="font-semibold text-slate-800">
+                                        {item.customerName}
+                                      </b>
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {item.ghiChu && item.ghiChu !== item.lyDo && (
+                                <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                                  <i className="bi bi-info-circle text-slate-400 text-[10px]" />
+                                  <span>{item.ghiChu}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>
 
-                      {/* 3. Ghi chú & diễn giải kèm Nút Xoá */}
-                      <td className="py-3 px-4 align-top">
+                      {/* 3. Ghi chú & diễn giải kèm Nút Xoá (Desktop) */}
+                      <td className="hidden md:table-cell py-3 px-4 align-top">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
                             <div className="text-xs text-slate-800 font-medium leading-relaxed">

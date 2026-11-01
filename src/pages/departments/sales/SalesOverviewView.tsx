@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Briefcase,
   CashStack,
@@ -55,8 +55,8 @@ const ALL_MONTHS_TREND_DATA: Record<number, SalesTrendItem> = {
   7: { ym: '2026-07', monthNum: 7, month: 'T07/26', monthFull: 'Tháng 07/2026', signed: 0.10, signedSeajong: 0.05, signedOem: 0.05, revenue: 0.10, revenueSeajong: 0.05, revenueOem: 0.05, target: 0.43, targetSales: 0.43, targetRevenue: 0.37, targetSeajong: 0.40, targetOem: 0.03, rate: 23.3 },
   8: { ym: '2026-08', monthNum: 8, month: 'T08/26', monthFull: 'Tháng 08/2026', signed: 1.00, signedSeajong: 0.39, signedOem: 0.61, revenue: 0.13, revenueSeajong: 0.11, revenueOem: 0.02, target: 0.56, targetSales: 0.56, targetRevenue: 0.47, targetSeajong: 0.50, targetOem: 0.06, rate: 100 },
   9: { ym: '2026-09', monthNum: 9, month: 'T09/26', monthFull: 'Tháng 09/2026', signed: 0.04, signedSeajong: 0.04, signedOem: 0, revenue: 0, revenueSeajong: 0, revenueOem: 0, target: 1.60, targetSales: 1.60, targetRevenue: 1.36, targetSeajong: 1.20, targetOem: 0.40, rate: 2.5 },
-  10: { ym: '2026-10', monthNum: 10, month: 'T10/26 (HT)', monthFull: 'Tháng 10/2026 (Hiện tại)', signed: 0.15, signedSeajong: 0.14, signedOem: 0.01, revenue: 0.07, revenueSeajong: 0.06, revenueOem: 0.01, target: 1.55, targetSales: 1.55, targetRevenue: 1.32, targetSeajong: 1.15, targetOem: 0.40, rate: 9.7 },
-  11: { ym: '2026-11', monthNum: 11, month: 'T11/26', monthFull: 'Tháng 11/2026', signed: 0, signedSeajong: 0, signedOem: 0, revenue: 0, revenueSeajong: 0, revenueOem: 0, target: 1.63, targetSales: 1.63, targetRevenue: 1.39, targetSeajong: 1.20, targetOem: 0.43, rate: 0 },
+  10: { ym: '2026-10', monthNum: 10, month: 'T10/26', monthFull: 'Tháng 10/2026', signed: 1.36, signedSeajong: 1.27, signedOem: 0.09, revenue: 1.57, revenueSeajong: 1.45, revenueOem: 0.12, target: 0.25, targetSales: 0.25, targetRevenue: 0.21, targetSeajong: 0.22, targetOem: 0.03, rate: 100 },
+  11: { ym: '2026-11', monthNum: 11, month: 'T11/26 (HT)', monthFull: 'Tháng 11/2026 (Hiện tại)', signed: 0, signedSeajong: 0, signedOem: 0, revenue: 0, revenueSeajong: 0, revenueOem: 0, target: 0.45, targetSales: 0.45, targetRevenue: 0.38, targetSeajong: 0.40, targetOem: 0.05, rate: 0 },
   12: { ym: '2026-12', monthNum: 12, month: 'T12/26', monthFull: 'Tháng 12/2026', signed: 0, signedSeajong: 0, signedOem: 0, revenue: 0, revenueSeajong: 0, revenueOem: 0, target: 1.61, targetSales: 1.61, targetRevenue: 1.37, targetSeajong: 1.20, targetOem: 0.41, rate: 0 },
 };
 
@@ -188,6 +188,36 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
   const [lastUpdated, setLastUpdated] = useState<string>(() => new Date().toLocaleTimeString('vi-VN'));
   const [isEventDrawerOpen, setIsEventDrawerOpen] = useState<boolean>(false);
   const [activeChartHover, setActiveChartHover] = useState<number | null>(null);
+  const [isMobileView, setIsMobileView] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+  );
+  const [mobileSlide, setMobileSlide] = useState<1 | 2>(1);
+  const touchStartXRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobileView(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!isMobileView) return;
+    touchStartXRef.current = e.touches[0]?.clientX ?? null;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!isMobileView || touchStartXRef.current === null) return;
+    const endX = e.changedTouches[0]?.clientX ?? touchStartXRef.current;
+    const deltaX = endX - touchStartXRef.current;
+    touchStartXRef.current = null;
+    if (Math.abs(deltaX) > 45) {
+      if (deltaX < 0 && mobileSlide === 1) {
+        setMobileSlide(2);
+      } else if (deltaX > 0 && mobileSlide === 2) {
+        setMobileSlide(1);
+      }
+    }
+  };
 
   // Dữ liệu thống kê thực tế từ CSDL SQLite
   const [salesStats, setSalesStats] = useState<SalesOverviewData | null>(null);
@@ -334,23 +364,49 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
         return '0.0%';
       };
 
-      const kpiSignedSeajong = +activeMonths.reduce((s, m) => s + (m.signedSeajong || 0), 0).toFixed(2);
-      const kpiSignedOem = +activeMonths.reduce((s, m) => s + (m.signedOem || 0), 0).toFixed(2);
-      const kpiSignedTotal = +(kpiSignedSeajong + kpiSignedOem).toFixed(2);
-      const kpiSignedTarget = +activeMonths.reduce((s, m) => s + (m.targetSales ?? m.target ?? 0), 0).toFixed(2);
-      const kpiSignedRate = kpiSignedTarget > 0 ? +Math.min((kpiSignedTotal / kpiSignedTarget) * 100, 100).toFixed(1) : 0;
+      const hasBackendAllMonths = Array.isArray((data as any).allMonthsTrend) && (data as any).allMonthsTrend.length === 12;
+
+      const kpiSignedSeajong = hasBackendAllMonths
+        ? (data.kpi?.signed?.seajongBillion ?? 0)
+        : +activeMonths.reduce((s, m) => s + (m.signedSeajong || 0), 0).toFixed(2);
+      const kpiSignedOem = hasBackendAllMonths
+        ? (data.kpi?.signed?.oemBillion ?? 0)
+        : +activeMonths.reduce((s, m) => s + (m.signedOem || 0), 0).toFixed(2);
+      const kpiSignedTotal = hasBackendAllMonths
+        ? (data.kpi?.signed?.totalValueBillion ?? +(kpiSignedSeajong + kpiSignedOem).toFixed(2))
+        : +(kpiSignedSeajong + kpiSignedOem).toFixed(2);
+      const kpiSignedTarget = hasBackendAllMonths
+        ? (data.kpi?.signed?.targetBillion ?? 0)
+        : +activeMonths.reduce((s, m) => s + (m.targetSales ?? m.target ?? 0), 0).toFixed(2);
+      const kpiSignedRate = hasBackendAllMonths
+        ? (data.kpi?.signed?.achievementRate ?? 0)
+        : kpiSignedTarget > 0 ? +Math.min((kpiSignedTotal / kpiSignedTarget) * 100, 100).toFixed(1) : 0;
       const currSignedGrowthVal = +currGrowthMonths.reduce((s, m) => s + (m.signed || 0), 0).toFixed(2);
       const prevSignedGrowthVal = +prevMonths.reduce((s, m) => s + (m.signed || 0), 0).toFixed(2);
-      const kpiSignedGrowth = calcGrowthStr(currSignedGrowthVal, prevSignedGrowthVal);
+      const kpiSignedGrowth = hasBackendAllMonths
+        ? (data.kpi?.signed?.growthText || calcGrowthStr(currSignedGrowthVal, prevSignedGrowthVal))
+        : calcGrowthStr(currSignedGrowthVal, prevSignedGrowthVal);
 
-      const kpiRevSeajong = +activeMonths.reduce((s, m) => s + (m.revenueSeajong || 0), 0).toFixed(2);
-      const kpiRevOem = +activeMonths.reduce((s, m) => s + (m.revenueOem || 0), 0).toFixed(2);
-      const kpiRevTotal = +(kpiRevSeajong + kpiRevOem).toFixed(2);
-      const kpiRevTarget = +activeMonths.reduce((s, m) => s + (m.targetRevenue ?? +((m.target || 0) * 0.85).toFixed(2)), 0).toFixed(2);
-      const kpiRevRate = kpiRevTarget > 0 ? +Math.min((kpiRevTotal / kpiRevTarget) * 100, 100).toFixed(1) : 0;
+      const kpiRevSeajong = hasBackendAllMonths
+        ? (data.kpi?.revenue?.seajongBillion ?? 0)
+        : +activeMonths.reduce((s, m) => s + (m.revenueSeajong || 0), 0).toFixed(2);
+      const kpiRevOem = hasBackendAllMonths
+        ? (data.kpi?.revenue?.oemBillion ?? 0)
+        : +activeMonths.reduce((s, m) => s + (m.revenueOem || 0), 0).toFixed(2);
+      const kpiRevTotal = hasBackendAllMonths
+        ? (data.kpi?.revenue?.totalValueBillion ?? +(kpiRevSeajong + kpiRevOem).toFixed(2))
+        : +(kpiRevSeajong + kpiRevOem).toFixed(2);
+      const kpiRevTarget = hasBackendAllMonths
+        ? (data.kpi?.revenue?.targetBillion ?? 0)
+        : +activeMonths.reduce((s, m) => s + (m.targetRevenue ?? +((m.target || 0) * 0.85).toFixed(2)), 0).toFixed(2);
+      const kpiRevRate = hasBackendAllMonths
+        ? (data.kpi?.revenue?.achievementRate ?? 0)
+        : kpiRevTarget > 0 ? +Math.min((kpiRevTotal / kpiRevTarget) * 100, 100).toFixed(1) : 0;
       const currRevGrowthVal = +currGrowthMonths.reduce((s, m) => s + (m.revenue || 0), 0).toFixed(2);
       const prevRevGrowthVal = +prevMonths.reduce((s, m) => s + (m.revenue || 0), 0).toFixed(2);
-      const kpiRevGrowth = calcGrowthStr(currRevGrowthVal, prevRevGrowthVal);
+      const kpiRevGrowth = hasBackendAllMonths
+        ? (data.kpi?.revenue?.growthText || calcGrowthStr(currRevGrowthVal, prevRevGrowthVal))
+        : calcGrowthStr(currRevGrowthVal, prevRevGrowthVal);
 
       data.kpi.signed = {
         ...data.kpi.signed,
@@ -503,12 +559,14 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
 
   return (
     <div
-      className="custom-scrollbar"
+      className="custom-scrollbar sales-overview-root"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: '14px',
-        padding: '16px 20px 20px 20px',
+        gap: isMobileView ? '8px' : '14px',
+        padding: isMobileView ? '8px' : '16px 20px 20px 20px',
         backgroundColor: 'var(--bg-surface-1)',
         height: '100%',
         maxHeight: '100%',
@@ -518,18 +576,19 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
     >
       {/* ── 1. THANH ĐIỀU KHIỂN VÀ BỘ LỌC KỲ BÁO CÁO ── */}
       <div
+        className="sales-overview-top-bar"
         style={{
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: '10px',
-          paddingBottom: '12px',
+          paddingBottom: isMobileView ? '6px' : '12px',
           borderBottom: '1px solid var(--border-subtle)',
           flexShrink: 0,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="sales-overview-realtime" style={{ display: isMobileView ? 'none' : 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
               display: 'inline-flex',
@@ -560,8 +619,9 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
         </div>
 
         {/* Nút lọc kỳ và Thao tác */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="sales-overview-actions-wrap" style={{ display: 'flex', alignItems: 'center', gap: '8px', width: isMobileView ? '100%' : 'auto' }}>
           <div
+            className="sales-overview-period-group"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -569,17 +629,20 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
               padding: '3px',
               borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border-subtle)',
+              width: isMobileView ? '100%' : 'auto',
             }}
           >
             {/* Nút Lịch sự kiện */}
             <button
               type="button"
+              className="sales-overview-event-btn"
               onClick={() => setIsEventDrawerOpen(true)}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: '5px',
-                padding: '4px 10px',
+                padding: isMobileView ? '5px 8px' : '4px 10px',
                 borderRadius: 'var(--radius-sm)',
                 fontSize: '0.75rem',
                 fontWeight: isEventDrawerOpen ? 700 : 500,
@@ -588,10 +651,31 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
                 border: 'none',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
+                flexShrink: 0,
               }}
             >
               <CalendarEvent size={13} color="var(--color-primary)" />
-              Lịch sự kiện
+              {!isMobileView && <span>Lịch sự kiện</span>}
+              {isMobileView && upcomingUserEvents.length > 0 && (
+                <span
+                  style={{
+                    minWidth: '16px',
+                    height: '16px',
+                    padding: '0 4px',
+                    borderRadius: '999px',
+                    backgroundColor: '#ef4444',
+                    color: '#ffffff',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    lineHeight: 1,
+                  }}
+                >
+                  {upcomingUserEvents.length}
+                </span>
+              )}
             </button>
 
             <span style={{ color: 'var(--border-subtle)', margin: '0 4px', userSelect: 'none', opacity: 0.8 }}>|</span>
@@ -600,6 +684,8 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
+                justifyContent: 'center',
+                flex: isMobileView ? 1.15 : undefined,
                 borderRadius: 'var(--radius-sm)',
                 backgroundColor: selectedPeriod === 'month' ? 'var(--color-primary)' : 'transparent',
                 color: selectedPeriod === 'month' ? '#ffffff' : 'var(--text-secondary)',
@@ -618,7 +704,7 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '4px 5px 4px 7px',
+                  padding: isMobileView ? '4px 4px' : '4px 5px 4px 7px',
                   background: 'transparent',
                   border: 'none',
                   color: 'inherit',
@@ -656,7 +742,7 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '4px 7px 4px 5px',
+                  padding: isMobileView ? '4px 4px' : '4px 7px 4px 5px',
                   background: 'transparent',
                   border: 'none',
                   color: 'inherit',
@@ -671,7 +757,8 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
               type="button"
               onClick={() => setSelectedPeriod('quarter')}
               style={{
-                padding: '4px 12px',
+                flex: isMobileView ? 1 : undefined,
+                padding: isMobileView ? '4px 6px' : '4px 12px',
                 borderRadius: 'var(--radius-sm)',
                 fontSize: '0.75rem',
                 fontWeight: selectedPeriod === 'quarter' ? 700 : 500,
@@ -679,6 +766,7 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
                 color: selectedPeriod === 'quarter' ? '#ffffff' : 'var(--text-secondary)',
                 border: 'none',
                 cursor: 'pointer',
+                whiteSpace: 'nowrap',
                 transition: 'all 0.15s ease',
               }}
             >
@@ -688,7 +776,8 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
               type="button"
               onClick={() => setSelectedPeriod('year')}
               style={{
-                padding: '4px 12px',
+                flex: isMobileView ? 1 : undefined,
+                padding: isMobileView ? '4px 6px' : '4px 12px',
                 borderRadius: 'var(--radius-sm)',
                 fontSize: '0.75rem',
                 fontWeight: selectedPeriod === 'year' ? 700 : 500,
@@ -696,6 +785,7 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
                 color: selectedPeriod === 'year' ? '#ffffff' : 'var(--text-secondary)',
                 border: 'none',
                 cursor: 'pointer',
+                whiteSpace: 'nowrap',
                 transition: 'all 0.15s ease',
               }}
             >
@@ -704,40 +794,44 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
           </div>
 
           {/* Menu tiện ích phòng ban (Thư viện tài liệu, Sổ ghi chép, Yêu cầu, Làm mới...) */}
-          <DepartmentActionMenu
-            noBorder={true}
-            extraItems={[
-              {
-                id: 'refresh-sales-data',
-                icon: <ArrowRepeat className="text-emerald-600 text-[15px] shrink-0" />,
-                title: 'Làm mới dữ liệu',
-                description: 'Đồng bộ doanh số, đơn hàng & công nợ thực tế',
-                onClick: () => {
-                  fetchSalesStats();
-                  loadUserEvents();
-                  onShowToast?.('success', 'Đã đồng bộ', 'Số liệu kinh doanh đã được cập nhật từ CSDL');
+          {!isMobileView && (
+            <DepartmentActionMenu
+              noBorder={true}
+              extraItems={[
+                {
+                  id: 'refresh-sales-data',
+                  icon: <ArrowRepeat className="text-emerald-600 text-[15px] shrink-0" />,
+                  title: 'Làm mới dữ liệu',
+                  description: 'Đồng bộ doanh số, đơn hàng & công nợ thực tế',
+                  onClick: () => {
+                    fetchSalesStats();
+                    loadUserEvents();
+                    onShowToast?.('success', 'Đã đồng bộ', 'Số liệu kinh doanh đã được cập nhật từ CSDL');
+                  },
                 },
-              },
-              {
-                id: 'print-sales-overview',
-                icon: <Printer className="text-blue-600 text-[15px] shrink-0" />,
-                title: 'In báo cáo tổng quan',
-                description: 'Xuất bản in tổng quan kinh doanh',
-                onClick: () => {
-                  window.print();
+                {
+                  id: 'print-sales-overview',
+                  icon: <Printer className="text-blue-600 text-[15px] shrink-0" />,
+                  title: 'In báo cáo tổng quan',
+                  description: 'Xuất bản in tổng quan kinh doanh',
+                  onClick: () => {
+                    window.print();
+                  },
                 },
-              },
-            ]}
-          />
+              ]}
+            />
+          )}
         </div>
       </div>
 
       {/* ── 2. HÀNG 4 THẺ CHỈ SỐ KPI KINH DOANH THEN CHỐT ── */}
+      {(!isMobileView || mobileSlide === 1) && (
       <div
+        className="sales-overview-kpi-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-          gap: '12px',
+          gridTemplateColumns: isMobileView ? 'repeat(2, minmax(0, 1fr))' : 'repeat(auto-fit, minmax(240px, 1fr))',
+          gap: isMobileView ? '8px' : '12px',
           flexShrink: 0,
         }}
       >
@@ -746,20 +840,21 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
           onClick={() => onNavigate?.('contracts')}
           style={{
             backgroundColor: 'var(--bg-surface-2)',
-            padding: '12px 16px',
+            padding: isMobileView ? '10px' : '12px 16px',
             borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--border-subtle)',
             display: 'flex',
             flexDirection: 'column',
-            gap: '6px',
+            gap: isMobileView ? '4px' : '6px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
             cursor: onNavigate ? 'pointer' : 'default',
+            minWidth: 0,
           }}
           title={onNavigate ? 'Nhấp để xem theo dõi đơn hàng & hợp đồng' : undefined}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Briefcase size={14} color="#0284c7" /> Tổng doanh số
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: isMobileView ? '0.6875rem' : '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {!isMobileView && <Briefcase size={14} color="#0284c7" />} Tổng doanh số
             </span>
             {(() => {
               const signedGrowth = salesStats?.kpi?.signed?.growthText || '+0.0%';
@@ -771,7 +866,7 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '2px',
-                    fontSize: '0.6875rem',
+                    fontSize: isMobileView ? '0.625rem' : '0.6875rem',
                     fontWeight: 700,
                     color: isNeg ? '#ef4444' : isPos ? '#10b981' : 'var(--text-muted)',
                     backgroundColor: isNeg
@@ -779,24 +874,27 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
                       : isPos
                       ? 'rgba(16, 185, 129, 0.12)'
                       : 'var(--bg-surface-3)',
-                    padding: '1px 6px',
+                    padding: isMobileView ? '1px 5px' : '1px 6px',
                     borderRadius: '4px',
+                    flexShrink: 0,
                   }}
                 >
-                  {isNeg ? <ArrowDownRight size={11} /> : <ArrowUpRight size={11} />} {signedGrowth}
+                  {isNeg ? <ArrowDownRight size={10} /> : <ArrowUpRight size={10} />} {signedGrowth}
                 </span>
               );
             })()}
           </div>
 
-          <div style={{ fontSize: '1.375rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-            {(salesStats?.kpi?.signed?.totalValueBillion ?? 0).toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>tỷ đồng</span>
+          <div style={{ fontSize: isMobileView ? '1.125rem' : '1.375rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+            {(salesStats?.kpi?.signed?.totalValueBillion ?? 0).toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span style={{ fontSize: isMobileView ? '0.6875rem' : '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>tỷ đồng</span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-              <span>{(salesStats?.kpi?.signed?.targetBillion ?? 0) > 0 ? `Chỉ tiêu: ${salesStats?.kpi?.signed?.targetBillion} tỷ đồng` : 'Theo kế hoạch năm'}</span>
-              <strong style={{ color: '#0284c7' }}>Đạt {salesStats?.kpi?.signed?.achievementRate ?? 0}%</strong>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: isMobileView ? '0.625rem' : '0.6875rem', color: 'var(--text-muted)', gap: '4px' }}>
+              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {(salesStats?.kpi?.signed?.targetBillion ?? 0) > 0 ? `Chỉ tiêu: ${salesStats?.kpi?.signed?.targetBillion} tỷ` : 'Theo kế hoạch năm'}
+              </span>
+              <strong style={{ color: '#0284c7', flexShrink: 0 }}>{isMobileView ? `${salesStats?.kpi?.signed?.achievementRate ?? 0}%` : `Đạt ${salesStats?.kpi?.signed?.achievementRate ?? 0}%`}</strong>
             </div>
             <div style={{ width: '100%', height: '4px', backgroundColor: 'var(--bg-surface-3)', borderRadius: '2px', overflow: 'hidden' }}>
               <div
@@ -811,11 +909,11 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
-            <span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: isMobileView ? '0.625rem' : '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px', gap: '4px' }}>
+            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               Seajong: <strong style={{ color: '#0284c7' }}>{(salesStats?.kpi?.signed?.seajongBillion ?? +((salesStats?.kpi?.signed?.totalValueBillion ?? 0) * 0.95).toFixed(2)).toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} tỷ</strong>
             </span>
-            <span>
+            <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
               OEM: <strong style={{ color: '#d97706' }}>{(salesStats?.kpi?.signed?.oemBillion ?? +((salesStats?.kpi?.signed?.totalValueBillion ?? 0) * 0.05).toFixed(2)).toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} tỷ</strong>
             </span>
           </div>
@@ -825,18 +923,19 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
         <div
           style={{
             backgroundColor: 'var(--bg-surface-2)',
-            padding: '12px 16px',
+            padding: isMobileView ? '10px' : '12px 16px',
             borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--border-subtle)',
             display: 'flex',
             flexDirection: 'column',
-            gap: '6px',
+            gap: isMobileView ? '4px' : '6px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+            minWidth: 0,
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <CashStack size={14} color="#10b981" /> Tổng doanh thu
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: isMobileView ? '0.6875rem' : '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {!isMobileView && <CashStack size={14} color="#10b981" />} Tổng doanh thu
             </span>
             {(() => {
               const revGrowth = salesStats?.kpi?.revenue?.growthText || '+0.0%';
@@ -848,7 +947,7 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '2px',
-                    fontSize: '0.6875rem',
+                    fontSize: isMobileView ? '0.625rem' : '0.6875rem',
                     fontWeight: 700,
                     color: isNeg ? '#ef4444' : isPos ? '#10b981' : 'var(--text-muted)',
                     backgroundColor: isNeg
@@ -856,24 +955,27 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
                       : isPos
                       ? 'rgba(16, 185, 129, 0.12)'
                       : 'var(--bg-surface-3)',
-                    padding: '1px 6px',
+                    padding: isMobileView ? '1px 5px' : '1px 6px',
                     borderRadius: '4px',
+                    flexShrink: 0,
                   }}
                 >
-                  {isNeg ? <ArrowDownRight size={11} /> : <ArrowUpRight size={11} />} {revGrowth}
+                  {isNeg ? <ArrowDownRight size={10} /> : <ArrowUpRight size={10} />} {revGrowth}
                 </span>
               );
             })()}
           </div>
 
-          <div style={{ fontSize: '1.375rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-            {(salesStats?.kpi?.revenue?.totalValueBillion ?? 0).toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>tỷ đồng</span>
+          <div style={{ fontSize: isMobileView ? '1.125rem' : '1.375rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+            {(salesStats?.kpi?.revenue?.totalValueBillion ?? 0).toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span style={{ fontSize: isMobileView ? '0.6875rem' : '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>tỷ đồng</span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-              <span>{(salesStats?.kpi?.revenue?.targetBillion ?? 0) > 0 ? `Kế hoạch: ${salesStats?.kpi?.revenue?.targetBillion} tỷ đồng` : 'Theo tiến độ HĐ'}</span>
-              <strong style={{ color: '#10b981' }}>Đạt {salesStats?.kpi?.revenue?.achievementRate ?? 0}%</strong>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: isMobileView ? '0.625rem' : '0.6875rem', color: 'var(--text-muted)', gap: '4px' }}>
+              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {(salesStats?.kpi?.revenue?.targetBillion ?? 0) > 0 ? `Kế hoạch: ${salesStats?.kpi?.revenue?.targetBillion} tỷ` : 'Theo tiến độ HĐ'}
+              </span>
+              <strong style={{ color: '#10b981', flexShrink: 0 }}>{isMobileView ? `${salesStats?.kpi?.revenue?.achievementRate ?? 0}%` : `Đạt ${salesStats?.kpi?.revenue?.achievementRate ?? 0}%`}</strong>
             </div>
             <div style={{ width: '100%', height: '4px', backgroundColor: 'var(--bg-surface-3)', borderRadius: '2px', overflow: 'hidden' }}>
               <div
@@ -888,11 +990,11 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
-            <span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: isMobileView ? '0.625rem' : '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px', gap: '4px' }}>
+            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               Seajong: <strong style={{ color: '#0284c7' }}>{(salesStats?.kpi?.revenue?.seajongBillion ?? +((salesStats?.kpi?.revenue?.totalValueBillion ?? 0) * 0.85).toFixed(2)).toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} tỷ</strong>
             </span>
-            <span>
+            <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
               OEM: <strong style={{ color: '#d97706' }}>{(salesStats?.kpi?.revenue?.oemBillion ?? +((salesStats?.kpi?.revenue?.totalValueBillion ?? 0) * 0.15).toFixed(2)).toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} tỷ</strong>
             </span>
           </div>
@@ -903,20 +1005,21 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
           onClick={() => onNavigate?.('partners')}
           style={{
             backgroundColor: 'var(--bg-surface-2)',
-            padding: '12px 16px',
+            padding: isMobileView ? '10px' : '12px 16px',
             borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--border-subtle)',
             display: 'flex',
             flexDirection: 'column',
-            gap: '6px',
+            gap: isMobileView ? '4px' : '6px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
             cursor: onNavigate ? 'pointer' : 'default',
+            minWidth: 0,
           }}
           title={onNavigate ? 'Nhấp để xem trang Phát triển đại lý' : undefined}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Buildings size={14} color="#f59e0b" /> Phát triển đại lý
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: isMobileView ? '0.6875rem' : '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {!isMobileView && <Buildings size={14} color="#f59e0b" />} Phát triển đại lý
             </span>
             <span
               title="Chỉ tiêu từ Kế hoạch KD (DB): 10 ĐL chính thức + 1 ĐL lắp kệ mới"
@@ -924,27 +1027,28 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '2px',
-                fontSize: '0.6875rem',
+                fontSize: isMobileView ? '0.625rem' : '0.6875rem',
                 fontWeight: 700,
                 color: '#f59e0b',
                 backgroundColor: 'rgba(245, 158, 11, 0.12)',
-                padding: '1px 6px',
+                padding: isMobileView ? '1px 5px' : '1px 6px',
                 borderRadius: '4px',
+                flexShrink: 0,
               }}
             >
-              <ArrowUpRight size={11} /> Mục tiêu: {salesStats?.kpi?.dealerDev?.targetNewDealers ?? 11} ĐL
+              <ArrowUpRight size={10} /> {isMobileView ? `${salesStats?.kpi?.dealerDev?.targetNewDealers ?? 11} ĐL` : `Mục tiêu: ${salesStats?.kpi?.dealerDev?.targetNewDealers ?? 11} ĐL`}
             </span>
           </div>
 
-          <div style={{ fontSize: '1.375rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-            {salesStats?.kpi?.dealerDev?.developedCount ?? 8} <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>đại lý phát triển</span>
+          <div style={{ fontSize: isMobileView ? '1.125rem' : '1.375rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+            {salesStats?.kpi?.dealerDev?.developedCount ?? 8} <span style={{ fontSize: isMobileView ? '0.6875rem' : '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>{isMobileView ? 'đại lý mới' : 'đại lý phát triển'}</span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-              <span>Chỉ tiêu: {salesStats?.kpi?.dealerDev?.targetNewDealers ?? 11} đại lý</span>
-              <strong style={{ color: '#f59e0b' }}>
-                Đạt {salesStats?.kpi?.dealerDev?.achievementRate ?? +Math.min(((salesStats?.kpi?.dealerDev?.developedCount ?? 8) / (salesStats?.kpi?.dealerDev?.targetNewDealers || 11)) * 100, 100).toFixed(1)}%
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: isMobileView ? '0.625rem' : '0.6875rem', color: 'var(--text-muted)', gap: '4px' }}>
+              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Chỉ tiêu: {salesStats?.kpi?.dealerDev?.targetNewDealers ?? 11} ĐL</span>
+              <strong style={{ color: '#f59e0b', flexShrink: 0 }}>
+                {isMobileView ? '' : 'Đạt '}{salesStats?.kpi?.dealerDev?.achievementRate ?? +Math.min(((salesStats?.kpi?.dealerDev?.developedCount ?? 8) / (salesStats?.kpi?.dealerDev?.targetNewDealers || 11)) * 100, 100).toFixed(1)}%
               </strong>
             </div>
             <div style={{ width: '100%', height: '4px', backgroundColor: 'var(--bg-surface-3)', borderRadius: '2px', overflow: 'hidden' }}>
@@ -960,12 +1064,12 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
-            <span>
-              Tiềm năng: <strong style={{ color: '#f59e0b' }}>{salesStats?.kpi?.dealerDev?.leadsCount ?? 4} đối tác</strong>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: isMobileView ? '0.625rem' : '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px', gap: '4px' }}>
+            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              Tiềm năng: <strong style={{ color: '#f59e0b' }}>{salesStats?.kpi?.dealerDev?.leadsCount ?? 4}</strong>
             </span>
-            <span>
-              {salesStats?.kpi?.dealerDev?.inCareCount ?? 3} chăm sóc • <strong style={{ color: '#d97706' }}>{salesStats?.kpi?.dealerDev?.negotiatingCount ?? 1} báo giá/HĐ</strong>
+            <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {salesStats?.kpi?.dealerDev?.inCareCount ?? 3} CS • <strong style={{ color: '#d97706' }}>{salesStats?.kpi?.dealerDev?.negotiatingCount ?? 1} HĐ</strong>
             </span>
           </div>
         </div>
@@ -975,47 +1079,49 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
           onClick={() => onNavigate?.('dealer-support')}
           style={{
             backgroundColor: 'var(--bg-surface-2)',
-            padding: '12px 16px',
+            padding: isMobileView ? '10px' : '12px 16px',
             borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--border-subtle)',
             display: 'flex',
             flexDirection: 'column',
-            gap: '6px',
+            gap: isMobileView ? '4px' : '6px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
             cursor: onNavigate ? 'pointer' : 'default',
+            minWidth: 0,
           }}
           title={onNavigate ? 'Nhấp để xem trang Hỗ trợ đại lý' : undefined}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Headset size={14} color="#8b5cf6" /> Hỗ trợ đại lý
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: isMobileView ? '0.6875rem' : '0.78125rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {!isMobileView && <Headset size={14} color="#8b5cf6" />} Hỗ trợ đại lý
             </span>
             <span
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '2px',
-                fontSize: '0.6875rem',
+                fontSize: isMobileView ? '0.625rem' : '0.6875rem',
                 fontWeight: 700,
                 color: (salesStats?.kpi?.dealerSupport?.waitingCount ?? 0) > 0 ? '#f59e0b' : '#10b981',
                 backgroundColor: (salesStats?.kpi?.dealerSupport?.waitingCount ?? 0) > 0 ? 'rgba(245, 158, 11, 0.12)' : 'rgba(16, 185, 129, 0.12)',
-                padding: '1px 6px',
+                padding: isMobileView ? '1px 5px' : '1px 6px',
                 borderRadius: '4px',
+                flexShrink: 0,
               }}
             >
-              <ArrowUpRight size={11} /> {(salesStats?.kpi?.dealerSupport?.waitingCount ?? 0) > 0 ? `${salesStats?.kpi?.dealerSupport?.waitingCount} chờ tiếp nhận` : 'Đã tiếp nhận'}
+              <ArrowUpRight size={10} /> {(salesStats?.kpi?.dealerSupport?.waitingCount ?? 0) > 0 ? `${salesStats?.kpi?.dealerSupport?.waitingCount} chờ` : 'Đã tiếp nhận'}
             </span>
           </div>
 
-          <div style={{ fontSize: '1.375rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-            {salesStats?.kpi?.dealerSupport?.totalCount ?? 0} <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>yêu cầu ({salesStats?.kpi?.dealerSupport?.resolvedCount ?? 0}/{salesStats?.kpi?.dealerSupport?.totalCount ?? 0} hoàn tất)</span>
+          <div style={{ fontSize: isMobileView ? '1.125rem' : '1.375rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {salesStats?.kpi?.dealerSupport?.totalCount ?? 0} <span style={{ fontSize: isMobileView ? '0.6875rem' : '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>yêu cầu ({salesStats?.kpi?.dealerSupport?.resolvedCount ?? 0}/{salesStats?.kpi?.dealerSupport?.totalCount ?? 0})</span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-              <span>{salesStats?.kpi?.dealerSupport?.inProgressCount ?? 0} đang xử lý • {salesStats?.kpi?.dealerSupport?.waitingCount ?? 0} chờ tiếp nhận</span>
-              <strong style={{ color: '#8b5cf6' }}>
-                Tiếp nhận {salesStats?.kpi?.dealerSupport?.slaRate ?? 0}%
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: isMobileView ? '0.625rem' : '0.6875rem', color: 'var(--text-muted)', gap: '4px' }}>
+              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{salesStats?.kpi?.dealerSupport?.inProgressCount ?? 0} đang xử lý</span>
+              <strong style={{ color: '#8b5cf6', flexShrink: 0 }}>
+                {isMobileView ? `${salesStats?.kpi?.dealerSupport?.slaRate ?? 0}%` : `Tiếp nhận ${salesStats?.kpi?.dealerSupport?.slaRate ?? 0}%`}
               </strong>
             </div>
             <div style={{ width: '100%', height: '4px', backgroundColor: 'var(--bg-surface-3)', borderRadius: '2px', overflow: 'hidden' }}>
@@ -1031,32 +1137,35 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
             </div>
           </div>
 
-          <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: isMobileView ? '0.625rem' : '0.6875rem', color: 'var(--text-secondary)', borderTop: '1px dashed var(--border-subtle)', paddingTop: '4px', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             Mới nhất: <strong>{salesStats?.kpi?.dealerSupport?.latestText || 'Chưa có yêu cầu'}</strong>
           </div>
         </div>
       </div>
+      )}
 
       {/* ── 3. KHỐI BIỂU ĐỒ DIỄN BIẾN VÀ CƠ CẤU DOANH SỐ (GRID 1.6fr / 1fr) ── */}
       <div
+        className="sales-overview-bottom-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)',
-          gap: '14px',
+          gridTemplateColumns: isMobileView ? 'minmax(0, 1fr)' : 'minmax(0, 1.6fr) minmax(0, 1fr)',
+          gap: isMobileView ? '8px' : '14px',
           flex: 1,
           minHeight: 0,
         }}
       >
         {/* Biểu đồ Doanh số và Doanh thu 6 tháng */}
+        {(!isMobileView || mobileSlide === 1) && (
         <div
           style={{
-            padding: '16px 20px 14px 20px',
+            padding: isMobileView ? '12px 12px 10px 12px' : '16px 20px 14px 20px',
             borderRadius: 'var(--radius-lg)',
             backgroundColor: 'var(--bg-surface-2)',
             border: '1px solid var(--border-subtle)',
             display: 'flex',
             flexDirection: 'column',
-            gap: '10px',
+            gap: isMobileView ? '6px' : '10px',
             boxSizing: 'border-box',
             height: '100%',
             minHeight: 0,
@@ -1065,12 +1174,14 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', flexShrink: 0 }}>
             <div>
-              <h3 style={{ fontSize: '0.8125rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.02em', lineHeight: 1.25 }}>
-                Diễn biến Doanh số và doanh thu 6 tháng gần nhất
+              <h3 style={{ fontSize: isMobileView ? '0.78125rem' : '0.8125rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.02em', lineHeight: 1.25 }}>
+                {isMobileView ? 'Diễn biến 6 tháng gần nhất' : 'Diễn biến Doanh số và doanh thu 6 tháng gần nhất'}
               </h3>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
-                Đơn vị: tỷ đồng • Phân rã kênh thương hiệu Seajong & Gia công OEM từ CSDL
-              </p>
+              {!isMobileView && (
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+                  Đơn vị: tỷ đồng • Phân rã kênh thương hiệu Seajong & Gia công OEM từ CSDL
+                </p>
+              )}
             </div>
 
             {/* Option chọn xem biểu đồ Doanh số / Doanh thu riêng */}
@@ -1087,9 +1198,9 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
                 type="button"
                 onClick={() => setChartMetric('sales')}
                 style={{
-                  padding: '4px 12px',
+                  padding: isMobileView ? '3px 10px' : '4px 12px',
                   borderRadius: '4px',
-                  fontSize: '0.71875rem',
+                  fontSize: isMobileView ? '0.6875rem' : '0.71875rem',
                   fontWeight: chartMetric === 'sales' ? 700 : 500,
                   backgroundColor: chartMetric === 'sales' ? 'var(--color-primary)' : 'transparent',
                   color: chartMetric === 'sales' ? '#ffffff' : 'var(--text-secondary)',
@@ -1104,9 +1215,9 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
                 type="button"
                 onClick={() => setChartMetric('revenue')}
                 style={{
-                  padding: '4px 12px',
+                  padding: isMobileView ? '3px 10px' : '4px 12px',
                   borderRadius: '4px',
-                  fontSize: '0.71875rem',
+                  fontSize: isMobileView ? '0.6875rem' : '0.71875rem',
                   fontWeight: chartMetric === 'revenue' ? 700 : 500,
                   backgroundColor: chartMetric === 'revenue' ? 'var(--color-primary)' : 'transparent',
                   color: chartMetric === 'revenue' ? '#ffffff' : 'var(--text-secondary)',
@@ -1121,34 +1232,47 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
           </div>
 
           {/* Thanh chú giải (Legend) */}
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '14px', fontSize: '0.71875rem', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#0284c7' }} />
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: isMobileView ? 'center' : 'flex-start',
+              flexWrap: 'wrap',
+              gap: isMobileView ? '10px' : '14px',
+              fontSize: isMobileView ? '0.625rem' : '0.71875rem',
+              flexShrink: 0,
+              order: isMobileView ? 3 : 0,
+              paddingTop: isMobileView ? '4px' : 0,
+              borderTop: isMobileView ? '1px dashed var(--border-subtle)' : 'none',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ width: isMobileView ? '8px' : '10px', height: isMobileView ? '8px' : '10px', borderRadius: '2px', backgroundColor: '#0284c7' }} />
               <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
-                {chartMetric === 'sales' ? 'Doanh số Seajong' : 'Doanh thu Seajong'}
+                {isMobileView ? 'Cột Seajong' : chartMetric === 'sales' ? 'Doanh số Seajong' : 'Doanh thu Seajong'}
               </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#f59e0b' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ width: isMobileView ? '8px' : '10px', height: isMobileView ? '8px' : '10px', borderRadius: '2px', backgroundColor: '#f59e0b' }} />
               <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
-                {chartMetric === 'sales' ? 'Doanh số OEM' : 'Doanh thu OEM'}
+                {isMobileView ? 'Cột OEM' : chartMetric === 'sales' ? 'Doanh số OEM' : 'Doanh thu OEM'}
               </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', width: '16px', height: '2.5px', backgroundColor: chartMetric === 'sales' ? '#8b5cf6' : '#10b981', borderRadius: '2px', position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', width: isMobileView ? '14px' : '16px', height: '2.5px', backgroundColor: chartMetric === 'sales' ? '#8b5cf6' : '#10b981', borderRadius: '2px', position: 'relative' }}>
                 <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '5px', height: '5px', borderRadius: '50%', backgroundColor: chartMetric === 'sales' ? '#8b5cf6' : '#10b981' }} />
               </span>
               <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
                 {chartMetric === 'sales' ? 'Tổng doanh số' : 'Tổng doanh thu'}
               </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', width: '18px', position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', width: isMobileView ? '14px' : '18px', position: 'relative' }}>
                 <span style={{ width: '100%', height: '2px', borderTop: '2px dashed #ef4444' }} />
                 <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#ef4444' }} />
               </span>
               <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
-                {chartMetric === 'sales' ? 'Mục tiêu doanh số' : 'Mục tiêu doanh thu'}
+                {isMobileView ? 'Mục tiêu' : chartMetric === 'sales' ? 'Mục tiêu doanh số' : 'Mục tiêu doanh thu'}
               </span>
             </div>
           </div>
@@ -1159,12 +1283,12 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
               position: 'relative',
               width: '100%',
               flex: 1,
-              minHeight: '255px',
+              minHeight: isMobileView ? '180px' : '255px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              marginTop: '4px',
-              paddingBottom: '4px',
+              marginTop: isMobileView ? '0px' : '4px',
+              paddingBottom: isMobileView ? '0px' : '4px',
               overflow: 'visible',
             }}
           >
@@ -1237,7 +1361,7 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
               return (
                 <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center' }}>
                   <svg
-                    viewBox="0 0 650 262"
+                    viewBox={isMobileView ? '24 8 602 250' : '0 0 650 262'}
                     preserveAspectRatio="xMidYMid meet"
                     style={{ width: '100%', height: '100%', maxHeight: '100%', overflow: 'visible' }}
                   >
@@ -1258,9 +1382,9 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
                       return (
                         <line
                           key={`grid-${idx}`}
-                          x1="14"
+                          x1={isMobileView ? '28' : '14'}
                           y1={y}
-                          x2="636"
+                          x2={isMobileView ? '622' : '636'}
                           y2={y}
                           stroke="var(--border-subtle)"
                           strokeDasharray={idx === 3 ? undefined : '3 3'}
@@ -1345,7 +1469,7 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
                             x={centerX}
                             y="251"
                             fill={isCurrentMonth ? 'var(--color-primary)' : 'var(--text-secondary)'}
-                            fontSize="10"
+                            fontSize={isMobileView ? '12' : '10'}
                             fontWeight={isCurrentMonth ? '700' : '500'}
                             textAnchor="middle"
                           >
@@ -1382,7 +1506,7 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
                             x={pt.x}
                             y={Math.max(pt.y + labelOffsetY, 12)}
                             fill="#dc2626"
-                            fontSize="8.5"
+                            fontSize={isMobileView ? '10.5' : '8.5'}
                             fontWeight="700"
                             textAnchor="middle"
                           >
@@ -1419,7 +1543,7 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
                               x={pt.x}
                               y={labelY}
                               fill={totalColor}
-                              fontSize="8.5"
+                              fontSize={isMobileView ? '10.5' : '8.5'}
                               fontWeight="700"
                               textAnchor="middle"
                             >
@@ -1555,11 +1679,13 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
             })()}
           </div>
         </div>
+        )}
 
         {/* Cột phải: Lịch công tác và sự kiện kinh doanh */}
+        {(!isMobileView || mobileSlide === 2) && (
         <div
           style={{
-            padding: '16px 20px 14px 20px',
+            padding: isMobileView ? '12px' : '16px 20px 14px 20px',
             borderRadius: 'var(--radius-lg)',
             backgroundColor: 'var(--bg-surface-2)',
             border: '1px solid var(--border-subtle)',
@@ -1702,6 +1828,7 @@ export const SalesOverviewView: React.FC<SalesOverviewViewProps> = ({
             )}
           </div>
         </div>
+        )}
       </div>
 
       {/* ── 5. OFFCANVAS LỊCH SỰ KIỆN PHÒNG KINH DOANH DÙNG CHUNG ── */}

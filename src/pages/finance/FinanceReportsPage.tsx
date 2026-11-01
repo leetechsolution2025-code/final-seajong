@@ -8,18 +8,20 @@ export interface FinanceReportsPageProps {
 
 export const FinanceReportsPage: React.FC<FinanceReportsPageProps> = ({ onShowToast }) => {
   return (
-    <StandardPage
-      title="Báo cáo tài chính & Kết quả kinh doanh"
-      description="Hệ thống báo cáo tài chính tổng hợp theo chuẩn mực kế toán Việt Nam Thông tư 200/2014/TT-BTC"
-      icon="bi-file-earmark-bar-graph"
-      color="blue"
-      badge="CHUẨN TT200"
-      tickerContext="finance"
-      cardPadding="p-0"
-      useCard={true}
-    >
-      <FinancialReportsView onShowToast={onShowToast} />
-    </StandardPage>
+    <div className="finance-reports-page h-full">
+      <StandardPage
+        title="Báo cáo tài chính & Kết quả kinh doanh"
+        description="Hệ thống báo cáo tài chính tổng hợp theo chuẩn mực kế toán Việt Nam Thông tư 200/2014/TT-BTC"
+        icon="bi-file-earmark-bar-graph"
+        color="blue"
+        badge="CHUẨN TT200"
+        tickerContext="finance"
+        cardPadding="p-0"
+        useCard={true}
+      >
+        <FinancialReportsView onShowToast={onShowToast} />
+      </StandardPage>
+    </div>
   );
 };
 

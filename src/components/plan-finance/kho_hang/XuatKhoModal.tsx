@@ -11,6 +11,12 @@ import { TrangThaiTonKhoBadge } from "@/components/plan-finance/dung_chung/Trang
 import { genDocCode } from "@/lib/genDocCode";
 import { LichSuXuatKhoOffcanvas } from "./LichSuXuatKhoOffcanvas";
 import { PrintLabelModal } from "@/components/common/PrintLabelModal";
+import { Input } from "@/components/common/Input";
+import { Select } from "@/components/common/Select";
+import { DatePicker } from "@/components/common/DatePicker";
+import { Toggle } from "@/components/common/Toggle";
+import { EmployeeSelect } from "@/components/common/EmployeeSelect";
+import { Button } from "@/components/common/Button";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Warehouse { id: string; code: string | null; name: string; isActive: boolean; }
@@ -20,16 +26,29 @@ interface SaleOrderOption {
   type: "contract" | "sale-order" | "retail-invoice";
   typeLabel: string;
   customer: string | null;
+  customerAddress?: string | null;
   tongTien: number;
   trangThai: string;
+  trangThaiKho?: string | null;
 }
-interface WorkOrderOption { id: string; code: string | null; tenLenhSX?: string | null; }
+interface WorkOrderOption {
+  id: string;
+  code: string | null;
+  tenLenhSX?: string | null;
+  customerName?: string | null;
+  customerAddress?: string | null;
+  itemsDetail?: string | null;
+  status?: string;
+  trangThai?: string;
+  materialTicketStatus?: string | null;
+}
 interface DefectOption {
   id: string;
   code: string;
   productName: string;
   productCode: string;
   customerName?: string | null;
+  customerAddress?: string | null;
   status: string;
   logisticsTickets?: Array<{
     id: string;
@@ -214,7 +233,26 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
     const url = "/api/plan-finance/sales-active" + (initialSoId ? `?includeId=${initialSoId}` : "");
     fetch(url)
       .then(r => r.json())
-      .then(d => setSaleOrders(Array.isArray(d) ? d : []))
+      .then(d => {
+        if (!Array.isArray(d)) {
+          setSaleOrders([]);
+          return;
+        }
+        // Loại bỏ đơn đã hoàn thành, huỷ bỏ, hoặc chưa thực hiện (trừ khi truyền trực tiếp initialSoId)
+        const excludedStatuses = new Set([
+          "completed", "done", "delivered", "exported", "hoan_thanh", "da_giao", "da_xuat_kho",
+          "cancelled", "canceled", "rejected", "huy", "da_huy",
+          "draft", "pending", "pending_approval", "in_production", "chua_thuc_hien", "not_started", "unpaid"
+        ]);
+        const filtered = d.filter((so: SaleOrderOption) => {
+          if (initialSoId && (so.id === initialSoId || so.code === initialSoId)) return true;
+          const st = String(so.trangThai || "").toLowerCase().trim();
+          const tkSt = String(so.trangThaiKho || "").toLowerCase().trim();
+          if (excludedStatuses.has(st) || tkSt === "exported") return false;
+          return true;
+        });
+        setSaleOrders(filtered);
+      })
       .catch(() => setSaleOrders([]))
       .finally(() => setListLoading(false));
   }, [mode, initialSoId]);
@@ -228,7 +266,32 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
       .then(r => r.json())
       .then((d: any[]) => {
         if (Array.isArray(d)) {
-          setWorkOrders(d.map(o => ({ id: o.id, code: o.id, tenLenhSX: o.name })));
+          const excludedWoStatuses = new Set([
+            "completed", "done", "cancelled", "canceled", "rejected", "stopped", "huy", "da_huy",
+            "pending", "draft", "chua_thuc_hien", "not_started"
+          ]);
+          const filtered = d.filter((o: any) => {
+            if (initialWoId && (o.id === initialWoId || o.saleOrderCode === initialWoId)) return true;
+            const st = String(o.status || "").toLowerCase().trim();
+            const soSt = String(o.trangThai || "").toLowerCase().trim();
+            const matTicketSt = String(o.materialTicketStatus || "").toUpperCase().trim();
+            if (excludedWoStatuses.has(st) || excludedWoStatuses.has(soSt)) return false;
+            if (matTicketSt === "COMPLETED" || matTicketSt === "PENDING" || matTicketSt === "CANCELLED") return false;
+            return true;
+          });
+          setWorkOrders(
+            filtered.map(o => ({
+              id: o.id,
+              code: o.id,
+              tenLenhSX: o.name,
+              customerName: o.customerName || null,
+              customerAddress: o.customerAddress || null,
+              itemsDetail: o.itemsDetail || null,
+              status: o.status,
+              trangThai: o.trangThai,
+              materialTicketStatus: o.materialTicketStatus || null,
+            }))
+          );
         } else {
           setWorkOrders([]);
         }
@@ -248,16 +311,22 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
           setDefects([]);
           return;
         }
-        // Lọc các hồ sơ lỗi chưa được xuất kho
+        // Lọc các hồ sơ lỗi: không hiển thị đã hoàn thành, huỷ bỏ, hoặc chưa thực hiện (NEW / PENDING)
         const unexported = data.filter((d: any) => {
           if (initialDefectId && (d.id === initialDefectId || d.code === initialDefectId)) {
             return true;
           }
           const tickets = d.logisticsTickets || [];
           if (tickets.length > 0) {
-            return tickets.some((t: any) => t.status !== "COMPLETED");
+            return tickets.some(
+              (t: any) => !["COMPLETED", "CANCELLED", "CANCELED", "PENDING"].includes(String(t.status || "").toUpperCase())
+            );
           }
-          return !["COMPLETED", "RESOLVED", "CLOSED", "HUY"].includes(d.status);
+          return ![
+            "COMPLETED", "RESOLVED", "RESOLVED_REMOTE", "CLOSED",
+            "HUY", "CANCELLED", "CANCELED", "REJECTED",
+            "NEW", "TECH_EVALUATING", "WAITING_APPROVAL", "PENDING", "CHUA_THUC_HIEN"
+          ].includes(String(d.status || "").toUpperCase());
         });
         setDefects(unexported);
       })
@@ -655,16 +724,17 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
       clearTimeout(searchTimers.current[lineId]);
       return;
     }
-    setLines(ls => ls.map(l => l.id === lineId ? { ...l, itemSearch: q, showSugg: true } : l));
+    setLines(ls => ls.map(l => l.id === lineId ? { ...l, itemSearch: q, item: null, showSugg: true } : l));
     clearTimeout(searchTimers.current[lineId]);
     searchTimers.current[lineId] = setTimeout(async () => {
       try {
         const whParam = fromWarehouseId ? `&warehouseId=${fromWarehouseId}` : "";
-        const res = await fetch(`/api/plan-finance/inventory/search?q=${encodeURIComponent(q)}&limit=8${whParam}`);
-        const data: ItemSuggestion[] = await res.json();
-        setLines(ls => ls.map(l => l.id === lineId ? { ...l, suggestions: Array.isArray(data) ? data : [] } : l));
+        const res = await fetch(`/api/plan-finance/inventory/search?q=${encodeURIComponent(q)}&limit=10${whParam}`);
+        const raw = await res.json();
+        const data: ItemSuggestion[] = Array.isArray(raw) ? raw : (raw?.items || raw?.data || []);
+        setLines(ls => ls.map(l => l.id === lineId ? { ...l, suggestions: data, showSugg: true } : l));
       } catch { /* ignore */ }
-    }, 250);
+    }, 180);
   };
 
   const selectItem = (lineId: string, item: ItemSuggestion) => setLines(ls => ls.map(l =>
@@ -890,16 +960,143 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
 
         /* SPECIFIC MOBILE TWEAKS */
         @media (max-width: 768px) {
-          .xk-sidebar-grid { grid-template-columns: 1fr !important; }
-          .xk-sidebar { max-height: none !important; }
+          .xk-top-bar { padding: 10px 12px !important; gap: 8px !important; }
+          .xk-top-brand { order: 1; flex: 1; min-width: 0 !important; }
+          .xk-top-title { min-width: 0 !important; }
+          .xk-top-actions { display: contents !important; }
+          .xk-top-close { order: 2; margin-left: auto !important; flex-shrink: 0; }
+          .xk-mode-select {
+            order: 3;
+            width: 100% !important;
+            margin-top: 2px !important;
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 4px !important;
+          }
+          .xk-mode-select button {
+            padding: 6px 8px !important;
+            font-size: 12px !important;
+          }
+          .xk-so-select {
+            order: 4;
+            width: 100% !important;
+            margin-top: 2px !important;
+          }
+          .xk-so-select > div,
+          .xk-so-select .form-group,
+          .xk-so-select .select-container,
+          .xk-so-select .form-select,
+          .xk-so-select select {
+            width: 100% !important;
+            min-width: 0 !important;
+          }
+          .xk-selected-badge {
+            display: none !important;
+          }
+
+          .xk-sidebar {
+            max-height: 44vh !important;
+            overflow-y: auto !important;
+          }
+          .xk-sidebar-inner {
+            padding: 10px 12px !important;
+            gap: 10px !important;
+          }
+          .xk-sidebar-header-toggle.is-collapsed {
+            padding-bottom: 0 !important;
+            border-bottom: none !important;
+          }
+          .xk-sidebar-grid { grid-template-columns: 1fr !important; gap: 10px !important; }
           .xk-sidebar-collapsed { display: none !important; }
+
+          .xk-table-wrapper {
+            padding: 12px !important;
+          }
+          .xk-pane-header {
+            gap: 6px !important;
+            margin-bottom: 10px !important;
+          }
+          .xk-table-inner {
+            overflow-x: visible !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+            padding-bottom: 0 !important;
+          }
+          .xk-table-inner > div {
+            min-width: 0 !important;
+            width: 100% !important;
+          }
+          .xk-table-header {
+            display: none !important;
+          }
+          .xk-lines-container {
+            border-top: 1px solid var(--border) !important;
+            border-radius: 8px !important;
+          }
+          .xk-line-row-desktop {
+            display: none !important;
+          }
+          .xk-line-row-mobile {
+            display: flex !important;
+          }
+          .xk-add-line-wrapper {
+            padding-left: 40px !important;
+          }
+
+          .xk-bottom-bar {
+            height: auto !important;
+            padding: 10px 12px !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 8px !important;
+          }
+          .xk-bottom-status {
+            width: 100% !important;
+            justify-content: space-between !important;
+            gap: 8px !important;
+          }
+          .xk-stock-status-pill {
+            padding: 6px 10px !important;
+            font-size: 12px !important;
+            flex: 1;
+            min-width: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          .xk-shortage-toggle {
+            padding: 4px 8px !important;
+            flex-shrink: 0;
+            white-space: nowrap;
+          }
+          .xk-bottom-actions {
+            width: 100% !important;
+            display: flex !important;
+            gap: 6px !important;
+          }
+          .xk-bottom-actions > button {
+            padding: 8px 10px !important;
+            font-size: 12.5px !important;
+            white-space: nowrap !important;
+            justify-content: center !important;
+          }
+          .xk-btn-history {
+            flex: 0 0 auto !important;
+          }
+          .xk-btn-save-print,
+          .xk-btn-save {
+            flex: 1 1 0 !important;
+          }
+          .xk-btn-in-tem { display: none !important; }
         }
       `}</style>
 
       {/* ═══ TOP BAR ══════════════════════════════════════════════════════════ */}
       <div className="xk-top-bar" style={{ flexShrink: 0, minHeight: 64, borderBottom: "1px solid rgba(0,0,0,0.08)", padding: "12px 24px", display: "flex", alignItems: "center", gap: 16, background: "var(--card)" }}>
         {/* Left: Icon & Title */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: "fit-content" }}>
+        <div className="xk-top-brand" style={{ display: "flex", alignItems: "center", gap: 12, minWidth: "fit-content" }}>
           <div style={{ width: 40, height: 40, borderRadius: 12, background: "linear-gradient(135deg, rgba(245,158,11,0.15) 0%, rgba(245,158,11,0.05) 100%)", border: "1px solid rgba(245,158,11,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <i className="bi bi-box-arrow-up" style={{ fontSize: 20, color: "#d97706" }} />
           </div>
@@ -942,51 +1139,40 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
 
           {/* SO/WO select */}
           {mode === "so" && (
-            <div className="xk-so-select position-relative" style={{ display: "flex", alignItems: "center" }}>
+            <div className="xk-so-select" style={{ display: "flex", alignItems: "center", position: "relative" }}>
               {listLoading ? (
                 <div style={{ fontSize: 13, color: "var(--muted-foreground)", padding: "0 10px" }}>
                   <i className="bi bi-arrow-repeat" style={{ animation: "spin 1s linear infinite" }} /> Đang tải…
                 </div>
               ) : (
-                <div className="position-relative">
-                  <select
+                <div style={{ position: "relative", width: 280 }}>
+                  <Select
                     value={selectedSo?.id ?? ""}
                     onChange={e => !locked && onSelectSo(e.target.value)}
+                    disabled={locked}
+                    options={[
+                      { value: "", label: "Chọn đơn bán hàng" },
+                      ...(saleOrders.length === 0
+                        ? [{ value: "__empty__", label: "Không có đơn đang thực hiện", disabled: true }]
+                        : saleOrders.map(so => ({
+                            value: so.id,
+                            label: so.code ?? so.id,
+                            description:
+                              [so.customer, so.customerAddress].filter(Boolean).join(" — ") ||
+                              so.typeLabel ||
+                              undefined,
+                          }))),
+                    ]}
                     style={{
-                      height: 38, padding: "0 36px 0 16px",
-                      border: `1px solid ${selectedSo ? "rgba(245,158,11,0.4)" : "var(--border)"}`,
-                      borderRadius: 10,
-                      background: selectedSo ? "rgba(245,158,11,0.05)" : "var(--background)",
-                      color: selectedSo ? "#d97706" : "var(--foreground)",
-                      fontSize: 13, fontWeight: selectedSo ? 600 : 400,
-                      outline: "none", cursor: locked ? "not-allowed" : "pointer",
-                      width: 280, transition: "all 0.2s",
-                      appearance: "none", textOverflow: "ellipsis"
+                      width: "100%",
+                      borderColor: selectedSo ? "rgba(245,158,11,0.4)" : undefined,
+                      backgroundColor: selectedSo ? "rgba(245,158,11,0.05)" : undefined,
+                      color: selectedSo ? "#d97706" : undefined,
+                      fontWeight: selectedSo ? 600 : 500,
                     }}
-                  >
-                    <option value="">Chọn đơn bán hàng</option>
-                    {saleOrders.length === 0 && <option disabled value="">Không có đơn đang thực hiện</option>}
-                    {/* Group by type */}
-                    {(["contract", "sale-order", "retail-invoice"] as const).map(type => {
-                      const group = saleOrders.filter(s => s.type === type);
-                      if (!group.length) return null;
-                      const groupLabel = group[0].typeLabel;
-                      return (
-                        <optgroup key={type} label={`— ${groupLabel} —`}>
-                          {group.map(so => (
-                            <option key={so.id} value={so.id}>
-                              {so.code ?? so.id}
-                              {so.customer ? ` — ${so.customer}` : ""}
-                              {so.tongTien ? ` (${so.tongTien.toLocaleString("vi-VN")}₫)` : ""}
-                            </option>
-                          ))}
-                        </optgroup>
-                      );
-                    })}
-                  </select>
-                  <i className="bi bi-chevron-down position-absolute" style={{ right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 12, pointerEvents: "none", color: selectedSo ? "#d97706" : "var(--muted-foreground)" }} />
+                  />
                   {selectedSo && (
-                    <span className="position-absolute" style={{ top: -10, right: -10, fontSize: 10, color: "#fff", fontWeight: 600, background: "#10b981", borderRadius: 20, padding: "2px 8px", boxShadow: "0 2px 4px rgba(16, 185, 129, 0.3)", zIndex: 10 }}>
+                    <span className="xk-selected-badge" style={{ position: "absolute", top: -9, right: -8, fontSize: 10, color: "#fff", fontWeight: 600, background: "#10b981", borderRadius: 20, padding: "2px 8px", boxShadow: "0 2px 4px rgba(16, 185, 129, 0.3)", zIndex: 10 }}>
                       <i className="bi bi-check" style={{ marginRight: 2 }} />Đã chọn
                     </span>
                   )}
@@ -996,32 +1182,35 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
           )}
 
           {mode === "wo" && (
-            <div className="xk-so-select position-relative" style={{ display: "flex", alignItems: "center" }}>
-              <div className="position-relative">
-                <select
+            <div className="xk-so-select" style={{ display: "flex", alignItems: "center", position: "relative" }}>
+              <div style={{ position: "relative", width: 320 }}>
+                <Select
                   value={selectedWo?.id ?? ""}
                   onChange={e => !locked && onSelectWo(e.target.value)}
+                  disabled={locked}
+                  options={[
+                    { value: "", label: "Chọn lệnh sản xuất" },
+                    ...(workOrders.length === 0
+                      ? [{ value: "__empty__", label: "Chưa có lệnh sản xuất đang thực hiện", disabled: true }]
+                      : workOrders.map(wo => ({
+                          value: wo.id,
+                          label: wo.code ?? wo.id,
+                          description:
+                            [wo.customerName, wo.customerAddress].filter(Boolean).join(" — ") ||
+                            [wo.tenLenhSX, wo.itemsDetail].filter(Boolean).join(" • ") ||
+                            undefined,
+                        }))),
+                  ]}
                   style={{
-                    height: 38, padding: "0 36px 0 16px",
-                    border: `1px solid ${selectedWo ? "rgba(99,102,241,0.4)" : "var(--border)"}`,
-                    borderRadius: 10,
-                    background: selectedWo ? "rgba(99,102,241,0.05)" : "var(--background)",
-                    color: selectedWo ? "#6366f1" : "var(--foreground)",
-                    fontSize: 13, fontWeight: selectedWo ? 600 : 400,
-                    outline: "none", cursor: locked ? "not-allowed" : "pointer",
-                    width: 320, transition: "all 0.2s",
-                    appearance: "none", textOverflow: "ellipsis"
+                    width: "100%",
+                    borderColor: selectedWo ? "rgba(99,102,241,0.4)" : undefined,
+                    backgroundColor: selectedWo ? "rgba(99,102,241,0.05)" : undefined,
+                    color: selectedWo ? "#6366f1" : undefined,
+                    fontWeight: selectedWo ? 600 : 500,
                   }}
-                >
-                  <option value="">Chọn lệnh sản xuất</option>
-                  {workOrders.length === 0 && <option disabled value="">Chưa có lệnh sản xuất</option>}
-                  {workOrders.map(wo => (
-                    <option key={wo.id} value={wo.id}>{wo.code ?? wo.id}</option>
-                  ))}
-                </select>
-                <i className="bi bi-chevron-down position-absolute" style={{ right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 12, pointerEvents: "none", color: selectedWo ? "#6366f1" : "var(--muted-foreground)" }} />
+                />
                 {selectedWo && (
-                  <span className="position-absolute" style={{ top: -10, right: -10, fontSize: 10, color: "#fff", fontWeight: 600, background: "#10b981", borderRadius: 20, padding: "2px 8px", boxShadow: "0 2px 4px rgba(16, 185, 129, 0.3)", zIndex: 10 }}>
+                  <span className="xk-selected-badge" style={{ position: "absolute", top: -9, right: -8, fontSize: 10, color: "#fff", fontWeight: 600, background: "#10b981", borderRadius: 20, padding: "2px 8px", boxShadow: "0 2px 4px rgba(16, 185, 129, 0.3)", zIndex: 10 }}>
                     <i className="bi bi-check" style={{ marginRight: 2 }} />Đã chọn
                   </span>
                 )}
@@ -1030,39 +1219,40 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
           )}
 
           {mode === "defect" && (
-            <div className="xk-so-select position-relative" style={{ display: "flex", alignItems: "center" }}>
+            <div className="xk-so-select" style={{ display: "flex", alignItems: "center", position: "relative" }}>
               {listLoading ? (
                 <div style={{ fontSize: 13, color: "var(--muted-foreground)", padding: "0 10px" }}>
                   <i className="bi bi-arrow-repeat" style={{ animation: "spin 1s linear infinite" }} /> Đang tải…
                 </div>
               ) : (
-                <div className="position-relative">
-                  <select
+                <div style={{ position: "relative", width: 260 }}>
+                  <Select
                     value={selectedDefect?.id ?? ""}
                     onChange={e => !locked && onSelectDefect(e.target.value)}
+                    disabled={locked}
+                    options={[
+                      { value: "", label: "Chọn hồ sơ lỗi" },
+                      ...(defects.length === 0
+                        ? [{ value: "__empty__", label: "Không có hồ sơ lỗi đang thực hiện", disabled: true }]
+                        : defects.map(d => ({
+                            value: d.id,
+                            label: d.code ?? d.id,
+                            description:
+                              [d.customerName, d.customerAddress].filter(Boolean).join(" — ") ||
+                              d.productName ||
+                              undefined,
+                          }))),
+                    ]}
                     style={{
-                      height: 38, padding: "0 36px 0 16px",
-                      border: `1px solid ${selectedDefect ? "rgba(239,68,68,0.4)" : "var(--border)"}`,
-                      borderRadius: 10,
-                      background: selectedDefect ? "rgba(239,68,68,0.05)" : "var(--background)",
-                      color: selectedDefect ? "#dc2626" : "var(--foreground)",
-                      fontSize: 13, fontWeight: selectedDefect ? 600 : 400,
-                      outline: "none", cursor: locked ? "not-allowed" : "pointer",
-                      width: 260, transition: "all 0.2s",
-                      appearance: "none", textOverflow: "ellipsis"
+                      width: "100%",
+                      borderColor: selectedDefect ? "rgba(239,68,68,0.4)" : undefined,
+                      backgroundColor: selectedDefect ? "rgba(239,68,68,0.05)" : undefined,
+                      color: selectedDefect ? "#dc2626" : undefined,
+                      fontWeight: selectedDefect ? 600 : 500,
                     }}
-                  >
-                    <option value="">Chọn hồ sơ lỗi</option>
-                    {defects.length === 0 && <option disabled value="">Không có hồ sơ lỗi</option>}
-                    {defects.map(d => (
-                      <option key={d.id} value={d.id}>
-                        {d.code ?? d.id}
-                      </option>
-                    ))}
-                  </select>
-                  <i className="bi bi-chevron-down position-absolute" style={{ right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 12, pointerEvents: "none", color: selectedDefect ? "#dc2626" : "var(--muted-foreground)" }} />
+                  />
                   {selectedDefect && (
-                    <span className="position-absolute" style={{ top: -10, right: -10, fontSize: 10, color: "#fff", fontWeight: 600, background: "#10b981", borderRadius: 20, padding: "2px 8px", boxShadow: "0 2px 4px rgba(16, 185, 129, 0.3)", zIndex: 10 }}>
+                    <span className="xk-selected-badge" style={{ position: "absolute", top: -9, right: -8, fontSize: 10, color: "#fff", fontWeight: 600, background: "#10b981", borderRadius: 20, padding: "2px 8px", boxShadow: "0 2px 4px rgba(16, 185, 129, 0.3)", zIndex: 10 }}>
                       <i className="bi bi-check" style={{ marginRight: 2 }} />Đã chọn
                     </span>
                   )}
@@ -1086,12 +1276,12 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
       <div className="xk-body" style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
         {/* ── SIDEBAR TRÁI ────────────────────────────────────────────────── */}
-        <div className="xk-sidebar" style={{ width: 272, flexShrink: 0, borderRight: "1px solid var(--border)", background: "var(--card)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <div style={{ padding: "16px 14px", display: "flex", flexDirection: "column", gap: 14, flex: 1, minHeight: 0 }}>
+        <div className="xk-sidebar" style={{ width: 272, flexShrink: 0, borderRight: "1px solid var(--border)", background: "var(--card)", display: "flex", flexDirection: "column", overflowY: "auto", overflowX: "hidden" }}>
+          <div className="xk-sidebar-inner" style={{ padding: "16px 14px", display: "flex", flexDirection: "column", gap: 12, flex: 1, minHeight: 0 }}>
 
             {/* Header nhóm (Clickable on mobile) */}
             <div
-              className="xk-sidebar-header-toggle"
+              className={`xk-sidebar-header-toggle ${!isSidebarOpen ? 'is-collapsed' : ''}`}
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               style={{ display: "flex", alignItems: "center", gap: 7, paddingBottom: 10, borderBottom: "1px solid var(--border)", cursor: "pointer", justifyContent: "space-between" }}
             >
@@ -1104,90 +1294,131 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
               <i className={`bi bi-chevron-${isSidebarOpen ? 'up' : 'down'} d-md-none`} style={{ fontSize: 14, color: "var(--muted-foreground)" }} />
             </div>
 
-            <div className={`xk-sidebar-content ${!isSidebarOpen ? 'xk-sidebar-collapsed' : ''}`} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <div className="xk-sidebar-grid" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                {/* Số phiếu — readOnly monospace */}
-                <div>
-                  <label style={CSS.label}>Số phiếu xuất</label>
-                  <input value={soChungTu} readOnly style={{ ...CSS.input, background: "var(--muted)", color: "var(--muted-foreground)", cursor: "default", fontFamily: "monospace", fontSize: 12 }} />
-                </div>
+            <div className={`xk-sidebar-content ${!isSidebarOpen ? 'xk-sidebar-collapsed' : ''}`} style={{ display: "flex", flexDirection: "column", gap: 12, flex: 1, minHeight: 0 }}>
+              <div className="xk-sidebar-grid" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {/* Số phiếu — Input chuẩn */}
+                <Input
+                  label="Số phiếu xuất"
+                  value={soChungTu}
+                  readOnly
+                  disabled
+                  style={{
+                    backgroundColor: "var(--muted)",
+                    color: "var(--muted-foreground)",
+                    cursor: "default",
+                    fontFamily: "monospace",
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                  }}
+                />
 
-                {/* Thời gian */}
-                <div>
-                  <label style={CSS.label}>Thời gian</label>
+                {/* Thời gian — DatePicker + Toggle chuẩn */}
+                <div className="form-group">
+                  <label className="form-label">Thời gian</label>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <input
-                      type="date"
+                    <DatePicker
                       value={ngayXuat}
                       min={lockDate ? new Date().toISOString().slice(0, 10) : undefined}
                       max={lockDate ? new Date().toISOString().slice(0, 10) : undefined}
-                      onChange={e => !lockDate && !locked && setNgayXuat(e.target.value)}
-                      readOnly={lockDate || locked}
-                      style={{ ...CSS.input, flex: 1, cursor: (lockDate || locked) ? "not-allowed" : "text", opacity: (lockDate || locked) ? 0.7 : 1, background: (lockDate || locked) ? "var(--muted)" : CSS.input.background }}
+                      onChange={val => !lockDate && !locked && setNgayXuat(val)}
+                      disabled={lockDate || locked}
+                      clearable={false}
+                      className="flex-1"
                     />
-                    {/* iOS-style toggle */}
                     {!locked && (
-                      <span onClick={() => setLockDate(v => !v)} title={lockDate ? "Khoá ngày hôm nay — nhấn để mở" : "Đang mở — nhấn để khoá"}
-                        style={{ position: "relative", display: "inline-block", width: 34, height: 18, borderRadius: 9, flexShrink: 0, background: lockDate ? "#f59e0b" : "var(--border)", transition: "background 0.2s", cursor: "pointer" }}>
-                        <span style={{ position: "absolute", top: 2, left: lockDate ? 18 : 2, width: 14, height: 14, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.25)", transition: "left 0.2s" }} />
-                      </span>
+                      <div
+                        style={{ flexShrink: 0 }}
+                        title={lockDate ? "Khoá ngày hôm nay — nhấn để mở" : "Đang mở — nhấn để khoá"}
+                      >
+                        <Toggle checked={lockDate} onChange={setLockDate} />
+                      </div>
                     )}
                   </div>
                 </div>
 
-                {/* Loại xuất kho */}
-                <div>
-                  <label style={CSS.label}>Loại xuất kho</label>
-                  <div style={{ position: "relative" }}>
-                    <select value={loaiXuatKho} onChange={e => !locked && setLoaiXuatKho(e.target.value)} disabled={locked}
-                      style={{ ...CSS.input, appearance: "none", opacity: locked ? 0.65 : 1, cursor: locked ? "not-allowed" : "pointer" }}>
-                      <option value="Xuất bán hàng">Xuất bán hàng</option>
-                      <option value="Xuất sản xuất">Xuất sản xuất</option>
-                      <option value="Cấp phát linh kiện thay thế">Cấp phát linh kiện thay thế</option>
-                      <option value="Xuất vật tư bảo hành">Xuất vật tư bảo hành</option>
-                      <option value="Xuất trả nhà cung cấp">Xuất trả nhà cung cấp</option>
-                      <option value="Xuất huỷ/hao hụt">Xuất huỷ / hao hụt</option>
-                      <option value="Khác">Khác</option>
-                    </select>
-                    <i className="bi bi-chevron-down position-absolute" style={{ right: 12, top: "50%", transform: "translateY(-50%)", fontSize: 12, pointerEvents: "none", color: "var(--muted-foreground)" }} />
-                  </div>
-                </div>
+                {/* Loại xuất kho — Select chuẩn */}
+                <Select
+                  label="Loại xuất kho"
+                  value={loaiXuatKho}
+                  onChange={e => !locked && setLoaiXuatKho(e.target.value)}
+                  disabled={locked}
+                >
+                  <option value="Xuất bán hàng">Xuất bán hàng</option>
+                  <option value="Xuất sản xuất">Xuất sản xuất</option>
+                  <option value="Cấp phát linh kiện thay thế">Cấp phát linh kiện thay thế</option>
+                  <option value="Xuất vật tư bảo hành">Xuất vật tư bảo hành</option>
+                  <option value="Xuất trả nhà cung cấp">Xuất trả nhà cung cấp</option>
+                  <option value="Xuất huỷ/hao hụt">Xuất huỷ / hao hụt</option>
+                  <option value="Khác">Khác</option>
+                </Select>
 
-                {/* Kho xuất */}
-                <div>
-                  <label style={CSS.label}>Kho xuất <span style={{ color: "#f43f5e" }}>*</span></label>
-                  <div style={{ position: "relative" }}>
-                    <select value={fromWarehouseId} onChange={e => !locked && setFromWarehouseId(e.target.value)} disabled={locked}
-                      style={{ ...CSS.input, appearance: "none", borderColor: fromWarehouseId ? "rgba(245,158,11,0.5)" : "var(--border)", opacity: locked ? 0.65 : 1, cursor: locked ? "not-allowed" : "pointer" }}>
-                      <option value="">Chọn kho</option>
-                      {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                    </select>
-                    <i className="bi bi-chevron-down position-absolute" style={{ right: 12, top: "50%", transform: "translateY(-50%)", fontSize: 12, pointerEvents: "none", color: "var(--muted-foreground)" }} />
-                  </div>
-                </div>
+                {/* Kho xuất — Select chuẩn */}
+                <Select
+                  label="Kho xuất"
+                  required
+                  value={fromWarehouseId}
+                  onChange={e => !locked && setFromWarehouseId(e.target.value)}
+                  disabled={locked}
+                >
+                  <option value="">Chọn kho</option>
+                  {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </Select>
 
-                {/* Người thực hiện */}
-                <div>
-                  <label style={CSS.label}>Người thực hiện</label>
-                  <input value={nguoiThucHien} onChange={e => !locked && setNguoiThucHien(e.target.value)} readOnly={locked}
-                    placeholder="Tên người xuất kho"
-                    style={{ ...CSS.input, opacity: locked ? 0.65 : 1, cursor: locked ? "default" : "text" }} />
-                </div>
+                {/* Người thực hiện — EmployeeSelect chuẩn (chỉ nhân sự Kho vận) */}
+                <EmployeeSelect
+                  label="Người thực hiện"
+                  multiple={false}
+                  departmentFilter="Kho vận"
+                  value={nguoiThucHien}
+                  onChange={(val) => !locked && setNguoiThucHien(val)}
+                  disabled={locked}
+                  placeholder="Chọn người xuất kho..."
+                  searchPlaceholder="Tìm tên nhân viên kho vận..."
+                  hidePositionBadge={true}
+                  inputStyle={{ height: 38, borderRadius: "var(--radius-md)" }}
+                />
               </div>
 
-              {/* Lý do — textarea */}
-              <div className="xk-sidebar-full-row">
-                <label style={CSS.label}>Lý do xuất kho</label>
-                <textarea value={lyDo} onChange={e => !locked && setLyDo(e.target.value)} readOnly={locked} rows={2}
-                  style={{ ...CSS.input, resize: locked ? "none" : "vertical", lineHeight: 1.5, opacity: locked ? 0.65 : 1, cursor: locked ? "default" : "text" }} />
+              {/* Lý do — textarea chuẩn */}
+              <div className="form-group xk-sidebar-full-row">
+                <label className="form-label">Lý do xuất kho</label>
+                <textarea
+                  className="form-input"
+                  value={lyDo}
+                  onChange={e => !locked && setLyDo(e.target.value)}
+                  readOnly={locked}
+                  rows={2}
+                  style={{
+                    height: "auto",
+                    padding: "8px 12px",
+                    resize: locked ? "none" : "vertical",
+                    lineHeight: 1.5,
+                    opacity: locked ? 0.65 : 1,
+                    cursor: locked ? "default" : "text",
+                  }}
+                />
               </div>
 
               {/* Ghi chú — chiếm hết không gian còn lại */}
-              <div className="xk-sidebar-full-row" style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
-                <label style={CSS.label}>Ghi chú</label>
-                <textarea value={ghiChu} onChange={e => !locked && setGhiChu(e.target.value)} readOnly={locked}
+              <div className="form-group xk-sidebar-full-row" style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 76 }}>
+                <label className="form-label">Ghi chú</label>
+                <textarea
+                  className="form-input"
+                  value={ghiChu}
+                  onChange={e => !locked && setGhiChu(e.target.value)}
+                  readOnly={locked}
                   placeholder="Ghi chú thêm..."
-                  style={{ ...CSS.input, flex: 1, resize: "none", lineHeight: 1.5, opacity: locked ? 0.65 : 1, cursor: locked ? "default" : "text" }} />
+                  style={{
+                    flex: 1,
+                    height: "auto",
+                    minHeight: 64,
+                    padding: "8px 12px",
+                    resize: "none",
+                    lineHeight: 1.5,
+                    opacity: locked ? 0.65 : 1,
+                    cursor: locked ? "default" : "text",
+                  }}
+                />
               </div>
 
               {/* Cảnh báo thiếu tồn */}
@@ -1266,7 +1497,7 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
 
           <div className="xk-table-inner">
             {/* Table header — 2 dòng */}
-            <div style={{ background: "var(--muted)", borderRadius: "8px 8px 0 0", overflow: "hidden" }}>
+            <div className="xk-table-header" style={{ background: "var(--muted)", borderRadius: "8px 8px 0 0", overflow: "hidden" }}>
               {/* Dòng 1 — group labels */}
               <div style={{ display: "grid", gridTemplateColumns: "28px 1fr 60px 160px 180px 110px 110px 32px", gap: 5, padding: "6px 10px 0", fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 <div>#</div>
@@ -1291,7 +1522,7 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
             </div>
 
             {/* Lines */}
-            <div style={{ border: "1px solid var(--border)", borderTop: "none", borderRadius: "0 0 8px 8px" }}>
+            <div className="xk-lines-container" style={{ border: "1px solid var(--border)", borderTop: "none", borderRadius: "0 0 8px 8px" }}>
               {lines.map((line, idx) => (
                 <LineRow key={line.id} line={line} idx={idx}
                   onItemSearch={q => onItemSearch(line.id, q)}
@@ -1302,7 +1533,7 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
                   locked={locked}
                 />
               ))}
-              <div style={{ padding: "8px 10px", borderTop: "1px dashed var(--border)" }}>
+              <div className="xk-add-line-wrapper" style={{ padding: "8px 10px", borderTop: "1px dashed var(--border)" }}>
                 {!locked ? (
                   <button onClick={addLine}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = "#f59e0b"; e.currentTarget.style.color = "#f59e0b"; }}
@@ -1323,7 +1554,7 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
       </div>
 
       {/* ═══ BOTTOM STATUS BAR ═════════════════════════════════════════════════════════════ */}
-      <div style={{ flexShrink: 0, height: 60, borderTop: "1px solid var(--border)", background: "var(--card)", padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div className="xk-bottom-bar" style={{ flexShrink: 0, height: 60, borderTop: "1px solid var(--border)", background: "var(--card)", padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         {/* Status */}
         {(() => {
           const totalItemsCount = validLines.length;
@@ -1357,27 +1588,19 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
           }
 
           return (
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 8, background: stockStatusBg, color: stockStatusColor, fontSize: 13.5, fontWeight: 700 }}>
+            <div className="xk-bottom-status" style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div className="xk-stock-status-pill" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 8, background: stockStatusBg, color: stockStatusColor, fontSize: 13.5, fontWeight: 700 }}>
                 <i className={`bi ${stockStatusIcon}`} style={{ fontSize: 16 }} />
                 {stockStatusLabel}
               </div>
 
               {missingItemsCount > 0 && totalItemsCount > 0 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 10px", background: "rgba(245, 158, 11, 0.05)", border: "1px dashed rgba(245, 158, 11, 0.3)", borderRadius: 8 }}>
-                  <div className="form-check form-switch m-0" style={{ minHeight: "auto", display: "flex", alignItems: "center" }}>
-                    <input
-                      className="form-check-input m-0"
-                      type="checkbox"
-                      id="allowExportShortage"
-                      checked={allowExportShortage}
-                      onChange={(e) => setAllowExportShortage(e.target.checked)}
-                      style={{ cursor: "pointer", width: 32, height: 18 }}
-                    />
-                  </div>
-                  <label htmlFor="allowExportShortage" style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 600, color: "var(--muted-foreground)", userSelect: "none", margin: 0 }}>
-                    Xuất thiếu hàng
-                  </label>
+                <div className="xk-shortage-toggle" style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 10px", background: "rgba(245, 158, 11, 0.05)", border: "1px dashed rgba(245, 158, 11, 0.3)", borderRadius: 8 }}>
+                  <Toggle
+                    checked={allowExportShortage}
+                    onChange={setAllowExportShortage}
+                    label="Xuất thiếu hàng"
+                  />
                 </div>
               )}
             </div>
@@ -1385,10 +1608,15 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
         })()}
 
         {/* Actions */}
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button onClick={() => setShowLichSu(true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 18px", borderWidth: "1.5px", borderStyle: "solid", borderColor: "var(--border)", background: "var(--muted)", color: "var(--foreground)", fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: "pointer" }}>
-            <i className="bi bi-clock-history" style={{ fontSize: 14 }} /> Lịch sử
-          </button>
+        <div className="xk-bottom-actions" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <Button
+            variant="secondary"
+            className="xk-btn-history"
+            onClick={() => setShowLichSu(true)}
+            leftIcon={<i className="bi bi-clock-history" style={{ fontSize: 14 }} />}
+          >
+            Lịch sử
+          </Button>
 
           {(() => {
             const isCapPhatVatTu =
@@ -1399,8 +1627,9 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
               loaiXuatKho === "Xuất vật tư bảo hành";
             const printDisabled = isCapPhatVatTu || !canPrint;
             return (
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                className="xk-btn-in-tem !hidden md:!inline-flex"
                 disabled={printDisabled}
                 onClick={() => {
                   if (!printDisabled) setShowPrintLabelModal(true);
@@ -1412,33 +1641,31 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
                     ? "Đã khoá khi cấp phát vật tư — chỉ mở khi xuất thành phẩm"
                     : "In tem sản phẩm"
                 }
+                leftIcon={<i className="bi bi-qr-code" style={{ fontSize: 14 }} />}
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "8px 18px",
-                  borderWidth: "1.5px",
-                  borderStyle: "solid",
                   borderColor: printDisabled ? "var(--border)" : "#2563eb",
                   background: printDisabled ? "var(--muted)" : "rgba(37, 99, 235, 0.08)",
                   color: printDisabled ? "var(--muted-foreground)" : "#2563eb",
-                  fontSize: 13,
-                  fontWeight: 700,
-                  borderRadius: 8,
-                  cursor: printDisabled ? "not-allowed" : "pointer",
-                  opacity: printDisabled ? 0.6 : 1,
-                  transition: "all 0.15s",
                 }}
               >
-                <i className="bi bi-qr-code" style={{ fontSize: 14 }} /> In tem
-              </button>
+                In tem
+              </Button>
             );
           })()}
 
           {success && (
-            <button onClick={() => setShowPreview(true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 18px", borderWidth: "1.5px", borderStyle: "solid", borderColor: "#f59e0b", background: "rgba(245,158,11,0.1)", color: "#f59e0b", fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: "pointer" }}>
-              <i className="bi bi-printer" style={{ fontSize: 14 }} /> In phiếu xuất kho
-            </button>
+            <Button
+              variant="outline"
+              onClick={() => setShowPreview(true)}
+              leftIcon={<i className="bi bi-printer" style={{ fontSize: 14 }} />}
+              style={{
+                borderColor: "#f59e0b",
+                background: "rgba(245,158,11,0.1)",
+                color: "#f59e0b",
+              }}
+            >
+              In phiếu xuất kho
+            </Button>
           )}
 
           {!success && (() => {
@@ -1460,34 +1687,38 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
               : undefined;
             return (
               <>
-                <button onClick={() => handleSave(true)} disabled={!canSave} title={buttonTitle} style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  padding: "8px 18px", border: "1.5px solid #f59e0b", borderRadius: 8,
-                  background: canSave ? "rgba(245,158,11,0.1)" : "var(--muted)",
-                  color: canSave ? "#f59e0b" : "var(--muted-foreground)",
-                  fontSize: 13, fontWeight: 700,
-                  cursor: canSave ? "pointer" : "not-allowed",
-                  opacity: canSave ? 1 : 0.6, transition: "all 0.15s",
-                }}>
-                  {saving && saveWithPrint
-                    ? <i className="bi bi-arrow-repeat" style={{ animation: "spin 1s linear infinite", fontSize: 14 }} />
-                    : <i className="bi bi-printer" style={{ fontSize: 14 }} />}
+                <Button
+                  variant="outline"
+                  className="xk-btn-save-print"
+                  onClick={() => handleSave(true)}
+                  disabled={!canSave}
+                  isLoading={saving && saveWithPrint}
+                  title={buttonTitle}
+                  leftIcon={<i className="bi bi-printer" style={{ fontSize: 14 }} />}
+                  style={{
+                    borderColor: "#f59e0b",
+                    background: canSave ? "rgba(245,158,11,0.1)" : "var(--muted)",
+                    color: canSave ? "#f59e0b" : "var(--muted-foreground)",
+                  }}
+                >
                   Xác nhận & In phiếu
-                </button>
-                <button onClick={() => handleSave(false)} disabled={!canSave} title={buttonTitle} style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  padding: "8px 24px", border: "none", borderRadius: 8,
-                  background: canSave ? "#f59e0b" : "var(--muted)",
-                  color: canSave ? "#fff" : "var(--muted-foreground)",
-                  fontSize: 13, fontWeight: 700,
-                  cursor: canSave ? "pointer" : "not-allowed",
-                  opacity: canSave ? 1 : 0.6, transition: "all 0.15s",
-                }}>
-                  {saving && !saveWithPrint
-                    ? <i className="bi bi-arrow-repeat" style={{ animation: "spin 1s linear infinite", fontSize: 14 }} />
-                    : <i className="bi bi-check2-all" style={{ fontSize: 14 }} />}
+                </Button>
+                <Button
+                  variant="primary"
+                  className="xk-btn-save"
+                  onClick={() => handleSave(false)}
+                  disabled={!canSave}
+                  isLoading={saving && !saveWithPrint}
+                  title={buttonTitle}
+                  leftIcon={<i className="bi bi-check2-all" style={{ fontSize: 14 }} />}
+                  style={{
+                    background: canSave ? "#f59e0b" : "var(--muted)",
+                    color: canSave ? "#fff" : "var(--muted-foreground)",
+                    borderColor: canSave ? "#f59e0b" : "var(--border)",
+                  }}
+                >
                   Xác nhận
-                </button>
+                </Button>
               </>
             );
           })()}
@@ -1582,105 +1813,248 @@ function LineRow({ line, idx, onItemSearch, onSelectItem, onUpdate, onRemove, ca
   locked?: boolean;
 }) {
   const cellInput: React.CSSProperties = {
-    width: "100%", padding: "6px 8px", borderWidth: 1, borderStyle: "solid", borderColor: "var(--border)",
-    borderRadius: 6, fontSize: 12.5, background: locked ? "var(--muted)" : "var(--background)",
+    width: "100%", height: 32, padding: "0 8px", fontSize: 12.5,
+    background: locked ? "var(--muted)" : "var(--background)",
     color: locked ? "var(--muted-foreground)" : "var(--foreground)",
-    outline: "none", boxSizing: "border-box", cursor: locked ? "default" : "text",
+    cursor: locked ? "default" : "text",
   };
-  const thanhTien = line.soLuong * line.donGia;
   const hasError = !!line.error;
   const isNotFound = line.itemSearch.trim() !== "" && !line.item;
   const isInsufficient = isNotFound || (line.item && line.soLuong > (line.soLuongTon ?? 0));
   const missingLabel = isNotFound ? "Không tìm thấy trong kho" : `Thiếu ${(line.soLuong - (line.soLuongTon ?? 0)).toLocaleString("vi-VN")}`;
 
   return (
-    <div style={{
-      display: "grid", gridTemplateColumns: GRID,
-      gap: 5, padding: "7px 10px",
-      borderTop: idx === 0 ? "none" : "1px solid var(--border)",
-      alignItems: "center",
-      background: hasError ? "rgba(244,63,94,0.04)" : line.item ? "var(--background)" : `color-mix(in srgb, var(--muted) 20%, var(--background))`,
-    }}>
-      <div style={{ textAlign: "center", fontSize: 11.5, color: "var(--muted-foreground)", fontWeight: 600 }}>{idx + 1}</div>
+    <>
+      <div className="xk-line-row-desktop" style={{
+        display: "grid", gridTemplateColumns: GRID,
+        gap: 5, padding: "7px 10px",
+        borderTop: idx === 0 ? "none" : "1px solid var(--border)",
+        alignItems: "center",
+        background: hasError ? "rgba(244,63,94,0.04)" : line.item ? "var(--background)" : `color-mix(in srgb, var(--muted) 20%, var(--background))`,
+      }}>
+        <div style={{ textAlign: "center", fontSize: 11.5, color: "var(--muted-foreground)", fontWeight: 600 }}>{idx + 1}</div>
 
-      {/* Item search */}
-      <div style={{ position: "relative" }}>
-        <input
-          value={line.itemSearch}
-          onChange={e => !locked && onItemSearch(e.target.value)}
-          onFocus={() => { if (line.itemSearch && !locked) onUpdate("showSugg", true); }}
+        {/* Item search */}
+        <div style={{ position: "relative" }}>
+          <Input
+            value={line.itemSearch}
+            onChange={e => !locked && onItemSearch(e.target.value)}
+            onFocus={() => {
+              if (!locked && line.itemSearch.trim()) {
+                onUpdate("showSugg", true);
+                if (line.suggestions.length === 0) onItemSearch(line.itemSearch);
+              }
+            }}
+            onBlur={() => setTimeout(() => onUpdate("showSugg", false), 180)}
+            readOnly={locked}
+            placeholder="Tìm hoặc nhập tên hàng..."
+            style={{
+              ...cellInput, paddingRight: isInsufficient ? 26 : 8,
+              borderColor: hasError ? "rgba(244,63,94,0.5)" : isInsufficient ? "rgba(244,63,94,0.4)" : "var(--border)",
+            }}
+          />
+          {isInsufficient && !hasError && (
+            <i className="bi bi-exclamation-circle-fill" title={missingLabel} style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#f43f5e", pointerEvents: "auto", cursor: "help" }} />
+          )}
+          {hasError && <p style={{ margin: "1px 0 0", fontSize: 10.5, color: "#f43f5e" }}>{line.error}</p>}
+          {line.showSugg && line.suggestions.length > 0 && (
+            <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, zIndex: 200, background: "var(--card)", borderWidth: 1, borderStyle: "solid", borderColor: "var(--border)", borderRadius: 7, boxShadow: "0 4px 14px rgba(0,0,0,0.12)", maxHeight: 220, overflowY: "auto" }}>
+              {line.suggestions.map(s => (
+                <div key={s.id}
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={() => onSelectItem(s)}
+                  style={{ padding: "7px 11px", cursor: "pointer", borderBottom: "1px solid var(--border)", transition: "background 0.1s" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "var(--muted)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                  <div style={{ fontWeight: 600, fontSize: 12.5 }}>{s.tenHang}</div>
+                  <div style={{ fontSize: 11, color: "var(--muted-foreground)" }}>
+                    {[s.code, s.donVi].filter(Boolean).join(" · ")}
+                    {s.soLuongTon !== undefined && (
+                      <span style={{ marginLeft: 8, fontWeight: 700, color: s.soLuongTon > 0 ? "#10b981" : "#f43f5e" }}>
+                        Tồn: {s.soLuongTon}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ textAlign: "center", fontSize: 12, color: "var(--muted-foreground)", fontWeight: 600 }}>{line.item?.donVi ?? "—"}</div>
+
+        {/* SL yêu cầu */}
+        <Input
+          type="number"
+          min={0}
+          hideZero={false}
+          numberGroup={false}
+          value={line.soLuongYC}
+          onChange={e => !locked && onUpdate("soLuongYC", Math.max(0, parseFloat(e.target.value) || 0))}
           readOnly={locked}
-          placeholder="Tìm hoặc nhập tên hàng..."
+          title="Số lượng yêu cầu"
+          style={{ ...cellInput, textAlign: "center", background: locked ? "var(--muted)" : "color-mix(in srgb, var(--muted) 60%, var(--background))", color: "var(--muted-foreground)" }}
+        />
+
+        {/* SL thực xuất */}
+        <Input
+          type="number"
+          min={0}
+          hideZero={false}
+          numberGroup={false}
+          value={line.soLuong}
+          onChange={e => !locked && onUpdate("soLuong", Math.max(0, parseFloat(e.target.value) || 0))}
+          readOnly={locked}
+          title="Số lượng thực tế xuất kho"
           style={{
-            ...cellInput, paddingRight: isInsufficient ? 26 : 8,
-            borderColor: hasError ? "rgba(244,63,94,0.5)" : isInsufficient ? "rgba(244,63,94,0.4)" : "var(--border)",
+            ...cellInput, textAlign: "center",
+            borderColor: hasError ? "rgba(244,63,94,0.5)" : (!locked && line.soLuong !== line.soLuongYC ? "#f59e0b" : "var(--border)"),
+            fontWeight: !locked && line.soLuong !== line.soLuongYC ? 700 : 400,
+            color: hasError ? "#f43f5e" : locked ? "var(--muted-foreground)" : line.soLuong !== line.soLuongYC ? "#f59e0b" : "var(--foreground)",
           }}
         />
-        {isInsufficient && !hasError && (
-          <i className="bi bi-exclamation-circle-fill" title={missingLabel} style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#f43f5e", pointerEvents: "auto", cursor: "help" }} />
-        )}
-        {hasError && <p style={{ margin: "1px 0 0", fontSize: 10.5, color: "#f43f5e" }}>{line.error}</p>}
-        {line.showSugg && line.suggestions.length > 0 && (
-          <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, zIndex: 200, background: "var(--card)", borderWidth: 1, borderStyle: "solid", borderColor: "var(--border)", borderRadius: 7, boxShadow: "0 4px 14px rgba(0,0,0,0.12)", maxHeight: 180, overflowY: "auto" }}>
-            {line.suggestions.map(s => (
-              <div key={s.id} onClick={() => onSelectItem(s)}
-                style={{ padding: "7px 11px", cursor: "pointer", borderBottom: "1px solid var(--border)", transition: "background 0.1s" }}
-                onMouseEnter={e => (e.currentTarget.style.background = "var(--muted)")}
-                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                <div style={{ fontWeight: 600, fontSize: 12.5 }}>{s.tenHang}</div>
-                <div style={{ fontSize: 11, color: "var(--muted-foreground)" }}>
-                  {s.code ?? ""} · {s.donVi ?? ""} · {s.giaNhap > 0 ? s.giaNhap.toLocaleString("vi-VN") + " ₫" : "—"}
-                  {s.soLuongTon !== undefined && (
-                    <span style={{ marginLeft: 8, fontWeight: 700, color: s.soLuongTon > 0 ? "#10b981" : "#f43f5e" }}>
-                      Tồn: {s.soLuongTon}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
+
+        {/* Vị trí */}
+        <Input placeholder="Hàng" value={line.viTriHang} onChange={e => !locked && onUpdate("viTriHang", e.target.value)} readOnly={locked} style={{ ...cellInput, textAlign: "center" }} title="Hàng" />
+        <Input placeholder="Cột" value={line.viTriCot} onChange={e => !locked && onUpdate("viTriCot", e.target.value)} readOnly={locked} style={{ ...cellInput, textAlign: "center" }} title="Cột" />
+        <Input placeholder="Tầng" value={line.viTriTang} onChange={e => !locked && onUpdate("viTriTang", e.target.value)} readOnly={locked} style={{ ...cellInput, textAlign: "center" }} title="Tầng" />
+
+        {/* Đơn giá */}
+        <Input value="***" readOnly title="Bảo mật giá" style={{ ...cellInput, textAlign: "right", background: "var(--muted)", color: "var(--muted-foreground)", cursor: "not-allowed" }} />
+
+        {/* Thành tiền */}
+        <div style={{ textAlign: "right", fontSize: 12.5, fontWeight: 700, color: "var(--muted-foreground)" }}>
+          ***
+        </div>
+
+        {/* Remove */}
+        <button onClick={onRemove} disabled={!canRemove || locked}
+          onMouseEnter={e => { if (canRemove && !locked) e.currentTarget.style.background = "rgba(244,63,94,0.1)"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+          style={{ width: 26, height: 26, border: "none", background: "transparent", color: (canRemove && !locked) ? "#f43f5e" : "var(--border)", cursor: (canRemove && !locked) ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, transition: "background 0.15s" }}>
+          <i className="bi bi-trash3" style={{ fontSize: 12 }} />
+        </button>
+      </div>
+
+      {/* Mobile card layout (<= 768px only) */}
+      <div className="xk-line-row-mobile" style={{
+        display: "none", flexDirection: "column", gap: 8, padding: "10px",
+        borderTop: idx === 0 ? "none" : "1px solid var(--border)",
+        background: hasError ? "rgba(244,63,94,0.04)" : line.item ? "var(--background)" : `color-mix(in srgb, var(--muted) 20%, var(--background))`,
+      }}>
+        {/* Row 1: # + Item search + Remove */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{
+            width: 24, height: 24, borderRadius: 6, background: "var(--muted)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", flexShrink: 0
+          }}>
+            {idx + 1}
           </div>
-        )}
+
+          <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
+            <Input
+              value={line.itemSearch}
+              onChange={e => !locked && onItemSearch(e.target.value)}
+              onFocus={() => {
+                if (!locked && line.itemSearch.trim()) {
+                  onUpdate("showSugg", true);
+                  if (line.suggestions.length === 0) onItemSearch(line.itemSearch);
+                }
+              }}
+              onBlur={() => setTimeout(() => onUpdate("showSugg", false), 180)}
+              readOnly={locked}
+              placeholder="Tìm hoặc nhập tên hàng..."
+              style={{
+                ...cellInput, paddingRight: isInsufficient ? 26 : 8,
+                borderColor: hasError ? "rgba(244,63,94,0.5)" : isInsufficient ? "rgba(244,63,94,0.4)" : "var(--border)",
+              }}
+            />
+            {isInsufficient && !hasError && (
+              <i className="bi bi-exclamation-circle-fill" title={missingLabel} style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#f43f5e", pointerEvents: "auto", cursor: "help" }} />
+            )}
+            {line.showSugg && line.suggestions.length > 0 && (
+              <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, zIndex: 200, background: "var(--card)", borderWidth: 1, borderStyle: "solid", borderColor: "var(--border)", borderRadius: 7, boxShadow: "0 4px 14px rgba(0,0,0,0.12)", maxHeight: 220, overflowY: "auto" }}>
+                {line.suggestions.map(s => (
+                  <div key={s.id}
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => onSelectItem(s)}
+                    style={{ padding: "7px 11px", cursor: "pointer", borderBottom: "1px solid var(--border)", transition: "background 0.1s" }}>
+                    <div style={{ fontWeight: 600, fontSize: 12.5 }}>{s.tenHang}</div>
+                    <div style={{ fontSize: 11, color: "var(--muted-foreground)" }}>
+                      {[s.code, s.donVi].filter(Boolean).join(" · ")}
+                      {s.soLuongTon !== undefined && (
+                        <span style={{ marginLeft: 8, fontWeight: 700, color: s.soLuongTon > 0 ? "#10b981" : "#f43f5e" }}>
+                          Tồn: {s.soLuongTon}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button onClick={onRemove} disabled={!canRemove || locked}
+            style={{ width: 28, height: 28, border: "none", background: "transparent", color: (canRemove && !locked) ? "#f43f5e" : "var(--border)", cursor: (canRemove && !locked) ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, flexShrink: 0 }}>
+            <i className="bi bi-trash3" style={{ fontSize: 13 }} />
+          </button>
+        </div>
+        {hasError && <p style={{ margin: "-2px 0 0", paddingLeft: 30, fontSize: 10.5, color: "#f43f5e" }}>{line.error}</p>}
+
+        {/* Row 2: ĐVT + SL yêu cầu + SL thực xuất (căn thẳng lề trái theo ô nhập tên hàng hoá) */}
+        <div style={{ display: "grid", gridTemplateColumns: "72px 1fr 1fr", gap: 8, paddingLeft: 30 }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", marginBottom: 3 }}>ĐVT</div>
+            <Input
+              value={line.item?.donVi ?? "—"}
+              readOnly
+              title="Đơn vị tính"
+              style={{
+                ...cellInput,
+                textAlign: "center",
+                background: "var(--muted)",
+                color: "var(--muted-foreground)",
+                fontWeight: 600,
+                cursor: "default",
+              }}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", marginBottom: 3 }}>SL Yêu cầu</div>
+            <Input
+              type="number"
+              min={0}
+              hideZero={false}
+              numberGroup={false}
+              value={line.soLuongYC}
+              onChange={e => !locked && onUpdate("soLuongYC", Math.max(0, parseFloat(e.target.value) || 0))}
+              readOnly={locked}
+              title="Số lượng yêu cầu"
+              style={{ ...cellInput, textAlign: "center", background: locked ? "var(--muted)" : "color-mix(in srgb, var(--muted) 60%, var(--background))", color: "var(--muted-foreground)" }}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", marginBottom: 3 }}>SL Thực xuất</div>
+            <Input
+              type="number"
+              min={0}
+              hideZero={false}
+              numberGroup={false}
+              value={line.soLuong}
+              onChange={e => !locked && onUpdate("soLuong", Math.max(0, parseFloat(e.target.value) || 0))}
+              readOnly={locked}
+              title="Số lượng thực tế xuất kho"
+              style={{
+                ...cellInput, textAlign: "center",
+                borderColor: hasError ? "rgba(244,63,94,0.5)" : (!locked && line.soLuong !== line.soLuongYC ? "#f59e0b" : "var(--border)"),
+                fontWeight: !locked && line.soLuong !== line.soLuongYC ? 700 : 400,
+                color: hasError ? "#f43f5e" : locked ? "var(--muted-foreground)" : line.soLuong !== line.soLuongYC ? "#f59e0b" : "var(--foreground)",
+              }}
+            />
+          </div>
+        </div>
       </div>
-
-      <div style={{ textAlign: "center", fontSize: 12, color: "var(--muted-foreground)", fontWeight: 600 }}>{line.item?.donVi ?? "—"}</div>
-
-      {/* SL yêu cầu */}
-      <input type="number" min={0} value={line.soLuongYC}
-        onChange={e => !locked && onUpdate("soLuongYC", Math.max(0, parseFloat(e.target.value) || 0))}
-        readOnly={locked} title="Số lượng yêu cầu"
-        style={{ ...cellInput, textAlign: "center", background: locked ? "var(--muted)" : "color-mix(in srgb, var(--muted) 60%, var(--background))", color: "var(--muted-foreground)" }} />
-
-      {/* SL thực xuất */}
-      <input type="number" min={0} value={line.soLuong}
-        onChange={e => !locked && onUpdate("soLuong", Math.max(0, parseFloat(e.target.value) || 0))}
-        readOnly={locked} title="Số lượng thực tế xuất kho"
-        style={{
-          ...cellInput, textAlign: "center",
-          borderColor: hasError ? "rgba(244,63,94,0.5)" : (!locked && line.soLuong !== line.soLuongYC ? "#f59e0b" : "var(--border)"),
-          fontWeight: !locked && line.soLuong !== line.soLuongYC ? 700 : 400,
-          color: hasError ? "#f43f5e" : locked ? "var(--muted-foreground)" : line.soLuong !== line.soLuongYC ? "#f59e0b" : "var(--foreground)",
-        }} />
-
-      {/* Vị trí */}
-      <input placeholder="Hàng" value={line.viTriHang} onChange={e => !locked && onUpdate("viTriHang", e.target.value)} readOnly={locked} style={{ ...cellInput, textAlign: "center" }} title="Hàng" />
-      <input placeholder="Cột" value={line.viTriCot} onChange={e => !locked && onUpdate("viTriCot", e.target.value)} readOnly={locked} style={{ ...cellInput, textAlign: "center" }} title="Cột" />
-      <input placeholder="Tầng" value={line.viTriTang} onChange={e => !locked && onUpdate("viTriTang", e.target.value)} readOnly={locked} style={{ ...cellInput, textAlign: "center" }} title="Tầng" />
-
-      {/* Đơn giá */}
-      <input value="***" readOnly title="Bảo mật giá" style={{ ...cellInput, textAlign: "right", background: "var(--muted)", color: "var(--muted-foreground)", cursor: "not-allowed" }} />
-
-      {/* Thành tiền */}
-      <div style={{ textAlign: "right", fontSize: 12.5, fontWeight: 700, color: "var(--muted-foreground)" }}>
-        ***
-      </div>
-
-      {/* Remove */}
-      <button onClick={onRemove} disabled={!canRemove || locked}
-        onMouseEnter={e => { if (canRemove && !locked) e.currentTarget.style.background = "rgba(244,63,94,0.1)"; }}
-        onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
-        style={{ width: 26, height: 26, border: "none", background: "transparent", color: (canRemove && !locked) ? "#f43f5e" : "var(--border)", cursor: (canRemove && !locked) ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, transition: "background 0.15s" }}>
-        <i className="bi bi-trash3" style={{ fontSize: 12 }} />
-      </button>
-    </div>
+    </>
   );
 }

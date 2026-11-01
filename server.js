@@ -4332,297 +4332,13 @@ app.get('/api/sales/dashboard', async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 app.get('/api/bom/overview-stats', async (req, res) => {
   try {
-    const period = req.query.period || 'month'; // 'month' | 'quarter' | 'year'
-    const currentYear = parseInt(req.query.year, 10) || 2026;
-    const currentMonth = 10; // Tháng 10/2026
-
-    // 1. Tải Kế hoạch năm từ DB (SalesYearlyPlan)
-    const yearlyPlan = await prisma.salesYearlyPlan.findFirst({
-      where: { year: currentYear },
-    });
-
-    let monthlyTargetsMap = {};
-    for (let m = 1; m <= 12; m++) {
-      monthlyTargetsMap[m] = 1000000000; // 1 Tỷ mặc định
-    }
-
-    if (yearlyPlan && yearlyPlan.monthlyTargets) {
-      try {
-        const parsed = JSON.parse(yearlyPlan.monthlyTargets);
-        for (let m = 1; m <= 12; m++) {
-          if (parsed[m]?.revenueRows) {
-            const mTotal = parsed[m].revenueRows.reduce((s, r) => s + (Number(r.value) || 0), 0);
-            if (mTotal > 0) monthlyTargetsMap[m] = mTotal;
-          }
-        }
-      } catch (e) {}
-    }
-
-    // 2. Tải Dữ liệu thực tế từ Đơn hàng (SaleOrder), Báo giá (Quotation)
-    const dbOrders = await prisma.saleOrder.findMany({
-      include: { customer: true },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const quotations = await prisma.quotation.findMany({
-      where: { trangThai: 'approved' },
-    });
-
-    // 3. Xây dựng biểu đồ 12 tháng Doanh số & Doanh thu
-    const monthlyChartData = Array.from({ length: 12 }, (_, i) => {
-      const monthNum = i + 1;
-      const isPastOrCurrent = monthNum <= currentMonth;
-      const isCurrent = monthNum === currentMonth;
-
-      // Kế hoạch (VND)
-      const targetVnd = monthlyTargetsMap[monthNum] || 1000000000;
-      const planSalesTy = Number((targetVnd / 1000000000).toFixed(2));
-      const planRevTy = Number((targetVnd / 1000000000).toFixed(2));
-
-      // Lọc đơn hàng trong tháng
-      const monthOrders = dbOrders.filter((o) => {
-        const d = new Date(o.ngayDat || o.createdAt);
-        return d.getMonth() + 1 === monthNum;
-      });
-      const orderSalesVnd = monthOrders.reduce((s, o) => s + (o.tongTien || 0), 0);
-
-      // Báo giá duyệt trong tháng (nếu có)
-      const monthQuotes = quotations.filter((q) => {
-        const d = new Date(q.ngayBaoGia || q.createdAt);
-        return d.getMonth() + 1 === monthNum;
-      });
-      const quotesVnd = monthQuotes.reduce((s, q) => s + (q.thanhTien || 0), 0);
-
-      // Tính Thực tế Doanh số & Doanh thu
-      let actualSalesTy = null;
-      let actualRevTy = null;
-      let seajongTy = null;
-      let oemTy = null;
-      const targetUnits = Math.round(targetVnd / 13500000); // Đơn giá trung bình ~13.5tr/sản phẩm
-      let actualUnits = null;
-
-      if (isPastOrCurrent) {
-        // Tỷ lệ thực hiện tự nhiên dựa trên DB:
-        const achievementFactors = [0.91, 0.95, 0.94, 0.92, 0.96, 0.90, 0.93, 1.56, 0.92, 0.91];
-        const factor = achievementFactors[monthNum - 1] || 0.91;
-        
-        let calculatedSalesVnd = Math.round(targetVnd * factor);
-        if (monthNum === 8 && quotesVnd > 0) {
-          calculatedSalesVnd = Math.max(calculatedSalesVnd, quotesVnd);
-        } else if (orderSalesVnd > 0) {
-          calculatedSalesVnd = Math.max(orderSalesVnd, Math.round(targetVnd * factor));
-        }
-
-        const calculatedRevVnd = Math.round(calculatedSalesVnd * 0.92);
-
-        actualSalesTy = Number((calculatedSalesVnd / 1000000000).toFixed(2));
-        actualRevTy = Number((calculatedRevVnd / 1000000000).toFixed(2));
-        actualUnits = Math.round(calculatedSalesVnd / 13500000);
-
-        // Phân bổ 2 cột: Seajong và OEM
-        const oemFactors = [0.42, 0.10, 0.65, 0.50, 0.35, 0.18, 0.52, 0.60, 0.88, 0.82];
-        seajongTy = actualRevTy;
-        oemTy = Number((oemFactors[monthNum - 1] || 0.80).toFixed(2));
-      }
-
-      return {
-        month: `T${monthNum}`,
-        monthFull: `Tháng ${String(monthNum).padStart(2, '0')}`,
-        plan: planSalesTy,
-        actual: actualRevTy, // Backwards compatible: actual is Doanh thu thực tế
-        planSales: planSalesTy,
-        actualSales: actualSalesTy,
-        planRevenue: planRevTy,
-        actualRevenue: actualRevTy,
-        seajong: seajongTy,
-        oem: oemTy,
-        targetUnits,
-        units: actualUnits,
-        isCurrent,
-      };
-    });
-
-    // 4. Tính toán số liệu thực tế từ CSDL theo kỳ (periodData: 'month' | 'quarter' | 'year')
-    const [salesStats, allDebts, cashAccounts] = await Promise.all([
-      computeSalesOverviewStats(prisma, period, currentMonth),
-      prisma.debt.findMany(),
-      prisma.accountingAccount.findMany({ where: { code: { in: ['1111', '1121'] } } }),
-    ]);
-
-    const cashAccountIds = cashAccounts.map((a) => a.id);
-    const cashJournalLines = await prisma.journalLine.findMany({
-      where: { accountId: { in: cashAccountIds }, type: 'CREDIT' },
-      include: { journalEntry: true },
-    });
-
-    const isMonthMatch = (dtVal) => {
-      const d = new Date(dtVal);
-      if (isNaN(d.getTime())) return false;
-      const m = d.getMonth() + 1;
-      if (period === 'month') return m === currentMonth;
-      if (period === 'quarter') return [8, 9, 10].includes(m);
-      return true;
-    };
-
-    const realOutflowVnd = cashJournalLines.reduce((sum, l) => {
-      const ed = l.journalEntry?.entryDate || l.journalEntry?.createdAt;
-      return isMonthMatch(ed) ? sum + (Number(l.amount) || 0) : sum;
-    }, 0);
-
-    let recInvoiced = 0,
-      recPaid = 0,
-      recTotalInvoiced = 0,
-      recTotalPaid = 0;
-    let payInvoiced = 0,
-      payPaid = 0,
-      payTotalInvoiced = 0,
-      payTotalPaid = 0;
-
-    allDebts.forEach((d) => {
-      const amt = Number(d.amount) || 0;
-      const paid = Number(d.paidAmount) || 0;
-      const dt = d.createdAt || d.dueDate;
-      if (d.type === 'RECEIVABLE' || d.type === 'phai-thu') {
-        recTotalInvoiced += amt;
-        recTotalPaid += paid;
-        if (isMonthMatch(dt)) {
-          recInvoiced += amt;
-          recPaid += paid;
-        }
-      } else if (d.type === 'PAYABLE' || d.type === 'phai-tra') {
-        payTotalInvoiced += amt;
-        payTotalPaid += paid;
-        if (isMonthMatch(dt)) {
-          payInvoiced += amt;
-          payPaid += paid;
-        }
-      }
-    });
-
-    const realRecVnd =
-      period === 'year'
-        ? Math.max(0, recTotalInvoiced - recTotalPaid)
-        : Math.max(0, recInvoiced - recPaid);
-    const realPayVnd =
-      period === 'year'
-        ? Math.max(0, payTotalInvoiced - payTotalPaid)
-        : Math.max(0, payInvoiced - payPaid);
-
-    const actualSales = Number(salesStats?.kpi?.signed?.totalValueBillion ?? 1.36);
-    const targetSales = Math.max(Number(salesStats?.kpi?.signed?.targetBillion ?? 1.55), 0.25);
-    const salesRate = targetSales > 0 ? Math.min(100, (actualSales / targetSales) * 100).toFixed(1) : '100.0';
-
-    const actualRev = Number(salesStats?.kpi?.revenue?.totalValueBillion ?? 1.58);
-    const targetRev = Math.max(Number(salesStats?.kpi?.revenue?.targetBillion ?? 1.32), 0.21);
-    const revRate = targetRev > 0 ? Math.min(100, (actualRev / targetRev) * 100).toFixed(1) : '100.0';
-
-    const targetUnits = Math.max(10, Math.round((targetSales * 1e9) / 13500000));
-    const actualUnits = Math.max(10, Math.round((actualSales * 1e9) / 13500000));
-    const unitsRate = targetUnits > 0 ? Math.min(100, (actualUnits / targetUnits) * 100).toFixed(1) : '100.0';
-
-    const targetRecovery = Number((targetRev * 0.92).toFixed(2));
-    const actualRecovery = actualRev;
-    const recoveryRate = targetRecovery > 0 ? Math.min(100, (actualRecovery / targetRecovery) * 100).toFixed(1) : '100.0';
-
-    const costActual = Number((realOutflowVnd / 1e9).toFixed(2));
-    const costTarget = Number(Math.max(costActual * 1.15, 0.55).toFixed(2));
-    const costRate = costTarget > 0 ? ((costActual / costTarget) * 100).toFixed(1) : '85.0';
-    const costRatioPct = actualRev > 0 ? `${((costActual / actualRev) * 100).toFixed(1)}%` : '29.6%';
-
-    const receivableTotal = Number((realRecVnd / 1e9).toFixed(2));
-    const receivableOverdue = 0.0;
-    const receivableDue = receivableTotal;
-
-    const payableTotal = Number((realPayVnd / 1e9).toFixed(2));
-    const payableDue = payableTotal;
-
-    const periodOrdersCount = Number(salesStats?.kpi?.signed?.count) || dbOrders.length;
-
-    const periodData = {
-      // 4 Thẻ KPI Chuẩn Mới (100% từ CSDL thực tế):
-      revenue: {
-        target: targetRev,
-        actual: actualRev,
-        rate: revRate,
-      },
-      cost: {
-        target: costTarget,
-        actual: costActual,
-        rate: costRate,
-        ratio: costRatioPct,
-      },
-      receivable: {
-        total: receivableTotal,
-        due: receivableDue,
-        overdue: receivableOverdue,
-        safeRate: '100%',
-      },
-      payable: {
-        total: payableTotal,
-        due: payableDue,
-        overdue: 0.0,
-        onTimeRate: '100%',
-      },
-      // Thuộc tính tương thích:
-      targetSales,
-      actualSales,
-      salesRate,
-      targetRev,
-      actualRev,
-      revRate,
-      targetUnits,
-      actualUnits,
-      unitsRate,
-      targetRecovery,
-      actualRecovery,
-      recoveryRate,
-      contracts: `${periodOrdersCount} đơn hàng`,
-      winRate: '86.5%',
-      otdrRate: '98.5',
-      otdrStatus: 'Đạt chuẩn cam kết',
-      firstPassYield: '99.4% KCS',
-      penaltyAmount: '0 đồng',
-      grossMargin: '34.5%',
-      overdueDebt: '0 đồng',
-    };
-
-    // 5. Danh mục sản phẩm (Seajong Categories)
-    const productSegments = [
-      { id: 'seg-1', name: 'Sen cây phím đàn hiển thị số', share: 38, growth: '+18.4%', revenue: '4.56 tỷ', color: '#0284c7' },
-      { id: 'seg-2', name: 'Sen tắm nhiệt độ cao cấp', share: 26, growth: '+12.1%', revenue: '3.12 tỷ', color: '#10b981' },
-      { id: 'seg-3', name: 'Vòi chậu lavabo nóng lạnh', share: 20, growth: '+9.5%', revenue: '2.40 tỷ', color: '#f59e0b' },
-      { id: 'seg-4', name: 'Bồn cầu thông minh & Bồn tắm', share: 16, growth: '+15.0%', revenue: '1.92 tỷ', color: '#8b5cf6' },
-    ];
-
-    // 6. 12 MonthlyPlanItems cho BusinessPlanView và ExecutiveAnalyticsEngine
-    const quarters = ['Q1', 'Q1', 'Q1', 'Q2', 'Q2', 'Q2', 'Q3', 'Q3', 'Q3', 'Q4', 'Q4', 'Q4'];
-    const totalPlanVnd = Object.values(monthlyTargetsMap).reduce((s, v) => s + v, 0);
-    const plans = monthlyChartData.map((m, idx) => {
-      const monthNum = idx + 1;
-      const vnd = monthlyTargetsMap[monthNum] || 1000000000;
-      const share = totalPlanVnd > 0 ? Number(((vnd / totalPlanVnd) * 100).toFixed(1)) : 8.3;
-      return {
-        month: m.monthFull,
-        monthNum,
-        quarter: quarters[idx],
-        revenue: m.planRevenue,
-        revenueDong: vnd,
-        share,
-        units: m.targetUnits,
-        recoveryTarget: Number((m.planRevenue * 0.92).toFixed(2)),
-        recoveryDong: Math.round(vnd * 0.92),
-        keyFocus: monthNum === 10 ? 'Đẩy mạnh bộ sưu tập sen cây phím đàn mùa cao điểm quý 4' : monthNum === 12 ? 'Quyết toán công nợ và tất toán hợp đồng năm' : 'Phát triển mạng lưới đại lý và showroom',
-        majorProjects: '',
-      };
-    });
-
-    res.json({
-      success: true,
-      periodData,
-      monthlyChartData,
-      productSegments,
-      plans,
-    });
+    const now = new Date();
+    const period = String(req.query.period || 'month'); // 'month' | 'quarter' | 'year'
+    const currentYear = parseInt(String(req.query.year || now.getFullYear()), 10) || now.getFullYear();
+    const currentMonth = parseInt(String(req.query.month || (now.getMonth() + 1)), 10) || (now.getMonth() + 1);
+    const freshMod = await import(`./server/salesOverviewHelper.js?t=${Date.now()}`);
+    const data = await freshMod.computeBomOverviewStats(prisma, period, currentYear, currentMonth);
+    res.json(data);
   } catch (err) {
     console.error('Lỗi API /api/bom/overview-stats:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -5253,8 +4969,69 @@ function buildAppendixConstructionTasks(recordId, contractCode, customerName, cu
 app.get('/api/user-tasks', async (req, res) => {
   try {
     const allTasks = [];
+    const seenIds = new Set();
 
-    // Chỉ lấy các hồ sơ đại lý đã ký hợp đồng trong quy trình Phát triển đại lý (MarketingLead)
+    // 1. Lấy các công việc khởi tạo trực tiếp trong bảng Task
+    try {
+      const dbTasks = await prisma.task.findMany({
+        orderBy: { createdAt: 'desc' },
+      });
+      for (const row of dbTasks) {
+        let parsed = null;
+        if (row.actualResult) {
+          try {
+            const obj = JSON.parse(row.actualResult);
+            if (obj && typeof obj === 'object' && obj.title) {
+              parsed = obj;
+            }
+          } catch (_e) {}
+        }
+        const taskItem = parsed
+          ? {
+              ...parsed,
+              id: parsed.id || row.id,
+              title: parsed.title || row.title,
+              description: parsed.description ?? row.description ?? '',
+              status: parsed.status || row.status || 'not_started',
+              priority: parsed.priority || row.priority || 'medium',
+              assignee: parsed.assignee || row.assigneeId || 'Chưa phân công',
+              assigner: parsed.assigner || row.creatorId || 'Ban Giám đốc',
+              department: parsed.department || row.deptCode || 'Phòng Kinh doanh',
+            }
+          : {
+              id: row.id,
+              code: `CV-2026-${String(row.id).slice(-3).toUpperCase()}`,
+              title: row.title,
+              project: 'Công việc nội bộ',
+              contractCode: '',
+              customerName: 'Nội bộ công ty',
+              customerAddress: '',
+              assignee: row.assigneeId || 'Chưa phân công',
+              assigner: row.creatorId || 'Ban Giám đốc',
+              department: row.deptCode || 'Phòng Kinh doanh',
+              priority: row.priority || 'medium',
+              priorityLabel:
+                row.priority === 'urgent'
+                  ? 'Khẩn cấp'
+                  : row.priority === 'high'
+                    ? 'Ưu tiên cao'
+                    : row.priority === 'low'
+                      ? 'Thấp'
+                      : 'Trung bình',
+              startDate: row.createdAt ? row.createdAt.toISOString().slice(0, 10) : '2026-10-04',
+              endDate: row.dueDate ? row.dueDate.toISOString().slice(0, 10) : '2026-10-10',
+              progress: row.status === 'completed' ? 100 : 0,
+              status: row.status || 'not_started',
+              statusLabel: row.status === 'completed' ? 'Đã hoàn thành' : 'Chưa thực hiện',
+              description: row.description || '',
+              category: 'production',
+            };
+        seenIds.add(String(taskItem.id));
+        allTasks.push(taskItem);
+      }
+    } catch (_dbErr) {}
+
+    // 2. Lấy các hồ sơ đại lý trong quy trình Phát triển đại lý (MarketingLead)
     const leads = await prisma.marketingLead.findMany({
       orderBy: { updatedAt: 'desc' },
     });
@@ -5267,10 +5044,9 @@ app.get('/api/user-tasks', async (req, res) => {
         fv = {};
       }
 
-      const contractCode = (fv.contractNo || fv.hdCode || '').trim();
-      if (!contractCode) continue;
       if (fv.constructionTasksDeleted) continue;
 
+      const contractCode = (fv.contractNo || fv.hdCode || '').trim();
       const customerName = fv.companyName || lead.fullName || 'Đại lý Seajong';
       const customerAddress = fv.address || fv.area || 'Chưa cập nhật địa chỉ';
       const executor = fv.executor || 'Nguyên Văn Thành';
@@ -5280,7 +5056,19 @@ app.get('/api/user-tasks', async (req, res) => {
           (fv.plPdf && String(fv.plPdf).trim() !== '')
       );
 
-      if (!hasAppendix) {
+      if (!contractCode || !hasAppendix) {
+        if (Array.isArray(fv.constructionTasks)) {
+          for (const ct of fv.constructionTasks) {
+            if (ct && !ct.isContractOnly && !seenIds.has(String(ct.id))) {
+              seenIds.add(String(ct.id));
+              allTasks.push({
+                ...ct,
+                code: ct.code || `CV-2026-${String(ct.id).slice(-3)}`,
+              });
+            }
+          }
+        }
+        if (!contractCode) continue;
         allTasks.push({
           id: `contract-only-${lead.id}`,
           code: '',
@@ -5330,10 +5118,11 @@ app.get('/api/user-tasks', async (req, res) => {
             .filter((t) => !standardIds.has(String(t.id)) && !t.isContractOnly)
             .map((t) => ({
               ...t,
-              contractCode,
-              project: customerName,
-              customerName,
-              customerAddress,
+              code: t.code || `CV-2026-${String(t.id).slice(-3)}`,
+              contractCode: t.contractCode !== undefined ? t.contractCode : contractCode,
+              project: t.project || customerName,
+              customerName: t.customerName || customerName,
+              customerAddress: t.customerAddress || customerAddress,
             }))
         : [];
 
@@ -5350,7 +5139,12 @@ app.get('/api/user-tasks', async (req, res) => {
         });
       }
 
-      allTasks.push(...mergedTasks);
+      for (const mt of mergedTasks) {
+        if (!seenIds.has(String(mt.id))) {
+          seenIds.add(String(mt.id));
+          allTasks.push(mt);
+        }
+      }
     }
 
     // Bộ lọc query tùy chọn
@@ -5379,68 +5173,79 @@ app.get('/api/user-tasks', async (req, res) => {
 app.post('/api/user-tasks', async (req, res) => {
   try {
     const body = req.body || {};
+    const taskId = body.id || `utask-${Date.now()}`;
+    const priorityVal = body.priority || 'medium';
+    const priorityLabelVal =
+      body.priorityLabel ||
+      (priorityVal === 'urgent'
+        ? 'Khẩn cấp'
+        : priorityVal === 'high'
+          ? 'Ưu tiên cao'
+          : priorityVal === 'low'
+            ? 'Thấp'
+            : 'Trung bình');
     const newTask = {
-      id: `utask-${Date.now()}`,
+      id: taskId,
+      code: body.code || `CV-2026-${String(Date.now()).slice(-3)}`,
       title: body.title || 'Công việc mới',
       project: body.project || body.customerName || 'Dự án thi công trưng bày',
-      contractCode: body.contractCode || 'HD-SEAJONG',
-      customerName: body.customerName || body.project || 'Đại lý Seajong',
-      customerAddress: body.customerAddress || 'Chưa cập nhật địa chỉ',
+      contractCode: body.contractCode !== undefined ? String(body.contractCode).trim() : '',
+      customerName: body.customerName || body.project || 'Nội bộ công ty',
+      customerAddress: body.customerAddress || 'Công ty Cổ phần Seajong Việt Nam',
       assignee: body.assignee || 'Chưa phân công',
       assigner: body.assigner || 'Ban Giám đốc',
       department: body.department || 'Phòng Kinh doanh',
-      priority: body.priority || 'Trung bình',
-      startDate: body.startDate || '2026-10-29',
-      endDate: body.endDate || '2026-10-31',
+      priority: priorityVal,
+      priorityLabel: priorityLabelVal,
+      startDate: body.startDate || '2026-10-04',
+      endDate: body.endDate || '2026-10-10',
       progress: Number(body.progress) || 0,
       status: body.status || 'not_started',
       statusLabel: body.statusLabel || 'Chưa thực hiện',
       description: body.description || '',
-      category: 'production',
+      category: body.category || 'production',
+      categoryLabel: body.categoryLabel || 'Sản xuất',
     };
 
-    // Tìm hồ sơ hợp đồng tương ứng trong MarketingLead hoặc Customer để gắn vào
+    // Lưu trực tiếp vào bảng Task để luôn đảm bảo tồn tại độc lập
+    await prisma.task.create({
+      data: {
+        id: newTask.id,
+        title: newTask.title,
+        description: newTask.description || '',
+        status: newTask.status,
+        priority: newTask.priority,
+        assigneeId: newTask.assignee,
+        creatorId: newTask.assigner,
+        deptCode: newTask.department,
+        actualResult: JSON.stringify(newTask),
+      },
+    });
+
+    // Nếu có mã hợp đồng trùng với MarketingLead thì gắn thêm vào hồ sơ hợp đồng đó
     const targetCode = (newTask.contractCode || '').trim().toUpperCase();
-    const leads = await prisma.marketingLead.findMany({ orderBy: { updatedAt: 'desc' } });
-    let saved = false;
-
-    for (const lead of leads) {
-      let fv = {};
-      try {
-        fv = lead.formValues ? JSON.parse(lead.formValues) : {};
-      } catch (_e) {
-        fv = {};
+    if (targetCode) {
+      const leads = await prisma.marketingLead.findMany({ orderBy: { updatedAt: 'desc' } });
+      for (const lead of leads) {
+        let fv = {};
+        try {
+          fv = lead.formValues ? JSON.parse(lead.formValues) : {};
+        } catch (_e) {
+          fv = {};
+        }
+        const cCode = (fv.contractNo || fv.hdCode || fv.quoteCode || `HD-${lead.code}`).trim().toUpperCase();
+        if (cCode === targetCode || (targetCode.includes(cCode) && cCode.length > 3)) {
+          const list = Array.isArray(fv.constructionTasks) ? fv.constructionTasks : [];
+          list.push(newTask);
+          fv.constructionTasks = list;
+          delete fv.constructionTasksDeleted;
+          await prisma.marketingLead.update({
+            where: { id: lead.id },
+            data: { formValues: JSON.stringify(fv) },
+          });
+          break;
+        }
       }
-      const cCode = (fv.contractNo || fv.hdCode || fv.quoteCode || `HD-${lead.code}`).trim().toUpperCase();
-      if (cCode === targetCode || (targetCode.includes(cCode) && cCode.length > 3)) {
-        const list = Array.isArray(fv.constructionTasks) ? fv.constructionTasks : [];
-        list.push(newTask);
-        fv.constructionTasks = list;
-        delete fv.constructionTasksDeleted;
-        await prisma.marketingLead.update({
-          where: { id: lead.id },
-          data: { formValues: JSON.stringify(fv) },
-        });
-        saved = true;
-        break;
-      }
-    }
-
-    if (!saved && leads.length > 0) {
-      const lead = leads[0];
-      let fv = {};
-      try {
-        fv = lead.formValues ? JSON.parse(lead.formValues) : {};
-      } catch (_e) {
-        fv = {};
-      }
-      const list = Array.isArray(fv.constructionTasks) ? fv.constructionTasks : [];
-      list.push(newTask);
-      fv.constructionTasks = list;
-      await prisma.marketingLead.update({
-        where: { id: lead.id },
-        data: { formValues: JSON.stringify(fv) },
-      });
     }
 
     res.status(201).json(newTask);
@@ -5455,7 +5260,39 @@ app.put('/api/user-tasks/:id', async (req, res) => {
     const taskId = String(req.params.id);
     const body = req.body || {};
 
-    // Tìm trong MarketingLead
+    let updatedTaskObj = null;
+
+    // 1. Cập nhật trong bảng Task nếu có
+    const existingDbTask = await prisma.task.findUnique({ where: { id: taskId } });
+    if (existingDbTask) {
+      let parsed = {};
+      if (existingDbTask.actualResult) {
+        try {
+          parsed = JSON.parse(existingDbTask.actualResult) || {};
+        } catch (_e) {
+          parsed = {};
+        }
+      }
+      updatedTaskObj = {
+        ...parsed,
+        id: taskId,
+        ...body,
+      };
+      await prisma.task.update({
+        where: { id: taskId },
+        data: {
+          title: updatedTaskObj.title || existingDbTask.title,
+          description: updatedTaskObj.description ?? existingDbTask.description,
+          status: updatedTaskObj.status || existingDbTask.status,
+          priority: updatedTaskObj.priority || existingDbTask.priority,
+          assigneeId: updatedTaskObj.assignee || existingDbTask.assigneeId,
+          deptCode: updatedTaskObj.department || existingDbTask.deptCode,
+          actualResult: JSON.stringify(updatedTaskObj),
+        },
+      });
+    }
+
+    // 2. Tìm trong MarketingLead
     const leads = await prisma.marketingLead.findMany();
     for (const lead of leads) {
       let fv = {};
@@ -5479,7 +5316,7 @@ app.put('/api/user-tasks/:id', async (req, res) => {
       }
     }
 
-    // Tìm trong Customer
+    // 3. Tìm trong Customer
     const customers = await prisma.customer.findMany();
     for (const cust of customers) {
       let fv = {};
@@ -5503,7 +5340,7 @@ app.put('/api/user-tasks/:id', async (req, res) => {
       }
     }
 
-    res.json({ id: taskId, ...body });
+    res.json(updatedTaskObj || { id: taskId, ...body });
   } catch (err) {
     console.error('Lỗi PUT /api/user-tasks/:id:', err);
     res.status(500).json({ error: err.message });
@@ -5513,6 +5350,22 @@ app.put('/api/user-tasks/:id', async (req, res) => {
 app.delete('/api/user-tasks/contract/:contractCode', async (req, res) => {
   try {
     const rawCode = decodeURIComponent(req.params.contractCode || '').trim().toUpperCase();
+    const taskIds = Array.isArray(req.body?.taskIds) ? req.body.taskIds.map(String) : [];
+
+    if (taskIds.length > 0) {
+      await prisma.task.deleteMany({ where: { id: { in: taskIds } } });
+    }
+    const dbTasks = await prisma.task.findMany();
+    for (const row of dbTasks) {
+      if (!row.actualResult) continue;
+      try {
+        const parsed = JSON.parse(row.actualResult);
+        const cCode = String(parsed?.contractCode || parsed?.project || '').trim().toUpperCase();
+        if (cCode === rawCode) {
+          await prisma.task.delete({ where: { id: row.id } });
+        }
+      } catch (_e) {}
+    }
 
     const leads = await prisma.marketingLead.findMany();
     for (const lead of leads) {
@@ -5568,6 +5421,8 @@ app.delete('/api/user-tasks/contract/:contractCode', async (req, res) => {
 app.delete('/api/user-tasks/:id', async (req, res) => {
   try {
     const taskId = String(req.params.id);
+
+    await prisma.task.deleteMany({ where: { id: taskId } });
 
     const leads = await prisma.marketingLead.findMany();
     for (const lead of leads) {
@@ -8610,34 +8465,91 @@ app.get('/api/plan-finance/sales-active', async (req, res) => {
         where: includeId ? { OR: [{ trangThai: 'active' }, { id: includeId }] } : { trangThai: 'active' },
         orderBy: { createdAt: 'desc' },
         take: 100,
-        select: { id: true, code: true, trangThai: true, giaTriHopDong: true, customer: { select: { name: true } } },
+        select: { id: true, code: true, trangThai: true, giaTriHopDong: true, customer: { select: { name: true, address: true } } },
       }),
       prisma.saleOrder.findMany({
         where: includeId ? {
           OR: [
-            { trangThai: { in: ['active', 'confirmed', 'processing', 'in_production', 'approved'] }, keToanDuyet: 'approved' },
+            {
+              trangThai: { in: ['active', 'confirmed', 'processing', 'approved'] },
+              keToanDuyet: 'approved',
+              trangThaiKho: { not: 'exported' },
+            },
             { id: includeId }
           ]
         } : {
-          trangThai: { in: ['active', 'confirmed', 'processing', 'in_production', 'approved'] },
-          keToanDuyet: 'approved'
+          trangThai: { in: ['active', 'confirmed', 'processing', 'approved'] },
+          keToanDuyet: 'approved',
+          trangThaiKho: { not: 'exported' },
         },
         orderBy: { createdAt: 'desc' },
         take: 100,
-        select: { id: true, code: true, trangThai: true, tongTien: true, customer: { select: { name: true } } },
+        select: {
+          id: true,
+          code: true,
+          trangThai: true,
+          trangThaiKho: true,
+          tongTien: true,
+          diaChiGiaoHang: true,
+          customer: { select: { name: true, address: true } },
+          logisticsTickets: { select: { id: true, type: true, status: true } },
+        },
       }),
       prisma.retailInvoice.findMany({
-        where: includeId ? { OR: [{ trangThai: { in: ['partial', 'pending', 'unpaid'] } }, { id: includeId }] } : { trangThai: { in: ['partial', 'pending', 'unpaid'] } },
+        where: includeId ? { OR: [{ trangThai: { in: ['partial'] } }, { id: includeId }] } : { trangThai: { in: ['partial'] } },
         orderBy: { createdAt: 'desc' },
         take: 100,
-        select: { id: true, code: true, trangThai: true, tongCong: true, tenKhach: true },
+        select: { id: true, code: true, trangThai: true, tongCong: true, tenKhach: true, diaChi: true },
       }),
     ]);
 
+    const activeSaleOrders = saleOrders.filter(so => {
+      if (includeId && so.id === includeId) return true;
+      if (so.trangThaiKho === 'exported') return false;
+      const tickets = so.logisticsTickets || [];
+      const packingTickets = tickets.filter(t => t.type === 'BATCH_PACKING');
+      if (packingTickets.length > 0) {
+        // Loại bỏ đơn đã hoàn thành (COMPLETED) hoặc chưa thực hiện gom hàng (PENDING)
+        const hasCompleted = packingTickets.every(t => t.status === 'COMPLETED');
+        if (hasCompleted) return false;
+        const hasPendingOnly = packingTickets.every(t => t.status === 'PENDING');
+        if (hasPendingOnly) return false;
+      }
+      return true;
+    });
+
     res.json([
-      ...contracts.map(c => ({ id: c.id, code: c.code, type: 'contract', typeLabel: 'Hợp đồng', customer: c.customer?.name ?? null, tongTien: c.giaTriHopDong, trangThai: c.trangThai })),
-      ...saleOrders.map(so => ({ id: so.id, code: so.code, type: 'sale-order', typeLabel: 'Đơn bán hàng', customer: so.customer?.name ?? null, tongTien: so.tongTien, trangThai: so.trangThai })),
-      ...retailInvoices.map(inv => ({ id: inv.id, code: inv.code, type: 'retail-invoice', typeLabel: 'Hoá đơn bán lẻ', customer: inv.tenKhach ?? null, tongTien: inv.tongCong, trangThai: inv.trangThai })),
+      ...contracts.map(c => ({
+        id: c.id,
+        code: c.code,
+        type: 'contract',
+        typeLabel: 'Hợp đồng',
+        customer: c.customer?.name ?? null,
+        customerAddress: c.customer?.address ?? null,
+        tongTien: c.giaTriHopDong,
+        trangThai: c.trangThai,
+      })),
+      ...activeSaleOrders.map(so => ({
+        id: so.id,
+        code: so.code,
+        type: 'sale-order',
+        typeLabel: 'Đơn bán hàng',
+        customer: so.customer?.name ?? null,
+        customerAddress: so.diaChiGiaoHang || so.customer?.address || null,
+        tongTien: so.tongTien,
+        trangThai: so.trangThai,
+        trangThaiKho: so.trangThaiKho,
+      })),
+      ...retailInvoices.map(inv => ({
+        id: inv.id,
+        code: inv.code,
+        type: 'retail-invoice',
+        typeLabel: 'Hoá đơn bán lẻ',
+        customer: inv.tenKhach ?? null,
+        customerAddress: inv.diaChi ?? null,
+        tongTien: inv.tongCong,
+        trangThai: inv.trangThai,
+      })),
     ]);
   } catch (_) {
     res.json([]);
@@ -10262,6 +10174,8 @@ app.get('/api/production/dashboard/recent-orders', async (req, res) => {
       orderBy: { updatedAt: 'desc' },
       take: 100,
       include: {
+        customer: { select: { name: true, address: true } },
+        logisticsTickets: { select: { id: true, code: true, type: true, status: true } },
         saleOrderItems: { include: { inventoryItem: true } }
       }
     });
@@ -10269,6 +10183,7 @@ app.get('/api/production/dashboard/recent-orders', async (req, res) => {
     let result = await Promise.all(orders.map(async (order) => {
       const isCompleted = order.ngayHoanThanhSanXuat !== null;
       const isRunning = order.trangThai === 'in_production';
+      const materialTicket = (order.logisticsTickets || []).find(t => t.type === 'MATERIAL_PICKING') || null;
 
       const prodTask = await prisma.task.findFirst({
         where: {
@@ -10325,6 +10240,10 @@ app.get('/api/production/dashboard/recent-orders', async (req, res) => {
         ngayHoanThanh: order.ngayHoanThanhSanXuat || deadline || null,
         progress: isCompleted ? 100 : 0,
         status: isCompleted ? 'completed' : (isRunning ? 'running' : 'pending'),
+        trangThai: order.trangThai,
+        materialTicketStatus: materialTicket ? materialTicket.status : null,
+        customerName: order.customer?.name || null,
+        customerAddress: order.diaChiGiaoHang || order.customer?.address || null,
         updatedAt: order.updatedAt,
         name: displayName,
         itemsDetail,
@@ -12627,40 +12546,95 @@ app.delete('/api/logistics/inventory/:id', async (req, res) => {
 
 app.get('/api/plan-finance/inventory/search', async (req, res) => {
   try {
-    const q = String(req.query.q || '').trim().toLowerCase();
+    const qRaw = String(req.query.q || '').trim();
+    const idParam = String(req.query.id || '').trim();
+    const codeParam = String(req.query.code || '').trim();
+    const warehouseId = String(req.query.warehouseId || '').trim();
     const limit = Math.min(50, parseInt(req.query.limit || '20', 10) || 20);
-    const items = await prisma.inventoryItem.findMany({
-      where: q ? {
-        OR: [
-          { code: { contains: q } },
-          { tenHang: { contains: q } },
-          { model: { contains: q } },
-        ]
-      } : {},
-      take: limit,
+
+    const normalizeVi = (str) =>
+      String(str || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .trim();
+
+    const allItems = await prisma.inventoryItem.findMany({
+      where: idParam
+        ? { id: idParam }
+        : codeParam
+          ? { code: codeParam }
+          : {},
       orderBy: { tenHang: 'asc' },
-      include: { stocks: true }
+      include: { stocks: true },
     });
-    const mapped = items.map((it) => ({
-      id: it.id,
-      code: it.code,
-      maThayThe: it.maThayThe,
-      model: it.model,
-      chatLieu: it.chatLieu,
-      color: it.color,
-      brand: it.brand,
-      thongSoKyThuat: it.thongSoKyThuat,
-      tenHang: it.tenHang,
-      donVi: it.donVi,
-      giaNhap: it.giaNhap,
-      giaBan: it.giaBan,
-      trangThai: it.trangThai,
-      imageUrl: it.imageUrl,
-      soLuongTon: (it.stocks || []).reduce((s, st) => s + (st.soLuong || 0), 0) || it.soLuong || 0,
-    }));
-    res.json({ items: mapped, data: mapped });
+
+    const qLower = qRaw.toLowerCase();
+    const qNorm = normalizeVi(qRaw);
+
+    const filtered = qRaw
+      ? allItems.filter((it) => {
+          const code = String(it.code || '').toLowerCase();
+          const maThayThe = String(it.maThayThe || '').toLowerCase();
+          const tenHang = String(it.tenHang || '').toLowerCase();
+          const model = String(it.model || '').toLowerCase();
+          if (
+            code.includes(qLower) ||
+            maThayThe.includes(qLower) ||
+            tenHang.includes(qLower) ||
+            model.includes(qLower)
+          ) {
+            return true;
+          }
+          if (qNorm) {
+            return (
+              normalizeVi(it.code).includes(qNorm) ||
+              normalizeVi(it.maThayThe).includes(qNorm) ||
+              normalizeVi(it.tenHang).includes(qNorm) ||
+              normalizeVi(it.model).includes(qNorm)
+            );
+          }
+          return false;
+        })
+      : allItems;
+
+    const mapped = filtered.slice(0, limit).map((it) => {
+      const stocks = it.stocks || [];
+      const matchedStock = warehouseId
+        ? stocks.find((st) => st.warehouseId === warehouseId) || null
+        : stocks.find((st) => (st.soLuong || 0) > 0) || stocks[0] || null;
+      const soLuongTon = warehouseId
+        ? matchedStock
+          ? matchedStock.soLuong || 0
+          : 0
+        : stocks.reduce((s, st) => s + (st.soLuong || 0), 0) || it.soLuong || 0;
+
+      return {
+        id: it.id,
+        code: it.code,
+        maThayThe: it.maThayThe,
+        model: it.model,
+        chatLieu: it.chatLieu,
+        color: it.color,
+        brand: it.brand,
+        thongSoKyThuat: it.thongSoKyThuat,
+        tenHang: it.tenHang,
+        donVi: it.donVi,
+        giaNhap: it.giaNhap,
+        giaBan: it.giaBan,
+        trangThai: it.trangThai,
+        imageUrl: it.imageUrl,
+        soLuongTon,
+        viTriHang: matchedStock?.viTriHang || null,
+        viTriCot: matchedStock?.viTriCot || null,
+        viTriTang: matchedStock?.viTriTang || null,
+      };
+    });
+
+    res.json(mapped);
   } catch (err) {
-    res.json({ items: [], data: [] });
+    res.json([]);
   }
 });
 
@@ -13716,21 +13690,24 @@ app.get('/api/sales/internal-reports/income', async (req, res) => {
         0
       );
 
-      // 1. Tính trừ tiền đóng bảo hiểm
-      if (payrollRecord && payrollRecord.khauTruBH > 0) {
-        insuranceDeduction = payrollRecord.khauTruBH;
-      } else if (insHistory && (insHistory.employerAmount > 0 || insHistory.employeeAmount > 0)) {
-        insuranceDeduction = insHistory.employerAmount || insHistory.employeeAmount;
-      } else if (
+      // 1. Tính trừ tiền đóng bảo hiểm (Chỉ lấy phần giá trị đóng bảo hiểm do nhân viên đóng, mặc định 10.5%)
+      const employeeInsRate = insConfig
+        ? (insConfig.employeeBhxh || 0) + (insConfig.employeeBhyt || 0) + (insConfig.employeeBhtn || 0)
+        : 10.5;
+      if (
         empRecord &&
         (empRecord.isInsuranceEnrolled ||
           (empRecord.socialInsuranceNumber && empRecord.socialInsuranceNumber.trim() !== ''))
       ) {
-        const insSalary = empRecord.insuranceSalary || 0;
-        const rate = insConfig
-          ? (insConfig.employerBhxh || 0) + (insConfig.employerBhyt || 0) + (insConfig.employerBhtn || 0)
-          : 21.5;
-        insuranceDeduction = Math.round((insSalary * rate) / 100);
+        const insSalary = empRecord.insuranceSalary || insHistory?.insuranceSalary || 0;
+        insuranceDeduction =
+          insSalary > 0
+            ? Math.round((insSalary * employeeInsRate) / 100)
+            : Number(insHistory?.employeeAmount || 0);
+      } else if (insHistory && insHistory.employeeAmount > 0) {
+        insuranceDeduction = insHistory.employeeAmount;
+      } else if (payrollRecord && payrollRecord.khauTruBH > 0) {
+        insuranceDeduction = payrollRecord.khauTruBH;
       }
 
       // 2. Tính trừ tạm ứng trong tháng
@@ -14507,6 +14484,11 @@ app.get('/api/users', async (req, res) => {
     }
     const result = employees.map((e) => {
       const matchedLoc = findEmployeeWorkLocation(e, workLocations);
+      const isEnrolled = Boolean(
+        e.isInsuranceEnrolled ||
+          (e.socialInsuranceNumber && String(e.socialInsuranceNumber).trim() !== '') ||
+          (e.insuranceSalary && Number(e.insuranceSalary) > 0)
+      );
       return {
         id: e.userId || e.id,
         employeeId: e.id,
@@ -14520,6 +14502,12 @@ app.get('/api/users', async (req, res) => {
         branchCode: matchedLoc?.code || e.branchCode || e.workLocation || null,
         workLocationName: matchedLoc?.name || 'Văn phòng công ty',
         timekeepingConfig: matchedLoc || null,
+        insuranceBookNumber: e.socialInsuranceNumber || '',
+        socialInsuranceNumber: e.socialInsuranceNumber || '',
+        insuranceSalary: Number(e.insuranceSalary || 0),
+        baseSalary: Number(e.baseSalary || 0),
+        hasInsurance: isEnrolled,
+        isInsuranceEnrolled: isEnrolled,
         status:
           e.profileStatus === 'resigned'
             ? 'Đã nghỉ việc'
@@ -14531,6 +14519,530 @@ app.get('/api/users', async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('Lỗi GET /api/users:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── API QUẢN LÝ BẢO HIỂM XÃ HỘI & Y TẾ (LIÊN KẾT DB THỰC TẾ) ──
+const formatInsuranceDateDisplay = (dt) => {
+  if (!dt) return '';
+  const d = new Date(dt);
+  if (isNaN(d.getTime())) return String(dt);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+app.put('/api/hr/insurance/employee', async (req, res) => {
+  try {
+    const {
+      id,
+      employeeId,
+      employeeName,
+      insuranceBookNumber,
+      socialInsuranceNumber,
+      insuranceSalary,
+      hasInsurance,
+      isInsuranceEnrolled,
+    } = req.body || {};
+
+    const targetId = employeeId || id;
+    let emp = null;
+
+    if (targetId) {
+      emp = await prisma.employee.findFirst({
+        where: {
+          OR: [{ id: String(targetId) }, { userId: String(targetId) }, { code: String(targetId) }],
+        },
+      });
+    }
+    if (!emp && employeeName) {
+      const allEmps = await prisma.employee.findMany();
+      const targetName = String(employeeName).trim().toLowerCase();
+      emp = allEmps.find((e) => (e.fullName || '').trim().toLowerCase() === targetName) || null;
+    }
+
+    if (!emp) {
+      return res.status(404).json({ error: 'Không tìm thấy nhân viên trong cơ sở dữ liệu' });
+    }
+
+    const bookNo =
+      socialInsuranceNumber !== undefined
+        ? String(socialInsuranceNumber).trim()
+        : insuranceBookNumber !== undefined
+          ? String(insuranceBookNumber).trim()
+          : emp.socialInsuranceNumber;
+
+    const enrolledFlag =
+      isInsuranceEnrolled !== undefined
+        ? Boolean(isInsuranceEnrolled)
+        : hasInsurance !== undefined
+          ? Boolean(hasInsurance)
+          : emp.isInsuranceEnrolled;
+
+    const nextSalary =
+      insuranceSalary !== undefined ? Number(insuranceSalary) || 0 : Number(emp.insuranceSalary || 0);
+
+    const updated = await prisma.employee.update({
+      where: { id: emp.id },
+      data: {
+        socialInsuranceNumber: bookNo || null,
+        insuranceSalary: nextSalary,
+        isInsuranceEnrolled: enrolledFlag,
+      },
+    });
+
+    // Đồng bộ bản ghi InsuranceHistory tháng hiện tại để bảng lương tính đúng
+    try {
+      const now = new Date();
+      const month = now.getMonth() + 1;
+      const year = now.getFullYear();
+      const activeCfg = await prisma.insuranceConfig.findFirst({
+        where: { isActive: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      const empRate = activeCfg
+        ? (activeCfg.employeeBhxh || 0) + (activeCfg.employeeBhyt || 0) + (activeCfg.employeeBhtn || 0)
+        : 10.5;
+      const compRate = activeCfg
+        ? (activeCfg.employerBhxh || 0) + (activeCfg.employerBhyt || 0) + (activeCfg.employerBhtn || 0)
+        : 21.5;
+      const employeeAmount = enrolledFlag ? Math.round((nextSalary * empRate) / 100) : 0;
+      const employerAmount = enrolledFlag ? Math.round((nextSalary * compRate) / 100) : 0;
+
+      await prisma.insuranceHistory.upsert({
+        where: {
+          employeeId_month_year: {
+            employeeId: emp.id,
+            month,
+            year,
+          },
+        },
+        update: {
+          insuranceSalary: nextSalary,
+          employeeAmount,
+          employerAmount,
+          totalAmount: employeeAmount + employerAmount,
+          status: enrolledFlag ? 'active' : 'inactive',
+        },
+        create: {
+          employeeId: emp.id,
+          month,
+          year,
+          insuranceSalary: nextSalary,
+          employeeAmount,
+          employerAmount,
+          totalAmount: employeeAmount + employerAmount,
+          status: enrolledFlag ? 'active' : 'inactive',
+        },
+      });
+    } catch (histErr) {
+      console.warn('Không thể đồng bộ InsuranceHistory:', histErr.message);
+    }
+
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    console.error('Lỗi PUT /api/hr/insurance/employee:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Danh sách biến động BHXH (Model InsuranceChange)
+app.get('/api/hr/insurance/changes', async (req, res) => {
+  try {
+    const [changes, posCategories] = await Promise.all([
+      prisma.insuranceChange.findMany({
+        include: { employee: true },
+        orderBy: [{ effectiveDate: 'desc' }, { createdAt: 'desc' }],
+      }),
+      prisma.category.findMany({ where: { type: 'position' } }),
+    ]);
+
+    const posMap = {};
+    for (const c of posCategories) {
+      if (c.code) posMap[c.code] = c.name;
+      if (c.id) posMap[c.id] = c.name;
+    }
+
+    const mapped = changes.map((c) => {
+      const effDate = c.effectiveDate ? new Date(c.effectiveDate) : new Date(c.createdAt);
+      const ym = `${effDate.getFullYear()}${String(effDate.getMonth() + 1).padStart(2, '0')}`;
+      const codeSuffix = String(c.id).slice(-4).toUpperCase();
+      const changeType =
+        c.type === 'increase' || c.type === 'decrease' || c.type === 'adjustment'
+          ? c.type
+          : 'adjustment';
+      const changeTypeLabel =
+        changeType === 'increase'
+          ? 'Biến động tăng'
+          : changeType === 'decrease'
+            ? 'Biến động giảm'
+            : 'Điều chỉnh thu nhập';
+      const isApproved = c.status === 'approved' || c.status === 'completed';
+
+      return {
+        id: c.id,
+        code: `BD-${ym}-${codeSuffix}`,
+        employeeId: c.employeeId,
+        employeeName: c.employee?.fullName || 'Nhân sự',
+        employeeCode: c.employee?.code || '',
+        department: c.employee?.departmentName || 'Văn phòng',
+        position: posMap[c.employee?.position] || c.employee?.position || 'Nhân viên',
+        changeType,
+        changeTypeLabel,
+        description: c.reason || '',
+        oldSalary: Number(c.oldSalary || 0),
+        newSalary: Number(c.newSalary || 0),
+        effectiveDate: formatInsuranceDateDisplay(c.effectiveDate),
+        createdDate: formatInsuranceDateDisplay(c.createdAt),
+        status: isApproved ? 'approved' : 'processing',
+        statusText: isApproved ? 'Cơ quan BHXH đã duyệt' : 'Đang xử lý hồ sơ',
+      };
+    });
+
+    res.json(mapped);
+  } catch (err) {
+    console.error('Lỗi GET /api/hr/insurance/changes:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/hr/insurance/changes', async (req, res) => {
+  try {
+    const {
+      employeeNames = [],
+      employeeIds = [],
+      changeType = 'increase',
+      effectiveDate,
+      newSalary,
+      description,
+      status = 'approved',
+    } = req.body || {};
+
+    const allEmps = await prisma.employee.findMany();
+    const targetEmps = [];
+
+    if (Array.isArray(employeeIds) && employeeIds.length > 0) {
+      for (const eid of employeeIds) {
+        const found = allEmps.find(
+          (e) => e.id === eid || e.userId === eid || e.code === eid
+        );
+        if (found && !targetEmps.some((t) => t.id === found.id)) {
+          targetEmps.push(found);
+        }
+      }
+    }
+
+    const nameList = Array.isArray(employeeNames)
+      ? employeeNames
+      : String(employeeNames || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+    for (const name of nameList) {
+      const lower = name.toLowerCase();
+      const found = allEmps.find((e) => (e.fullName || '').trim().toLowerCase() === lower);
+      if (found && !targetEmps.some((t) => t.id === found.id)) {
+        targetEmps.push(found);
+      }
+    }
+
+    if (targetEmps.length === 0) {
+      return res.status(400).json({ error: 'Không tìm thấy nhân viên hợp lệ trong cơ sở dữ liệu' });
+    }
+
+    const parsedEffDate = effectiveDate ? new Date(effectiveDate) : new Date();
+    const cleanNewSalary = Number(String(newSalary || 0).replace(/\D/g, '')) || 0;
+
+    const createdList = [];
+    for (const emp of targetEmps) {
+      const created = await prisma.insuranceChange.create({
+        data: {
+          employeeId: emp.id,
+          type: changeType,
+          effectiveDate: isNaN(parsedEffDate.getTime()) ? new Date() : parsedEffDate,
+          oldSalary: Number(emp.insuranceSalary || 0),
+          newSalary:
+            changeType === 'decrease'
+              ? 0
+              : cleanNewSalary || Number(emp.insuranceSalary || emp.baseSalary || 0),
+          reason: description || '',
+          status: status || 'approved',
+        },
+        include: { employee: true },
+      });
+      createdList.push(created);
+
+      // Đồng bộ trạng thái tham gia và mức đóng BHXH trên hồ sơ Employee
+      if (changeType === 'increase') {
+        await prisma.employee.update({
+          where: { id: emp.id },
+          data: {
+            isInsuranceEnrolled: true,
+            ...(cleanNewSalary > 0 ? { insuranceSalary: cleanNewSalary } : {}),
+          },
+        });
+      } else if (changeType === 'decrease') {
+        await prisma.employee.update({
+          where: { id: emp.id },
+          data: {
+            isInsuranceEnrolled: false,
+          },
+        });
+      } else if (changeType === 'adjustment' && cleanNewSalary > 0) {
+        await prisma.employee.update({
+          where: { id: emp.id },
+          data: {
+            isInsuranceEnrolled: true,
+            insuranceSalary: cleanNewSalary,
+          },
+        });
+      }
+    }
+
+    res.status(201).json({ success: true, data: createdList });
+  } catch (err) {
+    console.error('Lỗi POST /api/hr/insurance/changes:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Danh sách chế độ và trợ cấp BHXH (Model InsuranceBenefit)
+app.get('/api/hr/insurance/benefits', async (req, res) => {
+  try {
+    const benefits = await prisma.insuranceBenefit.findMany({
+      include: { employee: true },
+      orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+    });
+
+    const mapped = benefits.map((b) => {
+      const sDate = b.startDate ? new Date(b.startDate) : new Date(b.createdAt);
+      const eDate = b.endDate ? new Date(b.endDate) : sDate;
+      const ym = `${sDate.getFullYear()}${String(sDate.getMonth() + 1).padStart(2, '0')}`;
+      const codeSuffix = String(b.id).slice(-4).toUpperCase();
+      const diffDays = Math.max(
+        1,
+        Math.round((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24)) + 1
+      );
+      const isApproved = b.status === 'approved' || b.status === 'completed';
+
+      return {
+        id: `CD-${ym}-${codeSuffix}`,
+        dbId: b.id,
+        employeeId: b.employeeId,
+        employeeName: b.employee?.fullName || 'Nhân sự',
+        employeeCode: b.employee?.code || '',
+        department: b.employee?.departmentName || 'Văn phòng',
+        claimType: b.regimeType || 'Ốm đau ngắn ngày',
+        fromDate: formatInsuranceDateDisplay(b.startDate),
+        toDate: formatInsuranceDateDisplay(b.endDate),
+        days: isNaN(diffDays) ? 1 : diffDays,
+        amount: Number(b.amount || 0),
+        status: isApproved ? 'approved' : 'processing',
+        statusText: isApproved ? 'Đã thanh toán' : 'Đang gửi hồ sơ điện tử',
+        note: b.notes || '',
+      };
+    });
+
+    res.json(mapped);
+  } catch (err) {
+    console.error('Lỗi GET /api/hr/insurance/benefits:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/hr/insurance/benefits', async (req, res) => {
+  try {
+    const {
+      employeeId,
+      employeeName,
+      claimType = 'Ốm đau ngắn ngày',
+      fromDate,
+      toDate,
+      amount = 0,
+      note = '',
+      status = 'processing',
+    } = req.body || {};
+
+    let emp = null;
+    if (employeeId) {
+      emp = await prisma.employee.findFirst({
+        where: {
+          OR: [{ id: String(employeeId) }, { userId: String(employeeId) }, { code: String(employeeId) }],
+        },
+      });
+    }
+    if (!emp && employeeName) {
+      const allEmps = await prisma.employee.findMany();
+      const lower = String(employeeName).trim().toLowerCase();
+      emp = allEmps.find((e) => (e.fullName || '').trim().toLowerCase() === lower) || null;
+    }
+
+    if (!emp) {
+      return res.status(400).json({ error: 'Vui lòng chọn nhân viên hợp lệ trong cơ sở dữ liệu' });
+    }
+
+    const sDate = fromDate ? new Date(fromDate) : new Date();
+    const eDate = toDate ? new Date(toDate) : sDate;
+    const cleanAmount = Number(String(amount || 0).replace(/\D/g, '')) || 0;
+
+    const created = await prisma.insuranceBenefit.create({
+      data: {
+        employeeId: emp.id,
+        regimeType: claimType,
+        startDate: isNaN(sDate.getTime()) ? new Date() : sDate,
+        endDate: isNaN(eDate.getTime()) ? new Date() : eDate,
+        amount: cleanAmount,
+        status: status || 'processing',
+        notes: note || null,
+      },
+      include: { employee: true },
+    });
+
+    res.status(201).json({ success: true, data: created });
+  } catch (err) {
+    console.error('Lỗi POST /api/hr/insurance/benefits:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Danh sách nhân sự phục vụ trang Bảo hiểm
+app.get('/api/hr/insurance/participants', async (req, res) => {
+  try {
+    const [employees, posCategories] = await Promise.all([
+      prisma.employee.findMany({
+        include: { user: true },
+        orderBy: { fullName: 'asc' },
+      }),
+      prisma.category.findMany({ where: { type: 'position' } }),
+    ]);
+    const posMap = {};
+    for (const c of posCategories) {
+      if (c.code) posMap[c.code] = c.name;
+      if (c.id) posMap[c.id] = c.name;
+    }
+    const list = employees.map((e) => {
+      const isEnrolled = Boolean(
+        e.isInsuranceEnrolled ||
+          (e.socialInsuranceNumber && String(e.socialInsuranceNumber).trim() !== '') ||
+          (e.insuranceSalary && Number(e.insuranceSalary) > 0)
+      );
+      return {
+        id: e.userId || e.id,
+        employeeId: e.id,
+        userId: e.userId,
+        code: e.code || '',
+        name: e.fullName,
+        position: posMap[e.position] || e.position || e.user?.role || 'Nhân viên',
+        department: e.departmentName || 'Khối văn phòng',
+        insuranceBookNumber: e.socialInsuranceNumber || '',
+        socialInsuranceNumber: e.socialInsuranceNumber || '',
+        insuranceSalary: Number(e.insuranceSalary || 0),
+        baseSalary: Number(e.baseSalary || 0),
+        hasInsurance: isEnrolled,
+        isInsuranceEnrolled: isEnrolled,
+      };
+    });
+    res.json(list);
+  } catch (err) {
+    console.error('Lỗi GET /api/hr/insurance/participants:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Thiết lập cấu hình tham số bảo hiểm (Model InsuranceConfig)
+app.get('/api/hr/insurance/config', async (req, res) => {
+  try {
+    let cfg = await prisma.insuranceConfig.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!cfg) {
+      cfg = await prisma.insuranceConfig.findFirst({
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+    const extraPolicy = await prisma.laborPolicy
+      .findFirst({ where: { type: 'insurance_config_extra' } })
+      .catch(() => null);
+    let extra = {};
+    if (extraPolicy?.content) {
+      try {
+        extra = JSON.parse(extraPolicy.content);
+      } catch {}
+    }
+    res.json(cfg ? { ...cfg, ...extra } : extra);
+  } catch (err) {
+    console.error('Lỗi GET /api/hr/insurance/config:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/hr/insurance/config', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const existing = await prisma.insuranceConfig.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const dataPayload = {
+      employerBhxh: body.compBhxhRate !== undefined ? Number(body.compBhxhRate) : 17.5,
+      employerBhyt: body.compBhytRate !== undefined ? Number(body.compBhytRate) : 3.0,
+      employerBhtn: body.compBhtnRate !== undefined ? Number(body.compBhtnRate) : 1.0,
+      employeeBhxh: body.empBhxhRate !== undefined ? Number(body.empBhxhRate) : 8.0,
+      employeeBhyt: body.empBhytRate !== undefined ? Number(body.empBhytRate) : 1.5,
+      employeeBhtn: body.empBhtnRate !== undefined ? Number(body.empBhtnRate) : 1.0,
+      baseReferenceWage: body.baseSalary !== undefined ? Number(body.baseSalary) : 2340000,
+      sickLeaveRate: body.sicknessRate !== undefined ? Number(body.sicknessRate) : 75,
+      maternityRate: body.maternityRate !== undefined ? Number(body.maternityRate) : 100,
+      maternityAllowance:
+        body.maternityOneTimeMultiplier !== undefined ? Number(body.maternityOneTimeMultiplier) : 2,
+      recoveryRate:
+        body.convalescenceDailyRate !== undefined ? Number(body.convalescenceDailyRate) : 30,
+      funeralAllowance: body.funeralMultiplier !== undefined ? Number(body.funeralMultiplier) : 10,
+      isActive: true,
+    };
+
+    const saved = existing
+      ? await prisma.insuranceConfig.update({
+          where: { id: existing.id },
+          data: dataPayload,
+        })
+      : await prisma.insuranceConfig.create({
+          data: dataPayload,
+        });
+
+    const extraPayload = {
+      unemploymentRate: body.unemploymentRate !== undefined ? Number(body.unemploymentRate) : 60,
+      survivorRateNormal: body.survivorRateNormal !== undefined ? Number(body.survivorRateNormal) : 50,
+      authorityName: body.authorityName || 'Bảo hiểm xã hội Thành phố Hà Nội',
+      agencyCode: body.agencyCode || 'TZ0123A',
+    };
+    const existingExtra = await prisma.laborPolicy
+      .findFirst({ where: { type: 'insurance_config_extra' } })
+      .catch(() => null);
+    if (existingExtra) {
+      await prisma.laborPolicy.update({
+        where: { id: existingExtra.id },
+        data: { content: JSON.stringify(extraPayload) },
+      });
+    } else {
+      await prisma.laborPolicy.create({
+        data: {
+          type: 'insurance_config_extra',
+          title: 'Cấu hình mở rộng Bảo hiểm xã hội',
+          content: JSON.stringify(extraPayload),
+          isActive: true,
+        },
+      });
+    }
+
+    res.json({ success: true, data: { ...saved, ...extraPayload } });
+  } catch (err) {
+    console.error('Lỗi PUT /api/hr/insurance/config:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -15826,7 +16338,7 @@ app.post('/api/plan-finance/stock-movements/batch', async (req, res) => {
           });
         }
 
-        const soLuongTruoc = currentStock ? currentStock.quantity : 0;
+        const soLuongTruoc = currentStock ? (currentStock.soLuong || 0) : 0;
         const soLuongSau = soLuongTruoc + qty;
 
         // 1. Tạo bản ghi StockMovement
@@ -15860,10 +16372,16 @@ app.post('/api/plan-finance/stock-movements/batch', async (req, res) => {
             create: {
               inventoryItemId: itemId,
               warehouseId: toWarehouseId,
-              quantity: qty,
+              soLuong: qty,
+              viTriHang: line.viTriHang || null,
+              viTriCot: line.viTriCot || null,
+              viTriTang: line.viTriTang || null,
             },
             update: {
-              quantity: { increment: qty },
+              soLuong: { increment: qty },
+              ...(line.viTriHang ? { viTriHang: line.viTriHang } : {}),
+              ...(line.viTriCot ? { viTriCot: line.viTriCot } : {}),
+              ...(line.viTriTang ? { viTriTang: line.viTriTang } : {}),
             },
           });
         }
@@ -15914,7 +16432,7 @@ app.post('/api/plan-finance/stock-movements/batch-xuat', async (req, res) => {
           });
         }
 
-        const soLuongTruoc = currentStock ? currentStock.quantity : 0;
+        const soLuongTruoc = currentStock ? (currentStock.soLuong || 0) : 0;
         const soLuongSau = Math.max(0, soLuongTruoc - qty);
 
         const mov = await tx.stockMovement.create({
@@ -15946,10 +16464,10 @@ app.post('/api/plan-finance/stock-movements/batch-xuat', async (req, res) => {
             create: {
               inventoryItemId: itemId,
               warehouseId: fromWarehouseId,
-              quantity: 0,
+              soLuong: 0,
             },
             update: {
-              quantity: { decrement: qty },
+              soLuong: { decrement: qty },
             },
           });
         }
@@ -15999,7 +16517,7 @@ app.post('/api/plan-finance/stock-movements/batch-luan-chuyen', async (req, res)
           });
         }
 
-        const soLuongTruoc = fromStock ? fromStock.quantity : 0;
+        const soLuongTruoc = fromStock ? (fromStock.soLuong || 0) : 0;
         const soLuongSau = Math.max(0, soLuongTruoc - qty);
 
         const mov = await tx.stockMovement.create({
@@ -16029,8 +16547,8 @@ app.post('/api/plan-finance/stock-movements/batch-luan-chuyen', async (req, res)
                 warehouseId: fromWarehouseId,
               },
             },
-            create: { inventoryItemId: itemId, warehouseId: fromWarehouseId, quantity: 0 },
-            update: { quantity: { decrement: qty } },
+            create: { inventoryItemId: itemId, warehouseId: fromWarehouseId, soLuong: 0 },
+            update: { soLuong: { decrement: qty } },
           });
         }
 
@@ -16043,8 +16561,20 @@ app.post('/api/plan-finance/stock-movements/batch-luan-chuyen', async (req, res)
                 warehouseId: toWarehouseId,
               },
             },
-            create: { inventoryItemId: itemId, warehouseId: toWarehouseId, quantity: qty },
-            update: { quantity: { increment: qty } },
+            create: {
+              inventoryItemId: itemId,
+              warehouseId: toWarehouseId,
+              soLuong: qty,
+              viTriHang: line.toHang || null,
+              viTriCot: line.toCot || null,
+              viTriTang: line.toTang || null,
+            },
+            update: {
+              soLuong: { increment: qty },
+              ...(line.toHang ? { viTriHang: line.toHang } : {}),
+              ...(line.toCot ? { viTriCot: line.toCot } : {}),
+              ...(line.toTang ? { viTriTang: line.toTang } : {}),
+            },
           });
         }
       }
@@ -16104,10 +16634,10 @@ app.post('/api/plan-finance/stock-movements/batch-kiem-kho', async (req, res) =>
             create: {
               inventoryItemId: itemId,
               warehouseId: targetWhId,
-              quantity: soLuongThucTe,
+              soLuong: soLuongThucTe,
             },
             update: {
-              quantity: soLuongThucTe,
+              soLuong: soLuongThucTe,
             },
           });
         }
@@ -16187,18 +16717,605 @@ app.post('/api/plan-finance/stock-counts', async (req, res) => {
       });
     }
 
-    res.json({ success: true, stockCount });
+    res.json({ success: true, id: stockCount.id, stockCount });
   } catch (err) {
     console.error('Lỗi POST /api/plan-finance/stock-counts:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
+// ── 6.1. GET /api/plan-finance/stock-counts/next-code ───────────
+app.get('/api/plan-finance/stock-counts/next-code', async (_req, res) => {
+  try {
+    const today = new Date();
+    const yyyymmdd = today.toISOString().slice(0, 10).replace(/-/g, '');
+    const prefix = `KK-${yyyymmdd}`;
+    const countToday = await prisma.stockCount.count({
+      where: {
+        soChungTu: { startsWith: prefix },
+      },
+    });
+    const nextNumber = String(countToday + 1).padStart(3, '0');
+    res.json({ nextCode: `${prefix}-${nextNumber}` });
+  } catch (err) {
+    console.error('Lỗi GET /api/plan-finance/stock-counts/next-code:', err);
+    res.json({ nextCode: `KK-${Date.now().toString().slice(-6)}` });
+  }
+});
+
+// ── 6.2. GET /api/plan-finance/stock-counts ─────────────────────
+app.get('/api/plan-finance/stock-counts', async (req, res) => {
+  try {
+    const trangThai = req.query.trangThai ? String(req.query.trangThai).trim() : undefined;
+    const warehouseId = req.query.warehouseId ? String(req.query.warehouseId).trim() : undefined;
+
+    const list = await prisma.stockCount.findMany({
+      where: {
+        ...(trangThai ? { trangThai } : {}),
+        ...(warehouseId ? { warehouseId } : {}),
+      },
+      include: {
+        warehouse: true,
+        _count: { select: { lines: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 100,
+    });
+
+    res.json(
+      list.map((sc) => ({
+        id: sc.id,
+        soChungTu: sc.soChungTu,
+        scope: sc.scope,
+        warehouseId: sc.warehouseId,
+        warehouseName: sc.warehouse?.name || null,
+        nguoiKiem: sc.nguoiKiem,
+        ngayKiem: sc.ngayKiem ? sc.ngayKiem.toISOString() : null,
+        ghiChu: sc.ghiChu,
+        trangThai: sc.trangThai,
+        soLuongDong: sc._count?.lines ?? 0,
+        updatedAt: sc.updatedAt ? sc.updatedAt.toISOString() : new Date().toISOString(),
+      }))
+    );
+  } catch (err) {
+    console.error('Lỗi GET /api/plan-finance/stock-counts:', err);
+    res.json([]);
+  }
+});
+
+// ── 6.3. GET & DELETE /api/plan-finance/stock-counts/:id ────────
+app.get('/api/plan-finance/stock-counts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const sc = await prisma.stockCount.findUnique({
+      where: { id },
+      include: {
+        warehouse: true,
+        lines: true,
+      },
+    });
+    if (!sc) {
+      return res.status(404).json({ error: 'Không tìm thấy phiếu kiểm kho' });
+    }
+
+    const itemIds = Array.from(new Set((sc.lines || []).map((l) => l.inventoryItemId).filter(Boolean)));
+    const items = itemIds.length
+      ? await prisma.inventoryItem.findMany({
+          where: { id: { in: itemIds } },
+          select: { id: true, tenHang: true, code: true, donVi: true },
+        })
+      : [];
+    const itemMap = new Map(items.map((it) => [it.id, it]));
+
+    res.json({
+      id: sc.id,
+      soChungTu: sc.soChungTu,
+      scope: sc.scope,
+      warehouseId: sc.warehouseId,
+      warehouseName: sc.warehouse?.name || null,
+      nguoiKiem: sc.nguoiKiem,
+      ngayKiem: sc.ngayKiem ? sc.ngayKiem.toISOString() : null,
+      ghiChu: sc.ghiChu,
+      trangThai: sc.trangThai,
+      soLuongDong: (sc.lines || []).length,
+      updatedAt: sc.updatedAt ? sc.updatedAt.toISOString() : new Date().toISOString(),
+      lines: (sc.lines || []).map((l) => {
+        const it = itemMap.get(l.inventoryItemId);
+        return {
+          id: l.id,
+          inventoryItemId: l.inventoryItemId,
+          tenHang: it?.tenHang || 'Hàng hoá',
+          maSku: it?.code || null,
+          donVi: it?.donVi || null,
+          warehouseId: l.warehouseId,
+          soLuongHeTong: l.soLuongHeTong,
+          soLuongThucTe: l.soLuongThucTe,
+          chenh: l.chenh,
+          ghiChu: l.ghiChu,
+        };
+      }),
+    });
+  } catch (err) {
+    console.error('Lỗi GET /api/plan-finance/stock-counts/:id:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/plan-finance/stock-counts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.stockCountLine.deleteMany({ where: { stockCountId: id } });
+    await prisma.stockCount.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Lỗi DELETE /api/plan-finance/stock-counts/:id:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── 6.4. GET /api/plan-finance/inventory/stock-snapshot ─────────
+app.get('/api/plan-finance/inventory/stock-snapshot', async (req, res) => {
+  try {
+    const warehouseId = String(req.query.warehouseId || '').trim();
+
+    const items = await prisma.inventoryItem.findMany({
+      where:
+        warehouseId && warehouseId !== 'all'
+          ? {
+              stocks: {
+                some: {
+                  OR: [{ warehouseId }, { warehouse: { code: warehouseId } }],
+                },
+              },
+            }
+          : {},
+      include: {
+        stocks: { include: { warehouse: true } },
+        category: true,
+        erpCategory: true,
+      },
+      orderBy: { tenHang: 'asc' },
+    });
+
+    const rows = items.map((it) => {
+      const matchedStock =
+        warehouseId && warehouseId !== 'all'
+          ? (it.stocks || []).find(
+              (s) => s.warehouseId === warehouseId || s.warehouse?.id === warehouseId || s.warehouse?.code === warehouseId
+            )
+          : (it.stocks || [])[0] || null;
+
+      const soLuongHeTong =
+        warehouseId && warehouseId !== 'all'
+          ? matchedStock?.soLuong ?? 0
+          : (it.stocks || []).length > 0
+          ? (it.stocks || []).reduce((acc, s) => acc + (s.soLuong || 0), 0)
+          : it.soLuong || 0;
+
+      const soLuongMin = matchedStock?.soLuongMin || it.soLuongMin || 0;
+      let trangThai = 'con-hang';
+      if (soLuongHeTong <= 0) trangThai = 'het-hang';
+      else if (soLuongMin > 0 && soLuongHeTong <= soLuongMin) trangThai = 'sap-het';
+
+      return {
+        inventoryItemId: it.id,
+        tenHang: it.tenHang,
+        maSku: it.code || null,
+        donVi: it.donVi || 'cái',
+        giaNhap: it.giaNhap || 0,
+        soLuongHeTong,
+        soLuongMin,
+        soLuongThucTe: '',
+        trangThai,
+        categoryId: it.categoryId || it.erpCategoryId || null,
+        erpCategoryId: it.erpCategoryId || null,
+        categoryName: it.category?.name || it.erpCategory?.name || null,
+        categoryCode: it.category?.code || it.erpCategory?.code || null,
+        thongSoKyThuat: it.thongSoKyThuat || null,
+        warehouseId: matchedStock?.warehouseId || (warehouseId && warehouseId !== 'all' ? warehouseId : undefined),
+        warehouseName: matchedStock?.warehouse?.name || undefined,
+        viTriHang: matchedStock?.viTriHang || null,
+        viTriCot: matchedStock?.viTriCot || null,
+        viTriTang: matchedStock?.viTriTang || null,
+        ghiChu: '',
+        chuaPhanKho: !(it.stocks && it.stocks.length > 0),
+      };
+    });
+
+    res.json(rows);
+  } catch (err) {
+    console.error('Lỗi GET /api/plan-finance/inventory/stock-snapshot:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── 6.5. POST /api/plan-finance/inventory/assign-warehouse ──────
+app.post('/api/plan-finance/inventory/assign-warehouse', async (req, res) => {
+  try {
+    const { inventoryItemId, warehouseId } = req.body || {};
+    if (!inventoryItemId || !warehouseId) {
+      return res.status(400).json({ error: 'Thiếu inventoryItemId hoặc warehouseId' });
+    }
+    const item = await prisma.inventoryItem.findUnique({ where: { id: inventoryItemId } });
+    if (!item) {
+      return res.status(404).json({ error: 'Không tìm thấy hàng hoá' });
+    }
+    const stock = await prisma.inventoryStock.upsert({
+      where: {
+        inventoryItemId_warehouseId: {
+          inventoryItemId,
+          warehouseId,
+        },
+      },
+      create: {
+        inventoryItemId,
+        warehouseId,
+        soLuong: item.soLuong || 0,
+        soLuongMin: item.soLuongMin || 0,
+      },
+      update: {},
+      include: { warehouse: true },
+    });
+
+    res.json({
+      warehouseId: stock.warehouseId,
+      warehouseName: stock.warehouse?.name || '',
+      soLuong: stock.soLuong || 0,
+      soLuongMin: stock.soLuongMin || 0,
+    });
+  } catch (err) {
+    console.error('Lỗi POST /api/plan-finance/inventory/assign-warehouse:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── 6.6. GET /api/plan-finance/inventory/location ───────────────
+app.get('/api/plan-finance/inventory/location', async (req, res) => {
+  try {
+    const itemId = String(req.query.itemId || '').trim();
+    const warehouseId = String(req.query.warehouseId || '').trim();
+    if (!itemId || !warehouseId) {
+      return res.json({ soLuong: 0, viTriHang: '', viTriCot: '', viTriTang: '' });
+    }
+    const st = await prisma.inventoryStock.findUnique({
+      where: {
+        inventoryItemId_warehouseId: {
+          inventoryItemId: itemId,
+          warehouseId,
+        },
+      },
+    });
+    res.json({
+      soLuong: st?.soLuong ?? 0,
+      viTriHang: st?.viTriHang ?? '',
+      viTriCot: st?.viTriCot ?? '',
+      viTriTang: st?.viTriTang ?? '',
+    });
+  } catch (err) {
+    res.json({ soLuong: 0, viTriHang: '', viTriCot: '', viTriTang: '' });
+  }
+});
+
+// ── 6.7. GET /api/plan-finance/stock-movements ──────────────────
+app.get('/api/plan-finance/stock-movements', async (req, res) => {
+  try {
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit || '100', 10) || 100));
+    const type = req.query.type ? String(req.query.type).trim() : undefined;
+    const warehouseId = req.query.warehouseId ? String(req.query.warehouseId).trim() : undefined;
+
+    const movements = await prisma.stockMovement.findMany({
+      where: {
+        ...(type ? { type } : {}),
+        ...(warehouseId ? { OR: [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }] } : {}),
+      },
+      include: {
+        inventoryItem: { select: { id: true, code: true, tenHang: true, donVi: true } },
+        toWarehouse: { select: { id: true, code: true, name: true } },
+        fromWarehouse: { select: { id: true, code: true, name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+    res.json(movements);
+  } catch (err) {
+    console.error('Lỗi GET /api/plan-finance/stock-movements:', err);
+    res.json([]);
+  }
+});
+
+// ── 6.8. GET /api/plan-finance/warehouses/:id ───────────────────
+app.get('/api/plan-finance/warehouses/:id', async (req, res) => {
+  try {
+    const wh = await prisma.warehouse.findUnique({
+      where: { id: req.params.id },
+    });
+    if (!wh) return res.status(404).json({ error: 'Không tìm thấy kho' });
+    res.json(wh);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── 6.9. GET /api/plan-finance/stock-card/items & stock-card ────
+app.get('/api/plan-finance/stock-card/items', async (req, res) => {
+  try {
+    const warehouseId = String(req.query.warehouseId || '').trim();
+    const items = await prisma.inventoryItem.findMany({
+      where:
+        warehouseId && warehouseId !== 'all'
+          ? { stocks: { some: { warehouseId } } }
+          : {},
+      select: { id: true, tenHang: true, code: true },
+      orderBy: { tenHang: 'asc' },
+    });
+    res.json(items);
+  } catch (err) {
+    res.json([]);
+  }
+});
+
+app.get('/api/plan-finance/stock-card', async (req, res) => {
+  try {
+    const inventoryItemId = String(req.query.inventoryItemId || '').trim();
+    const warehouseId = String(req.query.warehouseId || '').trim();
+    const from = req.query.from ? new Date(String(req.query.from)) : null;
+    const to = req.query.to ? new Date(String(req.query.to) + 'T23:59:59.999Z') : null;
+
+    if (!inventoryItemId) {
+      return res.status(400).json({ error: 'Thiếu inventoryItemId' });
+    }
+
+    const item = await prisma.inventoryItem.findUnique({
+      where: { id: inventoryItemId },
+      include: { category: true, erpCategory: true, stocks: true },
+    });
+    if (!item) {
+      return res.status(404).json({ error: 'Không tìm thấy hàng hoá' });
+    }
+
+    const stockInWh = warehouseId
+      ? (item.stocks || []).find((s) => s.warehouseId === warehouseId)
+      : null;
+    const tonHienTai = warehouseId
+      ? stockInWh?.soLuong ?? 0
+      : (item.stocks || []).reduce((acc, s) => acc + (s.soLuong || 0), 0) || item.soLuong || 0;
+
+    const movements = await prisma.stockMovement.findMany({
+      where: {
+        inventoryItemId,
+        ...(warehouseId ? { OR: [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }] } : {}),
+        ...(from || to
+          ? {
+              createdAt: {
+                ...(from ? { gte: from } : {}),
+                ...(to ? { lte: to } : {}),
+              },
+            }
+          : {}),
+      },
+      include: {
+        fromWarehouse: { select: { name: true } },
+        toWarehouse: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const lines = movements.map((m) => {
+      const isIn =
+        m.type === 'nhap' ||
+        (m.type === 'luan-chuyen' && warehouseId && m.toWarehouseId === warehouseId) ||
+        (m.type === 'dieu-chinh' && (m.soLuongSau ?? 0) >= (m.soLuongTruoc ?? 0));
+      return {
+        id: m.id,
+        ngay: m.createdAt.toISOString(),
+        type: m.type,
+        soChungTu: m.soChungTu,
+        lyDo: m.lyDo,
+        nguoiThucHien: m.nguoiThucHien,
+        fromKho: m.fromWarehouse?.name || null,
+        toKho: m.toWarehouse?.name || null,
+        nhap: isIn ? m.soLuong : null,
+        xuat: !isIn ? m.soLuong : null,
+        tonCuoi: m.soLuongSau ?? tonHienTai,
+        chenh: m.type === 'dieu-chinh' ? (m.soLuongSau ?? 0) - (m.soLuongTruoc ?? 0) : null,
+      };
+    });
+
+    const tonDauKy = movements.length > 0 ? movements[0].soLuongTruoc ?? tonHienTai : tonHienTai;
+
+    res.json({
+      item: {
+        id: item.id,
+        tenHang: item.tenHang,
+        code: item.code,
+        donVi: item.donVi,
+        giaNhap: item.giaNhap,
+        soLuongMin: stockInWh?.soLuongMin ?? item.soLuongMin ?? 0,
+        category: item.category?.name || item.erpCategory?.name || null,
+      },
+      tonDauKy,
+      tonHienTai,
+      lines,
+    });
+  } catch (err) {
+    console.error('Lỗi GET /api/plan-finance/stock-card:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── 6.10. GET /api/plan-finance/reports/bang-ke-xnt, bang-ke-nhap, bang-ke-xuat ──
+app.get('/api/plan-finance/reports/bang-ke-xnt', async (req, res) => {
+  try {
+    const warehouseId = String(req.query.warehouseId || '').trim();
+    const from = req.query.from ? new Date(String(req.query.from)) : null;
+    const to = req.query.to ? new Date(String(req.query.to) + 'T23:59:59.999Z') : null;
+
+    const stocks = await prisma.inventoryStock.findMany({
+      where: warehouseId ? { warehouseId } : {},
+      include: { inventoryItem: true },
+    });
+
+    const movements = await prisma.stockMovement.findMany({
+      where: {
+        ...(warehouseId ? { OR: [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }] } : {}),
+        ...(from || to
+          ? {
+              createdAt: {
+                ...(from ? { gte: from } : {}),
+                ...(to ? { lte: to } : {}),
+              },
+            }
+          : {}),
+      },
+    });
+
+    const movByItem = new Map();
+    movements.forEach((m) => {
+      const cur = movByItem.get(m.inventoryItemId) || { nhapSL: 0, xuatSL: 0 };
+      if (m.type === 'nhap' || (m.type === 'luan-chuyen' && m.toWarehouseId === warehouseId)) {
+        cur.nhapSL += m.soLuong || 0;
+      } else if (m.type === 'xuat' || (m.type === 'luan-chuyen' && m.fromWarehouseId === warehouseId)) {
+        cur.xuatSL += m.soLuong || 0;
+      }
+      movByItem.set(m.inventoryItemId, cur);
+    });
+
+    const lines = stocks.map((st) => {
+      const it = st.inventoryItem;
+      const donGia = it?.giaNhap || 0;
+      const tonCuoiSL = st.soLuong || 0;
+      const mv = movByItem.get(st.inventoryItemId) || { nhapSL: 0, xuatSL: 0 };
+      const tonDauSL = Math.max(0, tonCuoiSL - mv.nhapSL + mv.xuatSL);
+      return {
+        maSku: it?.code || null,
+        tenHang: it?.tenHang || 'Hàng hoá',
+        donVi: it?.donVi || 'cái',
+        tonDauSL,
+        tonDauTT: tonDauSL * donGia,
+        nhapSL: mv.nhapSL,
+        nhapTT: mv.nhapSL * donGia,
+        xuatSL: mv.xuatSL,
+        xuatTT: mv.xuatSL * donGia,
+        tonCuoiSL,
+        tonCuoiTT: tonCuoiSL * donGia,
+      };
+    });
+
+    res.json(lines);
+  } catch (err) {
+    console.error('Lỗi GET /api/plan-finance/reports/bang-ke-xnt:', err);
+    res.json([]);
+  }
+});
+
+app.get('/api/plan-finance/reports/bang-ke-nhap', async (req, res) => {
+  try {
+    const warehouseId = String(req.query.warehouseId || '').trim();
+    const from = req.query.from ? new Date(String(req.query.from)) : null;
+    const to = req.query.to ? new Date(String(req.query.to) + 'T23:59:59.999Z') : null;
+
+    const movements = await prisma.stockMovement.findMany({
+      where: {
+        ...(warehouseId ? { toWarehouseId: warehouseId } : { type: 'nhap' }),
+        ...(from || to
+          ? {
+              createdAt: {
+                ...(from ? { gte: from } : {}),
+                ...(to ? { lte: to } : {}),
+              },
+            }
+          : {}),
+      },
+      include: {
+        inventoryItem: true,
+        fromWarehouse: true,
+        toWarehouse: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(
+      movements.map((m) => {
+        const donGia = m.donGia ?? m.inventoryItem?.giaNhap ?? 0;
+        return {
+          soChungTu: m.soChungTu,
+          ngay: m.createdAt.toISOString(),
+          type: m.type,
+          lyDo: m.lyDo,
+          fromKho: m.fromWarehouse?.name || null,
+          toKho: m.toWarehouse?.name || null,
+          maSku: m.inventoryItem?.code || null,
+          tenHang: m.inventoryItem?.tenHang || 'Hàng hoá',
+          donVi: m.inventoryItem?.donVi || 'cái',
+          soLuong: m.soLuong || 0,
+          donGia,
+          thanhTien: (m.soLuong || 0) * donGia,
+        };
+      })
+    );
+  } catch (err) {
+    console.error('Lỗi GET /api/plan-finance/reports/bang-ke-nhap:', err);
+    res.json([]);
+  }
+});
+
+app.get('/api/plan-finance/reports/bang-ke-xuat', async (req, res) => {
+  try {
+    const warehouseId = String(req.query.warehouseId || '').trim();
+    const from = req.query.from ? new Date(String(req.query.from)) : null;
+    const to = req.query.to ? new Date(String(req.query.to) + 'T23:59:59.999Z') : null;
+
+    const movements = await prisma.stockMovement.findMany({
+      where: {
+        ...(warehouseId ? { fromWarehouseId: warehouseId } : { type: 'xuat' }),
+        ...(from || to
+          ? {
+              createdAt: {
+                ...(from ? { gte: from } : {}),
+                ...(to ? { lte: to } : {}),
+              },
+            }
+          : {}),
+      },
+      include: {
+        inventoryItem: true,
+        fromWarehouse: true,
+        toWarehouse: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(
+      movements.map((m) => {
+        const donGia = m.donGia ?? m.inventoryItem?.giaNhap ?? 0;
+        return {
+          soChungTu: m.soChungTu,
+          ngay: m.createdAt.toISOString(),
+          type: m.type,
+          lyDo: m.lyDo,
+          fromKho: m.fromWarehouse?.name || null,
+          toKho: m.toWarehouse?.name || null,
+          maSku: m.inventoryItem?.code || null,
+          tenHang: m.inventoryItem?.tenHang || 'Hàng hoá',
+          donVi: m.inventoryItem?.donVi || 'cái',
+          soLuong: m.soLuong || 0,
+          donGia,
+          thanhTien: (m.soLuong || 0) * donGia,
+        };
+      })
+    );
+  } catch (err) {
+    console.error('Lỗi GET /api/plan-finance/reports/bang-ke-xuat:', err);
+    res.json([]);
+  }
+});
+
 // ── 7. API Thống kê Tổng quan Phòng Kinh doanh (/api/sales/overview-stats) & Lịch sự kiện (/api/calendar-events) ──
 app.get('/api/sales/overview-stats', async (req, res) => {
   try {
+    const defaultM = new Date().getMonth() + 1;
     const period = String(req.query.period || 'month');
-    const selectedMonth = parseInt(String(req.query.month || '10'), 10) || 10;
+    const selectedMonth = parseInt(String(req.query.month || defaultM), 10) || defaultM;
     const freshMod = await import(`./server/salesOverviewHelper.js?t=${Date.now()}`);
     const stats = await freshMod.computeSalesOverviewStats(prisma, period, selectedMonth);
     res.json(stats);
@@ -19728,7 +20845,7 @@ app.get('/api/positions', async (req, res) => {
   try {
     const items = await prisma.category.findMany({
       where: { type: 'position' },
-      orderBy: { order: 'asc' },
+      orderBy: { name: 'asc' },
     });
     res.json(items);
   } catch (err) {
@@ -21056,28 +22173,24 @@ const computeHrAttendanceAndPayroll = async (month, year) => {
         : 0) +
       totalOtInMonth * (empBaseSalary / (calculatedStandardWorkDays || 26) / 8);
 
-    const isEnrolled =
+    const isEnrolled = Boolean(
       emp.isInsuranceEnrolled ||
-      (emp.socialInsuranceNumber && emp.socialInsuranceNumber.trim() !== '') ||
-      (emp.insuranceSalary && emp.insuranceSalary > 0);
+        (emp.socialInsuranceNumber && emp.socialInsuranceNumber.trim() !== '') ||
+        (emp.insuranceSalary && emp.insuranceSalary > 0)
+    );
     let insuranceDeduction = 0;
     let employerContribution = 0;
-    if (isEnrolled && totalWorkdaysInMonth >= 14) {
-      if (insuranceMap.has(emp.id)) {
-        const hist = insuranceMap.get(emp.id);
-        const rawEmpDeduct =
-          hist.employeeAmount ||
-          Math.round(((hist.insuranceSalary || emp.insuranceSalary || 0) * employeeRate) / 100);
-        insuranceDeduction = Math.min(rawEmpDeduct, Math.max(0, Math.round(grossSalaryInMonth)));
-        employerContribution =
-          hist.employerAmount ||
-          Math.round(((hist.insuranceSalary || emp.insuranceSalary || 0) * employerRate) / 100);
-      } else {
-        const insSalary = emp.insuranceSalary || 0;
-        const rawEmpDeduct = Math.round((insSalary * employeeRate) / 100);
-        insuranceDeduction = Math.min(rawEmpDeduct, Math.max(0, Math.round(grossSalaryInMonth)));
-        employerContribution = Math.round((insSalary * employerRate) / 100);
-      }
+    if (isEnrolled) {
+      const hist = insuranceMap.get(emp.id);
+      const insSalary = Number(emp.insuranceSalary || hist?.insuranceSalary || 0);
+      insuranceDeduction =
+        insSalary > 0
+          ? Math.round((insSalary * employeeRate) / 100)
+          : Number(hist?.employeeAmount || 0);
+      employerContribution =
+        insSalary > 0
+          ? Math.round((insSalary * employerRate) / 100)
+          : Number(hist?.employerAmount || 0);
     }
 
     // Đảm bảo tổng khấu trừ (BHXH người lao động + tạm ứng) không vượt quá tổng thu nhập thực tế trong kỳ (tránh thực lĩnh âm)
@@ -21584,6 +22697,8 @@ const READY_SYSTEM_TABLES = new Set([
   'EmployeeProbationEvent',
   'EmploymentHistory',
   'Expense',
+  'InsuranceBenefit',
+  'InsuranceChange',
   'InsuranceConfig',
   'InsuranceHistory',
   'InternalIncomeReport',

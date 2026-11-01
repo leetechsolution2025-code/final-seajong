@@ -228,20 +228,20 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
 
             {/* Switcher Dropdown */}
             {switcherOpen && (
-              <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3.5 z-50 animate-dropdown">
-                <div className="pb-2.5 mb-2.5 border-b border-slate-100 flex items-center justify-between px-1">
-                  <div>
+              <div className="fixed left-3 right-3 top-[68px] w-auto sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3.5 z-50 animate-dropdown">
+                <div className="pb-2.5 mb-2.5 border-b border-slate-100 flex items-center justify-between gap-2 px-1">
+                  <div className="min-w-0">
                     <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                       Quản lý Phòng Ban
                     </h4>
-                    <p className="text-[11px] text-slate-400">Chuyển nhanh sang các bộ phận được cấp quyền</p>
+                    <p className="text-[11px] text-slate-400 truncate">Chuyển nhanh sang các bộ phận được cấp quyền</p>
                   </div>
-                  <span className="text-[10px] font-mono font-semibold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full border border-indigo-200">
+                  <span className="shrink-0 whitespace-nowrap text-[10px] font-mono font-semibold bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full border border-indigo-200">
                     EOS Master
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-80 overflow-y-auto pr-1">
+                <div className="grid grid-cols-3 gap-2 sm:gap-1.5 max-h-80 overflow-y-auto">
                   {departments.map((dept) => {
                     const isSelected = activeDeptCode === dept.code.toLowerCase();
                     const hasAccess = canAccessDepartment(user, dept.code);
@@ -260,7 +260,7 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
                             ? `Chuyển sang ${dept.nameVi}`
                             : `Chưa được cấp quyền truy cập ${dept.nameVi}`
                         }
-                        className={`p-2.5 rounded-xl border flex flex-col items-center text-center transition-all ${
+                        className={`px-1.5 py-2.5 sm:p-2.5 rounded-xl border flex flex-col items-center justify-center text-center transition-all ${
                           !hasAccess
                             ? 'border-slate-100 bg-slate-50/70 text-slate-400 opacity-55 cursor-not-allowed'
                             : isSelected
@@ -280,7 +280,7 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
                             <i className="bi bi-lock-fill text-[10px] text-slate-400" />
                           )}
                         </div>
-                        <span className="text-xs font-semibold mt-1 line-clamp-1">
+                        <span className="text-[11px] sm:text-xs font-semibold mt-1 line-clamp-1 leading-tight">
                           {dept.nameVi}
                         </span>
                       </button>

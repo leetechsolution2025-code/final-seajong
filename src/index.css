@@ -746,14 +746,28 @@ input[type="number"] {
 
 @media (max-width: 768px) {
   .page-header-bar {
-    padding: 14px 16px;
+    padding: 12px 16px;
     flex-direction: column;
     align-items: flex-start;
+    gap: 8px;
+  }
+  .page-header-left {
+    width: 100%;
+    min-width: 0;
     gap: 12px;
   }
+  .ph-text {
+    flex: 1;
+    min-width: 0;
+  }
+  .page-header-desc {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
   .page-header-right {
-    width: 100%;
-    justify-content: space-between;
+    display: none;
   }
   .ph-icon-box {
     width: 42px;
@@ -876,6 +890,12 @@ input[type="number"] {
   line-height: 36px;
   transition: all var(--transition-fast);
   outline: none;
+}
+
+textarea.form-input {
+  height: auto;
+  line-height: 1.5;
+  padding: 8px 12px;
 }
 
 .form-input:hover {
@@ -1294,6 +1314,52 @@ input[type="number"] {
   border-right: 1px solid #e2e8f0;
   box-shadow: 8px 0 32px rgba(15, 23, 42, 0.15);
   animation: slideInLeft 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (max-width: 768px) {
+  .offcanvas-backdrop {
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+  }
+
+  .offcanvas-panel,
+  .app-custom-drawer {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    min-width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    min-height: 100dvh !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-radius: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .offcanvas-header {
+    flex-shrink: 0 !important;
+  }
+
+  .offcanvas-body {
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+    height: auto !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .offcanvas-footer {
+    margin-top: auto !important;
+    flex-shrink: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
 }
 
 .offcanvas-header {
@@ -3038,5 +3104,3026 @@ input[type="checkbox"]:focus,
   }
   to {
     transform: translateX(0);
+  }
+}
+
+.bom-show-mobile-inline {
+  display: none;
+}
+
+.mobile-row-swipe-actions {
+  display: none;
+}
+
+/* ==========================================================================
+   Tối ưu giao diện Mobile (<= 768px) toàn hệ thống & Bộ phận Kho vận
+   (Tuyệt đối không ảnh hưởng đến màn hình lớn > 768px)
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* 1. Thanh các bước (ModernStepper) gọn gàng trên 1 hàng ngang */
+  .modern-stepper-container {
+    padding: 6px 8px !important;
+    gap: 4px !important;
+  }
+
+  .modern-stepper-inner {
+    gap: 4px !important;
+    overflow-x: auto !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+
+  .modern-stepper-inner::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .modern-stepper-divider,
+  .modern-step-desc,
+  .modern-step-badge {
+    display: none !important;
+  }
+
+  .modern-step-item {
+    min-width: 0 !important;
+    flex: 1 1 0% !important;
+    padding: 5px 6px !important;
+    gap: 5px !important;
+    border-radius: 8px !important;
+  }
+
+  .modern-step-icon {
+    width: 24px !important;
+    height: 24px !important;
+    font-size: 0.78rem !important;
+    border-radius: 6px !important;
+  }
+
+  .modern-step-header {
+    gap: 0 !important;
+  }
+
+  .modern-step-title {
+    font-size: 0.74rem !important;
+    line-height: 1.2 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .modern-stepper-actions {
+    margin-left: 2px !important;
+  }
+
+  /* 2. Thanh công cụ bảng (TableToolbar) tự động xuống dòng chuẩn mobile */
+  .table-toolbar {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    padding: 8px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .table-toolbar-left {
+    display: contents !important;
+  }
+
+  .table-toolbar-custom-filters,
+  .table-toolbar-filters-custom {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+
+  .table-toolbar-custom-filters > div,
+  .table-toolbar-filters-custom > div {
+    width: 100% !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+
+  .table-toolbar-filters-custom > div > * {
+    flex: 1 1 calc(50% - 4px) !important;
+    min-width: 125px !important;
+  }
+
+  .table-toolbar-custom-filters > div > div:not(.warehouse-category-filter-group) {
+    flex: 1 1 auto !important;
+    min-width: 130px !important;
+    max-width: 100% !important;
+  }
+
+  .table-toolbar-custom-filters input[type="date"] {
+    width: auto !important;
+    min-width: 0 !important;
+    flex: 1 1 0% !important;
+  }
+
+  .warehouse-category-filter-group {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+
+  .warehouse-category-filter-group > div {
+    flex: 1 1 calc(50% - 4px) !important;
+    min-width: 125px !important;
+    max-width: 100% !important;
+  }
+
+  .table-toolbar-filter-item {
+    flex: 1 1 125px !important;
+    min-width: 120px !important;
+    max-width: 100% !important;
+  }
+
+  .table-toolbar-search {
+    flex: 1 1 130px !important;
+    min-width: 115px !important;
+    max-width: 100% !important;
+  }
+
+  .table-toolbar-after-search {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+
+  .table-toolbar-after-search:has(> .hidden) {
+    display: none !important;
+  }
+
+  /* Riêng trang Nhập, xuất và kiểm kho: 3 bộ lọc nằm trên cùng 1 dòng, hộp tìm kiếm + nút ba chấm nằm ở dòng dưới */
+  .logistics-mobile-page.inbound-mobile-page .table-toolbar-custom-filters,
+  .logistics-mobile-page.inbound-mobile-page .table-toolbar-custom-filters > div.warehouse-category-filter-group {
+    display: contents !important;
+  }
+
+  .logistics-mobile-page.inbound-mobile-page .table-toolbar-filter-item,
+  .logistics-mobile-page.inbound-mobile-page .warehouse-category-filter-group > div {
+    flex: 1 1 calc(33.333% - 6px) !important;
+    min-width: 0 !important;
+    max-width: calc(33.333% - 4px) !important;
+  }
+
+  .logistics-mobile-page.inbound-mobile-page .table-toolbar-filter-item .form-select,
+  .logistics-mobile-page.inbound-mobile-page .warehouse-category-filter-group > div .form-select {
+    padding-left: 8px !important;
+    padding-right: 22px !important;
+    font-size: 12px !important;
+  }
+
+  .logistics-mobile-page.inbound-mobile-page .table-toolbar-search,
+  .logistics-mobile-page.material-picking-mobile-page .table-toolbar-search {
+    flex: 1 1 calc(100% - 50px) !important;
+    min-width: 0 !important;
+    width: auto !important;
+  }
+
+  .table-toolbar-right {
+    flex: 0 0 auto !important;
+    margin-left: auto !important;
+    gap: 6px !important;
+  }
+
+  .table-toolbar-right:has(.logistics-toolbar-assign-group) {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    justify-content: space-between !important;
+  }
+
+  .logistics-mobile-page:not(.inbound-mobile-page):not(.material-picking-mobile-page) .table-toolbar-menu-wrap {
+    display: none !important;
+  }
+
+  .logistics-mobile-page:not(.inbound-mobile-page):not(.material-picking-mobile-page) .table-toolbar-right:not(:has(> :not(.table-toolbar-menu-wrap):not(.hidden))) {
+    display: none !important;
+  }
+
+  .logistics-mobile-page.inbound-mobile-page .table-toolbar-right,
+  .logistics-mobile-page.material-picking-mobile-page .table-toolbar-right {
+    display: flex !important;
+    flex: 0 0 auto !important;
+    margin-left: 0 !important;
+  }
+
+  .logistics-mobile-page.inbound-mobile-page .table-toolbar-menu-wrap,
+  .logistics-mobile-page.material-picking-mobile-page .table-toolbar-menu-wrap {
+    display: block !important;
+  }
+
+  /* Riêng trang Hệ thống kho bãi & Yêu cầu cá nhân: đưa nút hành động lên hàng 1 cạnh bộ lọc, đẩy ô tìm kiếm xuống hàng 2 */
+  .warehouses-mobile-page .table-toolbar-filter-item,
+  .my-requests-mobile-page .table-toolbar-filter-item {
+    order: 1 !important;
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+  }
+
+  .warehouses-mobile-page .table-toolbar-right,
+  .my-requests-mobile-page .table-toolbar-right {
+    order: 2 !important;
+    flex: 0 0 auto !important;
+    margin-left: 0 !important;
+  }
+
+  .warehouses-mobile-page .table-toolbar-search,
+  .my-requests-mobile-page .table-toolbar-search {
+    order: 3 !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
+  }
+
+  .my-requests-mobile-page .table-toolbar-right .delete-btn-label {
+    display: none !important;
+  }
+
+  .my-requests-mobile-page .table-toolbar-right .btn > span.mr-1\.5 {
+    margin-right: 0 !important;
+  }
+
+  .my-requests-mobile-page .table-toolbar-right .btn {
+    padding: 0 9px !important;
+    min-width: 34px !important;
+    height: 34px !important;
+    gap: 3px !important;
+    justify-content: center !important;
+  }
+
+  /* 3. Chống tràn ngang tuyệt đối trên màn hình điện thoại (<= 768px) cho tất cả các trang */
+  html,
+  body,
+  #root {
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+    overscroll-behavior-x: none !important;
+    box-sizing: border-box !important;
+  }
+
+  main,
+  .is-standard-page,
+  .standard-page-card,
+  .standard-page-card > div,
+  .is-step-page,
+  .modern-stepper-wrapper,
+  .modern-stepper-container,
+  .modern-stepper-toolbar,
+  .modern-stepper-content,
+  .full-width-table-wrapper,
+  .full-width-table-wrapper > .table-responsive,
+  .app-responsive-table-wrapper,
+  .table-container,
+  .table-responsive {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Mọi thẻ trực tiếp trong main đều không được vượt quá 100% chiều rộng khung nhìn */
+  main > *,
+  .is-standard-page > *,
+  .is-step-page > *,
+  .modern-stepper-content > * {
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .table-toolbar {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+    position: relative !important;
+    z-index: 30 !important;
+    flex-shrink: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Khóa chặt mọi bảng dữ liệu trên điện thoại: không bao giờ phình ngang quá 100% card */
+  main table:not(.print-table),
+  .custom-table,
+  .full-width-table-wrapper table,
+  .app-responsive-table-wrapper table,
+  .table-container table,
+  .table-responsive table {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  main table:not(.print-table) th,
+  main table:not(.print-table) td,
+  .custom-table th,
+  .custom-table td,
+  .full-width-table-wrapper table th,
+  .full-width-table-wrapper table td,
+  .app-responsive-table-wrapper table th,
+  .app-responsive-table-wrapper table td,
+  .table-container table th,
+  .table-container table td,
+  .table-responsive table th,
+  .table-responsive table td {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
+  /* Ẩn cột checkbox và checkbox inline trong các bảng có chức năng Xoá (SwipeableTableRow), giữ nguyên checkbox ở các bảng chọn SP báo giá / giao việc trên điện thoại (<= 768px) */
+  main table:not(.print-table):not(.keep-mobile-checkbox) th:first-child:has(> input[type="checkbox"]:only-child),
+  main table:not(.print-table):not(.keep-mobile-checkbox) tr.swipeable-table-row td:first-child:has(> input[type="checkbox"]:only-child),
+  main table.swipeable-delete-table th:first-child:has(> input[type="checkbox"]:only-child),
+  main table.swipeable-delete-table td:first-child:has(> input[type="checkbox"]:only-child),
+  .bom-approval-table th:first-child,
+  .bom-approval-table td:first-child {
+    display: none !important;
+  }
+
+  main table:not(.print-table):not(.keep-mobile-checkbox) th input[type="checkbox"],
+  main table:not(.print-table):not(.keep-mobile-checkbox) tr.swipeable-table-row td input[type="checkbox"],
+  main table.swipeable-delete-table th input[type="checkbox"],
+  main table.swipeable-delete-table td input[type="checkbox"] {
+    display: none !important;
+  }
+
+  .table-toolbar .btn-danger,
+  .table-toolbar .toolbar-delete-btn {
+    display: none !important;
+  }
+
+  /* Đồng bộ ẩn các cột phụ desktop (hidden sm:table-cell / md:table-cell) xuyên suốt mốc <= 768px */
+  main table th.hidden.sm\:table-cell,
+  main table td.hidden.sm\:table-cell,
+  main table th.hidden.md\:table-cell,
+  main table td.hidden.md\:table-cell {
+    display: none !important;
+  }
+
+  /* 4. Thanh phân trang (Pagination) gọn trên 1 dòng, ẩn dòng Hiển thị 1-2... */
+  .table-pagination {
+    padding: 6px 10px !important;
+    gap: 6px !important;
+    font-size: 0.75rem !important;
+    justify-content: flex-end !important;
+  }
+
+  .table-pagination .pagination-left {
+    display: none !important;
+  }
+
+  .table-pagination .pagination-btn {
+    min-width: 28px !important;
+    height: 28px !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* 5. Danh sách công việc (TaskManagementView) trên màn hình điện thoại */
+  .task-mgmt-toolbar {
+    padding: 8px 10px !important;
+    gap: 6px !important;
+  }
+
+  .task-mgmt-toolbar-left,
+  .task-mgmt-toolbar-right {
+    display: contents !important;
+  }
+
+  .task-mgmt-title-block {
+    order: 0 !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
+  }
+
+  .task-mgmt-month-nav,
+  .task-mgmt-today-btn {
+    order: 1 !important;
+    flex: 0 0 auto !important;
+  }
+
+  .task-mgmt-status-select {
+    order: 2 !important;
+    flex: 1 1 90px !important;
+    width: auto !important;
+    min-width: 0 !important;
+  }
+
+  .task-mgmt-add-btn {
+    order: 3 !important;
+    flex: 0 0 32px !important;
+    width: 32px !important;
+    min-width: 32px !important;
+    height: 32px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+  }
+
+  .task-mgmt-assignee-filter {
+    order: 4 !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .task-mgmt-search-box {
+    order: 5 !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .task-mgmt-legend-bar {
+    display: none !important;
+  }
+
+  .task-mgmt-data-table,
+  .task-mgmt-data-table th,
+  .task-mgmt-data-table td,
+  .task-mgmt-col-work {
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  .task-mgmt-pagination-wrap {
+    padding: 0 !important;
+  }
+
+  /* 6. Tuỳ biến giao diện các trang Phòng Nhân sự trên màn hình điện thoại (<= 768px) */
+  .hr-stepper-calendar-btn {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    padding: 0 !important;
+    border-radius: 8px !important;
+    background-color: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    color: var(--color-primary, #0284c7) !important;
+    justify-content: center !important;
+  }
+
+  .hr-stepper-calendar-btn > span {
+    margin-right: 0 !important;
+  }
+
+  .hr-overview-live-charts {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    padding: 12px !important;
+    gap: 12px !important;
+    overflow: hidden !important;
+  }
+
+  .hr-overview-live-charts > div {
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+    width: 100% !important;
+  }
+
+  .hr-overview-live-charts > .hr-mobile-slide-hidden {
+    display: none !important;
+  }
+
+  .hr-overview-live-charts > .hr-mobile-slide-active {
+    display: flex !important;
+  }
+
+  /* Ẩn hoàn toàn cụm nút Làm mới & + Thêm mới (Hình 2) trên màn hình điện thoại */
+  .hr-overview-live-charts .mkt-chart-actions {
+    display: none !important;
+  }
+
+  /* Đồng bộ màu sắc và dãn đều 3 nút khoảng thời gian trên 1 dòng (Hình 1) trên màn hình điện thoại */
+  .hr-overview-live-charts .hr-range-btn-group {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    gap: 6px !important;
+    overflow: visible !important;
+  }
+
+  .hr-overview-live-charts .hr-range-btn {
+    width: 100% !important;
+    min-width: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    background-color: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #334155 !important;
+    border-radius: 6px !important;
+    padding: 6px 8px !important;
+    font-size: 0.75rem !important;
+    font-weight: 600 !important;
+  }
+
+  .hr-overview-live-charts .hr-range-btn.is-active {
+    background-color: var(--color-primary, #0284c7) !important;
+    border-color: var(--color-primary, #0284c7) !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    box-shadow: 0 1px 3px rgba(2, 132, 199, 0.25) !important;
+  }
+
+  .hr-overview-live-charts .hr-dept-switcher {
+    background-color: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    padding: 2px !important;
+    border-radius: 6px !important;
+    gap: 4px !important;
+  }
+
+  .hr-overview-live-charts .hr-dept-switcher .hr-dept-nav-btn {
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px !important;
+    padding: 0 !important;
+    border-radius: 5px !important;
+    background-color: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    color: var(--color-primary, #0284c7) !important;
+  }
+
+  .hr-overview-live-charts .hr-tab-group {
+    background-color: #f1f5f9 !important;
+    padding: 4px !important;
+    border-radius: 8px !important;
+    gap: 6px !important;
+  }
+
+  .hr-overview-live-charts .hr-tab-btn {
+    height: 32px !important;
+    padding: 0 10px !important;
+    border-radius: 6px !important;
+    background-color: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #334155 !important;
+    font-size: 0.75rem !important;
+    font-weight: 600 !important;
+  }
+
+  .hr-overview-live-charts .hr-tab-btn.is-active {
+    background-color: var(--color-primary, #0284c7) !important;
+    border-color: var(--color-primary, #0284c7) !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    box-shadow: 0 1px 3px rgba(2, 132, 199, 0.25) !important;
+  }
+
+  .hr-overview-live-charts .hr-tab-btn.is-active i {
+    color: #ffffff !important;
+  }
+
+  .mkt-campaign-feed-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+
+  .mkt-campaign-metrics {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    padding-top: 8px !important;
+    border-top: 1px dashed #e2e8f0 !important;
+    text-align: center !important;
+  }
+
+  .table-toolbar-before-search,
+  .table-toolbar-before-search > div {
+    flex: 1 1 130px !important;
+    min-width: 120px !important;
+    max-width: 100% !important;
+  }
+
+  /* Ma trận chấm công & Đăng ký ăn trưa theo tuần (7 ngày) trên điện thoại: vừa khít 100% màn hình */
+  .hr-attendance-matrix-page .full-width-table-wrapper,
+  .hr-attendance-matrix-page .full-width-table-wrapper .table-responsive {
+    overflow-x: hidden !important;
+  }
+
+  .hr-attendance-matrix-page .full-width-table-wrapper table {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
+  }
+
+  .hr-attendance-matrix-page .full-width-table-wrapper table th.day-col-header,
+  .hr-attendance-matrix-page .full-width-table-wrapper table td.day-col-cell {
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    padding: 4px 1px !important;
+  }
+
+  .hr-attendance-matrix-page .full-width-table-wrapper table th:first-child,
+  .hr-attendance-matrix-page .full-width-table-wrapper table td:first-child {
+    width: 130px !important;
+    min-width: 130px !important;
+    max-width: 130px !important;
+    padding: 6px 8px !important;
+  }
+
+  /* Bước 4 Thiết lập Bảo hiểm xã hội & Y tế trên điện thoại */
+  .hr-insurance-settings-step {
+    padding: 8px !important;
+  }
+
+  .hr-insurance-settings-step .hr-insurance-settings-header {
+    padding: 12px !important;
+    gap: 10px !important;
+  }
+
+  .hr-insurance-settings-step .hr-insurance-settings-badge-row {
+    flex-wrap: nowrap !important;
+    margin-bottom: 4px !important;
+  }
+
+  .hr-insurance-settings-step .hr-insurance-settings-title {
+    font-size: 1rem !important;
+    line-height: 1.3 !important;
+  }
+
+  .hr-insurance-settings-step .hr-insurance-settings-actions {
+    gap: 8px !important;
+  }
+
+  .hr-insurance-settings-step .hr-insurance-settings-section-bar {
+    padding: 10px 12px !important;
+    gap: 8px !important;
+  }
+
+  .hr-insurance-settings-step .hr-insurance-summary-pills {
+    flex-wrap: nowrap !important;
+    gap: 4px !important;
+    width: 100% !important;
+  }
+
+  .hr-insurance-settings-step .hr-insurance-summary-pill {
+    flex: 1 1 0% !important;
+    padding: 4px 6px !important;
+    font-size: 0.72rem !important;
+  }
+
+  .hr-insurance-settings-step .hr-insurance-config-table {
+    min-width: 100% !important;
+    width: 100% !important;
+    table-layout: fixed !important;
+  }
+
+  .hr-insurance-settings-step .hr-insurance-rate-table th.col-ins-item,
+  .hr-insurance-settings-step .hr-insurance-rate-table td.col-ins-item {
+    width: 48% !important;
+    padding: 8px 10px !important;
+  }
+
+  .hr-insurance-settings-step .hr-insurance-rate-table th.col-ins-rate,
+  .hr-insurance-settings-step .hr-insurance-rate-table td.col-ins-rate {
+    width: 26% !important;
+    padding: 8px 6px !important;
+  }
+
+  .hr-insurance-settings-step .hr-insurance-benefit-table th.col-benefit-item,
+  .hr-insurance-settings-step .hr-insurance-benefit-table td.col-benefit-item {
+    width: 68% !important;
+    padding: 8px 10px !important;
+  }
+
+  .hr-insurance-settings-step .hr-insurance-benefit-table th.col-benefit-rate,
+  .hr-insurance-settings-step .hr-insurance-benefit-table td.col-benefit-rate {
+    width: 32% !important;
+    padding: 8px 10px !important;
+  }
+
+  .hr-insurance-settings-step .hr-insurance-rate-input-group {
+    width: 100% !important;
+    max-width: 82px !important;
+  }
+
+  .hr-insurance-settings-step .hr-insurance-rate-input-group input {
+    padding: 5px 6px !important;
+    font-size: 0.78rem !important;
+  }
+
+  .hr-insurance-settings-step .hr-insurance-rate-input-group span {
+    padding: 5px 5px !important;
+    font-size: 0.7rem !important;
+  }
+
+  /* 7. Trang Quản trị tuyển dụng, Theo dõi thử việc, Kế hoạch đào tạo, Hồ sơ nhân viên, Tổng hợp công lương & Bảo hiểm xã hội trên màn hình điện thoại (<= 768px) */
+  .hr-recruitment-step-page .dynamic-ticker-bar,
+  .hr-probation-page .dynamic-ticker-bar,
+  .hr-training-page .dynamic-ticker-bar,
+  .hr-insurance-step-page .dynamic-ticker-bar {
+    display: none !important;
+  }
+
+  .hr-recruitment-step-page .table-toolbar,
+  .hr-probation-page .table-toolbar,
+  .hr-training-page .table-toolbar,
+  .hr-employees-mobile-wrap .table-toolbar,
+  .hr-attendance-step-page .table-toolbar,
+  .hr-insurance-step-page .table-toolbar {
+    gap: 5px !important;
+  }
+
+  .hr-recruitment-step-page .table-toolbar-menu-wrap,
+  .hr-probation-page .table-toolbar-menu-wrap,
+  .hr-training-page .table-toolbar-menu-wrap,
+  .hr-training-page .table-toolbar-right,
+  .hr-employees-mobile-wrap .table-toolbar-menu-wrap,
+  .hr-attendance-step-page .table-toolbar-menu-wrap,
+  .hr-insurance-step-page .table-toolbar-menu-wrap {
+    display: none !important;
+  }
+
+  .hr-recruitment-step-page .table-toolbar-before-search,
+  .hr-probation-page .table-toolbar-before-search,
+  .hr-training-page .table-toolbar-before-search,
+  .hr-employees-mobile-wrap .table-toolbar-before-search,
+  .hr-attendance-step-page .table-toolbar-before-search,
+  .hr-insurance-step-page .table-toolbar-before-search {
+    order: 1 !important;
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    width: auto !important;
+  }
+
+  .hr-recruitment-step-page .table-toolbar-before-search > div,
+  .hr-probation-page .table-toolbar-before-search > div,
+  .hr-training-page .table-toolbar-before-search > div,
+  .hr-employees-mobile-wrap .table-toolbar-before-search > div,
+  .hr-attendance-step-page .table-toolbar-before-search > div,
+  .hr-insurance-step-page .table-toolbar-before-search > div {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .hr-recruitment-step-page .table-toolbar-filter-item,
+  .hr-probation-page .table-toolbar-filter-item,
+  .hr-training-page .table-toolbar-filter-item,
+  .hr-employees-mobile-wrap .table-toolbar-filter-item,
+  .hr-attendance-step-page .table-toolbar-filter-item,
+  .hr-insurance-step-page .table-toolbar-filter-item {
+    order: 1 !important;
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    width: auto !important;
+  }
+
+  .hr-recruitment-step-page .table-toolbar-before-search .form-select,
+  .hr-recruitment-step-page .table-toolbar-filter-item .form-select,
+  .hr-probation-page .table-toolbar-before-search .form-select,
+  .hr-probation-page .table-toolbar-filter-item .form-select,
+  .hr-training-page .table-toolbar-before-search .form-select,
+  .hr-training-page .table-toolbar-filter-item .form-select,
+  .hr-employees-mobile-wrap .table-toolbar-before-search .form-select,
+  .hr-employees-mobile-wrap .table-toolbar-filter-item .form-select,
+  .hr-attendance-step-page .table-toolbar-before-search .form-select,
+  .hr-attendance-step-page .table-toolbar-filter-item .form-select,
+  .hr-insurance-step-page .table-toolbar-before-search .form-select,
+  .hr-insurance-step-page .table-toolbar-filter-item .form-select {
+    padding-left: 6px !important;
+    padding-right: 17px !important;
+    font-size: 11.5px !important;
+    height: 34px !important;
+    min-height: 34px !important;
+  }
+
+  .hr-recruitment-step-page .table-toolbar-before-search .select-arrow,
+  .hr-recruitment-step-page .table-toolbar-filter-item .select-arrow,
+  .hr-probation-page .table-toolbar-before-search .select-arrow,
+  .hr-probation-page .table-toolbar-filter-item .select-arrow,
+  .hr-training-page .table-toolbar-before-search .select-arrow,
+  .hr-training-page .table-toolbar-filter-item .select-arrow,
+  .hr-employees-mobile-wrap .table-toolbar-before-search .select-arrow,
+  .hr-employees-mobile-wrap .table-toolbar-filter-item .select-arrow,
+  .hr-attendance-step-page .table-toolbar-before-search .select-arrow,
+  .hr-attendance-step-page .table-toolbar-filter-item .select-arrow,
+  .hr-insurance-step-page .table-toolbar-before-search .select-arrow,
+  .hr-insurance-step-page .table-toolbar-filter-item .select-arrow {
+    right: 4px !important;
+  }
+
+  .hr-recruitment-step-page .table-toolbar-right,
+  .hr-probation-page .table-toolbar-right,
+  .hr-training-page .table-toolbar-after-search,
+  .hr-employees-mobile-wrap .table-toolbar-right,
+  .hr-attendance-step-page .table-toolbar-right,
+  .hr-insurance-step-page .table-toolbar-right {
+    order: 2 !important;
+    flex: 0 0 auto !important;
+    margin-left: 0 !important;
+    gap: 4px !important;
+  }
+
+  .hr-recruitment-step-page .table-toolbar-right > div,
+  .hr-probation-page .table-toolbar-right > div,
+  .hr-training-page .table-toolbar-after-search > div,
+  .hr-employees-mobile-wrap .table-toolbar-right > div,
+  .hr-attendance-step-page .table-toolbar-right > div,
+  .hr-insurance-step-page .table-toolbar-right > div {
+    gap: 4px !important;
+  }
+
+  .hr-recruitment-step-page .table-toolbar-right .recruitment-btn-label,
+  .hr-recruitment-step-page .table-toolbar-right .delete-btn-label,
+  .hr-probation-page .table-toolbar-right .recruitment-btn-label,
+  .hr-probation-page .table-toolbar-right .delete-btn-label,
+  .hr-training-page .table-toolbar-after-search .recruitment-btn-label,
+  .hr-training-page .table-toolbar-after-search .delete-btn-label,
+  .hr-employees-mobile-wrap .table-toolbar-right .recruitment-btn-label,
+  .hr-employees-mobile-wrap .table-toolbar-right .delete-btn-label,
+  .hr-attendance-step-page .table-toolbar-right .recruitment-btn-label,
+  .hr-attendance-step-page .table-toolbar-right .delete-btn-label,
+  .hr-insurance-step-page .table-toolbar-right .recruitment-btn-label,
+  .hr-insurance-step-page .table-toolbar-right .delete-btn-label {
+    display: none !important;
+  }
+
+  .hr-recruitment-step-page .table-toolbar-right .btn > span.mr-1\.5,
+  .hr-probation-page .table-toolbar-right .btn > span.mr-1\.5,
+  .hr-training-page .table-toolbar-after-search .btn > span.mr-1\.5,
+  .hr-employees-mobile-wrap .table-toolbar-right .btn > span.mr-1\.5,
+  .hr-attendance-step-page .table-toolbar-right .btn > span.mr-1\.5,
+  .hr-insurance-step-page .table-toolbar-right .btn > span.mr-1\.5 {
+    margin-right: 0 !important;
+  }
+
+  .hr-recruitment-step-page .table-toolbar-right .btn,
+  .hr-probation-page .table-toolbar-right .btn,
+  .hr-training-page .table-toolbar-after-search .btn,
+  .hr-employees-mobile-wrap .table-toolbar-right .btn,
+  .hr-attendance-step-page .table-toolbar-right .btn,
+  .hr-insurance-step-page .table-toolbar-right .btn {
+    padding: 0 6px !important;
+    min-width: 34px !important;
+    height: 34px !important;
+    gap: 2px !important;
+    justify-content: center !important;
+  }
+
+  .hr-recruitment-step-page .table-toolbar-search,
+  .hr-probation-page .table-toolbar-search,
+  .hr-training-page .table-toolbar-search,
+  .hr-employees-mobile-wrap .table-toolbar-search,
+  .hr-attendance-step-page .table-toolbar-search,
+  .hr-insurance-step-page .table-toolbar-search {
+    order: 3 !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}
+
+/* ==========================================================================
+   BAN GIÁM ĐỐC (BOM) — TUỲ BIẾN SÂU CHO MÀN HÌNH ĐIỆN THOẠI (<= 768px)
+   ========================================================================== */
+.bom-cat-mobile-meta,
+.bom-cat-mobile-type-bar,
+.bom-labor-mobile-subtabs,
+.bom-show-mobile-inline,
+.bom-show-mobile-block,
+.bom-sys-mobile-bar,
+.bom-approval-mobile-top-date {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  /* Ẩn thanh Ticker trên điện thoại cho các trang Ban Giám đốc */
+  .bom-overview-page .dynamic-ticker-bar,
+  .bom-category-page .dynamic-ticker-bar,
+  .bom-task-page .dynamic-ticker-bar,
+  .bom-labor-rules-page .dynamic-ticker-bar,
+  .bom-director-plan-page .dynamic-ticker-bar,
+  .bom-approval-step-page .dynamic-ticker-bar {
+    display: none !important;
+  }
+
+  /* ── 1. TRANG TỔNG QUAN BAN GIÁM ĐỐC (BomOverviewView) ── */
+  .bom-overview-root {
+    padding: 10px 10px 18px 10px !important;
+    gap: 10px !important;
+  }
+
+  .bom-overview-control-bar {
+    padding-bottom: 8px !important;
+    gap: 6px !important;
+  }
+
+  .bom-realtime-status {
+    display: none !important;
+  }
+
+  .bom-overview-actions-wrap {
+    width: 100% !important;
+    justify-content: space-between !important;
+    gap: 6px !important;
+  }
+
+  .bom-period-pill-group {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 2px !important;
+  }
+
+  .bom-calendar-btn {
+    padding: 5px 8px !important;
+    gap: 4px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .bom-calendar-btn .bom-btn-text {
+    display: none !important;
+  }
+
+  .bom-period-divider {
+    padding: 0 2px !important;
+  }
+
+  .bom-period-btn {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    padding: 5px 4px !important;
+    font-size: 0.72rem !important;
+    white-space: nowrap !important;
+    text-align: center !important;
+    justify-content: center !important;
+  }
+
+  .bom-export-btn {
+    display: none !important;
+  }
+
+  /* Lưới 4 thẻ KPI: 2x2 gọn gàng trên điện thoại */
+  .bom-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .bom-kpi-card {
+    padding: 8px 10px !important;
+    gap: 4px !important;
+    min-width: 0 !important;
+  }
+
+  .bom-kpi-header {
+    gap: 4px !important;
+  }
+
+  .bom-kpi-title {
+    font-size: 0.7rem !important;
+    line-height: 1.2 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .bom-kpi-badge {
+    font-size: 0.625rem !important;
+    padding: 1px 4px !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+
+  .bom-kpi-value {
+    font-size: 1.05rem !important;
+  }
+
+  .bom-kpi-value > span {
+    font-size: 0.72rem !important;
+  }
+
+  .bom-kpi-sub {
+    font-size: 0.625rem !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .bom-kpi-footer {
+    font-size: 0.625rem !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  /* Chế độ vuốt ngang 2 màn hình trên điện thoại (Tổng quan <-> 12 Chỉ số tài chính & Sức khỏe DN) */
+  .bom-charts-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0 !important;
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+    height: 100% !important;
+  }
+
+  .bom-chart-card {
+    padding: 12px 10px !important;
+    flex: 1 1 0% !important;
+    height: 100% !important;
+    min-height: 250px !important;
+  }
+
+  .bom-chart-card svg {
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    display: block !important;
+  }
+
+  .bom-chart-subtitle {
+    display: none !important;
+  }
+
+  .bom-chart-legend {
+    gap: 8px 12px !important;
+    font-size: 0.6875rem !important;
+  }
+
+  .bom-overview-root.mobile-slide-overview .bom-ratios-card {
+    display: none !important;
+  }
+
+  .bom-overview-root.mobile-slide-ratios .bom-overview-control-bar,
+  .bom-overview-root.mobile-slide-ratios .bom-kpi-grid,
+  .bom-overview-root.mobile-slide-ratios .bom-chart-card {
+    display: none !important;
+  }
+
+  .bom-overview-root.mobile-slide-ratios .bom-ratios-card {
+    display: flex !important;
+    padding: 12px !important;
+    flex: 1 1 0% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
+  }
+
+  /* ── 2. TRANG QUẢN LÝ DANH MỤC (CategoryManagementView) ── */
+  .bom-category-split-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0 !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .bom-category-left-panel {
+    display: none !important;
+  }
+
+  .bom-category-right-panel {
+    flex: 1 1 0% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .bom-cat-right-header-desktop {
+    display: none !important;
+  }
+
+  .bom-cat-mobile-type-bar {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    padding: 10px 10px 8px 10px !important;
+    border-bottom: 1px solid var(--border-subtle) !important;
+    background-color: var(--bg-surface-2) !important;
+    flex-shrink: 0 !important;
+  }
+
+  .bom-cat-mobile-type-bar .input-icon-prefix {
+    position: absolute !important;
+    left: 11px !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    pointer-events: none !important;
+    z-index: 2 !important;
+  }
+
+  .bom-cat-mobile-type-bar .select-arrow {
+    position: absolute !important;
+    right: 10px !important;
+    top: 50% !important;
+    pointer-events: none !important;
+  }
+
+  .bom-cat-search-row {
+    padding: 8px 10px 10px 10px !important;
+    gap: 8px !important;
+  }
+
+  .bom-cat-add-btn {
+    padding: 0 10px !important;
+    width: 36px !important;
+    justify-content: center !important;
+  }
+
+  .bom-cat-add-label {
+    display: none !important;
+  }
+
+  .bom-cat-table-wrap {
+    padding: 0 10px 10px 10px !important;
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+
+  .bom-cat-modal-2col {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .bom-cat-table-inner {
+    min-width: 100% !important;
+  }
+
+  .bom-cat-table-header,
+  .bom-cat-table-row {
+    grid-template-columns: minmax(0, 1fr) 92px !important;
+    padding: 8px 10px !important;
+    gap: 6px !important;
+  }
+
+  .bom-cat-col-desktop {
+    display: none !important;
+  }
+
+  .bom-cat-mobile-meta {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    margin-top: 2px !important;
+    flex-wrap: wrap !important;
+  }
+
+  .bom-cat-mobile-code {
+    font-size: 0.68rem !important;
+    font-family: monospace !important;
+    color: #5b5ce2 !important;
+    background-color: rgba(91, 92, 226, 0.08) !important;
+    border: 1px solid rgba(91, 92, 226, 0.2) !important;
+    padding: 0 5px !important;
+    border-radius: 4px !important;
+  }
+
+  .bom-cat-mobile-status {
+    font-size: 0.65rem !important;
+    font-weight: 600 !important;
+    padding: 1px 6px !important;
+    border-radius: 10px !important;
+  }
+
+  .bom-cat-mobile-status.is-active {
+    color: #059669 !important;
+    background-color: #d1fae5 !important;
+  }
+
+  .bom-cat-mobile-status.is-hidden {
+    color: #dc2626 !important;
+    background-color: #fee2e2 !important;
+  }
+
+  /* ── 3. TRANG PHÂN QUYỀN NGƯỜI DÙNG (UserAuthManagementPage) ── */
+  .bom-user-auth-header {
+    padding: 10px 12px !important;
+    gap: 8px !important;
+  }
+
+  .bom-user-auth-actions {
+    width: 100% !important;
+    justify-content: flex-end !important;
+  }
+
+  .bom-user-auth-tabs {
+    padding: 6px 10px 0 10px !important;
+  }
+
+  .bom-user-auth-tabs > div > button {
+    flex: 1 1 0% !important;
+    justify-content: center !important;
+    padding: 6px 6px 8px 6px !important;
+    font-size: 11.5px !important;
+    white-space: nowrap !important;
+  }
+
+  /* ── 4. TRANG NỘI QUY LAO ĐỘNG (LaborRulesPage & 4 Subviews) ── */
+  .bom-hide-mobile {
+    display: none !important;
+  }
+
+  .bom-show-mobile-inline {
+    display: inline !important;
+  }
+
+  .bom-labor-rules-body {
+    padding: 8px !important;
+  }
+
+  .bom-labor-view-root,
+  .bom-holiday-view-root,
+  .bom-intranet-view-root {
+    padding: 2px !important;
+    gap: 8px !important;
+  }
+
+  /* Thanh chọn khối làm việc / nơi làm việc gọn 1 dòng trên điện thoại */
+  .bom-labor-shift-bar,
+  .bom-intranet-shift-bar {
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    padding: 7px 10px !important;
+    gap: 8px !important;
+  }
+
+  .bom-labor-shift-left {
+    gap: 8px !important;
+    min-width: 0 !important;
+    flex: 1 1 0% !important;
+  }
+
+  .bom-labor-shift-icon {
+    width: 30px !important;
+    height: 30px !important;
+  }
+
+  .bom-labor-shift-label,
+  .bom-labor-shift-scope,
+  .bom-labor-card-sub {
+    display: none !important;
+  }
+
+  .bom-labor-shift-btn {
+    font-size: 0.875rem !important;
+    max-width: 100% !important;
+  }
+
+  .bom-labor-shift-btn-text {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .bom-labor-shift-popover {
+    width: calc(100vw - 44px) !important;
+    max-width: 380px !important;
+    left: -38px !important;
+    right: auto !important;
+  }
+
+  .bom-show-mobile-block {
+    display: block !important;
+  }
+
+  .bom-labor-header-actions,
+  .bom-intranet-header-actions {
+    width: auto !important;
+    flex-wrap: nowrap !important;
+    gap: 5px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .bom-labor-header-actions .bom-action-divider,
+  .bom-intranet-header-actions .bom-action-divider,
+  .bom-holiday-header-actions .bom-action-divider {
+    display: none !important;
+  }
+
+  .bom-labor-reset-btn {
+    padding: 0 !important;
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    justify-content: center !important;
+    flex: 0 0 30px !important;
+  }
+
+  .bom-labor-reset-btn > span {
+    margin: 0 !important;
+  }
+
+  .bom-labor-save-btn {
+    padding: 0 10px !important;
+    height: 30px !important;
+    font-size: 0.75rem !important;
+    white-space: nowrap !important;
+    flex: 0 0 auto !important;
+  }
+
+  /* Thanh chuyển 4 nhóm quy chế / 3 nhóm nghỉ lễ / 3 nhóm thông số trên điện thoại */
+  .bom-labor-mobile-subtabs {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 4px !important;
+    padding: 3px !important;
+    background-color: #f1f5f9 !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+  }
+
+  .bom-holiday-mobile-subtabs,
+  .bom-sys-mobile-bar .bom-labor-mobile-subtabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .bom-labor-mobile-subtab-btn {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 4px !important;
+    padding: 6px 4px !important;
+    border-radius: 6px !important;
+    border: none !important;
+    background: transparent !important;
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    color: #64748b !important;
+    cursor: pointer !important;
+    white-space: nowrap !important;
+    transition: all 0.15s ease !important;
+  }
+
+  .bom-labor-mobile-subtab-btn.is-active,
+  .bom-labor-mobile-subtab-btn.active {
+    background-color: #ffffff !important;
+    color: #4f46e5 !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08) !important;
+  }
+
+  .bom-labor-cards-grid,
+  .bom-intranet-cards-grid,
+  .bom-intranet-ip-mode-grid,
+  .bom-intranet-gps-grid,
+  .bom-sys-cat-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .bom-labor-card {
+    padding: 12px !important;
+    gap: 10px !important;
+  }
+
+  .bom-labor-card-mobile-hidden {
+    display: none !important;
+  }
+
+  .bom-labor-days-row {
+    flex-wrap: nowrap !important;
+    gap: 4px !important;
+  }
+
+  .bom-labor-days-row > button {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    padding: 6px 0 !important;
+    text-align: center !important;
+    font-size: 0.72rem !important;
+  }
+
+  .bom-labor-violation-inputs {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+  }
+
+  .bom-labor-violation-input-full {
+    grid-column: 1 / -1 !important;
+  }
+
+  .bom-labor-violation-table th,
+  .bom-labor-violation-table td {
+    padding: 6px 6px !important;
+  }
+
+  /* ── TAB 2: NGHỈ LỄ, TẾT (HolidayRulesView) ── */
+  .bom-holiday-top-bar {
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 6px !important;
+    padding: 8px 10px !important;
+    background-color: #ffffff !important;
+    border: 1.5px solid #bfdbfe !important;
+    border-radius: 10px !important;
+  }
+
+  .bom-holiday-top-title {
+    font-size: 0.85rem !important;
+    white-space: nowrap !important;
+  }
+
+  .bom-holiday-header-actions {
+    width: auto !important;
+    flex-wrap: nowrap !important;
+    gap: 5px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .bom-holiday-add-btn {
+    padding: 0 8px !important;
+    height: 30px !important;
+    font-size: 0.72rem !important;
+    white-space: nowrap !important;
+    flex: 0 0 auto !important;
+  }
+
+  .bom-holiday-card {
+    padding: 10px !important;
+  }
+
+  .bom-holiday-table th,
+  .bom-holiday-table td {
+    min-width: 0 !important;
+    padding: 8px 6px !important;
+  }
+
+  .bom-holiday-table th:first-child,
+  .bom-holiday-table td:first-child {
+    display: none !important;
+  }
+
+  .bom-holiday-date-group {
+    width: 100% !important;
+    justify-content: flex-end !important;
+    gap: 4px !important;
+  }
+
+  .bom-holiday-date-input {
+    width: 116px !important;
+    font-size: 0.72rem !important;
+    padding: 2px 4px !important;
+  }
+
+  .bom-personal-leave-table th,
+  .bom-personal-leave-table td {
+    min-width: 0 !important;
+    padding: 6px 8px !important;
+  }
+
+  /* ── TAB 3: MẠNG NỘI BỘ (IntranetSetupView) ── */
+  .bom-intranet-detect-banner {
+    padding: 8px 10px !important;
+    gap: 8px !important;
+  }
+
+  .bom-intranet-sync-bar {
+    padding: 6px 8px !important;
+    gap: 6px !important;
+  }
+
+  /* ── TAB 4: THÔNG SỐ HỆ THỐNG (SystemParametersView) ── */
+  .bom-sys-params-root {
+    padding: 4px 2px 16px !important;
+    gap: 10px !important;
+  }
+
+  .bom-sys-mobile-bar {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  .bom-sys-mobile-bar-top {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    padding: 8px 10px !important;
+    background-color: #ffffff !important;
+    border: 1.5px solid #bfdbfe !important;
+    border-radius: 10px !important;
+  }
+
+  .bom-sys-mobile-bar-title {
+    font-size: 0.85rem !important;
+    font-weight: 800 !important;
+    color: #0f172a !important;
+  }
+
+  .bom-sys-card {
+    padding: 12px !important;
+    gap: 12px !important;
+  }
+
+  .bom-sys-card-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  /* ── 5. TRANG LẬP KẾ HOẠCH NĂM (DirectorPlanPage) ── */
+  .bom-show-mobile-inline {
+    display: inline !important;
+  }
+
+  .bom-plan-mobile-hidden {
+    display: none !important;
+  }
+
+  .bom-director-stepper-toolbar {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 6px 10px !important;
+    gap: 6px !important;
+  }
+
+  .bom-director-profit-summary {
+    font-size: 11px !important;
+    justify-content: flex-end !important;
+  }
+
+  .bom-director-summary-brand,
+  .bom-director-margin-label {
+    display: none !important;
+  }
+
+  .bom-plan-scroll-body {
+    padding: 8px !important;
+  }
+
+  .bom-plan-step1-container,
+  .bom-plan-step2-container,
+  .bom-plan-step3-container {
+    padding-left: 2px !important;
+    padding-right: 2px !important;
+    padding-bottom: 12px !important;
+  }
+
+  .director-plan-scope .bom-plan-step1-row {
+    --bs-gutter-x: 0.5rem !important;
+    --bs-gutter-y: 0.5rem !important;
+  }
+
+  .bom-plan-year-card {
+    border-radius: 12px !important;
+  }
+
+  .bom-plan-year-card-body,
+  .bom-plan-card-body {
+    padding: 10px !important;
+    gap: 8px !important;
+  }
+
+  .bom-plan-card-header {
+    padding: 8px 10px !important;
+  }
+
+  .bom-plan-kpi-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px !important;
+  }
+
+  .bom-plan-kpi-full {
+    grid-column: 1 / -1 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 8px 10px !important;
+  }
+
+  .bom-plan-kpi-full label {
+    margin-bottom: 0 !important;
+    font-size: 11px !important;
+  }
+
+  .bom-plan-kpi-full h4 {
+    font-size: 16px !important;
+  }
+
+  .bom-plan-kpi-box:not(.bom-plan-kpi-full) {
+    padding: 6px 10px !important;
+  }
+
+  .bom-plan-kpi-box:not(.bom-plan-kpi-full) label {
+    font-size: 10px !important;
+    margin-bottom: 2px !important;
+    white-space: nowrap !important;
+  }
+
+  .bom-plan-kpi-box:not(.bom-plan-kpi-full) h4 {
+    font-size: 15px !important;
+  }
+
+  .bom-plan-mobile-subtabs {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 4px !important;
+    padding: 3px !important;
+    background-color: #f1f5f9 !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+  }
+
+  .bom-plan-dept-pills {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+  }
+
+  .bom-plan-dept-pill {
+    flex: 1 1 auto !important;
+    padding: 4px 8px !important;
+    border-radius: 6px !important;
+    border: 1px solid #e2e8f0 !important;
+    background-color: #ffffff !important;
+    color: #475569 !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    text-align: center !important;
+    white-space: nowrap !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease !important;
+  }
+
+  .bom-plan-dept-pill.is-active {
+    background-color: #eff6ff !important;
+    border-color: #3b82f6 !important;
+    color: #1d4ed8 !important;
+  }
+
+  .bom-plan-step-topbar {
+    gap: 6px !important;
+    margin-bottom: 8px !important;
+    padding: 6px 8px !important;
+    background-color: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 10px !important;
+  }
+
+  .bom-plan-step-topbar-left {
+    gap: 6px !important;
+    min-width: 0 !important;
+  }
+
+  .bom-plan-icon-btn {
+    width: 30px !important;
+    height: 30px !important;
+    font-size: 13px !important;
+    margin-left: 2px !important;
+  }
+
+  .bom-plan-del-btn {
+    height: 30px !important;
+    padding: 0 8px !important;
+  }
+
+  .bom-plan-dept-list {
+    gap: 8px !important;
+    padding-right: 0 !important;
+  }
+
+  .bom-plan-dept-card {
+    background-color: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 10px !important;
+    padding: 8px 10px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .bom-plan-dept-header {
+    padding-bottom: 6px !important;
+    margin-bottom: 6px !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    gap: 6px !important;
+  }
+
+  .bom-plan-dept-title {
+    font-size: 11.5px !important;
+    white-space: nowrap !important;
+  }
+
+  .bom-plan-dept-badge,
+  .bom-plan-dept-summary {
+    font-size: 10.5px !important;
+    white-space: nowrap !important;
+  }
+
+  .bom-plan-item-row {
+    padding-left: 0 !important;
+    gap: 6px !important;
+    margin-bottom: 4px !important;
+  }
+
+  /* Chuyển checkbox dòng từ dạng switch tròn sang ô vuông chuẩn trên mobile */
+  .director-plan-scope .bom-plan-row-checkbox {
+    width: 15px !important;
+    height: 15px !important;
+    min-width: 15px !important;
+    margin-top: 0 !important;
+    border-radius: 4px !important;
+    background-image: none !important;
+    border: 1.5px solid #cbd5e1 !important;
+    background-color: #ffffff !important;
+  }
+
+  .director-plan-scope .bom-plan-row-checkbox:checked {
+    background-color: #0d6efd !important;
+    border-color: #0d6efd !important;
+    background-position: center !important;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e") !important;
+  }
+
+  .bom-plan-item-label {
+    font-size: 11.5px !important;
+    color: #334155 !important;
+    font-weight: 500 !important;
+    line-height: 1.25 !important;
+    min-width: 0 !important;
+  }
+
+  .bom-plan-cost-inputs {
+    max-width: 155px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .bom-plan-cost-inputs:has(.percent-input-field) {
+    max-width: 205px !important;
+  }
+
+  .bom-plan-pct-unit {
+    min-width: 34px !important;
+    font-size: 9.5px !important;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .bom-plan-staff-inputs {
+    max-width: 175px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .bom-plan-staff-qty {
+    max-width: 38px !important;
+    padding-left: 2px !important;
+    padding-right: 2px !important;
+  }
+
+  .bom-plan-staff-unit {
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    font-size: 10px !important;
+  }
+
+  .bom-plan-add-btn {
+    padding-left: 0 !important;
+    margin-top: 4px !important;
+    font-size: 11.5px !important;
+  }
+
+  .bom-plan-step4-container {
+    padding-left: 2px !important;
+    padding-right: 2px !important;
+  }
+
+  .bom-plan-profit-table th,
+  .bom-plan-profit-table td {
+    padding: 8px 8px !important;
+    font-size: 12px !important;
+  }
+
+  /* ── 6. TRANG QUẢN TRỊ CÔNG VIỆC (TaskManagementPage) ── */
+  .task-mgmt-col-work {
+    max-width: none !important;
+  }
+
+  /* ── 7. TRANG TRUNG TÂM PHÊ DUYỆT (DocumentApprovalPage) ── */
+  .bom-approval-step-page .modern-step-badge {
+    display: inline-flex !important;
+    font-size: 0.625rem !important;
+    padding: 1px 5px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .bom-approval-step-page .table-toolbar-filter-item#filter-doc-type,
+  .bom-approval-step-page .table-toolbar-filter-item:nth-child(2) {
+    display: none !important;
+  }
+
+  .bom-approval-step-page .table-toolbar {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    padding: 8px !important;
+    gap: 6px !important;
+  }
+
+  .bom-approval-step-page .table-toolbar-top-row {
+    display: contents !important;
+  }
+
+  .bom-approval-step-page .table-toolbar-left {
+    display: contents !important;
+  }
+
+  .bom-approval-step-page .table-toolbar-filters-group {
+    order: 1 !important;
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    gap: 5px !important;
+  }
+
+  .bom-approval-step-page .table-toolbar-filter-item {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    width: auto !important;
+  }
+
+  .bom-approval-step-page .table-toolbar-filter-item .form-select {
+    padding-left: 6px !important;
+    padding-right: 17px !important;
+    font-size: 11.5px !important;
+    height: 34px !important;
+    min-height: 34px !important;
+  }
+
+  .bom-approval-step-page .table-toolbar-filter-item .select-arrow {
+    right: 4px !important;
+  }
+
+  .bom-approval-step-page .table-toolbar-after-search {
+    order: 2 !important;
+    flex: 0 0 auto !important;
+    margin-left: 0 !important;
+  }
+
+  .bom-approval-step-page .table-toolbar-after-search > div {
+    gap: 4px !important;
+  }
+
+  .bom-approval-step-page .table-toolbar-after-search .recruitment-btn-label,
+  .bom-approval-step-page .table-toolbar-after-search .delete-btn-label {
+    display: none !important;
+  }
+
+  .bom-approval-step-page .table-toolbar-after-search .btn > span.mr-1\.5 {
+    margin-right: 0 !important;
+  }
+
+  .bom-approval-step-page .table-toolbar-after-search .btn {
+    padding: 0 6px !important;
+    min-width: 34px !important;
+    height: 34px !important;
+    gap: 2px !important;
+    justify-content: center !important;
+  }
+
+  .bom-approval-step-page .table-toolbar-search {
+    order: 3 !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  /* Khóa chặt chiều rộng bảng Trung tâm phê duyệt không bao giờ tràn ngang trên điện thoại */
+  .bom-approval-step-page .table-container,
+  .bom-approval-step-page .table-responsive {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+  }
+
+  .bom-approval-table {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+  }
+
+  .bom-approval-table th:first-child,
+  .bom-approval-table td:first-child {
+    display: none !important;
+  }
+
+  .bom-approval-table th.bom-approval-col-title,
+  .bom-approval-table td.bom-approval-col-title {
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    padding: 8px 10px !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .bom-approval-cell-inner {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    gap: 3px !important;
+  }
+
+  .bom-approval-row-top {
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    gap: 4px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .bom-approval-code-badge {
+    font-size: 0.68rem !important;
+    padding: 1px 5px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .bom-approval-type-badge {
+    font-size: 0.68rem !important;
+    padding: 1px 5px !important;
+    min-width: 0 !important;
+    flex-shrink: 1 !important;
+    overflow: hidden !important;
+  }
+
+  .bom-approval-type-text {
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .bom-approval-attach-btn {
+    padding: 1px 4px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .bom-approval-mobile-top-date {
+    display: inline-flex !important;
+    align-items: center !important;
+    margin-left: auto !important;
+    padding-left: 4px !important;
+    font-size: 0.68rem !important;
+    font-weight: 600 !important;
+    color: #64748b !important;
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+  }
+
+  .bom-approval-row-title {
+    font-size: 0.8125rem !important;
+    line-height: 1.3 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    display: block !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .bom-approval-mobile-meta {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 6px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    margin-top: 1px !important;
+  }
+
+  .bom-approval-mobile-dept {
+    font-size: 0.72rem !important;
+    color: #475569 !important;
+    font-weight: 500 !important;
+    min-width: 0 !important;
+    flex: 1 1 0% !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .bom-approval-mobile-sub {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    gap: 4px !important;
+    flex-shrink: 0 !important;
+    max-width: 68% !important;
+  }
+
+  .bom-approval-mobile-val {
+    font-size: 0.68rem !important;
+    font-weight: 800 !important;
+    color: var(--color-primary, #0284c7) !important;
+    background-color: rgba(2, 132, 199, 0.08) !important;
+    padding: 1px 5px !important;
+    border-radius: 4px !important;
+    white-space: nowrap !important;
+  }
+
+  .bom-approval-mobile-summary {
+    font-size: 0.66rem !important;
+    font-weight: 600 !important;
+    color: #64748b !important;
+    background-color: #f1f5f9 !important;
+    padding: 1px 5px !important;
+    border-radius: 4px !important;
+    max-width: 105px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .bom-approval-mobile-actions {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 3px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .bom-approval-quick-btn {
+    height: 21px !important;
+    border-radius: 5px !important;
+    font-size: 0.66rem !important;
+    font-weight: 700 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 2.5px !important;
+    cursor: pointer !important;
+    white-space: nowrap !important;
+    transition: all 0.15s ease !important;
+  }
+
+  .bom-approval-quick-btn.is-approve {
+    padding: 0 6px !important;
+    background-color: rgba(16, 185, 129, 0.12) !important;
+    color: #059669 !important;
+    border: 1px solid rgba(16, 185, 129, 0.3) !important;
+  }
+
+  .bom-approval-quick-btn.is-approve:active {
+    background-color: #10b981 !important;
+    color: #ffffff !important;
+  }
+
+  .bom-approval-quick-btn.is-reject {
+    width: 21px !important;
+    padding: 0 !important;
+    background-color: rgba(239, 68, 68, 0.1) !important;
+    color: #dc2626 !important;
+    border: 1px solid rgba(239, 68, 68, 0.25) !important;
+  }
+
+  .bom-approval-quick-btn.is-reject:active {
+    background-color: #ef4444 !important;
+    color: #ffffff !important;
+  }
+
+  .bom-approval-mobile-status {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 3px !important;
+    font-size: 0.65rem !important;
+    font-weight: 700 !important;
+    padding: 1px 6px !important;
+    border-radius: 4px !important;
+    white-space: nowrap !important;
+  }
+
+  .bom-approval-mobile-status.is-approved {
+    background-color: rgba(16, 185, 129, 0.12) !important;
+    color: #059669 !important;
+    border: 1px solid rgba(16, 185, 129, 0.25) !important;
+  }
+
+  .bom-approval-mobile-status.is-rejected {
+    background-color: rgba(239, 68, 68, 0.1) !important;
+    color: #dc2626 !important;
+    border: 1px solid rgba(239, 68, 68, 0.25) !important;
+  }
+
+  .bom-approval-offcanvas {
+    width: 100vw !important;
+    max-width: 100vw !important;
+  }
+
+  .bom-approval-offcanvas-footer {
+    gap: 6px !important;
+  }
+
+  .bom-approval-offcanvas-footer .btn {
+    padding: 0 10px !important;
+    font-size: 0.78rem !important;
+  }
+
+  .bom-approval-modal-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  /* ==========================================================================
+     11. PHÒNG KINH DOANH (SALES) - TÙY BIẾN SÂU TRÊN MÀN HÌNH ĐIỆN THOẠI (<= 768px)
+     ========================================================================== */
+
+  /* Ẩn thanh ticker chạy chữ trên điện thoại để tối ưu diện tích hiển thị */
+  .sales-overview-page .dynamic-ticker-bar,
+  .sales-orders-page .dynamic-ticker-bar,
+  .sales-support-page .dynamic-ticker-bar,
+  .sales-partners-page .dynamic-ticker-bar,
+  .sales-customers-page .dynamic-ticker-bar,
+  .sales-pricing-page .dynamic-ticker-bar,
+  .sales-results-page .dynamic-ticker-bar,
+  .sales-internal-reports-page .dynamic-ticker-bar,
+  .sales-plan-scope .dynamic-ticker-bar {
+    display: none !important;
+  }
+
+  /* Tối ưu Step Tabs trên các trang StepPage của Phòng Kinh doanh */
+  .sales-orders-page .step-tabs-header,
+  .sales-support-page .step-tabs-header,
+  .sales-partners-page .step-tabs-header,
+  .sales-pricing-page .step-tabs-header,
+  .sales-internal-reports-page .step-tabs-header,
+  .sales-plan-scope .step-tabs-header {
+    padding: 4px 6px !important;
+    gap: 4px !important;
+    overflow-x: auto !important;
+    scrollbar-width: none !important;
+  }
+
+  .sales-orders-page .step-tabs-header::-webkit-scrollbar,
+  .sales-support-page .step-tabs-header::-webkit-scrollbar,
+  .sales-partners-page .step-tabs-header::-webkit-scrollbar,
+  .sales-pricing-page .step-tabs-header::-webkit-scrollbar,
+  .sales-internal-reports-page .step-tabs-header::-webkit-scrollbar,
+  .sales-plan-scope .step-tabs-header::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  /* Tối ưu TableToolbar 2 hàng gọn gàng trên màn hình điện thoại */
+  .sales-orders-page .table-toolbar,
+  .sales-support-page .table-toolbar,
+  .sales-partners-page .table-toolbar,
+  .sales-customers-page .table-toolbar,
+  .sales-pricing-page .table-toolbar,
+  .sales-results-page .table-toolbar {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 5px !important;
+    padding: 6px 8px !important;
+  }
+
+  .sales-orders-page .table-toolbar-menu-wrap,
+  .sales-support-page .table-toolbar-menu-wrap,
+  .sales-partners-page .table-toolbar-menu-wrap,
+  .sales-customers-page .table-toolbar-menu-wrap,
+  .sales-pricing-page .table-toolbar-menu-wrap,
+  .sales-results-page .table-toolbar-menu-wrap {
+    display: none !important;
+  }
+
+  .sales-orders-page .table-toolbar-before-search,
+  .sales-support-page .table-toolbar-before-search,
+  .sales-partners-page .table-toolbar-before-search,
+  .sales-customers-page .table-toolbar-before-search,
+  .sales-pricing-page .table-toolbar-before-search {
+    order: 1 !important;
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+  }
+
+  .sales-orders-page .table-toolbar-filter-item,
+  .sales-support-page .table-toolbar-filter-item,
+  .sales-partners-page .table-toolbar-filter-item,
+  .sales-customers-page .table-toolbar-filter-item,
+  .sales-pricing-page .table-toolbar-filter-item {
+    order: 1 !important;
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    width: auto !important;
+  }
+
+  /* Trang Hỗ trợ đại lý: ẩn filter thứ 3 (Mức độ) trên mobile để Hàng 1 vừa khít 2 filter */
+  .sales-support-page .table-toolbar-filter-item:nth-of-type(3) {
+    display: none !important;
+  }
+
+  .sales-orders-page .table-toolbar-filter-item .form-select,
+  .sales-support-page .table-toolbar-filter-item .form-select,
+  .sales-partners-page .table-toolbar-filter-item .form-select,
+  .sales-customers-page .table-toolbar-filter-item .form-select,
+  .sales-pricing-page .table-toolbar-filter-item .form-select {
+    padding-left: 7px !important;
+    padding-right: 18px !important;
+    font-size: 11.5px !important;
+    height: 34px !important;
+    min-height: 34px !important;
+  }
+
+  .sales-orders-page .table-toolbar-filter-item .select-arrow,
+  .sales-support-page .table-toolbar-filter-item .select-arrow,
+  .sales-partners-page .table-toolbar-filter-item .select-arrow,
+  .sales-customers-page .table-toolbar-filter-item .select-arrow,
+  .sales-pricing-page .table-toolbar-filter-item .select-arrow {
+    right: 4px !important;
+  }
+
+  .sales-orders-page .table-toolbar-right,
+  .sales-support-page .table-toolbar-right,
+  .sales-partners-page .table-toolbar-right,
+  .sales-customers-page .table-toolbar-right,
+  .sales-pricing-page .table-toolbar-right {
+    order: 2 !important;
+    flex: 0 0 auto !important;
+    margin-left: 0 !important;
+    gap: 4px !important;
+  }
+
+  .sales-orders-page .table-toolbar-right .btn,
+  .sales-partners-page .table-toolbar-right .btn,
+  .sales-customers-page .table-toolbar-right .btn,
+  .sales-pricing-page .table-toolbar-right .btn {
+    height: 34px !important;
+    padding: 0 8px !important;
+    font-size: 11.5px !important;
+    white-space: nowrap !important;
+  }
+
+  /* Riêng trang Theo dõi đơn hàng (5 bước):
+     - Sắp xếp tiêu đề bước thành 2 hàng (Hàng trên 3 bước, Hàng dưới 2 bước)
+     - Các nút hành động trên thanh công cụ dùng Icon-Only (34x34px) */
+  .sales-orders-page .modern-stepper-container {
+    padding: 6px 8px !important;
+  }
+
+  .sales-orders-page .modern-stepper-inner {
+    display: grid !important;
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+    gap: 5px !important;
+    width: 100% !important;
+    overflow: visible !important;
+  }
+
+  .sales-orders-page .modern-stepper-inner > button.modern-step-item:nth-of-type(1),
+  .sales-orders-page .modern-stepper-inner > button.modern-step-item:nth-of-type(2),
+  .sales-orders-page .modern-stepper-inner > button.modern-step-item:nth-of-type(3) {
+    grid-column: span 2 / span 2 !important;
+  }
+
+  .sales-orders-page .modern-stepper-inner > button.modern-step-item:nth-of-type(4),
+  .sales-orders-page .modern-stepper-inner > button.modern-step-item:nth-of-type(5) {
+    grid-column: span 3 / span 3 !important;
+  }
+
+  .sales-orders-page .modern-step-item {
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 5px 7px !important;
+    gap: 6px !important;
+    border-radius: 8px !important;
+    justify-content: flex-start !important;
+    border: 1px solid #e2e8f0 !important;
+    background-color: #f8fafc !important;
+  }
+
+  .sales-orders-page .modern-step-item.is-active {
+    background-color: #eff6ff !important;
+    border-color: #93c5fd !important;
+    box-shadow: 0 1px 2px rgba(0, 48, 135, 0.06) !important;
+  }
+
+  .sales-orders-page .modern-step-icon {
+    width: 22px !important;
+    height: 22px !important;
+    min-width: 22px !important;
+    border-radius: 6px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .sales-orders-page .modern-step-icon i {
+    font-size: 13px !important;
+  }
+
+  .sales-orders-page .modern-step-title {
+    font-size: 11.5px !important;
+    font-weight: 700 !important;
+    line-height: 1.2 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .sales-orders-page .table-toolbar-right .btn {
+    width: 34px !important;
+    min-width: 34px !important;
+    height: 34px !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 8px !important;
+  }
+
+  .sales-orders-page .table-toolbar-right .btn .sales-order-btn-label {
+    display: none !important;
+  }
+
+  .sales-orders-page .table-toolbar-right .btn svg {
+    margin: 0 !important;
+  }
+
+  /* Riêng trang Phát triển mạng lưới đại lý (4 bước: Chăm sóc, Báo giá, Hợp đồng, Thi công):
+     - Dàn đều 4 tab trên 1 hàng gọn gàng không bị cắt chữ
+     - Các nút Thêm dùng Icon-Only trên màn hình điện thoại (<= 768px) */
+  .sales-partners-page .modern-stepper-container {
+    padding: 6px 6px !important;
+  }
+
+  .sales-partners-page .modern-stepper-inner {
+    display: flex !important;
+    gap: 4px !important;
+    width: 100% !important;
+    overflow-x: hidden !important;
+  }
+
+  .sales-partners-page .modern-stepper-divider,
+  .sales-partners-page .modern-step-desc,
+  .sales-partners-page .modern-step-badge {
+    display: none !important;
+  }
+
+  .sales-partners-page .modern-step-item {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    padding: 5px 5px !important;
+    gap: 4px !important;
+    border-radius: 8px !important;
+    justify-content: center !important;
+  }
+
+  .sales-partners-page .modern-step-icon {
+    width: 22px !important;
+    height: 22px !important;
+    min-width: 22px !important;
+    border-radius: 6px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .sales-partners-page .modern-step-icon i {
+    font-size: 13px !important;
+  }
+
+  .sales-partners-page .modern-step-title {
+    font-size: 11.5px !important;
+    font-weight: 700 !important;
+    line-height: 1.2 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .sales-partners-page .table-toolbar-right .btn {
+    width: 34px !important;
+    min-width: 34px !important;
+    height: 34px !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 8px !important;
+  }
+
+  .sales-partners-page .table-toolbar-right .btn .sales-partner-btn-label,
+  .sales-partner-care-add-btn .sales-partner-btn-label {
+    display: none !important;
+  }
+
+  .sales-partners-page .table-toolbar-right .btn > span.mr-1\.5,
+  .sales-partners-page .table-toolbar-right .btn svg,
+  .sales-partner-care-add-btn svg {
+    margin: 0 !important;
+  }
+
+  .sales-partner-care-add-btn {
+    width: 28px !important;
+    min-width: 28px !important;
+    height: 28px !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 7px !important;
+  }
+
+  /* Thanh hành động trượt từ phải sang trái trong dòng bảng trên điện thoại (Sửa / Xoá) */
+  @keyframes mobileSwipeBarIn {
+    from {
+      opacity: 0;
+      transform: translateX(18px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .swipeable-table-row.is-swiped-open,
+  .sales-orders-table tbody tr.is-swiped-open {
+    background-color: #f8fafc !important;
+  }
+
+  .swipeable-table-row.is-swiped-open td:not(.mobile-swipe-target-td),
+  .sales-orders-table tbody tr.is-swiped-open td:nth-child(2) {
+    transform: translateX(-6px);
+    transition: transform 0.2s ease;
+  }
+
+  .swipeable-table-row td.mobile-swipe-target-td,
+  .sales-orders-table tbody td:last-child {
+    position: relative !important;
+    overflow: visible !important;
+  }
+
+  .mobile-row-swipe-actions {
+    position: absolute !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 132px !important;
+    display: flex !important;
+    align-items: stretch !important;
+    z-index: 25 !important;
+    border-top-left-radius: 8px !important;
+    border-bottom-left-radius: 8px !important;
+    overflow: hidden !important;
+    box-shadow: -6px 0 16px rgba(15, 23, 42, 0.14) !important;
+    animation: mobileSwipeBarIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  }
+
+  .mobile-swipe-btn {
+    flex: 1 1 50% !important;
+    border: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 2px !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    color: #ffffff !important;
+    cursor: pointer !important;
+    padding: 0 4px !important;
+    line-height: 1.1 !important;
+    user-select: none !important;
+  }
+
+  .mobile-swipe-btn.is-edit {
+    background-color: #0284c7 !important;
+  }
+
+  .mobile-swipe-btn.is-edit:active {
+    background-color: #0369a1 !important;
+  }
+
+  .mobile-swipe-btn.is-delete {
+    background-color: #ef4444 !important;
+  }
+
+  .mobile-swipe-btn.is-delete:active {
+    background-color: #dc2626 !important;
+  }
+
+  .sales-orders-page .table-toolbar-search,
+  .sales-support-page .table-toolbar-search,
+  .sales-partners-page .table-toolbar-search,
+  .sales-customers-page .table-toolbar-search,
+  .sales-pricing-page .table-toolbar-search,
+  .sales-results-page .table-toolbar-search {
+    order: 3 !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+  }
+
+  /* Đảm bảo nhãn Toggle không bao giờ bị xuống dòng trên mobile trong các trang Kinh doanh */
+  .sales-pricing-page label,
+  .sales-internal-reports-page label,
+  .sales-plan-scope label {
+    white-space: nowrap !important;
+  }
+
+  /* ==========================================================================
+     12. PHÒNG TÀI CHÍNH – KẾ TOÁN (FINANCE) - TÙY BIẾN SÂU TRÊN ĐIỆN THOẠI (<= 768px)
+     ========================================================================== */
+
+  /* 1. Ẩn thanh ticker chạy chữ trên điện thoại cho toàn bộ các trang Tài chính – Kế toán */
+  .finance-overview-page .dynamic-ticker-bar,
+  .finance-cashflow-page .dynamic-ticker-bar,
+  .finance-debts-page .dynamic-ticker-bar,
+  .finance-advances-page .dynamic-ticker-bar,
+  .finance-assets-page .dynamic-ticker-bar,
+  .finance-reports-page .dynamic-ticker-bar,
+  .finance-journal-page .dynamic-ticker-bar,
+  .finance-declaration-page .dynamic-ticker-bar {
+    display: none !important;
+  }
+
+  /* 2. Tối ưu thanh Stepper (ModernStepper) trên 4 trang StepPage của Tài chính – Kế toán */
+  .finance-cashflow-page .modern-stepper-container,
+  .finance-debts-page .modern-stepper-container,
+  .finance-advances-page .modern-stepper-container,
+  .finance-assets-page .modern-stepper-container {
+    padding: 6px 6px !important;
+  }
+
+  .finance-cashflow-page .modern-stepper-inner,
+  .finance-debts-page .modern-stepper-inner,
+  .finance-advances-page .modern-stepper-inner,
+  .finance-assets-page .modern-stepper-inner {
+    display: flex !important;
+    gap: 4px !important;
+    overflow-x: hidden !important;
+    width: 100% !important;
+  }
+
+  .finance-cashflow-page .modern-stepper-divider,
+  .finance-debts-page .modern-stepper-divider,
+  .finance-advances-page .modern-stepper-divider,
+  .finance-assets-page .modern-stepper-divider,
+  .finance-cashflow-page .modern-step-desc,
+  .finance-debts-page .modern-step-desc,
+  .finance-advances-page .modern-step-desc,
+  .finance-assets-page .modern-step-desc,
+  .finance-cashflow-page .modern-step-badge,
+  .finance-debts-page .modern-step-badge,
+  .finance-advances-page .modern-step-badge,
+  .finance-assets-page .modern-step-badge {
+    display: none !important;
+  }
+
+  .finance-cashflow-page .modern-step-item,
+  .finance-debts-page .modern-step-item,
+  .finance-advances-page .modern-step-item,
+  .finance-assets-page .modern-step-item {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    padding: 5px 6px !important;
+    justify-content: center !important;
+    gap: 5px !important;
+  }
+
+  .finance-cashflow-page .modern-step-icon,
+  .finance-debts-page .modern-step-icon,
+  .finance-advances-page .modern-step-icon,
+  .finance-assets-page .modern-step-icon {
+    width: 22px !important;
+    height: 22px !important;
+    min-width: 22px !important;
+    border-radius: 6px !important;
+  }
+
+  .finance-cashflow-page .modern-step-title,
+  .finance-debts-page .modern-step-title,
+  .finance-advances-page .modern-step-title,
+  .finance-assets-page .modern-step-title {
+    font-size: 11.5px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  /* 3. Tối ưu TableToolbar 2 hàng gọn gàng trên màn hình điện thoại cho Tài chính – Kế toán */
+  .finance-cashflow-page .table-toolbar,
+  .finance-debts-page .table-toolbar,
+  .finance-advances-page .table-toolbar,
+  .finance-assets-page .table-toolbar,
+  .finance-reports-page .table-toolbar,
+  .finance-journal-page .table-toolbar {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 5px !important;
+    padding: 6px 8px !important;
+  }
+
+  .finance-cashflow-page .table-toolbar-menu-wrap,
+  .finance-debts-page .table-toolbar-menu-wrap,
+  .finance-advances-page .table-toolbar-menu-wrap,
+  .finance-assets-page .table-toolbar-menu-wrap,
+  .finance-reports-page .table-toolbar-menu-wrap,
+  .finance-journal-page .table-toolbar-menu-wrap {
+    display: none !important;
+  }
+
+  .finance-cashflow-page .table-toolbar-filter-item,
+  .finance-debts-page .table-toolbar-filter-item,
+  .finance-advances-page .table-toolbar-filter-item,
+  .finance-assets-page .table-toolbar-filter-item,
+  .finance-reports-page .table-toolbar-filter-item,
+  .finance-journal-page .table-toolbar-filter-item {
+    order: 1 !important;
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    width: auto !important;
+  }
+
+  /* Ẩn filter thứ 3 trên các trang có 3 filter để Hàng 1 vừa khít 2 filter + nút hành động */
+  .finance-cashflow-page .table-toolbar-filter-item:nth-of-type(3),
+  .finance-debts-page .table-toolbar-filter-item:nth-of-type(3),
+  .finance-advances-page .table-toolbar-filter-item:nth-of-type(3),
+  .finance-assets-page .table-toolbar-filter-item:nth-of-type(3),
+  .finance-journal-page .table-toolbar-filter-item:nth-of-type(3) {
+    display: none !important;
+  }
+
+  .finance-cashflow-page .table-toolbar-filter-item .form-select,
+  .finance-debts-page .table-toolbar-filter-item .form-select,
+  .finance-advances-page .table-toolbar-filter-item .form-select,
+  .finance-assets-page .table-toolbar-filter-item .form-select,
+  .finance-reports-page .table-toolbar-filter-item .form-select,
+  .finance-journal-page .table-toolbar-filter-item .form-select {
+    padding-left: 7px !important;
+    padding-right: 18px !important;
+    font-size: 11.5px !important;
+    height: 34px !important;
+    min-height: 34px !important;
+  }
+
+  .finance-cashflow-page .table-toolbar-filter-item .select-arrow,
+  .finance-debts-page .table-toolbar-filter-item .select-arrow,
+  .finance-advances-page .table-toolbar-filter-item .select-arrow,
+  .finance-assets-page .table-toolbar-filter-item .select-arrow,
+  .finance-reports-page .table-toolbar-filter-item .select-arrow,
+  .finance-journal-page .table-toolbar-filter-item .select-arrow {
+    right: 4px !important;
+  }
+
+  .finance-cashflow-page .table-toolbar-right,
+  .finance-debts-page .table-toolbar-right,
+  .finance-advances-page .table-toolbar-right,
+  .finance-assets-page .table-toolbar-right,
+  .finance-reports-page .table-toolbar-right,
+  .finance-journal-page .table-toolbar-right {
+    order: 2 !important;
+    flex: 0 0 auto !important;
+    margin-left: 0 !important;
+    gap: 4px !important;
+  }
+
+  .finance-cashflow-page .table-toolbar-right .btn,
+  .finance-debts-page .table-toolbar-right .btn,
+  .finance-advances-page .table-toolbar-right .btn,
+  .finance-assets-page .table-toolbar-right .btn,
+  .finance-reports-page .table-toolbar-right .btn,
+  .finance-journal-page .table-toolbar-right .btn {
+    height: 34px !important;
+    padding: 0 8px !important;
+    font-size: 11.5px !important;
+    white-space: nowrap !important;
+  }
+
+  .finance-cashflow-page .table-toolbar-search,
+  .finance-debts-page .table-toolbar-search,
+  .finance-advances-page .table-toolbar-search,
+  .finance-assets-page .table-toolbar-search,
+  .finance-reports-page .table-toolbar-search,
+  .finance-journal-page .table-toolbar-search {
+    order: 3 !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+  }
+
+  /* 4. Lưới KPI 2x2 trên trang Quyết toán hoàn ứng và Sổ nhật ký chung */
+  .finance-advances-page .finance-settlement-kpi-grid,
+  .finance-journal-page .finance-journal-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    padding: 8px !important;
+  }
+
+  .finance-advances-page .finance-settlement-kpi-grid > div,
+  .finance-journal-page .finance-journal-kpi-grid > div {
+    padding: 8px 10px !important;
+    gap: 8px !important;
+  }
+
+  /* 5. Báo cáo tài chính (FinanceReportsPage) - 4 tab vừa khít 1 hàng và lưới chỉ số 1 cột */
+  .finance-reports-page .finance-reports-tabs {
+    padding: 0 6px !important;
+    gap: 2px !important;
+    overflow-x: hidden !important;
+  }
+
+  .finance-reports-page .finance-reports-tabs > button {
+    flex: 1 1 0% !important;
+    justify-content: center !important;
+    padding: 8px 4px !important;
+    font-size: 11.5px !important;
+  }
+
+  .finance-reports-page .finance-ratios-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+    padding: 8px !important;
+  }
+
+  /* 6. Khai báo số dư đầu kỳ (FinanceDeclarationPage) */
+  .finance-declaration-page .finance-declaration-header {
+    padding: 8px !important;
+  }
+
+  .finance-declaration-page .finance-declaration-header-actions {
+    justify-content: space-between !important;
+    gap: 6px !important;
+  }
+
+  .finance-declaration-page .finance-declaration-period-box {
+    flex: 1 1 auto !important;
+    padding: 5px 8px !important;
+  }
+
+  .finance-declaration-page .finance-declaration-kpi-wrap {
+    padding: 8px !important;
+  }
+
+  .finance-declaration-page .finance-declaration-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .finance-declaration-page .finance-declaration-kpi-grid > div {
+    padding: 10px !important;
+  }
+
+  .finance-declaration-page .finance-declaration-balance-card {
+    grid-column: 1 / -1 !important;
+  }
+
+  .finance-declaration-page .finance-declaration-tabs {
+    padding: 0 6px !important;
+    gap: 2px !important;
+  }
+
+  .finance-declaration-page .finance-declaration-tabs > button {
+    padding: 8px 6px !important;
+    font-size: 11.5px !important;
+    gap: 4px !important;
+  }
+
+  .finance-declaration-page .finance-declaration-body {
+    padding: 8px !important;
+  }
+}
+
+/* ==========================================================================
+   MOBILE CUSTOMIZATION: SẢN XUẤT, MUA HÀNG & ĐẢM BẢO CHẤT LƯỢNG (<= 768px)
+   Chỉ áp dụng trên màn hình điện thoại, giữ nguyên 100% giao diện Desktop
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* 1. Ẩn thanh ticker trên màn hình điện thoại cho 3 bộ phận */
+  .prod-overview-page .dynamic-ticker-bar,
+  .prod-defects-page .dynamic-ticker-bar,
+  .prod-bom-page .dynamic-ticker-bar,
+  .purchase-overview-page .dynamic-ticker-bar,
+  .purchase-suppliers-page .dynamic-ticker-bar,
+  .qa-overview-page .dynamic-ticker-bar,
+  .qa-standards-page .dynamic-ticker-bar,
+  .qa-defects-summary-page .dynamic-ticker-bar {
+    display: none !important;
+  }
+
+  /* 2. Stepper (StepPage) trên Mua hàng & Đảm bảo chất lượng vừa khít 1 hàng */
+  .purchase-overview-page .modern-stepper-bar,
+  .purchase-suppliers-page .modern-stepper-bar,
+  .qa-overview-page .modern-stepper-bar,
+  .qa-standards-page .modern-stepper-bar {
+    padding: 6px 8px !important;
+    gap: 4px !important;
+  }
+
+  .purchase-overview-page .modern-stepper-container,
+  .purchase-suppliers-page .modern-stepper-container,
+  .qa-overview-page .modern-stepper-container,
+  .qa-standards-page .modern-stepper-container {
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 4px !important;
+    overflow-x: hidden !important;
+  }
+
+  .purchase-overview-page .modern-stepper-divider,
+  .purchase-suppliers-page .modern-stepper-divider,
+  .qa-overview-page .modern-stepper-divider,
+  .qa-standards-page .modern-stepper-divider {
+    display: none !important;
+  }
+
+  .purchase-overview-page .modern-step-item,
+  .purchase-suppliers-page .modern-step-item,
+  .qa-overview-page .modern-step-item,
+  .qa-standards-page .modern-step-item {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    padding: 6px 4px !important;
+    gap: 5px !important;
+    justify-content: center !important;
+  }
+
+  .purchase-overview-page .modern-step-icon,
+  .purchase-suppliers-page .modern-step-icon,
+  .qa-overview-page .modern-step-icon,
+  .qa-standards-page .modern-step-icon {
+    width: 24px !important;
+    height: 24px !important;
+    border-radius: 6px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .purchase-overview-page .modern-step-title,
+  .purchase-suppliers-page .modern-step-title,
+  .qa-overview-page .modern-step-title,
+  .qa-standards-page .modern-step-title {
+    font-size: 11.5px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .purchase-overview-page .modern-step-desc,
+  .purchase-suppliers-page .modern-step-desc,
+  .qa-overview-page .modern-step-desc,
+  .qa-standards-page .modern-step-desc,
+  .purchase-overview-page .modern-step-badge,
+  .purchase-suppliers-page .modern-step-badge,
+  .qa-overview-page .modern-step-badge,
+  .qa-standards-page .modern-step-badge {
+    display: none !important;
+  }
+
+  /* 3. Bố cục TableToolbar 2 hàng gọn gàng trên màn hình điện thoại */
+  .prod-overview-page .table-toolbar,
+  .prod-defects-page .table-toolbar,
+  .prod-bom-page .table-toolbar,
+  .purchase-overview-page .table-toolbar,
+  .purchase-suppliers-page .table-toolbar,
+  .qa-overview-page .table-toolbar,
+  .qa-defects-summary-page .table-toolbar {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    padding: 8px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .prod-overview-page .table-toolbar-left,
+  .prod-defects-page .table-toolbar-left,
+  .prod-bom-page .table-toolbar-left,
+  .purchase-overview-page .table-toolbar-left,
+  .purchase-suppliers-page .table-toolbar-left,
+  .qa-overview-page .table-toolbar-left,
+  .qa-defects-summary-page .table-toolbar-left {
+    display: contents !important;
+  }
+
+  /* Hàng 0 cho các trang có tab phân loại nhanh (Xử lý hàng lỗi) */
+  .prod-defects-page .table-toolbar-before-search {
+    order: 0 !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
+  }
+
+  .prod-defects-page .prod-defects-tabs {
+    width: 100% !important;
+    display: flex !important;
+    gap: 4px !important;
+  }
+
+  .prod-defects-page .prod-defects-tabs > button {
+    flex: 1 1 0% !important;
+    justify-content: center !important;
+    height: 32px !important;
+    font-size: 11.5px !important;
+  }
+
+  /* Tab phạm vi trên trang Tổng hợp hàng lỗi QA */
+  .qa-defects-summary-page .table-toolbar-before-search {
+    order: 1 !important;
+    flex: 0 0 auto !important;
+  }
+
+  .qa-defects-summary-page .qa-defects-scope-tabs > button {
+    height: 34px !important;
+    font-size: 11.5px !important;
+    padding: 0 8px !important;
+  }
+
+  /* Hàng 1: Bộ lọc Select + Toggle + Nút hành động + Menu 3 chấm */
+  .prod-overview-page .table-toolbar-filter-item,
+  .prod-defects-page .table-toolbar-filter-item,
+  .prod-bom-page .table-toolbar-filter-item,
+  .purchase-overview-page .table-toolbar-filter-item,
+  .purchase-suppliers-page .table-toolbar-filter-item,
+  .qa-overview-page .table-toolbar-filter-item,
+  .qa-defects-summary-page .table-toolbar-filter-item {
+    order: 1 !important;
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+
+  .prod-overview-page .table-toolbar-filter-item .select-field,
+  .prod-defects-page .table-toolbar-filter-item .select-field,
+  .prod-bom-page .table-toolbar-filter-item .select-field,
+  .purchase-overview-page .table-toolbar-filter-item .select-field,
+  .purchase-suppliers-page .table-toolbar-filter-item .select-field,
+  .qa-overview-page .table-toolbar-filter-item .select-field,
+  .qa-defects-summary-page .table-toolbar-filter-item .select-field {
+    height: 34px !important;
+    font-size: 11.5px !important;
+    padding-left: 8px !important;
+    padding-right: 20px !important;
+  }
+
+  .prod-overview-page .table-toolbar-filter-item .select-arrow,
+  .prod-defects-page .table-toolbar-filter-item .select-arrow,
+  .prod-bom-page .table-toolbar-filter-item .select-arrow,
+  .purchase-overview-page .table-toolbar-filter-item .select-arrow,
+  .purchase-suppliers-page .table-toolbar-filter-item .select-arrow,
+  .qa-overview-page .table-toolbar-filter-item .select-arrow,
+  .qa-defects-summary-page .table-toolbar-filter-item .select-arrow {
+    right: 4px !important;
+  }
+
+  .prod-overview-page .table-toolbar-custom-filters {
+    order: 1 !important;
+    flex: 0 0 auto !important;
+  }
+
+  .prod-overview-page .table-toolbar-right,
+  .prod-defects-page .table-toolbar-right,
+  .prod-bom-page .table-toolbar-right,
+  .purchase-overview-page .table-toolbar-right,
+  .purchase-suppliers-page .table-toolbar-right,
+  .qa-overview-page .table-toolbar-right,
+  .qa-defects-summary-page .table-toolbar-right {
+    order: 2 !important;
+    flex: 0 0 auto !important;
+    margin-left: 0 !important;
+    gap: 4px !important;
+  }
+
+  .prod-overview-page .table-toolbar-right .btn,
+  .prod-defects-page .table-toolbar-right .btn,
+  .prod-bom-page .table-toolbar-right .btn,
+  .purchase-overview-page .table-toolbar-right .btn,
+  .purchase-suppliers-page .table-toolbar-right .btn,
+  .qa-overview-page .table-toolbar-right .btn,
+  .qa-defects-summary-page .table-toolbar-right .btn {
+    height: 34px !important;
+    padding: 0 8px !important;
+    font-size: 11.5px !important;
+    white-space: nowrap !important;
+  }
+
+  /* Hàng 2: Ô tìm kiếm 100% chiều ngang */
+  .prod-overview-page .table-toolbar-search,
+  .prod-defects-page .table-toolbar-search,
+  .prod-bom-page .table-toolbar-search,
+  .purchase-overview-page .table-toolbar-search,
+  .purchase-suppliers-page .table-toolbar-search,
+  .qa-overview-page .table-toolbar-search,
+  .qa-defects-summary-page .table-toolbar-search {
+    order: 3 !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
   }
 }

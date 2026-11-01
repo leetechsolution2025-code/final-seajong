@@ -271,6 +271,7 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
   const [expandedPeriodIds, setExpandedPeriodIds] = useState<string[]>(['HP-2026-01', 'HP-2026-02']);
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [mobileHolidayTab, setMobileHolidayTab] = useState<'holidays' | 'annual_leave' | 'personal_leave'>('holidays');
 
   // Modal State cho Kỳ nghỉ
   const [periodModalOpen, setPeriodModalOpen] = useState(false);
@@ -821,6 +822,7 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
 
   return (
     <div
+      className="bom-holiday-view-root"
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -831,6 +833,7 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
     >
       {/* ── 1. HEADER VÀ THANH CÔNG CỤ ĐIỀU HƯỚNG ── */}
       <div
+        className="bom-holiday-top-bar"
         style={{
           display: 'flex',
           flexWrap: 'wrap',
@@ -841,8 +844,9 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
           borderBottom: '1px solid var(--border-default, #e2e8f0)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div className="bom-labor-shift-left" style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
           <div
+            className="bom-labor-shift-icon"
             style={{
               width: '36px',
               height: '36px',
@@ -858,62 +862,91 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
           >
             <CalendarCheck />
           </div>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h2 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary, #0f172a)' }}>
-                Thiết lập lịch nghỉ lễ, Tết và phép năm
+              <h2 className="bom-holiday-top-title" style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary, #0f172a)' }}>
+                <span className="bom-hide-mobile">Thiết lập lịch </span>Nghỉ lễ, Tết<span className="bom-hide-mobile"> và phép năm</span>
               </h2>
-              {hasChanges && <Badge variant="warning">Chưa lưu thay đổi</Badge>}
+              {hasChanges && <Badge variant="warning" className="bom-hide-mobile">Chưa lưu thay đổi</Badge>}
             </div>
-            <p style={{ margin: '2px 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted, #64748b)' }}>
+            <p className="bom-hide-mobile" style={{ margin: '2px 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted, #64748b)' }}>
               Quản lý danh mục các kỳ nghỉ lễ chính thức theo luật lao động, ngày nghỉ bù và các kỳ nghỉ nội bộ nhà máy Seajong
             </p>
           </div>
         </div>
 
         {/* Nút hành động */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div className="bom-holiday-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <Button
             type="button"
             variant="secondary"
             size="sm"
+            className="bom-labor-reset-btn"
             leftIcon={<ArrowCounterclockwise size={14} />}
             onClick={handleResetToStatutory}
             disabled={isSaving}
+            title="Khôi phục chuẩn Luật Lao động"
           >
-            Khôi phục chuẩn Luật Lao động
+            <span className="bom-hide-mobile">Khôi phục chuẩn Luật Lao động</span>
           </Button>
 
           <Button
             type="button"
             variant="secondary"
             size="sm"
+            className="bom-holiday-add-btn"
             leftIcon={<PlusLg size={14} />}
             onClick={handleOpenAddPeriod}
             disabled={isSaving}
             style={{ fontWeight: 700 }}
           >
-            Thêm kỳ nghỉ mới
+            Thêm<span className="bom-hide-mobile"> kỳ nghỉ mới</span>
           </Button>
 
           <Button
             type="button"
             variant="primary"
             size="sm"
+            className="bom-labor-save-btn"
             leftIcon={<Save size={14} />}
             onClick={handleSaveAll}
             disabled={isSaving}
             style={{ fontWeight: 700 }}
           >
-            {isSaving ? 'Đang lưu...' : 'Lưu lịch nghỉ lễ'}
+            {isSaving ? 'Đang lưu...' : (
+              <>
+                Lưu<span className="bom-hide-mobile"> lịch nghỉ lễ</span>
+              </>
+            )}
           </Button>
         </div>
       </div>
 
-
+      {/* ── THANH CHUYỂN 3 NHÓM NGHỈ LỄ & PHÉP NĂM TRÊN ĐIỆN THOẠI (ẨN TRÊN DESKTOP) ── */}
+      <div className="bom-labor-mobile-subtabs bom-holiday-mobile-subtabs">
+        {[
+          { id: 'holidays' as const, label: 'Lịch nghỉ lễ', icon: <CalendarCheck size={12} /> },
+          { id: 'annual_leave' as const, label: 'Phép năm', icon: <Briefcase size={12} /> },
+          { id: 'personal_leave' as const, label: 'Việc riêng', icon: <CalendarCheck size={12} /> },
+        ].map((tab) => {
+          const isActive = mobileHolidayTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setMobileHolidayTab(tab.id)}
+              className={`bom-labor-mobile-subtab-btn ${isActive ? 'is-active' : ''}`}
+            >
+              {tab.icon}
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
 
       {/* Card 1: Danh sách các kỳ nghỉ lễ tết trong năm */}
       <div
+        className={`bom-holiday-card ${mobileHolidayTab !== 'holidays' ? 'bom-labor-card-mobile-hidden' : ''}`}
         style={{
           backgroundColor: '#ffffff',
           borderRadius: '10px',
@@ -932,9 +965,11 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
             justifyContent: 'space-between',
             paddingBottom: '10px',
             borderBottom: '1px solid #f1f5f9',
+            flexWrap: 'wrap',
+            gap: '6px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
             <div
               style={{
                 width: '28px',
@@ -945,15 +980,16 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: '#2563eb',
+                flexShrink: 0,
               }}
             >
               <CalendarCheck size={16} />
             </div>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <h5 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 800, color: '#0f172a' }}>
-                Danh sách các kỳ nghỉ lễ tết trong năm
+                Danh sách các kỳ nghỉ lễ tết<span className="bom-hide-mobile"> trong năm</span>
               </h5>
-              <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
+              <span className="bom-labor-card-sub" style={{ fontSize: '0.7rem', color: '#64748b' }}>
                 Lịch các ngày nghỉ lễ, Tết theo quy định của pháp luật và doanh nghiệp
               </span>
             </div>
@@ -968,15 +1004,16 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
               padding: '3px 8px',
               borderRadius: '6px',
               border: '1px solid #dbeafe',
+              whiteSpace: 'nowrap',
             }}
           >
-            Năm {selectedYear} • {statutoryPeriods.length} kỳ nghỉ theo quy định
+            Năm {selectedYear} • {statutoryPeriods.length} kỳ nghỉ<span className="bom-hide-mobile"> theo quy định</span>
           </span>
         </div>
 
         {/* Bảng danh sách các ngày nghỉ lễ tết theo quy định */}
-        <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', textAlign: 'left' }}>
+        <div className="bom-holiday-table-wrap" style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+          <table className="bom-holiday-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', textAlign: 'left' }}>
             <thead>
               <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                 <th
@@ -1035,25 +1072,42 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
 
                   {/* Cột 2: Tên kỳ nghỉ */}
                   <td style={{ padding: '10px 14px' }}>
-                    <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8125rem' }}>
+                    <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8125rem', lineHeight: 1.3 }}>
                       {period.name}
                     </div>
                     {period.description && (
-                      <div style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '2px', lineHeight: 1.35 }}>
+                      <div className="bom-hide-mobile" style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '2px', lineHeight: 1.35 }}>
                         {period.description}
                       </div>
                     )}
+                    <div className="bom-show-mobile-block" style={{ marginTop: '5px' }}>
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          fontSize: '0.65rem',
+                          fontWeight: 700,
+                          backgroundColor: '#eff6ff',
+                          color: '#1d4ed8',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          border: '1px solid #dbeafe',
+                        }}
+                      >
+                        {period.totalDays} ngày ({period.totalPaidDays} hưởng lương)
+                      </span>
+                    </div>
                   </td>
 
                   {/* Cột 3: Thời gian nghỉ */}
                   <td style={{ padding: '10px 14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                        <span style={{ fontSize: '0.7188rem', color: '#64748b', fontWeight: 600 }}>Từ:</span>
+                    <div className="bom-holiday-date-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <div className="bom-holiday-date-row" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                        <span className="bom-holiday-date-label" style={{ fontSize: '0.7188rem', color: '#64748b', fontWeight: 600 }}>Từ:</span>
                         <input
                           type="date"
                           value={period.startDate}
                           onChange={(e) => handleUpdatePeriodDate(period.id, 'startDate', e.target.value)}
+                          className="bom-holiday-date-input"
                           style={{
                             padding: '4px 8px',
                             fontSize: '0.75rem',
@@ -1068,12 +1122,13 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
                         />
                       </div>
 
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                        <span style={{ fontSize: '0.7188rem', color: '#64748b', fontWeight: 600 }}>Đến:</span>
+                      <div className="bom-holiday-date-row" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                        <span className="bom-holiday-date-label" style={{ fontSize: '0.7188rem', color: '#64748b', fontWeight: 600 }}>Đến:</span>
                         <input
                           type="date"
                           value={period.endDate}
                           onChange={(e) => handleUpdatePeriodDate(period.id, 'endDate', e.target.value)}
+                          className="bom-holiday-date-input"
                           style={{
                             padding: '4px 8px',
                             fontSize: '0.75rem',
@@ -1089,6 +1144,7 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
                       </div>
 
                       <span
+                        className="bom-hide-mobile"
                         style={{
                           fontSize: '0.6875rem',
                           fontWeight: 700,
@@ -1113,6 +1169,7 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
 
       {/* Card 2: Quy định chế độ nghỉ phép năm và việc riêng */}
       <div
+        className={`bom-holiday-card ${mobileHolidayTab === 'holidays' ? 'bom-labor-card-mobile-hidden' : ''}`}
         style={{
           backgroundColor: '#ffffff',
           borderRadius: '10px',
@@ -1136,7 +1193,7 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
             gap: '6px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
             <div
               style={{
                 width: '26px',
@@ -1147,15 +1204,16 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: '#7c3aed',
+                flexShrink: 0,
               }}
             >
               <Briefcase size={15} />
             </div>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <h5 style={{ margin: 0, fontSize: '0.8438rem', fontWeight: 800, color: '#0f172a' }}>
-                Quy định chế độ nghỉ phép năm và việc riêng
+                Quy định chế độ nghỉ phép năm<span className="bom-hide-mobile"> và việc riêng</span>
               </h5>
-              <span style={{ fontSize: '0.6875rem', color: '#64748b' }}>
+              <span className="bom-labor-card-sub" style={{ fontSize: '0.6875rem', color: '#64748b' }}>
                 Căn cứ theo Điều 113, 114 và Điều 115 Bộ luật Lao động số 45/2019/QH14
               </span>
             </div>
@@ -1170,14 +1228,18 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
               padding: '2px 8px',
               borderRadius: '6px',
               border: '1px solid #ddd6fe',
+              whiteSpace: 'nowrap',
             }}
           >
-            Chuẩn Bộ luật Lao động
+            Chuẩn Bộ luật LĐ
           </span>
         </div>
 
         {/* ── PHẦN 1: CHẾ ĐỘ NGHỈ PHÉP NĂM (ĐIỀU 113 VÀ ĐIỀU 114 BLLĐ) ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <div
+          className={mobileHolidayTab === 'personal_leave' ? 'bom-labor-card-mobile-hidden' : ''}
+          style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <div style={{ width: '3px', height: '12px', backgroundColor: '#4f46e5', borderRadius: '2px' }} />
             <h6 style={{ margin: 0, fontSize: '0.7813rem', fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
@@ -1362,7 +1424,10 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
         </div>
 
         {/* ── PHẦN 2: CHẾ ĐỘ NGHỈ VIỆC RIÊNG (ĐIỀU 115 BLLĐ) ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <div
+          className={mobileHolidayTab === 'annual_leave' ? 'bom-labor-card-mobile-hidden' : ''}
+          style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <div style={{ width: '3px', height: '12px', backgroundColor: '#7c3aed', borderRadius: '2px' }} />
@@ -1370,16 +1435,16 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
                 2. Chế độ nghỉ việc riêng (Điều 115)
               </h6>
             </div>
-            <span style={{ fontSize: '0.6875rem', color: '#64748b' }}>
+            <span className="bom-hide-mobile" style={{ fontSize: '0.6875rem', color: '#64748b' }}>
               Người lao động phải thông báo trước cho người sử dụng lao động theo quy định
             </span>
           </div>
 
           <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.7188rem', textAlign: 'left' }}>
+            <table className="bom-personal-leave-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.7188rem', textAlign: 'left' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                  <th style={{ padding: '5px 8px', fontWeight: 700, color: '#475569', width: '46px', textAlign: 'center' }}>
+                  <th className="bom-hide-mobile" style={{ padding: '5px 8px', fontWeight: 700, color: '#475569', width: '46px', textAlign: 'center' }}>
                     STT
                   </th>
                   <th style={{ padding: '5px 10px', fontWeight: 700, color: '#475569', minWidth: '260px' }}>
@@ -1388,10 +1453,10 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
                   <th style={{ padding: '5px 10px', fontWeight: 700, color: '#475569', width: '120px', textAlign: 'center' }}>
                     Số ngày nghỉ
                   </th>
-                  <th style={{ padding: '5px 10px', fontWeight: 700, color: '#475569', width: '160px' }}>
+                  <th className="bom-hide-mobile" style={{ padding: '5px 10px', fontWeight: 700, color: '#475569', width: '160px' }}>
                     Chế độ tiền lương
                   </th>
-                  <th style={{ padding: '5px 10px', fontWeight: 700, color: '#475569', width: '150px' }}>
+                  <th className="bom-hide-mobile" style={{ padding: '5px 10px', fontWeight: 700, color: '#475569', width: '150px' }}>
                     Căn cứ pháp lý
                   </th>
                 </tr>
@@ -1399,9 +1464,14 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
               <tbody>
                 {/* 1. Kết hôn */}
                 <tr style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: '#ffffff' }}>
-                  <td style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, color: '#334155' }}>1</td>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, color: '#334155' }}>1</td>
                   <td style={{ padding: '4px 10px', fontWeight: 600, color: '#0f172a' }}>
-                    Bản thân người lao động kết hôn
+                    <div>Bản thân người lao động kết hôn</div>
+                    <div className="bom-show-mobile-block" style={{ marginTop: '2px' }}>
+                      <span style={{ fontSize: '0.625rem', fontWeight: 700, backgroundColor: '#ecfdf5', color: '#047857', padding: '1px 5px', borderRadius: '4px', border: '1px solid #a7f3d0' }}>
+                        Hưởng nguyên lương
+                      </span>
+                    </div>
                   </td>
                   <td style={{ padding: '4px 10px', textAlign: 'center' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
@@ -1426,21 +1496,26 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
                       <span style={{ fontSize: '0.6875rem', color: '#64748b' }}>ngày</span>
                     </div>
                   </td>
-                  <td style={{ padding: '4px 10px' }}>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 10px' }}>
                     <span style={{ fontSize: '0.6563rem', fontWeight: 700, backgroundColor: '#ecfdf5', color: '#047857', padding: '2px 6px', borderRadius: '4px', border: '1px solid #a7f3d0', display: 'inline-block' }}>
                       Hưởng nguyên lương
                     </span>
                   </td>
-                  <td style={{ padding: '4px 10px', fontSize: '0.6875rem', color: '#64748b' }}>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 10px', fontSize: '0.6875rem', color: '#64748b' }}>
                     Điểm a Khoản 1 Điều 115
                   </td>
                 </tr>
 
                 {/* 2. Con kết hôn */}
                 <tr style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: '#fafafa' }}>
-                  <td style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, color: '#334155' }}>2</td>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, color: '#334155' }}>2</td>
                   <td style={{ padding: '4px 10px', fontWeight: 600, color: '#0f172a' }}>
-                    Con đẻ, con nuôi kết hôn
+                    <div>Con đẻ, con nuôi kết hôn</div>
+                    <div className="bom-show-mobile-block" style={{ marginTop: '2px' }}>
+                      <span style={{ fontSize: '0.625rem', fontWeight: 700, backgroundColor: '#ecfdf5', color: '#047857', padding: '1px 5px', borderRadius: '4px', border: '1px solid #a7f3d0' }}>
+                        Hưởng nguyên lương
+                      </span>
+                    </div>
                   </td>
                   <td style={{ padding: '4px 10px', textAlign: 'center' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
@@ -1465,21 +1540,26 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
                       <span style={{ fontSize: '0.6875rem', color: '#64748b' }}>ngày</span>
                     </div>
                   </td>
-                  <td style={{ padding: '4px 10px' }}>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 10px' }}>
                     <span style={{ fontSize: '0.6563rem', fontWeight: 700, backgroundColor: '#ecfdf5', color: '#047857', padding: '2px 6px', borderRadius: '4px', border: '1px solid #a7f3d0', display: 'inline-block' }}>
                       Hưởng nguyên lương
                     </span>
                   </td>
-                  <td style={{ padding: '4px 10px', fontSize: '0.6875rem', color: '#64748b' }}>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 10px', fontSize: '0.6875rem', color: '#64748b' }}>
                     Điểm b Khoản 1 Điều 115
                   </td>
                 </tr>
 
                 {/* 3. Tứ thân phụ mẫu / vợ chồng / con mất */}
                 <tr style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: '#ffffff' }}>
-                  <td style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, color: '#334155' }}>3</td>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, color: '#334155' }}>3</td>
                   <td style={{ padding: '4px 10px', color: '#0f172a' }}>
                     <div style={{ fontWeight: 600 }}>Cha đẻ, mẹ đẻ, cha nuôi, mẹ nuôi; cha mẹ của vợ hoặc chồng; vợ hoặc chồng; con đẻ, con nuôi chết</div>
+                    <div className="bom-show-mobile-block" style={{ marginTop: '2px' }}>
+                      <span style={{ fontSize: '0.625rem', fontWeight: 700, backgroundColor: '#ecfdf5', color: '#047857', padding: '1px 5px', borderRadius: '4px', border: '1px solid #a7f3d0' }}>
+                        Hưởng nguyên lương
+                      </span>
+                    </div>
                   </td>
                   <td style={{ padding: '4px 10px', textAlign: 'center' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
@@ -1504,21 +1584,26 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
                       <span style={{ fontSize: '0.6875rem', color: '#64748b' }}>ngày</span>
                     </div>
                   </td>
-                  <td style={{ padding: '4px 10px' }}>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 10px' }}>
                     <span style={{ fontSize: '0.6563rem', fontWeight: 700, backgroundColor: '#ecfdf5', color: '#047857', padding: '2px 6px', borderRadius: '4px', border: '1px solid #a7f3d0', display: 'inline-block' }}>
                       Hưởng nguyên lương
                     </span>
                   </td>
-                  <td style={{ padding: '4px 10px', fontSize: '0.6875rem', color: '#64748b' }}>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 10px', fontSize: '0.6875rem', color: '#64748b' }}>
                     Điểm c Khoản 1 Điều 115
                   </td>
                 </tr>
 
                 {/* 4. Ông bà, anh chị em ruột mất */}
                 <tr style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: '#fafafa' }}>
-                  <td style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, color: '#334155' }}>4</td>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, color: '#334155' }}>4</td>
                   <td style={{ padding: '4px 10px', fontWeight: 600, color: '#0f172a' }}>
-                    Ông nội, bà nội, ông ngoại, bà ngoại, anh, chị, em ruột chết
+                    <div>Ông nội, bà nội, ông ngoại, bà ngoại, anh, chị, em ruột chết</div>
+                    <div className="bom-show-mobile-block" style={{ marginTop: '2px' }}>
+                      <span style={{ fontSize: '0.625rem', fontWeight: 700, backgroundColor: '#fffbeb', color: '#b45309', padding: '1px 5px', borderRadius: '4px', border: '1px solid #fde68a' }}>
+                        Không hưởng lương
+                      </span>
+                    </div>
                   </td>
                   <td style={{ padding: '4px 10px', textAlign: 'center' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
@@ -1543,21 +1628,26 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
                       <span style={{ fontSize: '0.6875rem', color: '#64748b' }}>ngày</span>
                     </div>
                   </td>
-                  <td style={{ padding: '4px 10px' }}>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 10px' }}>
                     <span style={{ fontSize: '0.6563rem', fontWeight: 700, backgroundColor: '#fffbeb', color: '#b45309', padding: '2px 6px', borderRadius: '4px', border: '1px solid #fde68a', display: 'inline-block' }}>
                       Không hưởng lương
                     </span>
                   </td>
-                  <td style={{ padding: '4px 10px', fontSize: '0.6875rem', color: '#64748b' }}>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 10px', fontSize: '0.6875rem', color: '#64748b' }}>
                     Điểm a Khoản 2 Điều 115
                   </td>
                 </tr>
 
                 {/* 5. Cha hoặc mẹ kết hôn */}
                 <tr style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: '#ffffff' }}>
-                  <td style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, color: '#334155' }}>5</td>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, color: '#334155' }}>5</td>
                   <td style={{ padding: '4px 10px', fontWeight: 600, color: '#0f172a' }}>
-                    Cha hoặc mẹ kết hôn (tái hôn)
+                    <div>Cha hoặc mẹ kết hôn (tái hôn)</div>
+                    <div className="bom-show-mobile-block" style={{ marginTop: '2px' }}>
+                      <span style={{ fontSize: '0.625rem', fontWeight: 700, backgroundColor: '#fffbeb', color: '#b45309', padding: '1px 5px', borderRadius: '4px', border: '1px solid #fde68a' }}>
+                        Không hưởng lương
+                      </span>
+                    </div>
                   </td>
                   <td style={{ padding: '4px 10px', textAlign: 'center' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
@@ -1582,21 +1672,26 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
                       <span style={{ fontSize: '0.6875rem', color: '#64748b' }}>ngày</span>
                     </div>
                   </td>
-                  <td style={{ padding: '4px 10px' }}>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 10px' }}>
                     <span style={{ fontSize: '0.6563rem', fontWeight: 700, backgroundColor: '#fffbeb', color: '#b45309', padding: '2px 6px', borderRadius: '4px', border: '1px solid #fde68a', display: 'inline-block' }}>
                       Không hưởng lương
                     </span>
                   </td>
-                  <td style={{ padding: '4px 10px', fontSize: '0.6875rem', color: '#64748b' }}>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 10px', fontSize: '0.6875rem', color: '#64748b' }}>
                     Điểm b Khoản 2 Điều 115
                   </td>
                 </tr>
 
                 {/* 6. Anh chị em ruột kết hôn */}
                 <tr style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: '#fafafa' }}>
-                  <td style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, color: '#334155' }}>6</td>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, color: '#334155' }}>6</td>
                   <td style={{ padding: '4px 10px', fontWeight: 600, color: '#0f172a' }}>
-                    Anh, chị, em ruột kết hôn
+                    <div>Anh, chị, em ruột kết hôn</div>
+                    <div className="bom-show-mobile-block" style={{ marginTop: '2px' }}>
+                      <span style={{ fontSize: '0.625rem', fontWeight: 700, backgroundColor: '#fffbeb', color: '#b45309', padding: '1px 5px', borderRadius: '4px', border: '1px solid #fde68a' }}>
+                        Không hưởng lương
+                      </span>
+                    </div>
                   </td>
                   <td style={{ padding: '4px 10px', textAlign: 'center' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
@@ -1621,34 +1716,39 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
                       <span style={{ fontSize: '0.6875rem', color: '#64748b' }}>ngày</span>
                     </div>
                   </td>
-                  <td style={{ padding: '4px 10px' }}>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 10px' }}>
                     <span style={{ fontSize: '0.6563rem', fontWeight: 700, backgroundColor: '#fffbeb', color: '#b45309', padding: '2px 6px', borderRadius: '4px', border: '1px solid #fde68a', display: 'inline-block' }}>
                       Không hưởng lương
                     </span>
                   </td>
-                  <td style={{ padding: '4px 10px', fontSize: '0.6875rem', color: '#64748b' }}>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 10px', fontSize: '0.6875rem', color: '#64748b' }}>
                     Điểm c Khoản 2 Điều 115
                   </td>
                 </tr>
 
                 {/* 7. Nghỉ việc riêng khác theo thỏa thuận */}
                 <tr style={{ backgroundColor: '#ffffff' }}>
-                  <td style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, color: '#334155' }}>7</td>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, color: '#334155' }}>7</td>
                   <td style={{ padding: '4px 10px', color: '#0f172a' }}>
                     <div style={{ fontWeight: 600 }}>Các trường hợp việc riêng cá nhân khác</div>
-                    <div style={{ fontSize: '0.6563rem', color: '#64748b', marginTop: '1px' }}>
+                    <div className="bom-hide-mobile" style={{ fontSize: '0.6563rem', color: '#64748b', marginTop: '1px' }}>
                       Theo thỏa thuận giữa người lao động và người sử dụng lao động
+                    </div>
+                    <div className="bom-show-mobile-block" style={{ marginTop: '2px' }}>
+                      <span style={{ fontSize: '0.625rem', fontWeight: 700, backgroundColor: '#f1f5f9', color: '#475569', padding: '1px 5px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                        Không hưởng lương
+                      </span>
                     </div>
                   </td>
                   <td style={{ padding: '4px 10px', textAlign: 'center', color: '#64748b', fontStyle: 'italic', fontSize: '0.6875rem' }}>
                     Theo thỏa thuận
                   </td>
-                  <td style={{ padding: '4px 10px' }}>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 10px' }}>
                     <span style={{ fontSize: '0.6563rem', fontWeight: 700, backgroundColor: '#f1f5f9', color: '#475569', padding: '2px 6px', borderRadius: '4px', border: '1px solid #e2e8f0', display: 'inline-block' }}>
                       Không hưởng lương
                     </span>
                   </td>
-                  <td style={{ padding: '4px 10px', fontSize: '0.6875rem', color: '#64748b' }}>
+                  <td className="bom-hide-mobile" style={{ padding: '4px 10px', fontSize: '0.6875rem', color: '#64748b' }}>
                     Khoản 3 Điều 115
                   </td>
                 </tr>

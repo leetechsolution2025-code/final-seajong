@@ -263,6 +263,11 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
   const [aiResult, setAiResult] = useState<string>("");
   const [isFromCache, setIsFromCache] = useState<boolean>(false);
   const [companyInfo, setCompanyInfo] = useState<any>(null);
+  const [mobileStep1Tab, setMobileStep1Tab] = useState<"revenue" | "cost">("revenue");
+  const [mobileStep2View, setMobileStep2View] = useState<"detail" | "overview">("detail");
+  const [mobileStep2Dept, setMobileStep2Dept] = useState<string>("all");
+  const [mobileStep3View, setMobileStep3View] = useState<"detail" | "overview">("detail");
+  const [mobileStep3Dept, setMobileStep3Dept] = useState<string>("all");
 
   // --- States for Custom Dialogs ---
   const [costConfirmOpen, setCostConfirmOpen] = useState(false);
@@ -1350,18 +1355,18 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
     <>
       {currentStep === 1 ? (
         /* STEP 1: CHỈ TIÊU CƠ BẢN */
-        <div className="container-fluid px-3 pb-3">
-          <div className="row g-4">
+        <div className="container-fluid px-3 pb-3 bom-plan-step1-container">
+          <div className="row g-4 bom-plan-step1-row">
 
             {/* Column 1: Năm kế hoạch */}
             <div className="col-12 col-lg-4">
-              <div className="card h-100 border rounded-4 overflow-hidden">
-                <div className="card-header bg-light border-bottom p-3">
+              <div className="card h-100 border rounded-4 overflow-hidden bom-plan-year-card">
+                <div className="card-header bg-light border-bottom p-3 bom-hide-mobile">
                   <SectionTitle title="Năm kế hoạch" icon="bi-calendar3" className="mb-0" />
                 </div>
-                <div className="card-body p-3 d-flex flex-column gap-3">
+                <div className="card-body p-3 d-flex flex-column gap-3 bom-plan-year-card-body">
                   <div>
-                    <label className="form-label text-muted fw-semibold mb-1" style={{ fontSize: 12 }}>Chọn năm lập kế hoạch</label>
+                    <label className="form-label text-muted fw-semibold mb-1 bom-hide-mobile" style={{ fontSize: 12 }}>Chọn năm lập kế hoạch</label>
                     <div className="d-flex align-items-center gap-1" style={{ height: 38 }}>
                       <select
                         className="form-select fw-bold flex-grow-1 h-100"
@@ -1441,10 +1446,10 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                     </div>
                   </div>
 
-                  <div className="d-flex flex-column gap-2">
+                  <div className="d-flex flex-column gap-2 bom-plan-kpi-grid">
 
                     {/* Tổng Lợi Nhuận */}
-                    <div className="py-2 px-3 rounded-3" style={{
+                    <div className="py-2 px-3 rounded-3 bom-plan-kpi-box bom-plan-kpi-full" style={{
                       backgroundColor: valTotalProfit >= 0 ? "rgba(16, 185, 129, 0.05)" : "rgba(239, 68, 68, 0.05)",
                       border: valTotalProfit >= 0 ? "1px solid rgba(16, 185, 129, 0.15)" : "1px solid rgba(239, 68, 68, 0.15)"
                     }}>
@@ -1464,7 +1469,7 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                     </div>
 
                     {/* Biên Lợi Nhuận */}
-                    <div className="py-2 px-3 rounded-3" style={{
+                    <div className="py-2 px-3 rounded-3 bom-plan-kpi-box" style={{
                       backgroundColor: "rgba(59, 130, 246, 0.05)",
                       border: "1px solid rgba(59, 130, 246, 0.15)"
                     }}>
@@ -1484,7 +1489,7 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                     </div>
 
                     {/* Biên Lợi Nhuận Hoạt Động */}
-                    <div className="py-2 px-3 rounded-3" style={{
+                    <div className="py-2 px-3 rounded-3 bom-plan-kpi-box" style={{
                       backgroundColor: "rgba(139, 92, 246, 0.05)",
                       border: "1px solid rgba(139, 92, 246, 0.15)"
                     }}>
@@ -1508,16 +1513,36 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
               </div>
             </div>
 
+            {/* Mobile Sub-tabs for Step 1 */}
+            <div className="col-12 bom-show-mobile-block" style={{ display: "none" }}>
+              <div className="bom-plan-mobile-subtabs">
+                <button
+                  type="button"
+                  className={`bom-labor-mobile-subtab-btn ${mobileStep1Tab === "revenue" ? "is-active" : ""}`}
+                  onClick={() => setMobileStep1Tab("revenue")}
+                >
+                  <i className="bi bi-graph-up" /> Chỉ tiêu Doanh thu
+                </button>
+                <button
+                  type="button"
+                  className={`bom-labor-mobile-subtab-btn ${mobileStep1Tab === "cost" ? "is-active" : ""}`}
+                  onClick={() => setMobileStep1Tab("cost")}
+                >
+                  <i className="bi bi-cash-coin" /> Định mức Chi phí
+                </button>
+              </div>
+            </div>
+
             {/* Column 2: Doanh Thu */}
-            <div className="col-12 col-lg-4">
+            <div className={`col-12 col-lg-4 ${mobileStep1Tab !== "revenue" ? "bom-plan-mobile-hidden" : ""}`}>
               <div className="card h-100 border rounded-4 overflow-hidden">
-                <div className="card-header bg-light border-bottom p-3">
+                <div className="card-header bg-light border-bottom p-3 bom-plan-card-header">
                   <SectionTitle title="Chỉ tiêu Doanh thu" icon="bi-graph-up" className="mb-0" />
                 </div>
 
-                <div className="card-body p-3 d-flex flex-column gap-3">
+                <div className="card-body p-3 d-flex flex-column gap-3 bom-plan-card-body">
                   {/* Tổng Doanh Thu */}
-                  <div className="py-2 px-3 rounded-3" style={{ backgroundColor: "rgba(0, 0, 139, 0.05)", border: "1px solid rgba(0, 0, 139, 0.15)" }}>
+                  <div className="py-2 px-3 rounded-3 bom-plan-kpi-box bom-plan-kpi-full" style={{ backgroundColor: "rgba(0, 0, 139, 0.05)", border: "1px solid rgba(0, 0, 139, 0.15)" }}>
                     <label className="fw-extrabold mb-1" style={{ fontSize: 11.5, letterSpacing: "0.03em", fontWeight: 800, color: "darkblue" }}>TỔNG DOANH THU</label>
                     <h4 className="fw-black mb-0" style={{ fontWeight: 900, color: "darkblue", fontSize: 20 }}>
                       {totalRevenue.toLocaleString("vi-VN")} <span style={{ fontSize: 14, fontWeight: 700, color: "darkblue" }}>đ</span>
@@ -1565,11 +1590,11 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
             </div>
 
             {/* Column 3: Chi Phí */}
-            <div className="col-12 col-lg-4">
+            <div className={`col-12 col-lg-4 ${mobileStep1Tab !== "cost" ? "bom-plan-mobile-hidden" : ""}`}>
               <div className="card h-100 border rounded-4 overflow-hidden">
-                <div className="card-header bg-light border-bottom px-3 d-flex align-items-center justify-content-between" style={{ paddingTop: 10, paddingBottom: 10 }}>
+                <div className="card-header bg-light border-bottom px-3 d-flex align-items-center justify-content-between bom-plan-card-header" style={{ paddingTop: 10, paddingBottom: 10 }}>
                   <SectionTitle title="Định mức Chi phí" icon="bi-cash-coin" className="mb-0" />
-                  <div className="form-check form-switch mb-0 d-flex align-items-center gap-2">
+                  <div className="form-check form-switch mb-0 d-flex align-items-center gap-2 flex-shrink-0" style={{ whiteSpace: "nowrap" }}>
                     <input
                       className="form-check-input ms-0"
                       type="checkbox"
@@ -1579,15 +1604,15 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                       onChange={(e) => handleToggleStep1CalcByRev(e.target.checked)}
                       style={{ cursor: "pointer" }}
                     />
-                    <label className="form-check-label fw-semibold text-dark mb-0" htmlFor="calcByRevenueSwitch" style={{ fontSize: 12, cursor: "pointer" }}>
+                    <label className="form-check-label fw-semibold text-dark mb-0" htmlFor="calcByRevenueSwitch" style={{ fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
                       Tính theo doanh thu
                     </label>
                   </div>
                 </div>
 
-                <div className="card-body p-3 d-flex flex-column gap-1">
+                <div className="card-body p-3 d-flex flex-column gap-1 bom-plan-card-body">
                   {/* Định Mức Tổng Chi Phí */}
-                  <div className="py-2 px-3 rounded-3 bg-danger-subtle/30 border border-danger/20">
+                  <div className="py-2 px-3 rounded-3 bg-danger-subtle/30 border border-danger/20 bom-plan-kpi-box bom-plan-kpi-full">
                     <label className="text-danger fw-extrabold mb-1" style={{ fontSize: 11.5, letterSpacing: "0.03em", fontWeight: 800 }}>ĐỊNH MỨC TỔNG CHI PHÍ</label>
                     <h4 className="fw-black text-danger mb-0" style={{ fontWeight: 900, fontSize: 20 }}>
                       {totalCost.toLocaleString("vi-VN")} <span style={{ fontSize: 14, fontWeight: 700 }}>đ</span>
@@ -1941,18 +1966,18 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
               const displayVal = finalVal;
 
               return (
-                <div key={item.id} className="d-flex align-items-center gap-2 mb-1 ps-3">
+                <div key={item.id} className="d-flex align-items-center gap-2 mb-1 ps-3 bom-plan-item-row">
                   <input
                     type="checkbox"
-                    className="form-check-input"
+                    className="form-check-input bom-plan-row-checkbox"
                     checked={item.checked}
                     onChange={toggleChecked}
                     style={{ cursor: "pointer", width: 14, height: 14, flexShrink: 0 }}
                   />
-                  <span className="text-muted flex-grow-1" style={{ fontSize: 12 }}>
+                  <span className="text-muted flex-grow-1 bom-plan-item-label" style={{ fontSize: 12 }}>
                     {item.label}
                   </span>
-                  <div className="input-group input-group-sm" style={{ maxWidth: s2_calcByRev ? 280 : 210 }}>
+                  <div className="input-group input-group-sm bom-plan-cost-inputs" style={{ maxWidth: s2_calcByRev ? 280 : 210 }}>
                     {s2_calcByRev && (
                       <>
                         <input
@@ -1965,7 +1990,7 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                           placeholder="0.0"
                         />
                         <span
-                          className="input-group-text bg-light text-danger fw-bold"
+                          className="input-group-text bg-light text-danger fw-bold bom-plan-pct-unit"
                           style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}
                         >% doanh thu</span>
                         <input
@@ -2001,7 +2026,7 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
             ];
 
             return (
-              <div className="container-fluid px-3 pb-3">
+              <div className="container-fluid px-3 pb-3 bom-plan-step2-container">
                 <style>{`
                   @keyframes blinkRedDot {
                     0% { opacity: 0.3; transform: scale(0.95); }
@@ -2021,13 +2046,13 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
 
                   {/* LEFT – 7 phần */}
                   <div className="d-flex flex-column" style={{ flex: isMobileOrTablet ? "none" : 7, paddingRight: isMobileOrTablet ? 0 : 20, height: isMobileOrTablet ? "auto" : "100%" }}>
-                    <div className="d-flex align-items-center justify-content-between mb-3 flex-shrink-0">
-                      <div className="d-flex align-items-center gap-3">
+                    <div className="d-flex align-items-center justify-content-between mb-3 flex-shrink-0 bom-plan-step-topbar">
+                      <div className="d-flex align-items-center gap-2 bom-plan-step-topbar-left">
                         <SectionTitle title="Chi tiết định mức chi phí" icon="bi-list-ul" className="mb-0" />
                         <button
                           type="button"
                           title="Lưu kế hoạch"
-                          className="ms-2"
+                          className="ms-1 bom-plan-icon-btn"
                           onClick={handleSavePlan}
                           style={{
                             flexShrink: 0,
@@ -2049,15 +2074,15 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                         {hasCheckedCosts && (
                           <button
                             type="button"
-                            className="btn btn-danger btn-sm d-flex align-items-center gap-1 py-1"
+                            className="btn btn-danger btn-sm d-flex align-items-center gap-1 py-1 bom-plan-del-btn"
                             onClick={handleDeleteCheckedCosts}
                             style={{ fontSize: 12, borderRadius: 6 }}
                           >
-                            <i className="bi bi-trash"></i> Xoá đã chọn
+                            <i className="bi bi-trash"></i> <span className="bom-hide-mobile">Xoá đã chọn</span>
                           </button>
                         )}
                       </div>
-                      <div className="form-check form-switch mb-0 d-flex align-items-center gap-2">
+                      <div className="form-check form-switch mb-0 d-flex align-items-center gap-2 flex-shrink-0" style={{ whiteSpace: "nowrap" }}>
                         <input
                           className="form-check-input ms-0"
                           type="checkbox"
@@ -2067,26 +2092,68 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                           onChange={(e) => handleToggleStep2CalcByRev(e.target.checked)}
                           style={{ cursor: "pointer" }}
                         />
-                        <label className="form-check-label fw-semibold text-dark mb-0" htmlFor="s2CalcByRevenueSwitch" style={{ fontSize: 12.5, cursor: "pointer" }}>
+                        <label className="form-check-label fw-semibold text-dark mb-0" htmlFor="s2CalcByRevenueSwitch" style={{ fontSize: 12.5, cursor: "pointer", whiteSpace: "nowrap" }}>
                           Tính theo doanh thu
                         </label>
                       </div>
                     </div>
 
+                    {/* Mobile Sub-tabs for Step 2 */}
+                    <div className="bom-show-mobile-block mb-2" style={{ display: "none" }}>
+                      <div className="bom-plan-mobile-subtabs mb-1.5">
+                        <button
+                          type="button"
+                          className={`bom-labor-mobile-subtab-btn ${mobileStep2View === "detail" ? "is-active" : ""}`}
+                          onClick={() => setMobileStep2View("detail")}
+                        >
+                          <i className="bi bi-list-check" /> Chi tiết bộ phận
+                        </button>
+                        <button
+                          type="button"
+                          className={`bom-labor-mobile-subtab-btn ${mobileStep2View === "overview" ? "is-active" : ""}`}
+                          onClick={() => setMobileStep2View("overview")}
+                        >
+                          <i className="bi bi-pie-chart" /> Tổng quan chi phí
+                        </button>
+                      </div>
+                      {mobileStep2View === "detail" && (
+                        <div className="bom-plan-dept-pills">
+                          {[
+                            { id: "all", label: "Tất cả" },
+                            { id: "biz", label: "Kinh doanh" },
+                            { id: "fin", label: "KT & NS" },
+                            { id: "log", label: "Kho vận" },
+                            { id: "mkt", label: "Sản xuất" },
+                            { id: "ops", label: "Vận hành" },
+                            { id: "misc", label: "Khác" },
+                          ].map((d) => (
+                            <button
+                              key={d.id}
+                              type="button"
+                              className={`bom-plan-dept-pill ${mobileStep2Dept === d.id ? "is-active" : ""}`}
+                              onClick={() => setMobileStep2Dept(d.id)}
+                            >
+                              {d.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                     {/* Cost Sections */}
-                    <div className="d-flex flex-column gap-4" style={{ flexGrow: 1, overflowY: "auto", paddingRight: 5 }}>
+                    <div className={`d-flex flex-column gap-4 bom-plan-dept-list ${mobileStep2View !== "detail" ? "bom-plan-mobile-hidden" : ""}`} style={{ flexGrow: 1, overflowY: "auto", paddingRight: 5 }}>
                       {/* Công tác kinh doanh */}
-                      <div>
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
-                          <div className="fw-bold text-primary d-flex align-items-center gap-2 text-uppercase" style={{ fontSize: 13.5 }}>
+                      <div className={`bom-plan-dept-card ${mobileStep2Dept !== "all" && mobileStep2Dept !== "biz" ? "bom-plan-mobile-hidden" : ""}`}>
+                        <div className="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2 bom-plan-dept-header">
+                          <div className="fw-bold text-primary d-flex align-items-center gap-2 text-uppercase bom-plan-dept-title" style={{ fontSize: 13.5 }}>
                             <i className="bi bi-briefcase"></i> Công tác kinh doanh
                           </div>
                           <div className="d-flex align-items-center gap-2">
                             {grpBiz > finalCostSales && (
                               <span className="blinking-red-dot" title="Vượt định mức chi phí" />
                             )}
-                            <span className="badge fw-bold" style={{ fontSize: 11, color: grpBiz > finalCostSales ? "#ef4444" : "#3b82f6", background: grpBiz > finalCostSales ? "rgba(239, 68, 68, 0.1)" : "rgba(59, 130, 246, 0.1)" }}>
-                              Tổng: {grpBiz.toLocaleString("vi-VN")} đ / Định mức: {finalCostSales.toLocaleString("vi-VN")} đ
+                            <span className="badge fw-bold bom-plan-dept-badge" style={{ fontSize: 11, color: grpBiz > finalCostSales ? "#ef4444" : "#3b82f6", background: grpBiz > finalCostSales ? "rgba(239, 68, 68, 0.1)" : "rgba(59, 130, 246, 0.1)" }}>
+                              <span className="bom-hide-mobile">Tổng: </span>{grpBiz.toLocaleString("vi-VN")} <span className="bom-hide-mobile">đ </span>/ <span className="bom-hide-mobile">Định mức: </span>{finalCostSales.toLocaleString("vi-VN")} đ
                             </span>
                           </div>
                         </div>
@@ -2095,7 +2162,7 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                         </div>
                         <button
                           type="button"
-                          className="btn btn-link btn-sm text-primary text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3"
+                          className="btn btn-link btn-sm text-primary text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3 bom-plan-add-btn"
                           onClick={() => handleAddCostItem(setBizCosts, "biz")}
                           style={{ fontSize: 12, fontWeight: 600 }}
                         >
@@ -2104,17 +2171,17 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                       </div>
 
                       {/* Kế toán và nhân sự */}
-                      <div>
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
-                          <div className="fw-bold d-flex align-items-center gap-2 text-uppercase" style={{ fontSize: 13.5, color: "#10b981" }}>
+                      <div className={`bom-plan-dept-card ${mobileStep2Dept !== "all" && mobileStep2Dept !== "fin" ? "bom-plan-mobile-hidden" : ""}`}>
+                        <div className="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2 bom-plan-dept-header">
+                          <div className="fw-bold d-flex align-items-center gap-2 text-uppercase bom-plan-dept-title" style={{ fontSize: 13.5, color: "#10b981" }}>
                             <i className="bi bi-person-workspace"></i> Kế toán và nhân sự
                           </div>
                           <div className="d-flex align-items-center gap-2">
                             {grpFinCost > finalCostFinanceHR && (
                               <span className="blinking-red-dot" title="Vượt định mức chi phí" />
                             )}
-                            <span className="badge fw-bold" style={{ fontSize: 11, color: grpFinCost > finalCostFinanceHR ? "#ef4444" : "#10b981", background: grpFinCost > finalCostFinanceHR ? "rgba(239, 68, 68, 0.1)" : "rgba(16, 185, 129, 0.1)" }}>
-                              Tổng: {grpFinCost.toLocaleString("vi-VN")} đ / Định mức: {finalCostFinanceHR.toLocaleString("vi-VN")} đ
+                            <span className="badge fw-bold bom-plan-dept-badge" style={{ fontSize: 11, color: grpFinCost > finalCostFinanceHR ? "#ef4444" : "#10b981", background: grpFinCost > finalCostFinanceHR ? "rgba(239, 68, 68, 0.1)" : "rgba(16, 185, 129, 0.1)" }}>
+                              <span className="bom-hide-mobile">Tổng: </span>{grpFinCost.toLocaleString("vi-VN")} <span className="bom-hide-mobile">đ </span>/ <span className="bom-hide-mobile">Định mức: </span>{finalCostFinanceHR.toLocaleString("vi-VN")} đ
                             </span>
                           </div>
                         </div>
@@ -2123,7 +2190,7 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                         </div>
                         <button
                           type="button"
-                          className="btn btn-link btn-sm text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3"
+                          className="btn btn-link btn-sm text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3 bom-plan-add-btn"
                           onClick={() => handleAddCostItem(setFinCosts, "fin")}
                           style={{ fontSize: 12, fontWeight: 600, color: "#10b981" }}
                         >
@@ -2132,17 +2199,17 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                       </div>
 
                       {/* Kho vận */}
-                      <div>
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
-                          <div className="fw-bold d-flex align-items-center gap-2 text-uppercase" style={{ fontSize: 13.5, color: "#6366f1" }}>
+                      <div className={`bom-plan-dept-card ${mobileStep2Dept !== "all" && mobileStep2Dept !== "log" ? "bom-plan-mobile-hidden" : ""}`}>
+                        <div className="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2 bom-plan-dept-header">
+                          <div className="fw-bold d-flex align-items-center gap-2 text-uppercase bom-plan-dept-title" style={{ fontSize: 13.5, color: "#6366f1" }}>
                             <i className="bi bi-box-seam"></i> Kho vận
                           </div>
                           <div className="d-flex align-items-center gap-2">
                             {grpLogCost > finalCostLogistics && (
                               <span className="blinking-red-dot" title="Vượt định mức chi phí" />
                             )}
-                            <span className="badge fw-bold" style={{ fontSize: 11, color: grpLogCost > finalCostLogistics ? "#ef4444" : "#6366f1", background: grpLogCost > finalCostLogistics ? "rgba(239, 68, 68, 0.1)" : "rgba(99, 102, 241, 0.1)" }}>
-                              Tổng: {grpLogCost.toLocaleString("vi-VN")} đ / Định mức: {finalCostLogistics.toLocaleString("vi-VN")} đ
+                            <span className="badge fw-bold bom-plan-dept-badge" style={{ fontSize: 11, color: grpLogCost > finalCostLogistics ? "#ef4444" : "#6366f1", background: grpLogCost > finalCostLogistics ? "rgba(239, 68, 68, 0.1)" : "rgba(99, 102, 241, 0.1)" }}>
+                              <span className="bom-hide-mobile">Tổng: </span>{grpLogCost.toLocaleString("vi-VN")} <span className="bom-hide-mobile">đ </span>/ <span className="bom-hide-mobile">Định mức: </span>{finalCostLogistics.toLocaleString("vi-VN")} đ
                             </span>
                           </div>
                         </div>
@@ -2151,7 +2218,7 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                         </div>
                         <button
                           type="button"
-                          className="btn btn-link btn-sm text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3"
+                          className="btn btn-link btn-sm text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3 bom-plan-add-btn"
                           onClick={() => handleAddCostItem(setLogCosts, "log")}
                           style={{ fontSize: 12, fontWeight: 600, color: "#6366f1" }}
                         >
@@ -2160,17 +2227,17 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                       </div>
 
                       {/* Sản xuất */}
-                      <div>
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
-                          <div className="fw-bold d-flex align-items-center gap-2 text-uppercase" style={{ fontSize: 13.5, color: "#8b5cf6" }}>
+                      <div className={`bom-plan-dept-card ${mobileStep2Dept !== "all" && mobileStep2Dept !== "mkt" ? "bom-plan-mobile-hidden" : ""}`}>
+                        <div className="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2 bom-plan-dept-header">
+                          <div className="fw-bold d-flex align-items-center gap-2 text-uppercase bom-plan-dept-title" style={{ fontSize: 13.5, color: "#8b5cf6" }}>
                             <i className="bi bi-megaphone"></i> Sản xuất
                           </div>
                           <div className="d-flex align-items-center gap-2">
                             {grpMkt > finalCostMarketing && (
                               <span className="blinking-red-dot" title="Vượt định mức chi phí" />
                             )}
-                            <span className="badge fw-bold" style={{ fontSize: 11, color: grpMkt > finalCostMarketing ? "#ef4444" : "#8b5cf6", background: grpMkt > finalCostMarketing ? "rgba(239, 68, 68, 0.1)" : "rgba(139, 92, 246, 0.1)" }}>
-                              Tổng: {grpMkt.toLocaleString("vi-VN")} đ / Định mức: {finalCostMarketing.toLocaleString("vi-VN")} đ
+                            <span className="badge fw-bold bom-plan-dept-badge" style={{ fontSize: 11, color: grpMkt > finalCostMarketing ? "#ef4444" : "#8b5cf6", background: grpMkt > finalCostMarketing ? "rgba(239, 68, 68, 0.1)" : "rgba(139, 92, 246, 0.1)" }}>
+                              <span className="bom-hide-mobile">Tổng: </span>{grpMkt.toLocaleString("vi-VN")} <span className="bom-hide-mobile">đ </span>/ <span className="bom-hide-mobile">Định mức: </span>{finalCostMarketing.toLocaleString("vi-VN")} đ
                             </span>
                           </div>
                         </div>
@@ -2179,7 +2246,7 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                         </div>
                         <button
                           type="button"
-                          className="btn btn-link btn-sm text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3"
+                          className="btn btn-link btn-sm text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3 bom-plan-add-btn"
                           onClick={() => handleAddCostItem(setMktCosts, "mkt")}
                           style={{ fontSize: 12, fontWeight: 600, color: "#8b5cf6" }}
                         >
@@ -2188,17 +2255,17 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                       </div>
 
                       {/* Vận hành hệ thống */}
-                      <div>
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
-                          <div className="fw-bold d-flex align-items-center gap-2 text-uppercase" style={{ fontSize: 13.5, color: "#f59e0b" }}>
+                      <div className={`bom-plan-dept-card ${mobileStep2Dept !== "all" && mobileStep2Dept !== "ops" ? "bom-plan-mobile-hidden" : ""}`}>
+                        <div className="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2 bom-plan-dept-header">
+                          <div className="fw-bold d-flex align-items-center gap-2 text-uppercase bom-plan-dept-title" style={{ fontSize: 13.5, color: "#f59e0b" }}>
                             <i className="bi bi-gear"></i> Vận hành hệ thống
                           </div>
                           <div className="d-flex align-items-center gap-2">
                             {grpOps > finalCostOperations && (
                               <span className="blinking-red-dot" title="Vượt định mức chi phí" />
                             )}
-                            <span className="badge fw-bold" style={{ fontSize: 11, color: grpOps > finalCostOperations ? "#ef4444" : "#f59e0b", background: grpOps > finalCostOperations ? "rgba(239, 68, 68, 0.1)" : "rgba(245, 158, 11, 0.1)" }}>
-                              Tổng: {grpOps.toLocaleString("vi-VN")} đ / Định mức: {finalCostOperations.toLocaleString("vi-VN")} đ
+                            <span className="badge fw-bold bom-plan-dept-badge" style={{ fontSize: 11, color: grpOps > finalCostOperations ? "#ef4444" : "#f59e0b", background: grpOps > finalCostOperations ? "rgba(239, 68, 68, 0.1)" : "rgba(245, 158, 11, 0.1)" }}>
+                              <span className="bom-hide-mobile">Tổng: </span>{grpOps.toLocaleString("vi-VN")} <span className="bom-hide-mobile">đ </span>/ <span className="bom-hide-mobile">Định mức: </span>{finalCostOperations.toLocaleString("vi-VN")} đ
                             </span>
                           </div>
                         </div>
@@ -2207,7 +2274,7 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                         </div>
                         <button
                           type="button"
-                          className="btn btn-link btn-sm text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3"
+                          className="btn btn-link btn-sm text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3 bom-plan-add-btn"
                           onClick={() => handleAddCostItem(setOpsCosts, "ops")}
                           style={{ fontSize: 12, fontWeight: 600, color: "#f59e0b" }}
                         >
@@ -2216,12 +2283,12 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                       </div>
 
                       {/* Chi phí Khác */}
-                      <div>
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
-                          <div className="fw-bold d-flex align-items-center gap-2" style={{ fontSize: 13.5, color: "#ef4444" }}>
+                      <div className={`bom-plan-dept-card ${mobileStep2Dept !== "all" && mobileStep2Dept !== "misc" ? "bom-plan-mobile-hidden" : ""}`}>
+                        <div className="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2 bom-plan-dept-header">
+                          <div className="fw-bold d-flex align-items-center gap-2 bom-plan-dept-title" style={{ fontSize: 13.5, color: "#ef4444" }}>
                             <i className="bi bi-info-circle"></i> Chi phí Khác
                           </div>
-                          <span className="badge fw-bold" style={{ fontSize: 11, color: "#ef4444", background: "rgba(239, 68, 68, 0.1)" }}>
+                          <span className="badge fw-bold bom-plan-dept-badge" style={{ fontSize: 11, color: "#ef4444", background: "rgba(239, 68, 68, 0.1)" }}>
                             Tổng: {grpMisc.toLocaleString("vi-VN")} đ
                           </span>
                         </div>
@@ -2230,7 +2297,7 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                         </div>
                         <button
                           type="button"
-                          className="btn btn-link btn-sm text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3"
+                          className="btn btn-link btn-sm text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3 bom-plan-add-btn"
                           onClick={() => handleAddCostItem(setMiscCosts, "misc")}
                           style={{ fontSize: 12, fontWeight: 600, color: "#ef4444" }}
                         >
@@ -2244,8 +2311,8 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                   {!isMobileOrTablet && <div style={{ width: 1, background: "#dee2e6", flexShrink: 0, margin: "0 4px" }} />}
 
                   {/* RIGHT – 5 phần */}
-                  <div style={{ flex: isMobileOrTablet ? "none" : 5, paddingLeft: isMobileOrTablet ? 0 : 20, height: isMobileOrTablet ? "auto" : "100%", overflow: isMobileOrTablet ? "visible" : "hidden", marginTop: isMobileOrTablet ? 30 : 0 }}>
-                    <SectionTitle title="Tổng quan chi phí" icon="bi-pie-chart" className="mb-3" />
+                  <div className={`bom-plan-overview-panel ${mobileStep2View !== "overview" ? "bom-plan-mobile-hidden" : ""}`} style={{ flex: isMobileOrTablet ? "none" : 5, paddingLeft: isMobileOrTablet ? 0 : 20, height: isMobileOrTablet ? "auto" : "100%", overflow: isMobileOrTablet ? "visible" : "hidden", marginTop: isMobileOrTablet ? 12 : 0 }}>
+                    <SectionTitle title="Tổng quan chi phí" icon="bi-pie-chart" className="mb-3 bom-hide-mobile" />
 
                     <div className="p-3 rounded-3 mb-3" style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)" }}>
                       <div className="text-danger fw-bold mb-1" style={{ fontSize: 11, letterSpacing: "0.04em" }}>TỔNG CHI PHÍ</div>
@@ -2318,18 +2385,18 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
               };
 
               return (
-                <div key={item.id} className="d-flex align-items-center gap-2 mb-1 ps-3">
+                <div key={item.id} className="d-flex align-items-center gap-2 mb-1 ps-3 bom-plan-item-row">
                   <input
                     type="checkbox"
-                    className="form-check-input"
+                    className="form-check-input bom-plan-row-checkbox"
                     checked={item.checked}
                     onChange={toggleChecked}
                     style={{ cursor: "pointer", width: 14, height: 14, flexShrink: 0 }}
                   />
-                  <span className="text-muted flex-grow-1" style={{ fontSize: 12 }}>
+                  <span className="text-muted flex-grow-1 bom-plan-item-label" style={{ fontSize: 12 }}>
                     {item.label}
                   </span>
-                  <div className="input-group input-group-sm" style={{ maxWidth: 210 }}>
+                  <div className="input-group input-group-sm bom-plan-staff-inputs" style={{ maxWidth: 210 }}>
                     <input
                       type="text"
                       className="form-control text-end fw-semibold text-primary money-input-field"
@@ -2340,12 +2407,12 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                     />
                     <input
                       type="text"
-                      className="form-control text-center fw-bold text-dark"
+                      className="form-control text-center fw-bold text-dark bom-plan-staff-qty"
                       style={{ maxWidth: 55 }}
                       value={item.qty}
                       onChange={(e) => updateQty(e.target.value.replace(/\D/g, ""))}
                     />
-                    <span className="input-group-text text-muted" style={{ fontSize: 11, fontFamily: "var(--font-roboto-condensed), 'Roboto Condensed', sans-serif" }}>người</span>
+                    <span className="input-group-text text-muted bom-plan-staff-unit" style={{ fontSize: 11, fontFamily: "var(--font-roboto-condensed), 'Roboto Condensed', sans-serif" }}>người</span>
                   </div>
                 </div>
               );
@@ -2359,18 +2426,18 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
             ];
 
             return (
-              <div className="container-fluid px-3 pb-3">
+              <div className="container-fluid px-3 pb-3 bom-plan-step3-container">
                 <div className="d-flex" style={{ gap: 0, flexDirection: isMobileOrTablet ? "column" : "row", height: isMobileOrTablet ? "auto" : 530 }}>
 
                   {/* LEFT – 7 phần */}
                   <div className="d-flex flex-column" style={{ flex: isMobileOrTablet ? "none" : 7, paddingRight: isMobileOrTablet ? 0 : 20, height: isMobileOrTablet ? "auto" : "100%" }}>
-                    <div className="d-flex align-items-center justify-content-between mb-3 flex-shrink-0">
-                      <div className="d-flex align-items-center gap-3">
+                    <div className="d-flex align-items-center justify-content-between mb-3 flex-shrink-0 bom-plan-step-topbar">
+                      <div className="d-flex align-items-center gap-2 bom-plan-step-topbar-left">
                         <SectionTitle title="Chi tiết định biên nhân sự" icon="bi-people" className="mb-0" />
                         <button
                           type="button"
                           title="Lưu kế hoạch"
-                          className="ms-2"
+                          className="ms-1 bom-plan-icon-btn"
                           onClick={handleSavePlan}
                           style={{
                             flexShrink: 0,
@@ -2393,31 +2460,71 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                       {hasCheckedStaff && (
                         <button
                           type="button"
-                          className="btn btn-danger btn-sm d-flex align-items-center gap-1 py-1 animate__animated animate__fadeIn"
+                          className="btn btn-danger btn-sm d-flex align-items-center gap-1 py-1 animate__animated animate__fadeIn bom-plan-del-btn"
                           onClick={handleDeleteCheckedStaff}
                           style={{ fontSize: 12, borderRadius: 6 }}
                         >
-                          <i className="bi bi-trash"></i> Xoá đã chọn
+                          <i className="bi bi-trash"></i> <span className="bom-hide-mobile">Xoá đã chọn</span>
                         </button>
                       )}
                     </div>
 
-                    {/* Scrollable list container */}
-                    <div style={{ flexGrow: 1, overflowY: "auto", paddingRight: 5 }}>
-                      {/* Nhóm 1: Công tác kinh doanh */}
-                      <div className="mb-2">
-                        <div className="d-flex align-items-center gap-2 mb-1">
-                          <span className="rounded-circle d-inline-block" style={{ width: 8, height: 8, background: "#3b82f6", flexShrink: 0 }} />
-                          <span className="fw-bold text-primary" style={{ fontSize: 12 }}>CÔNG TÁC KINH DOANH</span>
-                          <span className="ms-auto fw-bold text-primary" style={{ fontSize: 12 }}>{grpBiz.toLocaleString("vi-VN")} người | {fundBiz.toLocaleString("vi-VN")} đồng</span>
+                    {/* Mobile Sub-tabs for Step 3 */}
+                    <div className="bom-show-mobile-block mb-2" style={{ display: "none" }}>
+                      <div className="bom-plan-mobile-subtabs mb-1.5">
+                        <button
+                          type="button"
+                          className={`bom-labor-mobile-subtab-btn ${mobileStep3View === "detail" ? "is-active" : ""}`}
+                          onClick={() => setMobileStep3View("detail")}
+                        >
+                          <i className="bi bi-people" /> Định biên bộ phận ({totalStep3})
+                        </button>
+                        <button
+                          type="button"
+                          className={`bom-labor-mobile-subtab-btn ${mobileStep3View === "overview" ? "is-active" : ""}`}
+                          onClick={() => setMobileStep3View("overview")}
+                        >
+                          <i className="bi bi-pie-chart" /> Tổng quan quỹ lương
+                        </button>
+                      </div>
+                      {mobileStep3View === "detail" && (
+                        <div className="bom-plan-dept-pills">
+                          {[
+                            { id: "all", label: "Tất cả" },
+                            { id: "biz", label: "Kinh doanh" },
+                            { id: "fin", label: "KT & NS" },
+                            { id: "log", label: "Kho vận" },
+                            { id: "mkt", label: "Sản xuất" },
+                          ].map((d) => (
+                            <button
+                              key={d.id}
+                              type="button"
+                              className={`bom-plan-dept-pill ${mobileStep3Dept === d.id ? "is-active" : ""}`}
+                              onClick={() => setMobileStep3Dept(d.id)}
+                            >
+                              {d.label}
+                            </button>
+                          ))}
                         </div>
-                        <div className="text-muted mb-2 ps-3" style={{ fontSize: 11, lineHeight: "1.4" }}>
+                      )}
+                    </div>
+
+                    {/* Scrollable list container */}
+                    <div className={`bom-plan-dept-list ${mobileStep3View !== "detail" ? "bom-plan-mobile-hidden" : ""}`} style={{ flexGrow: 1, overflowY: "auto", paddingRight: 5 }}>
+                      {/* Nhóm 1: Công tác kinh doanh */}
+                      <div className={`mb-2 bom-plan-dept-card ${mobileStep3Dept !== "all" && mobileStep3Dept !== "biz" ? "bom-plan-mobile-hidden" : ""}`}>
+                        <div className="d-flex align-items-center gap-2 mb-1 bom-plan-dept-header">
+                          <span className="rounded-circle d-inline-block" style={{ width: 8, height: 8, background: "#3b82f6", flexShrink: 0 }} />
+                          <span className="fw-bold text-primary bom-plan-dept-title" style={{ fontSize: 12 }}>CÔNG TÁC KINH DOANH</span>
+                          <span className="ms-auto fw-bold text-primary bom-plan-dept-summary" style={{ fontSize: 12 }}>{grpBiz.toLocaleString("vi-VN")} người | {fundBiz.toLocaleString("vi-VN")} <span className="bom-hide-mobile">đồng</span><span className="bom-show-mobile-inline">đ</span></span>
+                        </div>
+                        <div className="text-muted mb-2 ps-3 bom-hide-mobile" style={{ fontSize: 11, lineHeight: "1.4" }}>
                           Tổng nhân sự <strong>{grpBiz}</strong> người, chiếm <strong>{pct(grpBiz)}%</strong> tổng số nhân viên. Quỹ lương <strong>{fundBiz.toLocaleString("vi-VN")}</strong> đồng, chiếm <strong>{limitBiz > 0 ? (fundBiz / limitBiz * 100).toFixed(1) : "0.0"}%</strong> so với định mức chi phí lương của phòng và chiếm <strong>{pctRev(fundBiz)}%</strong> tổng doanh thu
                         </div>
                         {bizStaff.map(item => renderStaffRow(item, setBizStaff))}
                         <button
                           type="button"
-                          className="btn btn-link btn-sm text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3"
+                          className="btn btn-link btn-sm text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3 bom-plan-add-btn"
                           onClick={() => handleAddStaffItem(setBizStaff, "biz")}
                           style={{ fontSize: 12, fontWeight: 600, color: "#3b82f6" }}
                         >
@@ -2426,19 +2533,19 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                       </div>
 
                       {/* Nhóm 2: Kế toán và nhân sự */}
-                      <div className="mb-2">
-                        <div className="d-flex align-items-center gap-2 mb-1">
+                      <div className={`mb-2 bom-plan-dept-card ${mobileStep3Dept !== "all" && mobileStep3Dept !== "fin" ? "bom-plan-mobile-hidden" : ""}`}>
+                        <div className="d-flex align-items-center gap-2 mb-1 bom-plan-dept-header">
                           <span className="rounded-circle d-inline-block" style={{ width: 8, height: 8, background: "#6c757d", flexShrink: 0 }} />
-                          <span className="fw-bold" style={{ fontSize: 12, color: "#6c757d" }}>KẾ TOÁN VÀ NHÂN SỰ</span>
-                          <span className="ms-auto fw-bold" style={{ fontSize: 12, color: "#6c757d" }}>{grpFin.toLocaleString("vi-VN")} người | {fundFin.toLocaleString("vi-VN")} đồng</span>
+                          <span className="fw-bold bom-plan-dept-title" style={{ fontSize: 12, color: "#6c757d" }}>KẾ TOÁN VÀ NHÂN SỰ</span>
+                          <span className="ms-auto fw-bold bom-plan-dept-summary" style={{ fontSize: 12, color: "#6c757d" }}>{grpFin.toLocaleString("vi-VN")} người | {fundFin.toLocaleString("vi-VN")} <span className="bom-hide-mobile">đồng</span><span className="bom-show-mobile-inline">đ</span></span>
                         </div>
-                        <div className="text-muted mb-2 ps-3" style={{ fontSize: 11, lineHeight: "1.4" }}>
+                        <div className="text-muted mb-2 ps-3 bom-hide-mobile" style={{ fontSize: 11, lineHeight: "1.4" }}>
                           Tổng nhân sự <strong>{grpFin}</strong> người, chiếm <strong>{pct(grpFin)}%</strong> tổng số nhân viên. Quỹ lương <strong>{fundFin.toLocaleString("vi-VN")}</strong> đồng, chiếm <strong>{limitFin > 0 ? (fundFin / limitFin * 100).toFixed(1) : "0.0"}%</strong> so với định mức chi phí lương của phòng và chiếm <strong>{pctRev(fundFin)}%</strong> tổng doanh thu
                         </div>
                         {finStaff.map(item => renderStaffRow(item, setFinStaff))}
                         <button
                           type="button"
-                          className="btn btn-link btn-sm text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3"
+                          className="btn btn-link btn-sm text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3 bom-plan-add-btn"
                           onClick={() => handleAddStaffItem(setFinStaff, "fin")}
                           style={{ fontSize: 12, fontWeight: 600, color: "#6c757d" }}
                         >
@@ -2447,19 +2554,19 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                       </div>
 
                       {/* Nhóm 3: Kho vận */}
-                      <div className="mb-2">
-                        <div className="d-flex align-items-center gap-2 mb-1">
+                      <div className={`mb-2 bom-plan-dept-card ${mobileStep3Dept !== "all" && mobileStep3Dept !== "log" ? "bom-plan-mobile-hidden" : ""}`}>
+                        <div className="d-flex align-items-center gap-2 mb-1 bom-plan-dept-header">
                           <span className="rounded-circle d-inline-block" style={{ width: 8, height: 8, background: "#f59e0b", flexShrink: 0 }} />
-                          <span className="fw-bold" style={{ fontSize: 12, color: "#f59e0b" }}>KHO VẬN</span>
-                          <span className="ms-auto fw-bold" style={{ fontSize: 12, color: "#f59e0b" }}>{grpLog.toLocaleString("vi-VN")} người | {fundLog.toLocaleString("vi-VN")} đồng</span>
+                          <span className="fw-bold bom-plan-dept-title" style={{ fontSize: 12, color: "#f59e0b" }}>KHO VẬN</span>
+                          <span className="ms-auto fw-bold bom-plan-dept-summary" style={{ fontSize: 12, color: "#f59e0b" }}>{grpLog.toLocaleString("vi-VN")} người | {fundLog.toLocaleString("vi-VN")} <span className="bom-hide-mobile">đồng</span><span className="bom-show-mobile-inline">đ</span></span>
                         </div>
-                        <div className="text-muted mb-2 ps-3" style={{ fontSize: 11, lineHeight: "1.4" }}>
+                        <div className="text-muted mb-2 ps-3 bom-hide-mobile" style={{ fontSize: 11, lineHeight: "1.4" }}>
                           Tổng nhân sự <strong>{grpLog}</strong> người, chiếm <strong>{pct(grpLog)}%</strong> tổng số nhân viên. Quỹ lương <strong>{fundLog.toLocaleString("vi-VN")}</strong> đồng, chiếm <strong>{limitLog > 0 ? (fundLog / limitLog * 100).toFixed(1) : "0.0"}%</strong> so với định mức chi phí lương của phòng và chiếm <strong>{pctRev(fundLog)}%</strong> tổng doanh thu
                         </div>
                         {logStaff.map(item => renderStaffRow(item, setLogStaff))}
                         <button
                           type="button"
-                          className="btn btn-link btn-sm text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3"
+                          className="btn btn-link btn-sm text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3 bom-plan-add-btn"
                           onClick={() => handleAddStaffItem(setLogStaff, "log")}
                           style={{ fontSize: 12, fontWeight: 600, color: "#f59e0b" }}
                         >
@@ -2468,19 +2575,19 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                       </div>
 
                       {/* Nhóm 4: Sản xuất */}
-                      <div className="mb-2">
-                        <div className="d-flex align-items-center gap-2 mb-1">
+                      <div className={`mb-2 bom-plan-dept-card ${mobileStep3Dept !== "all" && mobileStep3Dept !== "mkt" ? "bom-plan-mobile-hidden" : ""}`}>
+                        <div className="d-flex align-items-center gap-2 mb-1 bom-plan-dept-header">
                           <span className="rounded-circle d-inline-block" style={{ width: 8, height: 8, background: "#8b5cf6", flexShrink: 0 }} />
-                          <span className="fw-bold" style={{ fontSize: 12, color: "#8b5cf6" }}>SẢN XUẤT</span>
-                          <span className="ms-auto fw-bold" style={{ fontSize: 12, color: "#8b5cf6" }}>{grpMkt.toLocaleString("vi-VN")} người | {fundMkt.toLocaleString("vi-VN")} đồng</span>
+                          <span className="fw-bold bom-plan-dept-title" style={{ fontSize: 12, color: "#8b5cf6" }}>SẢN XUẤT</span>
+                          <span className="ms-auto fw-bold bom-plan-dept-summary" style={{ fontSize: 12, color: "#8b5cf6" }}>{grpMkt.toLocaleString("vi-VN")} người | {fundMkt.toLocaleString("vi-VN")} <span className="bom-hide-mobile">đồng</span><span className="bom-show-mobile-inline">đ</span></span>
                         </div>
-                        <div className="text-muted mb-2 ps-3" style={{ fontSize: 11, lineHeight: "1.4" }}>
+                        <div className="text-muted mb-2 ps-3 bom-hide-mobile" style={{ fontSize: 11, lineHeight: "1.4" }}>
                           Tổng nhân sự <strong>{grpMkt}</strong> người, chiếm <strong>{pct(grpMkt)}%</strong> tổng số nhân viên. Quỹ lương <strong>{fundMkt.toLocaleString("vi-VN")}</strong> đồng, chiếm <strong>{limitMkt > 0 ? (fundMkt / limitMkt * 100).toFixed(1) : "0.0"}%</strong> so với định mức chi phí lương của phòng và chiếm <strong>{pctRev(fundMkt)}%</strong> tổng doanh thu
                         </div>
                         {mktStaff.map(item => renderStaffRow(item, setMktStaff))}
                         <button
                           type="button"
-                          className="btn btn-link btn-sm text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3"
+                          className="btn btn-link btn-sm text-decoration-none d-flex align-items-center gap-1 mt-2 ps-3 bom-plan-add-btn"
                           onClick={() => handleAddStaffItem(setMktStaff, "mkt")}
                           style={{ fontSize: 12, fontWeight: 600, color: "#8b5cf6" }}
                         >
@@ -2494,8 +2601,8 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                   {!isMobileOrTablet && <div style={{ width: 1, background: "#dee2e6", flexShrink: 0, margin: "0 4px" }} />}
 
                   {/* RIGHT – 5 phần */}
-                  <div style={{ flex: isMobileOrTablet ? "none" : 5, paddingLeft: isMobileOrTablet ? 0 : 20, height: isMobileOrTablet ? "auto" : "100%", overflow: isMobileOrTablet ? "visible" : "hidden", marginTop: isMobileOrTablet ? 30 : 0 }}>
-                    <SectionTitle title="Tổng quan nhân sự" icon="bi-pie-chart" className="mb-3" />
+                  <div className={`bom-plan-overview-panel ${mobileStep3View !== "overview" ? "bom-plan-mobile-hidden" : ""}`} style={{ flex: isMobileOrTablet ? "none" : 5, paddingLeft: isMobileOrTablet ? 0 : 20, height: isMobileOrTablet ? "auto" : "100%", overflow: isMobileOrTablet ? "visible" : "hidden", marginTop: isMobileOrTablet ? 12 : 0 }}>
+                    <SectionTitle title="Tổng quan nhân sự" icon="bi-pie-chart" className="mb-3 bom-hide-mobile" />
 
                     <div className="p-3 rounded-3 mb-3" style={{ background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.15)" }}>
                       <div className="text-primary fw-bold mb-1" style={{ fontSize: 11, letterSpacing: "0.04em" }}>TỔNG QUỸ LƯƠNG</div>
@@ -2675,21 +2782,21 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
             ];
 
             return (
-              <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden px-2 pb-2">
+              <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden px-2 pb-2 bom-plan-step4-container">
                 <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200">
                   <SectionTitle title="Kế hoạch lợi nhuận & Hiệu quả hoạt động (ROI)" icon="bi-trophy" className="mb-0" />
                 </div>
 
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden border border-slate-200 rounded-xl shadow-xs">
                   <FullWidthTable>
-                    <table className="w-full text-left border-collapse" style={{ fontSize: "13px" }}>
+                    <table className="w-full text-left border-collapse bom-plan-profit-table" style={{ fontSize: "13px" }}>
                       <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
                         <tr className="text-slate-600 text-[11.5px] uppercase tracking-wider font-bold">
-                          <th className="py-2.5 px-3 text-center w-14">STT</th>
+                          <th className="py-2.5 px-3 text-center w-14 bom-hide-mobile">STT</th>
                           <th className="py-2.5 px-3">Hạng mục - Chỉ tiêu</th>
-                          <th className="py-2.5 px-3 text-center w-24">Đơn vị</th>
+                          <th className="py-2.5 px-3 text-center w-24 bom-hide-mobile">Đơn vị</th>
                           <th className="py-2.5 px-3 text-right w-52">Giá trị</th>
-                          <th className="py-2.5 px-3">Ghi chú</th>
+                          <th className="py-2.5 px-3 bom-hide-mobile">Ghi chú</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -2709,23 +2816,25 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
 
                           return (
                             <tr key={row.id} className={`${rowBg} hover:bg-blue-50/40 transition-colors`}>
-                              <td className="py-2.5 px-3 text-center text-slate-500 font-mono font-medium">{row.stt}</td>
+                              <td className="py-2.5 px-3 text-center text-slate-500 font-mono font-medium bom-hide-mobile">{row.stt}</td>
                               <td className={`py-2.5 px-3 ${row.isBold ? "font-bold text-slate-800" : "text-slate-700"}`}>
+                                <span className="bom-show-mobile-inline text-slate-400 font-mono mr-1">{row.stt}.</span>
                                 {row.label}
                               </td>
-                              <td className="py-2.5 px-3 text-center text-slate-500 text-xs">
+                              <td className="py-2.5 px-3 text-center text-slate-500 text-xs bom-hide-mobile">
                                 {row.unit}
                               </td>
-                              <td className={`py-2.5 px-3 text-right font-mono ${row.isBold ? "font-bold" : ""} ${rowTextColor || (row.isBold ? "text-slate-900" : "text-slate-700")}`}>
+                              <td className={`py-2.5 px-3 text-right font-mono whitespace-nowrap ${row.isBold ? "font-bold" : ""} ${rowTextColor || (row.isBold ? "text-slate-900" : "text-slate-700")}`}>
                                 {row.type === "percentage" ? (
-                                  <span>{row.value}</span>
+                                  <span>{row.value}<span className="bom-show-mobile-inline ml-0.5 text-[11px]">%</span></span>
                                 ) : (
                                   <span style={{ fontFamily: "var(--font-roboto-condensed), 'Roboto Condensed', sans-serif" }}>
                                     {typeof row.value === "number" ? row.value.toLocaleString("vi-VN") : row.value}
+                                    <span className="bom-show-mobile-inline ml-0.5 text-[11px] font-sans">đ</span>
                                   </span>
                                 )}
                               </td>
-                              <td className="py-1.5 px-3">
+                              <td className="py-1.5 px-3 bom-hide-mobile">
                                 <input
                                   type="text"
                                   className="w-full bg-white border border-slate-200 rounded px-2.5 py-1 text-slate-700 text-xs placeholder:text-slate-300 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-300 transition-all"

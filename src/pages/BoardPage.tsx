@@ -16,6 +16,7 @@ export const BoardPage: React.FC<BoardPageProps> = ({ onNavigate, onShowToast })
       color="violet"
       tickerContext="board"
       cardPadding="p-0"
+      className="bom-overview-page"
     >
       <BomOverviewView onNavigate={onNavigate} onShowToast={onShowToast} />
     </StandardPage>

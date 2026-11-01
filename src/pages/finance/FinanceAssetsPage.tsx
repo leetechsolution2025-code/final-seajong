@@ -35,23 +35,25 @@ export const FinanceAssetsPage: React.FC<FinanceAssetsPageProps> = ({
   const [currentStep, setCurrentStep] = useState<number>(1);
 
   return (
-    <StepPage
-      title="Quản lý tài sản & Vốn bằng tiền"
-      description="Giám sát biến động quỹ tiền mặt, số dư tài khoản ngân hàng và quản lý danh mục tài sản cố định, trích khấu hao"
-      icon="bi-wallet2"
-      color="emerald"
-      badge="TÀI SẢN & TIỀN TỆ"
-      steps={ASSET_STEPS}
-      currentStep={currentStep}
-      onStepChange={setCurrentStep}
-      tickerContext="assets"
-    >
-      <AssetManagementView
-        key={`asset-step-${currentStep}`}
+    <div className="finance-assets-page h-full">
+      <StepPage
+        title="Quản lý tài sản & Vốn bằng tiền"
+        description="Giám sát biến động quỹ tiền mặt, số dư tài khoản ngân hàng và quản lý danh mục tài sản cố định, trích khấu hao"
+        icon="bi-wallet2"
+        color="emerald"
+        badge="TÀI SẢN & TIỀN TỆ"
+        steps={ASSET_STEPS}
         currentStep={currentStep}
-        onShowToast={onShowToast}
-      />
-    </StepPage>
+        onStepChange={setCurrentStep}
+        tickerContext="assets"
+      >
+        <AssetManagementView
+          key={`asset-step-${currentStep}`}
+          currentStep={currentStep}
+          onShowToast={onShowToast}
+        />
+      </StepPage>
+    </div>
   );
 };
 

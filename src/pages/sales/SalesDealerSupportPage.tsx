@@ -237,6 +237,7 @@ export const SalesDealerSupportPage: React.FC = () => {
   );
 
   return (
+    <div className="sales-support-page h-full w-full flex flex-col min-h-0">
     <StepPage
       title="Hỗ trợ đại lý"
       description="Tiếp nhận, xử lý và phản hồi các yêu cầu hỗ trợ gửi từ hệ thống đại lý và nhà phân phối Seajong"
@@ -327,16 +328,16 @@ export const SalesDealerSupportPage: React.FC = () => {
                 : 'Chưa có yêu cầu hỗ trợ nào đã xử lý.'
             }
           >
-            <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+            <table className="sales-support-table w-full text-left border-collapse" style={{ fontSize: '13px' }}>
               <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 text-slate-800 text-[11px] font-extrabold uppercase">
                 <tr>
-                  <th className="py-2.5 px-3.5 text-center w-[55px]">STT</th>
-                  <th className="py-2.5 px-3.5 w-[270px]">Mã yêu cầu & Đại lý gửi</th>
-                  <th className="py-2.5 px-3.5 w-[125px]">Ngày gửi</th>
-                  <th className="py-2.5 px-3.5 w-[205px]">Phân loại yêu cầu</th>
-                  <th className="py-2.5 px-3.5">Tiêu đề & Nội dung chi tiết</th>
-                  <th className="py-2.5 px-3.5 w-[180px]">Người phụ trách</th>
-                  <th className="py-2.5 px-3.5 text-center w-[135px]">Trạng thái</th>
+                  <th className="hidden sm:table-cell py-2.5 px-3.5 text-center w-[55px]">STT</th>
+                  <th className="py-2.5 px-2.5 sm:px-3.5 sm:w-[270px]">Mã yêu cầu & Đại lý gửi</th>
+                  <th className="hidden sm:table-cell py-2.5 px-3.5 w-[125px]">Ngày gửi</th>
+                  <th className="hidden sm:table-cell py-2.5 px-3.5 w-[205px]">Phân loại yêu cầu</th>
+                  <th className="hidden sm:table-cell py-2.5 px-3.5">Tiêu đề & Nội dung chi tiết</th>
+                  <th className="hidden sm:table-cell py-2.5 px-3.5 w-[180px]">Người phụ trách</th>
+                  <th className="py-2.5 px-2.5 sm:px-3.5 text-center w-[105px] sm:w-[135px]">Trạng thái</th>
                 </tr>
               </thead>
               <tbody>
@@ -359,10 +360,10 @@ export const SalesDealerSupportPage: React.FC = () => {
                       onClick={() => openTicketDrawer(tk)}
                       className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer"
                     >
-                      <td className="py-3 px-3.5 text-center font-mono text-xs text-slate-400 align-middle">
+                      <td className="hidden sm:table-cell py-3 px-3.5 text-center font-mono text-xs text-slate-400 align-middle">
                         {(page - 1) * pageSize + idx + 1}
                       </td>
-                      <td className="py-3 px-3.5 align-middle">
+                      <td className="py-2.5 sm:py-3 px-2.5 sm:px-3.5 align-middle min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-mono font-bold text-xs text-sky-700 hover:underline">
                             {tk.code}
@@ -378,7 +379,7 @@ export const SalesDealerSupportPage: React.FC = () => {
                             </span>
                           )}
                         </div>
-                        <div className="font-bold text-slate-900 text-xs truncate max-w-[250px] mt-0.5">
+                        <div className="font-bold text-slate-900 text-xs truncate max-w-[230px] sm:max-w-[250px] mt-0.5">
                           {tk.customer?.name || tk.dealerName}
                         </div>
                         {(tk.customer?.code || tk.customer?.dienThoai) && (
@@ -396,16 +397,27 @@ export const SalesDealerSupportPage: React.FC = () => {
                             )}
                           </div>
                         )}
+                        {/* Mobile compact info */}
+                        <div className="sm:hidden mt-1 pt-1 border-t border-dashed border-slate-200 space-y-0.5">
+                          <div className="text-[11px] font-bold text-slate-800 line-clamp-1">{tk.title}</div>
+                          <div className="flex items-center gap-1.5 flex-wrap text-[10.5px] text-slate-500">
+                            <span className="px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 font-semibold border border-indigo-100">
+                              {tk.type}
+                            </span>
+                            <span>• {new Date(tk.requestDate || tk.createdAt).toLocaleDateString('vi-VN')}</span>
+                            <span>• {tk.handler?.fullName || 'Phòng KD'}</span>
+                          </div>
+                        </div>
                       </td>
-                      <td className="py-3 px-3.5 text-xs text-slate-600 align-middle whitespace-nowrap">
+                      <td className="hidden sm:table-cell py-3 px-3.5 text-xs text-slate-600 align-middle whitespace-nowrap">
                         {new Date(tk.requestDate || tk.createdAt).toLocaleDateString('vi-VN')}
                       </td>
-                      <td className="py-3 px-3.5 align-middle">
+                      <td className="hidden sm:table-cell py-3 px-3.5 align-middle">
                         <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
                           {tk.type}
                         </span>
                       </td>
-                      <td className="py-3 px-3.5 align-middle">
+                      <td className="hidden sm:table-cell py-3 px-3.5 align-middle">
                         <div className="font-bold text-slate-900 text-xs">{tk.title}</div>
                         {cleanBody && (
                           <div className="text-slate-500 text-xs mt-0.5 line-clamp-1">
@@ -418,7 +430,7 @@ export const SalesDealerSupportPage: React.FC = () => {
                           </div>
                         )}
                       </td>
-                      <td className="py-3 px-3.5 align-middle">
+                      <td className="hidden sm:table-cell py-3 px-3.5 align-middle">
                         <div className="font-semibold text-slate-800 text-xs">
                           {tk.handler?.fullName || 'Phòng Kinh doanh'}
                         </div>
@@ -426,9 +438,9 @@ export const SalesDealerSupportPage: React.FC = () => {
                           <div className="text-[11px] font-mono text-sky-700">{tk.handler.phone}</div>
                         )}
                       </td>
-                      <td className="py-3 px-3.5 text-center align-middle">
+                      <td className="py-2.5 sm:py-3 px-2 sm:px-3.5 text-center align-middle">
                         <span
-                          className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                          className={`inline-block px-2 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold whitespace-nowrap ${
                             isResolved
                               ? 'bg-emerald-100 text-emerald-700'
                               : tk.status === 'In Progress'
@@ -633,6 +645,7 @@ export const SalesDealerSupportPage: React.FC = () => {
           })()}
       </Offcanvas>
     </StepPage>
+    </div>
   );
 };
 

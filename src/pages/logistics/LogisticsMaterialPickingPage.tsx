@@ -5,6 +5,7 @@ import { LogisticsMaterialPicking } from '@/components/logistics/material-pickin
 export const LogisticsMaterialPickingPage: React.FC = () => {
   return (
     <StandardPage
+      className="logistics-mobile-page material-picking-mobile-page"
       title="Cấp phát vật tư"
       description="Nhặt linh kiện và cấp phát vật tư cho lệnh sản xuất."
       icon="bi-tools"

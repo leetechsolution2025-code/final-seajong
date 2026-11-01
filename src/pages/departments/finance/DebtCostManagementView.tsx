@@ -2880,8 +2880,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                 setIsOffcanvasOpen(true);
               }}
               style={{ fontWeight: 700, whiteSpace: 'nowrap' }}
+              className="!px-2.5 sm:!px-3.5"
             >
-              {createButtonText}
+              <span className="hidden sm:inline">{createButtonText}</span>
+              <span className="sm:hidden">Tạo</span>
             </Button>
           </div>
         }
@@ -2890,6 +2892,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
       {/* BANNER THÔNG TIN KẾT NỐI VÀO BÁO CÁO TÀI CHÍNH */}
       {currentStep === 3 && (
         <div
+          className="hidden sm:flex"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -2974,9 +2977,9 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
               {currentStep === 1 && (
                 <tr style={{ color: '#475569', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   <th style={{ padding: '12px 14px' }}>Khách hàng</th>
-                  <th style={{ padding: '12px 14px', textAlign: 'right' }}>Số tiền gốc</th>
-                  <th style={{ padding: '12px 14px', textAlign: 'right' }}>Đã thanh toán</th>
-                  <th style={{ padding: '12px 14px', textAlign: 'center' }}>Hạn thanh toán</th>
+                  <th className="hidden sm:table-cell" style={{ padding: '12px 14px', textAlign: 'right' }}>Số tiền gốc</th>
+                  <th className="hidden sm:table-cell" style={{ padding: '12px 14px', textAlign: 'right' }}>Đã thanh toán</th>
+                  <th className="hidden sm:table-cell" style={{ padding: '12px 14px', textAlign: 'center' }}>Hạn thanh toán</th>
                   <th style={{ padding: '12px 14px', textAlign: 'right' }}>Còn lại</th>
                   <th style={{ padding: '12px 8px', textAlign: 'center', width: '50px' }}></th>
                 </tr>
@@ -2986,9 +2989,9 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
               {currentStep === 2 && (
                 <tr style={{ color: '#475569', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   <th style={{ padding: '12px 14px' }}>Nhà cung cấp / Đơn vị vận chuyển</th>
-                  <th style={{ padding: '12px 14px', textAlign: 'right' }}>Tổng tiền đơn</th>
-                  <th style={{ padding: '12px 14px', textAlign: 'right' }}>Đã thanh toán</th>
-                  <th style={{ padding: '12px 14px', textAlign: 'center' }}>Hạn thanh toán</th>
+                  <th className="hidden sm:table-cell" style={{ padding: '12px 14px', textAlign: 'right' }}>Tổng tiền đơn</th>
+                  <th className="hidden sm:table-cell" style={{ padding: '12px 14px', textAlign: 'right' }}>Đã thanh toán</th>
+                  <th className="hidden sm:table-cell" style={{ padding: '12px 14px', textAlign: 'center' }}>Hạn thanh toán</th>
                   <th style={{ padding: '12px 14px', textAlign: 'right' }}>Còn lại</th>
                   <th style={{ padding: '12px 8px', textAlign: 'center', width: '50px' }}></th>
                 </tr>
@@ -2998,9 +3001,9 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
               {currentStep === 3 && (
                 <tr style={{ color: '#475569', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   <th style={{ padding: '12px 14px' }}>Ngân hàng và Hợp đồng tín dụng</th>
-                  <th style={{ padding: '12px 14px', width: '160px', whiteSpace: 'nowrap' }}>Kỳ hạn & Trạng thái</th>
-                  <th style={{ padding: '12px 14px', textAlign: 'right', width: '200px', whiteSpace: 'nowrap' }}>Hạn mức và Dư nợ gốc</th>
-                  <th style={{ padding: '12px 14px', width: '220px', whiteSpace: 'nowrap' }}>Lãi suất & Lãi dự kiến</th>
+                  <th className="hidden sm:table-cell" style={{ padding: '12px 14px', width: '160px', whiteSpace: 'nowrap' }}>Kỳ hạn & Trạng thái</th>
+                  <th className="hidden sm:table-cell" style={{ padding: '12px 14px', textAlign: 'right', width: '200px', whiteSpace: 'nowrap' }}>Hạn mức và Dư nợ gốc</th>
+                  <th className="hidden sm:table-cell" style={{ padding: '12px 14px', width: '220px', whiteSpace: 'nowrap' }}>Lãi suất & Lãi dự kiến</th>
                   <th style={{ padding: '12px 8px', textAlign: 'center', width: '50px' }}></th>
                 </tr>
               )}
@@ -3360,27 +3363,30 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                 >
                                   {item.customerName}
                                 </div>
-                                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '3px' }}>
-                                  {item.customerAddress}
+                                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '3px' }}>
+                                    {item.customerAddress}
+                                  </div>
+                                  <div className="sm:hidden text-[11px] text-slate-500 mt-1">
+                                    Gốc: <span className="font-semibold text-slate-700">{formatNumberGroup(item.contractValue)}</span> • Đã thu: <span className="font-semibold text-emerald-600">{formatNumberGroup(item.paidAmount)}</span>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          );
-                        })()}
-                      </td>
+                            );
+                          })()}
+                        </td>
 
                           {/* Cột 2: Số tiền gốc */}
-                          <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 800, color: '#0f172a', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 800, color: '#0f172a', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
                             {formatNumberGroup(item.contractValue)}
                           </td>
 
                           {/* Cột 3: Đã thanh toán */}
-                          <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 800, color: '#059669', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 800, color: '#059669', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
                             {formatNumberGroup(item.paidAmount)}
                           </td>
 
                           {/* Cột 4: Hạn thanh toán */}
-                          <td style={{ padding: '12px 14px', textAlign: 'center', fontSize: '0.8125rem', color: '#475569', fontWeight: 500 }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '12px 14px', textAlign: 'center', fontSize: '0.8125rem', color: '#475569', fontWeight: 500 }}>
                             {item.dueDate || 'Theo tiến độ HĐ'}
                           </td>
 
@@ -3642,90 +3648,91 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                       </div>
                                     </td>
 
-                                    {/* Cột Số tiền gốc: font thường không đậm */}
-                                    <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 600, color: '#334155', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                      {formatNumberGroup(entry.contractValue || (entry as any).amount || 0)}
-                                    </td>
-
-                                    {/* Cột Đã thanh toán: font thường không đậm */}
-                                    <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: (entry.paidAmount || 0) > 0 ? '#059669' : '#94a3b8', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                      {formatNumberGroup(entry.paidAmount || 0)}
-                                    </td>
-
-                                    {/* Cột Hạn thanh toán: font thường không đậm */}
-                                    <td style={{ padding: '8px 14px', textAlign: 'center', fontWeight: 500, color: '#475569', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                      {entry.dueDate || item.dueDate || 'Theo tiến độ'}
-                                    </td>
-
-                                    {/* Cột Còn lại: font thường không đậm */}
-                                    <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: (entry.remainingAmount !== undefined ? entry.remainingAmount : (entry.contractValue || (entry as any).amount || 0)) > 0 ? '#dc2626' : '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                      {formatNumberGroup(entry.remainingAmount !== undefined ? entry.remainingAmount : (entry.contractValue || (entry as any).amount || 0))}
-                                    </td>
-
-                                    {/* Cột Thao tác: để trống cho đồng bộ và gọn gàng */}
-                                    <td style={{ padding: '8px 6px', textAlign: 'center' }}>
-                                    </td>
-                                  </tr>
-
-                                  {/* CÁC PHIẾU THU TIỀN ĐƯỢC NHÓM TRỰC TIẾP VÀO ĐỢT NÀY */}
-                                  {stagePayments.map((pay: any, pIdx: number) => (
-                                    <tr
-                                      key={pay.id || `pay-${pIdx}`}
-                                      style={{
-                                        backgroundColor: '#f1f5f9',
-                                        borderBottom: pIdx === stagePayments.length - 1 ? '1px solid #e2e8f0' : '1px dashed #e2e8f0',
-                                        fontSize: '0.7813rem',
-                                      }}
-                                    >
-                                      {/* Cột Khách hàng: Thụt lề với ký hiệu nhánh ↳ và badge Phiếu thu */}
-                                      <td style={{ padding: '6px 14px 6px 56px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                          <span style={{ color: '#059669', fontWeight: 800 }}>↳</span>
-                                          <span
-                                            style={{
-                                              backgroundColor: '#dcfce7',
-                                              color: '#15803d',
-                                              padding: '1px 6px',
-                                              borderRadius: '4px',
-                                              fontSize: '0.6875rem',
-                                              fontWeight: 700,
-                                            }}
-                                          >
-                                            Phiếu thu
-                                          </span>
-                                          <span style={{ fontWeight: 700, color: '#0f172a' }}>{pay.code || pay.receiptCode}</span>
-                                          <span style={{ color: '#cbd5e1' }}>|</span>
-                                          <span style={{ color: '#64748b', fontSize: '0.7188rem' }}>
-                                            {pay.time || '08:30'} • {pay.date}
-                                          </span>
-                                          <span style={{ color: '#64748b', fontSize: '0.7188rem', fontStyle: 'italic' }}>
-                                            ({pay.method || 'Chuyển khoản'})
-                                          </span>
-                                        </div>
-                                        <div style={{ fontSize: '0.7188rem', color: '#64748b', marginTop: '2px', paddingLeft: '18px' }}>
-                                          {pay.title || pay.note || `Thu tiền khách hàng theo phiếu ${pay.code || pay.receiptCode}`}
-                                        </div>
+                                      {/* Cột Số tiền gốc: font thường không đậm */}
+                                      <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 600, color: '#334155', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                        {formatNumberGroup(entry.contractValue || (entry as any).amount || 0)}
                                       </td>
 
-                                      {/* Số tiền gốc của phiếu thu */}
-                                      <td style={{ padding: '6px 14px', textAlign: 'right', color: '#94a3b8' }}>
-                                        —
+                                      {/* Cột Đã thanh toán: font thường không đậm */}
+                                      <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: (entry.paidAmount || 0) > 0 ? '#059669' : '#94a3b8', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                        {formatNumberGroup(entry.paidAmount || 0)}
                                       </td>
 
-                                      {/* Đã thanh toán (hiển thị số tiền thu được của phiếu này) */}
-                                      <td style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 700, color: '#059669' }}>
-                                        +{formatNumberGroup(pay.amount)}
+                                      {/* Cột Hạn thanh toán: font thường không đậm */}
+                                      <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'center', fontWeight: 500, color: '#475569', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                        {entry.dueDate || item.dueDate || 'Theo tiến độ'}
                                       </td>
 
-                                      {/* Hạn thanh toán / Trạng thái */}
-                                      <td style={{ padding: '6px 14px', textAlign: 'center', color: '#059669', fontWeight: 600, fontSize: '0.75rem' }}>
-                                        Đã thu
+                                      {/* Cột Còn lại: font thường không đậm */}
+                                      <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: (entry.remainingAmount !== undefined ? entry.remainingAmount : (entry.contractValue || (entry as any).amount || 0)) > 0 ? '#dc2626' : '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                        {formatNumberGroup(entry.remainingAmount !== undefined ? entry.remainingAmount : (entry.contractValue || (entry as any).amount || 0))}
                                       </td>
 
-                                      {/* Còn lại */}
-                                      <td style={{ padding: '6px 14px', textAlign: 'right', color: '#94a3b8' }}>
-                                        —
+                                      {/* Cột Thao tác: để trống cho đồng bộ và gọn gàng */}
+                                      <td style={{ padding: '8px 6px', textAlign: 'center' }}>
                                       </td>
+                                    </tr>
+
+                                    {/* CÁC PHIẾU THU TIỀN ĐƯỢC NHÓM TRỰC TIẾP VÀO ĐỢT NÀY */}
+                                    {stagePayments.map((pay: any, pIdx: number) => (
+                                      <tr
+                                        key={pay.id || `pay-${pIdx}`}
+                                        style={{
+                                          backgroundColor: '#f1f5f9',
+                                          borderBottom: pIdx === stagePayments.length - 1 ? '1px solid #e2e8f0' : '1px dashed #e2e8f0',
+                                          fontSize: '0.7813rem',
+                                        }}
+                                      >
+                                        {/* Cột Khách hàng: Thụt lề với ký hiệu nhánh ↳ và badge Phiếu thu */}
+                                        <td style={{ padding: '6px 14px 6px 56px' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                            <span style={{ color: '#059669', fontWeight: 800 }}>↳</span>
+                                            <span
+                                              style={{
+                                                backgroundColor: '#dcfce7',
+                                                color: '#15803d',
+                                                padding: '1px 6px',
+                                                borderRadius: '4px',
+                                                fontSize: '0.6875rem',
+                                                fontWeight: 700,
+                                              }}
+                                            >
+                                              Phiếu thu
+                                            </span>
+                                            <span style={{ fontWeight: 700, color: '#0f172a' }}>{pay.code || pay.receiptCode}</span>
+                                            <span style={{ color: '#cbd5e1' }}>|</span>
+                                            <span style={{ color: '#64748b', fontSize: '0.7188rem' }}>
+                                              {pay.time || '08:30'} • {pay.date}
+                                            </span>
+                                            <span style={{ color: '#64748b', fontSize: '0.7188rem', fontStyle: 'italic' }}>
+                                              ({pay.method || 'Chuyển khoản'})
+                                            </span>
+                                          </div>
+                                          <div style={{ fontSize: '0.7188rem', color: '#64748b', marginTop: '2px', paddingLeft: '18px' }}>
+                                            {pay.title || pay.note || `Thu tiền khách hàng theo phiếu ${pay.code || pay.receiptCode}`}
+                                          </div>
+                                        </td>
+
+                                        {/* Số tiền gốc của phiếu thu */}
+                                        <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', color: '#94a3b8' }}>
+                                          —
+                                        </td>
+
+                                        {/* Đã thanh toán (hiển thị số tiền thu được của phiếu này) */}
+                                        <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 700, color: '#059669' }}>
+                                          +{formatNumberGroup(pay.amount)}
+                                        </td>
+
+                                        {/* Hạn thanh toán / Trạng thái */}
+                                        <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'center', color: '#059669', fontWeight: 600, fontSize: '0.75rem' }}>
+                                          Đã thu
+                                        </td>
+
+                                        {/* Còn lại */}
+                                        <td style={{ padding: '6px 14px', textAlign: 'right', color: '#94a3b8' }}>
+                                          <span className="hidden sm:inline">—</span>
+                                          <span className="sm:hidden font-bold text-emerald-600">+{formatNumberGroup(pay.amount)}</span>
+                                        </td>
 
                                       <td style={{ padding: '6px 8px', textAlign: 'center' }}>
                                         <button
@@ -3893,6 +3900,9 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                     <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '3px' }}>
                                       {item.supplierAddress}
                                     </div>
+                                    <div className="sm:hidden text-[11px] text-slate-500 mt-1">
+                                      Tổng: <span className="font-semibold text-slate-700">{formatNumberGroup(item.totalAmount)}</span> • Đã trả: <span className="font-semibold text-emerald-600">{formatNumberGroup(item.paidAmount)}</span>
+                                    </div>
                                   </div>
                                 </div>
                               );
@@ -3900,17 +3910,17 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                           </td>
 
                           {/* Cột 2: Tổng tiền đơn */}
-                          <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 800, color: '#0f172a', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 800, color: '#0f172a', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
                             {formatNumberGroup(item.totalAmount)}
                           </td>
 
                           {/* Cột 3: Đã thanh toán */}
-                          <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 800, color: '#059669', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 800, color: '#059669', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
                             {formatNumberGroup(item.paidAmount)}
                           </td>
 
                           {/* Cột 4: Hạn thanh toán (Không ghi hạn thanh toán ở mục chính) */}
-                          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '12px 14px', textAlign: 'center' }}>
                           </td>
 
                           {/* Cột 5: Còn lại */}
@@ -4133,17 +4143,17 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                               </td>
 
                               {/* Cột Tổng tiền đơn: font thường không đậm */}
-                              <td style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 400, color: '#334155', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                              <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 400, color: '#334155', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
                                 {formatNumberGroup(entry.totalAmount)}
                               </td>
 
                               {/* Cột Đã thanh toán: font thường không đậm */}
-                              <td style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 400, color: '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                              <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 400, color: '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
                                 {formatNumberGroup(entry.paidAmount)}
                               </td>
 
                               {/* Cột Hạn thanh toán: font thường không đậm */}
-                              <td style={{ padding: '6px 14px', textAlign: 'center', fontWeight: 400, color: '#475569', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                              <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'center', fontWeight: 400, color: '#475569', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
                                 {entry.dueDate}
                               </td>
 
@@ -4245,10 +4255,21 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                               {item.loanType}
                             </div>
                           )}
+                          {/* Tóm tắt hiển thị trên màn hình điện thoại */}
+                          <div className="sm:hidden mt-1.5 space-y-0.5 text-[11.5px]">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-slate-600">Hạn mức: <strong className="text-slate-900">{formatNumberGroup(item.loanLimit)} đ</strong></span>
+                              <span className="font-bold text-rose-600">Dư nợ: {formatNumberGroup(item.remainingPrincipal)} đ</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2 text-slate-500">
+                              <span>Lãi: <strong className="text-slate-700">{item.interestRate}</strong> (~{formatNumberGroup(item.monthlyInterestEst)} đ/th)</span>
+                              <span>Đáo hạn: <strong className="text-slate-700">{item.maturityDate}</strong></span>
+                            </div>
+                          </div>
                         </td>
 
                         {/* Cột 2: Kỳ hạn & Trạng thái */}
-                        <td style={{ padding: '12px 14px', width: '160px', whiteSpace: 'nowrap' }}>
+                        <td className="hidden sm:table-cell" style={{ padding: '12px 14px', width: '160px', whiteSpace: 'nowrap' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', whiteSpace: 'nowrap' }}>
                             {renderStatusBadge(item.status, item.statusLabel)}
                           </div>
@@ -4258,7 +4279,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                         </td>
 
                         {/* Cột 3: Hạn mức và Dư nợ gốc */}
-                        <td style={{ padding: '12px 14px', textAlign: 'right', width: '200px', whiteSpace: 'nowrap' }}>
+                        <td className="hidden sm:table-cell" style={{ padding: '12px 14px', textAlign: 'right', width: '200px', whiteSpace: 'nowrap' }}>
                           <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.875rem' }}>
                             {formatNumberGroup(item.loanLimit)} đ
                           </div>
@@ -4271,7 +4292,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                         </td>
 
                         {/* Cột 4: Lãi suất và Lãi dự kiến */}
-                        <td style={{ padding: '12px 14px', width: '220px', whiteSpace: 'nowrap' }}>
+                        <td className="hidden sm:table-cell" style={{ padding: '12px 14px', width: '220px', whiteSpace: 'nowrap' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
                             <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.8125rem' }}>
                               {item.interestRate}

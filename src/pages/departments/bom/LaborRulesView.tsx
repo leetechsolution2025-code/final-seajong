@@ -213,6 +213,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [isShiftDropdownOpen, setIsShiftDropdownOpen] = useState<boolean>(false);
+  const [mobileCardTab, setMobileCardTab] = useState<'shift' | 'lunch' | 'violation' | 'overtime'>('shift');
   const shiftDropdownRef = useRef<HTMLDivElement>(null);
 
   // Đóng dropdown khi click bên ngoài
@@ -418,6 +419,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
 
   return (
     <div
+      className="bom-labor-view-root"
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -426,8 +428,9 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
         fontFamily: "'Roboto Condensed', sans-serif",
       }}
     >
-            {/* ── 1. HEADER: DROPLIST KHỐI LÀM VIỆC VÀ NÚT LƯU CẤU HÌNH (CHUẨN HÌNH 1) ── */}
+      {/* ── 1. HEADER: DROPLIST KHỐI LÀM VIỆC VÀ NÚT LƯU CẤU HÌNH (CHUẨN HÌNH 1) ── */}
       <div
+        className="bom-labor-shift-bar"
         style={{
           display: 'flex',
           flexWrap: 'wrap',
@@ -441,9 +444,10 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
           boxShadow: '0 1px 4px rgba(59, 130, 246, 0.05)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 auto', minWidth: 0 }}>
+        <div className="bom-labor-shift-left" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 auto', minWidth: 0 }}>
           {/* Icon tròn màu tím xanh nhạt */}
           <div
+            className="bom-labor-shift-icon"
             style={{
               width: '36px',
               height: '36px',
@@ -466,6 +470,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
           <div ref={shiftDropdownRef} style={{ flex: 1, minWidth: 0, position: 'relative' }}>
             {/* Nhãn thông báo */}
             <div
+              className="bom-labor-shift-label"
               style={{
                 fontSize: '0.65rem',
                 fontWeight: 700,
@@ -483,6 +488,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minHeight: '26px' }}>
               <button
                 type="button"
+                className="bom-labor-shift-btn"
                 onClick={() => setIsShiftDropdownOpen((prev) => !prev)}
                 style={{
                   display: 'inline-flex',
@@ -500,7 +506,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
                 }}
                 title="Nhấp để chuyển đổi khối làm việc"
               >
-                <span>{currentShift?.name || 'Khối hành chính văn phòng'}</span>
+                <span className="bom-labor-shift-btn-text">{currentShift?.name || 'Khối hành chính văn phòng'}</span>
                 {isShiftDropdownOpen ? (
                   <ChevronUp size={13} color="#4f46e5" style={{ flexShrink: 0 }} />
                 ) : (
@@ -509,7 +515,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
               </button>
 
               {hasChanges && (
-                <Badge variant="warning" style={{ fontSize: '0.6875rem', padding: '1px 6px' }}>
+                <Badge variant="warning" className="bom-hide-mobile" style={{ fontSize: '0.6875rem', padding: '1px 6px' }}>
                   Chưa lưu thay đổi
                 </Badge>
               )}
@@ -518,6 +524,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
             {/* Phạm vi hiển thị bằng dòng chữ nhỏ bên dưới tên khối */}
             {currentShift?.departmentScope && (
               <div
+                className="bom-labor-shift-scope"
                 style={{
                   fontSize: '0.7188rem',
                   color: '#64748b',
@@ -539,6 +546,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
             {/* Popover menu xổ xuống mở rộng hết không gian khả dụng - Chuẩn Hình 1 */}
             {isShiftDropdownOpen && (
               <div
+                className="bom-labor-shift-popover"
                 style={{
                   position: 'absolute',
                   top: '100%',
@@ -637,11 +645,12 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
         </div>
 
         {/* Cụm nút hành động bên phải: Khôi phục mặc định và Lưu cấu hình */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+        <div className="bom-labor-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
           <Button
             type="button"
             variant="ghost"
             size="sm"
+            className="bom-labor-reset-btn"
             leftIcon={<ArrowCounterclockwise size={13} color="#4f46e5" />}
             onClick={handleResetDefaults}
             disabled={isSaving}
@@ -656,15 +665,16 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
             }}
             title="Khôi phục thông số tiêu chuẩn mặc định"
           >
-            Khôi phục mặc định
+            <span className="bom-hide-mobile">Khôi phục mặc định</span>
           </Button>
 
-          <div style={{ width: '1px', height: '22px', backgroundColor: '#e2e8f0' }} />
+          <div className="bom-action-divider" style={{ width: '1px', height: '22px', backgroundColor: '#e2e8f0' }} />
 
           <Button
             type="button"
             variant="primary"
             size="sm"
+            className="bom-labor-save-btn"
             leftIcon={<Save size={14} />}
             onClick={handleSave}
             disabled={isSaving}
@@ -679,16 +689,44 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
               boxShadow: '0 2px 5px rgba(79, 70, 229, 0.25)',
             }}
           >
-            {isSaving ? 'Đang lưu...' : 'Lưu cấu hình quy chế'}
+            {isSaving ? 'Đang lưu...' : (
+              <>
+                Lưu<span className="bom-hide-mobile"> cấu hình quy chế</span>
+              </>
+            )}
           </Button>
         </div>
       </div>
 
+      {/* ── 2. THANH CHUYỂN NHÓM QUY CHẾ DÀNH RIÊNG CHO MOBILE (ẨN TRÊN DESKTOP) ── */}
+      <div className="bom-labor-mobile-subtabs">
+        {[
+          { id: 'shift' as const, label: 'Ca làm', icon: <Clock size={12} /> },
+          { id: 'lunch' as const, label: 'Nghỉ trưa', icon: <CupHot size={12} /> },
+          { id: 'violation' as const, label: 'Vi phạm', icon: <ExclamationTriangle size={12} /> },
+          { id: 'overtime' as const, label: 'Làm thêm', icon: <LightningCharge size={12} /> },
+        ].map((tab) => {
+          const isActive = mobileCardTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setMobileCardTab(tab.id)}
+              className={`bom-labor-mobile-subtab-btn ${isActive ? 'is-active' : ''}`}
+            >
+              {tab.icon}
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* ── 3. LƯỚI 4 CARD CẤU HÌNH CHUYÊN SÂU (CHUẨN FORM HÌNH 1) ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: '14px' }}>
+      <div className="bom-labor-cards-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: '14px' }}>
 
         {/* ── CARD 1: THỜI GIAN LÀM VIỆC THEO CA ── */}
         <div
+          className={`bom-labor-card ${mobileCardTab !== 'shift' ? 'bom-labor-card-mobile-hidden' : ''}`}
           style={{
             backgroundColor: '#ffffff',
             borderRadius: '10px',
@@ -700,16 +738,16 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
             gap: '12px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '10px', borderBottom: '1px solid #f1f5f9' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '10px', borderBottom: '1px solid #f1f5f9', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb', flexShrink: 0 }}>
                 <Clock size={16} />
               </div>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <h5 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 800, color: '#0f172a' }}>
                   Thời gian làm việc theo ca
                 </h5>
-                <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Khung giờ vào và hết ca sáng, chiều</span>
+                <span className="bom-labor-card-sub" style={{ fontSize: '0.7rem', color: '#64748b' }}>Khung giờ vào và hết ca sáng, chiều</span>
               </div>
             </div>
 
@@ -722,6 +760,8 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
                 padding: '3px 8px',
                 borderRadius: '6px',
                 border: '1px solid #dbeafe',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
               }}
             >
               {formatNumberGroup(currentShift.workHours)}h chuẩn • {formatNumberGroup(currentShift.standardWorkdays)} công
@@ -793,7 +833,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
 
             <div>
               <label style={{ display: 'block', fontSize: '0.7188rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                Số ngày công chuẩn/tháng (N_std = Ngày tháng - CN):
+                Số ngày công chuẩn/tháng<span className="bom-hide-mobile"> (N_std = Ngày tháng - CN)</span>:
               </label>
               <Input
                 type="text"
@@ -839,7 +879,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
             <label style={{ display: 'block', fontSize: '0.7188rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
               Ngày làm việc áp dụng trong tuần:
             </label>
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            <div className="bom-labor-days-row" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((dow) => {
                 const isApplied = currentShift.appliedDays?.includes(dow);
                 return (
@@ -863,7 +903,14 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
                       transition: 'all 0.15s ease',
                     }}
                   >
-                    {dow === 'CN' ? 'Chủ nhật' : dow}
+                    {dow === 'CN' ? (
+                      <>
+                        <span className="bom-hide-mobile">Chủ nhật</span>
+                        <span className="bom-show-mobile-inline">CN</span>
+                      </>
+                    ) : (
+                      dow
+                    )}
                   </button>
                 );
               })}
@@ -873,6 +920,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
 
         {/* ── CARD 2: QUY CHẾ RA TRƯA VÀ SUẤT ĂN ── */}
         <div
+          className={`bom-labor-card ${mobileCardTab !== 'lunch' ? 'bom-labor-card-mobile-hidden' : ''}`}
           style={{
             backgroundColor: '#ffffff',
             borderRadius: '10px',
@@ -884,20 +932,20 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
             gap: '12px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '10px', borderBottom: '1px solid #f1f5f9' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '10px', borderBottom: '1px solid #f1f5f9', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a', flexShrink: 0 }}>
                 <CupHot size={16} />
               </div>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <h5 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 800, color: '#0f172a' }}>
                   Quy chế nghỉ trưa và suất ăn
                 </h5>
-                <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Thời gian nghỉ trưa, quẹt thẻ và trợ cấp cơm</span>
+                <span className="bom-labor-card-sub" style={{ fontSize: '0.7rem', color: '#64748b' }}>Thời gian nghỉ trưa, quẹt thẻ và trợ cấp cơm</span>
               </div>
             </div>
 
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, color: '#334155' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, color: '#334155', flexShrink: 0, whiteSpace: 'nowrap' }}>
               <Toggle
                 checked={rules.lunchRule.autoDeductLunchDuration}
                 onChange={(checked) => updateLunchRule('autoDeductLunchDuration', checked)}
@@ -1011,6 +1059,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
 
         {/* ── CARD 3: XỬ LÝ VI PHẠM ĐI MUỘN VÀ VỀ SỚM ── */}
         <div
+          className={`bom-labor-card ${mobileCardTab !== 'violation' ? 'bom-labor-card-mobile-hidden' : ''}`}
           style={{
             backgroundColor: '#ffffff',
             borderRadius: '10px',
@@ -1023,19 +1072,19 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '10px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#d97706' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#d97706', flexShrink: 0 }}>
                 <ExclamationTriangle size={16} />
               </div>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <h5 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 800, color: '#0f172a' }}>
-                  Xử lý vi phạm đi muộn và về sớm
+                  Xử lý vi phạm đi muộn<span className="bom-hide-mobile"> và về sớm</span>
                 </h5>
-                <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Các mức phạt dưới đây được áp dụng cho từng ca sáng hoặc chiều</span>
+                <span className="bom-labor-card-sub" style={{ fontSize: '0.7rem', color: '#64748b' }}>Các mức phạt dưới đây được áp dụng cho từng ca sáng hoặc chiều</span>
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
               {/* Lựa chọn một trong 2 cách: Trừ công hoặc Phạt tiền */}
               <div style={{ display: 'inline-flex', backgroundColor: '#f1f5f9', padding: '2px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
                 <button
@@ -1082,10 +1131,10 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
+          <div className="bom-labor-violation-inputs" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.7188rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                Thời gian ân hạn không phạt:
+                Thời gian ân hạn<span className="bom-hide-mobile"> không phạt</span>:
               </label>
               <Input
                 type="text"
@@ -1102,7 +1151,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
 
             <div>
               <label style={{ display: 'block', fontSize: '0.7188rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                Số lần ân hạn cho phép:
+                Số lần ân hạn<span className="bom-hide-mobile"> cho phép</span>:
               </label>
               <Input
                 type="text"
@@ -1117,7 +1166,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
               />
             </div>
 
-            <div>
+            <div className="bom-labor-violation-input-full">
               <label style={{ display: 'block', fontSize: '0.7188rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
                 Thời hạn nộp giải trình:
               </label>
@@ -1137,7 +1186,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
 
           {/* Bảng 4 cấp độ vi phạm theo định mức 0,5 công/ca */}
           <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.7188rem', textAlign: 'left' }}>
+            <table className="bom-labor-violation-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.7188rem', textAlign: 'left' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                   <th style={{ padding: '7px 10px', fontWeight: 700, color: '#475569' }}>Cấp độ</th>
@@ -1299,6 +1348,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
 
         {/* ── CARD 4: HỆ SỐ LÀM THÊM GIỜ (OT) ── */}
         <div
+          className={`bom-labor-card ${mobileCardTab !== 'overtime' ? 'bom-labor-card-mobile-hidden' : ''}`}
           style={{
             backgroundColor: '#ffffff',
             borderRadius: '10px',
@@ -1310,20 +1360,20 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
             gap: '12px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '10px', borderBottom: '1px solid #f1f5f9' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#faf5ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7e22ce' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '10px', borderBottom: '1px solid #f1f5f9', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#faf5ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7e22ce', flexShrink: 0 }}>
                 <LightningCharge size={16} />
               </div>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <h5 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 800, color: '#0f172a' }}>
                   Hệ số làm thêm giờ
                 </h5>
-                <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Tỷ lệ tiền lương tăng ca theo Bộ luật LĐ</span>
+                <span className="bom-labor-card-sub" style={{ fontSize: '0.7rem', color: '#64748b' }}>Tỷ lệ tiền lương tăng ca theo Bộ luật LĐ</span>
               </div>
             </div>
 
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, color: '#334155' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, color: '#334155', flexShrink: 0, whiteSpace: 'nowrap' }}>
               <Toggle
                 checked={rules.overtimeRule.requirePreApproval}
                 onChange={(checked) => updateOvertimeRule('requirePreApproval', checked)}
@@ -1380,7 +1430,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.7188rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                Phụ cấp ca đêm (22:00 - 06:00):
+                Phụ cấp ca đêm<span className="bom-hide-mobile"> (22:00 - 06:00)</span>:
               </label>
               <Input
                 type="text"
@@ -1394,7 +1444,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
 
             <div>
               <label style={{ display: 'block', fontSize: '0.7188rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                Suất ăn tối tăng ca (OT ≥ 2h):
+                Suất ăn tối tăng ca<span className="bom-hide-mobile"> (OT ≥ 2h)</span>:
               </label>
               <Input
                 type="text"

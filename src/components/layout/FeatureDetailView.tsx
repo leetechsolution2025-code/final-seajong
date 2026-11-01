@@ -637,9 +637,9 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
         }
       }
 
-      // Mặc định: Tải dữ liệu thực tế từ bảng Công việc (/api/tasks) và Tờ trình phê duyệt (/api/approval-requests)
+      // Mặc định: Tải dữ liệu thực tế từ bảng Công việc (/api/user-tasks) và Tờ trình phê duyệt (/api/approval-requests)
       const [tasksRes, reqRes] = await Promise.all([
-        fetch('/api/tasks'),
+        fetch('/api/user-tasks'),
         fetch('/api/approval-requests'),
       ]);
       const tasksData = tasksRes.ok ? await tasksRes.json() : [];
@@ -743,7 +743,7 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
       color={meta.color}
       tickerContext={menuKey}
     >
-      <div className="flex flex-col h-full flex-1 overflow-hidden">
+      <div className="hr-employees-mobile-wrap flex flex-col h-full flex-1 overflow-hidden">
         <TableToolbar
           searchValue={searchTerm}
           onSearchChange={(val) => {
@@ -774,8 +774,18 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
               size="sm"
               onClick={() => setShowAddModal(true)}
               leftIcon={<i className="bi bi-plus-lg" />}
+              title="Thêm mới"
+              style={{
+                backgroundColor: 'var(--color-primary, #0284c7)',
+                color: '#fff',
+                height: '34px',
+                padding: '0 14px',
+                borderRadius: '6px',
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+              }}
             >
-              Thêm mới
+              <span className="recruitment-btn-label hidden md:inline">Thêm mới</span>
             </Button>
           }
         />
@@ -784,12 +794,12 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-200 text-slate-500 uppercase tracking-wider font-semibold bg-slate-50/60">
-                <th className="py-3 px-4 w-28">Mã số</th>
+                <th className="hidden md:table-cell py-3 px-4 w-28">Mã số</th>
                 <th className="py-3 px-4">Tên công việc / Hồ sơ nghiệp vụ</th>
-                <th className="py-3 px-4 w-44">Bộ phận</th>
-                <th className="py-3 px-4 w-32">Thời hạn / Ngày</th>
-                <th className="py-3 px-4 w-28">Mức độ</th>
-                <th className="py-3 px-4 w-32 text-center">Trạng thái</th>
+                <th className="hidden md:table-cell py-3 px-4 w-44">Bộ phận</th>
+                <th className="hidden md:table-cell py-3 px-4 w-32">Thời hạn / Ngày</th>
+                <th className="hidden md:table-cell py-3 px-4 w-28">Mức độ</th>
+                <th className="hidden md:table-cell py-3 px-4 w-32 text-center">Trạng thái</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-sans">
@@ -804,20 +814,49 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
                   .slice((page - 1) * pageSize, page * pageSize)
                   .map((row) => (
                     <tr key={row.id} className="hover:bg-blue-50/30 transition-colors">
-                      <td className="py-3 px-4 font-mono font-bold text-slate-700">
+                      <td className="hidden md:table-cell py-3 px-4 font-mono font-bold text-slate-700">
                         <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] border border-slate-200/80">
                           {row.code}
                         </span>
                       </td>
                       <td className="py-3 px-4 font-medium text-slate-900">
-                        <div className="flex items-center gap-2">
-                          <i className="bi bi-file-earmark-text text-slate-400 text-sm" />
-                          <span>{row.title}</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <i className="bi bi-file-earmark-text text-slate-400 text-sm shrink-0" />
+                          <span className="font-semibold text-slate-900">{row.title}</span>
+                          <span
+                            className={`md:hidden shrink-0 scale-90 origin-left inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                              row.status.includes('Hoàn thành') || row.status.includes('Hoạt động')
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : row.status.includes('Đang')
+                                ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            }`}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                            {row.status}
+                          </span>
+                        </div>
+                        <div className="flex md:hidden flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[11px] text-slate-500">
+                          <span className="font-mono font-bold text-slate-700">{row.code}</span>
+                          <span>•</span>
+                          <span>{row.dept}</span>
+                          {row.deadline && (
+                            <>
+                              <span>•</span>
+                              <span className="font-mono">{row.deadline}</span>
+                            </>
+                          )}
+                          {row.priority && (
+                            <>
+                              <span>•</span>
+                              <span className="font-semibold text-slate-700">{row.priority}</span>
+                            </>
+                          )}
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-slate-600 font-medium">{row.dept}</td>
-                      <td className="py-3 px-4 text-slate-500 font-mono text-[11px]">{row.deadline}</td>
-                      <td className="py-3 px-4">
+                      <td className="hidden md:table-cell py-3 px-4 text-slate-600 font-medium">{row.dept}</td>
+                      <td className="hidden md:table-cell py-3 px-4 text-slate-500 font-mono text-[11px]">{row.deadline}</td>
+                      <td className="hidden md:table-cell py-3 px-4">
                         <span
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             row.priority.includes('Gấp') || row.priority.includes('Cốt lõi')
@@ -830,7 +869,7 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
                           {row.priority}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-center">
+                      <td className="hidden md:table-cell py-3 px-4 text-center">
                         <span
                           className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
                             row.status.includes('Hoàn thành') || row.status.includes('Hoạt động')

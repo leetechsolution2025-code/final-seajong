@@ -21,7 +21,7 @@ import {
 } from 'react-bootstrap-icons';
 import { StepPage } from '@/components/common/StepPage';
 import { TableToolbar } from '@/components/common/TableToolbar';
-import { FullWidthTable } from '@/components/common/FullWidthTable';
+import { FullWidthTable, SwipeableTableRow } from '@/components/common/FullWidthTable';
 import { Pagination } from '@/components/common/Pagination';
 import { Offcanvas } from '@/components/common/Offcanvas';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
@@ -631,6 +631,7 @@ export const PurchaseSuppliersPage: React.FC = () => {
         num: 1,
         id: 'suppliers',
         title: 'Nhà cung cấp',
+        mobileTitle: 'Nhà cung cấp',
         desc: 'Đối tác cung ứng vật tư & linh kiện',
         icon: <Building size={15} />,
         badge: `${totalSuppliers} NCC`,
@@ -639,6 +640,7 @@ export const PurchaseSuppliersPage: React.FC = () => {
         num: 2,
         id: 'carriers',
         title: 'Đơn vị vận chuyển',
+        mobileTitle: 'Vận chuyển',
         desc: 'Đối tác vận tải & giao nhận hàng hóa',
         icon: <Truck size={15} />,
         badge: `${totalCarriers} ĐVVC`,
@@ -669,7 +671,7 @@ export const PurchaseSuppliersPage: React.FC = () => {
   };
 
   return (
-    <>
+    <div className="purchase-suppliers-page h-full">
       <StepPage
         title="Nhà cung cấp và vận chuyển"
         description="Quản lý danh sách nhà cung cấp vật tư, linh kiện và các đơn vị vận chuyển đối tác"
@@ -718,7 +720,7 @@ export const PurchaseSuppliersPage: React.FC = () => {
                 },
               ]}
               rightActions={
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2">
                   {selectedSupplierIds.length > 0 && (
                     <Button
                       variant="danger"
@@ -735,7 +737,8 @@ export const PurchaseSuppliersPage: React.FC = () => {
                     leftIcon={<Plus size={16} />}
                     onClick={handleOpenAddSupplier}
                   >
-                    Thêm mới
+                    <span className="sm:hidden">Thêm</span>
+                    <span className="hidden sm:inline">Thêm mới</span>
                   </Button>
                 </div>
               }
@@ -746,7 +749,7 @@ export const PurchaseSuppliersPage: React.FC = () => {
               <table className="custom-table w-full text-sm text-left border-collapse">
                 <thead className="bg-slate-50/95 border-b border-slate-200/80 text-slate-600 text-[11px] font-bold uppercase tracking-wider sticky top-0 z-10">
                   <tr>
-                    <th className="py-3 px-4 w-11 text-center">
+                    <th className="py-2.5 sm:py-3 px-2 sm:px-4 w-9 sm:w-11 text-center">
                       <input
                         type="checkbox"
                         checked={allSuppliersSelected}
@@ -754,12 +757,12 @@ export const PurchaseSuppliersPage: React.FC = () => {
                         className="form-check-input cursor-pointer"
                       />
                     </th>
-                    <th className="py-3 px-4">Nhà cung cấp</th>
-                    <th className="py-3 px-4">Danh mục cung ứng</th>
-                    <th className="py-3 px-4">Người liên hệ</th>
-                    <th className="py-3 px-4 text-right">Công nợ / Hạn mức</th>
-                    <th className="py-3 px-4 text-center">Đánh giá</th>
-                    <th className="py-3 px-4 text-center">Trạng thái</th>
+                    <th className="py-2.5 sm:py-3 px-2 sm:px-4">Nhà cung cấp</th>
+                    <th className="hidden sm:table-cell py-3 px-4">Danh mục cung ứng</th>
+                    <th className="hidden sm:table-cell py-3 px-4">Người liên hệ</th>
+                    <th className="py-2.5 sm:py-3 px-2.5 sm:px-4 text-right">Công nợ / Hạn mức</th>
+                    <th className="hidden sm:table-cell py-3 px-4 text-center">Đánh giá</th>
+                    <th className="hidden sm:table-cell py-3 px-4 text-center">Trạng thái</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
@@ -778,13 +781,21 @@ export const PurchaseSuppliersPage: React.FC = () => {
                     const isActive = sup.trangThai !== 'inactive';
 
                     return (
-                      <tr
+                      <SwipeableTableRow
                         key={sup.id}
+                        rowId={`sup-${sup.id}`}
+                        onEdit={() => handleOpenEditSupplier(sup)}
+                        onDelete={async () => {
+                          await fetch(`/api/plan-finance/suppliers/${sup.id}`, { method: 'DELETE' });
+                          await fetchSuppliers();
+                        }}
+                        deleteConfirmTitle="Xoá nhà cung cấp"
+                        deleteConfirmMessage={`Bạn có chắc chắn muốn xoá nhà cung cấp "${sup.name}" (${sup.code})? Hành động này không thể hoàn tác.`}
                         onClick={() => handleSelectSupplier(sup)}
                         className="cursor-pointer hover:bg-sky-50/40 transition-colors group"
                       >
                         <td
-                          className="py-3 px-4 w-11 text-center align-middle"
+                          className="py-2.5 sm:py-3 px-2 sm:px-4 w-9 sm:w-11 text-center align-middle"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <input
@@ -802,18 +813,18 @@ export const PurchaseSuppliersPage: React.FC = () => {
                             className="form-check-input cursor-pointer"
                           />
                         </td>
-                        <td className="py-3 px-4 align-middle">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-slate-800 group-hover:text-sky-700 transition-colors text-[13px] line-clamp-1">
+                        <td className="py-2.5 sm:py-3 px-2 sm:px-4 align-middle">
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                            <span className="font-semibold text-slate-800 group-hover:text-sky-700 transition-colors text-[12.5px] sm:text-[13px] line-clamp-1">
                               {sup.name}
                             </span>
                             {sup.code && (
-                              <span className="font-mono text-[11px] font-semibold text-[#1e5470] bg-sky-50/80 border border-sky-200/70 px-1.5 py-0.5 rounded shrink-0">
+                              <span className="font-mono text-[10.5px] sm:text-[11px] font-semibold text-[#1e5470] bg-sky-50/80 border border-sky-200/70 px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap">
                                 {sup.code}
                               </span>
                             )}
                           </div>
-                          <div className="text-[11.5px] text-slate-500 flex items-center gap-2 mt-0.5">
+                          <div className="hidden sm:flex text-[11.5px] text-slate-500 items-center gap-2 mt-0.5">
                             {sup.taxCode && <span>MST: {sup.taxCode}</span>}
                             {sup.address && (
                               <span className="truncate max-w-[280px]" title={sup.address}>
@@ -822,8 +833,15 @@ export const PurchaseSuppliersPage: React.FC = () => {
                               </span>
                             )}
                           </div>
+                          <div className="sm:hidden text-[11px] text-slate-500 mt-0.5 truncate max-w-[185px]">
+                            {sup.contactName || sup.phone
+                              ? `${sup.xungHo ? sup.xungHo + ' ' : ''}${sup.contactName || ''}${
+                                  sup.phone ? ' • ' + sup.phone : ''
+                                }`
+                              : sup.address || 'Chưa cập nhật liên hệ'}
+                          </div>
                         </td>
-                        <td className="py-3 px-4 align-middle">
+                        <td className="hidden sm:table-cell py-3 px-4 align-middle">
                           {supCats.length > 0 ? (
                             <div className="flex flex-wrap gap-1 max-w-[240px]">
                               {supCats.slice(0, 2).map((cName, idx) => (
@@ -846,7 +864,7 @@ export const PurchaseSuppliersPage: React.FC = () => {
                             </span>
                           )}
                         </td>
-                        <td className="py-3 px-4 align-middle">
+                        <td className="hidden sm:table-cell py-3 px-4 align-middle">
                           {sup.contactName || sup.phone ? (
                             <div>
                               <div className="text-[13px] font-medium text-slate-800">
@@ -863,18 +881,31 @@ export const PurchaseSuppliersPage: React.FC = () => {
                             <span className="text-[12px] text-slate-400">—</span>
                           )}
                         </td>
-                        <td className="py-3 px-4 align-middle text-right whitespace-nowrap">
-                          <div className="text-[13px] font-semibold text-slate-800">
+                        <td className="py-2.5 sm:py-3 px-2.5 sm:px-4 align-middle text-right whitespace-nowrap">
+                          <div className="text-[12.5px] sm:text-[13px] font-semibold text-slate-800">
                             {formatCurrency(sup.congNoHienTai || 0)}
                           </div>
-                          <div className="text-[11px] text-slate-400">
+                          <div className="hidden sm:block text-[11px] text-slate-400">
                             Hạn mức: {formatCurrency(sup.hanMucNo || 0)}
                           </div>
+                          <div className="sm:hidden mt-1">
+                            {isActive ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                Đang hợp tác
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                                Tạm ngưng
+                              </span>
+                            )}
+                          </div>
                         </td>
-                        <td className="py-3 px-4 align-middle text-center whitespace-nowrap">
+                        <td className="hidden sm:table-cell py-3 px-4 align-middle text-center whitespace-nowrap">
                           {renderStars(sup.danhGia)}
                         </td>
-                        <td className="py-3 px-4 align-middle text-center whitespace-nowrap">
+                        <td className="hidden sm:table-cell py-3 px-4 align-middle text-center whitespace-nowrap">
                           {isActive ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11.5px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -887,7 +918,7 @@ export const PurchaseSuppliersPage: React.FC = () => {
                             </span>
                           )}
                         </td>
-                      </tr>
+                      </SwipeableTableRow>
                     );
                   })}
                 </tbody>
@@ -946,7 +977,7 @@ export const PurchaseSuppliersPage: React.FC = () => {
                 },
               ]}
               rightActions={
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2">
                   {selectedCarrierIds.length > 0 && (
                     <Button
                       variant="danger"
@@ -963,7 +994,8 @@ export const PurchaseSuppliersPage: React.FC = () => {
                     leftIcon={<Plus size={16} />}
                     onClick={handleOpenAddCarrier}
                   >
-                    Thêm mới
+                    <span className="sm:hidden">Thêm</span>
+                    <span className="hidden sm:inline">Thêm mới</span>
                   </Button>
                 </div>
               }
@@ -974,7 +1006,7 @@ export const PurchaseSuppliersPage: React.FC = () => {
               <table className="custom-table w-full text-sm text-left border-collapse">
                 <thead className="bg-slate-50/95 border-b border-slate-200/80 text-slate-600 text-[11px] font-bold uppercase tracking-wider sticky top-0 z-10">
                   <tr>
-                    <th className="py-3 px-4 w-11 text-center">
+                    <th className="py-2.5 sm:py-3 px-2 sm:px-4 w-9 sm:w-11 text-center">
                       <input
                         type="checkbox"
                         checked={allCarriersSelected}
@@ -982,12 +1014,12 @@ export const PurchaseSuppliersPage: React.FC = () => {
                         className="form-check-input cursor-pointer"
                       />
                     </th>
-                    <th className="py-3 px-4">Đơn vị vận chuyển</th>
-                    <th className="py-3 px-4">Loại dịch vụ & Tuyến</th>
-                    <th className="py-3 px-4">Người liên hệ</th>
-                    <th className="py-3 px-4 text-right">Hạn mức nợ</th>
-                    <th className="py-3 px-4 text-center">Đánh giá</th>
-                    <th className="py-3 px-4 text-center">Trạng thái</th>
+                    <th className="py-2.5 sm:py-3 px-2 sm:px-4">Đơn vị vận chuyển</th>
+                    <th className="hidden sm:table-cell py-3 px-4">Loại dịch vụ & Tuyến</th>
+                    <th className="hidden sm:table-cell py-3 px-4">Người liên hệ</th>
+                    <th className="py-2.5 sm:py-3 px-2.5 sm:px-4 text-right">Hạn mức nợ</th>
+                    <th className="hidden sm:table-cell py-3 px-4 text-center">Đánh giá</th>
+                    <th className="hidden sm:table-cell py-3 px-4 text-center">Trạng thái</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
@@ -1003,13 +1035,21 @@ export const PurchaseSuppliersPage: React.FC = () => {
                     const isActive = car.trangThai !== 'inactive';
 
                     return (
-                      <tr
+                      <SwipeableTableRow
                         key={car.id}
+                        rowId={`car-${car.id}`}
+                        onEdit={() => handleOpenEditCarrier(car)}
+                        onDelete={async () => {
+                          await fetch(`/api/plan-finance/carriers/${car.id}`, { method: 'DELETE' });
+                          await fetchCarriers();
+                        }}
+                        deleteConfirmTitle="Xoá đơn vị vận chuyển"
+                        deleteConfirmMessage={`Bạn có chắc chắn muốn xoá đơn vị vận chuyển "${car.name}"? Hành động này không thể hoàn tác.`}
                         onClick={() => setSelectedCarrier(car)}
                         className="cursor-pointer hover:bg-sky-50/40 transition-colors group"
                       >
                         <td
-                          className="py-3 px-4 w-11 text-center align-middle"
+                          className="py-2.5 sm:py-3 px-2 sm:px-4 w-9 sm:w-11 text-center align-middle"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <input
@@ -1027,27 +1067,35 @@ export const PurchaseSuppliersPage: React.FC = () => {
                             className="form-check-input cursor-pointer"
                           />
                         </td>
-                        <td className="py-3 px-4 align-middle">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-slate-800 group-hover:text-sky-700 transition-colors text-[13px] line-clamp-1">
+                        <td className="py-2.5 sm:py-3 px-2 sm:px-4 align-middle">
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                            <span className="font-semibold text-slate-800 group-hover:text-sky-700 transition-colors text-[12.5px] sm:text-[13px] line-clamp-1">
                               {car.name}
                             </span>
                             {car.code && (
-                              <span className="font-mono text-[11px] font-semibold text-[#1e5470] bg-sky-50/80 border border-sky-200/70 px-1.5 py-0.5 rounded shrink-0">
+                              <span className="font-mono text-[10.5px] sm:text-[11px] font-semibold text-[#1e5470] bg-sky-50/80 border border-sky-200/70 px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap">
                                 {car.code}
                               </span>
                             )}
                           </div>
                           {(car.transactionAddress || car.address) && (
                             <div
-                              className="text-[11.5px] text-slate-500 truncate max-w-[280px] mt-0.5"
+                              className="hidden sm:block text-[11.5px] text-slate-500 truncate max-w-[280px] mt-0.5"
                               title={car.transactionAddress || car.address || ''}
                             >
                               {car.transactionAddress || car.address}
                             </div>
                           )}
+                          <div className="sm:hidden text-[11px] text-slate-500 mt-0.5 truncate max-w-[185px]">
+                            <span className="text-indigo-700 font-medium">
+                              {car.serviceType || 'Chuyển phát nhanh'}
+                            </span>
+                            {(car.phone || car.contactName) && (
+                              <span> • {car.phone || car.contactName}</span>
+                            )}
+                          </div>
                         </td>
-                        <td className="py-3 px-4 align-middle">
+                        <td className="hidden sm:table-cell py-3 px-4 align-middle">
                           <div className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
                             {car.serviceType || 'Chuyển phát nhanh'}
                           </div>
@@ -1060,7 +1108,7 @@ export const PurchaseSuppliersPage: React.FC = () => {
                             </div>
                           )}
                         </td>
-                        <td className="py-3 px-4 align-middle">
+                        <td className="hidden sm:table-cell py-3 px-4 align-middle">
                           {car.contactName || car.phone ? (
                             <div>
                               <div className="text-[13px] font-medium text-slate-800">
@@ -1082,15 +1130,28 @@ export const PurchaseSuppliersPage: React.FC = () => {
                             <span className="text-[12px] text-slate-400">—</span>
                           )}
                         </td>
-                        <td className="py-3 px-4 align-middle text-right whitespace-nowrap">
-                          <span className="text-[13px] font-semibold text-slate-800">
+                        <td className="py-2.5 sm:py-3 px-2.5 sm:px-4 align-middle text-right whitespace-nowrap">
+                          <span className="text-[12.5px] sm:text-[13px] font-semibold text-slate-800">
                             {formatCurrency(car.hanMucNo || 0)}
                           </span>
+                          <div className="sm:hidden mt-1">
+                            {isActive ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                Đang hợp tác
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                                Tạm ngưng
+                              </span>
+                            )}
+                          </div>
                         </td>
-                        <td className="py-3 px-4 align-middle text-center whitespace-nowrap">
+                        <td className="hidden sm:table-cell py-3 px-4 align-middle text-center whitespace-nowrap">
                           {renderStars(car.danhGia)}
                         </td>
-                        <td className="py-3 px-4 align-middle text-center whitespace-nowrap">
+                        <td className="hidden sm:table-cell py-3 px-4 align-middle text-center whitespace-nowrap">
                           {isActive ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11.5px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -1103,7 +1164,7 @@ export const PurchaseSuppliersPage: React.FC = () => {
                             </span>
                           )}
                         </td>
-                      </tr>
+                      </SwipeableTableRow>
                     );
                   })}
                 </tbody>
@@ -1918,7 +1979,7 @@ export const PurchaseSuppliersPage: React.FC = () => {
         isOpen={isEventCalendarOpen}
         onClose={() => setIsEventCalendarOpen(false)}
       />
-    </>
+    </div>
   );
 };
 

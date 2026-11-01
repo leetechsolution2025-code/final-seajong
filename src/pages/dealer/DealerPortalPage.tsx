@@ -3194,13 +3194,13 @@ export const DealerPortalPage: React.FC = () => {
                 <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
                   <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200 text-slate-600 text-xs font-semibold">
                     <tr>
-                      <th className="py-2.5 px-3.5 text-center">STT</th>
-                      <th className="py-2.5 px-3.5">Mã đơn hàng</th>
-                      <th className="py-2.5 px-3.5">Ngày đặt</th>
-                      <th className="py-2.5 px-3.5">Ngày hẹn giao</th>
-                      <th className="py-2.5 px-3.5 text-right">Tổng tiền</th>
-                      <th className="py-2.5 px-3.5 text-right">Đã thanh toán</th>
-                      <th className="py-2.5 px-3.5 text-center">Trạng thái đơn</th>
+                      <th className="hidden sm:table-cell py-2.5 px-3.5 text-center">STT</th>
+                      <th className="py-2.5 px-2.5 sm:px-3.5">Mã đơn hàng</th>
+                      <th className="hidden sm:table-cell py-2.5 px-3.5">Ngày đặt</th>
+                      <th className="hidden md:table-cell py-2.5 px-3.5">Ngày hẹn giao</th>
+                      <th className="py-2.5 px-2.5 sm:px-3.5 text-right">Tổng tiền</th>
+                      <th className="hidden sm:table-cell py-2.5 px-3.5 text-right">Đã thanh toán</th>
+                      <th className="py-2.5 px-2.5 sm:px-3.5 text-center">Trạng thái đơn</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3210,32 +3210,35 @@ export const DealerPortalPage: React.FC = () => {
                         onClick={() => setSelectedOrder(ord)}
                         className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer"
                       >
-                        <td className="py-2.5 px-3.5 text-center font-mono text-slate-400">
+                        <td className="hidden sm:table-cell py-2.5 px-3.5 text-center font-mono text-slate-400">
                           {(orderPage - 1) * orderPageSize + idx + 1}
                         </td>
-                        <td className="py-2.5 px-3.5">
-                          <span className="font-bold text-sky-700 hover:underline">{ord.code}</span>
+                        <td className="py-2.5 px-2.5 sm:px-3.5">
+                          <span className="font-bold text-sky-700 hover:underline block truncate">{ord.code}</span>
+                          <span className="sm:hidden text-[11px] text-slate-400 block">
+                            {new Date(ord.ngayDat).toLocaleDateString('vi-VN')}
+                          </span>
                         </td>
-                        <td className="py-2.5 px-3.5 text-slate-600">
+                        <td className="hidden sm:table-cell py-2.5 px-3.5 text-slate-600">
                           {new Date(ord.ngayDat).toLocaleDateString('vi-VN')}
                         </td>
-                        <td className="py-2.5 px-3.5 text-slate-500">
+                        <td className="hidden md:table-cell py-2.5 px-3.5 text-slate-500">
                           {ord.ngayGiao ? new Date(ord.ngayGiao).toLocaleDateString('vi-VN') : '—'}
                         </td>
-                        <td className="py-2.5 px-3.5 text-right font-bold text-slate-900">
+                        <td className="py-2.5 px-2.5 sm:px-3.5 text-right font-bold text-slate-900 whitespace-nowrap">
                           {formatVND(ord.tongTien)}
                         </td>
-                        <td className="py-2.5 px-3.5 text-right font-semibold text-emerald-600">
+                        <td className="hidden sm:table-cell py-2.5 px-3.5 text-right font-semibold text-emerald-600">
                           {formatVND(ord.daThanhToan)}
                         </td>
-                        <td className="py-2.5 px-3.5 text-center">
-                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
+                        <td className="py-2.5 px-2.5 sm:px-3.5 text-center">
+                          <span className={`inline-block px-2 sm:px-2.5 py-0.5 rounded-full text-[10.5px] sm:text-[11px] font-semibold whitespace-nowrap ${
                             ord.trangThai === 'completed' ? 'bg-emerald-100 text-emerald-800' :
                             ord.trangThai === 'approved' ? 'bg-blue-100 text-blue-800' :
                             ord.trangThai === 'draft' ? 'bg-slate-100 text-slate-700 border border-slate-200' : 'bg-amber-100 text-amber-800'
                           }`}>
                             {ord.trangThai === 'completed' ? 'Hoàn thành' : 
-                             ord.trangThai === 'approved' ? 'Đã duyệt / Đang giao' : 
+                             ord.trangThai === 'approved' ? 'Đã duyệt' : 
                              ord.trangThai === 'draft' ? 'Bản nháp' : 'Chờ duyệt'}
                           </span>
                         </td>
@@ -3945,13 +3948,13 @@ export const DealerPortalPage: React.FC = () => {
                 <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
                   <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 text-slate-800 text-[11px] font-extrabold uppercase">
                     <tr>
-                      <th className="py-2.5 px-3.5 text-center w-[55px]">STT</th>
-                      <th className="py-2.5 px-3.5 w-[165px]">Mã yêu cầu</th>
-                      <th className="py-2.5 px-3.5 w-[135px]">Ngày gửi</th>
-                      <th className="py-2.5 px-3.5 w-[210px]">Phân loại yêu cầu</th>
-                      <th className="py-2.5 px-3.5">Tiêu đề & Nội dung chi tiết</th>
-                      <th className="py-2.5 px-3.5 w-[190px]">Chuyên viên tiếp nhận</th>
-                      <th className="py-2.5 px-3.5 text-center w-[135px]">Trạng thái</th>
+                      <th className="hidden sm:table-cell py-2.5 px-3.5 text-center w-[55px]">STT</th>
+                      <th className="py-2.5 px-2.5 sm:px-3.5 w-[135px] sm:w-[165px]">Mã yêu cầu</th>
+                      <th className="hidden sm:table-cell py-2.5 px-3.5 w-[135px]">Ngày gửi</th>
+                      <th className="hidden md:table-cell py-2.5 px-3.5 w-[210px]">Phân loại yêu cầu</th>
+                      <th className="py-2.5 px-2.5 sm:px-3.5">Tiêu đề & Nội dung chi tiết</th>
+                      <th className="hidden sm:table-cell py-2.5 px-3.5 w-[190px]">Chuyên viên tiếp nhận</th>
+                      <th className="py-2.5 px-2.5 sm:px-3.5 text-center w-[105px] sm:w-[135px]">Trạng thái</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3976,43 +3979,43 @@ export const DealerPortalPage: React.FC = () => {
                           onClick={() => setSelectedSupportTicket(tk)}
                           className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer"
                         >
-                          <td className="py-3 px-3.5 text-center font-mono text-xs text-slate-400 align-middle">
+                          <td className="hidden sm:table-cell py-3 px-3.5 text-center font-mono text-xs text-slate-400 align-middle">
                             {(supportPage - 1) * supportPageSize + idx + 1}
                           </td>
-                          <td className="py-3 px-3.5 align-middle">
+                          <td className="py-3 px-2.5 sm:px-3.5 align-middle">
                             <div className="flex items-center gap-1.5">
-                              <span className="font-mono font-bold text-xs text-sky-700 hover:underline">
+                              <span className="font-mono font-bold text-xs text-sky-700 hover:underline truncate">
                                 {tk.code}
                               </span>
                               {isUrgent && (
-                                <span className="px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 text-[9.5px] font-extrabold">
+                                <span className="px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 text-[9.5px] font-extrabold shrink-0">
                                   Gấp
                                 </span>
                               )}
                             </div>
                             {relatedOrderCode && (
-                              <span className="text-[10.5px] font-mono text-slate-400 block mt-0.5">
+                              <span className="text-[10.5px] font-mono text-slate-400 block mt-0.5 truncate">
                                 Đơn: #{relatedOrderCode}
                               </span>
                             )}
                           </td>
-                          <td className="py-3 px-3.5 text-xs text-slate-600 align-middle whitespace-nowrap">
+                          <td className="hidden sm:table-cell py-3 px-3.5 text-xs text-slate-600 align-middle whitespace-nowrap">
                             {new Date(tk.requestDate || tk.createdAt).toLocaleDateString('vi-VN')}
                           </td>
-                          <td className="py-3 px-3.5 align-middle">
+                          <td className="hidden md:table-cell py-3 px-3.5 align-middle">
                             <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
                               {tk.type}
                             </span>
                           </td>
-                          <td className="py-3 px-3.5 align-middle">
-                            <div className="font-bold text-slate-900 text-xs">{tk.title}</div>
+                          <td className="py-3 px-2.5 sm:px-3.5 align-middle min-w-0">
+                            <div className="font-bold text-slate-900 text-xs truncate">{tk.title}</div>
                             {cleanBody && (
                               <div className="text-slate-500 text-xs mt-0.5 line-clamp-1">
                                 {cleanBody}
                               </div>
                             )}
                           </td>
-                          <td className="py-3 px-3.5 align-middle">
+                          <td className="hidden sm:table-cell py-3 px-3.5 align-middle">
                             <div className="font-semibold text-slate-800 text-xs">
                               {handler?.fullName || 'Phòng Kinh doanh'}
                             </div>
@@ -4020,9 +4023,9 @@ export const DealerPortalPage: React.FC = () => {
                               <div className="text-[11px] font-mono text-sky-700">{handler.phone}</div>
                             )}
                           </td>
-                          <td className="py-3 px-3.5 text-center align-middle">
+                          <td className="py-3 px-2.5 sm:px-3.5 text-center align-middle">
                             <span
-                              className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                              className={`inline-block px-2 sm:px-2.5 py-0.5 rounded-full text-[10.5px] sm:text-[11px] font-bold whitespace-nowrap ${
                                 isResolved
                                   ? 'bg-emerald-100 text-emerald-700'
                                   : isDraft

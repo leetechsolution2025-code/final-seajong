@@ -15,7 +15,7 @@ import {
 } from 'react-bootstrap-icons';
 import { StandardPage } from '../../components/layout/StandardPage';
 import { TableToolbar, type TableToolbarFilter } from '../../components/common/TableToolbar';
-import { FullWidthTable } from '../../components/common/FullWidthTable';
+import { FullWidthTable, SwipeableTableRow } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
 import { Button } from '../../components/common/Button';
 import { Offcanvas } from '../../components/common/Offcanvas';
@@ -246,6 +246,7 @@ export const WarehousesPage: React.FC = () => {
 
   return (
     <StandardPage
+      className="logistics-mobile-page warehouses-mobile-page"
       title="Hệ thống kho bãi Seajong"
       description="Sơ đồ định vị vị trí dãy kệ kho linh kiện, kho phôi đồng và kho sen vòi thành phẩm"
       icon="bi-building"
@@ -284,6 +285,7 @@ export const WarehousesPage: React.FC = () => {
               size="sm"
               onClick={() => showToast('info', 'Đang trích xuất dữ liệu danh sách kho hàng ra file Excel...')}
               leftIcon={<FileEarmarkExcel size={14} color="#16a34a" />}
+              className="!hidden md:!inline-flex"
             >
               Xuất Excel
             </Button>
@@ -316,10 +318,10 @@ export const WarehousesPage: React.FC = () => {
 
       {/* ── BẢNG FULLWIDTHTABLE DANH SÁCH KHO HÀNG ── */}
       <FullWidthTable loading={loading}>
-        <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+        <table className="w-full text-left border-collapse logistics-overview-compact-table" style={{ fontSize: '13px' }}>
           <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
-            <tr className="text-slate-500 text-[11.5px] uppercase tracking-[0.06em] font-bold">
-              <th className="py-2.5 px-3 w-10 text-center">
+            <tr className="text-slate-500 text-[11px] sm:text-[11.5px] uppercase tracking-[0.06em] font-bold">
+              <th className="py-2.5 px-2.5 sm:px-3 w-9 sm:w-10 text-center">
                 <input
                   type="checkbox"
                   checked={warehouses.length > 0 && selectedIds.size === warehouses.length}
@@ -331,12 +333,12 @@ export const WarehousesPage: React.FC = () => {
                   title="Chọn tất cả"
                 />
               </th>
-              <th className="py-2.5 px-3.5 min-w-[260px]">Tên kho & Định vị</th>
-              <th className="py-2.5 px-3.5 w-48">Phân loại kho</th>
-              <th className="py-2.5 px-3.5 w-52">Thủ kho phụ trách</th>
-              <th className="py-2.5 px-3.5 w-40 text-right">Mặt hàng lưu trữ</th>
-              <th className="py-2.5 px-3.5 w-40 text-right">Tổng tồn thực tế</th>
-              <th className="py-2.5 px-3.5 w-36 text-center">Trạng thái</th>
+              <th className="py-2.5 px-2.5 sm:px-3.5 md:min-w-[260px]">Tên kho & Định vị</th>
+              <th className="hidden md:table-cell py-2.5 px-3.5 w-48">Phân loại kho</th>
+              <th className="hidden md:table-cell py-2.5 px-3.5 w-52">Thủ kho phụ trách</th>
+              <th className="hidden md:table-cell py-2.5 px-3.5 w-40 text-right">Mặt hàng lưu trữ</th>
+              <th className="hidden md:table-cell py-2.5 px-3.5 w-40 text-right">Tổng tồn thực tế</th>
+              <th className="hidden md:table-cell py-2.5 px-3.5 w-36 text-center">Trạng thái</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -348,12 +350,17 @@ export const WarehousesPage: React.FC = () => {
               </tr>
             ) : (
               warehouses.map((wh) => (
-                <tr
+                <SwipeableTableRow
                   key={wh.id}
+                  rowId={wh.id}
+                  onEdit={() => handleOpenEdit(wh)}
+                  onDelete={() => handleDeleteOne(wh.id)}
+                  deleteConfirmTitle="Xác nhận xóa kho hàng"
+                  deleteConfirmMessage={`Bạn có chắc chắn muốn xóa kho hàng "${wh.name}" (${wh.code})? Hành động này không thể hoàn tác.`}
                   onClick={() => setDetailWarehouse(wh)}
                   className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 cursor-pointer"
                 >
-                  <td className="py-2.5 px-3 align-top text-center">
+                  <td className="py-2.5 px-2.5 sm:px-3 align-top text-center">
                     <input
                       type="checkbox"
                       checked={selectedIds.has(wh.id)}
@@ -367,14 +374,72 @@ export const WarehousesPage: React.FC = () => {
                       className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
                     />
                   </td>
-                  <td className="py-2.5 px-3.5 align-top">
-                    <div className="font-semibold text-slate-900 text-[13px]">{wh.name}</div>
+                  <td className="py-2.5 px-2.5 sm:px-3.5 align-top max-w-0 md:max-w-none w-full">
+                    <div className="flex items-center flex-wrap gap-2">
+                      <span className="font-semibold text-slate-900 text-[13px]">{wh.name}</span>
+                      <span
+                        className={`inline-flex md:hidden items-center px-2 py-0.5 rounded text-[10.5px] font-medium border ${
+                          wh.type === 'MATERIAL'
+                            ? 'bg-amber-50 text-amber-700 border-amber-200'
+                            : wh.type === 'DEFECT'
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : wh.type === 'TRANSIT'
+                            ? 'bg-purple-50 text-purple-700 border-purple-200'
+                            : 'bg-blue-50 text-blue-700 border-blue-200'
+                        }`}
+                      >
+                        {wh.typeLabel}
+                      </span>
+                    </div>
                     <div className="text-[11.5px] text-slate-500 mt-0.5 flex items-center gap-1">
                       <GeoAlt size={11} className="text-slate-400 shrink-0" />
                       <span className="truncate" title={wh.address}>{wh.address}</span>
                     </div>
+                    {/* Các thông tin còn lại hiển thị dưới địa chỉ kho trên màn hình điện thoại */}
+                    <div className="flex md:hidden flex-col gap-0.5 mt-1 text-[11px] text-slate-500">
+                      <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5">
+                        {wh.managerId && (
+                          <>
+                            <span className="inline-flex items-center gap-1">
+                              <Person size={11} className="text-slate-400 shrink-0" />
+                              <strong className="text-slate-700 font-medium">{wh.managerId}</strong>
+                              {wh.phone && <span className="font-mono text-slate-400">({wh.phone})</span>}
+                            </span>
+                            <span className="text-slate-300">•</span>
+                          </>
+                        )}
+                        <span
+                          className={`inline-flex items-center gap-1 font-semibold ${
+                            wh.isActive ? 'text-emerald-600' : 'text-slate-500'
+                          }`}
+                        >
+                          {wh.isActive ? (
+                            <>
+                              <CheckCircleFill size={9} />
+                              Hoạt động
+                            </>
+                          ) : (
+                            <>
+                              <XCircleFill size={9} />
+                              Tạm dừng
+                            </>
+                          )}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5">
+                        <span>
+                          Mặt hàng: <strong className="font-mono text-slate-800">{wh.itemCount.toLocaleString('vi-VN')} SKU</strong>
+                        </span>
+                        <span className="text-slate-300">•</span>
+                        <span>
+                          Tồn: <strong className="font-mono text-emerald-700">{wh.totalQuantity.toLocaleString('vi-VN')}</strong>
+                          {wh.totalHold > 0 && <span className="text-amber-600 font-mono ml-0.5">(Giữ: {wh.totalHold})</span>}
+                        </span>
+                      </div>
+                    </div>
                   </td>
-                  <td className="py-2.5 px-3.5 align-top">
+                  <td className="hidden md:table-cell py-2.5 px-3.5 align-top">
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border ${
                         wh.type === 'MATERIAL'
@@ -389,7 +454,7 @@ export const WarehousesPage: React.FC = () => {
                       {wh.typeLabel}
                     </span>
                   </td>
-                  <td className="py-2.5 px-3.5 align-top">
+                  <td className="hidden md:table-cell py-2.5 px-3.5 align-top">
                     <div className="font-medium text-slate-800 text-xs flex items-center gap-1">
                       <Person size={13} className="text-slate-400" />
                       <span>{wh.managerId}</span>
@@ -401,13 +466,13 @@ export const WarehousesPage: React.FC = () => {
                       </div>
                     )}
                   </td>
-                  <td className="py-2.5 px-3.5 align-top text-right">
+                  <td className="hidden md:table-cell py-2.5 px-3.5 align-top text-right">
                     <span className="font-bold text-slate-900 text-xs font-mono">
                       {wh.itemCount.toLocaleString('vi-VN')}
                     </span>
                     <span className="text-[11px] text-slate-400 ml-1">mã SKU</span>
                   </td>
-                  <td className="py-2.5 px-3.5 align-top text-right">
+                  <td className="hidden md:table-cell py-2.5 px-3.5 align-top text-right">
                     <div className="font-bold text-emerald-700 text-[13px] font-mono">
                       {wh.totalQuantity.toLocaleString('vi-VN')}
                     </div>
@@ -417,7 +482,7 @@ export const WarehousesPage: React.FC = () => {
                       </div>
                     )}
                   </td>
-                  <td className="py-2.5 px-3.5 align-top text-center">
+                  <td className="hidden md:table-cell py-2.5 px-3.5 align-top text-center">
                     <span
                       className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
                         wh.isActive
@@ -438,7 +503,7 @@ export const WarehousesPage: React.FC = () => {
                       )}
                     </span>
                   </td>
-                </tr>
+                </SwipeableTableRow>
               ))
             )}
           </tbody>

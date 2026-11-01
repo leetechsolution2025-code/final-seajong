@@ -157,10 +157,10 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
         ...style,
       }}
     >
-      <div style={{ display: 'flex', gap: '8px', flexWrap: wrap ? 'wrap' : 'nowrap', flex: '1 1 auto', minWidth: 0, alignItems: 'center' }}>
+      <div className="table-toolbar-left" style={{ display: 'flex', gap: '8px', flexWrap: wrap ? 'wrap' : 'nowrap', flex: '1 1 auto', minWidth: 0, alignItems: 'center' }}>
         {/* Nút hành động hoặc Toggle đặt trước các bộ lọc và hộp tìm kiếm */}
         {actionsBeforeSearch && (
-          <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center' }}>
+          <div className="table-toolbar-before-search" style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center' }}>
             {actionsBeforeSearch}
           </div>
         )}
@@ -170,6 +170,7 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
           filters.map((filter, idx) => (
             <div
               key={filter.id || idx}
+              className="table-toolbar-filter-item"
               style={{ minWidth: filter.minWidth || '180px', flex: '0 0 auto' }}
             >
               <Select
@@ -186,7 +187,7 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
           ))
         ) : (
           filters && (
-            <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="table-toolbar-filters-custom" style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
               {filters}
             </div>
           )
@@ -194,14 +195,14 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
 
         {/* Custom Filters (Khoảng ngày, Toggle...) hiển thị liền kề các bộ lọc */}
         {customFilters && (
-          <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="table-toolbar-custom-filters" style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
             {customFilters}
           </div>
         )}
 
         {/* 2. Hộp tìm kiếm (Search Box) hiển thị sau các bộ lọc */}
         {onSearchChange !== undefined && (
-          <div style={{ flex: searchWidth ? `0 0 ${typeof searchWidth === 'number' ? `${searchWidth}px` : searchWidth}` : `1 1 ${searchMinWidth}`, minWidth: '220px' }}>
+          <div className="table-toolbar-search" style={{ flex: searchWidth ? `0 0 ${typeof searchWidth === 'number' ? `${searchWidth}px` : searchWidth}` : `1 1 ${searchMinWidth}`, minWidth: '220px' }}>
             <Input
               placeholder={searchPlaceholder}
               value={searchValue ?? ''}
@@ -214,18 +215,18 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
 
         {/* 3. Nút hành động đặt ngay sau hộp tìm kiếm */}
         {actionsAfterSearch && (
-          <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center' }}>
+          <div className="table-toolbar-after-search" style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center' }}>
             {actionsAfterSearch}
           </div>
         )}
       </div>
 
       {/* Khu vực hành động bên phải: luôn có icon ba chấm ở cuối bên phải */}
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+      <div className="table-toolbar-right" style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
         {rightActions || actions}
 
         {showMenu && (
-          <div ref={menuRef} style={{ position: 'relative' }}>
+          <div ref={menuRef} className="table-toolbar-menu-wrap" style={{ position: 'relative' }}>
             <button
               type="button"
               onClick={() => setIsMenuOpen((prev) => !prev)}
