@@ -49,6 +49,7 @@ import { MyTasksPage } from '../../pages/departments/bom/MyTasksPage';
 import { MyRequestsPage } from '../../pages/departments/bom/MyRequestsPage';
 import { MyAttendancePage } from '../../pages/departments/bom/MyAttendancePage';
 import { DealerPortalPage } from '../../pages/dealer/DealerPortalPage';
+import { CustomerPortalPage } from '../../pages/customer/CustomerPortalPage';
 import { ProductionOverviewPage } from '../../pages/production/ProductionOverviewPage';
 import { ProductionDefectsPage } from '../../pages/production/ProductionDefectsPage';
 import { ProductionBomPage } from '../../pages/production/ProductionBomPage';
@@ -132,6 +133,11 @@ export const DashboardView: React.FC = () => {
   // ── CỔNG THÔNG TIN ĐẠI LÝ (DEALER PORTAL) ──
   if (activeDeptCode === 'dealer' || activeDeptCode === 'dai-ly') {
     return <DealerPortalPage />;
+  }
+
+  // ── CỔNG THÔNG TIN KHÁCH HÀNG (CUSTOMER PORTAL) ──
+  if (activeDeptCode === 'customer' || activeDeptCode === 'khach-hang') {
+    return <CustomerPortalPage />;
   }
 
   // ── PHÒNG TÀI CHÍNH – KẾ TOÁN (FINANCE) ROUTES ──

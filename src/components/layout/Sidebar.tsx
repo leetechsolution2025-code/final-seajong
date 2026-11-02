@@ -38,6 +38,16 @@ const DEPT_SIDEBAR_CONFIGS: Record<string, { deptName: string; sections: NavSect
     ],
   },
 
+  // 0b. CỔNG THÔNG TIN KHÁCH HÀNG (/customer)
+  customer: {
+    deptName: 'Cổng thông tin Khách hàng',
+    sections: [
+      { id: 'orders', label: 'Đơn mua hàng', icon: 'bi-bag-check', flat: true },
+      { id: 'warranty', label: 'Bảo hành điện tử', icon: 'bi-shield-check', flat: true },
+      { id: 'support', label: 'Hỗ trợ & CSKH', icon: 'bi-headset', flat: true },
+    ],
+  },
+
   // 1. BAN GIÁM ĐỐC (/board)
   board: {
     deptName: 'Ban Giám đốc',
@@ -557,7 +567,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
   const currentConfig = DEPT_SIDEBAR_CONFIGS[activeDeptCode] || DEPT_SIDEBAR_CONFIGS.board;
   const isOverview = activeMenuKey === 'overview';
 
-  const isDealer = activeDeptCode === 'dealer' || activeDeptCode === 'dai-ly';
+  const isDealer =
+    activeDeptCode === 'dealer' ||
+    activeDeptCode === 'dai-ly' ||
+    activeDeptCode === 'customer' ||
+    activeDeptCode === 'khach-hang';
 
   // Kiểm tra hiển thị mục "Kho hàng" trực tiếp (chuẩn client-seajong: ẩn ở logistics, marketing, production, finance, qa, hr, board, dealer)
   const isWarehouseHidden = isDealer || ['board', 'hr', 'logistics', 'marketing', 'production', 'finance', 'qa'].includes(activeDeptCode);

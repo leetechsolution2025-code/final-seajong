@@ -595,7 +595,13 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
           }
         } catch {}
 
-        // Lấy thông tin người phụ trách (Tên, phòng ban, SĐT) từ DB
+        // Lấy thông tin người phụ trách theo mã định danh (userId / employeeId / code) từ DB
+        const personId =
+          tenderActual?.assigned_person_id ||
+          tenderActual?.assignee_id ||
+          (targetDoc as any).submitterId ||
+          (targetDoc as any).createdById ||
+          '';
         let personName = tenderActual?.assigned_person || targetDoc.submitter || '';
         let personDept = targetDoc.department || '';
         let personPhone = '';
@@ -603,8 +609,18 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
           const resUsers = await fetch('/api/users');
           if (resUsers.ok) {
             const users = await resUsers.json();
-            const u = users.find((usr: any) => usr.name === personName);
+            const u = users.find(
+              (usr: any) =>
+                (personId &&
+                  (String(usr.id) === String(personId) ||
+                    String(usr.employeeId) === String(personId) ||
+                    String(usr.code) === String(personId))) ||
+                (personName &&
+                  (String(usr.id) === String(personName) ||
+                    String(usr.code) === String(personName)))
+            );
             if (u) {
+              if (u.name) personName = u.name;
               if (u.department) personDept = u.department;
               if (u.phone) personPhone = u.phone;
             }

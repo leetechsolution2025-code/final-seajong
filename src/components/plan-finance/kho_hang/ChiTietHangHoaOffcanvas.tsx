@@ -171,9 +171,14 @@ export function ChiTietHangHoaOffcanvas({ open, item, onClose, onDeleted, onUpda
     setEditMode(true);
     fetch("/api/plan-finance/inventory/categories")
       .then(r => r.json())
-      .then((d: { id: string; name: string }[]) => {
+      .then((d: { id: string; code?: string; name: string }[]) => {
         setEditCategories(Array.isArray(d) ? d : []);
-        const found = d.find((c: { id: string; name: string }) => c.name === i.category?.name);
+        const targetCatId = (i as any).categoryId || i.category?.id || (i.category as any)?.code;
+        const found = d.find(
+          (c: { id: string; code?: string; name: string }) =>
+            (targetCatId && (c.id === targetCatId || c.code === targetCatId)) ||
+            c.id === (i.category as any)?.id
+        );
         if (found) setEditForm(f => ({ ...f, categoryId: found.id }));
       }).catch(() => {});
   }, [fullItem, item]);

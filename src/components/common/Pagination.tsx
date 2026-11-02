@@ -64,7 +64,7 @@ export const Pagination: React.FC<PaginationProps> = ({
       return pages;
     }
 
-    const siblingCount = 1;
+    const siblingCount = compact ? 0 : 1;
     const leftSibling = Math.max(safeCurrentPage - siblingCount, 1);
     const rightSibling = Math.min(safeCurrentPage + siblingCount, totalPages);
 
@@ -109,12 +109,21 @@ export const Pagination: React.FC<PaginationProps> = ({
   };
 
   return (
-    <div className={`table-pagination ${className}`.trim()} style={style}>
+    <div className={`table-pagination ${compact ? 'is-compact' : ''} ${className}`.trim()} style={style}>
       {/* Left: Summary và Page Size */}
       <div className="pagination-left">
         <span>
-          Hiển thị <strong>{startItem}</strong> - <strong>{endItem}</strong> trong tổng số{' '}
-          <strong>{safeTotalItems}</strong> {itemName}
+          {compact ? (
+            <>
+              Hiển thị <strong>{startItem}</strong> - <strong>{endItem}</strong> /{' '}
+              <strong>{safeTotalItems}</strong> {itemName}
+            </>
+          ) : (
+            <>
+              Hiển thị <strong>{startItem}</strong> - <strong>{endItem}</strong> trong tổng số{' '}
+              <strong>{safeTotalItems}</strong> {itemName}
+            </>
+          )}
         </span>
 
         {onPageSizeChange && (

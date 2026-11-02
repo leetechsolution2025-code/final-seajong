@@ -16,6 +16,7 @@ export function normalizeDeptCode(code?: string | null): string {
   if (c === 'nhan-su') return 'hr';
   if (c === 'qc' || c === 'quality' || c === 'quan-ly-chat-luong') return 'qa';
   if (c === 'dai-ly') return 'dealer';
+  if (c === 'khach-hang' || c === 'customer') return 'customer';
   return c;
 }
 
@@ -175,6 +176,10 @@ export function getDeptAccessLevel(
     return target === 'dealer' ? 'full' : 'none';
   }
 
+  if (user.role === 'CUSTOMER') {
+    return target === 'customer' ? 'full' : 'none';
+  }
+
   // Tài khoản ADMIN
   if (isAdminUser(user)) {
     const primaryDept = normalizeDeptCode(
@@ -260,6 +265,7 @@ export function canAccessDepartment(
  */
 export function getDefaultAllowedDepartment(user?: Partial<User> | null): string {
   if (!user) return 'board';
+  if (user.role === 'CUSTOMER' || user.departmentCode === 'customer') return 'customer';
   if (user.role === 'DEALER' || user.departmentCode === 'dealer') return 'dealer';
   if (user.employee?.departmentCode) {
     return normalizeDeptCode(user.employee.departmentCode);

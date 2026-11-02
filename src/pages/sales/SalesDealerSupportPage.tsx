@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { StepPage } from '../../components/common/StepPage';
 import { TableToolbar } from '../../components/common/TableToolbar';
-import { FullWidthTable } from '../../components/common/FullWidthTable';
+import { FullWidthTable, SwipeableTableRow } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
 import { Button } from '../../components/common/Button';
 import { Offcanvas } from '../../components/common/Offcanvas';
 import { Select } from '../../components/common/Select';
+import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import type { ModernStepItem } from '../../types';
 import type { TickerItem } from '../../components/layout/DynamicTicker';
 import {
@@ -13,6 +14,7 @@ import {
   Send,
   PersonCheck,
   Shop,
+  Trash,
 } from 'react-bootstrap-icons';
 
 export interface DealerSupportTicketItem {
@@ -65,6 +67,44 @@ export const SalesDealerSupportPage: React.FC = () => {
   const [responseStatus, setResponseStatus] = useState<string>('In Progress');
   const [responseContent, setResponseContent] = useState<string>('');
   const [savingResponse, setSavingResponse] = useState<boolean>(false);
+
+  // Selection & delete state
+  const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(new Set());
+  const [confirmDeleteSelected, setConfirmDeleteSelected] = useState<boolean>(false);
+  const [deletingSelected, setDeletingSelected] = useState<boolean>(false);
+
+  const handleDeleteTicketById = async (ticketId: string) => {
+    try {
+      await fetch(`/api/sales/dealer-support-tickets/${ticketId}`, { method: 'DELETE' });
+      setSelectedTicketIds((prev) => {
+        const next = new Set(prev);
+        next.delete(ticketId);
+        return next;
+      });
+      fetchTickets();
+    } catch (err) {
+      console.error('Lỗi xoá yêu cầu hỗ trợ đại lý:', err);
+    }
+  };
+
+  const handleDeleteSelectedTickets = async () => {
+    if (selectedTicketIds.size === 0) return;
+    setDeletingSelected(true);
+    try {
+      await fetch('/api/sales/dealer-support-tickets', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedTicketIds) }),
+      });
+      setSelectedTicketIds(new Set());
+      setConfirmDeleteSelected(false);
+      fetchTickets();
+    } catch (err) {
+      console.error('Lỗi xoá danh sách yêu cầu hỗ trợ đại lý:', err);
+    } finally {
+      setDeletingSelected(false);
+    }
+  };
 
   const fetchTickets = async () => {
     setLoading(true);
@@ -317,6 +357,19 @@ export const SalesDealerSupportPage: React.FC = () => {
             },
           ]}
           onRefresh={fetchTickets}
+          rightActions={
+            selectedTicketIds.size > 0 ? (
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => setConfirmDeleteSelected(true)}
+                title={`Xoá (${selectedTicketIds.size})`}
+              >
+                <Trash className="w-3.5 h-3.5 md:mr-1" />
+                <span className="hidden md:inline">Xoá ({selectedTicketIds.size})</span>
+              </Button>
+            ) : undefined
+          }
         />
 
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
@@ -331,7 +384,22 @@ export const SalesDealerSupportPage: React.FC = () => {
             <table className="sales-support-table w-full text-left border-collapse" style={{ fontSize: '13px' }}>
               <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 text-slate-800 text-[11px] font-extrabold uppercase">
                 <tr>
-                  <th className="hidden sm:table-cell py-2.5 px-3.5 text-center w-[55px]">STT</th>
+                  <th className="py-2.5 px-2.5 sm:px-3.5 text-center w-8 sm:w-10">
+                    <input
+                      type="checkbox"
+                      checked={pagedTickets.length > 0 && pagedTickets.every((tk) => selectedTicketIds.has(tk.id))}
+                      onChange={(e) => {
+                        const next = new Set(selectedTicketIds);
+                        if (e.target.checked) {
+                          pagedTickets.forEach((tk) => next.add(tk.id));
+                        } else {
+                          pagedTickets.forEach((tk) => next.delete(tk.id));
+                        }
+                        setSelectedTicketIds(next);
+                      }}
+                      className="rounded border-slate-300 text-sky-600 cursor-pointer"
+                    />
+                  </th>
                   <th className="py-2.5 px-2.5 sm:px-3.5 sm:w-[270px]">Mã yêu cầu & Đại lý gửi</th>
                   <th className="hidden sm:table-cell py-2.5 px-3.5 w-[125px]">Ngày gửi</th>
                   <th className="hidden sm:table-cell py-2.5 px-3.5 w-[205px]">Phân loại yêu cầu</th>
@@ -341,7 +409,7 @@ export const SalesDealerSupportPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {pagedTickets.map((tk, idx) => {
+                {pagedTickets.map((tk) => {
                   const rawContent = String(tk.content || '');
                   const orderMatch = rawContent.match(/\[Đơn hàng:\s*([^\]]+)\]/);
                   const relatedOrderCode =
@@ -355,15 +423,31 @@ export const SalesDealerSupportPage: React.FC = () => {
                   const isResolved = tk.status === 'Resolved' || tk.status === 'Completed';
 
                   return (
-                    <tr
+                    <SwipeableTableRow
                       key={tk.id}
-                      onClick={() => openTicketDrawer(tk)}
+                      rowId={tk.id}
+                      onRowClick={() => openTicketDrawer(tk)}
+                      onEdit={() => openTicketDrawer(tk)}
+                      onDelete={() => handleDeleteTicketById(tk.id)}
+                      deleteConfirmTitle="Xác nhận xoá yêu cầu hỗ trợ"
+                      deleteConfirmMessage={`Bạn có chắc chắn muốn xoá yêu cầu hỗ trợ "${tk.code}" (${tk.customer?.name || tk.dealerName}) không? Thao tác này không thể hoàn tác.`}
+                      deleteConfirmText="Xoá yêu cầu"
                       className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer"
                     >
-                      <td className="hidden sm:table-cell py-3 px-3.5 text-center font-mono text-xs text-slate-400 align-middle">
-                        {(page - 1) * pageSize + idx + 1}
+                      <td className="py-3 px-2.5 sm:px-3.5 text-center align-top" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedTicketIds.has(tk.id)}
+                          onChange={(e) => {
+                            const next = new Set(selectedTicketIds);
+                            if (e.target.checked) next.add(tk.id);
+                            else next.delete(tk.id);
+                            setSelectedTicketIds(next);
+                          }}
+                          className="rounded border-slate-300 text-sky-600 cursor-pointer"
+                        />
                       </td>
-                      <td className="py-2.5 sm:py-3 px-2.5 sm:px-3.5 align-middle min-w-0">
+                      <td className="py-2.5 sm:py-3 px-2.5 sm:px-3.5 align-top min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-mono font-bold text-xs text-sky-700 hover:underline">
                             {tk.code}
@@ -409,15 +493,15 @@ export const SalesDealerSupportPage: React.FC = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="hidden sm:table-cell py-3 px-3.5 text-xs text-slate-600 align-middle whitespace-nowrap">
+                      <td className="hidden sm:table-cell py-3 px-3.5 text-xs text-slate-600 align-top whitespace-nowrap">
                         {new Date(tk.requestDate || tk.createdAt).toLocaleDateString('vi-VN')}
                       </td>
-                      <td className="hidden sm:table-cell py-3 px-3.5 align-middle">
+                      <td className="hidden sm:table-cell py-3 px-3.5 align-top">
                         <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
                           {tk.type}
                         </span>
                       </td>
-                      <td className="hidden sm:table-cell py-3 px-3.5 align-middle">
+                      <td className="hidden sm:table-cell py-3 px-3.5 align-top">
                         <div className="font-bold text-slate-900 text-xs">{tk.title}</div>
                         {cleanBody && (
                           <div className="text-slate-500 text-xs mt-0.5 line-clamp-1">
@@ -430,7 +514,7 @@ export const SalesDealerSupportPage: React.FC = () => {
                           </div>
                         )}
                       </td>
-                      <td className="hidden sm:table-cell py-3 px-3.5 align-middle">
+                      <td className="hidden sm:table-cell py-3 px-3.5 align-top">
                         <div className="font-semibold text-slate-800 text-xs">
                           {tk.handler?.fullName || 'Phòng Kinh doanh'}
                         </div>
@@ -438,7 +522,7 @@ export const SalesDealerSupportPage: React.FC = () => {
                           <div className="text-[11px] font-mono text-sky-700">{tk.handler.phone}</div>
                         )}
                       </td>
-                      <td className="py-2.5 sm:py-3 px-2 sm:px-3.5 text-center align-middle">
+                      <td className="py-2.5 sm:py-3 px-2 sm:px-3.5 text-center align-top whitespace-nowrap">
                         <span
                           className={`inline-block px-2 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold whitespace-nowrap ${
                             isResolved
@@ -455,7 +539,7 @@ export const SalesDealerSupportPage: React.FC = () => {
                             : 'Chờ tiếp nhận'}
                         </span>
                       </td>
-                    </tr>
+                    </SwipeableTableRow>
                   );
                 })}
               </tbody>
@@ -644,6 +728,20 @@ export const SalesDealerSupportPage: React.FC = () => {
             );
           })()}
       </Offcanvas>
+
+      <ConfirmDialog
+        isOpen={confirmDeleteSelected}
+        title="Xác nhận xoá yêu cầu hỗ trợ"
+        message={`Bạn có chắc chắn muốn xoá ${selectedTicketIds.size} yêu cầu hỗ trợ đã chọn không? Thao tác này không thể hoàn tác.`}
+        confirmText="Xoá dữ liệu"
+        cancelText="Huỷ"
+        variant="danger"
+        loading={deletingSelected}
+        onConfirm={handleDeleteSelectedTickets}
+        onClose={() => {
+          if (!deletingSelected) setConfirmDeleteSelected(false);
+        }}
+      />
     </StepPage>
     </div>
   );

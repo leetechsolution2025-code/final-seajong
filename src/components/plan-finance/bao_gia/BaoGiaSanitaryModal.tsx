@@ -3392,12 +3392,18 @@ export function BaoGiaSanitaryModal({ open, onClose, customer, editData, onSaved
                       multiple={false}
                       clearable={false}
                       allowManualInput={false}
-                      departmentFilter="Ban Giám đốc"
+                      departmentFilter="board"
                       employees={approvers}
-                      value={approverName}
+                      value={approverId || approverName}
                       onChange={(val, selectedObjs) => {
                         setApproverName(val);
-                        const selected = selectedObjs?.[0] || approvers.find(a => a.name === val);
+                        const selected =
+                          selectedObjs?.[0] ||
+                          approvers.find(
+                            (a) =>
+                              String(a.id) === val ||
+                              (Boolean((a as any).code) && String((a as any).code) === val)
+                          );
                         setApproverId(selected ? String(selected.id) : "");
                       }}
                       placeholder="Chọn người phê duyệt..."

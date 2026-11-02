@@ -4,7 +4,11 @@ import type { User } from '../types';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; message?: string; user?: User }>;
+  login: (
+    email: string,
+    password: string,
+    loginType?: 'staff' | 'dealer' | 'customer'
+  ) => Promise<{ success: boolean; message?: string; user?: User }>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -17,7 +21,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshUser = async () => {
     try {
-      const token = localStorage.getItem('seajong_token');
+      const sessionToken = sessionStorage.getItem('seajong_token');
+      const localToken = localStorage.getItem('seajong_token');
+      const token = sessionToken || localToken;
+      if (!sessionToken && localToken) {
+        sessionStorage.setItem('seajong_token', localToken);
+      }
       const res = await fetch('/api/auth/me', {
         headers: {
           'Content-Type': 'application/json',
@@ -28,7 +37,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.user) {
-          setUser(data.user);
+          const savedAudience =
+            sessionStorage.getItem('seajong_login_audience') ||
+            localStorage.getItem('seajong_login_audience');
+          const resolvedUser = { ...data.user };
+          if (savedAudience === 'customer' && (resolvedUser.customer || resolvedUser.role === 'DEALER')) {
+            resolvedUser.role = 'CUSTOMER';
+            resolvedUser.departmentCode = 'customer';
+            resolvedUser.deptAccess = ['customer'];
+          } else if (savedAudience === 'dealer' && (resolvedUser.customer || resolvedUser.role === 'CUSTOMER')) {
+            resolvedUser.role = 'DEALER';
+            resolvedUser.departmentCode = 'dealer';
+            resolvedUser.deptAccess = ['dealer'];
+          }
+          setUser(resolvedUser);
           return;
         }
       }
@@ -45,26 +67,73 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshUser();
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (
+    email: string,
+    password: string,
+    loginType?: 'staff' | 'dealer' | 'customer'
+  ) => {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, loginType }),
       });
 
-      const data = await res.json();
+      const rawText = await res.text();
+      let data: any = null;
+      if (rawText) {
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          data = null;
+        }
+      }
+
+      if (!data) {
+        return {
+          success: false,
+          message: 'Máy chủ phản hồi không hợp lệ hoặc đang khởi động lại. Vui lòng thử lại.',
+        };
+      }
+
       if (!res.ok || !data.success) {
-        return { success: false, message: data.message || 'Đăng nhập không thành công' };
+        return {
+          success: false,
+          message: data.message || 'Thông tin đăng nhập không chính xác. Vui lòng thử lại.',
+        };
       }
 
       if (data.token) {
-        localStorage.setItem('seajong_token', data.token);
+        sessionStorage.setItem('seajong_token', data.token);
+        if (loginType !== 'customer' || !localStorage.getItem('seajong_token')) {
+          localStorage.setItem('seajong_token', data.token);
+        }
       }
-      setUser(data.user);
-      return { success: true, user: data.user };
-    } catch (err: any) {
-      return { success: false, message: err.message || 'Lỗi mạng hoặc server không phản hồi' };
+      if (loginType) {
+        sessionStorage.setItem('seajong_login_audience', loginType);
+        if (loginType !== 'customer' || !localStorage.getItem('seajong_login_audience')) {
+          localStorage.setItem('seajong_login_audience', loginType);
+        }
+      }
+
+      const resolvedUser = { ...data.user };
+      if (loginType === 'customer' && (resolvedUser.customer || resolvedUser.role === 'DEALER')) {
+        resolvedUser.role = 'CUSTOMER';
+        resolvedUser.departmentCode = 'customer';
+        resolvedUser.deptAccess = ['customer'];
+      } else if (loginType === 'dealer' && (resolvedUser.customer || resolvedUser.role === 'CUSTOMER')) {
+        resolvedUser.role = 'DEALER';
+        resolvedUser.departmentCode = 'dealer';
+        resolvedUser.deptAccess = ['dealer'];
+      }
+
+      setUser(resolvedUser);
+      return { success: true, user: resolvedUser };
+    } catch {
+      return {
+        success: false,
+        message: 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.',
+      };
     }
   };
 
@@ -74,9 +143,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {
       // Bỏ qua lỗi mạng khi logout
     } finally {
+      sessionStorage.removeItem('seajong_token');
+      sessionStorage.removeItem('seajong_login_audience');
       localStorage.removeItem('seajong_token');
       localStorage.removeItem('seajong_active_dept');
       localStorage.removeItem('seajong_user_id');
+      localStorage.removeItem('seajong_login_audience');
       setUser(null);
     }
   };

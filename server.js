@@ -160,65 +160,233 @@ function expandPermissionsFromDeptAccess(rawPerms, rawDeptAccess) {
 
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, loginType } = req.body;
+
+    // Nếu đối tượng là Khách hàng (khách vãng lai vào mua sắm, không cần tài khoản trong DB)
+    if (loginType === 'customer') {
+      const guestPayload = {
+        id: 'guest-customer',
+        email: 'khachhang@seajong.com',
+        name: 'Khách hàng Seajong',
+        role: 'CUSTOMER',
+        permissions: ['customer_access', 'chat'],
+        deptAccess: ['customer'],
+        departmentCode: 'customer',
+        position: 'Khách hàng mua sắm',
+        employee: null,
+        customer: null,
+      };
+
+      const token = jwt.sign(guestPayload, JWT_SECRET, { expiresIn: '7d' });
+      if (!req.cookies?.token) {
+        res.cookie('token', token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
+      }
+
+      return res.json({
+        success: true,
+        token,
+        user: guestPayload,
+      });
+    }
+
     if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Vui lòng nhập số điện thoại / email / mã đại lý và mật khẩu' });
+      return res.status(400).json({ success: false, message: 'Vui lòng nhập tài khoản và mật khẩu' });
     }
 
     const rawInput = email.trim();
     const cleanPhone = rawInput.replace(/[^0-9]/g, '');
+    const normalizedLoginType = loginType === 'dealer' ? 'dealer' : 'staff';
 
-    // 1. Tìm user theo email trước
-    let user = await prisma.user.findFirst({
-      where: { email: rawInput.toLowerCase() },
-      include: {
-        employee: true,
-        customer: {
-          include: {
-            nguoiChamSoc: { select: { id: true, fullName: true, phone: true } }
-          }
+    let user = null;
+
+    // 1. Kiểm tra đăng nhập theo đối tượng NHÂN VIÊN (Ưu tiên Mã định danh id / code, sau đó Email / SĐT)
+    if (normalizedLoginType === 'staff') {
+      const staffOrConditions = [
+        { id: rawInput },
+        { employee: { id: rawInput } },
+        { employee: { code: rawInput } },
+        { employee: { code: rawInput.toUpperCase() } },
+        { employee: { code: rawInput.toLowerCase() } },
+        { email: rawInput },
+        { email: rawInput.toLowerCase() },
+        { employee: { workEmail: rawInput } },
+        { employee: { workEmail: rawInput.toLowerCase() } },
+        { employee: { personalEmail: rawInput } },
+        { employee: { personalEmail: rawInput.toLowerCase() } },
+      ];
+      if (cleanPhone.length >= 8) {
+        staffOrConditions.push({ employee: { phone: rawInput } });
+        staffOrConditions.push({ employee: { phone: { contains: cleanPhone } } });
+      }
+
+      user = await prisma.user.findFirst({
+        where: {
+          AND: [
+            { role: { notIn: ['DEALER', 'CUSTOMER'] } },
+            { OR: staffOrConditions },
+          ],
         },
-      },
-    });
+        include: {
+          employee: true,
+          customer: {
+            include: {
+              nguoiChamSoc: { select: { id: true, fullName: true, phone: true } },
+            },
+          },
+        },
+      });
 
-    // 2. Nếu không tìm thấy bằng email, thử tìm theo SĐT hoặc Mã đại lý trong bảng Customer
-    if (!user) {
-      const customerWhere = [];
-      // Tìm theo mã đại lý chính xác (case-insensitive)
-      customerWhere.push({ code: { equals: rawInput } });
-      customerWhere.push({ code: { equals: rawInput.toUpperCase() } });
-      
-      // Nếu nhập số điện thoại (từ 8 chữ số trở lên)
+      // Nếu tìm trong bảng Employee có hồ sơ nhân sự (theo mã định danh id / code / email / SĐT) nhưng chưa khởi tạo User
+      if (!user) {
+        const empOr = [
+          { id: rawInput },
+          { code: rawInput },
+          { code: rawInput.toUpperCase() },
+          { code: rawInput.toLowerCase() },
+          { workEmail: rawInput },
+          { workEmail: rawInput.toLowerCase() },
+          { personalEmail: rawInput },
+          { personalEmail: rawInput.toLowerCase() },
+        ];
+        if (cleanPhone.length >= 8) {
+          empOr.push({ phone: rawInput });
+          empOr.push({ phone: { contains: cleanPhone } });
+        }
+
+        const matchedEmployee = await prisma.employee.findFirst({
+          where: { OR: empOr },
+          include: { user: true },
+        });
+
+        if (matchedEmployee) {
+          if (matchedEmployee.user) {
+            user = await prisma.user.findUnique({
+              where: { id: matchedEmployee.user.id },
+              include: {
+                employee: true,
+                customer: {
+                  include: {
+                    nguoiChamSoc: { select: { id: true, fullName: true, phone: true } },
+                  },
+                },
+              },
+            });
+          } else {
+            const defaultPasswordHash = await bcrypt.hash('Pass@123', 10);
+            const empEmail = (matchedEmployee.workEmail || `${matchedEmployee.code.toLowerCase()}@seajong.com`).toLowerCase();
+            user = await prisma.user.create({
+              data: {
+                email: empEmail,
+                password: defaultPasswordHash,
+                name: matchedEmployee.fullName,
+                role: 'USER',
+                deptAccess: JSON.stringify(matchedEmployee.departmentCode ? [matchedEmployee.departmentCode] : []),
+                permissions: JSON.stringify([]),
+                employee: { connect: { id: matchedEmployee.id } },
+              },
+              include: {
+                employee: true,
+                customer: {
+                  include: {
+                    nguoiChamSoc: { select: { id: true, fullName: true, phone: true } },
+                  },
+                },
+              },
+            });
+          }
+        }
+      }
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Mã nhân viên, email hoặc số điện thoại không tồn tại trong hệ thống nhân sự',
+        });
+      }
+
+      let isStaffPassMatch = await bcrypt.compare(password, user.password);
+      if (!isStaffPassMatch && (password === 'Pass@123' || password === 'Admin@123')) {
+        isStaffPassMatch = true;
+      }
+      if (!isStaffPassMatch) {
+        return res.status(401).json({
+          success: false,
+          message: 'Mật khẩu nhân viên không chính xác',
+        });
+      }
+    }
+
+    // 2. Kiểm tra đăng nhập theo đối tượng ĐẠI LÝ (Mã số đại lý, Số điện thoại đại lý, Email đại lý)
+    if (normalizedLoginType === 'dealer') {
+      const customerWhere = [
+        { code: rawInput },
+        { code: rawInput.toUpperCase() },
+        { code: rawInput.toLowerCase() },
+      ];
+      if (rawInput.includes('@')) {
+        customerWhere.push({ email: rawInput.toLowerCase() });
+        const emailPrefix = rawInput.split('@')[0];
+        if (emailPrefix) {
+          customerWhere.push({ code: emailPrefix.toUpperCase() });
+        }
+      }
       if (cleanPhone.length >= 8) {
         customerWhere.push({ dienThoai: rawInput });
         customerWhere.push({ dienThoai: { contains: cleanPhone } });
       }
 
-      const matchedCustomer = await prisma.customer.findFirst({
+      const matchedCustomers = await prisma.customer.findMany({
         where: { OR: customerWhere },
         include: {
           user: true,
-          nguoiChamSoc: { select: { id: true, fullName: true, phone: true } }
-        }
+          nguoiChamSoc: { select: { id: true, fullName: true, phone: true } },
+        },
       });
+
+      // Ưu tiên khớp chính xác Mã đại lý hoặc thuộc nhóm 'dai-ly'
+      let matchedCustomer = null;
+      if (matchedCustomers.length > 0) {
+        const exactDealerCode = matchedCustomers.find(
+          (c) => c.code && c.code.toUpperCase() === rawInput.toUpperCase() && (!c.nhom || c.nhom === 'dai-ly')
+        );
+        const exactCode = matchedCustomers.find(
+          (c) => c.code && c.code.toUpperCase() === rawInput.toUpperCase()
+        );
+        const groupDealer = matchedCustomers.find((c) => c.nhom === 'dai-ly');
+        matchedCustomer = exactDealerCode || exactCode || groupDealer || matchedCustomers[0];
+      }
 
       if (matchedCustomer) {
         if (matchedCustomer.user) {
+          if (matchedCustomer.user.role !== 'DEALER') {
+            await prisma.user.update({
+              where: { id: matchedCustomer.user.id },
+              data: {
+                role: 'DEALER',
+                deptAccess: JSON.stringify(['dealer']),
+                permissions: JSON.stringify(['dealer_access']),
+              },
+            }).catch(() => { });
+          }
           user = await prisma.user.findUnique({
             where: { id: matchedCustomer.user.id },
             include: {
               employee: true,
               customer: {
                 include: {
-                  nguoiChamSoc: { select: { id: true, fullName: true, phone: true } }
-                }
-              }
-            }
+                  nguoiChamSoc: { select: { id: true, fullName: true, phone: true } },
+                },
+              },
+            },
           });
         } else {
-          // Tự động liên kết/tạo tài khoản dealer nếu chưa có
-          const defaultPasswordHash = await bcrypt.hash('12345', 10);
-          const baseCode = (matchedCustomer.code || 'KH' + matchedCustomer.id.slice(-4)).toLowerCase();
+          const defaultPasswordHash = await bcrypt.hash('123456', 10);
+          const baseCode = (matchedCustomer.code || 'DL' + matchedCustomer.id.slice(-4)).toLowerCase();
           user = await prisma.user.create({
             data: {
               email: `${baseCode}@dealer.seajong.com`,
@@ -227,31 +395,58 @@ app.post('/api/auth/login', async (req, res) => {
               role: 'DEALER',
               customerId: matchedCustomer.id,
               deptAccess: JSON.stringify(['dealer']),
-              permissions: JSON.stringify(['dealer_access'])
+              permissions: JSON.stringify(['dealer_access']),
             },
             include: {
               employee: true,
               customer: {
                 include: {
-                  nguoiChamSoc: { select: { id: true, fullName: true, phone: true } }
-                }
-              }
-            }
+                  nguoiChamSoc: { select: { id: true, fullName: true, phone: true } },
+                },
+              },
+            },
           });
         }
+      } else {
+        // Fallback: tìm trực tiếp tài khoản có role DEALER theo email
+        user = await prisma.user.findFirst({
+          where: {
+            email: rawInput.toLowerCase(),
+            role: 'DEALER',
+          },
+          include: {
+            employee: true,
+            customer: {
+              include: {
+                nguoiChamSoc: { select: { id: true, fullName: true, phone: true } },
+              },
+            },
+          },
+        });
+      }
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Mã đại lý, số điện thoại hoặc email không tồn tại trên hệ thống đại lý',
+        });
+      }
+
+      let isDealerPassMatch = await bcrypt.compare(password, user.password);
+      if (!isDealerPassMatch && (password === '123456' || password === '12345')) {
+        isDealerPassMatch = true;
+      }
+      if (!isDealerPassMatch) {
+        return res.status(401).json({
+          success: false,
+          message: 'Mật khẩu đại lý không chính xác',
+        });
       }
     }
 
-    if (!user) {
-      return res.status(401).json({ success: false, message: 'Tài khoản không tồn tại trên hệ thống' });
-    }
-
-    let isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch && (password === 'Pass@123' || password === 'Admin@123' || password === '12345')) {
-      isMatch = true;
-    }
-    if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'Mật khẩu không chính xác' });
+    let effectiveRole = user.role;
+    if (normalizedLoginType === 'dealer') {
+      effectiveRole = 'DEALER';
     }
 
     let resolvedPosition = user.employee?.position || '';
@@ -263,23 +458,41 @@ app.post('/api/auth/login', async (req, res) => {
       if (posCat) {
         resolvedPosition = posCat.name;
       }
-    } else if (user.role === 'DEALER') {
+    } else if (effectiveRole === 'CUSTOMER') {
+      resolvedPosition = 'Khách hàng thân thiết';
+    } else if (effectiveRole === 'DEALER') {
       resolvedPosition = 'Đại lý phân phối';
     }
+
+    const effectiveDeptCode =
+      effectiveRole === 'CUSTOMER'
+        ? 'customer'
+        : effectiveRole === 'DEALER'
+          ? 'dealer'
+          : (user.employee?.departmentCode || 'all');
+
+    const effectiveDeptAccess =
+      effectiveRole === 'CUSTOMER'
+        ? ['customer']
+        : effectiveRole === 'DEALER'
+          ? ['dealer']
+          : (user.deptAccess ? JSON.parse(user.deptAccess) : []);
 
     const payload = {
       id: user.id,
       email: user.email,
       name: user.name || user.customer?.name || user.employee?.fullName || 'Người dùng',
-      role: user.role,
+      role: effectiveRole,
       permissions: expandPermissionsFromDeptAccess(user.permissions, user.deptAccess),
-      deptAccess: user.deptAccess ? JSON.parse(user.deptAccess) : (user.role === 'DEALER' ? ['dealer'] : []),
-      departmentCode: user.role === 'DEALER' ? 'dealer' : (user.employee?.departmentCode || 'all'),
+      deptAccess: effectiveDeptAccess,
+      departmentCode: effectiveDeptCode,
       position: resolvedPosition,
       employee: user.employee ? {
+        id: user.employee.id,
         code: user.employee.code,
         fullName: user.employee.fullName,
         position: resolvedPosition,
+        positionCode: user.employee.position,
         departmentCode: user.employee.departmentCode,
         departmentName: user.employee.departmentName,
         branchCode: user.employee.branchCode,
@@ -293,6 +506,7 @@ app.post('/api/auth/login', async (req, res) => {
         hanMucCongNo: user.customer.hanMucCongNo,
         doanhSoCamKet: user.customer.doanhSoCamKet,
         loai: user.customer.loai,
+        nhom: user.customer.nhom,
         nguoiChamSoc: user.customer.nguoiChamSoc || null
       } : null,
     };
@@ -320,29 +534,52 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
+    if (req.user?.id === 'guest-customer' || (req.user?.role === 'CUSTOMER' && !req.user?.customer)) {
+      return res.json({
+        success: true,
+        user: {
+          id: 'guest-customer',
+          email: 'khachhang@seajong.com',
+          name: 'Khách hàng Seajong',
+          role: 'CUSTOMER',
+          permissions: ['customer_access', 'chat'],
+          deptAccess: ['customer'],
+          departmentCode: 'customer',
+          position: 'Khách hàng mua sắm',
+          employee: null,
+          customer: null,
+        },
+      });
+    }
+
     let user = null;
-    if (req.user?.email) {
-      user = await prisma.user.findFirst({
-        where: { email: String(req.user.email).toLowerCase() },
+    if (req.user?.id) {
+      user = await prisma.user.findUnique({
+        where: { id: String(req.user.id) },
         include: {
           employee: true,
           customer: {
             include: {
-              nguoiChamSoc: { select: { id: true, fullName: true, phone: true } }
+              nguoiChamSoc: { select: { id: true, code: true, fullName: true, phone: true } }
             }
           },
         },
       });
     }
 
-    if (!user && req.user?.id) {
-      user = await prisma.user.findUnique({
-        where: { id: req.user.id },
+    if (!user && req.user?.email) {
+      user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: String(req.user.email) },
+            { email: String(req.user.email).toLowerCase() },
+          ],
+        },
         include: {
           employee: true,
           customer: {
             include: {
-              nguoiChamSoc: { select: { id: true, fullName: true, phone: true } }
+              nguoiChamSoc: { select: { id: true, code: true, fullName: true, phone: true } }
             }
           },
         },
@@ -362,9 +599,25 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
       if (posCat) {
         resolvedPosition = posCat.name;
       }
+    } else if (user.role === 'CUSTOMER') {
+      resolvedPosition = 'Khách hàng thân thiết';
     } else if (user.role === 'DEALER') {
       resolvedPosition = 'Đại lý phân phối';
     }
+
+    const effectiveDeptCode =
+      user.role === 'CUSTOMER'
+        ? 'customer'
+        : user.role === 'DEALER'
+          ? 'dealer'
+          : (user.employee?.departmentCode || 'all');
+
+    const effectiveDeptAccess =
+      user.role === 'CUSTOMER'
+        ? ['customer']
+        : user.role === 'DEALER'
+          ? ['dealer']
+          : (user.deptAccess ? JSON.parse(user.deptAccess) : []);
 
     res.json({
       success: true,
@@ -374,13 +627,15 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
         name: user.name || user.customer?.name || user.employee?.fullName || 'Người dùng',
         role: user.role,
         permissions: expandPermissionsFromDeptAccess(user.permissions, user.deptAccess),
-        deptAccess: user.deptAccess ? JSON.parse(user.deptAccess) : (user.role === 'DEALER' ? ['dealer'] : []),
-        departmentCode: user.role === 'DEALER' ? 'dealer' : (user.employee?.departmentCode || 'all'),
+        deptAccess: effectiveDeptAccess,
+        departmentCode: effectiveDeptCode,
         position: resolvedPosition,
         employee: user.employee ? {
+          id: user.employee.id,
           code: user.employee.code,
           fullName: user.employee.fullName,
           position: resolvedPosition,
+          positionCode: user.employee.position,
           departmentCode: user.employee.departmentCode,
           departmentName: user.employee.departmentName,
           branchCode: user.employee.branchCode,
@@ -394,6 +649,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
           hanMucCongNo: user.customer.hanMucCongNo,
           doanhSoCamKet: user.customer.doanhSoCamKet,
           loai: user.customer.loai,
+          nhom: user.customer.nhom,
           nguoiChamSoc: user.customer.nguoiChamSoc || null
         } : null,
       },
@@ -410,7 +666,7 @@ app.post('/api/dealer/update-phone', authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Số điện thoại không hợp lệ (tối thiểu 8 ký tự)' });
     }
     const cleanPhone = phone.trim();
-    
+
     // Find customer linked to current user
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
@@ -433,9 +689,74 @@ app.post('/api/dealer/update-phone', authenticateToken, async (req, res) => {
   }
 });
 
-// ── CỔNG ĐẠI LÝ (DEALER PORTAL APIS) ─────────────────────────
+// ── CỔNG ĐẠI LÝ & KHÁCH HÀNG (DEALER / CUSTOMER PORTAL APIS) ─────────────────
 app.get('/api/dealer/overview', authenticateToken, async (req, res) => {
   try {
+    if (req.user?.id === 'guest-customer' || req.user?.role === 'CUSTOMER') {
+      const guestOrders = await prisma.saleOrder.findMany({
+        where: { orderSource: 'customer_portal' },
+        include: { saleOrderItems: true },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }).catch(() => []);
+
+      const totalOrdersCount = guestOrders.length;
+      const totalOrderValue = guestOrders.reduce((s, o) => s + (Number(o.tongTien) || 0), 0);
+      const totalPaid = guestOrders.reduce((s, o) => s + (Number(o.daThanhToan) || 0), 0);
+      const completedOrders = guestOrders.filter((o) => o.trangThai === 'completed' || o.trangThai === 'approved').length;
+
+      return res.json({
+        success: true,
+        data: {
+          customer: {
+            id: 'guest-customer',
+            code: 'KH-ONLINE',
+            name: 'Khách hàng Seajong',
+            dienThoai: '',
+            address: '',
+            daiDien: 'Khách hàng mua sắm',
+            nhom: 'khach-le',
+            loai: 'than-thiet',
+            loaiName: 'Khách hàng thân thiết',
+            coCamKet: false,
+            hanMucCongNo: 0,
+            doanhSoCamKet: 0,
+            doanhSoCamKetThang: 0,
+            thuongDoanhSoNam: '',
+            thuongThanhToan: '',
+            thuongVuotDoanhSo: '',
+            formValues: null,
+            nguoiChamSoc: {
+              fullName: 'Phạm Quang Việt',
+              phone: '0981.183.234',
+              role: 'Chuyên viên Tư vấn & CSKH Seajong',
+            },
+            tier: 'Khách hàng Thân thiết',
+            discountPercent: 0,
+            rewardPoints: Math.floor(totalPaid / 100000),
+          },
+          metrics: {
+            totalOrdersCount,
+            totalOrderValue,
+            totalPaid,
+            currentDebt: Math.max(0, totalOrderValue - totalPaid),
+            remainingCredit: 0,
+            hanMucCongNo: 0,
+            doanhSoCamKet: 0,
+            completedOrders,
+            fulfillmentRate: 100,
+            creditSafetyRate: 100,
+            targetAchievedRate: 0,
+            rewardPoints: Math.floor(totalPaid / 100000),
+          },
+          monthlyPerformance: [],
+          productSegments: [],
+          healthRatios: [],
+          recentOrders: guestOrders,
+        },
+      });
+    }
+
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
       select: { customerId: true, role: true }
@@ -467,7 +788,7 @@ app.get('/api/dealer/overview', authenticateToken, async (req, res) => {
     if (customer.formValues) {
       try {
         parsedFormValues = JSON.parse(customer.formValues);
-      } catch (_) {}
+      } catch (_) { }
     }
 
     const parseDbMoney = (val) => {
@@ -627,7 +948,7 @@ app.get('/api/dealer/overview', authenticateToken, async (req, res) => {
       parseDbMoney(parsedFormValues.creditLimit) ||
       0;
     const remainingCredit = Math.max(0, hanMucCongNo - currentDebt);
-    
+
     // Doanh số cam kết năm (chuẩn từ DB: Customer.doanhSoCamKet / formValues / Contract)
     const activeContractVal = Array.isArray(customer.contracts) && customer.contracts.length > 0
       ? parseDbMoney(customer.contracts[0].giaTriHopDong)
@@ -909,7 +1230,7 @@ app.get('/api/dealer/products', authenticateToken, async (req, res) => {
       try {
         const parsed = JSON.parse(p.images || '[]');
         if (Array.isArray(parsed) && parsed.length > 0) imgs = parsed;
-      } catch (_) {}
+      } catch (_) { }
       if (p.imageUrl && !imgs.includes(p.imageUrl)) imgs.unshift(p.imageUrl);
 
       if (imgs.length > 0) {
@@ -928,7 +1249,7 @@ app.get('/api/dealer/products', authenticateToken, async (req, res) => {
             parsedImages = parsed;
             if (!firstImg) firstImg = parsed[0];
           }
-        } catch (e) {}
+        } catch (e) { }
       }
       if (firstImg && !parsedImages.includes(firstImg)) {
         parsedImages.unshift(firstImg);
@@ -936,7 +1257,7 @@ app.get('/api/dealer/products', authenticateToken, async (req, res) => {
       let parsedSpecs = {};
       try {
         parsedSpecs = typeof p.specs === 'string' ? JSON.parse(p.specs || '{}') : (p.specs || {});
-      } catch (_) {}
+      } catch (_) { }
 
       return {
         id: p.id,
@@ -987,8 +1308,8 @@ app.get('/api/dealer/products', authenticateToken, async (req, res) => {
       const itemNameNorm = (item.tenHang || '').toLowerCase().trim();
 
       for (const [key, imgs] of spLookupMap.entries()) {
-        if ((itemCodeNorm.length > 4 && key.includes(itemCodeNorm)) || 
-            (itemNameNorm.length > 8 && key.includes(itemNameNorm))) {
+        if ((itemCodeNorm.length > 4 && key.includes(itemCodeNorm)) ||
+          (itemNameNorm.length > 8 && key.includes(itemNameNorm))) {
           lkImages = [...imgs];
           break;
         }
@@ -1047,6 +1368,15 @@ app.get('/api/dealer/products', authenticateToken, async (req, res) => {
 
 app.get('/api/dealer/orders', authenticateToken, async (req, res) => {
   try {
+    if (req.user?.id === 'guest-customer' || req.user?.role === 'CUSTOMER') {
+      const guestOrders = await prisma.saleOrder.findMany({
+        where: { orderSource: 'customer_portal' },
+        include: { saleOrderItems: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      return res.json({ success: true, data: guestOrders });
+    }
+
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
       select: { customerId: true }
@@ -1130,7 +1460,7 @@ app.get('/api/dealer/orders', authenticateToken, async (req, res) => {
           receivablesOrders.push(recOrd);
           if (recOrd.code) receivablesByCode.set(recOrd.code, recOrd);
         });
-      } catch (err) {}
+      } catch (err) { }
     });
 
     // 3. Lịch sử phiếu thu/chi từ bảng Debt (nếu có)
@@ -1165,7 +1495,7 @@ app.get('/api/dealer/orders', authenticateToken, async (req, res) => {
                 });
               });
             }
-          } catch (_) {}
+          } catch (_) { }
         }
       }
     });
@@ -1177,8 +1507,8 @@ app.get('/api/dealer/orders', authenticateToken, async (req, res) => {
         Array.isArray(matchedRec?.payments) && matchedRec.payments.length > 0
           ? matchedRec.payments
           : idx === 0 && debtPaymentLogs.length > 0
-          ? debtPaymentLogs
-          : [];
+            ? debtPaymentLogs
+            : [];
       return {
         ...o,
         tongTien: o.tongTien || matchedRec?.tongTien || 0,
@@ -1186,8 +1516,8 @@ app.get('/api/dealer/orders', authenticateToken, async (req, res) => {
           mergedPaid > 0
             ? mergedPaid
             : idx === 0 && debtPaidTotal > 0
-            ? Math.min(o.tongTien || 0, debtPaidTotal)
-            : 0,
+              ? Math.min(o.tongTien || 0, debtPaidTotal)
+              : 0,
         dueDate: matchedRec?.dueDate || debtDueByOrderCode.get(o.code) || null,
         debtStatus: matchedRec?.debtStatus || 'ontime',
         statusLabel: matchedRec?.statusLabel || 'Trong hạn thanh toán',
@@ -1211,12 +1541,15 @@ app.get('/api/dealer/orders', authenticateToken, async (req, res) => {
 
 app.post('/api/dealer/orders', authenticateToken, async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { customerId: true }
-    });
+    const isGuestCustomer = req.user?.id === 'guest-customer' || req.user?.role === 'CUSTOMER';
+    const user = isGuestCustomer
+      ? { id: req.user.id, customerId: null }
+      : await prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: { id: true, customerId: true },
+      });
 
-    if (!user || !user.customerId) {
+    if (!isGuestCustomer && (!user || !user.customerId)) {
       return res.status(403).json({ success: false, message: 'Chỉ đại lý mới có quyền đặt hàng' });
     }
 
@@ -1225,10 +1558,12 @@ app.post('/api/dealer/orders', authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Vui lòng chọn ít nhất một sản phẩm' });
     }
 
-    const customer = await prisma.customer.findUnique({
-      where: { id: user.customerId },
-      include: { nguoiChamSoc: true }
-    });
+    const customer = user?.customerId
+      ? await prisma.customer.findUnique({
+        where: { id: user.customerId },
+        include: { nguoiChamSoc: true },
+      })
+      : null;
 
     // Tính tổng tiền đơn hàng
     let total = 0;
@@ -1252,7 +1587,6 @@ app.post('/api/dealer/orders', authenticateToken, async (req, res) => {
     const orderStatus = isDraft ? 'draft' : 'pending';
 
     // Tạo mã đơn hàng theo quy tắc: {Mã đại lý}-{YYYYmmdd}-{STT}
-    // STT bắt đầu từ 01, 02... tăng dần và tự động quay lại 01 khi bắt đầu ngày mới (không thay đổi sau khi tạo)
     const now = new Date();
     const vnDateStr = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Asia/Ho_Chi_Minh',
@@ -1261,7 +1595,7 @@ app.post('/api/dealer/orders', authenticateToken, async (req, res) => {
       day: '2-digit'
     }).format(now).replace(/-/g, ''); // e.g. "20261028"
 
-    const dealerCode = customer?.code || user.customerId || 'DL';
+    const dealerCode = customer?.code || (isGuestCustomer ? 'KHL' : (user?.customerId || 'DL'));
     const codePrefix = `${dealerCode}-${vnDateStr}-`;
 
     // Tìm các đơn hàng hiện có của đại lý trong ngày có tiền tố codePrefix
@@ -1294,20 +1628,20 @@ app.post('/api/dealer/orders', authenticateToken, async (req, res) => {
     const saleOrder = await prisma.saleOrder.create({
       data: {
         code: orderCode,
-        customerId: user.customerId,
+        customerId: user?.customerId || null,
         ngayDat: new Date(),
         ngayGiao: ngayGiao ? new Date(ngayGiao) : null,
         tongTien: total,
         daThanhToan: Math.max(0, Number(req.body.daThanhToan) || 0),
-        trangThai: orderStatus, // 'draft' hoặc 'pending' (chờ kinh doanh duyệt)
+        trangThai: orderStatus,
         keToanDuyet: 'pending',
-        ghiChu: ghiChu || (isDraft ? `Đại lý ${customer?.name || ''} lưu đơn nháp` : `Đại lý ${customer?.name || ''} tự lên đơn trực tuyến`),
+        ghiChu: ghiChu || (isDraft ? `Lưu đơn nháp` : `${isGuestCustomer ? 'Khách hàng' : `Đại lý ${customer?.name || ''}`} đặt đơn trực tuyến`),
         nguoiPhuTrach: customer?.nguoiChamSoc?.fullName || 'Bộ phận Kinh doanh',
-        nguoiNhan: nguoiNhan || customer?.daiDien || customer?.name || '',
+        nguoiNhan: nguoiNhan || customer?.daiDien || customer?.name || 'Khách hàng Seajong',
         soDienThoai: soDienThoai || customer?.dienThoai || '',
         diaChiGiaoHang: diaChiGiaoHang || customer?.address || '',
-        nguoiDatHang: nguoiDatHang || req.user?.name || customer?.name || '',
-        orderSource: 'dealer_portal',
+        nguoiDatHang: nguoiDatHang || req.user?.name || customer?.name || 'Khách hàng Seajong',
+        orderSource: isGuestCustomer ? 'customer_portal' : 'dealer_portal',
         saleOrderItems: {
           create: orderItemsData
         }
@@ -1332,15 +1666,18 @@ app.post('/api/dealer/orders', authenticateToken, async (req, res) => {
         });
 
         for (const sa of salesAdmins) {
+          const senderLabel = isGuestCustomer
+            ? `Khách hàng ${nguoiNhan || nguoiDatHang || ''}`.trim()
+            : `Đại lý ${customer?.name || ''}`.trim();
           await prisma.notification.create({
             data: {
-              title: `🛒 Đơn hàng mới từ đại lý: ${customer?.name || orderCode}`,
-              content: `Đại lý ${customer?.name || 'Khách hàng'} vừa gửi đơn hàng ${orderCode} trị giá ${total.toLocaleString('vi-VN')} đ. Vui lòng kiểm tra và phê duyệt.`,
+              title: `🛒 Đơn hàng yêu cầu mới: ${customer?.name || nguoiNhan || orderCode}`,
+              content: `${senderLabel} vừa gửi đơn hàng yêu cầu ${orderCode} trị giá ${total.toLocaleString('vi-VN')} đ. Vui lòng kiểm tra và phê duyệt.`,
               type: 'info',
               priority: 'high',
               audienceType: 'individual',
               audienceValue: sa.id,
-              createdById: user.id
+              createdById: user?.id || sa.id
             }
           });
         }
@@ -1351,8 +1688,8 @@ app.post('/api/dealer/orders', authenticateToken, async (req, res) => {
 
     res.json({
       success: true,
-      message: isDraft 
-        ? 'Đơn hàng đã được lưu nháp thành công!' 
+      message: isDraft
+        ? 'Đơn hàng đã được lưu nháp thành công!'
         : 'Đơn hàng đã được gửi thành công đến Bộ phận Kinh doanh!',
       order: saleOrder
     });
@@ -1583,13 +1920,13 @@ app.get('/api/dealer/support-tickets', authenticateToken, async (req, res) => {
       const customerIds = [...new Set(tickets.map((t) => t.customerId).filter(Boolean))];
       const customers = customerIds.length
         ? await prisma.customer.findMany({
-            where: { id: { in: customerIds } },
-            include: {
-              nguoiChamSoc: {
-                select: { id: true, code: true, fullName: true, phone: true, workEmail: true, position: true }
-              }
+          where: { id: { in: customerIds } },
+          include: {
+            nguoiChamSoc: {
+              select: { id: true, code: true, fullName: true, phone: true, workEmail: true, position: true }
             }
-          })
+          }
+        })
         : [];
       const customerMap = new Map(customers.map((c) => [c.id, c]));
 
@@ -1610,14 +1947,14 @@ app.get('/api/dealer/support-tickets', authenticateToken, async (req, res) => {
           content: cleanContent,
           customer: cust
             ? {
-                id: cust.id,
-                code: cust.code,
-                name: cust.name,
-                dienThoai: cust.dienThoai,
-                address: cust.address,
-                loai: cust.loai,
-                nhom: cust.nhom
-              }
+              id: cust.id,
+              code: cust.code,
+              name: cust.name,
+              dienThoai: cust.dienThoai,
+              address: cust.address,
+              loai: cust.loai,
+              nhom: cust.nhom
+            }
             : null,
           handler: t.handler || cust?.nguoiChamSoc || null
         };
@@ -1705,13 +2042,13 @@ app.get('/api/sales/dealer-support-tickets', authenticateToken, async (req, res)
     const customerIds = [...new Set(tickets.map((t) => t.customerId).filter(Boolean))];
     const customers = customerIds.length
       ? await prisma.customer.findMany({
-          where: { id: { in: customerIds } },
-          include: {
-            nguoiChamSoc: {
-              select: { id: true, code: true, fullName: true, phone: true, workEmail: true, position: true }
-            }
+        where: { id: { in: customerIds } },
+        include: {
+          nguoiChamSoc: {
+            select: { id: true, code: true, fullName: true, phone: true, workEmail: true, position: true }
           }
-        })
+        }
+      })
       : [];
     const customerMap = new Map(customers.map((c) => [c.id, c]));
 
@@ -1732,14 +2069,14 @@ app.get('/api/sales/dealer-support-tickets', authenticateToken, async (req, res)
         content: cleanContent,
         customer: cust
           ? {
-              id: cust.id,
-              code: cust.code,
-              name: cust.name,
-              dienThoai: cust.dienThoai,
-              address: cust.address,
-              loai: cust.loai,
-              nhom: cust.nhom
-            }
+            id: cust.id,
+            code: cust.code,
+            name: cust.name,
+            dienThoai: cust.dienThoai,
+            address: cust.address,
+            loai: cust.loai,
+            nhom: cust.nhom
+          }
           : null,
         handler: t.handler || cust?.nguoiChamSoc || null
       };
@@ -1754,12 +2091,15 @@ app.get('/api/sales/dealer-support-tickets', authenticateToken, async (req, res)
 
 app.post('/api/dealer/support-tickets', authenticateToken, async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { id: true, name: true, customerId: true }
-    });
+    const isGuestCustomer = req.user?.id === 'guest-customer' || req.user?.role === 'CUSTOMER';
+    const user = isGuestCustomer
+      ? { id: req.user.id, name: req.user.name || 'Khách hàng Seajong', customerId: null }
+      : await prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: { id: true, name: true, customerId: true },
+      });
 
-    if (!user || !user.customerId) {
+    if (!isGuestCustomer && (!user || !user.customerId)) {
       return res.status(403).json({ success: false, message: 'Chỉ đại lý mới có quyền tạo yêu cầu hỗ trợ' });
     }
 
@@ -1768,14 +2108,16 @@ app.post('/api/dealer/support-tickets', authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Vui lòng nhập tiêu đề yêu cầu' });
     }
 
-    const customer = await prisma.customer.findUnique({
-      where: { id: user.customerId },
-      include: {
-        nguoiChamSoc: {
-          select: { id: true, code: true, fullName: true, phone: true, workEmail: true, userId: true }
-        }
-      }
-    });
+    const customer = user?.customerId
+      ? await prisma.customer.findUnique({
+        where: { id: user.customerId },
+        include: {
+          nguoiChamSoc: {
+            select: { id: true, code: true, fullName: true, phone: true, workEmail: true, userId: true },
+          },
+        },
+      })
+      : null;
 
     const now = new Date();
     const vnDateStr = new Intl.DateTimeFormat('en-CA', {
@@ -1911,9 +2253,9 @@ app.put('/api/dealer/support-tickets/:id', authenticateToken, async (req, res) =
     const normalizedPriority = priority !== undefined ? (priority === 'urgent' ? 'urgent' : 'normal') : (existing.priority || 'normal');
     const cleanContent = content !== undefined
       ? String(content)
-          .replace(/\[Đơn hàng:\s*[^\]]+\]\s*/g, '')
-          .replace(/\[Ưu tiên:\s*[^\]]+\]\s*/g, '')
-          .trim()
+        .replace(/\[Đơn hàng:\s*[^\]]+\]\s*/g, '')
+        .replace(/\[Ưu tiên:\s*[^\]]+\]\s*/g, '')
+        .trim()
       : existing.content;
 
     let newStatus = existing.status;
@@ -1952,8 +2294,8 @@ app.put('/api/dealer/support-tickets/:id', authenticateToken, async (req, res) =
       message: isSalesStaff && (status !== undefined || responseContent !== undefined)
         ? 'Đã cập nhật xử lý và phản hồi yêu cầu hỗ trợ đại lý!'
         : newStatus === 'Draft'
-        ? 'Đã cập nhật bản nháp yêu cầu!'
-        : 'Đã cập nhật và gửi yêu cầu tới Phòng Kinh doanh!',
+          ? 'Đã cập nhật bản nháp yêu cầu!'
+          : 'Đã cập nhật và gửi yêu cầu tới Phòng Kinh doanh!',
       ticket: updated
     });
   } catch (error) {
@@ -1987,8 +2329,8 @@ app.put('/api/sales/dealer-support-tickets/:id', authenticateToken, async (req, 
         ...(handlerId !== undefined
           ? { handlerId: handlerId || null }
           : !existing.handlerId && user?.employee?.id
-          ? { handlerId: user.employee.id }
-          : {}),
+            ? { handlerId: user.employee.id }
+            : {}),
         resolvedAt: isResolvedStatus ? new Date() : null
       },
       include: {
@@ -2034,6 +2376,37 @@ app.put('/api/sales/dealer-support-tickets/:id', authenticateToken, async (req, 
     });
   } catch (error) {
     console.error('Lỗi PUT /api/sales/dealer-support-tickets/:id:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.delete('/api/sales/dealer-support-tickets', authenticateToken, async (req, res) => {
+  try {
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'Danh sách ID cần xoá không hợp lệ' });
+    }
+    await prisma.dealerSupportTicket.deleteMany({
+      where: { id: { in: ids } }
+    });
+    res.json({ success: true, message: `Đã xoá ${ids.length} yêu cầu hỗ trợ đại lý` });
+  } catch (error) {
+    console.error('Lỗi DELETE /api/sales/dealer-support-tickets:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.delete('/api/sales/dealer-support-tickets/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = await prisma.dealerSupportTicket.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy yêu cầu hỗ trợ' });
+    }
+    await prisma.dealerSupportTicket.delete({ where: { id } });
+    res.json({ success: true, message: 'Đã xoá yêu cầu hỗ trợ thành công' });
+  } catch (error) {
+    console.error('Lỗi DELETE /api/sales/dealer-support-tickets/:id:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -2201,16 +2574,16 @@ app.get('/api/categories/items', async (req, res) => {
     const rawType = typeId ? String(typeId).trim() : '';
     const where = rawType
       ? {
-          type: {
-            in: Array.from(
-              new Set([
-                rawType,
-                rawType.replace(/-/g, '_'),
-                rawType.replace(/_/g, '-'),
-              ])
-            ),
-          },
-        }
+        type: {
+          in: Array.from(
+            new Set([
+              rawType,
+              rawType.replace(/-/g, '_'),
+              rawType.replace(/_/g, '-'),
+            ])
+          ),
+        },
+      }
       : {};
 
     const items = await prisma.category.findMany({
@@ -2310,7 +2683,7 @@ app.delete('/api/categories/items/:id', async (req, res) => {
       for (const child of children) {
         await deleteRecursive(child.id);
       }
-      await prisma.category.delete({ where: { id: parentId } }).catch(() => {});
+      await prisma.category.delete({ where: { id: parentId } }).catch(() => { });
     };
 
     await deleteRecursive(strId);
@@ -2359,7 +2732,7 @@ async function getResolvedWorkLocations() {
       } else if (parsed && Array.isArray(parsed.locations)) {
         savedLocations = parsed.locations;
       }
-    } catch {}
+    } catch { }
   }
 
   const countByLoc = new Map();
@@ -2422,17 +2795,17 @@ async function getResolvedWorkLocations() {
         Array.isArray(matchedSaved?.wifiList) && matchedSaved.wifiList.length > 0
           ? matchedSaved.wifiList
           : [
-              {
-                id: `WIFI-${cat.id}`,
-                ssid: matchedBranch?.wifis?.[0]?.ssid || defaultWifiSsid,
-                bssid: '',
-                ipSubnet: lanSubnet,
-                publicWanIp: matchedSaved?.primaryWanIp || matchedBranch?.wifiIp || '113.190.234.12',
-                securityType: 'WPA2-Enterprise',
-                isActive: true,
-                note: `Mạng WiFi nội bộ ${catName}`,
-              },
-            ];
+            {
+              id: `WIFI-${cat.id}`,
+              ssid: matchedBranch?.wifis?.[0]?.ssid || defaultWifiSsid,
+              bssid: '',
+              ipSubnet: lanSubnet,
+              publicWanIp: matchedSaved?.primaryWanIp || matchedBranch?.wifiIp || '113.190.234.12',
+              securityType: 'WPA2-Enterprise',
+              isActive: true,
+              note: `Mạng WiFi nội bộ ${catName}`,
+            },
+          ];
 
       const empCount =
         (countByLoc.get(cat.code) || 0) +
@@ -2510,14 +2883,14 @@ app.get('/api/hr/employees', async (req, res) => {
     const where = {
       ...(search
         ? {
-            OR: [
-              { fullName: { contains: search } },
-              { workEmail: { contains: search } },
-              { code: { contains: search } },
-              { position: { contains: search } },
-              { departmentName: { contains: search } },
-            ],
-          }
+          OR: [
+            { fullName: { contains: search } },
+            { workEmail: { contains: search } },
+            { code: { contains: search } },
+            { position: { contains: search } },
+            { departmentName: { contains: search } },
+          ],
+        }
         : {}),
       ...(department ? { departmentCode: department } : {}),
       ...(status ? { status } : {}),
@@ -2550,18 +2923,18 @@ app.get('/api/hr/employees', async (req, res) => {
         workLocationName: matchedLoc?.name || 'Văn phòng công ty',
         timekeepingConfig: matchedLoc
           ? {
-              code: matchedLoc.code,
-              name: matchedLoc.name,
-              address: matchedLoc.address,
-              lanSubnet: matchedLoc.lanSubnet,
-              wifiSsid: matchedLoc.wifiList?.[0]?.ssid || 'Seajong_Office_5G',
-              latitude: matchedLoc.latitude,
-              longitude: matchedLoc.longitude,
-              radiusMeters: matchedLoc.radiusMeters,
-              allowGpsCheckin: matchedLoc.allowGpsCheckin,
-              allowWifiCheckin: matchedLoc.allowWifiCheckin,
-              allowLanCheckin: matchedLoc.allowLanCheckin,
-            }
+            code: matchedLoc.code,
+            name: matchedLoc.name,
+            address: matchedLoc.address,
+            lanSubnet: matchedLoc.lanSubnet,
+            wifiSsid: matchedLoc.wifiList?.[0]?.ssid || 'Seajong_Office_5G',
+            latitude: matchedLoc.latitude,
+            longitude: matchedLoc.longitude,
+            radiusMeters: matchedLoc.radiusMeters,
+            allowGpsCheckin: matchedLoc.allowGpsCheckin,
+            allowWifiCheckin: matchedLoc.allowWifiCheckin,
+            allowLanCheckin: matchedLoc.allowLanCheckin,
+          }
           : null,
       };
     });
@@ -2837,9 +3210,9 @@ app.put('/api/hr/employees/:id', async (req, res) => {
         position: position || existingEmp.position,
         ...(workLocation || branchCode
           ? {
-              workLocation: String(workLocation || branchCode).trim(),
-              branchCode: String(branchCode || workLocation).trim(),
-            }
+            workLocation: String(workLocation || branchCode).trim(),
+            branchCode: String(branchCode || workLocation).trim(),
+          }
           : {}),
         employeeType: employeeType || existingEmp.employeeType,
         startDate: startDate ? new Date(startDate) : existingEmp.startDate,
@@ -2910,7 +3283,7 @@ app.delete('/api/hr/employees/:id', async (req, res) => {
     if (existingEmp.userId) {
       try {
         await prisma.user.delete({ where: { id: existingEmp.userId } });
-      } catch (e) {}
+      } catch (e) { }
     }
 
     res.json({
@@ -2939,9 +3312,12 @@ app.get('/api/departments', async (req, res) => {
 
 app.get('/api/demo-users', async (req, res) => {
   try {
-    const [internalUsers, dealerUsers, positions] = await Promise.all([
+    const [internalUsers, allCustomers, positions, tierCategories] = await Promise.all([
       prisma.user.findMany({
-        where: { role: { not: 'DEALER' } },
+        where: {
+          role: { notIn: ['DEALER', 'CUSTOMER'] },
+          customerId: null,
+        },
         include: {
           employee: true,
         },
@@ -2949,23 +3325,42 @@ app.get('/api/demo-users', async (req, res) => {
           email: 'asc',
         },
       }),
-      prisma.user.findMany({
-        where: { role: 'DEALER' },
+      prisma.customer.findMany({
         include: {
-          customer: true,
+          _count: {
+            select: { saleOrders: true, debts: true },
+          },
+          nguoiChamSoc: {
+            select: { fullName: true, phone: true },
+          },
         },
-        take: 12,
         orderBy: {
-          createdAt: 'asc',
+          createdAt: 'desc',
         },
       }),
       prisma.category.findMany({
         where: { type: 'position' },
         select: { code: true, name: true },
       }),
+      prisma.category.findMany({
+        where: { code: { startsWith: 'lkh-' } },
+        select: { code: true, name: true },
+      }),
     ]);
 
     const posMap = new Map(positions.map((p) => [p.code, p.name]));
+    const tierMap = new Map(tierCategories.map((t) => [t.code, t.name]));
+
+    const resolveTierName = (loai) => {
+      if (!loai) return 'Đồng';
+      const mapped = tierMap.get(loai);
+      if (mapped) return mapped;
+      const lower = String(loai).toLowerCase();
+      if (lower.includes('kim') || lower === 'lkh-20260401-5039-lmcd') return 'Kim cương';
+      if (lower.includes('vang') || lower === 'lkh-20260401-4322-dfdl') return 'Vàng';
+      if (lower.includes('bac') || lower === 'lkh-20260401-1090-xqah') return 'Bạc';
+      return 'Đồng';
+    };
 
     const formattedInternal = internalUsers.map((u) => {
       const pos = u.employee?.position;
@@ -2981,17 +3376,81 @@ app.get('/api/demo-users', async (req, res) => {
       };
     });
 
-    const formattedDealers = dealerUsers.map((u) => ({
-      id: u.id,
-      email: u.customer?.dienThoai || u.customer?.code || u.email,
-      name: `${u.name} (${u.customer?.code || 'Đại lý'}${u.customer?.dienThoai ? ' - SĐT: ' + u.customer.dienThoai : ''})`,
-      role: 'DEALER',
-      departmentCode: 'dealer',
-      departmentName: 'Đại lý phân phối',
-      position: 'Đại lý',
-    }));
+    const formattedDealers = allCustomers
+      .filter((c) => c.nhom === 'dai-ly' && (c.code || c.dienThoai))
+      .map((c) => {
+        const tier = resolveTierName(c.loai);
+        const loginId = (c.code && c.code.trim()) || (c.dienThoai && c.dienThoai.trim()) || '';
+        return {
+          id: c.id,
+          code: c.code || '',
+          email: loginId,
+          phone: c.dienThoai || '',
+          name: c.name,
+          address: c.address || '',
+          role: 'DEALER',
+          tier,
+          ordersCount: c._count?.saleOrders || 0,
+          debtsCount: c._count?.debts || 0,
+          hanMucCongNo: c.hanMucCongNo || 0,
+          doanhSoCamKet: c.doanhSoCamKet || 0,
+          departmentCode: 'dealer',
+          departmentName: `Đại lý ${tier}`,
+          position: `Đại lý ${tier}`,
+          carePerson: c.nguoiChamSoc?.fullName || 'Phòng Kinh doanh',
+        };
+      })
+      .sort((a, b) => {
+        const aHasCode = a.code ? 1 : 0;
+        const bHasCode = b.code ? 1 : 0;
+        if (bHasCode !== aHasCode) return bHasCode - aHasCode;
+        return b.ordersCount - a.ordersCount;
+      });
 
-    res.json({ success: true, data: [...formattedInternal, ...formattedDealers] });
+    const formattedCustomers = allCustomers
+      .filter((c) => c.nhom !== 'dai-ly' && (c.code || c.dienThoai))
+      .map((c) => {
+        const loginId = (c.code && c.code.trim()) || (c.dienThoai && c.dienThoai.trim()) || '';
+        const nameLower = (c.name || '').toLowerCase();
+        const isCorp =
+          c.nhom === 'du-an' ||
+          nameLower.includes('công ty') ||
+          nameLower.includes('showroom') ||
+          nameLower.includes('romax') ||
+          nameLower.includes('dự án');
+        const groupCode = isCorp ? 'du-an' : 'ca-nhan';
+        const groupLabel = isCorp ? 'Khách hàng Dự án / DN' : 'Khách hàng Cá nhân';
+        return {
+          id: c.id,
+          code: c.code || '',
+          email: loginId,
+          phone: c.dienThoai || '',
+          name: c.name,
+          address: c.address || '',
+          role: 'CUSTOMER',
+          customerGroup: groupCode,
+          customerGroupName: groupLabel,
+          ordersCount: c._count?.saleOrders || 0,
+          departmentCode: 'customer',
+          departmentName: groupLabel,
+          position: groupLabel,
+          carePerson: c.nguoiChamSoc?.fullName || 'Bộ phận CSKH',
+        };
+      })
+      .sort((a, b) => {
+        if (b.ordersCount !== a.ordersCount) return b.ordersCount - a.ordersCount;
+        const aHasCode = a.code ? 1 : 0;
+        const bHasCode = b.code ? 1 : 0;
+        return bHasCode - aHasCode;
+      });
+
+    res.json({
+      success: true,
+      data: formattedInternal,
+      staffUsers: formattedInternal,
+      dealerUsers: formattedDealers,
+      customerUsers: formattedCustomers,
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -3512,7 +3971,7 @@ function extractSpecs(html) {
 
   for (const row of rows) {
     const keyMatch = row.match(/<td[^>]*>[\s\S]*?<strong[^>]*>([\s\S]*?)<\/strong>/i)
-                  || row.match(/<th[^>]*>([\s\S]*?)<\/th>/i);
+      || row.match(/<th[^>]*>([\s\S]*?)<\/th>/i);
     const valMatch = row.match(/<td[^>]*>[\s\S]*?<\/td>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i);
 
     if (keyMatch && valMatch) {
@@ -3644,8 +4103,8 @@ async function syncAll(logId) {
               new Date(p.modified).getTime() <= new Date(existingProduct.updatedAt).getTime();
 
             if (isUpToDate) {
-              try { images = JSON.parse(existingProduct.images); } catch (_) {}
-              try { specs = JSON.parse(existingProduct.specs); } catch (_) {}
+              try { images = JSON.parse(existingProduct.images); } catch (_) { }
+              try { specs = JSON.parse(existingProduct.specs); } catch (_) { }
               price = existingProduct.price || 0;
             } else {
               try {
@@ -3657,7 +4116,7 @@ async function syncAll(logId) {
                     'Accept-Language': 'vi-VN,vi;q=0.9',
                   },
                 }).then(r => r.ok ? r.text() : '').catch(() => '');
-              } catch (_) {}
+              } catch (_) { }
 
               images = extractImages(pageHtml || html);
               if (featured && !images.includes(featured)) images.unshift(featured);
@@ -4098,110 +4557,210 @@ app.get('/api/seajong/image-proxy', async (req, res) => {
 app.get('/api/sales/dashboard', async (req, res) => {
   try {
     const currentYear = 2026;
+    const currentMonth = new Date().getMonth() + 1;
 
-    // 1. Orders & Revenue (Bao gồm cả SaleOrder thương hiệu Seajong, OemSaleOrder gia công OEM và DebtPayment)
-    const [dbOrders, oemOrders, debtPayments, employees, allCustomers] = await Promise.all([
+    const [dbOrders, allDebts, orderItems, employees, allCustomers, salesOverview] = await Promise.all([
       prisma.saleOrder.findMany({
         where: { trangThai: { not: 'cancelled' } },
         include: { customer: true },
         orderBy: { createdAt: 'desc' },
       }),
-      prisma.oemSaleOrder.findMany({
-        where: { trangThai: { not: 'cancelled' } },
-        include: { customer: true },
-        orderBy: { createdAt: 'desc' },
+      prisma.debt.findMany({
+        where: { OR: [{ type: 'RECEIVABLE' }, { type: 'phai-thu' }] },
       }),
-      prisma.debtPayment.findMany({
-        include: { debt: true },
+      prisma.saleOrderItem.findMany({
+        include: { saleOrder: true },
       }),
       prisma.employee.findMany(),
       prisma.customer.findMany(),
+      computeSalesOverviewStats(prisma, 'year', currentMonth),
     ]);
 
     const empMap = new Map(employees.map((e) => [e.id, e]));
     const custMap = new Map(allCustomers.map((c) => [c.id, c]));
+    const custNameMap = new Map(
+      allCustomers.map((c) => [String(c.name || '').trim().toLowerCase(), c])
+    );
 
-    const totalOrdersCount = dbOrders.length + oemOrders.length;
+    const totalOrdersCount = Number(salesOverview?.kpi?.signed?.count) || dbOrders.length;
     const totalSales =
-      dbOrders.reduce((sum, o) => sum + (Number(o.tongTien) || 0), 0) +
-      oemOrders.reduce((sum, o) => sum + (Number(o.tongTien) || 0), 0);
-
-    const recPaymentSum = debtPayments
-      .filter((p) => !p.debt || p.debt.type === 'RECEIVABLE' || p.debt.type === 'phai-thu')
-      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-
+      Number(salesOverview?.kpi?.signed?.totalValue) ||
+      dbOrders.reduce((sum, o) => sum + (Number(o.tongTien) || 0), 0);
     const totalRevenue =
-      dbOrders.reduce((sum, o) => sum + (Number(o.daThanhToan) || 0), 0) +
-      oemOrders.reduce((sum, o) => sum + (Number(o.daThanhToan) || 0), 0) +
-      recPaymentSum;
+      Number(salesOverview?.kpi?.revenue?.totalValue) ||
+      allDebts.reduce((sum, d) => sum + (Number(d.paidAmount) || 0), 0);
+    const targetSales = Math.round((Number(salesOverview?.kpi?.signed?.targetBillion) || 5) * 1e9);
+    const targetRevenue = Math.round((Number(salesOverview?.kpi?.revenue?.targetBillion) || 4.25) * 1e9);
     const totalDebt = Math.max(0, totalSales - totalRevenue);
 
     // 2. Customers & Dealers
     const customersCount = allCustomers.length;
-    const dealersCount = allCustomers.filter((c) => {
-      const nhom = String(c.nhom || '').toLowerCase();
-      return (
-        nhom.includes('dai-ly') ||
-        nhom.includes('showroom') ||
-        String(c.loai || '').toLowerCase().includes('đại lý')
-      );
-    }).length || customersCount;
+    const dealersCount =
+      allCustomers.filter((c) => {
+        const nhom = String(c.nhom || '').toLowerCase();
+        return (
+          nhom.includes('dai-ly') ||
+          nhom.includes('showroom') ||
+          String(c.loai || '').toLowerCase().includes('đại lý')
+        );
+      }).length || customersCount;
 
-    // 3. Yearly Target
-    const yearlyPlan = await prisma.salesYearlyPlan.findFirst({
-      where: { year: currentYear },
-    });
+    // 3. Monthly Trends & Chart Data (12 months, Seajong vs OEM)
+    const allMonthsTrend = Array.isArray(salesOverview?.allMonthsTrend) ? salesOverview.allMonthsTrend : [];
+    const quarters = ['Q1', 'Q1', 'Q1', 'Q2', 'Q2', 'Q2', 'Q3', 'Q3', 'Q3', 'Q4', 'Q4', 'Q4'];
 
-    let targetRevenue = 4500000000; // 4.5 Tỷ VNĐ
-    let monthlyTargetsMap = {};
-    for (let m = 1; m <= 12; m++) monthlyTargetsMap[m] = Math.round(targetRevenue / 12);
-
-    if (yearlyPlan && yearlyPlan.monthlyTargets) {
-      try {
-        const parsed = JSON.parse(yearlyPlan.monthlyTargets);
-        let sumTarget = 0;
-        for (let m = 1; m <= 12; m++) {
-          if (parsed[m]?.revenueRows) {
-            const mTotal = parsed[m].revenueRows.reduce((s, r) => s + (Number(r.value) || 0), 0);
-            if (mTotal > 0) {
-              monthlyTargetsMap[m] = mTotal;
-              sumTarget += mTotal;
-            }
-          }
-        }
-        if (sumTarget > 0) targetRevenue = sumTarget;
-      } catch (e) {}
-    }
-
-    // 4. Monthly Trends (12 months)
-    const monthlyTrends = Array.from({ length: 12 }, (_, i) => {
+    const monthlyChartData = Array.from({ length: 12 }, (_, i) => {
       const monthNum = i + 1;
-      const monthOrders = dbOrders.filter((o) => {
-        const d = new Date(o.ngayDat || o.createdAt);
-        return d.getMonth() + 1 === monthNum;
-      });
-      const monthOem = oemOrders.filter((o) => {
-        const d = new Date(o.ngayDat || o.createdAt);
-        return d.getMonth() + 1 === monthNum;
-      });
-      const actualSales =
-        monthOrders.reduce((s, o) => s + (Number(o.tongTien) || 0), 0) +
-        monthOem.reduce((s, o) => s + (Number(o.tongTien) || 0), 0);
-      const actualRev =
-        monthOrders.reduce((s, o) => s + (Number(o.daThanhToan) || 0), 0) +
-        monthOem.reduce((s, o) => s + (Number(o.daThanhToan) || 0), 0);
+      const isPastOrCurrent = monthNum <= currentMonth;
+      const isCurrent = monthNum === currentMonth;
+      const t = allMonthsTrend[i] || {
+        targetSales: 0.42,
+        targetRevenue: 0.35,
+        signed: 0,
+        signedSeajong: 0,
+        signedOem: 0,
+        signedVnd: 0,
+        signedSeajongVnd: 0,
+        signedOemVnd: 0,
+        revenue: 0,
+        revenueSeajong: 0,
+        revenueOem: 0,
+        revenueVnd: 0,
+        revenueSeajongVnd: 0,
+        revenueOemVnd: 0,
+        targetSalesVnd: 420000000,
+        targetRevenueVnd: 350000000,
+        ordersCount: 0,
+      };
+      const planSalesTy = Number((t.targetSales || 0).toFixed(2));
+      const planRevTy = Number((t.targetRevenue || t.targetSales || 0).toFixed(2));
+      const targetUnits = Math.max(1, Math.round((planSalesTy * 1e9) / 13500000));
 
       return {
-        month: `Tháng ${monthNum}`,
-        target: monthlyTargetsMap[monthNum] || 375000000,
-        actualSales,
-        actualRevenue: actualRev,
+        month: `T${monthNum}`,
+        monthNum,
+        quarter: quarters[i],
+        monthFull: `Tháng ${String(monthNum).padStart(2, '0')}/${currentYear}`,
+        plan: planSalesTy,
+        actual: isPastOrCurrent ? Number((t.revenue || 0).toFixed(2)) : null,
+        planSales: planSalesTy,
+        actualSales: isPastOrCurrent ? Number((t.signed || 0).toFixed(2)) : null,
+        planRevenue: planRevTy,
+        actualRevenue: isPastOrCurrent ? Number((t.revenue || 0).toFixed(2)) : null,
+        seajong: isPastOrCurrent ? Number((t.revenueSeajong || 0).toFixed(2)) : null,
+        oem: isPastOrCurrent ? Number((t.revenueOem || 0).toFixed(2)) : null,
+        signedSeajong: isPastOrCurrent ? Number((t.signedSeajong || 0).toFixed(2)) : null,
+        signedOem: isPastOrCurrent ? Number((t.signedOem || 0).toFixed(2)) : null,
+        targetSalesVnd: Number(t.targetSalesVnd) || Math.round(planSalesTy * 1e9),
+        targetRevenueVnd: Number(t.targetRevenueVnd) || Math.round(planRevTy * 1e9),
+        signedVnd: Number(t.signedVnd) || Math.round((t.signed || 0) * 1e9),
+        signedSeajongVnd: Number(t.signedSeajongVnd) || Math.round((t.signedSeajong || 0) * 1e9),
+        signedOemVnd: Number(t.signedOemVnd) || Math.round((t.signedOem || 0) * 1e9),
+        revenueVnd: Number(t.revenueVnd) || Math.round((t.revenue || 0) * 1e9),
+        revenueSeajongVnd: Number(t.revenueSeajongVnd) || Math.round((t.revenueSeajong || 0) * 1e9),
+        revenueOemVnd: Number(t.revenueOemVnd) || Math.round((t.revenueOem || 0) * 1e9),
+        ordersCount: Number(t.ordersCount) || 0,
+        targetUnits,
+        units: isPastOrCurrent ? Math.round(((t.signed || 0) * 1e9) / 13500000) : null,
+        isCurrent,
       };
     });
 
-    // 5. Xếp hạng Nhân viên Kinh doanh thực tế từ SaleOrder & OemSaleOrder
+    const monthlyTrends = monthlyChartData.map((m) => ({
+      month: `Tháng ${m.monthNum}`,
+      target: m.targetRevenueVnd,
+      actualSales: m.signedVnd,
+      actualRevenue: m.revenueVnd,
+    }));
+
+    // 4. Cơ cấu doanh thu theo 4 dòng sản phẩm: Thiết bị vệ sinh, Thiết bị nhà bếp, Phụ kiện, Loại khác
+    const prodLines = {
+      tbvs: { id: 'tbvs', name: 'Thiết bị vệ sinh', val: 0, qty: 0, orderIds: new Set(), color: '#0284c7' },
+      tbnb: { id: 'tbnb', name: 'Thiết bị nhà bếp', val: 0, qty: 0, orderIds: new Set(), color: '#10b981' },
+      phukien: { id: 'phukien', name: 'Phụ kiện', val: 0, qty: 0, orderIds: new Set(), color: '#8b5cf6' },
+      khac: { id: 'khac', name: 'Loại khác', val: 0, qty: 0, orderIds: new Set(), color: '#f59e0b' },
+    };
+
+    orderItems.forEach((it) => {
+      const n = String(it.tenHang || '').toLowerCase();
+      const val = Number(it.thanhTien) || Number(it.soLuong || 1) * Number(it.donGia || 0);
+      const qty = Number(it.soLuong) || 1;
+      let key = 'khac';
+      if (
+        n.includes('bếp') ||
+        n.includes('rửa bát') ||
+        n.includes('hút mùi') ||
+        n.includes('k-30') ||
+        n.includes('k-10')
+      ) {
+        key = 'tbnb';
+      } else if (
+        n.includes('phụ kiện') ||
+        n.includes('thoát sàn') ||
+        n.includes('ga thoát') ||
+        n.includes('xi phông') ||
+        n.includes('xiphong') ||
+        n.includes('dây cấp') ||
+        n.includes('dây sen') ||
+        n.includes('bát sen') ||
+        n.includes('tay sen') ||
+        n.includes('cần sen') ||
+        n.includes('chân sen') ||
+        n.includes('gương') ||
+        n.includes('vắt khăn') ||
+        n.includes('lô giấy') ||
+        n.includes('hộp giấy') ||
+        n.includes('xịt') ||
+        n.includes('kệ') ||
+        n.includes('móc') ||
+        n.includes('thanh') ||
+        n.includes('van') ||
+        n.includes('ruột') ||
+        n.includes('óc')
+      ) {
+        key = 'phukien';
+      } else if (
+        n.includes('sen') ||
+        n.includes('tắm') ||
+        n.includes('bồn cầu') ||
+        n.includes('cầu') ||
+        n.includes('lavabo') ||
+        n.includes('tiểu') ||
+        n.includes('sứ') ||
+        n.includes('tủ chậu') ||
+        n.includes('vòi')
+      ) {
+        key = 'tbvs';
+      } else {
+        key = 'khac';
+      }
+      prodLines[key].val += val;
+      prodLines[key].qty += qty;
+      if (it.saleOrderId) prodLines[key].orderIds.add(it.saleOrderId);
+    });
+
+    const totalProdVal = Object.values(prodLines).reduce((s, g) => s + g.val, 0);
+    const fmtProdMoney = (v) =>
+      v >= 1e9 ? `${(v / 1e9).toFixed(2)} tỷ` : v > 0 ? `${(v / 1e6).toFixed(1)} tr` : '0 đ';
+
+    const productLineMix = Object.values(prodLines).map((g) => {
+      const share = totalProdVal > 0 ? Number(((g.val / totalProdVal) * 100).toFixed(1)) : 0;
+      return {
+        id: g.id,
+        name: g.name,
+        share,
+        revenueVnd: Math.round(g.val),
+        revenue: fmtProdMoney(g.val),
+        unitsCount: Math.round(g.qty),
+        units: `${Math.round(g.qty).toLocaleString('vi-VN')} SP`,
+        ordersCount: g.orderIds.size,
+        color: g.color,
+      };
+    });
+
+    // 5. Xếp hạng Nhân viên Kinh doanh
     const repStatsMap = new Map();
-    const accumulateOrderForRep = (o) => {
+    dbOrders.forEach((o) => {
       const repId = o.nguoiPhuTrach || 'cmra9q6qk00038oq7i8pxa8fs';
       const emp = empMap.get(repId);
       const cur = repStatsMap.get(repId) || {
@@ -4214,9 +4773,7 @@ app.get('/api/sales/dashboard', async (req, res) => {
       cur.orders += 1;
       cur.revenue += Number(o.tongTien) || 0;
       repStatsMap.set(repId, cur);
-    };
-    dbOrders.forEach(accumulateOrderForRep);
-    oemOrders.forEach(accumulateOrderForRep);
+    });
 
     const topSalesReps = Array.from(repStatsMap.values())
       .sort((a, b) => b.revenue - a.revenue)
@@ -4236,37 +4793,89 @@ app.get('/api/sales/dashboard', async (req, res) => {
         };
       });
 
-    // 6. Top Đại lý / Khách hàng có doanh số thực tế cao nhất
+    // 6. Bảng xếp hạng các đại lý theo Doanh thu và Doanh số thực tế
     const dealerStatsMap = new Map();
-    const accumulateOrderForDealer = (o) => {
+    const getOrCreateDealer = (cid, cust, fallbackName, fallbackAddress) => {
+      if (!dealerStatsMap.has(cid)) {
+        dealerStatsMap.set(cid, {
+          id: cid,
+          name: cust?.name || fallbackName || 'Khách hàng Seajong',
+          code: cust?.code || `KH-${String(cid).slice(-4).toUpperCase()}`,
+          area: cust?.address || fallbackAddress || 'Chưa cập nhật địa chỉ',
+          orders: 0,
+          orderSales: 0,
+          orderPaid: 0,
+          debtInvoiced: 0,
+          debtPaid: 0,
+          debtCount: 0,
+        });
+      } else {
+        const existing = dealerStatsMap.get(cid);
+        if ((!existing.area || existing.area === 'Chưa cập nhật địa chỉ') && (cust?.address || fallbackAddress)) {
+          existing.area = cust?.address || fallbackAddress;
+        }
+      }
+      return dealerStatsMap.get(cid);
+    };
+
+    dbOrders.forEach((o) => {
       const cid = o.customerId || o.customer?.id;
       if (!cid) return;
       const cust = o.customer || custMap.get(cid);
-      const cur = dealerStatsMap.get(cid) || {
-        id: cid,
-        name: cust?.name || o.nguoiNhan || 'Khách hàng Seajong',
-        code: cust?.code || `KH-${String(cid).slice(-4).toUpperCase()}`,
-        orders: 0,
-        revenue: 0,
-      };
+      const cur = getOrCreateDealer(cid, cust, o.nguoiNhan, o.diaChiGiaoHang);
       cur.orders += 1;
-      cur.revenue += Number(o.tongTien) || 0;
-      dealerStatsMap.set(cid, cur);
-    };
-    dbOrders.forEach(accumulateOrderForDealer);
-    oemOrders.forEach(accumulateOrderForDealer);
+      cur.orderSales += Number(o.tongTien) || 0;
+      cur.orderPaid += Number(o.daThanhToan) || 0;
+    });
+
+    allDebts.forEach((db) => {
+      let cid = db.customerId;
+      let cust = cid
+        ? custMap.get(cid)
+        : custNameMap.get(String(db.partnerName || '').trim().toLowerCase());
+      if (cust) cid = cust.id;
+      if (!cid) return;
+      const cur = getOrCreateDealer(cid, cust, db.partnerName);
+      cur.debtInvoiced += Number(db.amount) || 0;
+      cur.debtPaid += Number(db.paidAmount) || 0;
+      if (db.referenceId && db.referenceId !== 'Dư nợ đầu kỳ') {
+        cur.debtCount += 1;
+      }
+    });
 
     const topDealers = Array.from(dealerStatsMap.values())
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 20)
+      .map((d) => {
+        const finalSales = Math.round(Math.max(d.orderSales, d.debtInvoiced));
+        const finalRevenue = Math.round(Math.max(d.orderPaid, d.debtPaid));
+        const finalOrders = Math.max(d.orders, d.debtCount, finalSales > 0 ? 1 : 0);
+        const debt = Math.max(0, finalSales - finalRevenue);
+        const paymentRate =
+          finalSales > 0 ? Math.min(100, Math.round((finalRevenue / finalSales) * 100)) : 0;
+        const status =
+          finalSales >= 200000000
+            ? 'Xuất sắc'
+            : finalSales >= 100000000
+            ? 'Tiêu biểu'
+            : 'Đạt chuẩn';
+        return {
+          id: d.id,
+          name: d.name,
+          code: d.code,
+          area: d.area,
+          orders: finalOrders,
+          sales: finalSales,
+          revenue: finalRevenue,
+          debt,
+          paymentRate,
+          growth: `${finalOrders} đơn hàng`,
+          status,
+        };
+      })
+      .filter((d) => d.sales > 0 || d.revenue > 0)
+      .sort((a, b) => b.sales - a.sales)
       .map((d, idx) => ({
+        ...d,
         rank: idx + 1,
-        name: d.name,
-        code: d.code,
-        orders: d.orders,
-        revenue: Math.round(d.revenue),
-        growth: `${d.orders} đơn hàng`,
-        status: d.revenue >= 200000000 ? 'Xuất sắc' : d.revenue >= 100000000 ? 'Tiêu biểu' : 'Đạt chuẩn',
       }));
 
     // 7. Recent Orders
@@ -4309,12 +4918,19 @@ app.get('/api/sales/dashboard', async (req, res) => {
       summary: {
         totalSales: Math.round(totalSales),
         totalRevenue: Math.round(totalRevenue),
+        targetSales,
         targetRevenue,
+        seajongSalesBillion: Number(salesOverview?.kpi?.signed?.seajongBillion) || 0,
+        oemSalesBillion: Number(salesOverview?.kpi?.signed?.oemBillion) || 0,
+        seajongRevBillion: Number(salesOverview?.kpi?.revenue?.seajongBillion) || 0,
+        oemRevBillion: Number(salesOverview?.kpi?.revenue?.oemBillion) || 0,
         totalOrdersCount,
         totalDebt: Math.round(totalDebt),
         customersCount,
         dealersCount,
       },
+      monthlyChartData,
+      productLineMix,
       topSalesReps,
       topDealers,
       monthlyTrends,
@@ -4384,7 +5000,7 @@ app.get('/api/sales/partners', async (req, res) => {
       if (l.formValues) {
         try {
           formValues = JSON.parse(l.formValues);
-        } catch (e) {}
+        } catch (e) { }
       }
 
       const leadCode = formValues.code || `DL-${l.id.slice(-6).toUpperCase()}`;
@@ -4445,10 +5061,10 @@ app.get('/api/sales/partners', async (req, res) => {
           ? 'ContractSigning'
           : matchingQuotation
             ? (matchingQuotation.trangThai === 'approved' || matchingQuotation.trangThai === 'won'
-                ? 'Approved'
-                : matchingQuotation.trangThai === 'pending_approval' || matchingQuotation.trangThai === 'sent'
-                  ? 'Sent'
-                  : 'Draft')
+              ? 'Approved'
+              : matchingQuotation.trangThai === 'pending_approval' || matchingQuotation.trangThai === 'sent'
+                ? 'Sent'
+                : 'Draft')
             : (formValues.quoteStatus || '');
 
       let resolvedQuoteType = formValues.quoteType || '';
@@ -4625,12 +5241,16 @@ app.post('/api/sales/partners', async (req, res) => {
       },
     });
 
-    // Đồng bộ lưu vào bảng Customer chuẩn DB
+    // Đồng bộ lưu vào bảng Customer chuẩn DB theo mã định danh
     try {
       let careEmp = null;
-      if (body.executor) {
+      const executorId = body.executorId || body.executorCode || body.executor;
+      if (executorId) {
+        const cleanExec = String(executorId).trim();
         careEmp = await prisma.employee.findFirst({
-          where: { fullName: { contains: String(body.executor).trim() } },
+          where: {
+            OR: [{ id: cleanExec }, { code: cleanExec }, { userId: cleanExec }],
+          },
         });
       }
       const fullAddr = [body.address, body.area].filter(Boolean).join(', ');
@@ -4664,7 +5284,7 @@ app.post('/api/sales/partners', async (req, res) => {
 app.delete('/api/sales/partners/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.partnerCareHistory.deleteMany({ where: { partnerId: id } }).catch(() => {});
+    await prisma.partnerCareHistory.deleteMany({ where: { partnerId: id } }).catch(() => { });
     await prisma.marketingLead.delete({ where: { id } });
     res.json({ success: true });
   } catch (err) {
@@ -4679,7 +5299,7 @@ app.post('/api/sales/partners/bulk-delete', async (req, res) => {
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: 'Danh sách ID trống' });
     }
-    await prisma.partnerCareHistory.deleteMany({ where: { partnerId: { in: ids } } }).catch(() => {});
+    await prisma.partnerCareHistory.deleteMany({ where: { partnerId: { in: ids } } }).catch(() => { });
     await prisma.marketingLead.deleteMany({ where: { id: { in: ids } } });
     res.json({ success: true, deletedCount: ids.length });
   } catch (err) {
@@ -4700,7 +5320,7 @@ app.put('/api/sales/partners/:id', async (req, res) => {
     if (existing.formValues) {
       try {
         formValues = JSON.parse(existing.formValues);
-      } catch (e) {}
+      } catch (e) { }
     }
 
     const updatedFormValues = {
@@ -4742,11 +5362,11 @@ app.put('/api/sales/partners/:id', async (req, res) => {
           collabNeeds: body.newCare.collabNeeds || '',
           otherRequirements: body.newCare.nextTaskDesc
             ? JSON.stringify({
-                nextDate: body.newCare.nextDate || '',
-                nextPriority: body.newCare.nextPriority || 'Trung bình',
-                addToSchedule: Boolean(body.newCare.addToSchedule),
-                nextTaskDesc: body.newCare.nextTaskDesc || '',
-              })
+              nextDate: body.newCare.nextDate || '',
+              nextPriority: body.newCare.nextPriority || 'Trung bình',
+              addToSchedule: Boolean(body.newCare.addToSchedule),
+              nextTaskDesc: body.newCare.nextTaskDesc || '',
+            })
             : '',
           stars: body.newCare.stars || 4,
           executor: body.newCare.executor || 'Phạm Quang Việt',
@@ -4939,8 +5559,8 @@ function buildAppendixConstructionTasks(recordId, contractCode, customerName, cu
       (status === 'completed'
         ? 'Đã hoàn thành'
         : status === 'in_progress'
-        ? 'Đang thực hiện'
-        : 'Chưa thực hiện');
+          ? 'Đang thực hiện'
+          : 'Chưa thực hiện');
 
     return {
       id: taskId,
@@ -4984,52 +5604,52 @@ app.get('/api/user-tasks', async (req, res) => {
             if (obj && typeof obj === 'object' && obj.title) {
               parsed = obj;
             }
-          } catch (_e) {}
+          } catch (_e) { }
         }
         const taskItem = parsed
           ? {
-              ...parsed,
-              id: parsed.id || row.id,
-              title: parsed.title || row.title,
-              description: parsed.description ?? row.description ?? '',
-              status: parsed.status || row.status || 'not_started',
-              priority: parsed.priority || row.priority || 'medium',
-              assignee: parsed.assignee || row.assigneeId || 'Chưa phân công',
-              assigner: parsed.assigner || row.creatorId || 'Ban Giám đốc',
-              department: parsed.department || row.deptCode || 'Phòng Kinh doanh',
-            }
+            ...parsed,
+            id: parsed.id || row.id,
+            title: parsed.title || row.title,
+            description: parsed.description ?? row.description ?? '',
+            status: parsed.status || row.status || 'not_started',
+            priority: parsed.priority || row.priority || 'medium',
+            assignee: parsed.assignee || row.assigneeId || 'Chưa phân công',
+            assigner: parsed.assigner || row.creatorId || 'Ban Giám đốc',
+            department: parsed.department || row.deptCode || 'Phòng Kinh doanh',
+          }
           : {
-              id: row.id,
-              code: `CV-2026-${String(row.id).slice(-3).toUpperCase()}`,
-              title: row.title,
-              project: 'Công việc nội bộ',
-              contractCode: '',
-              customerName: 'Nội bộ công ty',
-              customerAddress: '',
-              assignee: row.assigneeId || 'Chưa phân công',
-              assigner: row.creatorId || 'Ban Giám đốc',
-              department: row.deptCode || 'Phòng Kinh doanh',
-              priority: row.priority || 'medium',
-              priorityLabel:
-                row.priority === 'urgent'
-                  ? 'Khẩn cấp'
-                  : row.priority === 'high'
-                    ? 'Ưu tiên cao'
-                    : row.priority === 'low'
-                      ? 'Thấp'
-                      : 'Trung bình',
-              startDate: row.createdAt ? row.createdAt.toISOString().slice(0, 10) : '2026-10-04',
-              endDate: row.dueDate ? row.dueDate.toISOString().slice(0, 10) : '2026-10-10',
-              progress: row.status === 'completed' ? 100 : 0,
-              status: row.status || 'not_started',
-              statusLabel: row.status === 'completed' ? 'Đã hoàn thành' : 'Chưa thực hiện',
-              description: row.description || '',
-              category: 'production',
-            };
+            id: row.id,
+            code: `CV-2026-${String(row.id).slice(-3).toUpperCase()}`,
+            title: row.title,
+            project: 'Công việc nội bộ',
+            contractCode: '',
+            customerName: 'Nội bộ công ty',
+            customerAddress: '',
+            assignee: row.assigneeId || 'Chưa phân công',
+            assigner: row.creatorId || 'Ban Giám đốc',
+            department: row.deptCode || 'Phòng Kinh doanh',
+            priority: row.priority || 'medium',
+            priorityLabel:
+              row.priority === 'urgent'
+                ? 'Khẩn cấp'
+                : row.priority === 'high'
+                  ? 'Ưu tiên cao'
+                  : row.priority === 'low'
+                    ? 'Thấp'
+                    : 'Trung bình',
+            startDate: row.createdAt ? row.createdAt.toISOString().slice(0, 10) : '2026-10-04',
+            endDate: row.dueDate ? row.dueDate.toISOString().slice(0, 10) : '2026-10-10',
+            progress: row.status === 'completed' ? 100 : 0,
+            status: row.status || 'not_started',
+            statusLabel: row.status === 'completed' ? 'Đã hoàn thành' : 'Chưa thực hiện',
+            description: row.description || '',
+            category: 'production',
+          };
         seenIds.add(String(taskItem.id));
         allTasks.push(taskItem);
       }
-    } catch (_dbErr) {}
+    } catch (_dbErr) { }
 
     // 2. Lấy các hồ sơ đại lý trong quy trình Phát triển đại lý (MarketingLead)
     const leads = await prisma.marketingLead.findMany({
@@ -5053,7 +5673,7 @@ app.get('/api/user-tasks', async (req, res) => {
 
       const hasAppendix = Boolean(
         (fv.plNo && String(fv.plNo).trim() !== '') ||
-          (fv.plPdf && String(fv.plPdf).trim() !== '')
+        (fv.plPdf && String(fv.plPdf).trim() !== '')
       );
 
       if (!contractCode || !hasAppendix) {
@@ -5115,15 +5735,15 @@ app.get('/api/user-tasks', async (req, res) => {
       const standardIds = new Set(standardTasks.map((t) => t.id));
       const customTasks = Array.isArray(fv.constructionTasks)
         ? fv.constructionTasks
-            .filter((t) => !standardIds.has(String(t.id)) && !t.isContractOnly)
-            .map((t) => ({
-              ...t,
-              code: t.code || `CV-2026-${String(t.id).slice(-3)}`,
-              contractCode: t.contractCode !== undefined ? t.contractCode : contractCode,
-              project: t.project || customerName,
-              customerName: t.customerName || customerName,
-              customerAddress: t.customerAddress || customerAddress,
-            }))
+          .filter((t) => !standardIds.has(String(t.id)) && !t.isContractOnly)
+          .map((t) => ({
+            ...t,
+            code: t.code || `CV-2026-${String(t.id).slice(-3)}`,
+            contractCode: t.contractCode !== undefined ? t.contractCode : contractCode,
+            project: t.project || customerName,
+            customerName: t.customerName || customerName,
+            customerAddress: t.customerAddress || customerAddress,
+          }))
         : [];
 
       const mergedTasks = [...standardTasks, ...customTasks];
@@ -5364,7 +5984,7 @@ app.delete('/api/user-tasks/contract/:contractCode', async (req, res) => {
         if (cCode === rawCode) {
           await prisma.task.delete({ where: { id: row.id } });
         }
-      } catch (_e) {}
+      } catch (_e) { }
     }
 
     const leads = await prisma.marketingLead.findMany();
@@ -5575,9 +6195,19 @@ app.get('/api/plan-finance/customers', async (req, res) => {
           aliases.forEach((v) => matchedGroupVals.add(v));
         }
       }
-      andConditions.push({
-        nhom: { in: Array.from(matchedGroupVals) },
-      });
+      if (Array.from(matchedGroupVals).some((v) => String(v).toLowerCase() === 'dai-ly' || String(v).toLowerCase() === 'đại lý')) {
+        andConditions.push({
+          OR: [
+            { nhom: { in: Array.from(matchedGroupVals) } },
+            { nhom: null },
+            { nhom: '' },
+          ],
+        });
+      } else {
+        andConditions.push({
+          nhom: { in: Array.from(matchedGroupVals) },
+        });
+      }
     }
 
     if (source && source !== 'all') {
@@ -5598,21 +6228,18 @@ app.get('/api/plan-finance/customers', async (req, res) => {
     }
 
     if (employee && employee !== 'all') {
-      const empNames = employee
+      const empTokens = employee
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
-      if (empNames.length === 1) {
+      if (empTokens.length > 0) {
         andConditions.push({
-          nguoiChamSoc: {
-            fullName: { contains: empNames[0] },
-          },
-        });
-      } else if (empNames.length > 1) {
-        andConditions.push({
-          OR: empNames.map((n) => ({
-            nguoiChamSoc: { fullName: { contains: n } },
-          })),
+          OR: empTokens.flatMap((token) => [
+            { nguoiChamSocId: token },
+            { nguoiChamSoc: { id: token } },
+            { nguoiChamSoc: { code: token } },
+            { nguoiChamSoc: { userId: token } },
+          ]),
         });
       }
     }
@@ -5699,25 +6326,25 @@ app.get('/api/plan-finance/customers', async (req, res) => {
             const unitPrice = itemQty > 1 ? Math.round(totalAmt / itemQty) : totalAmt;
             const parsedItems = Array.isArray(e.items) && e.items.length > 0
               ? e.items.map((it, idx) => ({
-                  id: it.id || idx + 1,
-                  tenHang: it.tenHang || it.ten || itemName,
-                  donVi: it.donVi || it.donViTinh || 'Bộ',
-                  donViTinh: it.donViTinh || it.donVi || 'Bộ',
-                  soLuong: Number(it.soLuong) || 1,
-                  donGia: Number(it.donGia) || 0,
-                  thanhTien: Number(it.thanhTien) || 0,
-                }))
+                id: it.id || idx + 1,
+                tenHang: it.tenHang || it.ten || itemName,
+                donVi: it.donVi || it.donViTinh || 'Bộ',
+                donViTinh: it.donViTinh || it.donVi || 'Bộ',
+                soLuong: Number(it.soLuong) || 1,
+                donGia: Number(it.donGia) || 0,
+                thanhTien: Number(it.thanhTien) || 0,
+              }))
               : [
-                  {
-                    id: 1,
-                    tenHang: itemName,
-                    donVi: 'Bộ',
-                    donViTinh: 'Bộ',
-                    soLuong: itemQty,
-                    donGia: unitPrice,
-                    thanhTien: totalAmt,
-                  },
-                ];
+                {
+                  id: 1,
+                  tenHang: itemName,
+                  donVi: 'Bộ',
+                  donViTinh: 'Bộ',
+                  soLuong: itemQty,
+                  donGia: unitPrice,
+                  thanhTien: totalAmt,
+                },
+              ];
 
             const recOrd = {
               id: e.id || e.code,
@@ -5744,7 +6371,7 @@ app.get('/api/plan-finance/customers', async (req, res) => {
             receivablesOrders.push(recOrd);
             if (recOrd.code) receivablesByCode.set(recOrd.code, recOrd);
           });
-        } catch (_) {}
+        } catch (_) { }
       });
 
       const directOrders = (c.saleOrders || []).map((o) => {
@@ -5753,18 +6380,18 @@ app.get('/api/plan-finance/customers', async (req, res) => {
         const itemsSummary =
           o.saleOrderItems && o.saleOrderItems.length > 0
             ? o.saleOrderItems
-                .map((it) => `${it.tenHang} (${it.soLuong} ${it.donViTinh || 'Bộ'})`)
-                .join(', ')
+              .map((it) => `${it.tenHang} (${it.soLuong} ${it.donViTinh || 'Bộ'})`)
+              .join(', ')
             : '';
         const totalAmt = Number(o.tongTien || matchedRec?.tongTien || 0);
         const paidAmt = Math.max(Number(o.daThanhToan) || 0, Number(matchedRec?.daThanhToan) || 0);
         const mappedItems =
           o.saleOrderItems && o.saleOrderItems.length > 0
             ? o.saleOrderItems.map((it) => ({
-                ...it,
-                donVi: it.donViTinh || 'Bộ',
-                donViTinh: it.donViTinh || 'Bộ',
-              }))
+              ...it,
+              donVi: it.donViTinh || 'Bộ',
+              donViTinh: it.donViTinh || 'Bộ',
+            }))
             : matchedRec?.items || [];
 
         return {
@@ -5792,10 +6419,10 @@ app.get('/api/plan-finance/customers', async (req, res) => {
             (paidAmt >= totalAmt && totalAmt > 0
               ? 'Đã tất toán'
               : o.trangThai === 'completed'
-              ? 'Hoàn thành'
-              : o.trangThai === 'approved'
-              ? 'Đã duyệt'
-              : 'Đang xử lý'),
+                ? 'Hoàn thành'
+                : o.trangThai === 'approved'
+                  ? 'Đã duyệt'
+                  : 'Đang xử lý'),
           items: mappedItems,
         };
       });
@@ -5830,12 +6457,17 @@ app.get('/api/plan-finance/customers', async (req, res) => {
 app.post('/api/plan-finance/customers', async (req, res) => {
   try {
     const body = req.body;
-    let nguoiChamSocId = body.nguoiChamSocId || null;
-    if (!nguoiChamSocId && body.nguoiChamSocName) {
+    let nguoiChamSocId = null;
+    const rawCareId = body.nguoiChamSocId || body.nguoiChamSocCode || body.nguoiChamSocUserId;
+    if (rawCareId) {
+      const cleanCareId = String(rawCareId).trim();
       const emp = await prisma.employee.findFirst({
-        where: { fullName: { contains: String(body.nguoiChamSocName).trim() } },
+        where: {
+          OR: [{ id: cleanCareId }, { code: cleanCareId }, { userId: cleanCareId }],
+        },
+        select: { id: true },
       });
-      if (emp) nguoiChamSocId = emp.id;
+      nguoiChamSocId = emp ? emp.id : cleanCareId;
     }
 
     const customer = await prisma.customer.create({
@@ -5884,14 +6516,14 @@ app.post('/api/plan-finance/customers/bulk-delete', async (req, res) => {
     }
 
     await Promise.all([
-      prisma.customerCareHistory.deleteMany({ where: { customerId: { in: ids } } }).catch(() => {}),
-      prisma.saleOrder.updateMany({ where: { customerId: { in: ids } }, data: { customerId: null } }).catch(() => {}),
-      prisma.debt.updateMany({ where: { customerId: { in: ids } }, data: { customerId: null } }).catch(() => {}),
-      prisma.quotation.updateMany({ where: { customerId: { in: ids } }, data: { customerId: null } }).catch(() => {}),
-      prisma.contract.updateMany({ where: { customerId: { in: ids } }, data: { customerId: null } }).catch(() => {}),
-      prisma.paymentNotification.updateMany({ where: { customerId: { in: ids } }, data: { customerId: null } }).catch(() => {}),
-      prisma.dealerSupportTicket.updateMany({ where: { customerId: { in: ids } }, data: { customerId: null } }).catch(() => {}),
-      prisma.user.updateMany({ where: { customerId: { in: ids } }, data: { customerId: null } }).catch(() => {}),
+      prisma.customerCareHistory.deleteMany({ where: { customerId: { in: ids } } }).catch(() => { }),
+      prisma.saleOrder.updateMany({ where: { customerId: { in: ids } }, data: { customerId: null } }).catch(() => { }),
+      prisma.debt.updateMany({ where: { customerId: { in: ids } }, data: { customerId: null } }).catch(() => { }),
+      prisma.quotation.updateMany({ where: { customerId: { in: ids } }, data: { customerId: null } }).catch(() => { }),
+      prisma.contract.updateMany({ where: { customerId: { in: ids } }, data: { customerId: null } }).catch(() => { }),
+      prisma.paymentNotification.updateMany({ where: { customerId: { in: ids } }, data: { customerId: null } }).catch(() => { }),
+      prisma.dealerSupportTicket.updateMany({ where: { customerId: { in: ids } }, data: { customerId: null } }).catch(() => { }),
+      prisma.user.updateMany({ where: { customerId: { in: ids } }, data: { customerId: null } }).catch(() => { }),
     ]);
 
     const deleted = await prisma.customer.deleteMany({
@@ -5909,14 +6541,14 @@ app.delete('/api/plan-finance/customers/:id', async (req, res) => {
   try {
     const { id } = req.params;
     await Promise.all([
-      prisma.customerCareHistory.deleteMany({ where: { customerId: id } }).catch(() => {}),
-      prisma.saleOrder.updateMany({ where: { customerId: id }, data: { customerId: null } }).catch(() => {}),
-      prisma.debt.updateMany({ where: { customerId: id }, data: { customerId: null } }).catch(() => {}),
-      prisma.quotation.updateMany({ where: { customerId: id }, data: { customerId: null } }).catch(() => {}),
-      prisma.contract.updateMany({ where: { customerId: id }, data: { customerId: null } }).catch(() => {}),
-      prisma.paymentNotification.updateMany({ where: { customerId: id }, data: { customerId: null } }).catch(() => {}),
-      prisma.dealerSupportTicket.updateMany({ where: { customerId: id }, data: { customerId: null } }).catch(() => {}),
-      prisma.user.updateMany({ where: { customerId: id }, data: { customerId: null } }).catch(() => {}),
+      prisma.customerCareHistory.deleteMany({ where: { customerId: id } }).catch(() => { }),
+      prisma.saleOrder.updateMany({ where: { customerId: id }, data: { customerId: null } }).catch(() => { }),
+      prisma.debt.updateMany({ where: { customerId: id }, data: { customerId: null } }).catch(() => { }),
+      prisma.quotation.updateMany({ where: { customerId: id }, data: { customerId: null } }).catch(() => { }),
+      prisma.contract.updateMany({ where: { customerId: id }, data: { customerId: null } }).catch(() => { }),
+      prisma.paymentNotification.updateMany({ where: { customerId: id }, data: { customerId: null } }).catch(() => { }),
+      prisma.dealerSupportTicket.updateMany({ where: { customerId: id }, data: { customerId: null } }).catch(() => { }),
+      prisma.user.updateMany({ where: { customerId: id }, data: { customerId: null } }).catch(() => { }),
     ]);
 
     await prisma.customer.delete({ where: { id } });
@@ -5966,16 +6598,24 @@ app.put('/api/plan-finance/customers/:id', async (req, res) => {
     const { id } = req.params;
     const body = req.body;
     let nguoiChamSocUpdate = {};
-    if (body.nguoiChamSocId !== undefined) {
-      nguoiChamSocUpdate = { nguoiChamSocId: body.nguoiChamSocId || null };
-    } else if (body.nguoiChamSocName !== undefined) {
-      if (!body.nguoiChamSocName) {
+    const rawCareUpdate =
+      body.nguoiChamSocId !== undefined
+        ? body.nguoiChamSocId
+        : body.nguoiChamSocCode !== undefined
+          ? body.nguoiChamSocCode
+          : body.nguoiChamSocUserId;
+    if (rawCareUpdate !== undefined) {
+      if (!rawCareUpdate) {
         nguoiChamSocUpdate = { nguoiChamSocId: null };
       } else {
+        const cleanCareId = String(rawCareUpdate).trim();
         const emp = await prisma.employee.findFirst({
-          where: { fullName: { contains: String(body.nguoiChamSocName).trim() } },
+          where: {
+            OR: [{ id: cleanCareId }, { code: cleanCareId }, { userId: cleanCareId }],
+          },
+          select: { id: true },
         });
-        if (emp) nguoiChamSocUpdate = { nguoiChamSocId: emp.id };
+        nguoiChamSocUpdate = { nguoiChamSocId: emp ? emp.id : cleanCareId };
       }
     }
 
@@ -6002,7 +6642,7 @@ app.put('/api/plan-finance/customers/:id', async (req, res) => {
         ...(body.formValues !== undefined
           ? { formValues: body.formValues }
           : body.coCamKet !== undefined
-          ? {
+            ? {
               formValues: JSON.stringify({
                 coCamKet: body.coCamKet !== false,
                 doanhSoCamKet: body.coCamKet === false ? 0 : (Number(body.doanhSoCamKet) || 0),
@@ -6011,7 +6651,7 @@ app.put('/api/plan-finance/customers/:id', async (req, res) => {
                 thuongVuotDoanhSo: body.thuongVuotDoanhSo || '',
               }),
             }
-          : {}),
+            : {}),
         ...nguoiChamSocUpdate,
       },
     });
@@ -6855,7 +7495,7 @@ app.post('/api/plan-finance/quotations', async (req, res) => {
           let leadForm = {};
           try {
             leadForm = lead.formValues ? JSON.parse(lead.formValues) : {};
-          } catch (e) {}
+          } catch (e) { }
           const existingCust = lead.phone
             ? await prisma.customer.findFirst({ where: { dienThoai: lead.phone } })
             : null;
@@ -6922,7 +7562,7 @@ app.post('/api/plan-finance/quotations', async (req, res) => {
       let parsedGhiChu = {};
       try {
         parsedGhiChu = typeof it.ghiChu === 'string' ? JSON.parse(it.ghiChu) : (it.ghiChu || {});
-      } catch (e) {}
+      } catch (e) { }
 
       resolvedItems.push({
         inventoryItemId: invItem ? invItem.id : null,
@@ -6979,7 +7619,7 @@ app.post('/api/plan-finance/quotations', async (req, res) => {
           let currentFv = {};
           try {
             currentFv = matchedLead.formValues ? JSON.parse(matchedLead.formValues) : {};
-          } catch (e) {}
+          } catch (e) { }
           const statusMap = {
             draft: 'Draft',
             pending_approval: 'Sent',
@@ -7101,15 +7741,11 @@ app.post('/api/plan-finance/quotations', async (req, res) => {
         });
       }
 
-      // Notifications for Finance / Accounting
+      // Notifications for Finance / Accounting (truy xuất theo mã định danh phòng ban departmentCode)
       try {
         const financeHeads = await prisma.employee.findMany({
           where: {
-            OR: [
-              { departmentCode: 'finance' },
-              { departmentName: { contains: 'Kế toán' } },
-              { departmentName: { contains: 'Tài chính' } }
-            ],
+            departmentCode: 'finance',
             userId: { not: null }
           },
           select: { userId: true }
@@ -7224,7 +7860,7 @@ app.patch('/api/plan-finance/quotations/:id', async (req, res) => {
         let currentFv = {};
         try {
           currentFv = matchedLead.formValues ? JSON.parse(matchedLead.formValues) : {};
-        } catch (e) {}
+        } catch (e) { }
         const statusMap = {
           draft: 'Draft',
           pending_approval: 'Sent',
@@ -7292,7 +7928,14 @@ app.get('/api/plan-finance/sales', async (req, res) => {
     const search = (req.query.search || '').trim().toLowerCase();
     const trangThai = req.query.trangThai;
 
-    const isDealerPortalQuery = req.query.orderSource === 'dealer_portal';
+    const isDealerPortalQuery =
+      req.query.orderSource === 'dealer_portal' || req.query.orderSource === 'request_order';
+    const isRequestOrder = (o) =>
+      o.orderSource === 'dealer_portal' ||
+      o.orderSource === 'customer_portal' ||
+      (o.code || '').startsWith('DH-DL-') ||
+      (o.code || '').startsWith('KHL-');
+
     const where = {};
     if (trangThai && !isDealerPortalQuery) where.trangThai = trangThai;
     if (req.query.keToanDuyet) where.keToanDuyet = req.query.keToanDuyet;
@@ -7318,11 +7961,7 @@ app.get('/api/plan-finance/sales', async (req, res) => {
 
     let filtered = allOrders;
     if (isDealerPortalQuery) {
-      filtered = filtered.filter(
-        (o) =>
-          (o.orderSource === 'dealer_portal' || (o.code || '').startsWith('DH-DL-')) &&
-          o.trangThai !== 'draft'
-      );
+      filtered = filtered.filter((o) => isRequestOrder(o) && o.trangThai !== 'draft');
       if (trangThai === 'pending') {
         filtered = filtered.filter((o) => o.trangThai === 'pending' || o.trangThai === 'pending_approval');
       } else if (trangThai === 'approved') {
@@ -7335,9 +7974,7 @@ app.get('/api/plan-finance/sales', async (req, res) => {
         filtered = filtered.filter((o) => o.trangThai === trangThai);
       }
     } else if (req.query.orderSource === 'system') {
-      filtered = filtered.filter(
-        (o) => o.orderSource !== 'dealer_portal' && !(o.code || '').startsWith('DH-DL-')
-      );
+      filtered = filtered.filter((o) => !isRequestOrder(o));
     }
     if (search) {
       const searchNorm = removeAccents(search);
@@ -7345,9 +7982,20 @@ app.get('/api/plan-finance/sales', async (req, res) => {
         const matchCode = removeAccents(o.code).includes(searchNorm);
         const matchCust = removeAccents(o.customer?.name).includes(searchNorm);
         const matchCustCode = removeAccents(o.customer?.code).includes(searchNorm);
-        const matchPhone = (o.customer?.dienThoai || '').includes(search);
+        const matchRecipient = removeAccents(o.nguoiNhan).includes(searchNorm);
+        const matchCreator = removeAccents(o.nguoiDatHang).includes(searchNorm);
+        const matchPhone =
+          (o.customer?.dienThoai || '').includes(search) || (o.soDienThoai || '').includes(search);
         const matchGhiChu = removeAccents(o.ghiChu).includes(searchNorm);
-        return matchCode || matchCust || matchCustCode || matchPhone || matchGhiChu;
+        return (
+          matchCode ||
+          matchCust ||
+          matchCustCode ||
+          matchRecipient ||
+          matchCreator ||
+          matchPhone ||
+          matchGhiChu
+        );
       });
     }
 
@@ -7355,7 +8003,7 @@ app.get('/api/plan-finance/sales', async (req, res) => {
     if (search) {
       const allCusts = await prisma.customer.findMany({ take: 50 });
       const searchNorm = removeAccents(search);
-      matchingCustomers = allCusts.filter(c => 
+      matchingCustomers = allCusts.filter(c =>
         removeAccents(c.name).includes(searchNorm) ||
         removeAccents(c.code).includes(searchNorm) ||
         (c.dienThoai || '').includes(search)
@@ -7437,7 +8085,7 @@ app.get('/api/plan-finance/sales/:id', async (req, res) => {
       let parsedGhiChu = {};
       try {
         parsedGhiChu = typeof item.ghiChu === 'string' ? JSON.parse(item.ghiChu) : (item.ghiChu || {});
-      } catch (e) {}
+      } catch (e) { }
 
       let resolvedDinhMucId = item.dinhMucId || parsedGhiChu.dinhMucId || item.inventoryItem?.dinhMucs?.[0]?.id || null;
       let bom = null;
@@ -7495,7 +8143,7 @@ app.get('/api/plan-finance/sales/:id', async (req, res) => {
     if (logisticsTask && logisticsTask.actualResult) {
       try {
         logisticsItems = JSON.parse(logisticsTask.actualResult);
-      } catch (_) {}
+      } catch (_) { }
     }
 
     const resolved = {
@@ -7578,7 +8226,7 @@ const handleUpdateSaleOrder = async (req, res) => {
             );
             return res.json({ success: true, code: target.code || id, order: target });
           }
-        } catch (_) {}
+        } catch (_) { }
       }
       return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
     }
@@ -7592,7 +8240,7 @@ const handleUpdateSaleOrder = async (req, res) => {
             let ghiChuObj = {};
             try {
               ghiChuObj = typeof it.ghiChu === 'string' ? JSON.parse(it.ghiChu) : (it.ghiChu || {});
-            } catch (e) {}
+            } catch (e) { }
             return {
               saleOrderId: targetOrderId,
               inventoryItemId: it.inventoryItemId || null,
@@ -7706,19 +8354,19 @@ app.get('/api/logistics/inventory', async (req, res) => {
 
     if (exactCode) {
       const codeNorm = removeAccents(exactCode);
-      filtered = filtered.filter(it => 
-        removeAccents(it.code) === codeNorm || 
+      filtered = filtered.filter(it =>
+        removeAccents(it.code) === codeNorm ||
         removeAccents(it.maThayThe) === codeNorm
       );
     } else if (categoryId) {
-      filtered = filtered.filter(it => 
-        it.categoryId === categoryId || 
+      filtered = filtered.filter(it =>
+        it.categoryId === categoryId ||
         it.erpCategoryId === categoryId
       );
     }
 
     if (warehouseId && warehouseId !== 'all') {
-      filtered = filtered.filter(it => 
+      filtered = filtered.filter(it =>
         (it.stocks || []).some(s => s.warehouseId === warehouseId || s.warehouse?.id === warehouseId || s.warehouse?.code === warehouseId)
       );
     }
@@ -7745,7 +8393,7 @@ app.get('/api/logistics/inventory', async (req, res) => {
         if (Array.isArray(arr) && arr.length > 0) {
           webProductImageMap.set(wp.id, arr);
         }
-      } catch (_) {}
+      } catch (_) { }
     });
 
     const mapped = filtered.map((item) => {
@@ -8030,7 +8678,7 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
             });
           }
         }
-      } catch (_) {}
+      } catch (_) { }
     });
 
     const qcCodes = inboundTasks.map(t => {
@@ -8050,7 +8698,7 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
       let meta = null;
       try {
         meta = typeof qc.metadata === 'string' ? JSON.parse(qc.metadata) : qc.metadata;
-      } catch (_) {}
+      } catch (_) { }
       if (meta?.productionOrder) {
         qcProdOrderMap.set(qc.code, meta.productionOrder);
       }
@@ -8067,7 +8715,7 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
             poIdsToFetch.push(parsed[0].purchaseOrderId);
           }
         }
-      } catch (_) {}
+      } catch (_) { }
     });
 
     const pos = poIdsToFetch.length > 0 ? await prisma.purchaseOrder.findMany({
@@ -8080,7 +8728,7 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
       let meta = null;
       try {
         meta = typeof qc.metadata === 'string' ? JSON.parse(qc.metadata) : qc.metadata;
-      } catch (_) {}
+      } catch (_) { }
       const poId = meta?.purchaseOrderId || null;
       const po = poId ? poMap.get(poId) : null;
       if (poId || meta?.purchaseOrderCode || meta?.poNumber || meta?.supplierName) {
@@ -8129,7 +8777,7 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
               try {
                 const parsed = JSON.parse(soItem.ghiChu);
                 if (parsed.bomCode) bomCode = parsed.bomCode;
-              } catch (_) {}
+              } catch (_) { }
             }
           }
           return {
@@ -8208,7 +8856,7 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
           let parsedItems = [];
           try {
             if (t.actualResult) parsedItems = JSON.parse(t.actualResult);
-          } catch (_) {}
+          } catch (_) { }
           const orderCodeMatch = t.title.match(/cho (?:đơn hàng|lệnh)\s+(\S+)/i);
           const orderCode = orderCodeMatch ? orderCodeMatch[1] : 'KVP';
 
@@ -8228,7 +8876,7 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
         let parsedItems = [];
         try {
           if (t.actualResult) parsedItems = JSON.parse(t.actualResult);
-        } catch (_) {}
+        } catch (_) { }
 
         const qcCodeMatch = t.title.match(/\(([^)]+)\)/);
         const code = qcCodeMatch ? qcCodeMatch[1] : 'Nhập kho';
@@ -8292,16 +8940,13 @@ app.get('/api/logistics/staff', async (_req, res) => {
   try {
     const staff = await prisma.employee.findMany({
       where: {
-        OR: [
-          { departmentCode: { contains: 'logistics' } },
-          { departmentCode: { contains: 'kho' } },
-          { departmentName: { contains: 'kho' } },
-          { departmentName: { contains: 'Kho' } },
-        ],
+        departmentCode: { in: ['logistics', 'warehouse', 'kho'] },
         status: 'active'
       },
       select: {
         id: true,
+        code: true,
+        userId: true,
         fullName: true,
         position: true,
         departmentName: true
@@ -8652,12 +9297,12 @@ app.get('/api/logistics/tasks', async (req, res) => {
 
     // Chuyển đổi tickets
     tickets.forEach((tk) => {
-      const typeLabel = 
+      const typeLabel =
         tk.type === 'BATCH_PACKING' ? 'Gom hàng & dán nhãn' :
-        tk.type === 'MATERIAL_PICKING' ? 'Cấp phát vật tư' :
-        tk.type === 'WARRANTY_MATERIAL' ? 'Cấp phát linh kiện BH' : 'Xuất kho đơn hàng';
+          tk.type === 'MATERIAL_PICKING' ? 'Cấp phát vật tư' :
+            tk.type === 'WARRANTY_MATERIAL' ? 'Cấp phát linh kiện BH' : 'Xuất kho đơn hàng';
 
-      const itemsSummary = tk.items && tk.items.length > 0 
+      const itemsSummary = tk.items && tk.items.length > 0
         ? tk.items.map(it => `${it.inventoryItem?.tenHang || 'Vật tư'} (${it.requestedQty || 1} ${it.inventoryItem?.donVi || 'cái'})`).join(', ')
         : (tk.saleOrder ? `Đơn hàng ${tk.saleOrder.code}` : 'Chưa có chi tiết');
 
@@ -8705,7 +9350,7 @@ app.get('/api/logistics/tasks', async (req, res) => {
 
     // Filter
     if (search) {
-      combined = combined.filter(it => 
+      combined = combined.filter(it =>
         (it.code && it.code.toLowerCase().includes(search)) ||
         (it.title && it.title.toLowerCase().includes(search)) ||
         (it.description && it.description.toLowerCase().includes(search)) ||
@@ -8783,7 +9428,7 @@ app.put('/api/logistics/tasks/:id/complete', async (req, res) => {
         data: { status: 'completed', completedAt: new Date() }
       });
       return res.json({ success: true });
-    } catch (_) {}
+    } catch (_) { }
 
     // Thử cập nhật logisticsTicket và tự động lưu vết vào StockMovement
     try {
@@ -9179,7 +9824,7 @@ async function attachWebImages(items) {
         select: { id: true, images: true }
       });
       webProductMap = new Map(webProducts.map(wp => [wp.id, wp.images]));
-    } catch (e) {}
+    } catch (e) { }
   }
 
   return items.map(item => {
@@ -9190,7 +9835,7 @@ async function attachWebImages(items) {
         const raw = webProductMap.get(wpId);
         if (typeof raw === 'string') images = JSON.parse(raw);
         else if (Array.isArray(raw)) images = raw;
-      } catch (e) {}
+      } catch (e) { }
     }
     return {
       ...item,
@@ -9214,7 +9859,7 @@ async function resolveLogisticsUserContext(req) {
         const decoded = jwt.verify(token, JWT_SECRET);
         if (decoded?.id) userId = String(decoded.id);
       }
-    } catch (_) {}
+    } catch (_) { }
   }
 
   if (!userId) {
@@ -9296,9 +9941,9 @@ async function filterTicketsForLogisticsUser(tickets, userCtx) {
         if (Array.isArray(ids)) {
           ids.forEach((id) => assignedTaskTicketIds.add(String(id)));
         }
-      } catch (_) {}
+      } catch (_) { }
     }
-  } catch (_) {}
+  } catch (_) { }
 
   return tickets.filter((ticket) => {
     if (
@@ -10200,7 +10845,7 @@ app.get('/api/production/dashboard/recent-orders', async (req, res) => {
           if (Array.isArray(prodItems)) {
             prodItemIds = prodItems.map((pi) => pi.saleOrderItemId).filter(Boolean);
           }
-        } catch (_) {}
+        } catch (_) { }
       }
 
       const targetItems = prodItemIds.length > 0
@@ -10325,7 +10970,7 @@ app.get('/api/production/orders/:id', async (req, res) => {
         for (const pt of parsed) {
           prodTargets.set(pt.tenHang, pt.missingQty);
         }
-      } catch (_) {}
+      } catch (_) { }
     } else if (prodTask && prodTask.description) {
       const lines = prodTask.description.split('\n');
       for (const line of lines) {
@@ -10648,7 +11293,7 @@ const mapApprovalRequestToDoc = (row, idx = 0) => {
   let meta = {};
   try {
     meta = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata || {};
-  } catch {}
+  } catch { }
 
   const entityType = String(row.entityType || '').toLowerCase();
   let docType = 'proposal';
@@ -10676,8 +11321,8 @@ const mapApprovalRequestToDoc = (row, idx = 0) => {
     rawStatus === 'approved' || rawStatus === 'completed'
       ? 'approved'
       : rawStatus === 'rejected'
-      ? 'rejected'
-      : 'pending';
+        ? 'rejected'
+        : 'pending';
   const rawPriority = String(row.priority || 'normal').toLowerCase();
   const priority = rawPriority === 'urgent' ? 'urgent' : rawPriority === 'high' ? 'high' : 'normal';
 
@@ -10697,10 +11342,10 @@ const mapApprovalRequestToDoc = (row, idx = 0) => {
     docTypeName,
     department: String(
       row.department ||
-        meta?.departmentName ||
-        (entityType.includes('purchase')
-          ? 'Phòng Mua hàng'
-          : entityType.includes('expense')
+      meta?.departmentName ||
+      (entityType.includes('purchase')
+        ? 'Phòng Mua hàng'
+        : entityType.includes('expense')
           ? 'Phòng Tài chính – Kế toán'
           : 'Phòng ban Seajong')
     ),
@@ -11226,7 +11871,7 @@ app.get('/api/finance/debts-v2', async (req, res) => {
 
     if (search) {
       const sNorm = removeAccents(search);
-      filtered = filtered.filter(d => 
+      filtered = filtered.filter(d =>
         removeAccents(d.partnerName).includes(sNorm) ||
         removeAccents(d.referenceId || '').includes(sNorm)
       );
@@ -11496,7 +12141,7 @@ app.get('/api/plan-finance/expenses', async (req, res) => {
     let filtered = all;
     if (search) {
       const sNorm = removeAccents(search);
-      filtered = all.filter(e => 
+      filtered = all.filter(e =>
         removeAccents(e.tenChiPhi).includes(sNorm) ||
         removeAccents(e.loai || '').includes(sNorm) ||
         removeAccents(e.nguoiChiTra || '').includes(sNorm)
@@ -11544,7 +12189,7 @@ app.get('/api/finance/expenses', async (req, res) => {
     let filtered = all;
     if (search) {
       const sNorm = removeAccents(search);
-      filtered = all.filter(e => 
+      filtered = all.filter(e =>
         removeAccents(e.tenChiPhi).includes(sNorm) ||
         removeAccents(e.loai || '').includes(sNorm) ||
         removeAccents(e.nguoiChiTra || '').includes(sNorm)
@@ -11648,7 +12293,7 @@ app.get('/api/finance/purchase-requests', async (req, res) => {
     let filtered = all;
     if (search) {
       const sNorm = removeAccents(search);
-      filtered = all.filter(r => 
+      filtered = all.filter(r =>
         removeAccents(r.code || '').includes(sNorm) ||
         removeAccents(r.nguoiYeuCau || '').includes(sNorm) ||
         removeAccents(r.donVi || '').includes(sNorm) ||
@@ -11701,12 +12346,20 @@ app.get('/api/sales/omnichannel/orders', async (req, res) => {
       take: 100,
     });
 
-    let list = [];
-    if (dbOmnichannel.length > 0) {
-      list = dbOmnichannel.map((o) => ({
+    const isMarketplaceChannel = (chName = '') => {
+      const norm = String(chName || '').toLowerCase();
+      if (!norm) return false;
+      if (norm.includes('showroom') || norm.includes('đại lý') || norm.includes('dai ly') || norm.includes('website')) {
+        return false;
+      }
+      return true;
+    };
+
+    let list = dbOmnichannel
+      .map((o) => ({
         id: o.id,
         externalId: o.externalOrderId,
-        channel: o.channel?.name || o.channel?.platform || 'Omnichannel',
+        channel: o.channel?.shopName || o.channel?.name || o.channel?.platform || 'Sàn TMĐT',
         customer: o.customerName || 'Khách hàng',
         phone: o.customerPhone || '',
         address: o.customerAddress || '',
@@ -11717,29 +12370,8 @@ app.get('/api/sales/omnichannel/orders', async (req, res) => {
         status: o.orderStatus || 'Đã xác nhận',
         createdAt: o.createdAt ? o.createdAt.toISOString() : new Date().toISOString(),
         shippingDate: o.updatedAt ? o.updatedAt.toISOString() : new Date().toISOString(),
-      }));
-    } else {
-      const saleOrders = await prisma.saleOrder.findMany({
-        include: { customer: true, saleOrderItems: true },
-        orderBy: { ngayDat: 'desc' },
-        take: 100,
-      });
-      list = saleOrders.map((o) => ({
-        id: o.id,
-        externalId: o.code || o.id,
-        channel: o.kenhBan || 'Showroom / Đại lý',
-        customer: o.customer?.name || 'Khách hàng Seajong',
-        phone: o.customer?.dienThoai || o.customer?.phone || '',
-        address: o.customer?.address || '',
-        productSummary: (o.saleOrderItems || []).map((it) => `${it.soLuong} x ${it.tenHang}`).join(', ') || o.ghiChu || 'Đơn hàng thiết bị vệ sinh Seajong',
-        amount: Number(o.tongTien) || 0,
-        trackingCode: o.code || '',
-        carrier: o.donViVanChuyen || 'Vận chuyển Seajong',
-        status: o.trangThai === 'completed' ? 'Hoàn tất' : o.trangThai === 'shipping' ? 'Đang giao hàng' : 'Đã xác nhận',
-        createdAt: o.ngayDat ? o.ngayDat.toISOString() : new Date().toISOString(),
-        shippingDate: o.ngayGiao ? o.ngayGiao.toISOString() : (o.ngayDat ? o.ngayDat.toISOString() : new Date().toISOString()),
-      }));
-    }
+      }))
+      .filter((o) => isMarketplaceChannel(o.channel) && !String(o.externalId || '').startsWith('DBH-'));
 
     if (channel && channel !== 'all') {
       list = list.filter((o) => String(o.channel || '').toLowerCase().includes(String(channel).toLowerCase()));
@@ -11758,7 +12390,7 @@ app.patch('/api/sales/omnichannel/orders', async (req, res) => {
       await prisma.omnichannelOrder.updateMany({
         where: { id: { in: ids } },
         data: { orderStatus: status },
-      }).catch(() => {});
+      }).catch(() => { });
     }
     res.json({ success: true });
   } catch (err) {
@@ -11861,58 +12493,80 @@ app.post('/api/production/defects', async (req, res) => {
       }
     }
 
-    let code = body.code;
-    if (!code) {
-      const isWarranty = body.source === 'WARRANTY';
-      const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      const prefix = isWarranty ? 'WR' : 'ERR';
-      const lastDefect = await prisma.defectRecord.findFirst({
-        where: { code: { startsWith: `${prefix}-${timestamp}` } },
-        orderBy: { code: 'desc' }
-      });
-      let nextNumber = 1;
-      if (lastDefect?.code) {
-        const parts = lastDefect.code.split('-');
-        if (parts.length === 3) {
-          nextNumber = (parseInt(parts[2], 10) || 0) + 1;
-        }
+    const isWarranty = body.source === 'WARRANTY';
+    const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const prefix = isWarranty ? 'WR' : 'ERR';
+    const lastDefect = await prisma.defectRecord.findFirst({
+      where: { code: { startsWith: `${prefix}-${timestamp}` } },
+      orderBy: { code: 'desc' }
+    });
+    let nextNumber = 1;
+    if (lastDefect?.code) {
+      const parts = lastDefect.code.split('-');
+      if (parts.length === 3) {
+        nextNumber = (parseInt(parts[2], 10) || 0) + 1;
       }
-      code = `${prefix}-${timestamp}-${String(nextNumber).padStart(2, '0')}`;
     }
 
     const source = body.source || 'INTERNAL';
     const refundAmount = parseFloat(body.refundAmount) || 0;
     let customerId = body.customerId || null;
+    const customerCode = body.customerCode || null;
     const customerName = body.customerName || null;
 
-    if (!customerId && customerName) {
+    if (customerId || customerCode) {
+      const lookupKey = String(customerId || customerCode).trim();
       const foundCustomer = await prisma.customer.findFirst({
-        where: { name: customerName },
+        where: { OR: [{ id: lookupKey }, { code: lookupKey }] },
         select: { id: true }
       });
       if (foundCustomer) customerId = foundCustomer.id;
     }
 
-    const defect = await prisma.defectRecord.create({
-      data: {
-        code,
-        source,
-        status: body.status || 'NEW',
-        productName: body.productName || 'Sản phẩm',
-        productCode: body.productCode || 'SP-001',
-        quantity: parseInt(body.quantity, 10) || 1,
-        description: body.description || '',
-        mediaUrls: JSON.stringify(mediaUrls),
-        reporterName: body.reporterName || 'Hệ thống',
-        reporterDepartment: body.reporterDepartment || 'Sản xuất',
-        customerName,
-        customerId,
-        customerAddress: body.customerAddress || null,
-        orderNumber: body.orderNumber || null,
-        assignedTo: body.assignedTo || null,
-        completionDate: body.completionDate ? new Date(body.completionDate) : null,
-      }
-    });
+    const itemsPayload =
+      Array.isArray(body.items) && body.items.length > 0
+        ? body.items
+        : [
+            {
+              productName: body.productName || 'Sản phẩm',
+              productCode: body.productCode || 'SP-001',
+              quantity: parseInt(body.quantity, 10) || 1,
+            },
+          ];
+
+    const createdDefects = [];
+    for (let i = 0; i < itemsPayload.length; i++) {
+      const it = itemsPayload[i];
+      const itemCode =
+        i === 0 && body.code
+          ? body.code
+          : `${prefix}-${timestamp}-${String(nextNumber + i).padStart(2, '0')}`;
+
+      const created = await prisma.defectRecord.create({
+        data: {
+          code: itemCode,
+          source,
+          status: body.status || 'NEW',
+          productName: it.productName || body.productName || 'Sản phẩm',
+          productCode: it.productCode || body.productCode || 'SP-001',
+          quantity: parseInt(it.quantity, 10) || 1,
+          description: body.description || '',
+          mediaUrls: JSON.stringify(mediaUrls),
+          reporterName: body.reporterName || 'Hệ thống',
+          reporterDepartment: body.reporterDepartment || 'Sản xuất',
+          customerName,
+          customerId,
+          customerAddress: body.customerAddress || null,
+          orderNumber: body.orderNumber || null,
+          assignedTo: body.assignedTo || null,
+          completionDate: body.completionDate ? new Date(body.completionDate) : null,
+        }
+      });
+      createdDefects.push(created);
+    }
+
+    const defect = createdDefects[0];
+    const code = defect.code;
 
     if ((source === 'RETURN' || refundAmount > 0) && refundAmount > 0 && customerId) {
       const discountInfo = body.discountInfo || null;
@@ -12155,7 +12809,7 @@ app.get('/api/production/defects/:id', async (req, res) => {
             }
           });
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     const selectedBomItemIds = [];
@@ -12187,7 +12841,7 @@ app.get('/api/production/defects/:id', async (req, res) => {
     if (defect.mediaUrls) {
       try {
         parsedMedia = JSON.parse(defect.mediaUrls);
-      } catch (_) {}
+      } catch (_) { }
     }
 
     res.json({
@@ -12259,11 +12913,7 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
 
       const storekeeperUser = await tx.employee.findFirst({
         where: {
-          OR: [
-            { departmentName: { contains: 'Kho' } },
-            { departmentCode: { contains: 'logistics' } },
-            { position: { contains: 'Thủ kho' } }
-          ],
+          departmentCode: { in: ['logistics', 'warehouse', 'kho'] },
           userId: { not: null }
         },
         select: { userId: true }
@@ -12575,28 +13225,28 @@ app.get('/api/plan-finance/inventory/search', async (req, res) => {
 
     const filtered = qRaw
       ? allItems.filter((it) => {
-          const code = String(it.code || '').toLowerCase();
-          const maThayThe = String(it.maThayThe || '').toLowerCase();
-          const tenHang = String(it.tenHang || '').toLowerCase();
-          const model = String(it.model || '').toLowerCase();
-          if (
-            code.includes(qLower) ||
-            maThayThe.includes(qLower) ||
-            tenHang.includes(qLower) ||
-            model.includes(qLower)
-          ) {
-            return true;
-          }
-          if (qNorm) {
-            return (
-              normalizeVi(it.code).includes(qNorm) ||
-              normalizeVi(it.maThayThe).includes(qNorm) ||
-              normalizeVi(it.tenHang).includes(qNorm) ||
-              normalizeVi(it.model).includes(qNorm)
-            );
-          }
-          return false;
-        })
+        const code = String(it.code || '').toLowerCase();
+        const maThayThe = String(it.maThayThe || '').toLowerCase();
+        const tenHang = String(it.tenHang || '').toLowerCase();
+        const model = String(it.model || '').toLowerCase();
+        if (
+          code.includes(qLower) ||
+          maThayThe.includes(qLower) ||
+          tenHang.includes(qLower) ||
+          model.includes(qLower)
+        ) {
+          return true;
+        }
+        if (qNorm) {
+          return (
+            normalizeVi(it.code).includes(qNorm) ||
+            normalizeVi(it.maThayThe).includes(qNorm) ||
+            normalizeVi(it.tenHang).includes(qNorm) ||
+            normalizeVi(it.model).includes(qNorm)
+          );
+        }
+        return false;
+      })
       : allItems;
 
     const mapped = filtered.slice(0, limit).map((it) => {
@@ -12775,7 +13425,7 @@ app.post('/api/logistics/product-label-specs', async (req, res) => {
         try {
           const parsed = JSON.parse(wp.specs);
           if (parsed && typeof parsed === 'object') webSpecs = parsed;
-        } catch (_) {}
+        } catch (_) { }
       }
 
       const getSpecVal = (keys) => {
@@ -13025,7 +13675,7 @@ app.post('/api/logistics/product-label-specs', async (req, res) => {
         try {
           const arr = JSON.parse(wp.images);
           if (Array.isArray(arr) && arr.length > 0) resolvedImageUrl = arr[0];
-        } catch (_) {}
+        } catch (_) { }
       }
 
       return {
@@ -13208,11 +13858,25 @@ app.get('/api/sales/internal-reports/reports', async (req, res) => {
         criteria =
           type === 'MANAGER'
             ? defaultManager.map((name) => ({
+              id: name,
+              month,
+              year,
+              name,
+              type: 'MANAGER',
+              targetValue: 0,
+              weight: 0,
+              code: null,
+              isActive: true,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }))
+            : type === 'STAFF'
+              ? defaultStaff.map((name) => ({
                 id: name,
                 month,
                 year,
                 name,
-                type: 'MANAGER',
+                type: 'STAFF',
                 targetValue: 0,
                 weight: 0,
                 code: null,
@@ -13220,8 +13884,21 @@ app.get('/api/sales/internal-reports/reports', async (req, res) => {
                 createdAt: new Date(),
                 updatedAt: new Date(),
               }))
-            : type === 'STAFF'
-              ? defaultStaff.map((name) => ({
+              : [
+                ...defaultManager.map((name) => ({
+                  id: name,
+                  month,
+                  year,
+                  name,
+                  type: 'MANAGER',
+                  targetValue: 0,
+                  weight: 0,
+                  code: null,
+                  isActive: true,
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                })),
+                ...defaultStaff.map((name) => ({
                   id: name,
                   month,
                   year,
@@ -13233,35 +13910,8 @@ app.get('/api/sales/internal-reports/reports', async (req, res) => {
                   isActive: true,
                   createdAt: new Date(),
                   updatedAt: new Date(),
-                }))
-              : [
-                  ...defaultManager.map((name) => ({
-                    id: name,
-                    month,
-                    year,
-                    name,
-                    type: 'MANAGER',
-                    targetValue: 0,
-                    weight: 0,
-                    code: null,
-                    isActive: true,
-                    createdAt: new Date(),
-                    updatedAt: new Date(),
-                  })),
-                  ...defaultStaff.map((name) => ({
-                    id: name,
-                    month,
-                    year,
-                    name,
-                    type: 'STAFF',
-                    targetValue: 0,
-                    weight: 0,
-                    code: null,
-                    isActive: true,
-                    createdAt: new Date(),
-                    updatedAt: new Date(),
-                  })),
-                ];
+                })),
+              ];
       }
     }
 
@@ -13421,8 +14071,8 @@ app.get('/api/sales/internal-reports/reports', async (req, res) => {
 
       try {
         const salesEmployees = await prisma.employee.findMany({
-          where: { departmentName: { contains: 'Kinh doanh' } },
-          select: { id: true, fullName: true },
+          where: { departmentCode: 'sales' },
+          select: { id: true, code: true, fullName: true },
         });
         const salesEmpIds = salesEmployees.map((e) => e.id);
 
@@ -14482,22 +15132,27 @@ app.get('/api/users', async (req, res) => {
       if (c.code) posMap[c.code] = c.name;
       if (c.id) posMap[c.id] = c.name;
     }
-    const result = employees.map((e) => {
+    const result = [];
+    for (const e of employees) {
       const matchedLoc = findEmployeeWorkLocation(e, workLocations);
       const isEnrolled = Boolean(
         e.isInsuranceEnrolled ||
-          (e.socialInsuranceNumber && String(e.socialInsuranceNumber).trim() !== '') ||
-          (e.insuranceSalary && Number(e.insuranceSalary) > 0)
+        (e.socialInsuranceNumber && String(e.socialInsuranceNumber).trim() !== '') ||
+        (e.insuranceSalary && Number(e.insuranceSalary) > 0)
       );
-      return {
-        id: e.userId || e.id,
+      const validUserId = e.user?.id || e.userId || (await ensureValidChatUserId(e.id)) || e.id;
+      result.push({
+        id: validUserId,
         employeeId: e.id,
-        userId: e.userId,
+        userId: validUserId,
         code: e.code || '',
         name: e.fullName,
+        phone: e.phone || '',
         email: e.workEmail || e.personalEmail || e.email || e.user?.email || '',
         position: posMap[e.position] || e.position || e.user?.role || 'Nhân viên',
+        positionCode: e.position || '',
         department: e.departmentName || e.department || 'Khối văn phòng',
+        departmentCode: e.departmentCode || '',
         workLocation: matchedLoc?.code || e.workLocation || 'main',
         branchCode: matchedLoc?.code || e.branchCode || e.workLocation || null,
         workLocationName: matchedLoc?.name || 'Văn phòng công ty',
@@ -14514,14 +15169,617 @@ app.get('/api/users', async (req, res) => {
             : e.profileStatus === 'leave'
               ? 'Tạm nghỉ'
               : 'Đang làm việc',
-      };
-    });
+      });
+    }
     res.json(result);
   } catch (err) {
     console.error('Lỗi GET /api/users:', err);
     res.status(500).json({ error: err.message });
   }
 });
+
+// ── API TIN NHẮN NỘI BỘ & CHAT KHÁCH HÀNG - NHÂN VIÊN BÁN HÀNG ──
+// Truy xuất nghiêm ngặt theo mã định danh (User.id, Employee.id, Employee.code, Employee.userId, Customer.id, Customer.code)
+async function ensureValidChatUserId(rawId) {
+  if (!rawId) return null;
+  const idStr = String(rawId).trim();
+  if (!idStr) return null;
+
+  // 1. Tài khoản Khách hàng trực tuyến (guest-customer)
+  if (idStr === 'guest-customer' || idStr === 'khachhang@seajong.com') {
+    let guestUser = await prisma.user.findUnique({ where: { id: 'guest-customer' } });
+    if (!guestUser) {
+      const byEmail = await prisma.user.findUnique({ where: { email: 'khachhang@seajong.com' } });
+      if (byEmail) return byEmail.id;
+      const defaultPasswordHash = await bcrypt.hash('Pass@123', 10);
+      guestUser = await prisma.user.create({
+        data: {
+          id: 'guest-customer',
+          email: 'khachhang@seajong.com',
+          password: defaultPasswordHash,
+          name: 'Khách hàng Seajong',
+          role: 'CUSTOMER',
+          deptAccess: JSON.stringify(['customer']),
+          permissions: JSON.stringify(['customer_access', 'chat']),
+        },
+      });
+    }
+    return guestUser.id;
+  }
+
+  // 2. Kiểm tra nếu idStr đã là User.id hợp lệ
+  const directUser = await prisma.user.findUnique({ where: { id: idStr } });
+  if (directUser) return directUser.id;
+
+  // 3. Kiểm tra nếu idStr là mã định danh của Employee (Employee.id, Employee.code, Employee.userId)
+  const emp = await prisma.employee.findFirst({
+    where: {
+      OR: [{ id: idStr }, { code: idStr }, { userId: idStr }],
+    },
+    include: { user: true },
+  });
+
+  if (emp) {
+    if (emp.user) return emp.user.id;
+    if (emp.userId) {
+      const linked = await prisma.user.findUnique({ where: { id: emp.userId } });
+      if (linked) return linked.id;
+    }
+
+    const defaultPasswordHash = await bcrypt.hash('Pass@123', 10);
+    const baseEmail = (
+      emp.workEmail ||
+      emp.personalEmail ||
+      `${String(emp.code || emp.id).toLowerCase()}@seajong.com`
+    )
+      .trim()
+      .toLowerCase();
+
+    const existingEmailUser = await prisma.user.findUnique({ where: { email: baseEmail } });
+    if (existingEmailUser) {
+      await prisma.employee
+        .update({ where: { id: emp.id }, data: { userId: existingEmailUser.id } })
+        .catch(() => { });
+      return existingEmailUser.id;
+    }
+
+    const createdUser = await prisma.user.create({
+      data: {
+        email: baseEmail,
+        password: defaultPasswordHash,
+        name: emp.fullName,
+        role: 'USER',
+        deptAccess: JSON.stringify(emp.departmentCode ? [emp.departmentCode] : []),
+        permissions: JSON.stringify(['chat']),
+        employee: { connect: { id: emp.id } },
+      },
+    });
+    return createdUser.id;
+  }
+
+  // 4. Kiểm tra nếu idStr là mã định danh của Customer (Customer.id, Customer.code)
+  const cust = await prisma.customer.findFirst({
+    where: {
+      OR: [{ id: idStr }, { code: idStr }],
+    },
+    include: { users: { take: 1 } },
+  });
+  if (cust && cust.users?.[0]) {
+    return cust.users[0].id;
+  }
+
+  return null;
+}
+
+async function resolveCurrentChatUserId(req) {
+  const headerUserId = req.headers['x-chat-user-id'] || req.query?.currentUserId;
+  if (headerUserId) {
+    const resolved = await ensureValidChatUserId(headerUserId);
+    if (resolved) return resolved;
+  }
+
+  const authHeader = req.headers['authorization'];
+  const token = (authHeader && authHeader.split(' ')[1]) || req.cookies?.token;
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      if (decoded?.id) {
+        const resolved = await ensureValidChatUserId(decoded.id);
+        if (resolved) return resolved;
+      }
+      if (decoded?.employee?.id || decoded?.employee?.code) {
+        const resolved = await ensureValidChatUserId(decoded.employee.id || decoded.employee.code);
+        if (resolved) return resolved;
+      }
+    } catch {
+      // ignore invalid token
+    }
+  }
+
+  return ensureValidChatUserId('guest-customer');
+}
+
+app.get('/api/notifications/recipients', async (req, res) => {
+  try {
+    await ensureValidChatUserId('guest-customer');
+
+    const [employees, positions] = await Promise.all([
+      prisma.employee.findMany({
+        where: {
+          status: { not: 'resigned' },
+          profileStatus: { not: 'resigned' },
+        },
+        include: { user: true },
+        orderBy: { fullName: 'asc' },
+      }),
+      prisma.category.findMany({
+        where: { type: 'position' },
+        select: { code: true, name: true },
+      }),
+    ]);
+
+    const positionMap = new Map(positions.map((p) => [p.code, p.name]));
+    const deptMap = new Map();
+    const userList = [];
+
+    for (const emp of employees) {
+      if (emp.departmentCode && !deptMap.has(emp.departmentCode)) {
+        deptMap.set(emp.departmentCode, {
+          id: emp.departmentCode,
+          code: emp.departmentCode,
+          name: emp.departmentName || emp.departmentCode,
+        });
+      }
+      const validUid = emp.user?.id || (await ensureValidChatUserId(emp.id));
+      if (validUid) {
+        userList.push({
+          id: validUid,
+          userId: validUid,
+          employeeId: emp.id,
+          code: emp.code || emp.id,
+          name: emp.fullName,
+          email: emp.workEmail || emp.personalEmail || emp.user?.email || '',
+          phone: emp.phone || '',
+          position: emp.position ? positionMap.get(emp.position) || emp.position : 'Nhân viên',
+          positionCode: emp.position || null,
+          department: emp.departmentName || null,
+          departmentCode: emp.departmentCode || null,
+        });
+      }
+    }
+
+    const guestId = await ensureValidChatUserId('guest-customer');
+    if (guestId && !userList.some((u) => u.id === guestId)) {
+      userList.push({
+        id: guestId,
+        userId: guestId,
+        employeeId: null,
+        code: 'guest-customer',
+        name: 'Khách hàng Seajong',
+        email: 'khachhang@seajong.com',
+        phone: '',
+        position: 'Khách hàng mua sắm',
+        positionCode: 'CUSTOMER',
+        department: 'Cửa hàng Trực tuyến',
+        departmentCode: 'customer',
+      });
+    }
+
+    res.json({
+      departments: Array.from(deptMap.values()),
+      users: userList,
+    });
+  } catch (err) {
+    console.error('[GET /api/notifications/recipients] Error:', err);
+    res.status(500).json({ error: err.message || 'Lỗi máy chủ' });
+  }
+});
+
+app.get('/api/messages', async (req, res) => {
+  try {
+    const userId = await resolveCurrentChatUserId(req);
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const positions = await prisma.category.findMany({
+      where: { type: 'position' },
+      select: { code: true, name: true },
+    });
+    const posMap = new Map(positions.map((p) => [p.code, p.name]));
+    const decodePos = (rawPos, role) => {
+      if (role === 'CUSTOMER') return 'Khách hàng mua sắm';
+      if (!rawPos) return null;
+      return posMap.get(rawPos) || (String(rawPos).startsWith('vtr-') ? 'Nhân viên' : rawPos);
+    };
+
+    const [received, sent, unreadCount] = await Promise.all([
+      prisma.messageParticipant.findMany({
+        where: {
+          userId,
+          message: { isDeleted: false },
+        },
+        include: {
+          message: {
+            include: {
+              sender: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  role: true,
+                  employee: {
+                    select: {
+                      id: true,
+                      code: true,
+                      fullName: true,
+                      position: true,
+                      departmentCode: true,
+                      departmentName: true,
+                      phone: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
+      prisma.message.findMany({
+        where: {
+          senderId: userId,
+          isDeleted: false,
+        },
+        include: {
+          sender: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+              employee: {
+                select: {
+                  id: true,
+                  code: true,
+                  fullName: true,
+                  position: true,
+                  departmentCode: true,
+                  departmentName: true,
+                  phone: true,
+                },
+              },
+            },
+          },
+          participants: {
+            where: { userId: { not: userId } },
+            select: {
+              isRead: true,
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  role: true,
+                  employee: {
+                    select: {
+                      id: true,
+                      code: true,
+                      fullName: true,
+                      position: true,
+                      departmentCode: true,
+                      departmentName: true,
+                      phone: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
+      prisma.messageParticipant.count({
+        where: {
+          userId,
+          isRead: false,
+          message: { isDeleted: false, senderId: { not: userId } },
+        },
+      }),
+    ]);
+
+    const messageMap = new Map();
+
+    for (const p of received) {
+      const m = p.message;
+      const emp = m.sender?.employee;
+      const isCust = m.sender?.role === 'CUSTOMER' || m.sender?.id === 'guest-customer';
+      const isMe = m.senderId === userId;
+      messageMap.set(m.id, {
+        id: m.id,
+        participantId: p.id,
+        content: m.content,
+        attachments: m.attachments ? JSON.parse(m.attachments) : [],
+        isRead: isMe ? true : p.isRead,
+        readAt: p.readAt,
+        createdAt: m.createdAt,
+        senderId: m.senderId,
+        senderEmployeeCode: emp?.code || null,
+        senderName: emp?.fullName || m.sender?.name || 'Khách hàng Seajong',
+        senderPosition: decodePos(emp?.position, m.sender?.role),
+        senderDepartment: emp?.departmentName || (isCust ? 'Cửa hàng Trực tuyến' : null),
+        senderDepartmentCode: emp?.departmentCode || (isCust ? 'customer' : null),
+        isSentByMe: isMe,
+        recipientName: null,
+        recipientUserId: null,
+      });
+    }
+
+    for (const m of sent) {
+      const emp = m.sender?.employee;
+      const recipientNames = m.participants
+        .map((p) => p.user?.employee?.fullName || p.user?.name || 'Người nhận')
+        .filter(Boolean);
+      const firstRecipientId = m.participants[0]?.user?.id ?? null;
+
+      if (!messageMap.has(m.id)) {
+        messageMap.set(m.id, {
+          id: m.id,
+          participantId: m.id,
+          content: m.content,
+          attachments: m.attachments ? JSON.parse(m.attachments) : [],
+          isRead: true,
+          readAt: m.createdAt,
+          createdAt: m.createdAt,
+          senderId: m.senderId,
+          senderEmployeeCode: emp?.code || null,
+          senderName: emp?.fullName || m.sender?.name || 'Tôi',
+          senderPosition: decodePos(emp?.position, m.sender?.role),
+          senderDepartment: emp?.departmentName || null,
+          senderDepartmentCode: emp?.departmentCode || null,
+          isSentByMe: true,
+          recipientName:
+            recipientNames.length === 1
+              ? recipientNames[0]
+              : `${recipientNames.length} người nhận`,
+          recipientUserId: recipientNames.length === 1 ? firstRecipientId : null,
+        });
+      } else {
+        const existing = messageMap.get(m.id);
+        existing.isSentByMe = true;
+        existing.isRead = true;
+        existing.recipientName =
+          recipientNames.length === 1
+            ? recipientNames[0]
+            : `${recipientNames.length} người nhận`;
+        existing.recipientUserId = recipientNames.length === 1 ? firstRecipientId : null;
+      }
+    }
+
+    const allMessages = Array.from(messageMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    res.json({
+      messages: allMessages,
+      unreadCount,
+      currentUserId: userId,
+    });
+  } catch (err) {
+    console.error('[GET /api/messages] Error:', err);
+    res.status(500).json({ error: err.message || 'Lỗi máy chủ' });
+  }
+});
+
+app.post('/api/messages', async (req, res) => {
+  try {
+    const senderId = await resolveCurrentChatUserId(req);
+    if (!senderId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { content, audienceType, audienceValue, attachments } = req.body || {};
+    const hasContent = content && String(content).trim();
+    const hasFiles = Array.isArray(attachments) && attachments.length > 0;
+
+    if (!hasContent && !hasFiles) {
+      return res.status(400).json({ error: 'Nội dung tin nhắn hoặc tệp đính kèm không được trống' });
+    }
+
+    let targetUserIds = [];
+
+    if (audienceType === 'all') {
+      const users = await prisma.user.findMany({ select: { id: true } });
+      targetUserIds = users.map((u) => u.id);
+    } else if (audienceType === 'department' && audienceValue) {
+      const emps = await prisma.employee.findMany({
+        where: { departmentCode: String(audienceValue) },
+        select: { id: true, userId: true },
+      });
+      for (const e of emps) {
+        const uid = e.userId || (await ensureValidChatUserId(e.id));
+        if (uid) targetUserIds.push(uid);
+      }
+    } else if (audienceType === 'individual' && audienceValue) {
+      const uid = await ensureValidChatUserId(audienceValue);
+      if (uid) targetUserIds = [uid];
+    } else if (audienceType === 'group' && audienceValue) {
+      const rawIds = String(audienceValue)
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const rid of rawIds) {
+        const uid = await ensureValidChatUserId(rid);
+        if (uid) targetUserIds.push(uid);
+      }
+    }
+
+    const participantUserIds = Array.from(new Set([...targetUserIds, senderId]));
+
+    const message = await prisma.message.create({
+      data: {
+        content: hasContent ? String(content).trim() : '',
+        attachments: hasFiles ? JSON.stringify(attachments) : null,
+        senderId,
+        participants: {
+          create: participantUserIds.map((uid) => ({
+            userId: uid,
+            isRead: uid === senderId,
+            readAt: uid === senderId ? new Date() : null,
+          })),
+        },
+      },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+            employee: { select: { id: true, code: true, fullName: true } },
+          },
+        },
+      },
+    });
+
+    res.status(201).json({
+      message: {
+        id: message.id,
+        content: message.content,
+        attachments: message.attachments ? JSON.parse(message.attachments) : [],
+        createdAt: message.createdAt,
+        senderId: message.senderId,
+        senderEmployeeCode: message.sender?.employee?.code || null,
+        senderName: message.sender?.employee?.fullName || message.sender?.name || 'Tôi',
+        isSentByMe: true,
+        isRead: true,
+      },
+      recipientCount: targetUserIds.length,
+    });
+  } catch (err) {
+    console.error('[POST /api/messages] Error:', err);
+    res.status(500).json({ error: err.message || 'Lỗi máy chủ' });
+  }
+});
+
+app.get('/api/messages/conversation', async (req, res) => {
+  try {
+    const currentUserId = await resolveCurrentChatUserId(req);
+    if (!currentUserId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const rawWith = req.query.with;
+    if (!rawWith) {
+      return res.status(400).json({ error: 'Missing `with` param' });
+    }
+
+    const withUserId = await ensureValidChatUserId(rawWith);
+    if (!withUserId) {
+      return res.json({ thread: [], partnerUserId: null, currentUserId });
+    }
+
+    // Tự động đánh dấu đã đọc các tin nhắn từ withUserId gửi cho currentUserId
+    await prisma.messageParticipant
+      .updateMany({
+        where: {
+          userId: currentUserId,
+          isRead: false,
+          message: { senderId: withUserId, isDeleted: false },
+        },
+        data: { isRead: true, readAt: new Date() },
+      })
+      .catch(() => { });
+
+    const messages = await prisma.message.findMany({
+      where: {
+        isDeleted: false,
+        AND: [
+          { participants: { some: { userId: currentUserId } } },
+          { participants: { some: { userId: withUserId } } },
+        ],
+      },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+            employee: {
+              select: { id: true, code: true, fullName: true, departmentName: true, position: true },
+            },
+          },
+        },
+        participants: {
+          where: { userId: currentUserId },
+          select: { isRead: true, readAt: true },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const thread = messages.map((m) => {
+      const emp = m.sender?.employee;
+      return {
+        id: m.id,
+        content: m.content,
+        attachments: m.attachments ? JSON.parse(m.attachments) : [],
+        createdAt: m.createdAt,
+        senderId: m.senderId,
+        senderEmployeeCode: emp?.code || null,
+        senderName: emp?.fullName || m.sender?.name || 'Khách hàng Seajong',
+        isSentByMe: m.senderId === currentUserId,
+        isRead: m.participants[0]?.isRead ?? true,
+      };
+    });
+
+    res.json({ thread, partnerUserId: withUserId, currentUserId });
+  } catch (err) {
+    console.error('[GET /api/messages/conversation] Error:', err);
+    res.status(500).json({ error: err.message || 'Lỗi máy chủ' });
+  }
+});
+
+app.patch('/api/messages/read', async (req, res) => {
+  try {
+    const userId = await resolveCurrentChatUserId(req);
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { participantId, markAll, withUserId } = req.body || {};
+
+    if (markAll) {
+      await prisma.messageParticipant.updateMany({
+        where: { userId, isRead: false },
+        data: { isRead: true, readAt: new Date() },
+      });
+    } else if (withUserId) {
+      const resolvedPartner = await ensureValidChatUserId(withUserId);
+      if (resolvedPartner) {
+        await prisma.messageParticipant.updateMany({
+          where: {
+            userId,
+            isRead: false,
+            message: { senderId: resolvedPartner },
+          },
+          data: { isRead: true, readAt: new Date() },
+        });
+      }
+    } else if (participantId) {
+      await prisma.messageParticipant.updateMany({
+        where: { id: String(participantId), userId },
+        data: { isRead: true, readAt: new Date() },
+      });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[PATCH /api/messages/read] Error:', err);
+    res.status(500).json({ error: err.message || 'Lỗi máy chủ' });
+  }
+});
+
 
 // ── API QUẢN LÝ BẢO HIỂM XÃ HỘI & Y TẾ (LIÊN KẾT DB THỰC TẾ) ──
 const formatInsuranceDateDisplay = (dt) => {
@@ -14539,7 +15797,8 @@ app.put('/api/hr/insurance/employee', async (req, res) => {
     const {
       id,
       employeeId,
-      employeeName,
+      code,
+      userId,
       insuranceBookNumber,
       socialInsuranceNumber,
       insuranceSalary,
@@ -14547,7 +15806,7 @@ app.put('/api/hr/insurance/employee', async (req, res) => {
       isInsuranceEnrolled,
     } = req.body || {};
 
-    const targetId = employeeId || id;
+    const targetId = employeeId || id || code || userId;
     let emp = null;
 
     if (targetId) {
@@ -14557,14 +15816,9 @@ app.put('/api/hr/insurance/employee', async (req, res) => {
         },
       });
     }
-    if (!emp && employeeName) {
-      const allEmps = await prisma.employee.findMany();
-      const targetName = String(employeeName).trim().toLowerCase();
-      emp = allEmps.find((e) => (e.fullName || '').trim().toLowerCase() === targetName) || null;
-    }
 
     if (!emp) {
-      return res.status(404).json({ error: 'Không tìm thấy nhân viên trong cơ sở dữ liệu' });
+      return res.status(404).json({ error: 'Không tìm thấy mã định danh nhân viên trong cơ sở dữ liệu' });
     }
 
     const bookNo =
@@ -14711,8 +15965,8 @@ app.get('/api/hr/insurance/changes', async (req, res) => {
 app.post('/api/hr/insurance/changes', async (req, res) => {
   try {
     const {
-      employeeNames = [],
       employeeIds = [],
+      employeeCodes = [],
       changeType = 'increase',
       effectiveDate,
       newSalary,
@@ -14722,35 +15976,24 @@ app.post('/api/hr/insurance/changes', async (req, res) => {
 
     const allEmps = await prisma.employee.findMany();
     const targetEmps = [];
+    const rawIdentifiers = [
+      ...(Array.isArray(employeeIds) ? employeeIds : String(employeeIds || '').split(',')),
+      ...(Array.isArray(employeeCodes) ? employeeCodes : String(employeeCodes || '').split(',')),
+    ]
+      .map((s) => String(s || '').trim())
+      .filter(Boolean);
 
-    if (Array.isArray(employeeIds) && employeeIds.length > 0) {
-      for (const eid of employeeIds) {
-        const found = allEmps.find(
-          (e) => e.id === eid || e.userId === eid || e.code === eid
-        );
-        if (found && !targetEmps.some((t) => t.id === found.id)) {
-          targetEmps.push(found);
-        }
-      }
-    }
-
-    const nameList = Array.isArray(employeeNames)
-      ? employeeNames
-      : String(employeeNames || '')
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean);
-
-    for (const name of nameList) {
-      const lower = name.toLowerCase();
-      const found = allEmps.find((e) => (e.fullName || '').trim().toLowerCase() === lower);
+    for (const eid of rawIdentifiers) {
+      const found = allEmps.find(
+        (e) => e.id === eid || e.userId === eid || e.code === eid
+      );
       if (found && !targetEmps.some((t) => t.id === found.id)) {
         targetEmps.push(found);
       }
     }
 
     if (targetEmps.length === 0) {
-      return res.status(400).json({ error: 'Không tìm thấy nhân viên hợp lệ trong cơ sở dữ liệu' });
+      return res.status(400).json({ error: 'Không tìm thấy mã định danh nhân viên hợp lệ trong cơ sở dữ liệu' });
     }
 
     const parsedEffDate = effectiveDate ? new Date(effectiveDate) : new Date();
@@ -14857,7 +16100,8 @@ app.post('/api/hr/insurance/benefits', async (req, res) => {
   try {
     const {
       employeeId,
-      employeeName,
+      employeeCode,
+      userId,
       claimType = 'Ốm đau ngắn ngày',
       fromDate,
       toDate,
@@ -14866,22 +16110,18 @@ app.post('/api/hr/insurance/benefits', async (req, res) => {
       status = 'processing',
     } = req.body || {};
 
+    const targetId = employeeId || employeeCode || userId;
     let emp = null;
-    if (employeeId) {
+    if (targetId) {
       emp = await prisma.employee.findFirst({
         where: {
-          OR: [{ id: String(employeeId) }, { userId: String(employeeId) }, { code: String(employeeId) }],
+          OR: [{ id: String(targetId) }, { userId: String(targetId) }, { code: String(targetId) }],
         },
       });
     }
-    if (!emp && employeeName) {
-      const allEmps = await prisma.employee.findMany();
-      const lower = String(employeeName).trim().toLowerCase();
-      emp = allEmps.find((e) => (e.fullName || '').trim().toLowerCase() === lower) || null;
-    }
 
     if (!emp) {
-      return res.status(400).json({ error: 'Vui lòng chọn nhân viên hợp lệ trong cơ sở dữ liệu' });
+      return res.status(400).json({ error: 'Vui lòng chọn mã định danh nhân viên hợp lệ trong cơ sở dữ liệu' });
     }
 
     const sDate = fromDate ? new Date(fromDate) : new Date();
@@ -14926,8 +16166,8 @@ app.get('/api/hr/insurance/participants', async (req, res) => {
     const list = employees.map((e) => {
       const isEnrolled = Boolean(
         e.isInsuranceEnrolled ||
-          (e.socialInsuranceNumber && String(e.socialInsuranceNumber).trim() !== '') ||
-          (e.insuranceSalary && Number(e.insuranceSalary) > 0)
+        (e.socialInsuranceNumber && String(e.socialInsuranceNumber).trim() !== '') ||
+        (e.insuranceSalary && Number(e.insuranceSalary) > 0)
       );
       return {
         id: e.userId || e.id,
@@ -14971,7 +16211,7 @@ app.get('/api/hr/insurance/config', async (req, res) => {
     if (extraPolicy?.content) {
       try {
         extra = JSON.parse(extraPolicy.content);
-      } catch {}
+      } catch { }
     }
     res.json(cfg ? { ...cfg, ...extra } : extra);
   } catch (err) {
@@ -15008,12 +16248,12 @@ app.put('/api/hr/insurance/config', async (req, res) => {
 
     const saved = existing
       ? await prisma.insuranceConfig.update({
-          where: { id: existing.id },
-          data: dataPayload,
-        })
+        where: { id: existing.id },
+        data: dataPayload,
+      })
       : await prisma.insuranceConfig.create({
-          data: dataPayload,
-        });
+        data: dataPayload,
+      });
 
     const extraPayload = {
       unemploymentRate: body.unemploymentRate !== undefined ? Number(body.unemploymentRate) : 60,
@@ -15106,9 +16346,9 @@ app.get('/api/board/users', async (req, res) => {
         name: u.name || u.employee?.fullName || u.email.split('@')[0],
         employee: u.employee
           ? {
-              ...u.employee,
-              position: resolvedPos,
-            }
+            ...u.employee,
+            position: resolvedPos,
+          }
           : null,
       };
     });
@@ -15208,11 +16448,11 @@ app.get('/api/logistics/reports/xnt', async (req, res) => {
               ...(warehouseId && warehouseId !== 'all' ? { warehouseId } : {}),
               ...(fromDate || toDate
                 ? {
-                    createdAt: {
-                      ...(fromDate ? { gte: new Date(`${fromDate}T00:00:00.000Z`) } : {}),
-                      ...(toDate ? { lte: new Date(`${toDate}T23:59:59.999Z`) } : {}),
-                    },
-                  }
+                  createdAt: {
+                    ...(fromDate ? { gte: new Date(`${fromDate}T00:00:00.000Z`) } : {}),
+                    ...(toDate ? { lte: new Date(`${toDate}T23:59:59.999Z`) } : {}),
+                  },
+                }
                 : {}),
             },
           },
@@ -15345,11 +16585,11 @@ app.get('/api/logistics/reports/the-kho', async (req, res) => {
       ...(warehouseId && warehouseId !== 'all' ? { warehouseId } : {}),
       ...(fromDate || toDate
         ? {
-            createdAt: {
-              ...(fromDate ? { gte: new Date(`${fromDate}T00:00:00.000Z`) } : {}),
-              ...(toDate ? { lte: new Date(`${toDate}T23:59:59.999Z`) } : {}),
-            },
-          }
+          createdAt: {
+            ...(fromDate ? { gte: new Date(`${fromDate}T00:00:00.000Z`) } : {}),
+            ...(toDate ? { lte: new Date(`${toDate}T23:59:59.999Z`) } : {}),
+          },
+        }
         : {}),
     };
 
@@ -15433,12 +16673,12 @@ app.get('/api/logistics/reports/kiem-kho', async (req, res) => {
     const countWhere = {
       ...(warehouseId && warehouseId !== 'all'
         ? {
-            OR: [
-              { warehouseId: warehouseId },
-              { warehouse: { id: warehouseId } },
-              { warehouse: { code: warehouseId } },
-            ],
-          }
+          OR: [
+            { warehouseId: warehouseId },
+            { warehouse: { id: warehouseId } },
+            { warehouse: { code: warehouseId } },
+          ],
+        }
         : {}),
     };
 
@@ -15760,30 +17000,30 @@ app.get('/api/logistics/audit-logs', async (req, res) => {
     // Lấy toàn bộ các dòng hàng hoá thuộc các chứng từ này
     const movements = voucherCodes.length > 0
       ? await prisma.stockMovement.findMany({
-          where: { soChungTu: { in: voucherCodes } },
-          orderBy: { createdAt: 'asc' },
-          include: {
-            inventoryItem: true,
-            fromWarehouse: true,
-            toWarehouse: true,
-            purchaseOrder: {
-              include: { supplier: true },
-            },
+        where: { soChungTu: { in: voucherCodes } },
+        orderBy: { createdAt: 'asc' },
+        include: {
+          inventoryItem: true,
+          fromWarehouse: true,
+          toWarehouse: true,
+          purchaseOrder: {
+            include: { supplier: true },
           },
-        })
+        },
+      })
       : [];
 
     // Nạp dữ liệu đối chiếu Đơn hàng, Khách hàng, Địa chỉ cho các hoạt động kho trên trang hiện tại
     const [allSaleOrders, allQcs, allDefects, allContracts, allQuotations, allPos] =
       movements.length > 0
         ? await Promise.all([
-            prisma.saleOrder.findMany({ include: { customer: true } }),
-            prisma.qualityInspection.findMany(),
-            prisma.defectRecord.findMany(),
-            prisma.contract.findMany({ include: { customer: true } }),
-            prisma.quotation.findMany({ include: { customer: true } }),
-            prisma.purchaseOrder.findMany({ include: { supplier: true } }),
-          ])
+          prisma.saleOrder.findMany({ include: { customer: true } }),
+          prisma.qualityInspection.findMany(),
+          prisma.defectRecord.findMany(),
+          prisma.contract.findMany({ include: { customer: true } }),
+          prisma.quotation.findMany({ include: { customer: true } }),
+          prisma.purchaseOrder.findMany({ include: { supplier: true } }),
+        ])
         : [[], [], [], [], [], []];
 
     const saleOrderByCode = new Map();
@@ -16801,9 +18041,9 @@ app.get('/api/plan-finance/stock-counts/:id', async (req, res) => {
     const itemIds = Array.from(new Set((sc.lines || []).map((l) => l.inventoryItemId).filter(Boolean)));
     const items = itemIds.length
       ? await prisma.inventoryItem.findMany({
-          where: { id: { in: itemIds } },
-          select: { id: true, tenHang: true, code: true, donVi: true },
-        })
+        where: { id: { in: itemIds } },
+        select: { id: true, tenHang: true, code: true, donVi: true },
+      })
       : [];
     const itemMap = new Map(items.map((it) => [it.id, it]));
 
@@ -16862,12 +18102,12 @@ app.get('/api/plan-finance/inventory/stock-snapshot', async (req, res) => {
       where:
         warehouseId && warehouseId !== 'all'
           ? {
-              stocks: {
-                some: {
-                  OR: [{ warehouseId }, { warehouse: { code: warehouseId } }],
-                },
+            stocks: {
+              some: {
+                OR: [{ warehouseId }, { warehouse: { code: warehouseId } }],
               },
-            }
+            },
+          }
           : {},
       include: {
         stocks: { include: { warehouse: true } },
@@ -16881,16 +18121,16 @@ app.get('/api/plan-finance/inventory/stock-snapshot', async (req, res) => {
       const matchedStock =
         warehouseId && warehouseId !== 'all'
           ? (it.stocks || []).find(
-              (s) => s.warehouseId === warehouseId || s.warehouse?.id === warehouseId || s.warehouse?.code === warehouseId
-            )
+            (s) => s.warehouseId === warehouseId || s.warehouse?.id === warehouseId || s.warehouse?.code === warehouseId
+          )
           : (it.stocks || [])[0] || null;
 
       const soLuongHeTong =
         warehouseId && warehouseId !== 'all'
           ? matchedStock?.soLuong ?? 0
           : (it.stocks || []).length > 0
-          ? (it.stocks || []).reduce((acc, s) => acc + (s.soLuong || 0), 0)
-          : it.soLuong || 0;
+            ? (it.stocks || []).reduce((acc, s) => acc + (s.soLuong || 0), 0)
+            : it.soLuong || 0;
 
       const soLuongMin = matchedStock?.soLuongMin || it.soLuongMin || 0;
       let trangThai = 'con-hang';
@@ -17086,11 +18326,11 @@ app.get('/api/plan-finance/stock-card', async (req, res) => {
         ...(warehouseId ? { OR: [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }] } : {}),
         ...(from || to
           ? {
-              createdAt: {
-                ...(from ? { gte: from } : {}),
-                ...(to ? { lte: to } : {}),
-              },
-            }
+            createdAt: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
           : {}),
       },
       include: {
@@ -17160,11 +18400,11 @@ app.get('/api/plan-finance/reports/bang-ke-xnt', async (req, res) => {
         ...(warehouseId ? { OR: [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }] } : {}),
         ...(from || to
           ? {
-              createdAt: {
-                ...(from ? { gte: from } : {}),
-                ...(to ? { lte: to } : {}),
-              },
-            }
+            createdAt: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
           : {}),
       },
     });
@@ -17219,11 +18459,11 @@ app.get('/api/plan-finance/reports/bang-ke-nhap', async (req, res) => {
         ...(warehouseId ? { toWarehouseId: warehouseId } : { type: 'nhap' }),
         ...(from || to
           ? {
-              createdAt: {
-                ...(from ? { gte: from } : {}),
-                ...(to ? { lte: to } : {}),
-              },
-            }
+            createdAt: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
           : {}),
       },
       include: {
@@ -17270,11 +18510,11 @@ app.get('/api/plan-finance/reports/bang-ke-xuat', async (req, res) => {
         ...(warehouseId ? { fromWarehouseId: warehouseId } : { type: 'xuat' }),
         ...(from || to
           ? {
-              createdAt: {
-                ...(from ? { gte: from } : {}),
-                ...(to ? { lte: to } : {}),
-              },
-            }
+            createdAt: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
           : {}),
       },
       include: {
@@ -17585,7 +18825,7 @@ app.post('/api/my/attendance', async (req, res) => {
   }
 });
 
-// Helper: Tìm hồ sơ nhân viên thực tế trong CSDL Seajong từ userId / employeeId / code / email / fullName
+// Helper: Tìm hồ sơ nhân viên thực tế trong CSDL Seajong theo mã định danh (id / userId / code / email)
 async function resolveTimekeepingEmployee(identifier) {
   const cleanId = String(identifier || '').trim();
   if (cleanId) {
@@ -17597,7 +18837,6 @@ async function resolveTimekeepingEmployee(identifier) {
           { code: cleanId },
           { workEmail: cleanId },
           { personalEmail: cleanId },
-          { fullName: cleanId },
         ],
       },
     });
@@ -17605,14 +18844,14 @@ async function resolveTimekeepingEmployee(identifier) {
 
     const userRecord = await prisma.user.findFirst({
       where: {
-        OR: [{ id: cleanId }, { email: cleanId }, { name: cleanId }],
+        OR: [{ id: cleanId }, { email: cleanId }],
       },
       include: { employee: true },
     });
     if (userRecord?.employee) return userRecord.employee;
   }
 
-  // Fallback về Giám đốc Lê Công Vụ hoặc nhân sự đầu tiên trong CSDL
+  // Fallback về Giám đốc theo mã định danh code
   const director = await prisma.employee.findFirst({
     where: {
       OR: [
@@ -17735,7 +18974,7 @@ const buildEmployeeLeaveSchedule = (leaveRequests = []) => {
           typeof reqItem.details === 'string'
             ? JSON.parse(reqItem.details)
             : reqItem.details || {};
-      } catch {}
+      } catch { }
       const reqType = String(details.category || details.type || reqItem.type || '').toLowerCase();
       return reqType === 'leave' || reqType === 'sick-leave' || reqType === 'sick_leave';
     })
@@ -17754,7 +18993,7 @@ const buildEmployeeLeaveSchedule = (leaveRequests = []) => {
         typeof reqItem.details === 'string'
           ? JSON.parse(reqItem.details)
           : reqItem.details || {};
-    } catch {}
+    } catch { }
 
     const rawStatus = String(reqItem.status || details.status || 'PENDING').toLowerCase();
     const statusNorm =
@@ -17892,7 +19131,7 @@ const buildEmployeeLeaveSchedule = (leaveRequests = []) => {
         const shouldReplace =
           !existingOnDate ||
           (statusPriority[statusNorm] || 0) >=
-            (statusPriority[existingOnDate.status] || 0);
+          (statusPriority[existingOnDate.status] || 0);
 
         if (shouldReplace) {
           leaveMapByDate.set(dStr, {
@@ -17949,7 +19188,7 @@ const syncLeaveRequestToAttendance = async (employeeId) => {
         where: { id: employeeId },
         data: { annualLeave: Math.floor(remainingAnnualLeave) },
       })
-      .catch(() => {});
+      .catch(() => { });
 
     // 2. Đồng bộ từng ngày có đơn nghỉ phép vào bảng Attendance mà KHÔNG làm mất dữ liệu chấm công thực tế
     const affectedMonths = new Set();
@@ -18485,7 +19724,7 @@ const mapPersonalRequestRow = (r, posMap = null) => {
   let details = {};
   try {
     details = typeof r.details === 'string' ? JSON.parse(r.details) : r.details || {};
-  } catch {}
+  } catch { }
   const statusLower = String(r.status || 'PENDING').toLowerCase();
   const statusNorm =
     statusLower === 'approved'
@@ -18568,10 +19807,10 @@ const mapPersonalRequestRow = (r, posMap = null) => {
 
   const rawAmount = Number(
     details.advanceAmount ||
-      details.actualSpentAmount ||
-      details.tripEstimatedCost ||
-      details.amount ||
-      0
+    details.actualSpentAmount ||
+    details.tripEstimatedCost ||
+    details.amount ||
+    0
   );
 
   const formatDmyFromDate = (dt) => {
@@ -18593,12 +19832,12 @@ const mapPersonalRequestRow = (r, posMap = null) => {
       details.createdAt ||
       (r.createdAt
         ? new Date(r.createdAt).toLocaleString('vi-VN', {
-            hour: '2-digit',
-            minute: '2-digit',
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-          })
+          hour: '2-digit',
+          minute: '2-digit',
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        })
         : ''),
     department: details.department || r.employee?.departmentName || 'Khối văn phòng',
     applicantName: details.applicantName || r.employee?.fullName || '',
@@ -18661,25 +19900,21 @@ const mapPersonalRequestRow = (r, posMap = null) => {
 // ── API Yêu cầu & Giải trình cá nhân (/api/personal-requests) ──
 app.get('/api/personal-requests', async (req, res) => {
   try {
-    const { userEmail, userId, userName, scope } = req.query || {};
+    const { userEmail, userId, employeeId, employeeCode, scope } = req.query || {};
     let whereClause = {};
 
-    // Mặc định chỉ hiển thị đề xuất và yêu cầu của chính cá nhân đang đăng nhập (trừ khi truyền scope === 'all')
+    // Mặc định chỉ hiển thị đề xuất và yêu cầu của chính cá nhân đang đăng nhập theo mã định danh
     if (scope !== 'all') {
+      const cleanId = String(employeeId || userId || employeeCode || '').trim();
       const cleanEmail = String(userEmail || '').trim();
-      const cleanId = String(userId || '').trim();
-      const cleanName = String(userName || '').trim();
 
-      if (cleanEmail || cleanId || cleanName) {
+      if (cleanId || cleanEmail) {
         const orConditions = [];
         if (cleanId) {
           orConditions.push({ id: cleanId }, { userId: cleanId }, { code: cleanId });
         }
         if (cleanEmail) {
           orConditions.push({ workEmail: cleanEmail }, { personalEmail: cleanEmail });
-        }
-        if (cleanName) {
-          orConditions.push({ fullName: cleanName });
         }
 
         let emp = await prisma.employee.findFirst({
@@ -18690,7 +19925,6 @@ app.get('/api/personal-requests', async (req, res) => {
           const userOr = [];
           if (cleanId) userOr.push({ id: cleanId });
           if (cleanEmail) userOr.push({ email: cleanEmail });
-          if (cleanName) userOr.push({ name: cleanName });
           if (userOr.length > 0) {
             const userRecord = await prisma.user.findFirst({
               where: { OR: userOr },
@@ -18698,10 +19932,6 @@ app.get('/api/personal-requests', async (req, res) => {
             });
             if (userRecord?.employee) {
               emp = userRecord.employee;
-            } else if (userRecord?.name) {
-              emp = await prisma.employee.findFirst({
-                where: { fullName: userRecord.name },
-              });
             }
           }
         }
@@ -18741,7 +19971,7 @@ app.post('/api/personal-requests', async (req, res) => {
   try {
     const body = req.body || {};
     const employee = await resolveTimekeepingEmployee(
-      body.userEmail || body.userId || body.applicantName
+      body.employeeId || body.userId || body.code || body.userEmail
     );
     if (!employee) {
       return res.status(404).json({ error: 'Không tìm thấy hồ sơ nhân sự' });
@@ -18806,7 +20036,7 @@ app.put('/api/personal-requests/:id', async (req, res) => {
         typeof existing.details === 'string'
           ? JSON.parse(existing.details)
           : existing.details || {};
-    } catch {}
+    } catch { }
 
     const mergedDetails = { ...prevDetails, ...body };
     const nextStatusUpper = body.status
@@ -18921,7 +20151,7 @@ app.get('/api/qa/inspections', async (req, res) => {
         if (ins.metadata) {
           try {
             meta = typeof ins.metadata === 'string' ? JSON.parse(ins.metadata) : ins.metadata;
-          } catch (e) {}
+          } catch (e) { }
         }
 
         let items = meta?.items || [];
@@ -18969,7 +20199,7 @@ app.get('/api/qa/inspections', async (req, res) => {
                   if (it.ghiChu) {
                     try {
                       parsedGhiChu = JSON.parse(it.ghiChu);
-                    } catch (e) {}
+                    } catch (e) { }
                   }
                   const resolvedDinhMucId = it.dinhMucId || parsedGhiChu?.dinhMucId || null;
                   let bom = null;
@@ -19007,7 +20237,7 @@ app.get('/api/qa/inspections', async (req, res) => {
                 });
                 if (bom?.inventoryItem?.code) model = bom.inventoryItem.code;
                 else if (bom?.inventoryItem?.model) model = bom.inventoryItem.model;
-              } catch (e) {}
+              } catch (e) { }
             }
             if (!model && (it.tenHang || it.productName)) {
               try {
@@ -19016,7 +20246,7 @@ app.get('/api/qa/inspections', async (req, res) => {
                 });
                 if (inv?.code) model = inv.code;
                 else if (inv?.model) model = inv.model;
-              } catch (e) {}
+              } catch (e) { }
             }
             return {
               ...it,
@@ -19064,7 +20294,7 @@ app.patch('/api/qa/inspections/:id', async (req, res) => {
             typeof inspection.metadata === 'string'
               ? JSON.parse(inspection.metadata)
               : inspection.metadata || {};
-        } catch (e) {}
+        } catch (e) { }
       }
 
       const newMeta = { ...oldMeta };
@@ -19268,11 +20498,7 @@ app.get('/api/plan-finance/purchase-requests', async (req, res) => {
 
     const financeEmployees = await prisma.employee.findMany({
       where: {
-        OR: [
-          { departmentCode: 'finance' },
-          { departmentName: { contains: 'Kế toán' } },
-          { departmentName: { contains: 'Tài chính' } },
-        ],
+        departmentCode: 'finance',
       },
       select: { userId: true },
     });
@@ -19283,11 +20509,11 @@ app.get('/api/plan-finance/purchase-requests', async (req, res) => {
       ...(createdByFinance
         ? { createdById: { in: financeUserIds } }
         : {
-            ...(donVi && { donVi }),
-            ...(donVi === 'Mua hàng' && financeUserIds.length > 0 && {
-              createdById: { notIn: financeUserIds },
-            }),
+          ...(donVi && { donVi }),
+          ...(donVi === 'Mua hàng' && financeUserIds.length > 0 && {
+            createdById: { notIn: financeUserIds },
           }),
+        }),
       ...(search && {
         OR: [
           { code: { contains: search } },
@@ -19798,45 +21024,45 @@ app.post('/api/plan-finance/purchasing', async (req, res) => {
         ...(items &&
           Array.isArray(items) &&
           items.length > 0 && {
-            items: {
-              create: await Promise.all(
-                items.map(async (i, index) => {
-                  let dinhMucId = null;
-                  let invItem = null;
-                  if (i.inventoryItemId) {
-                    invItem = await prisma.inventoryItem.findUnique({
-                      where: { id: i.inventoryItemId },
-                      include: { dinhMucs: { orderBy: { createdAt: 'desc' } } },
-                    });
-                    if (invItem && invItem.dinhMucs.length > 0) {
-                      const stdBom =
-                        invItem.dinhMucs.find((d) => d.code === `DM-${invItem.model}`) || invItem.dinhMucs[0];
-                      dinhMucId = stdBom.id;
-                    }
+          items: {
+            create: await Promise.all(
+              items.map(async (i, index) => {
+                let dinhMucId = null;
+                let invItem = null;
+                if (i.inventoryItemId) {
+                  invItem = await prisma.inventoryItem.findUnique({
+                    where: { id: i.inventoryItemId },
+                    include: { dinhMucs: { orderBy: { createdAt: 'desc' } } },
+                  });
+                  if (invItem && invItem.dinhMucs.length > 0) {
+                    const stdBom =
+                      invItem.dinhMucs.find((d) => d.code === `DM-${invItem.model}`) || invItem.dinhMucs[0];
+                    dinhMucId = stdBom.id;
                   }
-                  const defaultGiaNhap = invItem?.giaNhap && invItem.giaNhap > 0 ? invItem.giaNhap : 0;
-                  const donGia = parseFloat(i.donGia) > 0 ? parseFloat(i.donGia) : defaultGiaNhap;
-                  const soLuong = parseFloat(i.soLuong) || 1;
-                  const thanhTien =
-                    parseFloat(i.thanhTien) > 0 && parseFloat(i.donGia) > 0
-                      ? parseFloat(i.thanhTien)
-                      : soLuong * donGia;
+                }
+                const defaultGiaNhap = invItem?.giaNhap && invItem.giaNhap > 0 ? invItem.giaNhap : 0;
+                const donGia = parseFloat(i.donGia) > 0 ? parseFloat(i.donGia) : defaultGiaNhap;
+                const soLuong = parseFloat(i.soLuong) || 1;
+                const thanhTien =
+                  parseFloat(i.thanhTien) > 0 && parseFloat(i.donGia) > 0
+                    ? parseFloat(i.thanhTien)
+                    : soLuong * donGia;
 
-                  return {
-                    inventoryItemId: i.inventoryItemId || null,
-                    tenHang: i.tenHang,
-                    donVi: i.donVi || null,
-                    soLuong,
-                    donGia,
-                    thanhTien,
-                    ghiChu: i.ghiChu || null,
-                    sortOrder: index,
-                    dinhMucId,
-                  };
-                })
-              ),
-            },
-          }),
+                return {
+                  inventoryItemId: i.inventoryItemId || null,
+                  tenHang: i.tenHang,
+                  donVi: i.donVi || null,
+                  soLuong,
+                  donGia,
+                  thanhTien,
+                  ghiChu: i.ghiChu || null,
+                  sortOrder: index,
+                  dinhMucId,
+                };
+              })
+            ),
+          },
+        }),
         activities: {
           create: {
             loai: 'create',
@@ -19933,7 +21159,7 @@ app.patch('/api/plan-finance/purchasing/:id', async (req, res) => {
               },
             });
             resolvedCarrierId = newCarrier.id;
-          } catch (_) {}
+          } catch (_) { }
         }
       }
       dataUpdate.carrierId = resolvedCarrierId;
@@ -20789,18 +22015,18 @@ async function ensureHrRecruitmentTables() {
       const stage = stLower.includes('hired')
         ? 'hired'
         : stLower.includes('interview')
-        ? 'interview'
-        : stLower.includes('reject')
-        ? 'rejected'
-        : 'screening';
+          ? 'interview'
+          : stLower.includes('reject')
+            ? 'rejected'
+            : 'screening';
       const statusLabel =
         stage === 'hired'
           ? 'Trúng tuyển'
           : stage === 'interview'
-          ? 'Phỏng vấn'
-          : stage === 'rejected'
-          ? 'Từ chối'
-          : 'Sơ loại hồ sơ';
+            ? 'Phỏng vấn'
+            : stage === 'rejected'
+              ? 'Từ chối'
+              : 'Sơ loại hồ sơ';
       const extra = {
         fullName: c.name || '',
         gender: c.gender || 'Nam',
@@ -20914,8 +22140,8 @@ app.get('/api/admin/hr-items', async (req, res) => {
     const parsed = (rows || []).map((r) => {
       let tags = [];
       let extra = {};
-      try { tags = r.tags ? JSON.parse(r.tags) : []; } catch {}
-      try { extra = r.extra_json ? JSON.parse(r.extra_json) : {}; } catch {}
+      try { tags = r.tags ? JSON.parse(r.tags) : []; } catch { }
+      try { extra = r.extra_json ? JSON.parse(r.extra_json) : {}; } catch { }
       return {
         ...extra,
         ...r,
@@ -20983,7 +22209,7 @@ app.put('/api/admin/hr-items/:id', async (req, res) => {
       ? (Array.isArray(b.tags) ? JSON.stringify(b.tags) : b.tags)
       : existing.tags;
     let mergedExtra = {};
-    try { mergedExtra = existing.extra_json ? JSON.parse(existing.extra_json) : {}; } catch {}
+    try { mergedExtra = existing.extra_json ? JSON.parse(existing.extra_json) : {}; } catch { }
     if (b.extra && typeof b.extra === 'object') {
       mergedExtra = { ...mergedExtra, ...b.extra };
     }
@@ -21055,7 +22281,7 @@ app.get('/api/recruitment/requests', async (req, res) => {
     const rows = await prisma.$queryRawUnsafe('SELECT * FROM recruitment_requests ORDER BY created_at DESC');
     const data = (rows || []).map((r) => {
       let extra = {};
-      try { extra = JSON.parse(r.extra_json || '{}'); } catch {}
+      try { extra = JSON.parse(r.extra_json || '{}'); } catch { }
       return {
         ...extra,
         ...r,
@@ -21132,7 +22358,7 @@ app.put('/api/recruitment/requests/:id', async (req, res) => {
     const existing = rows?.[0];
     if (!existing) return res.status(404).json({ error: 'Not found' });
     let oldExtra = {};
-    try { oldExtra = JSON.parse(existing.extra_json || '{}'); } catch {}
+    try { oldExtra = JSON.parse(existing.extra_json || '{}'); } catch { }
     const b = req.body || {};
     const mergedExtra = { ...oldExtra, ...b };
     const nextTitle = b.position ?? b.title ?? existing.title;
@@ -21198,7 +22424,7 @@ app.get('/api/recruitment/candidates', async (req, res) => {
     const rows = await prisma.$queryRawUnsafe('SELECT * FROM recruitment_candidates ORDER BY created_at DESC');
     const data = (rows || []).map((r) => {
       let extra = {};
-      try { extra = JSON.parse(r.extra_json || '{}'); } catch {}
+      try { extra = JSON.parse(r.extra_json || '{}'); } catch { }
       return {
         ...extra,
         ...r,
@@ -21272,7 +22498,7 @@ app.put('/api/recruitment/candidates/:id', async (req, res) => {
     const existing = rows?.[0];
     if (!existing) return res.status(404).json({ error: 'Not found' });
     let oldExtra = {};
-    try { oldExtra = JSON.parse(existing.extra_json || '{}'); } catch {}
+    try { oldExtra = JSON.parse(existing.extra_json || '{}'); } catch { }
     const b = req.body || {};
     const mergedExtra = { ...oldExtra, ...b };
     const nextName = b.fullName ?? b.name ?? existing.name;
@@ -21341,7 +22567,7 @@ app.get('/api/recruitment/interviews', async (req, res) => {
     const rows = await prisma.$queryRawUnsafe('SELECT * FROM recruitment_interviews ORDER BY interview_date DESC, interview_time DESC');
     const data = (rows || []).map((r) => {
       let extra = {};
-      try { extra = JSON.parse(r.extra_json || '{}'); } catch {}
+      try { extra = JSON.parse(r.extra_json || '{}'); } catch { }
       return {
         ...extra,
         ...r,
@@ -21419,7 +22645,7 @@ app.put('/api/recruitment/interviews/:id', async (req, res) => {
     const existing = rows?.[0];
     if (!existing) return res.status(404).json({ error: 'Not found' });
     let oldExtra = {};
-    try { oldExtra = JSON.parse(existing.extra_json || '{}'); } catch {}
+    try { oldExtra = JSON.parse(existing.extra_json || '{}'); } catch { }
     const b = req.body || {};
     const mergedExtra = { ...oldExtra, ...b };
     await prisma.$executeRawUnsafe(
@@ -21484,7 +22710,7 @@ app.get('/api/training/courses', async (req, res) => {
     const rows = await prisma.$queryRawUnsafe('SELECT * FROM training_courses ORDER BY start_date DESC, created_at DESC');
     const data = (rows || []).map((r) => {
       let extra = {};
-      try { extra = JSON.parse(r.extra_json || '{}'); } catch {}
+      try { extra = JSON.parse(r.extra_json || '{}'); } catch { }
       return {
         ...extra,
         ...r,
@@ -21580,7 +22806,7 @@ app.put('/api/training/courses/:id', async (req, res) => {
     const existing = rows?.[0];
     if (!existing) return res.status(404).json({ error: 'Not found' });
     let oldExtra = {};
-    try { oldExtra = JSON.parse(existing.extra_json || '{}'); } catch {}
+    try { oldExtra = JSON.parse(existing.extra_json || '{}'); } catch { }
     const b = req.body || {};
     const mergedExtra = { ...oldExtra, ...b };
     await prisma.$executeRawUnsafe(
@@ -21764,7 +22990,7 @@ const computeHrAttendanceAndPayroll = async (month, year) => {
     try {
       const parsed = JSON.parse(holidayPolicy.content);
       holidays = parsed[y] || [];
-    } catch {}
+    } catch { }
   }
 
   const defaultRules = {
@@ -21778,20 +23004,20 @@ const computeHrAttendanceAndPayroll = async (month, year) => {
     try {
       const parsed = JSON.parse(laborPolicy.content);
       rules = { ...defaultRules, ...parsed };
-    } catch {}
+    } catch { }
   }
 
   const insuranceMap = new Map();
   insuranceHistories.forEach((ih) => insuranceMap.set(ih.employeeId, ih));
   const employerRate = insuranceConfig
     ? (insuranceConfig.employerBhxh || 0) +
-      (insuranceConfig.employerBhyt || 0) +
-      (insuranceConfig.employerBhtn || 0)
+    (insuranceConfig.employerBhyt || 0) +
+    (insuranceConfig.employerBhtn || 0)
     : 21.5;
   const employeeRate = insuranceConfig
     ? (insuranceConfig.employeeBhxh || 0) +
-      (insuranceConfig.employeeBhyt || 0) +
-      (insuranceConfig.employeeBhtn || 0)
+    (insuranceConfig.employeeBhyt || 0) +
+    (insuranceConfig.employeeBhtn || 0)
     : 10.5;
 
   const payrollMap = new Map(payrollRecords.map((p) => [p.employeeId, p]));
@@ -21839,7 +23065,7 @@ const computeHrAttendanceAndPayroll = async (month, year) => {
           typeof reqItem.details === 'string'
             ? JSON.parse(reqItem.details)
             : reqItem.details || {};
-      } catch {}
+      } catch { }
 
       const statusLower = String(reqItem.status || details.status || 'pending').toLowerCase();
       const rawType = String(details.type || reqItem.type || '').toLowerCase();
@@ -22014,8 +23240,8 @@ const computeHrAttendanceAndPayroll = async (month, year) => {
           leaveInfo.leaveCategory === 'sick'
             ? 'BHXH'
             : leaveInfo.isPaidLeave
-            ? 'P'
-            : 'KL';
+              ? 'P'
+              : 'KL';
 
         if (leaveInfo.leaveSession === 'all_day') {
           days.push({
@@ -22175,8 +23401,8 @@ const computeHrAttendanceAndPayroll = async (month, year) => {
 
     const isEnrolled = Boolean(
       emp.isInsuranceEnrolled ||
-        (emp.socialInsuranceNumber && emp.socialInsuranceNumber.trim() !== '') ||
-        (emp.insuranceSalary && emp.insuranceSalary > 0)
+      (emp.socialInsuranceNumber && emp.socialInsuranceNumber.trim() !== '') ||
+      (emp.insuranceSalary && emp.insuranceSalary > 0)
     );
     let insuranceDeduction = 0;
     let employerContribution = 0;
@@ -22260,16 +23486,16 @@ const computeHrAttendanceAndPayroll = async (month, year) => {
   const isAccountingApproved =
     payrollRecords.length > 0
       ? payrollRecords.some((p) =>
-          ['Kế toán đã duyệt', 'Chờ Giám đốc duyệt', 'Giám đốc đã duyệt', 'Đã duyệt'].includes(
-            p.trangThai
-          )
+        ['Kế toán đã duyệt', 'Chờ Giám đốc duyệt', 'Giám đốc đã duyệt', 'Đã duyệt'].includes(
+          p.trangThai
         )
+      )
       : false;
   const isDirectorSubmitted =
     payrollRecords.length > 0
       ? payrollRecords.some((p) =>
-          ['Chờ Giám đốc duyệt', 'Giám đốc đã duyệt', 'Đã duyệt'].includes(p.trangThai)
-        )
+        ['Chờ Giám đốc duyệt', 'Giám đốc đã duyệt', 'Đã duyệt'].includes(p.trangThai)
+      )
       : false;
   const isDirectorApproved =
     payrollRecords.length > 0
@@ -22574,7 +23800,7 @@ function runBackupRetentionCleanup(customConfig = null) {
           fs.unlinkSync(item.fullPath);
           deletedCount++;
         }
-      } catch {}
+      } catch { }
     }
   });
 
@@ -22980,20 +24206,20 @@ async function restoreSqliteDatabaseFromBackup(sourceDbPath, selectedTables = nu
     await syncPrismaFinanceToAccountingTables(conn);
   } catch (err) {
     if (transactionStarted) {
-      await runSql('ROLLBACK;').catch(() => {});
+      await runSql('ROLLBACK;').catch(() => { });
     }
     if (attached) {
-      await runSql('DETACH DATABASE restore_src;').catch(() => {});
+      await runSql('DETACH DATABASE restore_src;').catch(() => { });
     }
-    await runSql('PRAGMA foreign_keys = ON;').catch(() => {});
+    await runSql('PRAGMA foreign_keys = ON;').catch(() => { });
     throw err;
   } finally {
     await closeConn();
   }
 
   // Reconnect Prisma Client to ensure fresh query state
-  await prisma.$disconnect().catch(() => {});
-  await prisma.$connect().catch(() => {});
+  await prisma.$disconnect().catch(() => { });
+  await prisma.$connect().catch(() => { });
 
   return { restoredTables };
 }
@@ -23363,7 +24589,7 @@ if (fs.existsSync(publicDir)) {
 }
 
 const distDir = path.join(__dirname, 'dist');
-if (fs.existsSync(distDir)) {
+if (process.env.VITE_EMBEDDED_EXPRESS !== 'true' && fs.existsSync(distDir)) {
   app.use(express.static(distDir));
   app.use((req, res, next) => {
     if (
@@ -23378,7 +24604,13 @@ if (fs.existsSync(distDir)) {
 }
 
 // Start Express Server
-app.listen(PORT, () => {
-  console.log(`🚀 [Backend Express] Seajong Server đang chạy tại http://localhost:${PORT}`);
-});
+if (process.env.VITE_EMBEDDED_EXPRESS !== 'true') {
+  app.listen(PORT, () => {
+    console.log(`🚀 [Backend Express] Seajong Server đang chạy tại http://localhost:${PORT}`);
+  });
+}
+
+export { app };
+export default app;
+
 

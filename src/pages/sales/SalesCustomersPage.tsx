@@ -237,6 +237,7 @@ export const SalesCustomersPage: React.FC = () => {
     name: '',
     address: '',
     nguon: 'Tự nhiên',
+    nguoiChamSocId: '',
     nguoiChamSocName: '',
     xungHo: 'Anh',
     daiDien: '',
@@ -457,6 +458,7 @@ export const SalesCustomersPage: React.FC = () => {
       name: '',
       address: '',
       nguon: customerSources[0] || 'Tự nhiên',
+      nguoiChamSocId: '',
       nguoiChamSocName: '',
       xungHo: 'Anh',
       daiDien: '',
@@ -492,6 +494,7 @@ export const SalesCustomersPage: React.FC = () => {
       name: c.name,
       address: c.address || '',
       nguon: resolveDisplaySource(c) || '',
+      nguoiChamSocId: c.nguoiChamSoc?.id || '',
       nguoiChamSocName: c.nguoiChamSoc?.fullName || '',
       xungHo: c.xungHo || detectedPrefix || 'Anh',
       daiDien: cleanedRep,
@@ -649,8 +652,9 @@ export const SalesCustomersPage: React.FC = () => {
               <EmployeeSelect
                 multiple={false}
                 value={employeeFilter}
-                onChange={(val) => {
-                  setEmployeeFilter(val);
+                onChange={(val, selectedObjs) => {
+                  const sel = selectedObjs?.[0];
+                  setEmployeeFilter(sel ? String(sel.employeeId || sel.id) : val);
                   setPage(1);
                 }}
                 placeholder="Chọn nhân viên phụ trách..."
@@ -1436,8 +1440,15 @@ export const SalesCustomersPage: React.FC = () => {
               <EmployeeSelect
                 label="Nhân viên phụ trách"
                 multiple={false}
-                value={formData.nguoiChamSocName}
-                onChange={(val) => setFormData({ ...formData, nguoiChamSocName: val })}
+                value={formData.nguoiChamSocId || formData.nguoiChamSocName}
+                onChange={(val, selectedObjs) => {
+                  const sel = selectedObjs?.[0];
+                  setFormData({
+                    ...formData,
+                    nguoiChamSocId: sel ? String(sel.employeeId || sel.id) : '',
+                    nguoiChamSocName: val,
+                  });
+                }}
                 placeholder="Chọn nhân viên chăm sóc"
                 hidePositionBadge={true}
               />

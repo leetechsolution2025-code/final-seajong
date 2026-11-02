@@ -84,7 +84,9 @@ export const AccountSettingsModal: React.FC<AccountSettingsModalProps> = ({
             <div>
               <h3 className="font-bold text-slate-900 text-base">Cài Đặt Tài Khoản</h3>
               <p className="text-xs text-slate-500">
-                {user?.role === 'DEALER' || user?.customer
+                {user?.role === 'CUSTOMER'
+                  ? `Cổng thông tin Khách hàng • ${user?.customer?.code ? `Mã KH: ${user.customer.code}` : 'Khách hàng thân thiết'}`
+                  : user?.role === 'DEALER' || user?.customer
                   ? `Hệ thống Đại lý & NPP • ${user?.customer?.code ? `Mã: ${user.customer.code}` : 'Đại lý chính thức'}`
                   : `${user?.employee?.departmentName || 'Hệ thống Seajong'} • ${user?.employee?.position || user?.role}`}
               </p>

@@ -4,8 +4,12 @@ import { Search, X, ChevronDown } from 'react-bootstrap-icons';
 
 export interface EmployeeItem {
   id: number | string;
+  code?: string;
+  employeeId?: string;
+  userId?: string;
   name: string;
   department: string;
+  departmentCode?: string;
   position?: string;
   phone?: string;
   email?: string;
@@ -31,6 +35,29 @@ export async function fetchEmployeesFromDb(): Promise<EmployeeItem[]> {
 
   isFetchingEmployees = true;
   try {
+    const res = await fetch('/api/users');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        const mapped: EmployeeItem[] = data.map((u: any) => ({
+          id: u.employeeId || u.id,
+          code: u.code || '',
+          employeeId: u.employeeId || String(u.id),
+          userId: u.userId || String(u.id),
+          name: u.name,
+          department: u.department || 'Công ty',
+          departmentCode: u.departmentCode || '',
+          position: u.position || '',
+          phone: u.phone || '',
+          email: u.email || '',
+        }));
+        cachedEmployees = mapped;
+        listeners.forEach((fn) => fn(mapped));
+        listeners.length = 0;
+        return mapped;
+      }
+    }
+
     const boardRes = await fetch('/api/board/users');
     if (boardRes.ok) {
       const boardData = await boardRes.json();
@@ -41,33 +68,18 @@ export async function fetchEmployeesFromDb(): Promise<EmployeeItem[]> {
           const rawPos = u.employee?.position || u.position || '';
           const cleanPos = String(rawPos).startsWith('vtr-') ? '' : rawPos;
           return {
-            id: u.id,
+            id: u.employee?.id || u.id,
+            code: u.employee?.code || u.code || '',
+            employeeId: u.employee?.id || String(u.id),
+            userId: String(u.id),
             name: u.employee?.fullName || u.name,
             department: u.employee?.departmentName || u.department || 'Công ty',
+            departmentCode: u.employee?.departmentCode || u.departmentCode || '',
             position: cleanPos,
             phone: u.employee?.phone || u.phone || '',
             email: u.email || '',
           };
         });
-        cachedEmployees = mapped;
-        listeners.forEach((fn) => fn(mapped));
-        listeners.length = 0;
-        return mapped;
-      }
-    }
-
-    const res = await fetch('/api/users');
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        const mapped: EmployeeItem[] = data.map((u: any) => ({
-          id: u.id,
-          name: u.name,
-          department: u.department || 'Công ty',
-          position: u.position || '',
-          phone: u.phone || '',
-          email: u.email || '',
-        }));
         cachedEmployees = mapped;
         listeners.forEach((fn) => fn(mapped));
         listeners.length = 0;
@@ -257,8 +269,11 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
     }
   }, [isOpen]);
 
-  // Chuẩn hoá mảng tên nhân viên đang được chọn (loại bỏ dấu ngoặc nếu có)
-  const selectedNames = useMemo<string[]>(() => {
+  // Theo dõi danh sách mã định danh (id) đang chọn để phân biệt chính xác các nhân sự trùng họ tên
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Chuẩn hoá mảng token đang được truyền qua value (hỗ trợ cả mã định danh id/code hoặc chuỗi hiển thị)
+  const selectedTokens = useMemo<string[]>(() => {
     if (Array.isArray(value)) {
       return value.map((v) => v.replace(/\s*\(.*?\)/g, '').trim()).filter(Boolean);
     }
@@ -271,58 +286,137 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
     return [];
   }, [value]);
 
-  // Tìm nhân sự được chọn khi là single mode (multiple === false)
+  // Đồng bộ selectedIds từ value theo ưu tiên mã định danh (id / code / employeeId / userId) trước
+  useEffect(() => {
+    if (selectedTokens.length === 0) {
+      setSelectedIds([]);
+      return;
+    }
+    setSelectedIds((prevIds) => {
+      // Nếu các nhân sự trong prevIds đã khớp với selectedTokens thì giữ nguyên đúng mã định danh đã chọn
+      const prevMatched = staffData.filter((s) => prevIds.includes(String(s.id)));
+      if (
+        prevMatched.length === selectedTokens.length &&
+        prevMatched.every(
+          (s, idx) =>
+            String(s.id) === selectedTokens[idx] ||
+            s.code === selectedTokens[idx] ||
+            s.name === selectedTokens[idx]
+        )
+      ) {
+        return prevIds;
+      }
+
+      const resolvedIds: string[] = [];
+      for (const token of selectedTokens) {
+        const byIdentifier = staffData.find(
+          (s) =>
+            String(s.id) === token ||
+            (Boolean(s.code) && String(s.code) === token) ||
+            (Boolean(s.employeeId) && String(s.employeeId) === token) ||
+            (Boolean(s.userId) && String(s.userId) === token)
+        );
+        if (byIdentifier) {
+          resolvedIds.push(String(byIdentifier.id));
+          continue;
+        }
+        const byName = staffData.find(
+          (s) =>
+            s.name.toLowerCase() === token.toLowerCase() &&
+            !resolvedIds.includes(String(s.id))
+        );
+        if (byName) {
+          resolvedIds.push(String(byName.id));
+        }
+      }
+      return resolvedIds;
+    });
+  }, [selectedTokens, staffData]);
+
+  // Tìm nhân sự được chọn khi là single mode (multiple === false) ưu tiên theo mã định danh
   const singleSelectedEmp = useMemo(() => {
     if (multiple) return null;
-    const name = selectedNames[0];
-    if (!name) return null;
-    return staffData.find((s) => s.name.toLowerCase() === name.toLowerCase()) || null;
-  }, [multiple, selectedNames, staffData]);
+    if (selectedIds[0]) {
+      const byId = staffData.find((s) => String(s.id) === selectedIds[0]);
+      if (byId) return byId;
+    }
+    const token = selectedTokens[0];
+    if (!token) return null;
+    return (
+      staffData.find(
+        (s) =>
+          String(s.id) === token ||
+          (Boolean(s.code) && String(s.code) === token) ||
+          (Boolean(s.employeeId) && String(s.employeeId) === token) ||
+          (Boolean(s.userId) && String(s.userId) === token)
+      ) ||
+      staffData.find((s) => s.name.toLowerCase() === token.toLowerCase()) ||
+      null
+    );
+  }, [multiple, selectedIds, selectedTokens, staffData]);
 
   const inputValue = useMemo(() => {
+    if (selectedIds.length > 0) {
+      const matched = selectedIds
+        .map((id) => staffData.find((s) => String(s.id) === id))
+        .filter(Boolean) as EmployeeItem[];
+      if (matched.length === selectedTokens.length) {
+        return matched.map((m) => m.name).join(', ');
+      }
+    }
     if (Array.isArray(value)) {
       return value.map((v) => v.replace(/\s*\(.*?\)/g, '').trim()).join(', ');
     }
     if (!value) return '';
     return value.replace(/\s*\(.*?\)/g, '').trim();
-  }, [value]);
+  }, [value, selectedIds, selectedTokens, staffData]);
 
-  // Lọc danh sách theo từ khoá tìm kiếm và phòng ban
+  // Lọc danh sách theo từ khoá tìm kiếm và mã phòng ban
   const filteredEmployees = useMemo(() => {
     let list = staffData;
     if (departmentFilter) {
       const df = departmentFilter.toLowerCase();
-      list = list.filter((e) => e.department.toLowerCase().includes(df));
+      list = list.filter(
+        (e) =>
+          (e.departmentCode && e.departmentCode.toLowerCase() === df) ||
+          e.department.toLowerCase().includes(df)
+      );
     }
     if (!searchTerm.trim()) return list;
 
     const q = searchTerm.toLowerCase();
     return list.filter(
       (e) =>
+        String(e.id).toLowerCase().includes(q) ||
+        (e.code && e.code.toLowerCase().includes(q)) ||
         e.name.toLowerCase().includes(q) ||
         e.department.toLowerCase().includes(q) ||
         (e.position && e.position.toLowerCase().includes(q))
     );
   }, [staffData, departmentFilter, searchTerm]);
 
-  // Xử lý khi chọn/bỏ chọn một nhân viên
-  const handleToggle = (name: string) => {
+  // Xử lý khi chọn/bỏ chọn một nhân viên căn cứ theo mã định danh (staff.id)
+  const handleToggle = (staff: EmployeeItem) => {
     if (disabled || readOnly) return;
 
-    let updatedNames: string[];
+    const targetId = String(staff.id);
+    let nextIds: string[];
     if (multiple) {
-      if (selectedNames.includes(name)) {
-        updatedNames = selectedNames.filter((n) => n !== name);
+      if (selectedIds.includes(targetId)) {
+        nextIds = selectedIds.filter((id) => id !== targetId);
       } else {
-        updatedNames = [...selectedNames, name];
+        nextIds = [...selectedIds, targetId];
       }
     } else {
-      updatedNames = [name];
+      nextIds = [targetId];
       setIsOpen(false);
     }
 
-    const updatedStr = updatedNames.join(', ');
-    const selectedObjs = staffData.filter((s) => updatedNames.includes(s.name));
+    setSelectedIds(nextIds);
+    const selectedObjs = nextIds
+      .map((id) => staffData.find((s) => String(s.id) === id))
+      .filter(Boolean) as EmployeeItem[];
+    const updatedStr = selectedObjs.map((s) => s.name).join(', ');
     onChange?.(updatedStr, selectedObjs);
   };
 
@@ -330,7 +424,18 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     const parts = val.split(',').map((s) => s.trim()).filter(Boolean);
-    const selectedObjs = staffData.filter((s) => parts.includes(s.name));
+    const selectedObjs = parts
+      .map(
+        (token) =>
+          staffData.find(
+            (s) =>
+              String(s.id) === token ||
+              (Boolean(s.code) && String(s.code) === token) ||
+              s.name.toLowerCase() === token.toLowerCase()
+          ) || null
+      )
+      .filter(Boolean) as EmployeeItem[];
+    setSelectedIds(selectedObjs.map((s) => String(s.id)));
     onChange?.(val, selectedObjs);
   };
 
@@ -379,7 +484,7 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
             width: '100%',
             height: '36px',
             padding: '5px 30px 5px 10px',
-            paddingRight: !hidePositionBadge && singleSelectedEmp && (singleSelectedEmp.position || singleSelectedEmp.department) ? '135px' : (clearable && selectedNames.length > 0 ? '44px' : '28px'),
+            paddingRight: !hidePositionBadge && singleSelectedEmp && (singleSelectedEmp.position || singleSelectedEmp.department) ? '135px' : (clearable && selectedTokens.length > 0 ? '44px' : '28px'),
             borderRadius: 'var(--radius-sm, 6px)',
             border: `1px solid ${error ? 'var(--color-danger, #ef4444)' : isOpen ? 'var(--color-primary, #4f46e5)' : 'var(--border-default, #cbd5e1)'}`,
             fontSize: '0.8125rem',
@@ -399,7 +504,7 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
           <span
             style={{
               position: 'absolute',
-              right: clearable && selectedNames.length > 0 && !disabled && !readOnly ? '42px' : '26px',
+              right: clearable && selectedTokens.length > 0 && !disabled && !readOnly ? '42px' : '26px',
               top: '50%',
               transform: 'translateY(-50%)',
               fontSize: '0.6875rem',
@@ -422,11 +527,12 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
         )}
 
         {/* Nút xoá nhanh khi đã chọn nhân viên */}
-        {clearable && selectedNames.length > 0 && !disabled && !readOnly && (
+        {clearable && selectedTokens.length > 0 && !disabled && !readOnly && (
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
+              setSelectedIds([]);
               onChange?.('', []);
             }}
             title="Bỏ chọn / Xem tất cả"
@@ -576,6 +682,7 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
             {showAllOption && (
               <div
                 onClick={() => {
+                  setSelectedIds([]);
                   onChange?.('', []);
                   setIsOpen(false);
                 }}
@@ -585,20 +692,20 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
                   padding: '7px 10px',
                   cursor: 'pointer',
                   borderBottom: '1px solid #f1f5f9',
-                  backgroundColor: selectedNames.length === 0 ? '#f0f9ff' : 'transparent',
+                  backgroundColor: selectedTokens.length === 0 ? '#f0f9ff' : 'transparent',
                   transition: 'background-color 0.12s ease',
                   userSelect: 'none',
                 }}
                 onMouseEnter={(e) => {
-                  if (selectedNames.length !== 0) e.currentTarget.style.backgroundColor = '#f8fafc';
+                  if (selectedTokens.length !== 0) e.currentTarget.style.backgroundColor = '#f8fafc';
                 }}
                 onMouseLeave={(e) => {
-                  if (selectedNames.length !== 0) e.currentTarget.style.backgroundColor = 'transparent';
+                  if (selectedTokens.length !== 0) e.currentTarget.style.backgroundColor = 'transparent';
                 }}
               >
                 <input
                   type={multiple ? 'checkbox' : 'radio'}
-                  checked={selectedNames.length === 0}
+                  checked={selectedTokens.length === 0}
                   onChange={() => {}}
                   style={{
                     width: '15px',
@@ -611,9 +718,9 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
                 />
                 <span
                   style={{
-                    fontWeight: selectedNames.length === 0 ? 700 : 500,
+                    fontWeight: selectedTokens.length === 0 ? 700 : 500,
                     fontSize: '0.8125rem',
-                    color: selectedNames.length === 0 ? '#0284c7' : '#1e293b',
+                    color: selectedTokens.length === 0 ? '#0284c7' : '#1e293b',
                   }}
                 >
                   {allOptionLabel || `Tất cả nhân sự (${staffData.length})`}
@@ -633,11 +740,11 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
               </div>
             ) : (
               filteredEmployees.map((staff) => {
-                const selected = selectedNames.includes(staff.name);
+                const selected = selectedIds.includes(String(staff.id));
                 return (
                   <div
-                    key={staff.id}
-                    onClick={() => handleToggle(staff.name)}
+                    key={String(staff.id)}
+                    onClick={() => handleToggle(staff)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -672,17 +779,36 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
                         flexShrink: 0,
                       }}
                     />
-                    <span
+                    <div
                       style={{
-                        fontWeight: selected ? 700 : 500,
-                        fontSize: '0.8125rem',
-                        color: selected ? '#0284c7' : '#1e293b',
-                        whiteSpace: 'nowrap',
+                        display: 'flex',
+                        flexDirection: 'column',
                         marginRight: '12px',
+                        minWidth: 0,
                       }}
                     >
-                      {staff.name}
-                    </span>
+                      <span
+                        style={{
+                          fontWeight: selected ? 700 : 500,
+                          fontSize: '0.8125rem',
+                          color: selected ? '#0284c7' : '#1e293b',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {staff.name}
+                      </span>
+                      {staff.code && (
+                        <span
+                          style={{
+                            fontSize: '0.68rem',
+                            color: '#94a3b8',
+                            fontFamily: 'monospace',
+                          }}
+                        >
+                          {staff.code}
+                        </span>
+                      )}
+                    </div>
                     <span
                       style={{
                         marginLeft: 'auto',
@@ -718,7 +844,7 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
             }}
           >
             <span>
-              Đã chọn: <strong>{selectedNames.length}</strong> {multiple ? 'người' : ''}
+              Đã chọn: <strong>{selectedIds.length}</strong> {multiple ? 'người' : ''}
             </span>
             <button
               type="button"

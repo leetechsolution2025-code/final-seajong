@@ -1,7 +1,9 @@
 export interface EmployeeInfo {
+  id?: string;
   code: string;
   fullName: string;
   position: string;
+  positionCode?: string;
   departmentCode: string;
   departmentName: string;
   branchCode?: string | null;
@@ -16,6 +18,7 @@ export interface CustomerInfo {
   hanMucCongNo?: number;
   doanhSoCamKet?: number;
   loai?: string | null;
+  nhom?: string | null;
   nguoiChamSoc?: {
     id: string;
     fullName: string;

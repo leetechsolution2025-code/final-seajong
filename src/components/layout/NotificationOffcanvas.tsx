@@ -159,8 +159,8 @@ export const NotificationOffcanvas: React.FC<NotificationOffcanvasProps> = ({
       />
 
       {/* Drawer */}
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-        <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col border-l border-slate-200 animate-slide-left">
+      <div className="fixed inset-0 md:inset-y-0 md:left-auto md:right-0 max-w-full flex pl-0 md:pl-10">
+        <div className="offcanvas-panel w-screen max-w-full md:max-w-md h-full bg-white shadow-2xl flex flex-col border-0 md:border-l border-slate-200 animate-slide-left">
           
           {/* Header */}
           <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">

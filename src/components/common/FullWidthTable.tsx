@@ -213,6 +213,15 @@ export const FullWidthTable: React.FC<FullWidthTableProps> = ({
           color: var(--text-primary, #1e293b);
           vertical-align: middle;
         }
+        .full-width-table-wrapper table tbody td.align-top,
+        .full-width-table-wrapper table tbody td:has(input[type="checkbox"]),
+        .full-width-table-wrapper table tbody td:has(.form-check-input) {
+          vertical-align: top !important;
+        }
+        .full-width-table-wrapper table tbody td:has(input[type="checkbox"]) input[type="checkbox"],
+        .full-width-table-wrapper table tbody td:has(.form-check-input) .form-check-input {
+          margin-top: 2px;
+        }
         .full-width-table-wrapper table tbody tr {
           background-color: #ffffff;
           transition: background-color 0.15s ease;

@@ -62,7 +62,10 @@ export const DepartmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const isNewLogin = !lastUserIdRef.current && (!storedUserId || storedUserId !== currentUserId);
     const isSwitchedUser = Boolean(lastUserIdRef.current && lastUserIdRef.current !== currentUserId);
 
-    if (user.role === 'DEALER') {
+    if (user.role === 'CUSTOMER') {
+      setActiveDeptCodeState('customer');
+      localStorage.setItem('seajong_active_dept', 'customer');
+    } else if (user.role === 'DEALER') {
       setActiveDeptCodeState('dealer');
       localStorage.setItem('seajong_active_dept', 'dealer');
     } else if (isNewLogin || isSwitchedUser) {
@@ -91,6 +94,9 @@ export const DepartmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [activeDeptCode]);
 
   const setActiveDeptCode = (code: string) => {
+    if (user?.role === 'CUSTOMER' && code !== 'customer') {
+      return; // Cấm khách hàng chuyển sang phòng ban nội bộ khác
+    }
     if (user?.role === 'DEALER' && code !== 'dealer') {
       return; // Cấm đại lý chuyển sang phòng ban nội bộ khác
     }

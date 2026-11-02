@@ -1,14 +1,18 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { StepPage } from '../../components/common/StepPage';
 import { TableToolbar } from '../../components/common/TableToolbar';
 import { FullWidthTable, SwipeableTableRow } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
 import { Button } from '../../components/common/Button';
+import { Badge } from '../../components/common/Badge';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { EventOffcanvas } from '../../components/common/EventOffcanvas';
 import { Offcanvas } from '../../components/common/Offcanvas';
 import { TaoDonHangModal } from '../../components/plan-finance/bao_gia/TaoDonHangModal';
 import { BaoGiaSanitaryModal } from '../../components/plan-finance/bao_gia/BaoGiaSanitaryModal';
+import { CreateDefectOffcanvas } from '../production/defects/CreateDefectOffcanvas';
+import { DefectSummaryOffcanvas } from '../production/defects/DefectSummaryOffcanvas';
+import { DefectProcessModal } from '../production/defects/DefectProcessModal';
 import { getCustomerGroupInfo } from '../../utils/customerGroupUtils';
 import type { ModernStepItem } from '../../types';
 import type { TickerItem } from '../../components/layout/DynamicTicker';
@@ -26,6 +30,8 @@ import {
   CloudUpload,
   ArrowRepeat,
   Upload,
+  ChevronDown,
+  ChevronRight,
 } from 'react-bootstrap-icons';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -150,16 +156,16 @@ const STEP_ITEMS: ModernStepItem[] = [
   {
     num: 3,
     id: 'DEALER_ORDER',
-    title: 'Đơn hàng từ đại lý',
-    mobileTitle: 'Đơn đại lý',
-    desc: 'Đơn đại lý tự lập & gửi lên',
+    title: 'Đơn hàng yêu cầu',
+    mobileTitle: 'Đơn yêu cầu',
+    desc: 'Đơn đại lý & khách hàng tự lập gửi lên',
     icon: 'bi-buildings',
   },
   {
     num: 4,
     id: 'OMNICHANNEL',
     title: 'Bán hàng đa kênh',
-    desc: 'Gom đơn từ các kênh bán hàng',
+    desc: 'Gom đơn từ các sàn TMĐT',
     icon: 'bi-shop',
   },
   {
@@ -346,7 +352,10 @@ export const SalesOrderTrackingPage: React.FC = () => {
   const [defectPage, setDefectPage] = useState<number>(1);
   const [defectPageSize, setDefectPageSize] = useState<number>(10);
   const [selectedDefectIds, setSelectedDefectIds] = useState<Set<string>>(new Set());
-  const [, setSelectedDefect] = useState<DefectReturn | null>(null);
+  const [selectedDefect, setSelectedDefect] = useState<DefectReturn | null>(null);
+  const [showCreateDefectOffcanvas, setShowCreateDefectOffcanvas] = useState<boolean>(false);
+  const [showDefectProcessModal, setShowDefectProcessModal] = useState<boolean>(false);
+  const [expandedDefectKeys, setExpandedDefectKeys] = useState<Set<string>>(() => new Set());
 
   // ── Customer Select Drawer ──
   const [showCustomerSelect, setShowCustomerSelect] = useState<boolean>(false);
@@ -355,6 +364,9 @@ export const SalesOrderTrackingPage: React.FC = () => {
   const [customerSearch, setCustomerSearch] = useState<string>('');
   const [customersList, setCustomersList] = useState<CustomerOption[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState<boolean>(false);
+  const [customerDrawerPage, setCustomerDrawerPage] = useState<number>(1);
+  const [customerDrawerPageSize, setCustomerDrawerPageSize] = useState<number>(10);
+  const customerDrawerListRef = useRef<HTMLDivElement | null>(null);
 
   // ── Modals & Drawers ──
   const [showCreateOrderModal, setShowCreateOrderModal] = useState<boolean>(false);
@@ -434,7 +446,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
     }
   };
 
-  // ── Fetch Dealer Orders (Đơn hàng từ đại lý) ────────────────────────────────
+  // ── Fetch Request Orders (Đơn hàng yêu cầu từ đại lý & khách hàng tự lập) ──
   const fetchDealerOrders = async () => {
     setDealerOrderLoading(true);
     try {
@@ -452,20 +464,23 @@ export const SalesOrderTrackingPage: React.FC = () => {
         const data = await res.json();
         const nonDraftItems = (data.items || []).filter(
           (o: SaleOrder) =>
-            (o.orderSource === 'dealer_portal' || (o.code || '').startsWith('DH-DL-')) &&
+            (o.orderSource === 'dealer_portal' ||
+              o.orderSource === 'customer_portal' ||
+              (o.code || '').startsWith('DH-DL-') ||
+              (o.code || '').startsWith('KHL-')) &&
             o.trangThai !== 'draft'
         );
         setDealerOrders(nonDraftItems);
-        setDealerOrderTotal(nonDraftItems.length);
+        setDealerOrderTotal(data.total ?? nonDraftItems.length);
       }
     } catch (e) {
-      console.error('Lỗi tải đơn hàng đại lý:', e);
+      console.error('Lỗi tải đơn hàng yêu cầu:', e);
     } finally {
       setDealerOrderLoading(false);
     }
   };
 
-  // ── Fetch Omnichannel ───────────────────────────────────────────────────────
+  // ── Fetch Omnichannel (Chỉ lấy đơn hàng từ các sàn thương mại điện tử) ─────
   const fetchOmnichannelOrders = async () => {
     setOmnichannelLoading(true);
     try {
@@ -473,8 +488,19 @@ export const SalesOrderTrackingPage: React.FC = () => {
       if (omnichannelChannelFilter !== 'all') params.set('channel', omnichannelChannelFilter);
       const res = await fetch(`/api/sales/omnichannel/orders?${params.toString()}`);
       if (res.ok) {
-        const data = await res.json();
-        setOmnichannelOrders(data);
+        const data: OmnichannelOrder[] = await res.json();
+        const marketplaceOnly = (Array.isArray(data) ? data : []).filter((o) => {
+          const ch = String(o.channel || '').toLowerCase();
+          const extId = String(o.externalId || '');
+          if (extId.startsWith('DBH-') || extId.startsWith('DH-DL-') || extId.startsWith('KHL-')) {
+            return false;
+          }
+          if (ch.includes('showroom') || ch.includes('đại lý') || ch.includes('dai ly') || ch.includes('website')) {
+            return false;
+          }
+          return true;
+        });
+        setOmnichannelOrders(marketplaceOnly);
       }
     } catch (e) {
       console.error('Lỗi tải đơn hàng đa kênh:', e);
@@ -486,6 +512,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
   // ── Fetch Defects / Returns ─────────────────────────────────────────────────
   const fetchDefects = async () => {
     setDefectLoading(true);
+    setExpandedDefectKeys(new Set());
     try {
       const res = await fetch('/api/production/defects');
       if (res.ok) {
@@ -507,16 +534,11 @@ export const SalesOrderTrackingPage: React.FC = () => {
     }
   };
 
-  // ── Fetch Customers for Drawer ──────────────────────────────────────────────
-  const fetchCustomersForDrawer = async (search: string = '') => {
+  // ── Fetch Customers for Drawer (Lấy toàn bộ dữ liệu khách hàng trong DB) ───
+  const fetchCustomersForDrawer = async () => {
     setLoadingCustomers(true);
     try {
-      const params = new URLSearchParams({ pageSize: '50' });
-      if (search.trim()) {
-        params.set('search', search.trim());
-      } else {
-        params.set('nhom', customerTab === 'dai_ly' ? 'dai-ly' : 'ca-nhan');
-      }
+      const params = new URLSearchParams({ page: '1', pageSize: '10000' });
       const res = await fetch(`/api/plan-finance/customers?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
@@ -546,6 +568,10 @@ export const SalesOrderTrackingPage: React.FC = () => {
     if (currentStep === 4) fetchOmnichannelOrders();
     if (currentStep === 5) fetchDefects();
   }, [currentStep]);
+
+  useEffect(() => {
+    setExpandedDefectKeys(new Set());
+  }, [defectPage, defectPageSize, defectSearch, defectStatusFilter, defectSourceFilter]);
 
   const handleEditSingleOrder = (order: SaleOrder) => {
     setActiveCustomerForNew((order.customer as any) || null);
@@ -612,10 +638,74 @@ export const SalesOrderTrackingPage: React.FC = () => {
   };
 
   useEffect(() => {
+    fetchCustomersForDrawer();
+  }, []);
+
+  useEffect(() => {
     if (showCustomerSelect) {
-      fetchCustomersForDrawer(customerSearch);
+      fetchCustomersForDrawer();
     }
-  }, [showCustomerSelect, customerTab, customerSearch]);
+  }, [showCustomerSelect]);
+
+  useEffect(() => {
+    setCustomerDrawerPage(1);
+  }, [customerTab, customerSearch]);
+
+  useEffect(() => {
+    customerDrawerListRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [customerDrawerPage, customerTab]);
+
+  const isRetailCustomerOption = (c: CustomerOption) => {
+    const raw = (c.nhom || '').toLowerCase().trim();
+    if (!raw) return false;
+    const grp = getCustomerGroupInfo(c.nhom);
+    return (
+      grp.code === 'ca-nhan' ||
+      raw === 'ca-nhan' ||
+      raw === 'ca_nhan' ||
+      raw === 'canhan' ||
+      raw.includes('cá nhân') ||
+      raw.includes('khách lẻ') ||
+      raw === 'khg-20260401-3898-wxjs'
+    );
+  };
+
+  const normalizeCustomerSearch = (str?: string | null) =>
+    (str || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .trim();
+
+  const matchesCustomerDrawerSearch = (c: CustomerOption, query: string) => {
+    if (!query.trim()) return true;
+    const qRaw = query.toLowerCase().trim();
+    const qNorm = normalizeCustomerSearch(query);
+    const fields = [c.name, c.code, c.dienThoai, c.address, (c as any).daiDien];
+    return fields.some(
+      (f) =>
+        (f && String(f).toLowerCase().includes(qRaw)) ||
+        (f && normalizeCustomerSearch(String(f)).includes(qNorm))
+    );
+  };
+
+  const agencyCustomersMatched = useMemo(
+    () => customersList.filter((c) => !isRetailCustomerOption(c) && matchesCustomerDrawerSearch(c, customerSearch)),
+    [customersList, customerSearch]
+  );
+
+  const retailCustomersMatched = useMemo(
+    () => customersList.filter((c) => isRetailCustomerOption(c) && matchesCustomerDrawerSearch(c, customerSearch)),
+    [customersList, customerSearch]
+  );
+
+  const activeDrawerCustomers = customerTab === 'dai_ly' ? agencyCustomersMatched : retailCustomersMatched;
+
+  const paginatedDrawerCustomers = useMemo(() => {
+    const startIdx = (customerDrawerPage - 1) * customerDrawerPageSize;
+    return activeDrawerCustomers.slice(startIdx, startIdx + customerDrawerPageSize);
+  }, [activeDrawerCustomers, customerDrawerPage, customerDrawerPageSize]);
 
   // ── Handlers ──
   const handleDeleteSelectedOrders = async () => {
@@ -1270,13 +1360,13 @@ export const SalesOrderTrackingPage: React.FC = () => {
           )}
 
           {/* ══════════════════════════════════════════════════════════════════════
-            STEP 3: ĐƠN HÀNG TỪ ĐẠI LÝ (DEALER PORTAL ORDERS)
+            STEP 3: ĐƠN HÀNG YÊU CẦU (DEALER & CUSTOMER PORTAL ORDERS)
             ══════════════════════════════════════════════════════════════════════ */}
           {currentStep === 3 && (
             <div className="flex-1 flex flex-col h-full overflow-hidden">
               <TableToolbar
                 showMenu={false}
-                searchPlaceholder="Tìm mã đơn đại lý, tên đại lý, mã ĐL, SĐT..."
+                searchPlaceholder="Tìm mã đơn yêu cầu, tên KH/đại lý, SĐT..."
                 searchValue={dealerOrderSearch}
                 onSearchChange={(v) => {
                   setDealerOrderSearch(v);
@@ -1343,7 +1433,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
                 }
               />
 
-              {/* Dealer Orders Table */}
+              {/* Request Orders Table */}
               <div className="flex-1 overflow-hidden flex flex-col min-h-0">
                 <FullWidthTable loading={dealerOrderLoading}>
                   <table className="sales-orders-table w-full text-left border-collapse" style={{ fontSize: '13px' }}>
@@ -1363,8 +1453,8 @@ export const SalesOrderTrackingPage: React.FC = () => {
                             className="rounded border-slate-300 text-sky-600 cursor-pointer"
                           />
                         </th>
-                        <th className="py-2.5 px-2.5 sm:px-3.5 sm:w-48">Mã đơn đại lý</th>
-                        <th className="hidden sm:table-cell py-2.5 px-3.5">Đại lý & Thông tin nhận hàng</th>
+                        <th className="py-2.5 px-2.5 sm:px-3.5 sm:w-48">Mã đơn yêu cầu</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5">Khách hàng / Đại lý & Nhận hàng</th>
                         <th className="hidden sm:table-cell py-2.5 px-3.5">Nội dung yêu cầu</th>
                         <th className="hidden sm:table-cell py-2.5 px-3.5 w-32">Ngày gửi</th>
                         <th className="hidden sm:table-cell py-2.5 px-3.5 w-32">Ngày giao</th>
@@ -1377,7 +1467,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
                         <tr>
                           <td colSpan={8} className="py-12 text-center text-slate-400">
                             <i className="bi bi-inbox text-2xl block mb-2 opacity-30" />
-                            Chưa có đơn hàng nào từ đại lý gửi lên hệ thống
+                            Chưa có đơn hàng yêu cầu nào từ đại lý hoặc khách hàng gửi lên hệ thống
                           </td>
                         </tr>
                       ) : (
@@ -1386,11 +1476,15 @@ export const SalesOrderTrackingPage: React.FC = () => {
                           .map((o) => {
                             const itemsList = o.saleOrderItems || [];
                             const totalQty = itemsList.reduce((s: number, it: any) => s + (Number(it.soLuong) || 1), 0);
+                            const isCustomerSelfOrder =
+                              o.orderSource === 'customer_portal' || (o.code || '').startsWith('KHL-');
+                            const senderName =
+                              o.customer?.name || o.nguoiNhan || o.nguoiDatHang || (isCustomerSelfOrder ? 'Khách hàng mua lẻ' : 'Đại lý Seajong');
                             const requestContent =
                               (o.ghiChu && o.ghiChu.trim()) ||
                               (itemsList[0]?.tenHang
                                 ? `Đặt mua ${itemsList[0].tenHang}${itemsList.length > 1 ? ` (+${itemsList.length - 1} SP)` : ''}`
-                                : 'Đặt hàng theo danh mục đại lý');
+                                : 'Đặt hàng trực tuyến từ trang mua hàng');
                             return (
                               <SwipeableTableRow
                                 key={o.id}
@@ -1398,8 +1492,8 @@ export const SalesOrderTrackingPage: React.FC = () => {
                                 onRowClick={() => setSelectedOrder(o)}
                                 onEdit={() => handleEditSingleOrder(o)}
                                 onDelete={() => handleDeleteOrderById(o.id)}
-                                deleteConfirmTitle="Xác nhận xoá đơn hàng đại lý"
-                                deleteConfirmMessage={`Bạn có chắc chắn muốn xoá đơn hàng đại lý "${o.code}" không? Thao tác này không thể hoàn tác.`}
+                                deleteConfirmTitle="Xác nhận xoá đơn hàng yêu cầu"
+                                deleteConfirmMessage={`Bạn có chắc chắn muốn xoá đơn hàng yêu cầu "${o.code}" không? Thao tác này không thể hoàn tác.`}
                                 deleteConfirmText="Xoá đơn hàng"
                                 className="hover:bg-slate-50/80 transition-colors cursor-pointer border-b border-slate-100"
                               >
@@ -1421,12 +1515,12 @@ export const SalesOrderTrackingPage: React.FC = () => {
                                     {o.code}
                                   </div>
                                   <div className="text-slate-400 text-[11px] mt-0.5 truncate">
-                                    Người lập: {o.nguoiDatHang || o.customer?.name || 'Đại lý'}
+                                    Người lập: {o.nguoiDatHang || o.customer?.name || o.nguoiNhan || (isCustomerSelfOrder ? 'Khách hàng' : 'Đại lý')}
                                   </div>
                                   {/* Mobile summary */}
                                   <div className="sm:hidden mt-1 space-y-0.5">
                                     <div className="font-semibold text-slate-900 text-xs truncate">
-                                      {o.customer?.name || o.nguoiNhan || 'Đại lý Seajong'}
+                                      {senderName}
                                     </div>
                                     <div className="text-[11px] text-slate-500 truncate">
                                       {requestContent} ({totalQty} SP)
@@ -1445,11 +1539,21 @@ export const SalesOrderTrackingPage: React.FC = () => {
                                   <div>
                                     <div className="flex items-center gap-1.5">
                                       <span className="font-semibold text-slate-900 text-[13px]">
-                                        {o.customer?.name || o.nguoiNhan || 'Đại lý Seajong'}
+                                        {senderName}
                                       </span>
-                                      {o.customer?.code && (
+                                      {o.customer?.code ? (
                                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
                                           {o.customer.code}
+                                        </span>
+                                      ) : (
+                                        <span
+                                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                                            isCustomerSelfOrder
+                                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                              : 'bg-blue-50 text-blue-700 border-blue-200'
+                                          }`}
+                                        >
+                                          {isCustomerSelfOrder ? 'Khách lẻ' : 'Đại lý'}
                                         </span>
                                       )}
                                     </div>
@@ -1487,13 +1591,13 @@ export const SalesOrderTrackingPage: React.FC = () => {
                 </FullWidthTable>
               </div>
 
-              {/* Dealer Order Footer Pagination */}
+              {/* Request Order Footer Pagination */}
               <Pagination
                 currentPage={dealerOrderPage}
                 totalPages={Math.max(1, Math.ceil((dealerOrderTotal || dealerOrders.length) / dealerOrderPageSize))}
                 totalItems={dealerOrderTotal || dealerOrders.length}
                 pageSize={dealerOrderPageSize}
-                itemName="đơn đại lý"
+                itemName="đơn yêu cầu"
                 onPageChange={setDealerOrderPage}
                 onPageSizeChange={(sz) => {
                   setDealerOrderPageSize(sz);
@@ -1518,14 +1622,15 @@ export const SalesOrderTrackingPage: React.FC = () => {
                 filters={[
                   {
                     id: 'channel',
-                    ariaLabel: 'Kênh bán',
+                    ariaLabel: 'Sàn TMĐT',
                     value: omnichannelChannelFilter,
                     onChange: setOmnichannelChannelFilter,
                     options: [
-                      { value: 'all', label: 'Tất cả kênh' },
+                      { value: 'all', label: 'Tất cả sàn TMĐT' },
                       { value: 'Shopee', label: 'Shopee Mall' },
                       { value: 'TikTok', label: 'TikTok Shop' },
-                      { value: 'Website', label: 'Website Seajong' },
+                      { value: 'Lazada', label: 'Lazada Mall' },
+                      { value: 'Tiki', label: 'Tiki Trading' },
                     ],
                   },
                   {
@@ -1620,7 +1725,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
                             <tr>
                               <td colSpan={7} className="py-12 text-center text-slate-400">
                                 <i className="bi bi-inbox text-2xl block mb-2 opacity-30" />
-                                Không tìm thấy đơn hàng đa kênh nào phù hợp
+                                Chưa có đơn hàng nào từ các sàn thương mại điện tử
                               </td>
                             </tr>
                           );
@@ -1807,8 +1912,8 @@ export const SalesOrderTrackingPage: React.FC = () => {
                       variant="primary"
                       size="sm"
                       className="bg-[#003087] hover:bg-[#00256c] text-white border-[#003087]"
-                      onClick={() => alert('Mở phiếu tạo hồ sơ đổi trả / hàng bảo hành mới')}
-                      title="Tạo hồ sơ đổi trả / bảo hành mới"
+                      onClick={() => setShowCreateDefectOffcanvas(true)}
+                      title="Tạo hồ sơ lỗi mới"
                     >
                       <Plus className="w-4 h-4 md:mr-1" />
                       <span className="sales-order-btn-label hidden md:inline">Tạo mới</span>
@@ -1837,10 +1942,8 @@ export const SalesOrderTrackingPage: React.FC = () => {
                             className="rounded border-slate-300 text-sky-600 cursor-pointer"
                           />
                         </th>
-                        <th className="py-2.5 px-2.5 sm:px-3.5 sm:w-36">Mã lỗi</th>
-                        <th className="hidden sm:table-cell py-2.5 px-3.5">Khách hàng</th>
-                        <th className="hidden sm:table-cell py-2.5 px-3.5 w-36">Đơn hàng</th>
-                        <th className="hidden sm:table-cell py-2.5 px-3.5 w-36">Ngày tạo</th>
+                        <th className="py-2.5 px-2.5 sm:px-3.5">Mã lỗi</th>
+                        <th className="hidden sm:table-cell py-2.5 px-3.5 w-32">Ngày tạo</th>
                         <th className="hidden sm:table-cell py-2.5 px-3.5">Mô tả lỗi</th>
                         <th className="py-2.5 px-2.5 sm:px-3.5 text-center w-28 sm:w-32">Trạng thái</th>
                       </tr>
@@ -1848,11 +1951,13 @@ export const SalesOrderTrackingPage: React.FC = () => {
                     <tbody className="divide-y divide-slate-100">
                       {(() => {
                         const filtered = defects.filter((d) => {
+                          const q = defectSearch.toLowerCase();
                           const matchSearch =
                             !defectSearch ||
-                            d.code.toLowerCase().includes(defectSearch.toLowerCase()) ||
-                            (d.customerName || '').toLowerCase().includes(defectSearch.toLowerCase()) ||
-                            (d.productName || '').toLowerCase().includes(defectSearch.toLowerCase());
+                            (d.code || '').toLowerCase().includes(q) ||
+                            (d.customerName || '').toLowerCase().includes(q) ||
+                            (d.productName || '').toLowerCase().includes(q) ||
+                            (d.orderNumber || '').toLowerCase().includes(q);
                           const matchStatus =
                             defectStatusFilter === 'all' || d.status === defectStatusFilter;
                           const matchSource =
@@ -1860,13 +1965,50 @@ export const SalesOrderTrackingPage: React.FC = () => {
                           return matchSearch && matchStatus && matchSource;
                         });
 
+                        // Gom nhóm các hàng trả về thuộc cùng một đơn hàng (chỉ nhóm khi đơn có >= 2 mã lỗi)
+                        const orderBuckets = new Map<string, DefectReturn[]>();
+                        filtered.forEach((d) => {
+                          const orderKey = (d.orderNumber || '').trim();
+                          if (orderKey && orderKey !== '—') {
+                            const list = orderBuckets.get(orderKey) || [];
+                            list.push(d);
+                            orderBuckets.set(orderKey, list);
+                          }
+                        });
+
+                        type DefectDisplayEntry =
+                          | { type: 'single'; row: DefectReturn }
+                          | { type: 'group'; orderNumber: string; items: DefectReturn[] };
+
+                        const entries: DefectDisplayEntry[] = [];
+                        const processedOrders = new Set<string>();
+
+                        filtered.forEach((d) => {
+                          const orderKey = (d.orderNumber || '').trim();
+                          if (orderKey && orderKey !== '—') {
+                            const bucket = orderBuckets.get(orderKey) || [];
+                            if (bucket.length > 1) {
+                              if (!processedOrders.has(orderKey)) {
+                                processedOrders.add(orderKey);
+                                entries.push({
+                                  type: 'group',
+                                  orderNumber: orderKey,
+                                  items: bucket,
+                                });
+                              }
+                              return;
+                            }
+                          }
+                          entries.push({ type: 'single', row: d });
+                        });
+
                         const start = (defectPage - 1) * defectPageSize;
-                        const pageSlice = filtered.slice(start, start + defectPageSize);
+                        const pageSlice = entries.slice(start, start + defectPageSize);
 
                         if (pageSlice.length === 0) {
                           return (
                             <tr>
-                              <td colSpan={7} className="py-12 text-center text-slate-400">
+                              <td colSpan={5} className="py-12 text-center text-slate-400">
                                 <i className="bi bi-inbox text-2xl block mb-2 opacity-30" />
                                 Chưa có hồ sơ hàng trả về nào
                               </td>
@@ -1874,74 +2016,269 @@ export const SalesOrderTrackingPage: React.FC = () => {
                           );
                         }
 
-                        return pageSlice.map((row) => (
-                          <SwipeableTableRow
-                            key={row.id}
-                            rowId={row.id}
-                            onRowClick={() => setSelectedDefect(row)}
-                            onEdit={() => setSelectedDefect(row)}
-                            onDelete={() => handleDeleteDefectById(row.id)}
-                            deleteConfirmTitle="Xác nhận xoá hồ sơ trả về"
-                            deleteConfirmMessage={`Bạn có chắc chắn muốn xoá hồ sơ "${row.code}" không? Thao tác này không thể hoàn tác.`}
-                            deleteConfirmText="Xoá hồ sơ"
-                            className="hover:bg-slate-50/80 cursor-pointer transition-colors border-b border-slate-100"
-                          >
-                            <td className="py-2.5 px-2.5 sm:px-3.5 text-center" onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                checked={selectedDefectIds.has(row.id)}
-                                onChange={(e) => {
-                                  const next = new Set(selectedDefectIds);
-                                  if (e.target.checked) next.add(row.id);
-                                  else next.delete(row.id);
-                                  setSelectedDefectIds(next);
-                                }}
-                                className="rounded border-slate-300 text-sky-600 cursor-pointer"
-                              />
-                            </td>
-                            <td className="py-2.5 px-2.5 sm:px-3.5 min-w-0">
-                              <div>
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="font-bold text-[#003087] hover:underline cursor-pointer text-[13px]">
-                                    {row.code || 'ERR-—'}
+                        const toggleOrderGroup = (orderNum: string) => {
+                          setExpandedDefectKeys((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(orderNum)) next.delete(orderNum);
+                            else next.add(orderNum);
+                            return next;
+                          });
+                        };
+
+                        const renderCustomerOrderSubline = (customerName?: string | null, orderNum?: string | null) => {
+                          const hasCust = Boolean(customerName && customerName !== '—');
+                          const hasOrder = Boolean(orderNum && orderNum !== '—');
+                          if (!hasCust && !hasOrder) {
+                            return <div className="text-[11px] text-slate-400 mt-0.5">Nội bộ / Chưa gắn đơn</div>;
+                          }
+                          return (
+                            <div className="text-[11.5px] text-slate-600 mt-0.5 flex items-center gap-1.5 min-w-0 sm:flex-wrap">
+                              {hasCust && (
+                                <span className="font-semibold text-slate-800 truncate max-w-[145px] sm:max-w-[260px]" title={customerName || ''}>
+                                  {customerName}
+                                </span>
+                              )}
+                              {hasCust && hasOrder && <span className="text-slate-300 shrink-0">•</span>}
+                              {hasOrder && (
+                                <span className="font-mono font-medium text-blue-700 whitespace-nowrap shrink-0">
+                                  {orderNum}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        };
+
+                        const renderProductLinesInsideCode = (itemsList: DefectReturn[], isClickableItem: boolean) => (
+                          <div className="mt-2 space-y-1.5">
+                            {itemsList.map((item, idx) => (
+                              <div
+                                key={item.id || idx}
+                                onClick={
+                                  isClickableItem
+                                    ? (e) => {
+                                        e.stopPropagation();
+                                        setSelectedDefect(item);
+                                      }
+                                    : undefined
+                                }
+                                className={`${
+                                  idx > 0 ? 'pt-1.5 border-t border-dashed border-slate-200/80' : ''
+                                } ${isClickableItem ? 'hover:bg-white/80 rounded px-1 -mx-1 py-0.5 transition-colors' : ''}`}
+                              >
+                                <div className="flex items-start gap-1.5">
+                                  <span className="text-slate-400 font-mono text-xs leading-none mt-1 select-none shrink-0">
+                                    ↳
                                   </span>
-                                  <span className="inline-block px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-normal">
-                                    {row.source === 'RETURN' ? 'Trả về' : row.source === 'WARRANTY' ? 'Bảo hành' : 'Nội bộ'}
-                                  </span>
-                                </div>
-                                {/* Mobile summary */}
-                                <div className="sm:hidden mt-1 space-y-0.5">
-                                  <div className="font-semibold text-slate-900 text-xs truncate">
-                                    {row.customerName || '—'} {row.orderNumber ? `• #${row.orderNumber}` : ''}
+                                  <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
+                                    {item.productCode && (
+                                      <span className="font-mono font-bold text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200 whitespace-nowrap">
+                                        {item.productCode}
+                                      </span>
+                                    )}
+                                    <span className="font-medium text-slate-800 text-[12px] sm:text-[12.5px]">
+                                      {item.productName || 'Sản phẩm trả về'}
+                                    </span>
+                                    <span className="hidden sm:inline text-slate-300">•</span>
+                                    <span className="text-[11.5px] text-slate-500 whitespace-nowrap ml-auto sm:ml-0">
+                                      SL:{' '}
+                                      <strong className="font-mono font-bold text-rose-600">
+                                        {String(item.quantity || 1).padStart(2, '0')}
+                                      </strong>
+                                    </span>
                                   </div>
-                                  <div className="text-[11px] text-slate-500 truncate">
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        );
+
+                        return pageSlice.map((entry) => {
+                          if (entry.type === 'single') {
+                            const row = entry.row;
+                            const isExpanded = expandedDefectKeys.has(row.id);
+                            return (
+                              <SwipeableTableRow
+                                key={row.id}
+                                rowId={row.id}
+                                onRowClick={() => setSelectedDefect(row)}
+                                onEdit={() => setSelectedDefect(row)}
+                                onDelete={() => handleDeleteDefectById(row.id)}
+                                deleteConfirmTitle="Xác nhận xoá hồ sơ trả về"
+                                deleteConfirmMessage={`Bạn có chắc chắn muốn xoá hồ sơ "${row.code}" không? Thao tác này không thể hoàn tác.`}
+                                deleteConfirmText="Xoá hồ sơ"
+                                className="hover:bg-slate-50/80 cursor-pointer transition-colors border-b border-slate-100"
+                              >
+                                <td className="py-3 px-2.5 sm:px-3.5 text-center align-top" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedDefectIds.has(row.id)}
+                                    onChange={(e) => {
+                                      const next = new Set(selectedDefectIds);
+                                      if (e.target.checked) next.add(row.id);
+                                      else next.delete(row.id);
+                                      setSelectedDefectIds(next);
+                                    }}
+                                    className="rounded border-slate-300 text-sky-600 cursor-pointer"
+                                  />
+                                </td>
+                                <td className="py-3 px-2.5 sm:px-3.5 min-w-0 align-top">
+                                  <div className="flex items-start gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleOrderGroup(row.id);
+                                      }}
+                                      className="mt-0.5 w-5 h-5 flex items-center justify-center shrink-0 text-slate-500 hover:text-[#003087] bg-transparent border-0 p-0 transition-colors cursor-pointer"
+                                      title={isExpanded ? 'Thu gọn sản phẩm trả về' : 'Mở rộng sản phẩm trả về'}
+                                    >
+                                      {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                    </button>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-bold text-[#003087] hover:underline cursor-pointer text-[13px] whitespace-nowrap">
+                                          {row.code || 'ERR-—'}
+                                        </span>
+                                        <span className="inline-block px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-normal whitespace-nowrap">
+                                          {row.source === 'RETURN' ? 'Trả về' : row.source === 'WARRANTY' ? 'Bảo hành' : 'Nội bộ'}
+                                        </span>
+                                      </div>
+                                      {renderCustomerOrderSubline(row.customerName, row.orderNumber)}
+                                      {isExpanded && renderProductLinesInsideCode([row], true)}
+                                      {/* Mobile summary */}
+                                      {row.description && row.description.trim() && row.description.trim() !== '—' && (
+                                        <div className="sm:hidden mt-1">
+                                          <div className="text-[11px] text-slate-500 truncate">
+                                            {row.description}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="hidden sm:table-cell py-3 px-3.5 text-slate-600 text-[13px] align-top">
+                                  {row.createdAt ? new Date(row.createdAt).toLocaleDateString('vi-VN') : '—'}
+                                </td>
+                                <td className="hidden sm:table-cell py-3 px-3.5 align-top">
+                                  <span className="text-slate-500 text-[12px] truncate inline-block max-w-[280px]" title={row.description}>
                                     {row.description || '—'}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-2.5 sm:px-3.5 text-center align-top whitespace-nowrap">
+                                  <StatusBadge status={row.status} />
+                                </td>
+                              </SwipeableTableRow>
+                            );
+                          }
+
+                          const { orderNumber, items } = entry;
+                          const firstRow = items[0];
+                          const isExpanded = expandedDefectKeys.has(orderNumber);
+                          const allSelected = items.every((i) => selectedDefectIds.has(i.id));
+
+                          return (
+                            <SwipeableTableRow
+                              key={`group-${orderNumber}`}
+                              rowId={`group-${orderNumber}`}
+                              onRowClick={() => toggleOrderGroup(orderNumber)}
+                              onEdit={() => setSelectedDefect(firstRow)}
+                              onDelete={async () => {
+                                await fetch('/api/production/defects', {
+                                  method: 'DELETE',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ ids: items.map((it) => it.id) }),
+                                });
+                                setSelectedDefectIds((prev) => {
+                                  const next = new Set(prev);
+                                  items.forEach((it) => next.delete(it.id));
+                                  return next;
+                                });
+                                fetchDefects();
+                              }}
+                              deleteConfirmTitle="Xác nhận xoá nhóm hồ sơ trả về"
+                              deleteConfirmMessage={`Bạn có chắc chắn muốn xoá toàn bộ ${items.length} hồ sơ trả về thuộc đơn hàng "${orderNumber}" không? Thao tác này không thể hoàn tác.`}
+                              deleteConfirmText="Xoá hồ sơ"
+                              className={`cursor-pointer transition-colors border-b border-slate-100 ${
+                                isExpanded ? 'bg-blue-50/30 hover:bg-blue-50/50' : 'hover:bg-slate-50/80'
+                              }`}
+                            >
+                              <td className="py-3 px-2.5 sm:px-3.5 text-center align-top" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={allSelected}
+                                  onChange={(e) => {
+                                    const next = new Set(selectedDefectIds);
+                                    items.forEach((it) => {
+                                      if (e.target.checked) next.add(it.id);
+                                      else next.delete(it.id);
+                                    });
+                                    setSelectedDefectIds(next);
+                                  }}
+                                  className="rounded border-slate-300 text-sky-600 cursor-pointer"
+                                />
+                              </td>
+                              <td className="py-3 px-2.5 sm:px-3.5 min-w-0 align-top">
+                                <div className="flex items-start gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleOrderGroup(orderNumber);
+                                    }}
+                                    className="mt-0.5 w-5 h-5 flex items-center justify-center shrink-0 text-slate-500 hover:text-[#003087] bg-transparent border-0 p-0 transition-colors cursor-pointer"
+                                    title={isExpanded ? 'Thu gọn sản phẩm trả về' : 'Mở rộng sản phẩm trả về'}
+                                  >
+                                    {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                  </button>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="font-bold text-[#003087] text-[13px] whitespace-nowrap">
+                                        {firstRow.code || 'ERR-—'}
+                                      </span>
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-[#003087] text-[10.5px] font-bold whitespace-nowrap">
+                                        {items.length} sản phẩm
+                                      </span>
+                                      <span className="inline-block px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-normal whitespace-nowrap">
+                                        {firstRow.source === 'RETURN'
+                                          ? 'Trả về'
+                                          : firstRow.source === 'WARRANTY'
+                                            ? 'Bảo hành'
+                                            : 'Nội bộ'}
+                                      </span>
+                                    </div>
+                                    {renderCustomerOrderSubline(firstRow.customerName, orderNumber)}
+                                    {/* Khi mở rộng: chỉ hiển thị danh sách sản phẩm trả về bên trong, không lặp lại mã lỗi / KH / đơn hàng */}
+                                    {isExpanded && renderProductLinesInsideCode(items, true)}
+                                    {/* Mobile summary */}
+                                    {firstRow.description && firstRow.description.trim() && firstRow.description.trim() !== '—' && (
+                                      <div className="sm:hidden mt-1">
+                                        <div className="text-[11px] text-slate-500 truncate">
+                                          {firstRow.description}
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
-                              </div>
-                            </td>
-                            <td className="hidden sm:table-cell py-2.5 px-3.5">
-                              <div>
-                                <div className="font-semibold text-slate-900 text-[13px]">{row.customerName || '—'}</div>
-                                <div className="text-slate-400 text-[11px] mt-0.5 truncate">{row.customerAddress || '—'}</div>
-                              </div>
-                            </td>
-                            <td className="hidden sm:table-cell py-2.5 px-3.5 text-slate-800 text-[13px] font-medium">
-                              {row.orderNumber || '—'}
-                            </td>
-                            <td className="hidden sm:table-cell py-2.5 px-3.5 text-slate-600 text-[13px]">
-                              {row.createdAt ? new Date(row.createdAt).toLocaleDateString('vi-VN') : '—'}
-                            </td>
-                            <td className="hidden sm:table-cell py-2.5 px-3.5">
-                              <span className="text-slate-500 text-[12px] truncate inline-block max-w-[260px]" title={row.description}>
-                                {row.description || '—'}
-                              </span>
-                            </td>
-                            <td className="py-2.5 px-2.5 sm:px-3.5 text-center">
-                              <StatusBadge status={row.status} />
-                            </td>
-                          </SwipeableTableRow>
-                        ));
+                              </td>
+                              <td className="hidden sm:table-cell py-3 px-3.5 text-slate-600 text-[13px] align-top">
+                                {firstRow.createdAt
+                                  ? new Date(firstRow.createdAt).toLocaleDateString('vi-VN')
+                                  : '—'}
+                              </td>
+                              <td className="hidden sm:table-cell py-3 px-3.5 align-top">
+                                <span
+                                  className="text-slate-500 text-[12px] truncate inline-block max-w-[280px]"
+                                  title={firstRow.description}
+                                >
+                                  {firstRow.description || '—'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-2.5 sm:px-3.5 text-center align-top whitespace-nowrap">
+                                <StatusBadge status={firstRow.status} />
+                              </td>
+                            </SwipeableTableRow>
+                          );
+                        });
                       })()}
                     </tbody>
                   </table>
@@ -1951,22 +2288,46 @@ export const SalesOrderTrackingPage: React.FC = () => {
               {/* Defect Footer */}
               {(() => {
                 const filtered = defects.filter((d) => {
+                  const q = defectSearch.toLowerCase();
                   const matchSearch =
                     !defectSearch ||
-                    d.code.toLowerCase().includes(defectSearch.toLowerCase()) ||
-                    (d.customerName || '').toLowerCase().includes(defectSearch.toLowerCase()) ||
-                    (d.productName || '').toLowerCase().includes(defectSearch.toLowerCase());
+                    (d.code || '').toLowerCase().includes(q) ||
+                    (d.customerName || '').toLowerCase().includes(q) ||
+                    (d.productName || '').toLowerCase().includes(q) ||
+                    (d.orderNumber || '').toLowerCase().includes(q);
                   const matchStatus =
                     defectStatusFilter === 'all' || d.status === defectStatusFilter;
                   const matchSource =
                     defectSourceFilter === 'all' || d.source === defectSourceFilter;
                   return matchSearch && matchStatus && matchSource;
                 });
+
+                const orderCounts = new Map<string, number>();
+                filtered.forEach((d) => {
+                  const orderKey = (d.orderNumber || '').trim();
+                  if (orderKey && orderKey !== '—') {
+                    orderCounts.set(orderKey, (orderCounts.get(orderKey) || 0) + 1);
+                  }
+                });
+                const seenOrders = new Set<string>();
+                let entryCount = 0;
+                filtered.forEach((d) => {
+                  const orderKey = (d.orderNumber || '').trim();
+                  if (orderKey && orderKey !== '—' && (orderCounts.get(orderKey) || 0) > 1) {
+                    if (!seenOrders.has(orderKey)) {
+                      seenOrders.add(orderKey);
+                      entryCount += 1;
+                    }
+                  } else {
+                    entryCount += 1;
+                  }
+                });
+
                 return (
                   <Pagination
                     currentPage={defectPage}
-                    totalPages={Math.max(1, Math.ceil(filtered.length / defectPageSize))}
-                    totalItems={filtered.length}
+                    totalPages={Math.max(1, Math.ceil(entryCount / defectPageSize))}
+                    totalItems={entryCount}
                     pageSize={defectPageSize}
                     itemName="hồ sơ"
                     onPageChange={setDefectPage}
@@ -1989,7 +2350,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
           isOpen={showCustomerSelect}
           onClose={() => setShowCustomerSelect(false)}
           title={customerDrawerMode === 'order' ? 'Chọn khách hàng tạo đơn hàng' : 'Chọn khách hàng lập báo giá'}
-          description="Mạng lưới 345 đại lý & khách hàng toàn quốc"
+          description={`Mạng lưới ${customersList.length} đại lý & khách hàng toàn quốc`}
           icon={null}
           width="400px"
           bodyClassName="p-0 flex flex-col"
@@ -1998,22 +2359,28 @@ export const SalesOrderTrackingPage: React.FC = () => {
               {/* Tabs Đại lý vs Vãng lai */}
               <div className="p-3 bg-slate-100 flex gap-2 border-b border-slate-200">
                 <button
-                  className={`flex-1 py-2 text-[13.5px] font-bold rounded-lg transition-all cursor-pointer ${customerTab === 'dai_ly'
+                  className={`flex-1 py-2 px-3 text-[13.5px] font-bold rounded-lg transition-all cursor-pointer inline-flex items-center justify-center gap-2 ${customerTab === 'dai_ly'
                       ? 'bg-white text-[#003087] shadow-xs border border-slate-300'
                       : 'text-slate-600 hover:bg-white/60'
                     }`}
                   onClick={() => setCustomerTab('dai_ly')}
                 >
-                  Hệ thống Đại lý ({customerTab === 'dai_ly' ? customersList.length : '343'})
+                  <span>Đại lý</span>
+                  <Badge variant={customerTab === 'dai_ly' ? 'brand' : 'neutral'}>
+                    {agencyCustomersMatched.length}
+                  </Badge>
                 </button>
                 <button
-                  className={`flex-1 py-2 text-[13.5px] font-bold rounded-lg transition-all cursor-pointer ${customerTab === 'vang_lai'
+                  className={`flex-1 py-2 px-3 text-[13.5px] font-bold rounded-lg transition-all cursor-pointer inline-flex items-center justify-center gap-2 ${customerTab === 'vang_lai'
                       ? 'bg-white text-[#003087] shadow-xs border border-slate-300'
                       : 'text-slate-600 hover:bg-white/60'
                     }`}
                   onClick={() => setCustomerTab('vang_lai')}
                 >
-                  Khách vãng lai / Khách lẻ
+                  <span>Vãng lai</span>
+                  <Badge variant={customerTab === 'vang_lai' ? 'brand' : 'neutral'}>
+                    {retailCustomersMatched.length}
+                  </Badge>
                 </button>
               </div>
 
@@ -2031,6 +2398,21 @@ export const SalesOrderTrackingPage: React.FC = () => {
                 </div>
               </div>
             </div>
+          }
+          footer={
+            <Pagination
+              currentPage={customerDrawerPage}
+              totalItems={activeDrawerCustomers.length}
+              pageSize={customerDrawerPageSize}
+              onPageChange={setCustomerDrawerPage}
+              onPageSizeChange={(newSize) => {
+                setCustomerDrawerPageSize(newSize);
+                setCustomerDrawerPage(1);
+              }}
+              pageSizeOptions={[10, 20, 50, 100]}
+              itemName="khách hàng"
+              compact={true}
+            />
           }
         >
           <div className="flex-1 flex flex-col h-full overflow-hidden">
@@ -2061,13 +2443,16 @@ export const SalesOrderTrackingPage: React.FC = () => {
               </div>
             )}
 
-            <div className="flex-1 overflow-y-auto p-2.5 divide-y divide-slate-100">
+            <div
+              ref={customerDrawerListRef}
+              className="flex-1 overflow-y-auto p-2.5 divide-y divide-slate-100"
+            >
               {loadingCustomers ? (
                 <div className="py-12 text-center text-sm text-slate-400">Đang nạp danh sách khách hàng...</div>
-              ) : customersList.length === 0 ? (
+              ) : activeDrawerCustomers.length === 0 ? (
                 <div className="py-12 text-center text-sm text-slate-400">Không tìm thấy khách hàng nào</div>
               ) : (
-                customersList.map((c) => {
+                paginatedDrawerCustomers.map((c) => {
                   const grp = getCustomerGroupInfo(c.nhom);
                   return (
                     <div
@@ -2079,7 +2464,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-slate-900 text-[14px] truncate">{c.name}</span>
                           <span
-                            className="text-[11px] px-1.5 py-0.5 rounded font-bold"
+                            className="text-[11px] px-1.5 py-0.5 rounded font-bold shrink-0"
                             style={{ backgroundColor: grp.badgeBg, color: grp.badgeText }}
                           >
                             {grp.name}
@@ -2208,15 +2593,24 @@ export const SalesOrderTrackingPage: React.FC = () => {
               <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] uppercase font-bold text-slate-400">Khách hàng / Đại lý</span>
-                  {selectedOrder.orderSource === 'dealer_portal' || (selectedOrder.code || '').startsWith('DH-DL-') ? (
+                  {selectedOrder.orderSource === 'dealer_portal' ||
+                  selectedOrder.orderSource === 'customer_portal' ||
+                  (selectedOrder.code || '').startsWith('DH-DL-') ||
+                  (selectedOrder.code || '').startsWith('KHL-') ? (
                     <DealerOrderStatusBadge status={selectedOrder.trangThai} />
                   ) : (
                     <StatusBadge status={selectedOrder.trangThai} />
                   )}
                 </div>
-                <div className="font-bold text-[15px] text-slate-900">{selectedOrder.customer?.name || 'Khách vãng lai'}</div>
-                {selectedOrder.customer?.dienThoai && <div className="text-slate-600 text-xs">📞 {selectedOrder.customer.dienThoai}</div>}
-                {selectedOrder.customer?.address && <div className="text-slate-500 text-xs">📍 {selectedOrder.customer.address}</div>}
+                <div className="font-bold text-[15px] text-slate-900">
+                  {selectedOrder.customer?.name || selectedOrder.nguoiNhan || selectedOrder.nguoiDatHang || 'Khách vãng lai'}
+                </div>
+                {(selectedOrder.soDienThoai || selectedOrder.customer?.dienThoai) && (
+                  <div className="text-slate-600 text-xs">📞 {selectedOrder.soDienThoai || selectedOrder.customer?.dienThoai}</div>
+                )}
+                {(selectedOrder.diaChiGiaoHang || selectedOrder.customer?.address) && (
+                  <div className="text-slate-500 text-xs">📍 {selectedOrder.diaChiGiaoHang || selectedOrder.customer?.address}</div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
@@ -2412,8 +2806,8 @@ export const SalesOrderTrackingPage: React.FC = () => {
 
         <ConfirmDialog
           isOpen={confirmDeleteDealerOrder}
-          title="Xác nhận xoá đơn hàng đại lý"
-          message={`Bạn có chắc chắn muốn xoá ${selectedDealerOrderIds.size} đơn hàng đại lý đã chọn không? Thao tác này không thể hoàn tác.`}
+          title="Xác nhận xoá đơn hàng yêu cầu"
+          message={`Bạn có chắc chắn muốn xoá ${selectedDealerOrderIds.size} đơn hàng yêu cầu đã chọn không? Thao tác này không thể hoàn tác.`}
           confirmText="Xoá vĩnh viễn"
           variant="danger"
           onConfirm={handleDeleteSelectedDealerOrders}
@@ -2547,6 +2941,29 @@ export const SalesOrderTrackingPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* ── Offcanvas Tạo Hồ Sơ Lỗi / Hàng Trả Về Mới (Từ client-seajong) ── */}
+        <CreateDefectOffcanvas
+          show={showCreateDefectOffcanvas}
+          onClose={() => setShowCreateDefectOffcanvas(false)}
+          onRefresh={fetchDefects}
+          defaultSource="RETURN"
+        />
+
+        {/* ── Offcanvas & Modal Chi Tiết / Xử Lý Hồ Sơ Lỗi & Hàng Trả Về ── */}
+        <DefectSummaryOffcanvas
+          defectId={selectedDefect?.id || null}
+          defect={selectedDefect}
+          onClose={() => setSelectedDefect(null)}
+          onRefresh={fetchDefects}
+          onOpenProcess={() => setShowDefectProcessModal(true)}
+        />
+
+        <DefectProcessModal
+          defectId={showDefectProcessModal ? selectedDefect?.id || null : null}
+          onClose={() => setShowDefectProcessModal(false)}
+          onRefresh={fetchDefects}
+        />
 
         {/* ── Offcanvas Lịch Sự Kiện Đa Năng Chuẩn client-skydoor ── */}
         <EventOffcanvas

@@ -630,9 +630,13 @@ export const MarketingPlanPage: React.FC = () => {
       .then((res) => {
         const list = res.data || res;
         if (Array.isArray(list)) {
-          const mgr = list.find((e: any) => e.departmentName === 'Marketing');
+          const mgr = list.find(
+            (e: any) => String(e.departmentCode || '').toLowerCase() === 'marketing'
+          );
           if (mgr) setMarketingManagerName(mgr.fullName);
-          const dir = list.find((e: any) => e.departmentName === 'Ban Giám đốc');
+          const dir = list.find(
+            (e: any) => String(e.departmentCode || '').toLowerCase() === 'board'
+          );
           if (dir) setDirectorName(dir.fullName);
         }
       })

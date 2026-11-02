@@ -37,6 +37,11 @@ export const MainLayout: React.FC = () => {
     return <Navigate to="/login" replace />;
   }
 
+  const isCustomer =
+    user?.role === 'CUSTOMER' ||
+    user?.departmentCode === 'customer' ||
+    user?.email?.includes('@customer.');
+
   return (
     <div className="h-[100dvh] max-h-[100dvh] bg-[#f1f5f9] flex flex-col overflow-hidden">
       {/* ── TOPBAR FULL WIDTH TRÊN TOÀN MÀN HÌNH (100% Full Row) ── */}
@@ -45,20 +50,22 @@ export const MainLayout: React.FC = () => {
       {/* ── BODY NẰM DƯỚI TOPBAR (pt-16) ── */}
       <div className="pt-16 flex flex-1 w-full h-full min-h-0 overflow-hidden relative">
         {/* Lớp phủ mờ khi mở Sidebar trên màn hình di động (< 768px) */}
-        {!collapsed && (
+        {!isCustomer && !collapsed && (
           <div
             className="fixed inset-0 top-16 bg-slate-900/40 z-30 md:hidden transition-opacity"
             onClick={() => setCollapsed(true)}
           />
         )}
 
-        {/* Sidebar navigation fixed bên trái từ top-16 xuống đáy */}
-        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+        {/* Sidebar navigation fixed bên trái từ top-16 xuống đáy (Ẩn đối với Khách hàng mua sắm) */}
+        {!isCustomer && (
+          <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+        )}
 
         {/* Main Content Area */}
         <main 
           className={`flex-1 w-full transition-all duration-300 min-w-0 flex flex-col h-full min-h-0 overflow-hidden ml-0 ${
-            collapsed ? 'md:ml-18' : 'md:ml-64'
+            isCustomer ? '' : collapsed ? 'md:ml-18' : 'md:ml-64'
           }`}
         >
           <Outlet />

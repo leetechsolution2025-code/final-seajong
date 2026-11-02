@@ -208,6 +208,8 @@ export const InsuranceManagementView: React.FC<InsuranceManagementViewProps> = (
   // Offcanvas thêm nhân sự đóng BHXH ở Bước 1 (400px)
   const [isAddParticipantOpen, setIsAddParticipantOpen] = useState(false);
   const [newParticipant, setNewParticipant] = useState({
+    employeeId: '',
+    employeeCode: '',
     employeeName: '',
     insuranceBookNumber: '',
     insuranceSalary: '5500000',
@@ -215,7 +217,7 @@ export const InsuranceManagementView: React.FC<InsuranceManagementViewProps> = (
 
   const handleSaveParticipant = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newParticipant.employeeName.trim()) {
+    if (!newParticipant.employeeId && !newParticipant.employeeName.trim()) {
       alert('Vui lòng chọn nhân viên tham gia BHXH');
       return;
     }
@@ -227,6 +229,9 @@ export const InsuranceManagementView: React.FC<InsuranceManagementViewProps> = (
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          id: newParticipant.employeeId,
+          employeeId: newParticipant.employeeId,
+          code: newParticipant.employeeCode,
           employeeName: newParticipant.employeeName,
           socialInsuranceNumber: bookNo,
           insuranceSalary: cleanSalary,
@@ -241,6 +246,8 @@ export const InsuranceManagementView: React.FC<InsuranceManagementViewProps> = (
       await fetchUsers();
       setIsAddParticipantOpen(false);
       setNewParticipant({
+        employeeId: '',
+        employeeCode: '',
         employeeName: '',
         insuranceBookNumber: '',
         insuranceSalary: '5500000',
@@ -254,6 +261,7 @@ export const InsuranceManagementView: React.FC<InsuranceManagementViewProps> = (
   // Offcanvas tạo hồ sơ biến động mới (400px)
   const [isAddFluctuationOpen, setIsAddFluctuationOpen] = useState(false);
   const [selectedEmpNames, setSelectedEmpNames] = useState<string>('');
+  const [selectedEmpIds, setSelectedEmpIds] = useState<string[]>([]);
 
   const [newFluct, setNewFluct] = useState({
     changeType: 'increase' as 'increase' | 'decrease' | 'adjustment',
@@ -270,7 +278,7 @@ export const InsuranceManagementView: React.FC<InsuranceManagementViewProps> = (
       .map((s) => s.trim())
       .filter(Boolean);
 
-    if (names.length === 0) {
+    if (selectedEmpIds.length === 0 && names.length === 0) {
       alert('Vui lòng chọn ít nhất một nhân viên');
       return;
     }
@@ -290,6 +298,7 @@ export const InsuranceManagementView: React.FC<InsuranceManagementViewProps> = (
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          employeeIds: selectedEmpIds,
           employeeNames: names,
           changeType: newFluct.changeType,
           effectiveDate: newFluct.effectiveDate || todayIso,
@@ -306,6 +315,7 @@ export const InsuranceManagementView: React.FC<InsuranceManagementViewProps> = (
       await Promise.all([fetchFluctuations(), fetchUsers()]);
       setIsAddFluctuationOpen(false);
       setSelectedEmpNames('');
+      setSelectedEmpIds([]);
       setNewFluct({
         changeType: 'increase',
         createdDate: todayIso,
@@ -322,6 +332,8 @@ export const InsuranceManagementView: React.FC<InsuranceManagementViewProps> = (
   // Offcanvas tạo hồ sơ chế độ mới (400px)
   const [isAddClaimOpen, setIsAddClaimOpen] = useState(false);
   const [newClaim, setNewClaim] = useState({
+    employeeId: '',
+    employeeCode: '',
     employeeName: '',
     claimType: 'Ốm đau ngắn ngày',
     fromDate: todayIso,
@@ -341,7 +353,7 @@ export const InsuranceManagementView: React.FC<InsuranceManagementViewProps> = (
 
   const handleSaveClaim = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newClaim.employeeName.trim()) {
+    if (!newClaim.employeeId && !newClaim.employeeName.trim()) {
       alert('Vui lòng chọn nhân viên thụ hưởng');
       return;
     }
@@ -351,6 +363,8 @@ export const InsuranceManagementView: React.FC<InsuranceManagementViewProps> = (
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          employeeId: newClaim.employeeId,
+          employeeCode: newClaim.employeeCode,
           employeeName: newClaim.employeeName,
           claimType: newClaim.claimType,
           fromDate: newClaim.fromDate || todayIso,
@@ -368,6 +382,8 @@ export const InsuranceManagementView: React.FC<InsuranceManagementViewProps> = (
       await fetchClaims();
       setIsAddClaimOpen(false);
       setNewClaim({
+        employeeId: '',
+        employeeCode: '',
         employeeName: '',
         claimType: 'Ốm đau ngắn ngày',
         fromDate: todayIso,
@@ -2419,8 +2435,16 @@ export const InsuranceManagementView: React.FC<InsuranceManagementViewProps> = (
             label="Nhân viên tham gia"
             required
             multiple={false}
-            value={newParticipant.employeeName}
-            onChange={(val) => setNewParticipant({ ...newParticipant, employeeName: val })}
+            value={newParticipant.employeeId || newParticipant.employeeName}
+            onChange={(val, selectedObjs) => {
+              const sel = selectedObjs?.[0];
+              setNewParticipant({
+                ...newParticipant,
+                employeeId: sel ? String(sel.employeeId || sel.id) : '',
+                employeeCode: sel?.code ? String(sel.code) : '',
+                employeeName: val,
+              });
+            }}
             placeholder="Chọn nhân viên..."
             searchPlaceholder="Tìm tên nhân viên, phòng ban..."
           />
@@ -2468,8 +2492,13 @@ export const InsuranceManagementView: React.FC<InsuranceManagementViewProps> = (
             label="Nhân viên áp dụng"
             required
             multiple={true}
-            value={selectedEmpNames}
-            onChange={(val) => setSelectedEmpNames(val)}
+            value={selectedEmpIds.length > 0 ? selectedEmpIds : selectedEmpNames}
+            onChange={(val, selectedObjs) => {
+              setSelectedEmpNames(val);
+              setSelectedEmpIds(
+                (selectedObjs || []).map((s) => String(s.employeeId || s.id))
+              );
+            }}
             placeholder="Chọn nhân viên..."
             searchPlaceholder="Tìm tên nhân viên, phòng ban..."
           />
@@ -2566,8 +2595,16 @@ export const InsuranceManagementView: React.FC<InsuranceManagementViewProps> = (
             label="Nhân viên thụ hưởng"
             required
             multiple={false}
-            value={newClaim.employeeName}
-            onChange={(val) => setNewClaim({ ...newClaim, employeeName: val })}
+            value={newClaim.employeeId || newClaim.employeeName}
+            onChange={(val, selectedObjs) => {
+              const sel = selectedObjs?.[0];
+              setNewClaim({
+                ...newClaim,
+                employeeId: sel ? String(sel.employeeId || sel.id) : '',
+                employeeCode: sel?.code ? String(sel.code) : '',
+                employeeName: val,
+              });
+            }}
             placeholder="Chọn nhân viên..."
             searchPlaceholder="Tìm tên nhân viên, phòng ban..."
           />

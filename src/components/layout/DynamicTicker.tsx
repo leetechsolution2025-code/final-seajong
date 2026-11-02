@@ -733,6 +733,45 @@ export const BOARD_TICKER_ITEMS: TickerItem[] = [
   },
 ];
 
+// ── CỔNG MUA SẮM KHÁCH HÀNG: CHÍNH SÁCH BÁN HÀNG, KHUYẾN MẠI & BẢO HÀNH SEAJONG ──
+export const CUSTOMER_PORTAL_TICKER_ITEMS: TickerItem[] = [
+  {
+    badge: 'BẢO HÀNH ĐIỆN TỬ 5 NĂM',
+    badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold',
+    text: 'Chính sách bảo hành chính hãng <strong>5 năm (60 tháng)</strong> đối với thân sen vòi đồng thau 59-1 và <strong>10 năm</strong> men sứ Nano kháng khuẩn Seajong',
+  },
+  {
+    badge: 'ĐỔI MỚI 1 ĐỔI 1',
+    badgeColor: 'bg-blue-50 text-blue-700 border-blue-200 font-bold',
+    text: 'Cam kết <strong>Đổi mới 1:1 miễn phí trong 30 ngày</strong> đầu tiên nếu phát sinh bất kỳ lỗi kỹ thuật nào từ nhà sản xuất',
+  },
+  {
+    badge: 'KHUYẾN MẠI MUA SẮM',
+    badgeColor: 'bg-rose-50 text-rose-700 border-rose-200 font-bold',
+    text: 'Ưu đãi đặt hàng trực tuyến: Nhập mã <strong>SEAJONG10</strong> giảm ngay <strong>10%</strong> (tối đa 500.000 đ) • Tặng bộ phụ kiện lắp đặt đồng bộ cho combo phòng tắm',
+  },
+  {
+    badge: 'THANH TOÁN TRỰC TUYẾN',
+    badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200 font-bold',
+    text: 'Ưu đãi giảm thêm <strong>2%</strong> trên tổng đơn khi thanh toán trực tuyến qua <strong>VietQR Ngân hàng / VNPAY QR</strong> • Xác nhận đơn tự động 24/7',
+  },
+  {
+    badge: 'CHÍNH SÁCH VẬN CHUYỂN',
+    badgeColor: 'bg-amber-50 text-amber-800 border-amber-200 font-bold',
+    text: '<strong>Miễn phí vận chuyển toàn quốc</strong> cho đơn hàng từ <strong>2.000.000 đ</strong> • Đồng kiểm hàng chính hãng nguyên đai nguyên kiện trước khi nhận',
+  },
+  {
+    badge: 'CAM KẾT CHÍNH HÃNG',
+    badgeColor: 'bg-teal-50 text-teal-800 border-teal-200 font-bold',
+    text: '100% sản phẩm chính hãng <strong>Seajong công nghệ Hàn Quốc</strong> • Đầy đủ tem QR chống hàng giả, chứng nhận xuất xưởng CO/CQ &amp; hóa đơn VAT',
+  },
+  {
+    badge: 'LINH KIỆN & LẮP ĐẶT',
+    badgeColor: 'bg-purple-50 text-purple-700 border-purple-200 font-bold',
+    text: 'Hỗ trợ tư vấn kỹ thuật lắp đặt tận nơi tại 63 tỉnh thành • Cung cấp linh kiện thay thế chính hãng trọn đời trợ giá <strong>30%</strong> cho khách hàng Seajong',
+  },
+];
+
 // ── HÀM SUY LUẬN CONTEXT THÔNG MINH PHÙ HỢP 100% VỚI NỘI DUNG TRANG ─────────
 export function resolveContext(
   explicitContext?: string,
@@ -740,6 +779,14 @@ export function resolveContext(
   activeMenuKey?: string,
   activeDeptCode?: string
 ): string {
+  // 0. Nếu đang ở Cổng Khách hàng mua sắm trực tuyến
+  if (
+    activeDeptCode?.toLowerCase().trim() === 'customer' ||
+    explicitContext?.toLowerCase().trim() === 'customer-portal' ||
+    explicitContext?.toLowerCase().trim() === 'customer'
+  ) {
+    return 'customer-portal';
+  }
   // 1. Kiểm tra nếu explicitContext là module cụ thể (không phải phòng ban chung chung)
   if (explicitContext) {
     const ctx = explicitContext.toLowerCase().trim();
@@ -1184,6 +1231,9 @@ export const DynamicTicker: React.FC<DynamicTickerProps> = ({
         break;
       case 'security':
         displayItems = SECURITY_TICKER_ITEMS;
+        break;
+      case 'customer-portal':
+        displayItems = CUSTOMER_PORTAL_TICKER_ITEMS;
         break;
       case 'board':
       default:

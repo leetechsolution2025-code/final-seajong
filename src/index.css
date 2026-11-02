@@ -541,11 +541,13 @@ input[type="number"] {
   color: #94a3b8;
 }
 
-/* ── RESPONSIVE: tablet/mobile → ảnh nền full + form card giữa ── */
+/* ── RESPONSIVE: tablet → ảnh nền full + form card giữa; mobile → full screen ── */
 @media (max-width: 1024px) {
   .login-root {
     position: relative;
     flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;
   }
 
   .login-left {
@@ -560,6 +562,7 @@ input[type="number"] {
     z-index: 1;
     flex: none;
     min-height: 100vh;
+    min-height: 100dvh;
     background: transparent;
     padding: 24px 20px;
     align-items: center;
@@ -570,6 +573,74 @@ input[type="number"] {
     border-radius: 20px;
     padding: 36px 28px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+  }
+}
+
+/* ── MOBILE FULL SCREEN: Tối ưu cho màn hình điện thoại & thanh công cụ trình duyệt ── */
+@media (max-width: 767px) {
+  .login-root {
+    min-height: 100vh;
+    min-height: 100dvh;
+    background: #ffffff;
+    overflow-x: hidden;
+  }
+
+  .login-left {
+    display: none !important;
+  }
+
+  .login-right {
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
+    background: #ffffff;
+    padding: 0;
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+
+  .login-form-wrap {
+    width: 100%;
+    max-width: none;
+    min-height: 100vh;
+    min-height: 100dvh;
+    background: #ffffff;
+    border-radius: 0;
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding-top: max(28px, calc(env(safe-area-inset-top, 0px) + 20px));
+    padding-bottom: max(36px, calc(env(safe-area-inset-bottom, 0px) + 28px));
+    padding-left: max(20px, calc(env(safe-area-inset-left, 0px) + 20px));
+    padding-right: max(20px, calc(env(safe-area-inset-right, 0px) + 20px));
+    box-sizing: border-box;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .login-form-main {
+    width: 100%;
+    margin-top: auto;
+    margin-bottom: auto;
+  }
+
+  .login-input {
+    font-size: 16px;
+    min-height: 48px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .login-btn {
+    min-height: 48px;
+    font-size: 1rem;
+  }
+
+  .login-footer {
+    margin-top: 24px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    flex-shrink: 0;
   }
 }
 
@@ -1094,6 +1165,40 @@ textarea.form-input {
   font-size: 0.8125rem;
 }
 
+.table-pagination.is-compact {
+  padding: 8px 12px;
+  gap: 8px;
+  font-size: 0.78125rem;
+}
+
+.table-pagination.is-compact .pagination-left {
+  display: flex !important;
+  width: 100%;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.table-pagination.is-compact > div:last-child {
+  width: 100%;
+  justify-content: flex-end;
+}
+
+.table-pagination.is-compact .pagination-nav-btn,
+.table-pagination.is-compact .pagination-page-btn {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  font-size: 0.75rem;
+}
+
+.table-pagination.is-compact .pagination-select {
+  height: 26px;
+  font-size: 0.75rem;
+  padding: 2px 24px 2px 8px;
+}
+
 /* ==========================================================================
    Custom Table (Imported from client-skydoor)
    ========================================================================== */
@@ -1468,6 +1573,19 @@ textarea.form-input {
   flex-shrink: 0;
 }
 
+.offcanvas-footer:has(> .table-pagination) {
+  padding: 10px 14px;
+  padding-bottom: max(10px, calc(8px + env(safe-area-inset-bottom, 0px)));
+  background-color: #ffffff;
+}
+
+.offcanvas-footer > .table-pagination {
+  width: 100%;
+  padding: 0 !important;
+  border-top: none !important;
+  background-color: transparent !important;
+}
+
 /* ==========================================================================
    Component: Modern Stepper & Tabs (from client-skydoor)
    ========================================================================== */
@@ -1661,29 +1779,61 @@ textarea.form-input {
   border-radius: 9999px;
 }
 
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  padding: 2px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+
+.badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
 .badge-brand {
-  background-color: rgba(2, 132, 199, 0.15);
+  background-color: rgba(2, 132, 199, 0.14);
   color: var(--color-primary, #0284c7);
+  border: 1px solid rgba(2, 132, 199, 0.24);
+}
+
+.badge-info {
+  background-color: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
+  border: 1px solid rgba(37, 99, 235, 0.2);
 }
 
 .badge-success {
-  background-color: rgba(16, 185, 129, 0.15);
-  color: #10b981;
+  background-color: rgba(16, 185, 129, 0.14);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.25);
 }
 
 .badge-warning {
-  background-color: rgba(245, 158, 11, 0.15);
-  color: #f59e0b;
+  background-color: rgba(245, 158, 11, 0.14);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.25);
 }
 
 .badge-danger {
-  background-color: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
+  background-color: rgba(239, 68, 68, 0.14);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.25);
 }
 
 .badge-neutral {
   background-color: #f1f5f9;
-  color: #64748b;
+  color: #475569;
+  border: 1px solid #e2e8f0;
 }
 
 .modern-stepper-divider {
@@ -3040,6 +3190,19 @@ input[type="checkbox"]:focus,
   box-shadow: 0 0 0 1.5px rgba(0, 48, 135, 0.25) !important;
 }
 
+/* Căn các checkbox trong bảng của toàn hệ thống lên top */
+table tbody td:has(input[type="checkbox"]),
+table tbody td:has(.form-check-input),
+.custom-table tbody td:has(input[type="checkbox"]),
+.custom-table tbody td:has(.form-check-input) {
+  vertical-align: top !important;
+}
+
+table tbody td:has(input[type="checkbox"]) input[type="checkbox"],
+table tbody td:has(.form-check-input) .form-check-input {
+  margin-top: 2px;
+}
+
 /* ==========================================================================
    TIMEKEEPING COMPONENT RESPONSIVE UTILITIES
    ========================================================================== */
@@ -3442,7 +3605,12 @@ input[type="checkbox"]:focus,
 
   /* Ẩn cột checkbox và checkbox inline trong các bảng có chức năng Xoá (SwipeableTableRow), giữ nguyên checkbox ở các bảng chọn SP báo giá / giao việc trên điện thoại (<= 768px) */
   main table:not(.print-table):not(.keep-mobile-checkbox) th:first-child:has(> input[type="checkbox"]:only-child),
+  main table:not(.print-table):not(.keep-mobile-checkbox) td:first-child:has(> input[type="checkbox"]:only-child),
   main table:not(.print-table):not(.keep-mobile-checkbox) tr.swipeable-table-row td:first-child:has(> input[type="checkbox"]:only-child),
+  .sales-orders-table th:first-child:has(input[type="checkbox"]),
+  .sales-orders-table td:first-child:has(input[type="checkbox"]),
+  .sales-support-table th:first-child:has(input[type="checkbox"]),
+  .sales-support-table td:first-child:has(input[type="checkbox"]),
   main table.swipeable-delete-table th:first-child:has(> input[type="checkbox"]:only-child),
   main table.swipeable-delete-table td:first-child:has(> input[type="checkbox"]:only-child),
   .bom-approval-table th:first-child,
@@ -3451,7 +3619,12 @@ input[type="checkbox"]:focus,
   }
 
   main table:not(.print-table):not(.keep-mobile-checkbox) th input[type="checkbox"],
+  main table:not(.print-table):not(.keep-mobile-checkbox) td:first-child input[type="checkbox"],
   main table:not(.print-table):not(.keep-mobile-checkbox) tr.swipeable-table-row td input[type="checkbox"],
+  .sales-orders-table th input[type="checkbox"],
+  .sales-orders-table td input[type="checkbox"],
+  .sales-support-table th input[type="checkbox"],
+  .sales-support-table td input[type="checkbox"],
   main table.swipeable-delete-table th input[type="checkbox"],
   main table.swipeable-delete-table td input[type="checkbox"] {
     display: none !important;
@@ -3478,7 +3651,7 @@ input[type="checkbox"]:focus,
     justify-content: flex-end !important;
   }
 
-  .table-pagination .pagination-left {
+  .table-pagination:not(.is-compact) .pagination-left {
     display: none !important;
   }
 
@@ -6125,5 +6298,284 @@ input[type="checkbox"]:focus,
     width: 100% !important;
     max-width: 100% !important;
     min-width: 100% !important;
+  }
+
+  /* =====================================================================
+     CUSTOMER PORTAL PAGE (CỬA HÀNG TRỰC TUYẾN & BẢO HÀNH SẢN PHẨM) - MOBILE (<= 768px)
+     Tuỳ biến sâu cho màn hình điện thoại, giữ nguyên 100% màn hình Desktop/Tablet
+     ===================================================================== */
+
+  /* 1. Ẩn thanh chạy chữ (DynamicTicker) trên điện thoại để tối ưu diện tích mua sắm */
+  .customer-portal-page .dynamic-ticker-bar {
+    display: none !important;
+  }
+
+  /* 2. Thanh tiến trình 4 bước (ModernStepper) gọn trên 1 hàng ngang duy nhất */
+  .customer-portal-page .modern-stepper-container {
+    padding: 6px 6px !important;
+  }
+
+  .customer-portal-page .modern-stepper-inner {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 4px !important;
+    width: 100% !important;
+    overflow-x: hidden !important;
+  }
+
+  .customer-portal-page .modern-stepper-divider,
+  .customer-portal-page .modern-step-desc,
+  .customer-portal-page .modern-step-badge {
+    display: none !important;
+  }
+
+  .customer-portal-page .modern-step-item {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    padding: 5px 4px !important;
+    gap: 4px !important;
+    border-radius: 8px !important;
+    justify-content: center !important;
+  }
+
+  .customer-portal-page .modern-step-icon {
+    width: 22px !important;
+    height: 22px !important;
+    min-width: 22px !important;
+    border-radius: 6px !important;
+  }
+
+  .customer-portal-page .modern-step-icon svg {
+    width: 12px !important;
+    height: 12px !important;
+  }
+
+  .customer-portal-page .modern-step-title-row {
+    justify-content: center !important;
+    gap: 0 !important;
+  }
+
+  .customer-portal-page .modern-step-title {
+    font-size: 11.5px !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.01em !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  /* 3. Thanh công cụ TableToolbar 2 hàng gọn gàng trên điện thoại */
+  .customer-portal-page .table-toolbar {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 6px !important;
+    padding: 8px !important;
+  }
+
+  /* Hàng 1: Bộ lọc + Nút Giỏ hàng / Hành động trên cùng 1 hàng ngang */
+  .customer-portal-page .table-toolbar-filter-item {
+    order: 1 !important;
+    flex: 1 1 0% !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+
+  /* Ẩn bộ lọc thứ 3 (Sắp xếp) trên điện thoại để Hàng 1 vừa khít 2 ô lọc + nút Giỏ hàng */
+  .customer-portal-page .table-toolbar-filter-item:nth-of-type(3) {
+    display: none !important;
+  }
+
+  .customer-portal-page .table-toolbar-filter-item .select-trigger {
+    height: 34px !important;
+    min-height: 34px !important;
+    font-size: 11.5px !important;
+    padding-left: 8px !important;
+    padding-right: 20px !important;
+  }
+
+  .customer-portal-page .table-toolbar-filter-item .select-arrow {
+    right: 4px !important;
+  }
+
+  .customer-portal-page .table-toolbar-right {
+    order: 2 !important;
+    flex: 0 0 auto !important;
+    margin-left: 0 !important;
+    gap: 4px !important;
+  }
+
+  .customer-portal-page .table-toolbar-right .btn {
+    height: 34px !important;
+    padding: 0 8px !important;
+    font-size: 11.5px !important;
+    white-space: nowrap !important;
+  }
+
+  /* Hàng 2: Ô tìm kiếm rộng 100% chiều ngang */
+  .customer-portal-page .table-toolbar-search {
+    order: 3 !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+  }
+
+  /* 4. Dải chip Danh mục cuộn ngang mượt mà trên điện thoại */
+  .customer-portal-page .customer-category-strip {
+    padding: 6px 8px !important;
+    gap: 6px !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .customer-portal-page .customer-category-strip::-webkit-scrollbar {
+    display: none;
+  }
+
+  .customer-portal-page .customer-category-label {
+    display: none !important;
+  }
+
+  .customer-portal-page .customer-category-chip {
+    padding: 3px 9px !important;
+    font-size: 11px !important;
+  }
+
+  /* 5. Lưới sản phẩm 2 cột chuẩn ứng dụng mua sắm di động */
+  .customer-portal-page .customer-product-grid-wrap {
+    padding: 8px !important;
+  }
+
+  .customer-portal-page .customer-product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .customer-portal-page .customer-product-card {
+    border-radius: 10px !important;
+  }
+
+  .customer-portal-page .customer-product-img {
+    height: 124px !important;
+  }
+
+  .customer-portal-page .customer-product-badges {
+    top: 6px !important;
+    left: 6px !important;
+    gap: 3px !important;
+  }
+
+  .customer-portal-page .customer-product-badges span {
+    font-size: 9.5px !important;
+    padding: 1px 5px !important;
+  }
+
+  .customer-portal-page .customer-product-detail-btn {
+    display: none !important;
+  }
+
+  .customer-portal-page .customer-product-body {
+    padding: 8px !important;
+  }
+
+  .customer-portal-page .customer-product-meta {
+    font-size: 10px !important;
+    margin-bottom: 2px !important;
+  }
+
+  .customer-portal-page .customer-product-title {
+    font-size: 11.5px !important;
+    line-height: 1.3 !important;
+    min-height: 30px !important;
+  }
+
+  .customer-portal-page .customer-product-price-row {
+    margin-top: 4px !important;
+    gap: 4px !important;
+  }
+
+  .customer-portal-page .customer-product-price {
+    font-size: 12.5px !important;
+  }
+
+  .customer-portal-page .customer-product-old-price {
+    font-size: 10px !important;
+  }
+
+  .customer-portal-page .customer-product-tags {
+    display: none !important;
+  }
+
+  .customer-portal-page .customer-product-actions {
+    padding: 0 8px 8px 8px !important;
+    gap: 5px !important;
+  }
+
+  /* Nút Thêm giỏ thu gọn thành nút icon 30x30px để nút Mua ngay rộng rãi trên 1 dòng */
+  .customer-portal-page .customer-add-cart-btn {
+    flex: 0 0 32px !important;
+    width: 32px !important;
+    min-width: 32px !important;
+    height: 30px !important;
+    padding: 0 !important;
+  }
+
+  .customer-portal-page .customer-add-cart-label {
+    display: none !important;
+  }
+
+  .customer-portal-page .customer-buy-now-btn {
+    flex: 1 1 0% !important;
+    height: 30px !important;
+    padding: 0 6px !important;
+    font-size: 11px !important;
+  }
+
+  .customer-portal-page .customer-product-qty-box {
+    height: 30px !important;
+    padding: 0 4px !important;
+  }
+}
+
+/* =====================================================
+   MOBILE & IPHONE (iOS SAFARI / WEBKIT) ANTI-ZOOM ON INPUT FOCUS
+   Chặn hoàn toàn hiệu ứng tự động phóng to màn hình khi focus vào ô nhập liệu trên điện thoại / iPhone
+   ===================================================== */
+html,
+body {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  touch-action: manipulation;
+}
+
+input,
+textarea,
+select,
+button,
+a {
+  touch-action: manipulation;
+}
+
+@media screen and (max-width: 768px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea,
+  select,
+  [contenteditable="true"] {
+    font-size: 16px !important;
+  }
+}
+
+/* Đặc trị riêng cho iPhone / iOS Safari & WebView (nhận diện qua -webkit-touch-callout) */
+@supports (-webkit-touch-callout: none) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea,
+  select,
+  [contenteditable="true"] {
+    font-size: 16px !important;
   }
 }

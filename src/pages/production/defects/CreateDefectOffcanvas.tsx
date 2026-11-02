@@ -4,6 +4,7 @@ import { canManageProdDefects } from '@/lib/production-permissions';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { Select } from '@/components/common/Select';
+import { SuggestionInput } from '@/components/common/SuggestionInput';
 import { Offcanvas } from '@/components/common/Offcanvas';
 import { CurrencyInput } from '@/components/ui/CurrencyInput';
 
@@ -75,6 +76,7 @@ export function CreateDefectOffcanvas({
   const [formData, setFormData] = useState({
     source: defaultSource,
     status: 'NEW',
+    priority: 'normal',
     productName: '',
     productCode: '',
     quantity: 1,
@@ -99,26 +101,35 @@ export function CreateDefectOffcanvas({
 
   const [customers, setCustomers] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
-  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [orders, setOrders] = useState<any[]>([]);
+  const [selectedOrderItems, setSelectedOrderItems] = useState<
+    Record<string, { checked: boolean; returnQty: number }>
+  >({});
 
   const { data: session } = useSession();
-  const isProdAdmin = canManageProdDefects(session?.user);
+  const isProdAdmin = canManageProdDefects(session?.user) || defaultSource === 'RETURN' || Boolean(session?.user);
 
   useEffect(() => {
     if (session?.user) {
-      setFormData((prev) => ({
-        ...prev,
-        reporterName: session.user.name || '',
-        reporterDepartment: (session.user as any).departmentName || 'Phòng ban khác',
-      }));
+      const nextName = session.user.name || '';
+      const nextDept = (session.user as any).departmentName || 'Phòng ban khác';
+      setFormData((prev) => {
+        if (prev.reporterName === nextName && prev.reporterDepartment === nextDept) {
+          return prev;
+        }
+        return {
+          ...prev,
+          reporterName: nextName,
+          reporterDepartment: nextDept,
+        };
+      });
     }
-  }, [session]);
+  }, [session?.user?.name, (session?.user as any)?.departmentName]);
 
   useEffect(() => {
     if (show) {
       setFormData((prev) => ({ ...prev, source: defaultSource }));
-      fetch('/api/plan-finance/customers?pageSize=200')
+      fetch('/api/plan-finance/customers?page=1&pageSize=10000')
         .then((res) => res.json())
         .then((data) => {
           if (data.customers) setCustomers(data.customers);
@@ -205,6 +216,59 @@ export function CreateDefectOffcanvas({
     });
   };
 
+  const selectedOrder = orders.find((o) => (o.code || o.id) === formData.orderNumber);
+
+  const getOrderItemKey = (item: any, idx: number) =>
+    String(item.id || item.inventoryItem?.code || item.code || idx);
+
+  const recalculateFromSelectedItems = (
+    nextSelection: Record<string, { checked: boolean; returnQty: number }>,
+    orderObj: any,
+    applyDiscount: boolean
+  ) => {
+    const itemsList: any[] = orderObj?.saleOrderItems || [];
+    let totalRefund = 0;
+    let totalQty = 0;
+    let firstCheckedItem: any = null;
+    let firstPricing: any = null;
+
+    itemsList.forEach((item, idx) => {
+      const key = getOrderItemKey(item, idx);
+      const entry = nextSelection[key];
+      if (entry?.checked) {
+        const pricing = calculateItemRefundPricing(item, orderObj);
+        const priceToUse =
+          applyDiscount && pricing.effectiveUnitPrice > 0
+            ? pricing.effectiveUnitPrice
+            : pricing.originalUnitPrice;
+        const qty = Math.max(1, Number(entry.returnQty) || 1);
+        totalRefund += priceToUse * qty;
+        totalQty += qty;
+        if (!firstCheckedItem) {
+          firstCheckedItem = item;
+          firstPricing = pricing;
+        }
+      }
+    });
+
+    setFormData((prev) => ({
+      ...prev,
+      productCode: firstCheckedItem
+        ? firstCheckedItem.inventoryItem?.code || firstCheckedItem.code || 'SP-001'
+        : '',
+      productName: firstCheckedItem
+        ? firstCheckedItem.inventoryItem?.tenHang || firstCheckedItem.tenHang || 'Sản phẩm'
+        : '',
+      quantity: totalQty || 1,
+      unitPrice: firstPricing ? firstPricing.originalUnitPrice : 0,
+      effectiveUnitPrice: firstPricing ? firstPricing.effectiveUnitPrice : 0,
+      itemDiscountPct: firstPricing ? firstPricing.itemDiscountPct : 0,
+      orderDiscountPct: firstPricing ? firstPricing.orderDiscountPct : 0,
+      discountInfo: firstPricing ? firstPricing.discountInfo : '',
+      refundAmount: Math.round(totalRefund),
+    }));
+  };
+
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!isProdAdmin) {
@@ -213,6 +277,32 @@ export function CreateDefectOffcanvas({
       );
       return;
     }
+
+    const orderItemsList: any[] = selectedOrder?.saleOrderItems || [];
+    let selectedItemsPayload: { productCode: string; productName: string; quantity: number }[] = [];
+
+    if (orderItemsList.length > 0) {
+      orderItemsList.forEach((item, idx) => {
+        const key = getOrderItemKey(item, idx);
+        const sel = selectedOrderItems[key];
+        if (sel?.checked) {
+          selectedItemsPayload.push({
+            productCode: item.inventoryItem?.code || item.code || 'SP-001',
+            productName: item.inventoryItem?.tenHang || item.tenHang || 'Sản phẩm',
+            quantity: Math.max(1, Number(sel.returnQty) || 1),
+          });
+        }
+      });
+
+      if (selectedItemsPayload.length === 0) {
+        alert('Vui lòng tích chọn ít nhất 1 mặt hàng trong đơn hàng!');
+        return;
+      }
+    } else if (!formData.productName.trim()) {
+      alert('Vui lòng nhập tên sản phẩm!');
+      return;
+    }
+
     setLoading(true);
     try {
       const filesData = await Promise.all(files.map(fileToBase64));
@@ -222,6 +312,7 @@ export function CreateDefectOffcanvas({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          ...(selectedItemsPayload.length > 0 ? { items: selectedItemsPayload } : {}),
           filesData,
         }),
       });
@@ -231,6 +322,7 @@ export function CreateDefectOffcanvas({
         setFormData({
           source: defaultSource,
           status: 'NEW',
+          priority: 'normal',
           productName: '',
           productCode: '',
           quantity: 1,
@@ -254,6 +346,7 @@ export function CreateDefectOffcanvas({
             '',
           completionDate: '',
         });
+        setSelectedOrderItems({});
         setUseDiscountedPrice(true);
         setFiles([]);
       } else {
@@ -267,11 +360,13 @@ export function CreateDefectOffcanvas({
     }
   };
 
-  const filteredCustomers = customers.filter((c) =>
-    (c.name || '').toLowerCase().includes(formData.customerName.toLowerCase())
-  );
-
-  const selectedOrder = orders.find((o) => (o.code || o.id) === formData.orderNumber);
+  const customerSuggestions = customers.map((c) => ({
+    id: c.id,
+    value: c.name || '',
+    label: c.name || '',
+    subText: [c.dienThoai, c.address].filter(Boolean).join(' • ') || undefined,
+    badge: c.code || undefined,
+  }));
 
   return (
     <Offcanvas
@@ -331,7 +426,7 @@ export function CreateDefectOffcanvas({
         </div>
 
         <div className="grid grid-cols-12 gap-3">
-          <div className="col-span-5">
+          <div className="col-span-6">
             <Select
               label="Trạng thái *"
               value={formData.status}
@@ -343,56 +438,79 @@ export function CreateDefectOffcanvas({
             />
           </div>
 
-          <div className="col-span-7 relative">
-            <Input
-              label="Tên khách hàng"
-              placeholder="Nhập để tìm khách hàng..."
-              value={formData.customerName}
-              onChange={(e) => {
-                setFormData({ ...formData, customerName: e.target.value, customerId: '' });
-                setShowCustomerDropdown(true);
-              }}
-              onFocus={() => setShowCustomerDropdown(true)}
-              onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
+          <div className="col-span-6">
+            <Select
+              label="Mức độ ưu tiên"
+              value={formData.priority}
+              onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+              options={[
+                { label: 'Bình thường', value: 'normal' },
+                { label: 'Thấp', value: 'low' },
+                { label: 'Cao', value: 'high' },
+                { label: 'Khẩn cấp', value: 'urgent' },
+              ]}
             />
-            {showCustomerDropdown && (
-              <div className="absolute left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
-                {filteredCustomers.length > 0 ? (
-                  filteredCustomers.map((c) => (
-                    <div
-                      key={c.id}
-                      className="px-3 py-2 border-b border-slate-100 hover:bg-sky-50 text-xs text-slate-700 cursor-pointer"
-                      onMouseDown={() => {
-                        setFormData({
-                          ...formData,
-                          customerId: c.id,
-                          customerName: c.name,
-                          customerAddress: c.address || '',
-                          orderNumber: '',
-                        });
-                        setShowCustomerDropdown(false);
-                      }}
-                    >
-                      {c.name}
-                    </div>
-                  ))
-                ) : (
-                  <div className="px-3 py-2 text-xs text-slate-400">Không tìm thấy...</div>
-                )}
-              </div>
-            )}
           </div>
         </div>
 
+        <div>
+          <SuggestionInput
+            label="Tên khách hàng"
+            placeholder="Nhập hoặc chọn khách hàng..."
+            value={formData.customerName}
+            suggestions={customerSuggestions}
+            maxSuggestions={200}
+            onChange={(val) => {
+              const matched = customers.find(
+                (c) => (c.name || '').trim().toLowerCase() === val.trim().toLowerCase()
+              );
+              setFormData((prev) => ({
+                ...prev,
+                customerName: val,
+                customerId: matched ? matched.id : '',
+                customerAddress: matched ? matched.address || '' : prev.customerAddress,
+                ...(matched ? {} : { orderNumber: '', refundAmount: 0 }),
+              }));
+              if (!matched) {
+                setSelectedOrderItems({});
+              }
+            }}
+            onSelectSuggestion={(item) => {
+              const c = customers.find(
+                (cust) => cust.id === item.id || cust.name === item.value
+              );
+              setFormData((prev) => ({
+                ...prev,
+                customerId: c?.id || item.id || '',
+                customerName: c?.name || item.value,
+                customerAddress: c?.address || '',
+                orderNumber: '',
+                productCode: '',
+                productName: '',
+                refundAmount: 0,
+              }));
+              setSelectedOrderItems({});
+            }}
+          />
+        </div>
+
         <div className="grid grid-cols-12 gap-3">
-          <div className="col-span-8">
+          <div className="col-span-7">
             <Select
               label="Số hiệu đơn hàng"
               value={formData.orderNumber}
-              onChange={(e) =>
+              onChange={(e) => {
+                const nextOrderNum = e.target.value;
+                const foundOrd = orders.find((o) => (o.code || o.id) === nextOrderNum);
+                const initMap: Record<string, { checked: boolean; returnQty: number }> = {};
+                (foundOrd?.saleOrderItems || []).forEach((it: any, idx: number) => {
+                  const key = getOrderItemKey(it, idx);
+                  initMap[key] = { checked: false, returnQty: 1 };
+                });
+                setSelectedOrderItems(initMap);
                 setFormData((prev) => ({
                   ...prev,
-                  orderNumber: e.target.value,
+                  orderNumber: nextOrderNum,
                   productCode: '',
                   productName: '',
                   unitPrice: 0,
@@ -401,8 +519,8 @@ export function CreateDefectOffcanvas({
                   orderDiscountPct: 0,
                   discountInfo: '',
                   refundAmount: 0,
-                }))
-              }
+                }));
+              }}
               options={[
                 { label: 'Chọn đơn hàng...', value: '' },
                 ...orders.map((o) => ({
@@ -412,32 +530,6 @@ export function CreateDefectOffcanvas({
               ]}
             />
           </div>
-          <div className="col-span-4">
-            <Input
-              label="Số lượng *"
-              type="number"
-              min={1}
-              value={formData.quantity}
-              onChange={(e) => {
-                const qty = parseInt(e.target.value) || 1;
-                const priceToUse =
-                  useDiscountedPrice && formData.effectiveUnitPrice > 0
-                    ? formData.effectiveUnitPrice
-                    : formData.unitPrice > 0
-                    ? formData.unitPrice
-                    : 0;
-                setFormData((prev) => ({
-                  ...prev,
-                  quantity: qty,
-                  refundAmount: priceToUse > 0 ? priceToUse * qty : prev.refundAmount,
-                }));
-              }}
-              required
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-12 gap-3">
           <div className="col-span-5">
             <Select
               label="Nguồn lỗi *"
@@ -450,93 +542,167 @@ export function CreateDefectOffcanvas({
               ]}
             />
           </div>
-          <div className="col-span-7">
-            {selectedOrder?.saleOrderItems?.length > 0 ? (
-              <Select
-                label="Mã sản phẩm *"
-                value={formData.productCode}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  const item = selectedOrder?.saleOrderItems?.find(
-                    (i: any) =>
-                      (i.inventoryItem?.code && i.inventoryItem.code === val) ||
-                      i.id === val ||
-                      (i.code && i.code === val)
-                  );
+        </div>
 
-                  if (item) {
-                    const pricing = calculateItemRefundPricing(item, selectedOrder);
-                    const priceToUse =
-                      useDiscountedPrice && pricing.effectiveUnitPrice > 0
-                        ? pricing.effectiveUnitPrice
-                        : pricing.originalUnitPrice;
-                    const currentQty = formData.quantity || 1;
+        {selectedOrder?.saleOrderItems?.length > 0 ? (
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700">
+                Danh sách hàng hoá trong đơn <span className="text-rose-600">*</span>
+              </label>
+              <span className="text-[11px] font-semibold text-[#003087] bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+                Đã chọn{' '}
+                {
+                  Object.values(selectedOrderItems).filter((v) => v?.checked).length
+                }
+                /{selectedOrder.saleOrderItems.length}
+              </span>
+            </div>
+            <div className="border border-slate-200 rounded-xl overflow-hidden bg-white divide-y divide-slate-100 max-h-60 overflow-y-auto">
+              <div className="px-3 py-2 bg-slate-50 flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={
+                      selectedOrder.saleOrderItems.length > 0 &&
+                      selectedOrder.saleOrderItems.every(
+                        (it: any, idx: number) =>
+                          selectedOrderItems[getOrderItemKey(it, idx)]?.checked
+                      )
+                    }
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      const nextMap: Record<string, { checked: boolean; returnQty: number }> = {};
+                      selectedOrder.saleOrderItems.forEach((it: any, idx: number) => {
+                        const key = getOrderItemKey(it, idx);
+                        nextMap[key] = {
+                          checked,
+                          returnQty: selectedOrderItems[key]?.returnQty || 1,
+                        };
+                      });
+                      setSelectedOrderItems(nextMap);
+                      recalculateFromSelectedItems(nextMap, selectedOrder, useDiscountedPrice);
+                    }}
+                    className="rounded border-slate-300 text-sky-600 cursor-pointer"
+                  />
+                  <span>Sản phẩm trong đơn</span>
+                </label>
+                <span>SL trả về</span>
+              </div>
 
-                    setFormData((prev) => ({
-                      ...prev,
-                      productCode: item.inventoryItem?.code || item.code || val,
-                      productName: item.inventoryItem?.tenHang || item.tenHang || '',
-                      unitPrice: pricing.originalUnitPrice,
-                      effectiveUnitPrice: pricing.effectiveUnitPrice,
-                      itemDiscountPct: pricing.itemDiscountPct,
-                      orderDiscountPct: pricing.orderDiscountPct,
-                      discountInfo: pricing.discountInfo,
-                      refundAmount: priceToUse > 0 ? priceToUse * currentQty : 0,
-                    }));
-                  } else {
-                    setFormData((prev) => ({
-                      ...prev,
-                      productCode: val,
-                      productName: '',
-                      unitPrice: 0,
-                      effectiveUnitPrice: 0,
-                      itemDiscountPct: 0,
-                      orderDiscountPct: 0,
-                      discountInfo: '',
-                      refundAmount: 0,
-                    }));
-                  }
-                }}
-                options={[
-                  { label: 'Chọn sản phẩm trong đơn...', value: '' },
-                  ...(selectedOrder?.saleOrderItems || []).map((item: any) => {
-                    const pricing = calculateItemRefundPricing(item, selectedOrder);
-                    const hasDiscount =
-                      pricing.itemDiscountPct > 0 || pricing.orderDiscountPct > 0;
-                    const codeVal = item.inventoryItem?.code || item.code || item.id;
-                    return {
-                      value: codeVal,
-                      label: `${codeVal} - ${item.inventoryItem?.tenHang || item.tenHang}${
-                        hasDiscount
-                          ? ` (SL: ${item.soLuong} | Thực: ${pricing.effectiveUnitPrice.toLocaleString('vi-VN')} đ)`
-                          : ` (SL: ${item.soLuong} | ${pricing.originalUnitPrice.toLocaleString('vi-VN')} đ)`
-                      }`,
-                    };
-                  }),
-                ]}
-              />
-            ) : (
-              <Input
-                label="Mã sản phẩm *"
-                placeholder="VD: SJ-8012"
-                value={formData.productCode}
-                onChange={(e) => setFormData({ ...formData, productCode: e.target.value })}
-                onBlur={handleProductCodeBlur}
-                required
-              />
-            )}
+              {selectedOrder.saleOrderItems.map((item: any, idx: number) => {
+                const key = getOrderItemKey(item, idx);
+                const itemState = selectedOrderItems[key] || { checked: false, returnQty: 1 };
+                const pricing = calculateItemRefundPricing(item, selectedOrder);
+                const codeVal = item.inventoryItem?.code || item.code || '';
+                const nameVal = item.inventoryItem?.tenHang || item.tenHang || 'Sản phẩm';
+                const maxOrderedQty = Math.max(1, Number(item.soLuong) || 1);
+                const displayUnitPrice =
+                  useDiscountedPrice && pricing.effectiveUnitPrice > 0
+                    ? pricing.effectiveUnitPrice
+                    : pricing.originalUnitPrice;
+
+                return (
+                  <div
+                    key={key}
+                    className={`px-3 py-2.5 flex items-start justify-between gap-2.5 transition-colors ${
+                      itemState.checked ? 'bg-sky-50/50' : 'hover:bg-slate-50/70'
+                    }`}
+                  >
+                    <label className="flex items-start gap-2.5 flex-1 min-w-0 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={itemState.checked}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          const nextMap = {
+                            ...selectedOrderItems,
+                            [key]: {
+                              checked,
+                              returnQty: itemState.returnQty || 1,
+                            },
+                          };
+                          setSelectedOrderItems(nextMap);
+                          recalculateFromSelectedItems(
+                            nextMap,
+                            selectedOrder,
+                            useDiscountedPrice
+                          );
+                        }}
+                        className="mt-0.5 rounded border-slate-300 text-sky-600 cursor-pointer shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-slate-800 text-xs leading-snug">
+                          {nameVal}
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                          {codeVal && (
+                            <span className="font-mono font-bold text-slate-700 bg-slate-100 border border-slate-200 px-1.5 py-0.2 rounded text-[10px]">
+                              {codeVal}
+                            </span>
+                          )}
+                          <span>
+                            Đã mua: <strong className="text-slate-700">{maxOrderedQty}</strong>
+                          </span>
+                          {displayUnitPrice > 0 && (
+                            <>
+                              <span>•</span>
+                              <span className="font-mono text-sky-700 font-semibold">
+                                {displayUnitPrice.toLocaleString('vi-VN')} đ
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </label>
+
+                    <div
+                      className="shrink-0 flex items-center gap-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="number"
+                        min={1}
+                        max={maxOrderedQty}
+                        value={itemState.returnQty}
+                        onChange={(e) => {
+                          const raw = parseInt(e.target.value, 10);
+                          const clamped = isNaN(raw)
+                            ? 1
+                            : Math.min(maxOrderedQty, Math.max(1, raw));
+                          const nextMap = {
+                            ...selectedOrderItems,
+                            [key]: {
+                              checked: true,
+                              returnQty: clamped,
+                            },
+                          };
+                          setSelectedOrderItems(nextMap);
+                          recalculateFromSelectedItems(
+                            nextMap,
+                            selectedOrder,
+                            useDiscountedPrice
+                          );
+                        }}
+                        className="w-14 h-8 px-2 text-center text-xs font-bold text-slate-800 rounded-lg border border-slate-300 bg-white focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-
-        <div>
-          <Input
-            label="Tên sản phẩm *"
-            placeholder="Nhập tên sản phẩm..."
-            value={formData.productName}
-            onChange={(e) => setFormData({ ...formData, productName: e.target.value })}
-            required
-          />
-        </div>
+        ) : (
+          <div>
+            <Input
+              label="Tên sản phẩm *"
+              placeholder="Nhập tên sản phẩm..."
+              value={formData.productName}
+              onChange={(e) => setFormData({ ...formData, productName: e.target.value })}
+              required
+            />
+          </div>
+        )}
 
         <div>
           <div className="flex items-center justify-between mb-1.5">
@@ -573,14 +739,22 @@ export function CreateDefectOffcanvas({
                       onChange={(e) => {
                         const checked = e.target.checked;
                         setUseDiscountedPrice(checked);
-                        const p =
-                          checked && formData.effectiveUnitPrice > 0
-                            ? formData.effectiveUnitPrice
-                            : formData.unitPrice;
-                        setFormData((prev) => ({
-                          ...prev,
-                          refundAmount: p * (prev.quantity || 1),
-                        }));
+                        if (selectedOrder?.saleOrderItems?.length > 0) {
+                          recalculateFromSelectedItems(
+                            selectedOrderItems,
+                            selectedOrder,
+                            checked
+                          );
+                        } else {
+                          const p =
+                            checked && formData.effectiveUnitPrice > 0
+                              ? formData.effectiveUnitPrice
+                              : formData.unitPrice;
+                          setFormData((prev) => ({
+                            ...prev,
+                            refundAmount: p * (prev.quantity || 1),
+                          }));
+                        }
                       }}
                     />
                     <span className="text-[11px] text-slate-600">
