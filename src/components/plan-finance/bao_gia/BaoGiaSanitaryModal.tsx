@@ -3636,14 +3636,12 @@ export function BaoGiaSanitaryModal({ open, onClose, customer, editData, onSaved
                               const isOutOfFinishedGood = ton === 0 || it.soLuong > ton;
                               if (!isOutOfFinishedGood) return null;
                               return ton === 0 ? (
-                                <span title="Hết hàng" style={{ color: "#ef4444", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                <span title="Hết hàng" style={{ color: "#ef4444", background: "rgba(239, 68, 68, 0.1)", width: 22, height: 22, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                                   <i className="bi bi-x-circle-fill" style={{ fontSize: 13 }} />
-                                  <span style={{ fontSize: 11, fontWeight: 600 }}>Hết hàng</span>
                                 </span>
                               ) : (
-                                <span title={`Thiếu hàng (thực tồn: ${ton})`} style={{ color: "#f97316", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                <span title={`Thiếu hàng (thực tồn: ${ton})`} style={{ color: "#f97316", background: "rgba(249, 115, 22, 0.1)", width: 22, height: 22, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                                   <i className="bi bi-exclamation-triangle-fill" style={{ fontSize: 13 }} />
-                                  <span style={{ fontSize: 11, fontWeight: 600 }}>Thiếu hàng (tồn: {ton})</span>
                                 </span>
                               );
                             })()}

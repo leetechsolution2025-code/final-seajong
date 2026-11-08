@@ -228,11 +228,22 @@ export function ProductionOverviewPage() {
                           </span>
                           {order.saleOrderCode && !order.saleOrderCode.startsWith('LSX') && (
                             <>
-                              <span className="text-slate-300 hidden sm:inline">|</span>
+                              <span className="text-slate-300">|</span>
                               <span className="text-[11px] sm:text-xs text-slate-500 whitespace-nowrap">
-                                <span className="hidden sm:inline">Đơn hàng: </span>
+                                <span>Đơn hàng: </span>
                                 <strong className="font-semibold text-slate-700 font-mono">
                                   {order.saleOrderCode}
+                                </strong>
+                              </span>
+                            </>
+                          )}
+                          {order.materialTicketCode && (
+                            <>
+                              <span className="text-slate-300">|</span>
+                              <span className="text-[11px] sm:text-xs text-slate-500 whitespace-nowrap">
+                                <span>Lệnh cấp phát: </span>
+                                <strong className="font-semibold text-emerald-700 font-mono">
+                                  {order.materialTicketCode}
                                 </strong>
                               </span>
                             </>
@@ -244,10 +255,23 @@ export function ProductionOverviewPage() {
                           )}
                         </div>
                         <div
-                          className="text-xs text-slate-600 sm:text-slate-500 truncate mt-0.5 sm:mt-1 max-w-[230px] sm:max-w-xl"
-                          title={order.itemsDetail || order.name || 'Sản xuất dự trữ hàng hoá'}
+                          className="text-xs text-slate-600 sm:text-slate-500 truncate mt-0.5 sm:mt-1 max-w-[280px] sm:max-w-xl"
+                          title={
+                            order.customerName
+                              ? `${order.customerName}${order.customerAddress ? ` • ${order.customerAddress}` : ''}`
+                              : order.name || 'Sản xuất dự trữ hàng hoá'
+                          }
                         >
-                          {order.name || 'Sản xuất dự trữ hàng hoá'}
+                          {order.customerName ? (
+                            <span>
+                              <strong className="font-semibold text-slate-800">{order.customerName}</strong>
+                              {order.customerAddress && (
+                                <span className="text-slate-500"> — {order.customerAddress}</span>
+                              )}
+                            </span>
+                          ) : (
+                            order.name || 'Sản xuất dự trữ hàng hoá'
+                          )}
                         </div>
                         <div className="sm:hidden flex items-center flex-wrap gap-x-2 gap-y-1 text-[11px] text-slate-500 mt-1">
                           <span>

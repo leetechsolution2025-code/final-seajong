@@ -1448,26 +1448,26 @@ export default function BoardYearlyPlanPage() {
         .director-plan-scope .row {
           display: flex;
           flex-wrap: wrap;
-          margin-top: calc(-1 * var(--bs-gutter-y, 1.5rem));
-          margin-right: calc(-.5 * var(--bs-gutter-x, 1.5rem));
-          margin-left: calc(-.5 * var(--bs-gutter-x, 1.5rem));
+          margin-top: calc(-1 * var(--bs-gutter-y, 1rem));
+          margin-right: calc(-.5 * var(--bs-gutter-x, 1rem));
+          margin-left: calc(-.5 * var(--bs-gutter-x, 1rem));
         }
         .director-plan-scope .row > * {
           box-sizing: border-box;
           flex-shrink: 0;
           width: 100%;
           max-width: 100%;
-          padding-right: calc(var(--bs-gutter-x, 1.5rem) * .5);
-          padding-left: calc(var(--bs-gutter-x, 1.5rem) * .5);
-          margin-top: var(--bs-gutter-y, 1.5rem);
+          padding-right: calc(var(--bs-gutter-x, 1rem) * .5);
+          padding-left: calc(var(--bs-gutter-x, 1rem) * .5);
+          margin-top: var(--bs-gutter-y, 1rem);
         }
         .director-plan-scope .g-4 {
-          --bs-gutter-x: 1.5rem;
-          --bs-gutter-y: 1.5rem;
-        }
-        .director-plan-scope .g-3 {
           --bs-gutter-x: 1rem;
           --bs-gutter-y: 1rem;
+        }
+        .director-plan-scope .g-3 {
+          --bs-gutter-x: 0.875rem;
+          --bs-gutter-y: 0.875rem;
         }
         .director-plan-scope .g-2 {
           --bs-gutter-x: 0.5rem;
@@ -1476,6 +1476,10 @@ export default function BoardYearlyPlanPage() {
         .director-plan-scope .col-12 {
           flex: 0 0 auto;
           width: 100%;
+        }
+        .director-plan-scope .col-6 {
+          flex: 0 0 auto;
+          width: 50%;
         }
         @media (min-width: 992px) {
           .director-plan-scope .col-lg-4 {
@@ -1495,6 +1499,115 @@ export default function BoardYearlyPlanPage() {
             width: 100%;
           }
         }
+        /* Flexbox & Display Utilities */
+        .director-plan-scope .d-flex { display: flex !important; }
+        .director-plan-scope .d-inline-flex { display: inline-flex !important; }
+        .director-plan-scope .d-inline-block { display: inline-block !important; }
+        .director-plan-scope .d-block { display: block !important; }
+        .director-plan-scope .d-none { display: none !important; }
+        @media (min-width: 768px) {
+          .director-plan-scope .d-md-inline { display: inline !important; }
+          .director-plan-scope .d-md-flex { display: flex !important; }
+        }
+        .director-plan-scope .flex-column { flex-direction: column !important; }
+        .director-plan-scope .flex-row { flex-direction: row !important; }
+        @media (min-width: 1200px) {
+          .director-plan-scope .flex-xl-row { flex-direction: row !important; }
+          .director-plan-scope .align-items-xl-center { align-items: center !important; }
+          .director-plan-scope .gap-xl-0 { gap: 0 !important; }
+        }
+        .director-plan-scope .flex-wrap { flex-wrap: wrap !important; }
+        .director-plan-scope .flex-nowrap { flex-wrap: nowrap !important; }
+        .director-plan-scope .flex-grow-1 { flex-grow: 1 !important; }
+        .director-plan-scope .flex-shrink-0, .director-plan-scope .shrink-0 { flex-shrink: 0 !important; }
+        .director-plan-scope .align-items-center { align-items: center !important; }
+        .director-plan-scope .align-items-start { align-items: flex-start !important; }
+        .director-plan-scope .align-items-end { align-items: flex-end !important; }
+        .director-plan-scope .justify-content-between { justify-content: space-between !important; }
+        .director-plan-scope .justify-content-center { justify-content: center !important; }
+        .director-plan-scope .justify-content-end { justify-content: flex-end !important; }
+        /* Gap & Spacing Utilities */
+        .director-plan-scope .gap-1 { gap: 0.25rem !important; }
+        .director-plan-scope .gap-2 { gap: 0.5rem !important; }
+        .director-plan-scope .gap-3 { gap: 0.75rem !important; }
+        .director-plan-scope .gap-4 { gap: 1rem !important; }
+        .director-plan-scope .row-gap-1 { row-gap: 0.25rem !important; }
+        .director-plan-scope .column-gap-3 { column-gap: 0.75rem !important; }
+        .director-plan-scope .m-0 { margin: 0 !important; }
+        .director-plan-scope .mb-0 { margin-bottom: 0 !important; }
+        .director-plan-scope .mb-1 { margin-bottom: 0.25rem !important; }
+        .director-plan-scope .mb-2 { margin-bottom: 0.5rem !important; }
+        .director-plan-scope .mb-3 { margin-bottom: 0.75rem !important; }
+        .director-plan-scope .mb-4 { margin-bottom: 1rem !important; }
+        .director-plan-scope .mt-1 { margin-top: 0.25rem !important; }
+        .director-plan-scope .mt-2 { margin-top: 0.5rem !important; }
+        .director-plan-scope .mt-3 { margin-top: 0.75rem !important; }
+        .director-plan-scope .ms-0 { margin-left: 0 !important; }
+        .director-plan-scope .ms-1 { margin-left: 0.25rem !important; }
+        .director-plan-scope .ms-2 { margin-left: 0.5rem !important; }
+        .director-plan-scope .ms-auto { margin-left: auto !important; }
+        .director-plan-scope .me-1 { margin-right: 0.25rem !important; }
+        .director-plan-scope .me-2 { margin-right: 0.5rem !important; }
+        .director-plan-scope .p-0 { padding: 0 !important; }
+        .director-plan-scope .p-2 { padding: 0.5rem !important; }
+        .director-plan-scope .p-3 { padding: 0.875rem !important; }
+        .director-plan-scope .px-2 { padding-left: 0.5rem !important; padding-right: 0.5rem !important; }
+        .director-plan-scope .px-3 { padding-left: 0.875rem !important; padding-right: 0.875rem !important; }
+        .director-plan-scope .py-1 { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
+        .director-plan-scope .py-2 { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
+        .director-plan-scope .ps-3 { padding-left: 0.75rem !important; }
+        .director-plan-scope .pe-1 { padding-right: 0.25rem !important; }
+        .director-plan-scope .pe-2 { padding-right: 0.5rem !important; }
+        .director-plan-scope .pb-1 { padding-bottom: 0.25rem !important; }
+        .director-plan-scope .pb-2 { padding-bottom: 0.5rem !important; }
+        .director-plan-scope .pb-3 { padding-bottom: 0.75rem !important; }
+        /* Sizing, Borders & Radius */
+        .director-plan-scope .w-100 { width: 100% !important; }
+        .director-plan-scope .h-100 { height: 100% !important; }
+        .director-plan-scope .overflow-hidden { overflow: hidden !important; }
+        .director-plan-scope .overflow-auto { overflow: auto !important; }
+        .director-plan-scope .border { border: 1px solid #e2e8f0 !important; }
+        .director-plan-scope .border-0 { border: 0 !important; }
+        .director-plan-scope .border-top { border-top: 1px solid #e2e8f0 !important; }
+        .director-plan-scope .border-bottom { border-bottom: 1px solid #e2e8f0 !important; }
+        .director-plan-scope .rounded { border-radius: 0.375rem !important; }
+        .director-plan-scope .rounded-2 { border-radius: 0.5rem !important; }
+        .director-plan-scope .rounded-3 { border-radius: 0.625rem !important; }
+        .director-plan-scope .rounded-4 { border-radius: 0.875rem !important; }
+        .director-plan-scope .rounded-circle { border-radius: 9999px !important; }
+        .director-plan-scope .shadow-sm { box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.06) !important; }
+        /* Typography & Colors */
+        .director-plan-scope .fw-medium { font-weight: 500 !important; }
+        .director-plan-scope .fw-semibold { font-weight: 600 !important; }
+        .director-plan-scope .fw-bold { font-weight: 700 !important; }
+        .director-plan-scope .fw-extrabold { font-weight: 800 !important; }
+        .director-plan-scope .fw-black { font-weight: 900 !important; }
+        .director-plan-scope .text-muted { color: #64748b !important; }
+        .director-plan-scope .text-dark { color: #0f172a !important; }
+        .director-plan-scope .text-primary { color: #2563eb !important; }
+        .director-plan-scope .text-success { color: #059669 !important; }
+        .director-plan-scope .text-danger { color: #e11d48 !important; }
+        .director-plan-scope .text-warning { color: #d97706 !important; }
+        .director-plan-scope .text-white { color: #ffffff !important; }
+        .director-plan-scope .text-end { text-align: right !important; }
+        .director-plan-scope .text-center { text-align: center !important; }
+        .director-plan-scope .text-start { text-align: left !important; }
+        .director-plan-scope .text-nowrap { white-space: nowrap !important; }
+        .director-plan-scope .text-uppercase { text-transform: uppercase !important; }
+        .director-plan-scope .text-decoration-none { text-decoration: none !important; }
+        .director-plan-scope .bg-white { background-color: #ffffff !important; }
+        .director-plan-scope .bg-light { background-color: #f8fafc !important; }
+        .director-plan-scope .bg-danger-subtle\\/30 { background-color: rgba(244, 63, 94, 0.06) !important; }
+        .director-plan-scope .border-danger\\/20 { border-color: rgba(244, 63, 94, 0.2) !important; }
+        .director-plan-scope .badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.2rem 0.5rem;
+          font-size: 0.75rem;
+          font-weight: 600;
+          line-height: 1.2;
+          border-radius: 0.375rem;
+        }
         .director-plan-scope .card {
           position: relative;
           display: flex;
@@ -1503,24 +1616,25 @@ export default function BoardYearlyPlanPage() {
           height: 100%;
           word-wrap: break-word;
           background-color: #fff;
-          border: 1px solid #dee2e6;
-          border-radius: 1rem;
+          border: 1px solid #e2e8f0;
+          border-radius: 0.875rem;
+          box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.03);
           overflow: hidden;
         }
         .director-plan-scope .card-header {
-          padding: 0.75rem 1rem;
-          background-color: #f8f9fa;
-          border-bottom: 1px solid #dee2e6;
+          padding: 0.625rem 0.875rem;
+          background-color: #f8fafc;
+          border-bottom: 1px solid #e2e8f0;
         }
         .director-plan-scope .card-body {
           flex: 1 1 auto;
-          padding: 1rem;
+          padding: 0.875rem;
         }
         .director-plan-scope .form-label {
-          margin-bottom: 0.25rem;
+          margin-bottom: 0.2rem;
           font-size: 12px;
           font-weight: 600;
-          color: #64748b;
+          color: #475569;
           display: block;
         }
         .director-plan-scope .input-group {
@@ -1538,6 +1652,11 @@ export default function BoardYearlyPlanPage() {
           border-top-right-radius: 0;
           border-bottom-right-radius: 0;
         }
+        .director-plan-scope .input-group > .form-control:not(:first-child) {
+          border-top-left-radius: 0;
+          border-bottom-left-radius: 0;
+          border-left: 0;
+        }
         .director-plan-scope .input-group > .input-group-text:not(:last-child) {
           border-radius: 0;
           border-left: 0;
@@ -1546,14 +1665,16 @@ export default function BoardYearlyPlanPage() {
           border-top-left-radius: 0;
           border-bottom-left-radius: 0;
           border-left: 0;
+          border-top-right-radius: 6px;
+          border-bottom-right-radius: 6px;
         }
         .director-plan-scope .input-group-text {
           display: flex;
           align-items: center;
-          padding: 0.25rem 0.5rem;
-          font-size: 0.8125rem;
-          font-weight: 500;
-          line-height: 1.5;
+          padding: 0.2rem 0.5rem;
+          font-size: 0.78rem;
+          font-weight: 600;
+          line-height: 1.4;
           color: #475569;
           text-align: center;
           white-space: nowrap;
@@ -1563,40 +1684,47 @@ export default function BoardYearlyPlanPage() {
         .director-plan-scope .form-control {
           display: block;
           width: 100%;
-          padding: 0.25rem 0.5rem;
-          font-size: 0.875rem;
-          font-weight: 600;
-          line-height: 1.5;
+          padding: 0.25rem 0.55rem;
+          font-size: 0.84rem;
+          font-weight: 700;
+          line-height: 1.4;
           color: #0f172a;
           background-color: #fff;
           border: 1px solid #cbd5e1;
           border-radius: 6px;
           box-sizing: border-box;
+          transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .director-plan-scope .form-control:disabled {
+          background-color: #f8fafc;
+          color: #334155;
+          cursor: not-allowed;
         }
         .director-plan-scope .form-control:focus, .director-plan-scope .form-select:focus {
-          border-color: #86b7fe;
+          border-color: #3b82f6;
           outline: 0;
-          box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
         }
         .director-plan-scope .form-select {
           display: block;
           width: 100%;
-          padding: 0.375rem 2rem 0.375rem 0.75rem;
-          font-size: 0.875rem;
-          font-weight: 600;
-          line-height: 1.5;
-          color: #212529;
+          padding: 0.35rem 2rem 0.35rem 0.75rem;
+          font-size: 0.85rem;
+          font-weight: 700;
+          line-height: 1.4;
+          color: #0f172a;
           background-color: #fff;
           border: 1px solid #cbd5e1;
-          border-radius: 6px;
+          border-radius: 8px;
           box-sizing: border-box;
+          cursor: pointer;
         }
         .director-plan-scope .btn {
           display: inline-flex;
           align-items: center;
           justify-content: center;
           font-weight: 600;
-          line-height: 1.5;
+          line-height: 1.4;
           text-align: center;
           vertical-align: middle;
           cursor: pointer;
@@ -1604,28 +1732,37 @@ export default function BoardYearlyPlanPage() {
           background-color: transparent;
           border: 1px solid transparent;
           padding: 0.25rem 0.5rem;
-          font-size: 0.875rem;
+          font-size: 0.84rem;
           border-radius: 6px;
           transition: all .15s ease-in-out;
         }
         .director-plan-scope .btn-primary {
           color: #fff !important;
-          background-color: #0d6efd !important;
-          border-color: #0d6efd !important;
+          background-color: #2563eb !important;
+          border-color: #2563eb !important;
         }
         .director-plan-scope .btn-primary:hover {
-          background-color: #0b5ed7 !important;
-          border-color: #0a58ca !important;
+          background-color: #1d4ed8 !important;
+          border-color: #1e40af !important;
+        }
+        .director-plan-scope .btn-danger {
+          color: #fff !important;
+          background-color: #e11d48 !important;
+          border-color: #e11d48 !important;
+        }
+        .director-plan-scope .btn-danger:hover {
+          background-color: #be123c !important;
+          border-color: #9f1239 !important;
         }
         .director-plan-scope .btn-outline-secondary {
-          color: #6c757d !important;
+          color: #475569 !important;
           background-color: #fff !important;
-          border-color: #dee2e6 !important;
+          border-color: #cbd5e1 !important;
         }
         .director-plan-scope .btn-outline-secondary:hover {
-          background-color: #f8f9fa !important;
-          border-color: #adb5bd !important;
-          color: #212529 !important;
+          background-color: #f1f5f9 !important;
+          border-color: #94a3b8 !important;
+          color: #0f172a !important;
         }
         .director-plan-scope .form-check-input {
           width: 2.2em;
@@ -1643,10 +1780,26 @@ export default function BoardYearlyPlanPage() {
           cursor: pointer;
         }
         .director-plan-scope .form-check-input:checked {
-          background-color: #0d6efd;
-          border-color: #0d6efd;
+          background-color: #2563eb;
+          border-color: #2563eb;
           background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23fff'/%3e%3c/svg%3e");
           background-position: right center;
+        }
+        .director-plan-scope .bom-plan-row-checkbox {
+          width: 16px !important;
+          height: 16px !important;
+          min-width: 16px !important;
+          margin-top: 0 !important;
+          border-radius: 4px !important;
+          background-image: none !important;
+          border: 1.5px solid #cbd5e1 !important;
+          background-color: #ffffff !important;
+        }
+        .director-plan-scope .bom-plan-row-checkbox:checked {
+          background-color: #2563eb !important;
+          border-color: #2563eb !important;
+          background-position: center !important;
+          background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e") !important;
         }
         .director-plan-scope .table {
           width: 100%;
@@ -1672,11 +1825,166 @@ export default function BoardYearlyPlanPage() {
           border-width: 0 1px;
           border-color: #dee2e6;
         }
+        /* Chuẩn hoá khoảng trống ngoài 8px, khoảng trống giữa các card 8px, và tự động co giãn full chiều cao */
+        .director-plan-scope .bom-director-plan-page .modern-stepper-toolbar {
+          padding: 0 !important;
+        }
+        .director-plan-scope .bom-plan-scroll-body {
+          padding: 8px !important;
+          flex: 1 1 0% !important;
+          min-height: 0 !important;
+          height: 100% !important;
+          display: flex !important;
+          flex-direction: column !important;
+          overflow: hidden !important;
+        }
+        .director-plan-scope .bom-plan-step1-container,
+        .director-plan-scope .bom-plan-step2-container,
+        .director-plan-scope .bom-plan-step3-container,
+        .director-plan-scope .bom-plan-step4-container {
+          padding: 0 !important;
+          margin: 0 !important;
+          flex: 1 1 0% !important;
+          min-height: 0 !important;
+          height: 100% !important;
+          width: 100% !important;
+          display: flex !important;
+          flex-direction: column !important;
+        }
+
+        /* Lưới Step 1: 3 cột ngang trên Laptop/Desktop, full chiều cao, gap 8px */
+        .director-plan-scope .bom-plan-step1-wrapper {
+          display: flex !important;
+          flex-direction: column !important;
+          flex: 1 1 0% !important;
+          min-height: 0 !important;
+          height: 100% !important;
+          width: 100% !important;
+          padding: 0 !important;
+          margin: 0 !important;
+        }
+        .director-plan-scope .bom-plan-step1-grid {
+          display: flex !important;
+          flex-direction: row !important;
+          flex: 1 1 0% !important;
+          min-height: 0 !important;
+          height: 100% !important;
+          width: 100% !important;
+          gap: 8px !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        .director-plan-scope .bom-plan-step1-col {
+          flex: 1 1 0% !important;
+          min-width: 0 !important;
+          width: 33.333% !important;
+          height: 100% !important;
+          min-height: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        .director-plan-scope .bom-plan-step1-col > .card {
+          flex: 1 1 0% !important;
+          height: 100% !important;
+          min-height: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          margin: 0 !important;
+          border-radius: 12px !important;
+          border: 1px solid #e2e8f0 !important;
+          box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+          overflow: hidden !important;
+        }
+        .director-plan-scope .bom-plan-step1-col > .card > .card-header {
+          height: 42px !important;
+          min-height: 42px !important;
+          max-height: 42px !important;
+          padding: 0 12px !important;
+          display: flex !important;
+          align-items: center !important;
+          flex-shrink: 0 !important;
+          background-color: #f8fafc !important;
+          border-bottom: 1px solid #e2e8f0 !important;
+        }
+        .director-plan-scope .bom-plan-step1-col > .card > .card-body {
+          flex: 1 1 0% !important;
+          min-height: 0 !important;
+          padding: 10px 12px !important;
+          overflow-y: auto !important;
+          display: flex !important;
+          flex-direction: column !important;
+          gap: 8px !important;
+        }
+        .director-plan-scope .bom-plan-kpi-grid {
+          flex: 1 1 0% !important;
+          display: flex !important;
+          flex-direction: column !important;
+          justify-content: space-between !important;
+          min-height: 0 !important;
+          gap: 8px !important;
+        }
+        .director-plan-scope .bom-plan-kpi-grid > .bom-plan-kpi-box {
+          flex: 1 1 0% !important;
+          display: flex !important;
+          flex-direction: column !important;
+          justify-content: center !important;
+          padding: 8px 12px !important;
+        }
+        .director-plan-scope .bom-plan-step1-fields-distribute {
+          flex: 1 1 0% !important;
+          display: flex !important;
+          flex-direction: column !important;
+          justify-content: space-between !important;
+          min-height: 0 !important;
+          gap: 6px !important;
+        }
+        .director-plan-scope .bom-plan-mobile-step1-tabs {
+          display: none !important;
+        }
+        @media (max-width: 768px) {
+          .director-plan-scope .bom-plan-scroll-body {
+            overflow-y: auto !important;
+          }
+          .director-plan-scope .bom-plan-mobile-step1-tabs {
+            display: flex !important;
+            gap: 4px !important;
+            padding: 3px !important;
+            margin-bottom: 8px !important;
+            background-color: #f1f5f9 !important;
+            border: 1px solid #e2e8f0 !important;
+            border-radius: 8px !important;
+          }
+          .director-plan-scope .bom-plan-step1-grid {
+            flex-direction: column !important;
+            height: auto !important;
+            min-height: auto !important;
+            gap: 8px !important;
+          }
+          .director-plan-scope .bom-plan-step1-col {
+            width: 100% !important;
+            height: auto !important;
+            min-height: auto !important;
+          }
+          .director-plan-scope .bom-plan-step1-col > .card {
+            height: auto !important;
+          }
+          .director-plan-scope .bom-plan-mobile-hidden {
+            display: none !important;
+          }
+        }
       `}</style>
 
       {(() => {
+        const activeProfitVal = activeTab === "seajong" ? valOperatingProfit : omProfit;
+        const activeMarginVal = activeTab === "seajong" ? operatingProfitMargin : omMargin;
+
         const stepperToolbar = (
-          <div className="d-flex flex-column flex-xl-row align-items-start align-items-xl-center justify-content-between p-2 px-3 bg-light border-top border-bottom gap-3 gap-xl-0 overflow-hidden w-100 bom-director-stepper-toolbar" style={{ minHeight: 44 }}>
+          <div
+            className="d-flex flex-row flex-wrap align-items-center justify-content-between px-3 py-1.5 bg-light gap-2 w-100 bom-director-stepper-toolbar"
+            style={{ minHeight: 42 }}
+          >
             <div className="d-flex align-items-center gap-2 shrink-0">
               <button
                 type="button"
@@ -1686,7 +1994,7 @@ export default function BoardYearlyPlanPage() {
                     : "btn-outline-secondary"
                 }`}
                 onClick={() => setActiveTab("seajong")}
-                style={{ borderRadius: 6, padding: "2px 10px", fontSize: 12 }}
+                style={{ borderRadius: 6, padding: "3px 12px", fontSize: 12 }}
               >
                 SEAJONG
               </button>
@@ -1698,7 +2006,7 @@ export default function BoardYearlyPlanPage() {
                     : "btn-outline-secondary"
                 }`}
                 onClick={() => setActiveTab("oem")}
-                style={{ borderRadius: 6, padding: "2px 10px", fontSize: 12 }}
+                style={{ borderRadius: 6, padding: "3px 12px", fontSize: 12 }}
               >
                 OEM
               </button>
@@ -1708,13 +2016,13 @@ export default function BoardYearlyPlanPage() {
               <div className="d-flex flex-wrap align-items-center gap-1 transition-all">
                 <span className="fw-bold text-dark text-nowrap bom-director-summary-brand">{activeTab === "seajong" ? "SEAJONG:" : "OEM:"}</span>
                 <span className="text-muted text-nowrap">Lợi nhuận</span>
-                <span className="fw-bold text-success text-nowrap">
-                  {(activeTab === "seajong" ? valOperatingProfit : omProfit).toLocaleString("vi-VN")} đ
+                <span className={`fw-bold text-nowrap ${activeProfitVal >= 0 ? "text-success" : "text-danger"}`}>
+                  {activeProfitVal.toLocaleString("vi-VN")} đ
                 </span>
                 <span className="text-muted d-none d-md-inline">-</span>
                 <span className="text-muted text-nowrap bom-director-margin-label">Biên lợi nhuận hoạt động</span>
                 <span className="fw-bold text-primary text-nowrap">
-                  {(activeTab === "seajong" ? operatingProfitMargin : omMargin).toFixed(1)}%
+                  {activeMarginVal.toFixed(1)}%
                 </span>
               </div>
             </div>
@@ -1741,27 +2049,48 @@ export default function BoardYearlyPlanPage() {
             className="bom-director-plan-page"
           >
             {activeTab === "seajong" ? (
-              <div className="flex-1 overflow-auto p-3 bom-plan-scroll-body" style={{ minHeight: 0 }}>
+              <div className="flex-1 overflow-auto bom-plan-scroll-body" style={{ minHeight: 0 }}>
         {currentStep === 1 ? (
             /* STEP 1: CHỈ TIÊU CƠ BẢN */
-            <div className="container-fluid px-3 pb-3 bom-plan-step1-container">
-              <div className="row g-4 bom-plan-step1-row">
+            <div className="bom-plan-step1-wrapper">
+              {/* Mobile Sub-tabs for Step 1 */}
+              <div className="bom-plan-mobile-step1-tabs">
+                <button
+                  type="button"
+                  className={`bom-labor-mobile-subtab-btn ${mobileStep1Tab === "revenue" ? "is-active" : ""}`}
+                  onClick={() => setMobileStep1Tab("revenue")}
+                >
+                  <i className="bi bi-graph-up" /> Chỉ tiêu Doanh thu
+                </button>
+                <button
+                  type="button"
+                  className={`bom-labor-mobile-subtab-btn ${mobileStep1Tab === "cost" ? "is-active" : ""}`}
+                  onClick={() => setMobileStep1Tab("cost")}
+                >
+                  <i className="bi bi-cash-coin" /> Định mức Chi phí
+                </button>
+              </div>
 
+              <div className="bom-plan-step1-grid bom-plan-step1-row">
                 {/* Column 1: Năm kế hoạch */}
-                <div className="col-12 col-lg-4">
+                <div className="bom-plan-step1-col bom-plan-col-year">
                   <div className="card h-100 border rounded-4 overflow-hidden bom-plan-year-card">
-                    <div className="card-header bg-light border-bottom p-3 bom-hide-mobile">
+                    <div className="card-header bg-light border-bottom px-3 d-flex align-items-center bom-hide-mobile" style={{ minHeight: 42 }}>
                       <SectionTitle title="Năm kế hoạch" icon="bi-calendar3" className="mb-0" />
                     </div>
-                    <div className="card-body p-3 d-flex flex-column gap-3 bom-plan-year-card-body">
-                      <div>
+                    <div className="card-body p-3 d-flex flex-column gap-2.5 bom-plan-year-card-body">
+                      <div className="flex-shrink-0">
                         <label className="form-label text-muted fw-semibold mb-1 bom-hide-mobile" style={{ fontSize: 12 }}>Chọn năm lập kế hoạch</label>
-                        <div className="d-flex align-items-center gap-1" style={{ height: 38 }}>
+                        <div className="d-flex align-items-center gap-1" style={{ height: 36 }}>
                           <select
                             className="form-select fw-bold flex-grow-1 h-100"
                             value={year}
-                            onChange={(e) => setYear(Number(e.target.value))}
-                            style={{ fontSize: 14 }}
+                            onChange={(e) => {
+                              const nextYear = Number(e.target.value);
+                              setYear(nextYear);
+                              setOemYear(nextYear);
+                            }}
+                            style={{ fontSize: 13.5, paddingTop: 4, paddingBottom: 4 }}
                           >
                             <option value={2025}>Năm 2025</option>
                             <option value={2026}>Năm 2026</option>
@@ -1773,7 +2102,7 @@ export default function BoardYearlyPlanPage() {
                             onClick={handleSavePlan}
                             style={{
                               flexShrink: 0,
-                              width: 36, height: 38,
+                              width: 36, height: 36,
                               border: "1px solid #dee2e6",
                               borderRadius: 8,
                               background: "#fff",
@@ -1794,7 +2123,7 @@ export default function BoardYearlyPlanPage() {
                             onClick={() => setIsPrintOpen(true)}
                             style={{
                               flexShrink: 0,
-                              width: 36, height: 38,
+                              width: 36, height: 36,
                               border: "1px solid #dee2e6",
                               borderRadius: 8,
                               background: "#fff",
@@ -1803,7 +2132,6 @@ export default function BoardYearlyPlanPage() {
                               cursor: "pointer",
                               transition: "background 0.15s, border-color 0.15s, color 0.15s",
                               fontSize: 15,
-                              marginRight: 6
                             }}
                             onMouseEnter={e => { e.currentTarget.style.background = "#f0f0f0"; e.currentTarget.style.borderColor = "#adb5bd"; e.currentTarget.style.color = "#343a40"; }}
                             onMouseLeave={e => { e.currentTarget.style.background = "#fff"; e.currentTarget.style.borderColor = "#dee2e6"; e.currentTarget.style.color = "#6c757d"; }}
@@ -1816,7 +2144,7 @@ export default function BoardYearlyPlanPage() {
                             onClick={() => handleAiAnalysis()}
                             style={{
                               flexShrink: 0,
-                              width: 36, height: 38,
+                              width: 36, height: 36,
                               border: "1px solid #6d28d9",
                               borderRadius: 8,
                               background: "#6d28d9",
@@ -1838,7 +2166,7 @@ export default function BoardYearlyPlanPage() {
                       <div className="d-flex flex-column gap-2 bom-plan-kpi-grid">
 
                         {/* Tổng Lợi Nhuận */}
-                        <div className="py-2 px-3 rounded-3 bom-plan-kpi-box bom-plan-kpi-full" style={{
+                        <div className="py-2.5 px-3 rounded-3 bom-plan-kpi-box bom-plan-kpi-full" style={{
                           backgroundColor: valTotalProfit >= 0 ? "rgba(16, 185, 129, 0.05)" : "rgba(239, 68, 68, 0.05)",
                           border: valTotalProfit >= 0 ? "1px solid rgba(16, 185, 129, 0.15)" : "1px solid rgba(239, 68, 68, 0.15)"
                         }}>
@@ -1857,8 +2185,8 @@ export default function BoardYearlyPlanPage() {
                           </h4>
                         </div>
 
-                        {/* Biên Lợi Nhuận */}
-                        <div className="py-2 px-3 rounded-3 bom-plan-kpi-box" style={{
+                        {/* Biên Lợi Nhuận Gộp */}
+                        <div className="py-2.5 px-3 rounded-3 bom-plan-kpi-box" style={{
                           backgroundColor: "rgba(59, 130, 246, 0.05)",
                           border: "1px solid rgba(59, 130, 246, 0.15)"
                         }}>
@@ -1878,7 +2206,7 @@ export default function BoardYearlyPlanPage() {
                         </div>
 
                         {/* Biên Lợi Nhuận Hoạt Động */}
-                        <div className="py-2 px-3 rounded-3 bom-plan-kpi-box" style={{
+                        <div className="py-2.5 px-3 rounded-3 bom-plan-kpi-box" style={{
                           backgroundColor: "rgba(139, 92, 246, 0.05)",
                           border: "1px solid rgba(139, 92, 246, 0.15)"
                         }}>
@@ -1902,111 +2230,93 @@ export default function BoardYearlyPlanPage() {
                   </div>
                 </div>
 
-                {/* Mobile Sub-tabs for Step 1 */}
-                <div className="col-12 bom-show-mobile-block" style={{ display: "none" }}>
-                  <div className="bom-plan-mobile-subtabs">
-                    <button
-                      type="button"
-                      className={`bom-labor-mobile-subtab-btn ${mobileStep1Tab === "revenue" ? "is-active" : ""}`}
-                      onClick={() => setMobileStep1Tab("revenue")}
-                    >
-                      <i className="bi bi-graph-up" /> Chỉ tiêu Doanh thu
-                    </button>
-                    <button
-                      type="button"
-                      className={`bom-labor-mobile-subtab-btn ${mobileStep1Tab === "cost" ? "is-active" : ""}`}
-                      onClick={() => setMobileStep1Tab("cost")}
-                    >
-                      <i className="bi bi-cash-coin" /> Định mức Chi phí
-                    </button>
-                  </div>
-                </div>
-
                 {/* Column 2: Doanh Thu */}
-                <div className={`col-12 col-lg-4 ${mobileStep1Tab !== "revenue" ? "bom-plan-mobile-hidden" : ""}`}>
+                <div className={`bom-plan-step1-col bom-plan-col-revenue ${mobileStep1Tab !== "revenue" ? "bom-plan-mobile-hidden" : ""}`}>
                   <div className="card h-100 border rounded-4 overflow-hidden">
-                    <div className="card-header bg-light border-bottom p-3 bom-plan-card-header">
+                    <div className="card-header bg-light border-bottom px-3 d-flex align-items-center bom-plan-card-header" style={{ minHeight: 42 }}>
                       <SectionTitle title="Chỉ tiêu Doanh thu" icon="bi-graph-up" className="mb-0" />
                     </div>
 
-                    <div className="card-body p-3 d-flex flex-column gap-3 bom-plan-card-body">
+                    <div className="card-body p-3 d-flex flex-column gap-2.5 bom-plan-card-body">
                       {/* Tổng Doanh Thu */}
-                      <div className="py-2 px-3 rounded-3 bom-plan-kpi-box bom-plan-kpi-full" style={{ backgroundColor: "rgba(0, 0, 139, 0.05)", border: "1px solid rgba(0, 0, 139, 0.15)" }}>
-                        <label className="fw-extrabold mb-1" style={{ fontSize: 11.5, letterSpacing: "0.03em", fontWeight: 800, color: "darkblue" }}>TỔNG DOANH THU</label>
+                      <div className="py-2 px-3 rounded-3 flex-shrink-0 bom-plan-kpi-box bom-plan-kpi-full" style={{ backgroundColor: "rgba(0, 0, 139, 0.05)", border: "1px solid rgba(0, 0, 139, 0.15)" }}>
+                        <label className="fw-extrabold mb-0.5 d-block" style={{ fontSize: 11.5, letterSpacing: "0.03em", fontWeight: 800, color: "darkblue" }}>TỔNG DOANH THU</label>
                         <h4 className="fw-black mb-0" style={{ fontWeight: 900, color: "darkblue", fontSize: 20 }}>
                           {totalRevenue.toLocaleString("vi-VN")} <span style={{ fontSize: 14, fontWeight: 700, color: "darkblue" }}>đ</span>
                         </h4>
                       </div>
 
-                      {/* Doanh thu từ đại lý */}
-                      <div>
-                        <label className="form-label text-muted fw-semibold mb-1" style={{ fontSize: 12 }}>Doanh thu từ đại lý</label>
-                        <div className="input-group input-group-sm">
-                          <input
-                            type="text"
-                            className="form-control fw-bold money-input-field"
-                            value={formatVNDInput(revenueAgent)}
-                            onChange={handleNumericChange(setRevenueAgent)}
-                            onKeyDown={handleMoneyKeyDown}
-                          />
-                          <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                          <span className="input-group-text bg-light text-primary fw-bold" style={{ minWidth: 65, justifyContent: "center" }}>
-                            {totalRevenue > 0 ? ((Number(revenueAgent) || 0) / totalRevenue * 100).toFixed(1) : "0.0"}%
-                          </span>
+                      <div className="bom-plan-step1-fields-distribute">
+                        {/* Doanh thu từ đại lý */}
+                        <div>
+                          <label className="form-label text-muted fw-semibold mb-1" style={{ fontSize: 12 }}>Doanh thu từ đại lý</label>
+                          <div className="input-group input-group-sm">
+                            <input
+                              type="text"
+                              className="form-control fw-bold money-input-field"
+                              value={formatVNDInput(revenueAgent)}
+                              onChange={handleNumericChange(setRevenueAgent)}
+                              onKeyDown={handleMoneyKeyDown}
+                            />
+                            <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                            <span className="input-group-text bg-light text-primary fw-bold" style={{ minWidth: 65, justifyContent: "center" }}>
+                              {totalRevenue > 0 ? ((Number(revenueAgent) || 0) / totalRevenue * 100).toFixed(1) : "0.0"}%
+                            </span>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Doanh thu từ phát triển đại lý */}
-                      <div>
-                        <label className="form-label text-muted fw-semibold mb-1" style={{ fontSize: 12 }}>Doanh thu từ phát triển đại lý</label>
-                        <div className="input-group input-group-sm">
-                          <input
-                            type="text"
-                            className="form-control fw-bold money-input-field"
-                            value={formatVNDInput(revenueAgentDev)}
-                            onChange={handleNumericChange(setRevenueAgentDev)}
-                            onKeyDown={handleMoneyKeyDown}
-                          />
-                          <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                          <span className="input-group-text bg-light text-primary fw-bold" style={{ minWidth: 65, justifyContent: "center" }}>
-                            {totalRevenue > 0 ? ((Number(revenueAgentDev) || 0) / totalRevenue * 100).toFixed(1) : "0.0"}%
-                          </span>
+                        {/* Doanh thu từ phát triển đại lý */}
+                        <div>
+                          <label className="form-label text-muted fw-semibold mb-1" style={{ fontSize: 12 }}>Doanh thu từ phát triển đại lý</label>
+                          <div className="input-group input-group-sm">
+                            <input
+                              type="text"
+                              className="form-control fw-bold money-input-field"
+                              value={formatVNDInput(revenueAgentDev)}
+                              onChange={handleNumericChange(setRevenueAgentDev)}
+                              onKeyDown={handleMoneyKeyDown}
+                            />
+                            <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                            <span className="input-group-text bg-light text-primary fw-bold" style={{ minWidth: 65, justifyContent: "center" }}>
+                              {totalRevenue > 0 ? ((Number(revenueAgentDev) || 0) / totalRevenue * 100).toFixed(1) : "0.0"}%
+                            </span>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Doanh thu bán hàng truyền thống */}
-                      <div>
-                        <label className="form-label text-muted fw-semibold mb-1" style={{ fontSize: 12 }}>Doanh thu bán hàng truyền thống</label>
-                        <div className="input-group input-group-sm">
-                          <input
-                            type="text"
-                            className="form-control fw-bold money-input-field"
-                            value={formatVNDInput(revenueTraditional)}
-                            onChange={handleNumericChange(setRevenueTraditional)}
-                            onKeyDown={handleMoneyKeyDown}
-                          />
-                          <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                          <span className="input-group-text bg-light text-primary fw-bold" style={{ minWidth: 65, justifyContent: "center" }}>
-                            {totalRevenue > 0 ? ((Number(revenueTraditional) || 0) / totalRevenue * 100).toFixed(1) : "0.0"}%
-                          </span>
+                        {/* Doanh thu bán hàng truyền thống */}
+                        <div>
+                          <label className="form-label text-muted fw-semibold mb-1" style={{ fontSize: 12 }}>Doanh thu bán hàng truyền thống</label>
+                          <div className="input-group input-group-sm">
+                            <input
+                              type="text"
+                              className="form-control fw-bold money-input-field"
+                              value={formatVNDInput(revenueTraditional)}
+                              onChange={handleNumericChange(setRevenueTraditional)}
+                              onKeyDown={handleMoneyKeyDown}
+                            />
+                            <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                            <span className="input-group-text bg-light text-primary fw-bold" style={{ minWidth: 65, justifyContent: "center" }}>
+                              {totalRevenue > 0 ? ((Number(revenueTraditional) || 0) / totalRevenue * 100).toFixed(1) : "0.0"}%
+                            </span>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Doanh thu bán hàng trên sàn thương mại */}
-                      <div>
-                        <label className="form-label text-muted fw-semibold mb-1" style={{ fontSize: 12 }}>Doanh thu bán hàng trên sàn thương mại</label>
-                        <div className="input-group input-group-sm">
-                          <input
-                            type="text"
-                            className="form-control fw-bold money-input-field"
-                            value={formatVNDInput(revenueEcommerce)}
-                            onChange={handleNumericChange(setRevenueEcommerce)}
-                            onKeyDown={handleMoneyKeyDown}
-                          />
-                          <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                          <span className="input-group-text bg-light text-primary fw-bold" style={{ minWidth: 65, justifyContent: "center" }}>
-                            {totalRevenue > 0 ? ((Number(revenueEcommerce) || 0) / totalRevenue * 100).toFixed(1) : "0.0"}%
-                          </span>
+                        {/* Doanh thu bán hàng trên sàn thương mại */}
+                        <div>
+                          <label className="form-label text-muted fw-semibold mb-1" style={{ fontSize: 12 }}>Doanh thu bán hàng trên sàn thương mại</label>
+                          <div className="input-group input-group-sm">
+                            <input
+                              type="text"
+                              className="form-control fw-bold money-input-field"
+                              value={formatVNDInput(revenueEcommerce)}
+                              onChange={handleNumericChange(setRevenueEcommerce)}
+                              onKeyDown={handleMoneyKeyDown}
+                            />
+                            <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                            <span className="input-group-text bg-light text-primary fw-bold" style={{ minWidth: 65, justifyContent: "center" }}>
+                              {totalRevenue > 0 ? ((Number(revenueEcommerce) || 0) / totalRevenue * 100).toFixed(1) : "0.0"}%
+                            </span>
+                          </div>
                         </div>
                       </div>
 
@@ -2015,9 +2325,9 @@ export default function BoardYearlyPlanPage() {
                 </div>
 
                 {/* Column 3: Chi Phí */}
-                <div className={`col-12 col-lg-4 ${mobileStep1Tab !== "cost" ? "bom-plan-mobile-hidden" : ""}`}>
+                <div className={`bom-plan-step1-col bom-plan-col-cost ${mobileStep1Tab !== "cost" ? "bom-plan-mobile-hidden" : ""}`}>
                   <div className="card h-100 border rounded-4 overflow-hidden">
-                    <div className="card-header bg-light border-bottom px-3 d-flex align-items-center justify-content-between bom-plan-card-header" style={{ paddingTop: 10, paddingBottom: 10 }}>
+                    <div className="card-header bg-light border-bottom px-3 d-flex align-items-center justify-content-between bom-plan-card-header" style={{ minHeight: 42 }}>
                       <SectionTitle title="Định mức Chi phí" icon="bi-cash-coin" className="mb-0" />
                       <div className="d-flex align-items-center flex-shrink-0" style={{ whiteSpace: "nowrap" }}>
                         <Toggle
@@ -2028,280 +2338,270 @@ export default function BoardYearlyPlanPage() {
                       </div>
                     </div>
 
-                    <div className="card-body p-3 d-flex flex-column gap-1 bom-plan-card-body">
+                    <div className="card-body p-3 d-flex flex-column gap-2 bom-plan-card-body">
                       {/* Định Mức Tổng Chi Phí */}
-                      <div className="py-2 px-3 rounded-3 bg-danger-subtle/30 border border-danger/20 bom-plan-kpi-box bom-plan-kpi-full">
-                        <label className="text-danger fw-extrabold mb-1" style={{ fontSize: 11.5, letterSpacing: "0.03em", fontWeight: 800 }}>ĐỊNH MỨC TỔNG CHI PHÍ</label>
+                      <div
+                        className="py-2 px-3 rounded-3 flex-shrink-0 bom-plan-kpi-box bom-plan-kpi-full"
+                        style={{
+                          backgroundColor: "rgba(239, 68, 68, 0.05)",
+                          border: "1px solid rgba(239, 68, 68, 0.15)"
+                        }}
+                      >
+                        <label className="text-danger fw-extrabold mb-0.5 d-block" style={{ fontSize: 11.5, letterSpacing: "0.03em", fontWeight: 800 }}>ĐỊNH MỨC TỔNG CHI PHÍ</label>
                         <h4 className="fw-black text-danger mb-0" style={{ fontWeight: 900, fontSize: 20 }}>
                           {totalCost.toLocaleString("vi-VN")} <span style={{ fontSize: 14, fontWeight: 700 }}>đ</span>
                         </h4>
                       </div>
 
-                      <div className="row g-2">
-                        {/* Khấu trừ doanh thu */}
-                        <div className="col-6">
-                          <label className="form-label text-muted fw-semibold mb-0" style={{ fontSize: 12, marginBottom: 1 }}>Khấu trừ doanh thu</label>
-                          <div className="input-group input-group-sm">
-                            <input
-                              type="text"
-                              className="form-control fw-bold percent-input-field"
-                              value={revenueDeductionPercent}
-                              onChange={(e) => {
-                                const raw = e.target.value.replace(/[^0-9.]/g, "");
-                                setRevenueDeductionPercent(raw);
-                              }}
-                              onKeyDown={handlePercentKeyDown}
-                            />
-                            <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>%</span>
+                      <div className="bom-plan-step1-fields-distribute">
+                        <div className="row g-2">
+                          {/* Khấu trừ doanh thu */}
+                          <div className="col-6">
+                            <label className="form-label text-muted fw-semibold mb-0.5" style={{ fontSize: 12 }}>Khấu trừ doanh thu</label>
+                            <div className="input-group input-group-sm">
+                              <input
+                                type="text"
+                                className="form-control fw-bold percent-input-field"
+                                value={revenueDeductionPercent}
+                                onChange={(e) => {
+                                  const raw = e.target.value.replace(/[^0-9.]/g, "");
+                                  setRevenueDeductionPercent(raw);
+                                }}
+                                onKeyDown={handlePercentKeyDown}
+                              />
+                              <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>%</span>
+                            </div>
+                          </div>
+
+                          {/* Giá bán hàng */}
+                          <div className="col-6">
+                            <label className="form-label text-muted fw-semibold mb-0.5" style={{ fontSize: 12 }}>Giá bán hàng</label>
+                            <div className="input-group input-group-sm">
+                              <input
+                                type="text"
+                                className="form-control fw-bold percent-input-field"
+                                value={cogsPercent}
+                                onChange={(e) => {
+                                  const raw = e.target.value.replace(/[^0-9.]/g, "");
+                                  setCogsPercent(raw);
+                                }}
+                                onKeyDown={handlePercentKeyDown}
+                              />
+                              <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>%</span>
+                            </div>
                           </div>
                         </div>
 
-                        {/* Giá bán hàng */}
-                        <div className="col-6">
-                          <label className="form-label text-muted fw-semibold mb-0" style={{ fontSize: 12, marginBottom: 1 }}>Giá bán hàng</label>
+                        {/* Công tác kinh doanh */}
+                        <div>
+                          <label className="form-label text-muted fw-semibold mb-0.5" style={{ fontSize: 12 }}>Công tác kinh doanh</label>
                           <div className="input-group input-group-sm">
-                            <input
-                              type="text"
-                              className="form-control fw-bold percent-input-field"
-                              value={cogsPercent}
-                              onChange={(e) => {
-                                const raw = e.target.value.replace(/[^0-9.]/g, "");
-                                setCogsPercent(raw);
-                              }}
-                              onKeyDown={handlePercentKeyDown}
-                            />
-                            <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>%</span>
+                            {isCalculateByRevenue ? (
+                              <>
+                                <input
+                                  type="text"
+                                  className="form-control fw-bold text-danger text-center percent-input-field"
+                                  style={{ maxWidth: 50 }}
+                                  value={costSalesPercent}
+                                  onChange={(e) => {
+                                    const raw = e.target.value.replace(/[^0-9.]/g, "");
+                                    setCostSalesPercent(raw);
+                                  }}
+                                  onKeyDown={handlePercentKeyDown}
+                                  placeholder="0.0"
+                                />
+                                <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
+                                <input
+                                  type="text"
+                                  className="form-control fw-bold"
+                                  value={formatVNDInput(finalCostSales.toString())}
+                                  disabled
+                                />
+                                <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                              </>
+                            ) : (
+                              <>
+                                <input
+                                  type="text"
+                                  className="form-control fw-bold money-input-field"
+                                  value={formatVNDInput(costSales)}
+                                  onChange={handleNumericChange(setCostSales)}
+                                  onKeyDown={handleMoneyKeyDown}
+                                />
+                                <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Công tác Marketing */}
+                        <div>
+                          <label className="form-label text-muted fw-semibold mb-0.5" style={{ fontSize: 12 }}>Công tác Marketing</label>
+                          <div className="input-group input-group-sm">
+                            {isCalculateByRevenue ? (
+                              <>
+                                <input
+                                  type="text"
+                                  className="form-control fw-bold text-danger text-center percent-input-field"
+                                  style={{ maxWidth: 50 }}
+                                  value={costMarketingPercent}
+                                  onChange={(e) => {
+                                    const raw = e.target.value.replace(/[^0-9.]/g, "");
+                                    setCostMarketingPercent(raw);
+                                  }}
+                                  onKeyDown={handlePercentKeyDown}
+                                  placeholder="0.0"
+                                />
+                                <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
+                                <input
+                                  type="text"
+                                  className="form-control fw-bold"
+                                  value={formatVNDInput(finalCostMarketing.toString())}
+                                  disabled
+                                />
+                                <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                              </>
+                            ) : (
+                              <>
+                                <input
+                                  type="text"
+                                  className="form-control fw-bold money-input-field"
+                                  value={formatVNDInput(costMarketing)}
+                                  onChange={handleNumericChange(setCostMarketing)}
+                                  onKeyDown={handleMoneyKeyDown}
+                                />
+                                <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Kế toán và nhân sự */}
+                        <div>
+                          <label className="form-label text-muted fw-semibold mb-0.5" style={{ fontSize: 12 }}>Kế toán và nhân sự</label>
+                          <div className="input-group input-group-sm">
+                            {isCalculateByRevenue ? (
+                              <>
+                                <input
+                                  type="text"
+                                  className="form-control fw-bold text-danger text-center percent-input-field"
+                                  style={{ maxWidth: 50 }}
+                                  value={costFinanceHRPercent}
+                                  onChange={(e) => {
+                                    const raw = e.target.value.replace(/[^0-9.]/g, "");
+                                    setCostFinanceHRPercent(raw);
+                                  }}
+                                  onKeyDown={handlePercentKeyDown}
+                                  placeholder="0.0"
+                                />
+                                <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
+                                <input
+                                  type="text"
+                                  className="form-control fw-bold"
+                                  value={formatVNDInput(finalCostFinanceHR.toString())}
+                                  disabled
+                                />
+                                <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                              </>
+                            ) : (
+                              <>
+                                <input
+                                  type="text"
+                                  className="form-control fw-bold money-input-field"
+                                  value={formatVNDInput(costFinanceHR)}
+                                  onChange={handleNumericChange(setCostFinanceHR)}
+                                  onKeyDown={handleMoneyKeyDown}
+                                />
+                                <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Kho vận */}
+                        <div>
+                          <label className="form-label text-muted fw-semibold mb-0.5" style={{ fontSize: 12 }}>Kho vận</label>
+                          <div className="input-group input-group-sm">
+                            {isCalculateByRevenue ? (
+                              <>
+                                <input
+                                  type="text"
+                                  className="form-control fw-bold text-danger text-center percent-input-field"
+                                  style={{ maxWidth: 50 }}
+                                  value={costLogisticsPercent}
+                                  onChange={(e) => {
+                                    const raw = e.target.value.replace(/[^0-9.]/g, "");
+                                    setCostLogisticsPercent(raw);
+                                  }}
+                                  onKeyDown={handlePercentKeyDown}
+                                  placeholder="0.0"
+                                />
+                                <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
+                                <input
+                                  type="text"
+                                  className="form-control fw-bold"
+                                  value={formatVNDInput(finalCostLogistics.toString())}
+                                  disabled
+                                />
+                                <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                              </>
+                            ) : (
+                              <>
+                                <input
+                                  type="text"
+                                  className="form-control fw-bold money-input-field"
+                                  value={formatVNDInput(costLogistics)}
+                                  onChange={handleNumericChange(setCostLogistics)}
+                                  onKeyDown={handleMoneyKeyDown}
+                                />
+                                <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Công tác vận hành hệ thống */}
+                        <div>
+                          <label className="form-label text-muted fw-semibold mb-0.5" style={{ fontSize: 12 }}>Công tác vận hành hệ thống</label>
+                          <div className="input-group input-group-sm">
+                            {isCalculateByRevenue ? (
+                              <>
+                                <input
+                                  type="text"
+                                  className="form-control fw-bold text-danger text-center percent-input-field"
+                                  style={{ maxWidth: 50 }}
+                                  value={costOperationsPercent}
+                                  onChange={(e) => {
+                                    const raw = e.target.value.replace(/[^0-9.]/g, "");
+                                    setCostOperationsPercent(raw);
+                                  }}
+                                  onKeyDown={handlePercentKeyDown}
+                                  placeholder="0.0"
+                                />
+                                <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
+                                <input
+                                  type="text"
+                                  className="form-control fw-bold"
+                                  value={formatVNDInput(finalCostOperations.toString())}
+                                  disabled
+                                />
+                                <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                              </>
+                            ) : (
+                              <>
+                                <input
+                                  type="text"
+                                  className="form-control fw-bold money-input-field"
+                                  value={formatVNDInput(costOperations)}
+                                  onChange={handleNumericChange(setCostOperations)}
+                                  onKeyDown={handleMoneyKeyDown}
+                                />
+                                <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
-
-                      {/* Công tác kinh doanh */}
-                      <div>
-                        <label className="form-label text-muted fw-semibold mb-0" style={{ fontSize: 12, marginBottom: 1 }}>Công tác kinh doanh</label>
-                        <div className="input-group input-group-sm">
-                          {isCalculateByRevenue ? (
-                            <>
-                              {/* % DT ở đầu */}
-                              <input
-                                type="text"
-                                className="form-control fw-bold text-danger text-center percent-input-field"
-                                style={{ maxWidth: 50 }}
-                                value={costSalesPercent}
-                                onChange={(e) => {
-                                  const raw = e.target.value.replace(/[^0-9.]/g, "");
-                                  setCostSalesPercent(raw);
-                                }}
-                                onKeyDown={handlePercentKeyDown}
-                                placeholder="0.0"
-                              />
-                              <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
-
-                              {/* Ô giá trị chi phí bị khóa */}
-                              <input
-                                type="text"
-                                className="form-control fw-bold"
-                                value={formatVNDInput(finalCostSales.toString())}
-                                disabled
-                              />
-                              <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                            </>
-                          ) : (
-                            <>
-                              <input
-                                type="text"
-                                className="form-control fw-bold money-input-field"
-                                value={formatVNDInput(costSales)}
-                                onChange={handleNumericChange(setCostSales)}
-                                onKeyDown={handleMoneyKeyDown}
-                              />
-                              <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Công tác Marketing */}
-                      <div>
-                        <label className="form-label text-muted fw-semibold mb-0" style={{ fontSize: 12, marginBottom: 1 }}>Công tác Marketing</label>
-                        <div className="input-group input-group-sm">
-                          {isCalculateByRevenue ? (
-                            <>
-                              {/* % DT ở đầu */}
-                              <input
-                                type="text"
-                                className="form-control fw-bold text-danger text-center percent-input-field"
-                                style={{ maxWidth: 50 }}
-                                value={costMarketingPercent}
-                                onChange={(e) => {
-                                  const raw = e.target.value.replace(/[^0-9.]/g, "");
-                                  setCostMarketingPercent(raw);
-                                }}
-                                onKeyDown={handlePercentKeyDown}
-                                placeholder="0.0"
-                              />
-                              <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
-
-                              {/* Ô giá trị chi phí bị khóa */}
-                              <input
-                                type="text"
-                                className="form-control fw-bold"
-                                value={formatVNDInput(finalCostMarketing.toString())}
-                                disabled
-                              />
-                              <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                            </>
-                          ) : (
-                            <>
-                              <input
-                                type="text"
-                                className="form-control fw-bold money-input-field"
-                                value={formatVNDInput(costMarketing)}
-                                onChange={handleNumericChange(setCostMarketing)}
-                                onKeyDown={handleMoneyKeyDown}
-                              />
-                              <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Kế toán và nhân sự */}
-                      <div>
-                        <label className="form-label text-muted fw-semibold mb-0" style={{ fontSize: 12, marginBottom: 1 }}>Kế toán và nhân sự</label>
-                        <div className="input-group input-group-sm">
-                          {isCalculateByRevenue ? (
-                            <>
-                              {/* % DT ở đầu */}
-                              <input
-                                type="text"
-                                className="form-control fw-bold text-danger text-center percent-input-field"
-                                style={{ maxWidth: 50 }}
-                                value={costFinanceHRPercent}
-                                onChange={(e) => {
-                                  const raw = e.target.value.replace(/[^0-9.]/g, "");
-                                  setCostFinanceHRPercent(raw);
-                                }}
-                                onKeyDown={handlePercentKeyDown}
-                                placeholder="0.0"
-                              />
-                              <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
-
-                              {/* Ô giá trị chi phí bị khóa */}
-                              <input
-                                type="text"
-                                className="form-control fw-bold"
-                                value={formatVNDInput(finalCostFinanceHR.toString())}
-                                disabled
-                              />
-                              <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                            </>
-                          ) : (
-                            <>
-                              <input
-                                type="text"
-                                className="form-control fw-bold money-input-field"
-                                value={formatVNDInput(costFinanceHR)}
-                                onChange={handleNumericChange(setCostFinanceHR)}
-                                onKeyDown={handleMoneyKeyDown}
-                              />
-                              <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Kho vận */}
-                      <div>
-                        <label className="form-label text-muted fw-semibold mb-0" style={{ fontSize: 12, marginBottom: 1 }}>Kho vận</label>
-                        <div className="input-group input-group-sm">
-                          {isCalculateByRevenue ? (
-                            <>
-                              {/* % DT ở đầu */}
-                              <input
-                                type="text"
-                                className="form-control fw-bold text-danger text-center percent-input-field"
-                                style={{ maxWidth: 50 }}
-                                value={costLogisticsPercent}
-                                onChange={(e) => {
-                                  const raw = e.target.value.replace(/[^0-9.]/g, "");
-                                  setCostLogisticsPercent(raw);
-                                }}
-                                onKeyDown={handlePercentKeyDown}
-                                placeholder="0.0"
-                              />
-                              <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
-
-                              {/* Ô giá trị chi phí bị khóa */}
-                              <input
-                                type="text"
-                                className="form-control fw-bold"
-                                value={formatVNDInput(finalCostLogistics.toString())}
-                                disabled
-                              />
-                              <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                            </>
-                          ) : (
-                            <>
-                              <input
-                                type="text"
-                                className="form-control fw-bold money-input-field"
-                                value={formatVNDInput(costLogistics)}
-                                onChange={handleNumericChange(setCostLogistics)}
-                                onKeyDown={handleMoneyKeyDown}
-                              />
-                              <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Công tác vận hành hệ thống */}
-                      <div>
-                        <label className="form-label text-muted fw-semibold mb-0" style={{ fontSize: 12, marginBottom: 1 }}>Công tác vận hành hệ thống</label>
-                        <div className="input-group input-group-sm">
-                          {isCalculateByRevenue ? (
-                            <>
-                              {/* % DT ở đầu */}
-                              <input
-                                type="text"
-                                className="form-control fw-bold text-danger text-center percent-input-field"
-                                style={{ maxWidth: 50 }}
-                                value={costOperationsPercent}
-                                onChange={(e) => {
-                                  const raw = e.target.value.replace(/[^0-9.]/g, "");
-                                  setCostOperationsPercent(raw);
-                                }}
-                                onKeyDown={handlePercentKeyDown}
-                                placeholder="0.0"
-                              />
-                              <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
-
-                              {/* Ô giá trị chi phí bị khóa */}
-                              <input
-                                type="text"
-                                className="form-control fw-bold"
-                                value={formatVNDInput(finalCostOperations.toString())}
-                                disabled
-                              />
-                              <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                            </>
-                          ) : (
-                            <>
-                              <input
-                                type="text"
-                                className="form-control fw-bold money-input-field"
-                                value={formatVNDInput(costOperations)}
-                                onChange={handleNumericChange(setCostOperations)}
-                                onKeyDown={handleMoneyKeyDown}
-                              />
-                              <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Space padding */}
-                      <div className="pb-1" />
 
                     </div>
                   </div>
@@ -3292,7 +3592,7 @@ export default function BoardYearlyPlanPage() {
 
               </div>
             ) : (
-              <div className="flex-1 overflow-auto p-3 bom-plan-scroll-body" style={{ minHeight: 0 }}>
+              <div className="flex-1 overflow-auto bom-plan-scroll-body" style={{ minHeight: 0 }}>
                 <OemPlanView
                   currentStep={oemCurrentStep}
                   year={oemYear}

@@ -21,15 +21,30 @@ import {
   Bank,
   Trash,
   ExclamationTriangleFill,
+  ExclamationTriangle,
+  ExclamationCircle,
   CheckCircleFill,
   ChevronDown,
   XLg,
   Check2,
+  CheckLg,
+  BoxSeam,
+  ArrowLeft,
+  Person,
+  Telephone,
+  GeoAlt,
+  Diagram3,
+  CartX,
+  Send,
+  FileEarmarkArrowDownFill,
+  SendCheckFill,
+  CalendarEvent,
 } from 'react-bootstrap-icons';
 import { TableToolbar, type TableToolbarFilter, type TableToolbarMenuItem } from '../../../components/common/TableToolbar';
 import { FullWidthTable, SwipeableTableRow } from '../../../components/common/FullWidthTable';
 import { Pagination } from '../../../components/common/Pagination';
 import { Button } from '../../../components/common/Button';
+import { Badge } from '../../../components/common/Badge';
 import { Modal } from '../../../components/common/Modal';
 import { Offcanvas } from '../../../components/common/Offcanvas';
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog';
@@ -282,18 +297,28 @@ const formatVND = (val: number): string => {
 interface OrderApprovalItem {
   id: string;
   code: string;
+  customerId?: string | null;
   customerName: string;
   customerPhone: string;
   customerAddress?: string;
   customerGroup: string;
+  outstandingDebt?: number;
+  creditLimit?: number;
   orderDate: string;
   deliveryDate: string;
   totalAmount: number;
   paidAmount: number;
   remainingAmount: number;
-  status: 'cho_duyet' | 'da_duyet' | 'dang_san_xuat' | 'hoan_tat';
+  status: 'cho_duyet' | 'da_duyet' | 'dang_san_xuat' | 'hoan_tat' | 'tu_choi';
+  rawTrangThai?: string;
+  keToanDuyet?: string;
+  trangThaiKho?: string;
+  ghiChu?: string;
   itemsSummary: string;
   salesPerson: string;
+  purchaseRequestCode?: string | null;
+  stockMovementCode?: string | null;
+  hasLenhXuatKho?: boolean;
 }
 
 // ── KIỂU DỮ LIỆU BƯỚC 2: DUYỆT YÊU CẦU ──
@@ -380,6 +405,16 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
 
   // Modal/Offcanvas xem chi tiết và giải ngân lệnh chi
   const [selectedOrder, setSelectedOrder] = useState<OrderApprovalItem | null>(null);
+  const [showItemsOffcanvas, setShowItemsOffcanvas] = useState<boolean>(false);
+  const [orderDetails, setOrderDetails] = useState<any[]>([]);
+  const [orderFullDetail, setOrderFullDetail] = useState<any | null>(null);
+  const [fetchingOrderDetails, setFetchingOrderDetails] = useState<boolean>(false);
+  const [productionItemIds, setProductionItemIds] = useState<string[]>([]);
+  const [productionQuantities, setProductionQuantities] = useState<Record<string, number | string>>({});
+  const [productionDueDate, setProductionDueDate] = useState<string>('');
+  const [selectedItemIdForBreakdown, setSelectedItemIdForBreakdown] = useState<string | null>(null);
+  const [isSubmittingOrderAction, setIsSubmittingOrderAction] = useState<boolean>(false);
+  const [showSingleOrderDeleteConfirm, setShowSingleOrderDeleteConfirm] = useState<boolean>(false);
   const [selectedRequest, setSelectedRequest] = useState<RequestApprovalItem | null>(null);
   const [selectedOutflow, setSelectedOutflow] = useState<CashOutflowItem | null>(null);
   const [payoutExecutionDate, setPayoutExecutionDate] = useState<string>('27/10/2026');
@@ -787,32 +822,57 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
       .then((data) => {
         if (data?.orders && Array.isArray(data.orders)) {
           const mappedOrders: OrderApprovalItem[] = data.orders.map((o: any) => {
-            const rawGroup = o.customer?.nhom || 'dai-ly';
+            const rawGroup = o.customer?.nhom || (o.customer?.id ? 'dai-ly' : 'khach-le');
             const total = Number(o.tongTien) || 0;
             const paid = Number(o.daThanhToan) || 0;
-            let st: 'cho_duyet' | 'da_duyet' | 'dang_san_xuat' | 'hoan_tat' = 'cho_duyet';
-            if (o.trangThai === 'completed') st = 'hoan_tat';
+            let st: OrderApprovalItem['status'] = 'cho_duyet';
+            if (o.keToanDuyet === 'rejected' || o.trangThai === 'cancelled') st = 'tu_choi';
+            else if (o.trangThai === 'completed' || o.trangThai === 'done' || o.trangThaiKho === 'exported') st = 'hoan_tat';
             else if (o.trangThai === 'in_production') st = 'dang_san_xuat';
-            else if (o.trangThai === 'approved') st = 'da_duyet';
+            else if (o.keToanDuyet === 'approved' || o.trangThai === 'approved') st = 'da_duyet';
+
+            let cName = o.customer?.name || o.nguoiNhan || o.nguoiDatHang || (o.code ? `Khách hàng ${o.code}` : 'Khách vãng lai');
+            let cPhone = o.customer?.dienThoai || o.soDienThoai || '';
+            let cAddress = o.customer?.address || o.diaChiGiaoHang || '';
+
+            if (!o.customer && o.ghiChu) {
+              const match = o.ghiChu.match(/Tên khách hàng:\s*(.*?)\s*Số điện thoại:\s*(.*?)\s*Địa chỉ giao hàng:\s*(.*)/);
+              if (match) {
+                cName = match[1].trim() || cName;
+                cPhone = match[2].trim() || cPhone;
+                cAddress = match[3].trim() || cAddress;
+              }
+            }
 
             return {
               id: o.id,
               code: o.code || `DBH-${o.id}`,
-              customerName: o.customer?.name || (o.code ? `Khách hàng ${o.code}` : 'Khách hàng'),
-              customerPhone: o.customer?.dienThoai || '',
-              customerAddress: o.customer?.address || '',
+              customerId: o.customerId ?? o.customer?.id ?? null,
+              customerName: cName,
+              customerPhone: cPhone,
+              customerAddress: cAddress,
               customerGroup: rawGroup,
-              orderDate: o.ngayDat ? new Date(o.ngayDat).toLocaleDateString('vi-VN') : '',
-              deliveryDate: o.ngayGiao ? new Date(o.ngayGiao).toLocaleDateString('vi-VN') : '',
+              outstandingDebt: Number(o.customer?.outstandingDebt) || 0,
+              creditLimit: Number(o.customer?.creditLimit ?? o.customer?.hanMucCongNo) || 0,
+              orderDate: o.ngayDat ? new Date(o.ngayDat).toLocaleDateString('vi-VN') : (o.createdAt ? new Date(o.createdAt).toLocaleDateString('vi-VN') : ''),
+              deliveryDate: o.ngayGiao ? new Date(o.ngayGiao).toLocaleDateString('vi-VN') : '---',
               totalAmount: total,
               paidAmount: paid,
               remainingAmount: Math.max(0, total - paid),
               status: st,
+              rawTrangThai: o.trangThai || 'active',
+              keToanDuyet: o.keToanDuyet || 'pending',
+              trangThaiKho: o.trangThaiKho || 'in_stock',
+              ghiChu: o.ghiChu || '',
               itemsSummary: '',
-              salesPerson: o.nguoiPhuTrach || '',
+              salesPerson: o.nguoiPhuTrachName || o.nguoiPhuTrach || 'Hệ thống',
             };
           });
           setOrders(mappedOrders);
+          setSelectedOrder((prev) => {
+            if (!prev) return null;
+            return mappedOrders.find((m) => m.id === prev.id) || prev;
+          });
         }
       })
       .catch((err) => console.error('Lỗi tải danh sách đơn hàng từ DB:', err));
@@ -990,13 +1050,227 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
   });
 
 
-  // ── XỬ LÝ HÀNH ĐỘNG BƯỚC 1: DUYỆT ĐƠN HÀNG ──
-  const handleApproveOrder = (orderId: string) => {
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: 'da_duyet' } : o))
+  // ── NẠP CHI TIẾT ĐƠN HÀNG & VẬT TƯ SẢN XUẤT KHI MỞ OFFCANVAS BƯỚC 1 ──
+  useEffect(() => {
+    const orderId = selectedOrder?.id;
+    setShowItemsOffcanvas(false);
+    if (!orderId) {
+      setOrderDetails([]);
+      setOrderFullDetail(null);
+      setProductionItemIds([]);
+      return;
+    }
+
+    let cancelled = false;
+    const fetchOrderDetail = async () => {
+      setFetchingOrderDetails(true);
+      try {
+        const res = await fetch(`/api/plan-finance/sales/${encodeURIComponent(orderId)}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled) return;
+        const detail = json?.data || json;
+        setOrderFullDetail(detail || null);
+        const items = Array.isArray(detail?.items) ? detail.items : [];
+        setOrderDetails(items);
+        if (items.length > 0) {
+          setSelectedItemIdForBreakdown(String(items[0].id));
+        } else {
+          setSelectedItemIdForBreakdown(null);
+        }
+
+        if (detail?.keToanDuyet === 'approved' && Array.isArray(detail?.productionItemIds)) {
+          setProductionItemIds(detail.productionItemIds.map((id: any) => String(id)));
+        } else {
+          const defaultProdIds = items
+            .filter(
+              (it: any) =>
+                (Number(it.missingQty || 0) > 0 || detail?.trangThaiKho === 'out_of_stock') &&
+                it.isManufactured
+            )
+            .map((it: any) => String(it.id));
+          setProductionItemIds(defaultProdIds);
+        }
+
+        const initialQuantities: Record<string, number> = {};
+        if (detail?.productionQuantities && typeof detail.productionQuantities === 'object') {
+          Object.entries(detail.productionQuantities).forEach(([k, v]) => {
+            initialQuantities[k] = Number(v) || 0;
+          });
+        }
+        items.forEach((it: any) => {
+          if (initialQuantities[it.id] === undefined) {
+            initialQuantities[it.id] = Number(it.missingQty || 0) > 0 ? Number(it.missingQty) : Number(it.soLuong || 1);
+          }
+        });
+        setProductionQuantities(initialQuantities);
+
+        // Khởi tạo ngày hoàn thành sản xuất từ ngày giao hàng của đơn hàng
+        const rawDeliveryDate = detail?.ngayGiao || selectedOrder?.deliveryDate || '';
+        let initialDueDate = '';
+        if (rawDeliveryDate) {
+          if (/^\d{4}-\d{2}-\d{2}/.test(rawDeliveryDate)) {
+            initialDueDate = rawDeliveryDate.slice(0, 10);
+          } else {
+            const parts = rawDeliveryDate.split('/');
+            if (parts.length === 3) {
+              initialDueDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            }
+          }
+        }
+        const todayStr = new Date().toISOString().slice(0, 10);
+        if (!initialDueDate || initialDueDate < todayStr) {
+          initialDueDate = todayStr;
+        }
+        setProductionDueDate(initialDueDate);
+
+        setSelectedOrder((prev) => {
+          if (!prev || prev.id !== orderId) return prev;
+          return {
+            ...prev,
+            outstandingDebt: Number(detail?.customer?.outstandingDebt ?? prev.outstandingDebt ?? 0),
+            creditLimit: Number(detail?.customer?.creditLimit ?? prev.creditLimit ?? 0),
+            rawTrangThai: detail?.trangThai || prev.rawTrangThai,
+            keToanDuyet: detail?.keToanDuyet || prev.keToanDuyet,
+            trangThaiKho: detail?.trangThaiKho || prev.trangThaiKho,
+            ghiChu: detail?.ghiChu ?? prev.ghiChu,
+            purchaseRequestCode: detail?.purchaseRequestCode ?? prev.purchaseRequestCode,
+            stockMovementCode: detail?.stockMovementCode ?? prev.stockMovementCode,
+            hasLenhXuatKho: Boolean(detail?.hasLenhXuatKho ?? prev.hasLenhXuatKho),
+          };
+        });
+      } catch (err) {
+        console.error('Lỗi tải chi tiết đơn hàng:', err);
+      } finally {
+        if (!cancelled) {
+          setFetchingOrderDetails(false);
+        }
+      }
+    };
+
+    fetchOrderDetail();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedOrder?.id]);
+
+  // ── XỬ LÝ HÀNH ĐỘNG BƯỚC 1: DUYỆT / TỪ CHỐI / XÓA ĐƠN HÀNG ──
+  const handleApproveOrder = async (orderId: string) => {
+    setIsSubmittingOrderAction(true);
+    try {
+      const sanitizedQuantities: Record<string, number> = {};
+      Object.entries(productionQuantities).forEach(([k, v]) => {
+        const n = Number(v);
+        if (!isNaN(n) && n > 0) sanitizedQuantities[k] = n;
+      });
+
+      const res = await fetch(`/api/plan-finance/sales/${encodeURIComponent(orderId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keToanDuyet: 'approved',
+          productionItemIds,
+          productionQuantities: sanitizedQuantities,
+          productionDueDate,
+          approvedBy: 'Trần Thị Linh (Kế toán trưởng)',
+        }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Không thể phê duyệt đơn hàng');
+      }
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId ? { ...o, status: 'da_duyet', keToanDuyet: 'approved' } : o
+        )
+      );
+      setSelectedOrder(null);
+      notifyFinanceUpdated();
+      loadBackendData();
+      onShowToast?.(
+        'success',
+        'Đã duyệt đơn hàng',
+        'Đơn hàng đã được Kế toán phê duyệt, tự động cập nhật công nợ và điều phối kho / sản xuất.'
+      );
+    } catch (err: any) {
+      console.error('Lỗi duyệt đơn hàng:', err);
+      onShowToast?.('error', 'Lỗi phê duyệt', err?.message || 'Không thể duyệt đơn hàng');
+    } finally {
+      setIsSubmittingOrderAction(false);
+    }
+  };
+
+  const handleRejectOrder = async (orderId: string) => {
+    setIsSubmittingOrderAction(true);
+    try {
+      const res = await fetch(`/api/plan-finance/sales/${encodeURIComponent(orderId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keToanDuyet: 'rejected',
+        }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Không thể từ chối đơn hàng');
+      }
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId ? { ...o, status: 'tu_choi', keToanDuyet: 'rejected' } : o
+        )
+      );
+      setSelectedOrder(null);
+      notifyFinanceUpdated();
+      loadBackendData();
+      onShowToast?.(
+        'warning',
+        'Đã từ chối đơn hàng',
+        `Đơn hàng ${selectedOrder?.code || ''} đã chuyển sang trạng thái Từ chối.`
+      );
+    } catch (err: any) {
+      console.error('Lỗi từ chối đơn hàng:', err);
+      onShowToast?.('error', 'Lỗi cập nhật', err?.message || 'Không thể từ chối đơn hàng');
+    } finally {
+      setIsSubmittingOrderAction(false);
+    }
+  };
+
+  const handleSubmitOrderToDirector = () => {
+    onShowToast?.(
+      'info',
+      'Trình Giám đốc',
+      `Đã gửi trình Giám đốc phê duyệt đơn hàng ${selectedOrder?.code || ''}!`
     );
-    notifyFinanceUpdated();
-    onShowToast?.('success', 'Đã duyệt đơn hàng', 'Đơn hàng đã được phê duyệt và chuyển sang bộ phận sản xuất.');
+  };
+
+  const handleDeleteSingleOrder = async (orderId: string) => {
+    setIsSubmittingOrderAction(true);
+    try {
+      const res = await fetch(`/api/plan-finance/sales/${encodeURIComponent(orderId)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Không thể xóa đơn hàng');
+      }
+      const deletedCode = selectedOrder?.code || orderId;
+      setOrders((prev) => prev.filter((o) => o.id !== orderId));
+      setSelectedOrderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
+      setShowSingleOrderDeleteConfirm(false);
+      setSelectedOrder(null);
+      notifyFinanceUpdated();
+      loadBackendData();
+      onShowToast?.('success', 'Đã xóa đơn hàng', `Đã xóa đơn hàng ${deletedCode} khỏi hệ thống.`);
+    } catch (err: any) {
+      console.error('Lỗi xóa đơn hàng:', err);
+      onShowToast?.('error', 'Lỗi xóa đơn hàng', err?.message || 'Không thể xóa đơn hàng');
+    } finally {
+      setIsSubmittingOrderAction(false);
+    }
   };
 
   const currentSelectedCount = useMemo(() => {
@@ -1006,13 +1280,20 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
     return selectedOutflowIds.size;
   }, [currentStep, selectedOrderIds, selectedRequestIds, selectedInflowIds, selectedOutflowIds]);
 
-  const handleDeleteSelectedItems = () => {
+  const handleDeleteSelectedItems = async () => {
     if (currentStep === 1) {
-      const count = selectedOrderIds.size;
+      const idsToDelete = Array.from(selectedOrderIds);
+      const count = idsToDelete.length;
+      await Promise.allSettled(
+        idsToDelete.map((id) =>
+          fetch(`/api/plan-finance/sales/${encodeURIComponent(id)}`, { method: 'DELETE' })
+        )
+      );
       setOrders((prev) => prev.filter((o) => !selectedOrderIds.has(o.id)));
       setSelectedOrderIds(new Set());
       setShowDeleteConfirm(false);
       notifyFinanceUpdated();
+      loadBackendData();
       onShowToast?.('success', 'Đã xóa đơn hàng', `Đã xóa thành công ${count} đơn hàng khỏi hệ thống.`);
     } else if (currentStep === 2) {
       const count = selectedRequestIds.size;
@@ -1305,6 +1586,7 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
             { value: 'da_duyet', label: 'Đã phê duyệt' },
             { value: 'dang_san_xuat', label: 'Đang sản xuất' },
             { value: 'hoan_tat', label: 'Hoàn tất' },
+            { value: 'tu_choi', label: 'Từ chối' },
           ],
         },
         {
@@ -1558,7 +1840,10 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                     rowId={`cf-ord-${ord.id}`}
                     onClick={() => setSelectedOrder(ord)}
                     onEdit={() => setSelectedOrder(ord)}
-                    onDelete={() => {
+                    onDelete={async () => {
+                      await fetch(`/api/plan-finance/sales/${encodeURIComponent(ord.id)}`, {
+                        method: 'DELETE',
+                      }).catch(() => {});
                       setOrders((prev) => prev.filter((o) => o.id !== ord.id));
                       setSelectedOrderIds((prev) => {
                         const next = new Set(prev);
@@ -1566,6 +1851,7 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                         return next;
                       });
                       notifyFinanceUpdated();
+                      loadBackendData();
                       onShowToast?.('success', 'Đã xóa đơn hàng', `Đã xóa đơn hàng ${ord.code} khỏi hệ thống.`);
                     }}
                     deleteConfirmTitle="Xác nhận xóa dữ liệu đơn hàng"
@@ -1599,6 +1885,8 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                                   ? 'bg-sky-50 text-sky-700 border border-sky-200'
                                   : ord.status === 'dang_san_xuat'
                                   ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                  : ord.status === 'tu_choi'
+                                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
                                   : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               }`}
                             >
@@ -1608,6 +1896,8 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                                 ? 'Đã phê duyệt'
                                 : ord.status === 'dang_san_xuat'
                                 ? 'Đang sản xuất'
+                                : ord.status === 'tu_choi'
+                                ? 'Từ chối'
                                 : 'Hoàn tất'}
                             </span>
                           </div>
@@ -1665,6 +1955,8 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                             ? 'bg-sky-50 text-sky-700 border border-sky-200'
                             : ord.status === 'dang_san_xuat'
                             ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                            : ord.status === 'tu_choi'
+                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
                             : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                         }`}
                       >
@@ -1674,6 +1966,8 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                           ? 'Đã phê duyệt'
                           : ord.status === 'dang_san_xuat'
                           ? 'Đang sản xuất'
+                          : ord.status === 'tu_choi'
+                          ? 'Từ chối'
                           : 'Hoàn tất'}
                       </span>
                     </td>
@@ -2220,140 +2514,651 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
       {selectedOrder && (
         <Offcanvas
           isOpen={true}
-          onClose={() => setSelectedOrder(null)}
-          title={`Đơn hàng: ${selectedOrder.code}`}
-          description="Thông tin chi tiết đơn hàng & phê duyệt luồng tiền"
+          onClose={() => {
+            setSelectedOrder(null);
+            setShowItemsOffcanvas(false);
+          }}
+          title="Thông tin đơn hàng"
+          description={`Đơn hàng: ${selectedOrder.code} • ${orderDetails.length} sản phẩm`}
           width="400px"
+          bodyClassName={showItemsOffcanvas ? '!p-3.5 !flex !flex-col !overflow-hidden !h-full' : '!p-4'}
           footer={
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '8px' }}>
-              <Button variant="outline" size="sm" onClick={() => setSelectedOrder(null)}>
-                Đóng
-              </Button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Button
-                  variant="danger"
+                  variant="outline"
                   size="sm"
                   onClick={() => {
-                    setOrders((prev) =>
-                      prev.map((o) => (o.id === selectedOrder.id ? { ...o, status: 'cho_duyet' } : o))
-                    );
-                    notifyFinanceUpdated();
-                    onShowToast?.('warning', 'Từ chối đơn hàng', `Đã từ chối đơn hàng ${selectedOrder.code}`);
-                    setSelectedOrder(null);
+                    if (showItemsOffcanvas) {
+                      setShowItemsOffcanvas(false);
+                    } else {
+                      setSelectedOrder(null);
+                    }
                   }}
                 >
-                  Từ chối
+                  {showItemsOffcanvas ? 'Quay lại' : 'Đóng'}
                 </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => {
-                    handleApproveOrder(selectedOrder.id);
-                    setSelectedOrder(null);
-                  }}
-                >
-                  Phê duyệt
-                </Button>
+                {!showItemsOffcanvas && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSubmitOrderToDirector}
+                      leftIcon={<Send size={13} className="text-blue-600" />}
+                      title="Gửi trình Ban Giám đốc phê duyệt"
+                    >
+                      Trình GĐ
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => setShowSingleOrderDeleteConfirm(true)}
+                      leftIcon={<Trash size={13} />}
+                      title="Xoá đơn hàng khỏi hệ thống"
+                    >
+                      Xoá
+                    </Button>
+                  </>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {selectedOrder.keToanDuyet !== 'approved' && selectedOrder.status !== 'da_duyet' && (
+                  <>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      disabled={isSubmittingOrderAction}
+                      onClick={() => handleRejectOrder(selectedOrder.id)}
+                    >
+                      Từ chối
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={isSubmittingOrderAction}
+                      onClick={() => handleApproveOrder(selectedOrder.id)}
+                    >
+                      {isSubmittingOrderAction ? 'Đang duyệt...' : 'Duyệt đơn'}
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           }
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.85rem' }}>
-            {/* Thông tin khách hàng */}
-            <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Khách hàng
+          {showItemsOffcanvas ? (
+            /* ════ MÀN HÌNH 2: DANH SÁCH HÀNG HOÁ & CHỌN MẶT HÀNG SẢN XUẤT ════ */
+            <div className="flex flex-col h-full min-h-0 text-[13px]">
+              {/* THANH ĐIỀU HƯỚNG QUAY LẠI */}
+              <div className="shrink-0 flex items-center justify-between pb-2 border-b border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setShowItemsOffcanvas(false)}
+                  className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+                >
+                  <ArrowLeft size={13} />
+                  <span>Quay lại chi tiết đơn hàng</span>
+                </button>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {orderDetails.length} mặt hàng
                 </span>
-                {(() => {
-                  const grp = getCustomerGroupInfo(selectedOrder.customerGroup);
+              </div>
+
+              {fetchingOrderDetails ? (
+                <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+                  <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent mb-2" />
+                  <p className="text-xs">Đang kiểm tra tồn kho & định mức vật tư...</p>
+                </div>
+              ) : orderDetails.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+                  <BoxSeam size={28} className="mx-auto mb-2 text-slate-300" />
+                  <p className="text-xs">Đơn hàng không có danh mục sản phẩm</p>
+                </div>
+              ) : (
+                (() => {
+                  const activeItem = orderDetails.find((it: any) => String(it.id) === String(selectedItemIdForBreakdown)) || orderDetails[0];
+                  const isApproved = selectedOrder.keToanDuyet === 'approved' || selectedOrder.status === 'da_duyet';
+                  const isChecked = productionItemIds.includes(String(activeItem?.id));
+                  const isManufactured = Boolean(activeItem?.isManufactured);
+                  const missingQty = Number(activeItem?.missingQty || 0);
+                  const rawVal = productionQuantities[activeItem?.id];
+                  const displayVal = rawVal !== undefined ? rawVal : (missingQty > 0 ? missingQty : Number(activeItem?.soLuong) || 1);
+                  const effectiveProdQty = (typeof rawVal === 'number' && rawVal > 0)
+                    ? rawVal
+                    : (Number(rawVal) > 0 ? Number(rawVal) : (missingQty > 0 ? missingQty : Number(activeItem?.soLuong) || 1));
+
                   return (
+                    <div className="flex-1 min-h-0 flex flex-col pt-2.5">
+                      {/* BỘ CHỌN SẢN PHẨM (KHI ĐƠN HÀNG CÓ NHIỀU HƠN 1 MẶT HÀNG) */}
+                      {orderDetails.length > 1 && (
+                        <div className="shrink-0 mb-2">
+                          <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                            Chọn mặt hàng kiểm tra:
+                          </label>
+                          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                            {orderDetails.map((it: any) => {
+                              const isActive = String(it.id) === String(activeItem?.id);
+                              const itChecked = productionItemIds.includes(String(it.id));
+                              return (
+                                <button
+                                  key={it.id}
+                                  type="button"
+                                  onClick={() => setSelectedItemIdForBreakdown(String(it.id))}
+                                  className={`text-left text-xs px-2.5 py-1.5 rounded-lg border transition-all shrink-0 max-w-[200px] cursor-pointer ${
+                                    isActive
+                                      ? 'border-blue-500 bg-blue-50/80 text-blue-900 font-semibold shadow-xs'
+                                      : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium'
+                                  }`}
+                                >
+                                  <div className="truncate text-[11.5px]">{it.tenHang || it.productName}</div>
+                                  <div className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
+                                    <span>SL: {it.soLuong}</span>
+                                    {itChecked && <span className="text-blue-600 font-bold">• Lập SX</span>}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* KHỐI THÔNG TIN SẢN PHẨM & CẤU HÌNH SẢN XUẤT (ĐÃ ĐƯA RA NGOÀI CARD CŨ) */}
+                      <div className="shrink-0 bg-slate-50 border border-slate-200 rounded-lg p-3 shadow-xs">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-2 flex-1 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              disabled={isApproved || !isManufactured}
+                              title={
+                                !isManufactured
+                                  ? 'Sản phẩm thương mại/mua ngoài (không thể lập lệnh sản xuất)'
+                                  : isApproved
+                                  ? 'Đơn hàng đã duyệt'
+                                  : 'Chọn sản xuất cho mặt hàng này'
+                              }
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setProductionItemIds((prev) => [...prev, String(activeItem.id)]);
+                                } else {
+                                  setProductionItemIds((prev) =>
+                                    prev.filter((id) => id !== String(activeItem.id))
+                                  );
+                                }
+                              }}
+                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 mt-0.5 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 shrink-0"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="font-bold text-slate-900 text-[13px] leading-snug">
+                                {activeItem.tenHang || activeItem.productName}
+                              </div>
+                              {activeItem.dinhMucCode && (
+                                <div className="mt-1 inline-flex items-center gap-1 text-[11px] text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 font-medium">
+                                  <Diagram3 size={11} className="shrink-0" />
+                                  <span className="truncate">{activeItem.dinhMucCode}: {activeItem.dinhMucTen || 'Định mức'}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <div className="text-[11px] text-slate-500">SL Đặt hàng</div>
+                            <div className="font-bold text-slate-900 text-[14px]">
+                              {activeItem.soLuong || 1} <span className="text-xs font-normal text-slate-600">{activeItem.donVi || 'sp'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Ghi chú định mức (nếu có) */}
+                        {(activeItem.dinhMucGhiChu || activeItem.bom?.ghiChu) && (
+                          <div className="mt-2 text-[11px] text-amber-900 bg-amber-50/90 px-2 py-1 rounded border border-amber-200">
+                            <span className="font-bold">Ghi chú ĐM: </span>
+                            <span>{activeItem.dinhMucGhiChu || activeItem.bom?.ghiChu}</span>
+                          </div>
+                        )}
+
+                        {/* Trạng thái tồn kho & Khả năng sản xuất */}
+                        <div className="mt-2 flex items-center justify-between gap-2 pt-2 border-t border-slate-200/70 text-xs">
+                          <div>
+                            {missingQty <= 0 ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                <CheckLg size={11} /> Đủ hàng trong kho
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                <ExclamationTriangle size={11} /> Thiếu: {missingQty} {activeItem.donVi || 'sp'}
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            {activeItem.canProduce ? (
+                              <span className="text-[11px] text-emerald-600 font-medium">
+                                ✓ Đủ phụ kiện để sản xuất
+                              </span>
+                            ) : activeItem.isManufactured ? (
+                              <span className="text-[11px] text-rose-600 font-medium">
+                                ⚠ Thiếu phụ kiện
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-slate-500 font-medium">
+                                Hàng mua ngoài
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* SỐ LƯỢNG CẦN SẢN XUẤT & NGÀY HOÀN THÀNH SẢN XUẤT */}
+                        {isManufactured && (
+                          <div className="mt-2.5 pt-2 border-t border-slate-200 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-bold text-slate-800">
+                                Số lượng cần sản xuất:
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  value={displayVal}
+                                  disabled={isApproved || !isChecked}
+                                  onChange={(e) => {
+                                    const text = e.target.value;
+                                    setProductionQuantities((prev) => ({
+                                      ...prev,
+                                      [activeItem.id]: text === '' ? '' : Math.max(1, parseInt(text, 10) || 1),
+                                    }));
+                                  }}
+                                  onBlur={(e) => {
+                                    const text = e.target.value.trim();
+                                    const num = parseInt(text, 10);
+                                    if (!text || isNaN(num) || num <= 0) {
+                                      setProductionQuantities((prev) => ({
+                                        ...prev,
+                                        [activeItem.id]: missingQty > 0 ? missingQty : Number(activeItem?.soLuong) || 1,
+                                      }));
+                                    }
+                                  }}
+                                  className="w-20 h-7 px-2 text-right font-bold text-blue-900 bg-white border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-xs disabled:bg-slate-100 disabled:text-slate-400 shadow-2xs"
+                                />
+                                <span className="text-xs text-slate-600 font-medium">{activeItem.donVi || 'sp'}</span>
+                              </div>
+                            </div>
+
+                            {/* Ô NHẬP NGÀY HOÀN THÀNH SẢN XUẤT */}
+                            <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/60">
+                              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                                <CalendarEvent size={13} className={isChecked ? 'text-blue-600' : 'text-slate-400'} />
+                                <span>Ngày hoàn thành sản xuất:</span>
+                              </div>
+                              <input
+                                type="date"
+                                min={new Date().toISOString().slice(0, 10)}
+                                value={productionDueDate}
+                                disabled={isApproved || !isChecked}
+                                onChange={(e) => {
+                                  const selectedDate = e.target.value;
+                                  const today = new Date().toISOString().slice(0, 10);
+                                  if (selectedDate && selectedDate < today) {
+                                    onShowToast?.('warning', 'Ngày không hợp lệ', 'Không thể chọn ngày hoàn thành trong quá khứ.');
+                                    return;
+                                  }
+                                  setProductionDueDate(selectedDate);
+                                }}
+                                className="h-7 px-2 font-semibold text-slate-900 bg-white border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-xs disabled:bg-slate-100 disabled:text-slate-400 shadow-2xs cursor-pointer disabled:cursor-not-allowed"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* DANH SÁCH VẬT TƯ: KHI ĐƠN HÀNG CẦN SẢN XUẤT THÌ HIỂN THỊ, KHI KHÔNG CẦN SX THÌ ẨN ĐI */}
+                      {isChecked ? (
+                        <div className="flex-1 min-h-0 flex flex-col mt-3">
+                          <div className="shrink-0 flex items-center justify-between pb-1.5">
+                            <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                              Bóc tách vật tư theo định mức
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-medium">
+                              {activeItem.vatTu?.length || 0} loại vật tư
+                            </span>
+                          </div>
+
+                          {activeItem.vatTu && activeItem.vatTu.length > 0 ? (
+                            <div className="flex-1 min-h-0 overflow-y-auto border border-slate-200 rounded-lg bg-white shadow-2xs divide-y divide-slate-100">
+                              {activeItem.vatTu.map((vt: any) => {
+                                const requiredMatQty = (Number(vt.dinhMucQty) || 1) * effectiveProdQty;
+                                const matStock = Number(vt.tonKho) || 0;
+                                const isMatEnough = matStock >= requiredMatQty;
+
+                                return (
+                                  <div key={vt.id} className="p-2.5 hover:bg-slate-50/80 transition-colors text-xs">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="font-semibold text-slate-900 leading-snug">
+                                        {vt.tenVatTu}
+                                        {vt.maVatTu && (
+                                          <span className="text-[10.5px] font-normal text-slate-400 ml-1.5">
+                                            ({vt.maVatTu})
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-right shrink-0 font-bold text-slate-900">
+                                        {requiredMatQty} <span className="font-normal text-slate-500 text-[11px]">{vt.donViTinh || 'cái'}</span>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between mt-1 text-[11px] text-slate-500">
+                                      <div>
+                                        Định mức: <strong className="text-slate-700">{vt.dinhMucQty}</strong> {vt.donViTinh}/sp • Tồn kho: <strong className={isMatEnough ? 'text-emerald-600' : 'text-rose-600'}>{matStock}</strong>
+                                      </div>
+                                      <span
+                                        className={`inline-flex items-center px-1.5 py-0.2 rounded font-semibold text-[10.5px] ${
+                                          isMatEnough
+                                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                            : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                        }`}
+                                      >
+                                        {isMatEnough ? 'Đủ vật tư' : `Thiếu ${requiredMatQty - matStock}`}
+                                      </span>
+                                    </div>
+
+                                    {vt.ghiChu && (
+                                      <div className="mt-1 text-[10.5px] text-slate-400 italic">
+                                        * Ghi chú: {vt.ghiChu}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="flex-1 min-h-0 flex flex-col items-center justify-center border border-dashed border-slate-200 rounded-lg bg-slate-50 text-slate-400 p-4 text-center">
+                              <BoxSeam size={24} className="mb-1 text-slate-300" />
+                              <p className="text-xs">Sản phẩm chưa cấu hình danh mục vật tư định mức</p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex-1 min-h-0 flex flex-col items-center justify-center border border-dashed border-slate-200 rounded-lg bg-slate-50/70 text-slate-400 p-6 text-center mt-3">
+                          <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mb-2">
+                            <CheckLg size={20} />
+                          </div>
+                          <div className="font-semibold text-slate-800 text-xs mb-1">
+                            {missingQty <= 0 ? 'Đủ hàng trong kho — Không cần sản xuất' : 'Chưa chọn lệnh sản xuất cho mặt hàng này'}
+                          </div>
+                          <p className="text-[11.5px] text-slate-500 max-w-xs">
+                            {missingQty <= 0
+                              ? 'Hàng hoá có sẵn trong kho để xuất trực tiếp cho đơn hàng. Nếu cần sản xuất bổ sung, vui lòng tích chọn ô "SX" phía trên.'
+                              : 'Tích chọn ô "SX" phía trên để mở khoá ngày hoàn thành và bóc tách vật tư.'}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
+              )}
+            </div>
+          ) : (
+            /* ════ MÀN HÌNH 1: CHI TIẾT ĐƠN HÀNG DÀNH CHO KẾ TOÁN DUYỆT ════ */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.85rem' }}>
+              {/* KHỐI 1: KHÁCH HÀNG & CÔNG NỢ */}
+              <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Khách hàng
+                    </span>
+                    {(() => {
+                      const grp = getCustomerGroupInfo(selectedOrder.customerGroup);
+                      return (
+                        <span
+                          style={{
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            fontSize: '0.68rem',
+                            fontWeight: 600,
+                            backgroundColor: grp.badgeBg,
+                            color: grp.badgeText,
+                            border: `1px solid ${grp.badgeBorder}`,
+                          }}
+                        >
+                          {grp.name}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  {/* Nút Xem Hàng Hoá */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="!py-0.5 !px-2 !text-[11px] !h-6"
+                    onClick={() => setShowItemsOffcanvas(true)}
+                    leftIcon={<BoxSeam size={12} className="text-blue-600" />}
+                  >
+                    Xem hàng hoá
+                  </Button>
+                </div>
+
+                <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>
+                  {selectedOrder.customerName}
+                </div>
+                {selectedOrder.customerAddress && (
+                  <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: '4px', display: 'flex', alignItems: 'flex-start', gap: '4px' }}>
+                    <GeoAlt size={12} className="shrink-0 mt-0.5 text-slate-400" />
+                    <span>{selectedOrder.customerAddress}</span>
+                  </div>
+                )}
+                <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Telephone size={12} className="shrink-0 text-slate-400" />
+                  <span>{selectedOrder.customerPhone || 'Chưa cập nhật SĐT'}</span>
+                </div>
+
+                {/* Hộp so sánh Công nợ vs Hạn mức */}
+                <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div style={{ backgroundColor: '#ffffff', padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                      <span style={{ fontSize: '0.7rem', color: '#64748b', display: 'block' }}>Công nợ hiện tại:</span>
+                      <strong
+                        style={{
+                          fontSize: '0.85rem',
+                          color: (selectedOrder.outstandingDebt || 0) > (selectedOrder.creditLimit || 0) && (selectedOrder.creditLimit || 0) > 0 ? '#dc2626' : '#0f172a',
+                        }}
+                      >
+                        {formatVND(selectedOrder.outstandingDebt || 0)}
+                      </strong>
+                    </div>
+                    <div style={{ backgroundColor: '#ffffff', padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                      <span style={{ fontSize: '0.7rem', color: '#64748b', display: 'block' }}>Hạn mức công nợ:</span>
+                      <strong style={{ fontSize: '0.85rem', color: '#0f172a' }}>
+                        {(selectedOrder.creditLimit || 0) > 0 ? formatVND(selectedOrder.creditLimit || 0) : 'Không giới hạn'}
+                      </strong>
+                    </div>
+                  </div>
+                  {(selectedOrder.outstandingDebt || 0) > (selectedOrder.creditLimit || 0) && (selectedOrder.creditLimit || 0) > 0 && (
+                    <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-700 bg-amber-50 px-2 py-1 rounded border border-amber-200">
+                      <ExclamationTriangle size={12} className="shrink-0" />
+                      <span>Cảnh báo: Khách hàng đang vượt hạn mức công nợ cho phép.</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* KHỐI 2: THÔNG TIN DUYỆT & TIẾN ĐỘ */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+                  Thông tin duyệt & Điều phối
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.8rem' }}>
+                  <div>
+                    <span style={{ color: '#64748b', display: 'block', fontSize: '0.72rem' }}>Trạng thái chung:</span>
                     <span
                       style={{
-                        padding: '2px 8px',
+                        display: 'inline-block',
+                        marginTop: '2px',
+                        padding: '1px 6px',
                         borderRadius: '4px',
-                        fontSize: '0.68rem',
+                        fontSize: '0.72rem',
                         fontWeight: 600,
-                        backgroundColor: grp.badgeBg,
-                        color: grp.badgeText,
-                        border: `1px solid ${grp.badgeBorder}`,
+                        backgroundColor:
+                          selectedOrder.status === 'cho_duyet' ? '#fef3c7' :
+                          selectedOrder.status === 'da_duyet' ? '#e0f2fe' :
+                          selectedOrder.status === 'dang_san_xuat' ? '#ede9fe' :
+                          selectedOrder.status === 'tu_choi' ? '#ffe4e6' : '#dcfce7',
+                        color:
+                          selectedOrder.status === 'cho_duyet' ? '#b45309' :
+                          selectedOrder.status === 'da_duyet' ? '#0369a1' :
+                          selectedOrder.status === 'dang_san_xuat' ? '#6d28d9' :
+                          selectedOrder.status === 'tu_choi' ? '#e11d48' : '#15803d',
                       }}
                     >
-                      {grp.name}
+                      {selectedOrder.status === 'cho_duyet' ? 'Chờ duyệt' :
+                       selectedOrder.status === 'da_duyet' ? 'Đã duyệt' :
+                       selectedOrder.status === 'dang_san_xuat' ? 'Đang sản xuất' :
+                       selectedOrder.status === 'tu_choi' ? 'Từ chối' : 'Hoàn tất'}
                     </span>
-                  );
-                })()}
-              </div>
-              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>
-                {selectedOrder.customerName}
-              </div>
-              {selectedOrder.customerAddress && (
-                <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: '4px' }}>
-                  Địa chỉ: <strong>{selectedOrder.customerAddress}</strong>
-                </div>
-              )}
-              <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: '2px' }}>
-                SĐT: <strong>{selectedOrder.customerPhone}</strong>
-              </div>
-            </div>
+                  </div>
 
-            {/* Thông tin thời gian */}
-            <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px' }}>
-              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
-                Thời gian & Trạng thái
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.8rem' }}>
-                <div>
-                  <span style={{ color: '#64748b', display: 'block', fontSize: '0.72rem' }}>Ngày đặt hàng:</span>
-                  <strong style={{ color: '#1e293b' }}>{selectedOrder.orderDate}</strong>
+                  <div>
+                    <span style={{ color: '#64748b', display: 'block', fontSize: '0.72rem' }}>Kế toán duyệt:</span>
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        marginTop: '2px',
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        backgroundColor:
+                          selectedOrder.keToanDuyet === 'approved' ? '#dcfce7' :
+                          selectedOrder.keToanDuyet === 'rejected' ? '#ffe4e6' : '#fef3c7',
+                        color:
+                          selectedOrder.keToanDuyet === 'approved' ? '#15803d' :
+                          selectedOrder.keToanDuyet === 'rejected' ? '#e11d48' : '#b45309',
+                      }}
+                    >
+                      {selectedOrder.keToanDuyet === 'approved' ? '✓ Đã phê duyệt' :
+                       selectedOrder.keToanDuyet === 'rejected' ? '✕ Đã từ chối' : '⏳ Chờ duyệt'}
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <span style={{ color: '#64748b', display: 'block', fontSize: '0.72rem' }}>Hạn giao hàng:</span>
-                  <strong style={{ color: '#1e293b' }}>{selectedOrder.deliveryDate}</strong>
-                </div>
-              </div>
-              <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: '#64748b', fontSize: '0.75rem' }}>Trạng thái đơn:</span>
-                <span
-                  style={{
-                    padding: '2px 8px',
-                    borderRadius: '9999px',
-                    fontSize: '0.72rem',
-                    fontWeight: 600,
-                    backgroundColor:
-                      selectedOrder.status === 'cho_duyet' ? '#fef3c7' :
-                      selectedOrder.status === 'da_duyet' ? '#e0f2fe' :
-                      selectedOrder.status === 'dang_san_xuat' ? '#ede9fe' : '#dcfce7',
-                    color:
-                      selectedOrder.status === 'cho_duyet' ? '#b45309' :
-                      selectedOrder.status === 'da_duyet' ? '#0369a1' :
-                      selectedOrder.status === 'dang_san_xuat' ? '#6d28d9' : '#15803d',
-                  }}
-                >
-                  {selectedOrder.status === 'cho_duyet' ? 'Chờ duyệt' :
-                   selectedOrder.status === 'da_duyet' ? 'Đã phê duyệt' :
-                   selectedOrder.status === 'dang_san_xuat' ? 'Đang sản xuất' : 'Hoàn tất'}
-                </span>
-              </div>
-            </div>
 
-            {/* Thông tin tài chính */}
-            <div style={{ backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '10px', padding: '12px' }}>
-              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#065f46', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
-                Giá trị tài chính
+                <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #f1f5f9', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.8rem' }}>
+                  <div>
+                    <span style={{ color: '#64748b', display: 'block', fontSize: '0.72rem' }}>Trạng thái kho:</span>
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        marginTop: '2px',
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        backgroundColor: selectedOrder.trangThaiKho === 'out_of_stock' ? '#fef3c7' : '#dcfce7',
+                        color: selectedOrder.trangThaiKho === 'out_of_stock' ? '#b45309' : '#15803d',
+                      }}
+                    >
+                      {selectedOrder.trangThaiKho === 'out_of_stock' ? 'Thiếu hàng' : 'Đủ hàng'}
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', display: 'block', fontSize: '0.72rem' }}>Người phụ trách:</span>
+                    <strong style={{ color: '#1e293b' }}>{selectedOrder.salesPerson || 'Phòng Kinh doanh'}</strong>
+                  </div>
+                </div>
+
+                {/* Các chứng từ tự động liên kết (nếu có) */}
+                {(selectedOrder.purchaseRequestCode || selectedOrder.stockMovementCode || selectedOrder.hasLenhXuatKho) && (
+                  <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #f1f5f9' }} className="space-y-1">
+                    {selectedOrder.purchaseRequestCode && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-blue-700 bg-blue-50 px-2 py-1 rounded">
+                        <FileEarmarkArrowDownFill size={11} className="shrink-0" />
+                        <span>Phiếu mua vật tư: <strong>{selectedOrder.purchaseRequestCode}</strong></span>
+                      </div>
+                    )}
+                    {(selectedOrder.stockMovementCode || selectedOrder.hasLenhXuatKho) && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 bg-emerald-50 px-2 py-1 rounded">
+                        <SendCheckFill size={11} className="shrink-0" />
+                        <span>Lệnh xuất kho: <strong>{selectedOrder.stockMovementCode || 'Đã tạo lệnh xuất'}</strong></span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #f1f5f9', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.8rem' }}>
+                  <div>
+                    <span style={{ color: '#64748b', display: 'block', fontSize: '0.72rem' }}>Ngày đặt hàng:</span>
+                    <strong style={{ color: '#1e293b' }}>{selectedOrder.orderDate}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', display: 'block', fontSize: '0.72rem' }}>Hạn giao hàng:</span>
+                    <strong style={{ color: '#1e293b' }}>{selectedOrder.deliveryDate}</strong>
+                  </div>
+                </div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <span style={{ color: '#047857', fontSize: '0.8rem' }}>Tổng giá trị:</span>
-                <strong style={{ fontSize: '1.05rem', color: '#0f172a' }}>{formatVND(selectedOrder.totalAmount)}</strong>
+
+              {/* KHỐI 3: THANH TOÁN */}
+              <div style={{ backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '10px', padding: '12px' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#065f46', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+                  Thanh toán
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <span style={{ color: '#047857', fontSize: '0.8rem' }}>Tổng tiền đơn hàng:</span>
+                  <strong style={{ fontSize: '1.05rem', color: '#0f172a' }}>{formatVND(selectedOrder.totalAmount)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px', borderTop: '1px solid #d1fae5' }}>
+                  <span style={{ color: '#047857', fontSize: '0.8rem' }}>Đã nhận thanh toán:</span>
+                  <strong style={{ color: '#059669' }}>{formatVND(selectedOrder.paidAmount)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px', marginTop: '4px', borderTop: '1px dashed #a7f3d0' }}>
+                  <span style={{ color: '#047857', fontSize: '0.8rem' }}>Còn phải thu:</span>
+                  <strong style={{ color: selectedOrder.totalAmount - selectedOrder.paidAmount > 0 ? '#dc2626' : '#059669' }}>
+                    {formatVND(Math.max(0, selectedOrder.totalAmount - selectedOrder.paidAmount))}
+                  </strong>
+                </div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '6px', borderTop: '1px solid #d1fae5' }}>
-                <span style={{ color: '#047857', fontSize: '0.8rem' }}>Đã thanh toán:</span>
-                <strong style={{ color: '#059669' }}>{formatVND(selectedOrder.paidAmount)}</strong>
+
+              {/* KHỐI 4: GHI CHÚ & VẬT TƯ SẢN XUẤT */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
+                  Vật tư sản xuất & Linh kiện
+                </div>
+                <div className="flex items-center justify-between text-xs py-1">
+                  <span className="text-slate-600">Trạng thái linh kiện:</span>
+                  <span className="font-semibold text-slate-800">
+                    {fetchingOrderDetails
+                      ? 'Đang kiểm tra...'
+                      : orderDetails.some((it: any) => !it.canProduce && it.isManufactured && Number(it.missingQty || 0) > 0)
+                      ? '⚠ Thiếu vật tư sản xuất'
+                      : '✓ Đủ điều kiện'}
+                  </span>
+                </div>
+                {selectedOrder.ghiChu && (
+                  <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #f1f5f9', fontSize: '0.78rem', color: '#475569' }}>
+                    <span style={{ color: '#64748b', display: 'block', fontSize: '0.7rem', fontWeight: 600 }}>Ghi chú:</span>
+                    <span>{selectedOrder.ghiChu}</span>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
+          )}
         </Offcanvas>
       )}
+
+      {/* ── CONFIRM DIALOG XÁC NHẬN XÓA ĐƠN HÀNG ĐƠN LẺ ── */}
+      <ConfirmDialog
+        isOpen={showSingleOrderDeleteConfirm}
+        title="Xác nhận xóa dữ liệu đơn hàng"
+        message={`Bạn có chắc chắn muốn xóa đơn hàng "${selectedOrder?.code || ''}" khỏi hệ thống? Dữ liệu sau khi xóa sẽ không thể phục hồi.`}
+        variant="danger"
+        confirmText="Xác nhận xóa"
+        cancelText="Hủy bỏ"
+        onConfirm={() => {
+          if (selectedOrder) {
+            handleDeleteSingleOrder(selectedOrder.id);
+          }
+        }}
+        onClose={() => setShowSingleOrderDeleteConfirm(false)}
+      />
 
       {/* ── CONFIRM DIALOG XÁC NHẬN XÓA DỮ LIỆU HÀNG LOẠT ── */}
       <ConfirmDialog

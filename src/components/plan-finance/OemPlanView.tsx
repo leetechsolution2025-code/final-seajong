@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { StandardPage } from "@/components/layout/StandardPage";
 import { FullWidthTable } from "@/components/common/FullWidthTable";
+import { Toggle } from "@/components/common/Toggle";
 import { WorkflowCard } from "@/components/ui/WorkflowCard";
 import { ModernStepper, ModernStepItem } from "@/components/ui/ModernStepper";
 import { SectionTitle } from "@/components/ui/SectionTitle";
@@ -1355,24 +1356,41 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
     <>
       {currentStep === 1 ? (
         /* STEP 1: CHỈ TIÊU CƠ BẢN */
-        <div className="container-fluid px-3 pb-3 bom-plan-step1-container">
-          <div className="row g-4 bom-plan-step1-row">
+        <div className="bom-plan-step1-wrapper">
+          {/* Mobile Sub-tabs for Step 1 */}
+          <div className="bom-plan-mobile-step1-tabs">
+            <button
+              type="button"
+              className={`bom-labor-mobile-subtab-btn ${mobileStep1Tab === "revenue" ? "is-active" : ""}`}
+              onClick={() => setMobileStep1Tab("revenue")}
+            >
+              <i className="bi bi-graph-up" /> Chỉ tiêu Doanh thu
+            </button>
+            <button
+              type="button"
+              className={`bom-labor-mobile-subtab-btn ${mobileStep1Tab === "cost" ? "is-active" : ""}`}
+              onClick={() => setMobileStep1Tab("cost")}
+            >
+              <i className="bi bi-cash-coin" /> Định mức Chi phí
+            </button>
+          </div>
 
+          <div className="bom-plan-step1-grid bom-plan-step1-row">
             {/* Column 1: Năm kế hoạch */}
-            <div className="col-12 col-lg-4">
+            <div className="bom-plan-step1-col bom-plan-col-year">
               <div className="card h-100 border rounded-4 overflow-hidden bom-plan-year-card">
-                <div className="card-header bg-light border-bottom p-3 bom-hide-mobile">
+                <div className="card-header bg-light border-bottom px-3 d-flex align-items-center bom-hide-mobile" style={{ minHeight: 42 }}>
                   <SectionTitle title="Năm kế hoạch" icon="bi-calendar3" className="mb-0" />
                 </div>
-                <div className="card-body p-3 d-flex flex-column gap-3 bom-plan-year-card-body">
-                  <div>
+                <div className="card-body p-3 d-flex flex-column gap-2.5 bom-plan-year-card-body">
+                  <div className="flex-shrink-0">
                     <label className="form-label text-muted fw-semibold mb-1 bom-hide-mobile" style={{ fontSize: 12 }}>Chọn năm lập kế hoạch</label>
-                    <div className="d-flex align-items-center gap-1" style={{ height: 38 }}>
+                    <div className="d-flex align-items-center gap-1" style={{ height: 36 }}>
                       <select
                         className="form-select fw-bold flex-grow-1 h-100"
                         value={year}
                         disabled
-                        style={{ fontSize: 14 }}
+                        style={{ fontSize: 13.5, paddingTop: 4, paddingBottom: 4 }}
                       >
                         <option value={2025}>Năm 2025</option>
                         <option value={2026}>Năm 2026</option>
@@ -1384,7 +1402,7 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                         onClick={handleSavePlan}
                         style={{
                           flexShrink: 0,
-                          width: 36, height: 38,
+                          width: 36, height: 36,
                           border: "1px solid #dee2e6",
                           borderRadius: 8,
                           background: "#fff",
@@ -1405,7 +1423,7 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                         onClick={() => setIsPrintOpen(true)}
                         style={{
                           flexShrink: 0,
-                          width: 36, height: 38,
+                          width: 36, height: 36,
                           border: "1px solid #dee2e6",
                           borderRadius: 8,
                           background: "#fff",
@@ -1414,7 +1432,6 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                           cursor: "pointer",
                           transition: "background 0.15s, border-color 0.15s, color 0.15s",
                           fontSize: 15,
-                          marginRight: 6
                         }}
                         onMouseEnter={e => { e.currentTarget.style.background = "#f0f0f0"; e.currentTarget.style.borderColor = "#adb5bd"; e.currentTarget.style.color = "#343a40"; }}
                         onMouseLeave={e => { e.currentTarget.style.background = "#fff"; e.currentTarget.style.borderColor = "#dee2e6"; e.currentTarget.style.color = "#6c757d"; }}
@@ -1427,7 +1444,7 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                         onClick={() => handleAiAnalysis()}
                         style={{
                           flexShrink: 0,
-                          width: 36, height: 38,
+                          width: 36, height: 36,
                           border: "1px solid #6d28d9",
                           borderRadius: 8,
                           background: "#6d28d9",
@@ -1449,7 +1466,7 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                   <div className="d-flex flex-column gap-2 bom-plan-kpi-grid">
 
                     {/* Tổng Lợi Nhuận */}
-                    <div className="py-2 px-3 rounded-3 bom-plan-kpi-box bom-plan-kpi-full" style={{
+                    <div className="py-2.5 px-3 rounded-3 bom-plan-kpi-box bom-plan-kpi-full" style={{
                       backgroundColor: valTotalProfit >= 0 ? "rgba(16, 185, 129, 0.05)" : "rgba(239, 68, 68, 0.05)",
                       border: valTotalProfit >= 0 ? "1px solid rgba(16, 185, 129, 0.15)" : "1px solid rgba(239, 68, 68, 0.15)"
                     }}>
@@ -1468,8 +1485,8 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                       </h4>
                     </div>
 
-                    {/* Biên Lợi Nhuận */}
-                    <div className="py-2 px-3 rounded-3 bom-plan-kpi-box" style={{
+                    {/* Biên Lợi Nhuận Gộp */}
+                    <div className="py-2.5 px-3 rounded-3 bom-plan-kpi-box" style={{
                       backgroundColor: "rgba(59, 130, 246, 0.05)",
                       border: "1px solid rgba(59, 130, 246, 0.15)"
                     }}>
@@ -1489,7 +1506,7 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
                     </div>
 
                     {/* Biên Lợi Nhuận Hoạt Động */}
-                    <div className="py-2 px-3 rounded-3 bom-plan-kpi-box" style={{
+                    <div className="py-2.5 px-3 rounded-3 bom-plan-kpi-box" style={{
                       backgroundColor: "rgba(139, 92, 246, 0.05)",
                       border: "1px solid rgba(139, 92, 246, 0.15)"
                     }}>
@@ -1513,75 +1530,57 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
               </div>
             </div>
 
-            {/* Mobile Sub-tabs for Step 1 */}
-            <div className="col-12 bom-show-mobile-block" style={{ display: "none" }}>
-              <div className="bom-plan-mobile-subtabs">
-                <button
-                  type="button"
-                  className={`bom-labor-mobile-subtab-btn ${mobileStep1Tab === "revenue" ? "is-active" : ""}`}
-                  onClick={() => setMobileStep1Tab("revenue")}
-                >
-                  <i className="bi bi-graph-up" /> Chỉ tiêu Doanh thu
-                </button>
-                <button
-                  type="button"
-                  className={`bom-labor-mobile-subtab-btn ${mobileStep1Tab === "cost" ? "is-active" : ""}`}
-                  onClick={() => setMobileStep1Tab("cost")}
-                >
-                  <i className="bi bi-cash-coin" /> Định mức Chi phí
-                </button>
-              </div>
-            </div>
-
             {/* Column 2: Doanh Thu */}
-            <div className={`col-12 col-lg-4 ${mobileStep1Tab !== "revenue" ? "bom-plan-mobile-hidden" : ""}`}>
+            <div className={`bom-plan-step1-col bom-plan-col-revenue ${mobileStep1Tab !== "revenue" ? "bom-plan-mobile-hidden" : ""}`}>
               <div className="card h-100 border rounded-4 overflow-hidden">
-                <div className="card-header bg-light border-bottom p-3 bom-plan-card-header">
+                <div className="card-header bg-light border-bottom px-3 d-flex align-items-center bom-plan-card-header" style={{ minHeight: 42 }}>
                   <SectionTitle title="Chỉ tiêu Doanh thu" icon="bi-graph-up" className="mb-0" />
                 </div>
 
-                <div className="card-body p-3 d-flex flex-column gap-3 bom-plan-card-body">
+                <div className="card-body p-3 d-flex flex-column gap-2.5 bom-plan-card-body">
                   {/* Tổng Doanh Thu */}
-                  <div className="py-2 px-3 rounded-3 bom-plan-kpi-box bom-plan-kpi-full" style={{ backgroundColor: "rgba(0, 0, 139, 0.05)", border: "1px solid rgba(0, 0, 139, 0.15)" }}>
-                    <label className="fw-extrabold mb-1" style={{ fontSize: 11.5, letterSpacing: "0.03em", fontWeight: 800, color: "darkblue" }}>TỔNG DOANH THU</label>
+                  <div className="py-2 px-3 rounded-3 flex-shrink-0 bom-plan-kpi-box bom-plan-kpi-full" style={{ backgroundColor: "rgba(0, 0, 139, 0.05)", border: "1px solid rgba(0, 0, 139, 0.15)" }}>
+                    <label className="fw-extrabold mb-0.5 d-block" style={{ fontSize: 11.5, letterSpacing: "0.03em", fontWeight: 800, color: "darkblue" }}>TỔNG DOANH THU</label>
                     <h4 className="fw-black mb-0" style={{ fontWeight: 900, color: "darkblue", fontSize: 20 }}>
                       {totalRevenue.toLocaleString("vi-VN")} <span style={{ fontSize: 14, fontWeight: 700, color: "darkblue" }}>đ</span>
                     </h4>
                   </div>
 
-                  {/* Doanh thu từ đại lý */}
-                  <div>
-                    <label className="form-label text-muted fw-semibold mb-1" style={{ fontSize: 12 }}>Doanh thu từ đại lý</label>
-                    <div className="input-group input-group-sm">
-                      <input
-                        type="text"
-                        className="form-control fw-bold money-input-field"
-                        value={formatVNDInput(revenueAgent)}
-                        onChange={handleNumericChange(setRevenueAgent)}
-                        onKeyDown={handleMoneyKeyDown}
-                      />
-                      <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                      <span className="input-group-text bg-light text-primary fw-bold" style={{ minWidth: 65, justifyContent: "center" }}>
-                        {totalRevenue > 0 ? ((Number(revenueAgent) || 0) / totalRevenue * 100).toFixed(1) : "0.0"}%
-                      </span>
+                  <div className="bom-plan-step1-fields-distribute">
+                    {/* Doanh thu từ đại lý */}
+                    <div>
+                      <label className="form-label text-muted fw-semibold mb-1" style={{ fontSize: 12 }}>Doanh thu từ đại lý</label>
+                      <div className="input-group input-group-sm">
+                        <input
+                          type="text"
+                          className="form-control fw-bold money-input-field"
+                          value={formatVNDInput(revenueAgent)}
+                          onChange={handleNumericChange(setRevenueAgent)}
+                          onKeyDown={handleMoneyKeyDown}
+                        />
+                        <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                        <span className="input-group-text bg-light text-primary fw-bold" style={{ minWidth: 65, justifyContent: "center" }}>
+                          {totalRevenue > 0 ? ((Number(revenueAgent) || 0) / totalRevenue * 100).toFixed(1) : "0.0"}%
+                        </span>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Doanh thu OEM */}
-                  <div>
-                    <label className="form-label text-muted fw-semibold mb-1" style={{ fontSize: 12 }}>Doanh thu từ bán lẻ</label>
-                    <div className="input-group input-group-sm">
-                      <input
-                        type="text"
-                        className="form-control fw-bold money-input-field"
-                        value={formatVNDInput(revenueOEM)}
-                        onChange={handleNumericChange(setRevenueOEM)}
-                        onKeyDown={handleMoneyKeyDown}
-                      />
-                      <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                      <span className="input-group-text bg-light text-primary fw-bold" style={{ minWidth: 65, justifyContent: "center" }}>
-                        {totalRevenue > 0 ? ((Number(revenueOEM) || 0) / totalRevenue * 100).toFixed(1) : "0.0"}%
-                      </span>
+                    {/* Doanh thu OEM */}
+                    <div>
+                      <label className="form-label text-muted fw-semibold mb-1" style={{ fontSize: 12 }}>Doanh thu từ bán lẻ</label>
+                      <div className="input-group input-group-sm">
+                        <input
+                          type="text"
+                          className="form-control fw-bold money-input-field"
+                          value={formatVNDInput(revenueOEM)}
+                          onChange={handleNumericChange(setRevenueOEM)}
+                          onKeyDown={handleMoneyKeyDown}
+                        />
+                        <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                        <span className="input-group-text bg-light text-primary fw-bold" style={{ minWidth: 65, justifyContent: "center" }}>
+                          {totalRevenue > 0 ? ((Number(revenueOEM) || 0) / totalRevenue * 100).toFixed(1) : "0.0"}%
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -1590,300 +1589,283 @@ export default function OemPlanView({ currentStep, year, onProfitChange }: { cur
             </div>
 
             {/* Column 3: Chi Phí */}
-            <div className={`col-12 col-lg-4 ${mobileStep1Tab !== "cost" ? "bom-plan-mobile-hidden" : ""}`}>
+            <div className={`bom-plan-step1-col bom-plan-col-cost ${mobileStep1Tab !== "cost" ? "bom-plan-mobile-hidden" : ""}`}>
               <div className="card h-100 border rounded-4 overflow-hidden">
-                <div className="card-header bg-light border-bottom px-3 d-flex align-items-center justify-content-between bom-plan-card-header" style={{ paddingTop: 10, paddingBottom: 10 }}>
+                <div className="card-header bg-light border-bottom px-3 d-flex align-items-center justify-content-between bom-plan-card-header" style={{ minHeight: 42 }}>
                   <SectionTitle title="Định mức Chi phí" icon="bi-cash-coin" className="mb-0" />
-                  <div className="form-check form-switch mb-0 d-flex align-items-center gap-2 flex-shrink-0" style={{ whiteSpace: "nowrap" }}>
-                    <input
-                      className="form-check-input ms-0"
-                      type="checkbox"
-                      role="switch"
-                      id="calcByRevenueSwitch"
+                  <div className="d-flex align-items-center flex-shrink-0" style={{ whiteSpace: "nowrap" }}>
+                    <Toggle
                       checked={isCalculateByRevenue}
-                      onChange={(e) => handleToggleStep1CalcByRev(e.target.checked)}
-                      style={{ cursor: "pointer" }}
+                      onChange={handleToggleStep1CalcByRev}
+                      label="Tính theo doanh thu"
                     />
-                    <label className="form-check-label fw-semibold text-dark mb-0" htmlFor="calcByRevenueSwitch" style={{ fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
-                      Tính theo doanh thu
-                    </label>
                   </div>
                 </div>
 
-                <div className="card-body p-3 d-flex flex-column gap-1 bom-plan-card-body">
+                <div className="card-body p-3 d-flex flex-column gap-2 bom-plan-card-body">
                   {/* Định Mức Tổng Chi Phí */}
-                  <div className="py-2 px-3 rounded-3 bg-danger-subtle/30 border border-danger/20 bom-plan-kpi-box bom-plan-kpi-full">
-                    <label className="text-danger fw-extrabold mb-1" style={{ fontSize: 11.5, letterSpacing: "0.03em", fontWeight: 800 }}>ĐỊNH MỨC TỔNG CHI PHÍ</label>
+                  <div
+                    className="py-2 px-3 rounded-3 flex-shrink-0 bom-plan-kpi-box bom-plan-kpi-full"
+                    style={{
+                      backgroundColor: "rgba(239, 68, 68, 0.05)",
+                      border: "1px solid rgba(239, 68, 68, 0.15)"
+                    }}
+                  >
+                    <label className="text-danger fw-extrabold mb-0.5 d-block" style={{ fontSize: 11.5, letterSpacing: "0.03em", fontWeight: 800 }}>ĐỊNH MỨC TỔNG CHI PHÍ</label>
                     <h4 className="fw-black text-danger mb-0" style={{ fontWeight: 900, fontSize: 20 }}>
                       {totalCost.toLocaleString("vi-VN")} <span style={{ fontSize: 14, fontWeight: 700 }}>đ</span>
                     </h4>
                   </div>
 
-                  <div className="row g-2">
-                    {/* Khấu trừ doanh thu */}
-                    <div className="col-6">
-                      <label className="form-label text-muted fw-semibold mb-0" style={{ fontSize: 12, marginBottom: 1 }}>Khấu trừ doanh thu</label>
-                      <div className="input-group input-group-sm">
-                        <input
-                          type="text"
-                          className="form-control fw-bold percent-input-field"
-                          value={revenueDeductionPercent}
-                          onChange={(e) => {
-                            const raw = e.target.value.replace(/[^0-9.]/g, "");
-                            setRevenueDeductionPercent(raw);
-                          }}
-                          onKeyDown={handlePercentKeyDown}
-                        />
-                        <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>%</span>
+                  <div className="bom-plan-step1-fields-distribute">
+                    <div className="row g-2">
+                      {/* Khấu trừ doanh thu */}
+                      <div className="col-6">
+                        <label className="form-label text-muted fw-semibold mb-0.5" style={{ fontSize: 12 }}>Khấu trừ doanh thu</label>
+                        <div className="input-group input-group-sm">
+                          <input
+                            type="text"
+                            className="form-control fw-bold percent-input-field"
+                            value={revenueDeductionPercent}
+                            onChange={(e) => {
+                              const raw = e.target.value.replace(/[^0-9.]/g, "");
+                              setRevenueDeductionPercent(raw);
+                            }}
+                            onKeyDown={handlePercentKeyDown}
+                          />
+                          <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>%</span>
+                        </div>
+                      </div>
+
+                      {/* Giá bán hàng */}
+                      <div className="col-6">
+                        <label className="form-label text-muted fw-semibold mb-0.5" style={{ fontSize: 12 }}>Giá bán hàng</label>
+                        <div className="input-group input-group-sm">
+                          <input
+                            type="text"
+                            className="form-control fw-bold percent-input-field"
+                            value={cogsPercent}
+                            onChange={(e) => {
+                              const raw = e.target.value.replace(/[^0-9.]/g, "");
+                              setCogsPercent(raw);
+                            }}
+                            onKeyDown={handlePercentKeyDown}
+                          />
+                          <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>%</span>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Giá bán hàng */}
-                    <div className="col-6">
-                      <label className="form-label text-muted fw-semibold mb-0" style={{ fontSize: 12, marginBottom: 1 }}>Giá bán hàng</label>
+                    {/* Công tác kinh doanh */}
+                    <div>
+                      <label className="form-label text-muted fw-semibold mb-0.5" style={{ fontSize: 12 }}>Công tác kinh doanh</label>
                       <div className="input-group input-group-sm">
-                        <input
-                          type="text"
-                          className="form-control fw-bold percent-input-field"
-                          value={cogsPercent}
-                          onChange={(e) => {
-                            const raw = e.target.value.replace(/[^0-9.]/g, "");
-                            setCogsPercent(raw);
-                          }}
-                          onKeyDown={handlePercentKeyDown}
-                        />
-                        <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>%</span>
+                        {isCalculateByRevenue ? (
+                          <>
+                            <input
+                              type="text"
+                              className="form-control fw-bold text-danger text-center percent-input-field"
+                              style={{ maxWidth: 50 }}
+                              value={costSalesPercent}
+                              onChange={(e) => {
+                                const raw = e.target.value.replace(/[^0-9.]/g, "");
+                                setCostSalesPercent(raw);
+                              }}
+                              onKeyDown={handlePercentKeyDown}
+                              placeholder="0.0"
+                            />
+                            <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
+                            <input
+                              type="text"
+                              className="form-control fw-bold"
+                              value={formatVNDInput(finalCostSales.toString())}
+                              disabled
+                            />
+                            <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                          </>
+                        ) : (
+                          <>
+                            <input
+                              type="text"
+                              className="form-control fw-bold money-input-field"
+                              value={formatVNDInput(costSales)}
+                              onChange={handleNumericChange(setCostSales)}
+                              onKeyDown={handleMoneyKeyDown}
+                            />
+                            <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Kế toán và nhân sự */}
+                    <div>
+                      <label className="form-label text-muted fw-semibold mb-0.5" style={{ fontSize: 12 }}>Kế toán và nhân sự</label>
+                      <div className="input-group input-group-sm">
+                        {isCalculateByRevenue ? (
+                          <>
+                            <input
+                              type="text"
+                              className="form-control fw-bold text-danger text-center percent-input-field"
+                              style={{ maxWidth: 50 }}
+                              value={costFinanceHRPercent}
+                              onChange={(e) => {
+                                const raw = e.target.value.replace(/[^0-9.]/g, "");
+                                setCostFinanceHRPercent(raw);
+                              }}
+                              onKeyDown={handlePercentKeyDown}
+                              placeholder="0.0"
+                            />
+                            <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
+                            <input
+                              type="text"
+                              className="form-control fw-bold"
+                              value={formatVNDInput(finalCostFinanceHR.toString())}
+                              disabled
+                            />
+                            <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                          </>
+                        ) : (
+                          <>
+                            <input
+                              type="text"
+                              className="form-control fw-bold money-input-field"
+                              value={formatVNDInput(costFinanceHR)}
+                              onChange={handleNumericChange(setCostFinanceHR)}
+                              onKeyDown={handleMoneyKeyDown}
+                            />
+                            <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Kho vận */}
+                    <div>
+                      <label className="form-label text-muted fw-semibold mb-0.5" style={{ fontSize: 12 }}>Kho vận</label>
+                      <div className="input-group input-group-sm">
+                        {isCalculateByRevenue ? (
+                          <>
+                            <input
+                              type="text"
+                              className="form-control fw-bold text-danger text-center percent-input-field"
+                              style={{ maxWidth: 50 }}
+                              value={costLogisticsPercent}
+                              onChange={(e) => {
+                                const raw = e.target.value.replace(/[^0-9.]/g, "");
+                                setCostLogisticsPercent(raw);
+                              }}
+                              onKeyDown={handlePercentKeyDown}
+                              placeholder="0.0"
+                            />
+                            <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
+                            <input
+                              type="text"
+                              className="form-control fw-bold"
+                              value={formatVNDInput(finalCostLogistics.toString())}
+                              disabled
+                            />
+                            <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                          </>
+                        ) : (
+                          <>
+                            <input
+                              type="text"
+                              className="form-control fw-bold money-input-field"
+                              value={formatVNDInput(costLogistics)}
+                              onChange={handleNumericChange(setCostLogistics)}
+                              onKeyDown={handleMoneyKeyDown}
+                            />
+                            <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Sản xuất */}
+                    <div>
+                      <label className="form-label text-muted fw-semibold mb-0.5" style={{ fontSize: 12 }}>Sản xuất</label>
+                      <div className="input-group input-group-sm">
+                        {isCalculateByRevenue ? (
+                          <>
+                            <input
+                              type="text"
+                              className="form-control fw-bold text-danger text-center percent-input-field"
+                              style={{ maxWidth: 50 }}
+                              value={costMarketingPercent}
+                              onChange={(e) => {
+                                const raw = e.target.value.replace(/[^0-9.]/g, "");
+                                setCostMarketingPercent(raw);
+                              }}
+                              onKeyDown={handlePercentKeyDown}
+                              placeholder="0.0"
+                            />
+                            <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
+                            <input
+                              type="text"
+                              className="form-control fw-bold"
+                              value={formatVNDInput(finalCostMarketing.toString())}
+                              disabled
+                            />
+                            <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                          </>
+                        ) : (
+                          <>
+                            <input
+                              type="text"
+                              className="form-control fw-bold money-input-field"
+                              value={formatVNDInput(costMarketing)}
+                              onChange={handleNumericChange(setCostMarketing)}
+                              onKeyDown={handleMoneyKeyDown}
+                            />
+                            <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Vận hành hệ thống */}
+                    <div>
+                      <label className="form-label text-muted fw-semibold mb-0.5" style={{ fontSize: 12 }}>Vận hành hệ thống</label>
+                      <div className="input-group input-group-sm">
+                        {isCalculateByRevenue ? (
+                          <>
+                            <input
+                              type="text"
+                              className="form-control fw-bold text-danger text-center percent-input-field"
+                              style={{ maxWidth: 50 }}
+                              value={costOperationsPercent}
+                              onChange={(e) => {
+                                const raw = e.target.value.replace(/[^0-9.]/g, "");
+                                setCostOperationsPercent(raw);
+                              }}
+                              onKeyDown={handlePercentKeyDown}
+                              placeholder="0.0"
+                            />
+                            <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
+                            <input
+                              type="text"
+                              className="form-control fw-bold"
+                              value={formatVNDInput(finalCostOperations.toString())}
+                              disabled
+                            />
+                            <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                          </>
+                        ) : (
+                          <>
+                            <input
+                              type="text"
+                              className="form-control fw-bold money-input-field"
+                              value={formatVNDInput(costOperations)}
+                              onChange={handleNumericChange(setCostOperations)}
+                              onKeyDown={handleMoneyKeyDown}
+                            />
+                            <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
-
-                  {/* Công tác kinh doanh */}
-                  <div>
-                    <label className="form-label text-muted fw-semibold mb-0" style={{ fontSize: 12, marginBottom: 1 }}>Công tác kinh doanh</label>
-                    <div className="input-group input-group-sm">
-                      {isCalculateByRevenue ? (
-                        <>
-                          {/* % DT ở đầu */}
-                          <input
-                            type="text"
-                            className="form-control fw-bold text-danger text-center percent-input-field"
-                            style={{ maxWidth: 50 }}
-                            value={costSalesPercent}
-                            onChange={(e) => {
-                              const raw = e.target.value.replace(/[^0-9.]/g, "");
-                              setCostSalesPercent(raw);
-                            }}
-                            onKeyDown={handlePercentKeyDown}
-                            placeholder="0.0"
-                          />
-                          <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
-
-                          {/* Ô giá trị chi phí bị khóa */}
-                          <input
-                            type="text"
-                            className="form-control fw-bold"
-                            value={formatVNDInput(finalCostSales.toString())}
-                            disabled
-                          />
-                          <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                        </>
-                      ) : (
-                        <>
-                          <input
-                            type="text"
-                            className="form-control fw-bold money-input-field"
-                            value={formatVNDInput(costSales)}
-                            onChange={handleNumericChange(setCostSales)}
-                            onKeyDown={handleMoneyKeyDown}
-                          />
-                          <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Kế toán và nhân sự */}
-                  <div>
-                    <label className="form-label text-muted fw-semibold mb-0" style={{ fontSize: 12, marginBottom: 1 }}>Kế toán và nhân sự</label>
-                    <div className="input-group input-group-sm">
-                      {isCalculateByRevenue ? (
-                        <>
-                          {/* % DT ở đầu */}
-                          <input
-                            type="text"
-                            className="form-control fw-bold text-danger text-center percent-input-field"
-                            style={{ maxWidth: 50 }}
-                            value={costFinanceHRPercent}
-                            onChange={(e) => {
-                              const raw = e.target.value.replace(/[^0-9.]/g, "");
-                              setCostFinanceHRPercent(raw);
-                            }}
-                            onKeyDown={handlePercentKeyDown}
-                            placeholder="0.0"
-                          />
-                          <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
-
-                          {/* Ô giá trị chi phí bị khóa */}
-                          <input
-                            type="text"
-                            className="form-control fw-bold"
-                            value={formatVNDInput(finalCostFinanceHR.toString())}
-                            disabled
-                          />
-                          <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                        </>
-                      ) : (
-                        <>
-                          <input
-                            type="text"
-                            className="form-control fw-bold money-input-field"
-                            value={formatVNDInput(costFinanceHR)}
-                            onChange={handleNumericChange(setCostFinanceHR)}
-                            onKeyDown={handleMoneyKeyDown}
-                          />
-                          <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Kho vận */}
-                  <div>
-                    <label className="form-label text-muted fw-semibold mb-0" style={{ fontSize: 12, marginBottom: 1 }}>Kho vận</label>
-                    <div className="input-group input-group-sm">
-                      {isCalculateByRevenue ? (
-                        <>
-                          {/* % DT ở đầu */}
-                          <input
-                            type="text"
-                            className="form-control fw-bold text-danger text-center percent-input-field"
-                            style={{ maxWidth: 50 }}
-                            value={costLogisticsPercent}
-                            onChange={(e) => {
-                              const raw = e.target.value.replace(/[^0-9.]/g, "");
-                              setCostLogisticsPercent(raw);
-                            }}
-                            onKeyDown={handlePercentKeyDown}
-                            placeholder="0.0"
-                          />
-                          <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
-
-                          {/* Ô giá trị chi phí bị khóa */}
-                          <input
-                            type="text"
-                            className="form-control fw-bold"
-                            value={formatVNDInput(finalCostLogistics.toString())}
-                            disabled
-                          />
-                          <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                        </>
-                      ) : (
-                        <>
-                          <input
-                            type="text"
-                            className="form-control fw-bold money-input-field"
-                            value={formatVNDInput(costLogistics)}
-                            onChange={handleNumericChange(setCostLogistics)}
-                            onKeyDown={handleMoneyKeyDown}
-                          />
-                          <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Sản xuất */}
-                  <div>
-                    <label className="form-label text-muted fw-semibold mb-0" style={{ fontSize: 12, marginBottom: 1 }}>Sản xuất</label>
-                    <div className="input-group input-group-sm">
-                      {isCalculateByRevenue ? (
-                        <>
-                          {/* % DT ở đầu */}
-                          <input
-                            type="text"
-                            className="form-control fw-bold text-danger text-center percent-input-field"
-                            style={{ maxWidth: 50 }}
-                            value={costMarketingPercent}
-                            onChange={(e) => {
-                              const raw = e.target.value.replace(/[^0-9.]/g, "");
-                              setCostMarketingPercent(raw);
-                            }}
-                            onKeyDown={handlePercentKeyDown}
-                            placeholder="0.0"
-                          />
-                          <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
-
-                          {/* Ô giá trị chi phí bị khóa */}
-                          <input
-                            type="text"
-                            className="form-control fw-bold"
-                            value={formatVNDInput(finalCostMarketing.toString())}
-                            disabled
-                          />
-                          <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                        </>
-                      ) : (
-                        <>
-                          <input
-                            type="text"
-                            className="form-control fw-bold money-input-field"
-                            value={formatVNDInput(costMarketing)}
-                            onChange={handleNumericChange(setCostMarketing)}
-                            onKeyDown={handleMoneyKeyDown}
-                          />
-                          <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Vận hành hệ thống */}
-                  <div>
-                    <label className="form-label text-muted fw-semibold mb-0" style={{ fontSize: 12, marginBottom: 1 }}>Vận hành hệ thống</label>
-                    <div className="input-group input-group-sm">
-                      {isCalculateByRevenue ? (
-                        <>
-                          {/* % DT ở đầu */}
-                          <input
-                            type="text"
-                            className="form-control fw-bold text-danger text-center percent-input-field"
-                            style={{ maxWidth: 50 }}
-                            value={costOperationsPercent}
-                            onChange={(e) => {
-                              const raw = e.target.value.replace(/[^0-9.]/g, "");
-                              setCostOperationsPercent(raw);
-                            }}
-                            onKeyDown={handlePercentKeyDown}
-                            placeholder="0.0"
-                          />
-                          <span className="input-group-text bg-light text-danger fw-bold" style={{ fontSize: 10, paddingLeft: 6, paddingRight: 4, minWidth: 75, justifyContent: "flex-start" }}>% doanh thu</span>
-
-                          {/* Ô giá trị chi phí bị khóa */}
-                          <input
-                            type="text"
-                            className="form-control fw-bold"
-                            value={formatVNDInput(finalCostOperations.toString())}
-                            disabled
-                          />
-                          <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                        </>
-                      ) : (
-                        <>
-                          <input
-                            type="text"
-                            className="form-control fw-bold money-input-field"
-                            value={formatVNDInput(costOperations)}
-                            onChange={handleNumericChange(setCostOperations)}
-                            onKeyDown={handleMoneyKeyDown}
-                          />
-                          <span className="input-group-text fw-semibold" style={{ minWidth: 32, justifyContent: "center" }}>đ</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Space padding */}
-                  <div className="pb-1" />
 
                 </div>
               </div>

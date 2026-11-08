@@ -1,0 +1,188 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" width="100%" height="100%" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f8fafc" />
+      <stop offset="100%" stop-color="#f1f5f9" />
+    </linearGradient>
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1e3a8a" />
+      <stop offset="100%" stop-color="#2563eb" />
+    </linearGradient>
+    <filter id="cardShadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0f172a" flood-opacity="0.08" />
+    </filter>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#2563eb" />
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#16a34a" />
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#dc2626" />
+    </marker>
+    <marker id="arrowAmber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#d97706" />
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="760" rx="16" fill="url(#bgGrad)" stroke="#cbd5e1" stroke-width="1.5" />
+
+  <!-- Top Banner -->
+  <rect x="20" y="16" width="1160" height="64" rx="12" fill="url(#headerGrad)" />
+  <text x="600" y="44" fill="#ffffff" font-size="18" font-weight="700" text-anchor="middle">QUY TRÌNH BÁN HÀNG &amp; TRIỂN KHAI ĐƠN HÀNG KHÉP KÍN (ORDER-TO-CASH) — SEAJONG EOS</text>
+  <text x="600" y="66" fill="#bfdbfe" font-size="12.5" font-weight="500" text-anchor="middle">Kinh doanh khởi tạo &amp; giữ tồn ➔ Kế toán duyệt &amp; ghi sổ TK 131 / TK 111-112 ➔ Kho vận đóng gói &amp; xuất kho ➔ Thu hồi công nợ &amp; Báo cáo</text>
+
+  <!-- Swimlane Headers -->
+  <g transform="translate(20, 96)">
+    <rect x="0" y="0" width="275" height="36" rx="8" fill="#dbeafe" stroke="#93c5fd" />
+    <text x="137" y="23" fill="#1e40af" font-size="13" font-weight="700" text-anchor="middle">1. KINH DOANH &amp; ĐẠI LÝ</text>
+
+    <rect x="295" y="0" width="275" height="36" rx="8" fill="#e0e7ff" stroke="#a5b4fc" />
+    <text x="432" y="23" fill="#3730a3" font-size="13" font-weight="700" text-anchor="middle">2. TÀI CHÍNH - KẾ TOÁN</text>
+
+    <rect x="590" y="0" width="275" height="36" rx="8" fill="#fef3c7" stroke="#fcd34d" />
+    <text x="727" y="23" fill="#92400e" font-size="13" font-weight="700" text-anchor="middle">3. KHO VẬN &amp; SẢN XUẤT</text>
+
+    <rect x="885" y="0" width="275" height="36" rx="8" fill="#dcfce7" stroke="#86efac" />
+    <text x="1022" y="23" fill="#166534" font-size="13" font-weight="700" text-anchor="middle">4. BÁO CÁO &amp; TẤT TOÁN</text>
+  </g>
+
+  <!-- Swimlane Background Columns -->
+  <g transform="translate(20, 140)">
+    <rect x="0" y="0" width="275" height="596" rx="10" fill="#ffffff" fill-opacity="0.6" stroke="#e2e8f0" stroke-dasharray="4 4" />
+    <rect x="295" y="0" width="275" height="596" rx="10" fill="#ffffff" fill-opacity="0.6" stroke="#e2e8f0" stroke-dasharray="4 4" />
+    <rect x="590" y="0" width="275" height="596" rx="10" fill="#ffffff" fill-opacity="0.6" stroke="#e2e8f0" stroke-dasharray="4 4" />
+    <rect x="885" y="0" width="275" height="596" rx="10" fill="#ffffff" fill-opacity="0.6" stroke="#e2e8f0" stroke-dasharray="4 4" />
+  </g>
+
+  <!-- STEP 1: CHỌN KHÁCH HÀNG & TẠO ĐƠN -->
+  <g transform="translate(36, 160)" filter="url(#cardShadow)">
+    <rect width="243" height="118" rx="10" fill="#ffffff" stroke="#3b82f6" stroke-width="2" />
+    <rect width="243" height="28" rx="10" fill="#eff6ff" />
+    <text x="12" y="19" fill="#1d4ed8" font-size="12" font-weight="700">BƯỚC 1: KHỞI TẠO ĐƠN HÀNG</text>
+    <text x="12" y="46" fill="#334155" font-size="11.5" font-weight="600">• Chọn Đại lý / Khách lẻ (Offcanvas)</text>
+    <text x="12" y="64" fill="#334155" font-size="11.5">• Áp chính sách CK Cấp 1 + Cấp 2 + VAT</text>
+    <text x="12" y="82" fill="#334155" font-size="11.5">• Sinh mã: DBH-YYYYMMDD-XX</text>
+    <text x="12" y="102" fill="#2563eb" font-size="11" font-weight="600">API: POST /api/sales-engine/orders</text>
+  </g>
+
+  <!-- STEP 1B: TẠM GIỮ TỒN KHO & BÁO CÓ CỌC -->
+  <g transform="translate(36, 315)" filter="url(#cardShadow)">
+    <rect width="243" height="122" rx="10" fill="#ffffff" stroke="#60a5fa" stroke-width="1.5" />
+    <rect width="243" height="28" rx="10" fill="#f0f9ff" />
+    <text x="12" y="19" fill="#0369a1" font-size="12" font-weight="700">TÁC VỤ TỰ ĐỘNG KHI LƯU ĐƠN</text>
+    <text x="12" y="46" fill="#334155" font-size="11.5">1. Giữ tồn: +soLuongGiu (Chưa trừ kho)</text>
+    <text x="12" y="64" fill="#334155" font-size="11.5">2. Xét tồn: in_stock / out_of_stock</text>
+    <text x="12" y="82" fill="#334155" font-size="11.5">3. Nếu có cọc ➔ Sinh phiếu PT-... (pending)</text>
+    <text x="12" y="102" fill="#dc2626" font-size="11" font-weight="700">Chốt chặn: keToanDuyet = 'pending'</text>
+  </g>
+
+  <!-- STEP 2: KẾ TOÁN KIỂM TRA & PHÊ DUYỆT -->
+  <g transform="translate(331, 160)" filter="url(#cardShadow)">
+    <rect width="243" height="125" rx="10" fill="#ffffff" stroke="#4f46e5" stroke-width="2" />
+    <rect width="243" height="28" rx="10" fill="#eef2ff" />
+    <text x="12" y="19" fill="#4338ca" font-size="12" font-weight="700">BƯỚC 2: KẾ TOÁN XỬ LÝ ĐƠN</text>
+    <text x="12" y="46" fill="#334155" font-size="11.5" font-weight="600">• Màn hình: Theo dõi dòng tiền (Bước 1)</text>
+    <text x="12" y="64" fill="#334155" font-size="11.5">• Kiểm tra hạn mức công nợ Đại lý</text>
+    <text x="12" y="82" fill="#334155" font-size="11.5">• Đối chiếu sao kê tiền cọc (nếu có)</text>
+    <text x="12" y="100" fill="#4f46e5" font-size="11" font-weight="600">POST /api/sales-engine/orders/:id/approve</text>
+    <text x="12" y="116" fill="#16a34a" font-size="11" font-weight="700">➔ Chuyển keToanDuyet = 'approved'</text>
+  </g>
+
+  <!-- STEP 2B: HẠCH TOÁN SỔ CÁI TỰ ĐỘNG -->
+  <g transform="translate(331, 325)" filter="url(#cardShadow)">
+    <rect width="243" height="125" rx="10" fill="#ffffff" stroke="#6366f1" stroke-width="1.5" />
+    <rect width="243" height="28" rx="10" fill="#f5f3ff" />
+    <text x="12" y="19" fill="#4f46e5" font-size="12" font-weight="700">HẠCH TOÁN KẾ TOÁN TỰ ĐỘNG</text>
+    <text x="12" y="46" fill="#334155" font-size="11.5" font-weight="600">• Sổ Công nợ phải thu (TK 131):</text>
+    <text x="20" y="63" fill="#475569" font-size="11">Tự động tạo Debt (tongTien - daThanhToan)</text>
+    <text x="20" y="79" fill="#475569" font-size="11">Trạng thái: UNPAID hoặc PARTIAL</text>
+    <text x="12" y="98" fill="#334155" font-size="11.5" font-weight="600">• Sổ Quỹ / Ngân hàng (TK 111/112):</text>
+    <text x="20" y="114" fill="#475569" font-size="11">Xác nhận phiếu báo có cọc ➔ verified</text>
+  </g>
+
+  <!-- STEP 2C: TỪ CHỐI / HỦY ĐƠN -->
+  <g transform="translate(331, 495)" filter="url(#cardShadow)">
+    <rect width="243" height="105" rx="10" fill="#fff1f2" stroke="#f43f5e" stroke-width="1.5" />
+    <text x="12" y="22" fill="#be123c" font-size="12" font-weight="700">NGOẠI LỆ: TỪ CHỐI / HỦY ĐƠN</text>
+    <text x="12" y="44" fill="#881337" font-size="11.5">• Vượt hạn mức nợ / Khách hủy đơn</text>
+    <text x="12" y="62" fill="#881337" font-size="11.5">• keToanDuyet = 'rejected' / cancelled</text>
+    <text x="12" y="80" fill="#be123c" font-size="11.5" font-weight="600">• Tự động hoàn trả soLuongGiu về Kho</text>
+    <text x="12" y="96" fill="#881337" font-size="11">• Xóa công nợ nháp chưa phát sinh</text>
+  </g>
+
+  <!-- STEP 3A: MỞ KHÓA KHO VẬN & ĐÓNG GÓI -->
+  <g transform="translate(626, 160)" filter="url(#cardShadow)">
+    <rect width="243" height="125" rx="10" fill="#ffffff" stroke="#d97706" stroke-width="2" />
+    <rect width="243" height="28" rx="10" fill="#fffbeb" />
+    <text x="12" y="19" fill="#b45309" font-size="12" font-weight="700">BƯỚC 3: SOẠN HÀNG &amp; ĐÓNG GÓI</text>
+    <text x="12" y="46" fill="#16a34a" font-size="11.5" font-weight="700">✓ Mở khóa khi keToanDuyet = 'approved'</text>
+    <text x="12" y="64" fill="#334155" font-size="11.5">• Hiển thị tại Tổng quan Kho vận</text>
+    <text x="12" y="82" fill="#334155" font-size="11.5">• Phân công nhân viên nhặt &amp; đóng gói</text>
+    <text x="12" y="100" fill="#334155" font-size="11.5">• Nếu thiếu hàng ➔ Báo Sản xuất/Mua hàng</text>
+    <text x="12" y="116" fill="#b45309" font-size="11" font-weight="600">Trạng thái kho: in_stock ➔ packed</text>
+  </g>
+
+  <!-- STEP 3B: XUẤT KHO VẬT LÝ -->
+  <g transform="translate(626, 325)" filter="url(#cardShadow)">
+    <rect width="243" height="125" rx="10" fill="#ffffff" stroke="#ea580c" stroke-width="2" />
+    <rect width="243" height="28" rx="10" fill="#fff7ed" />
+    <text x="12" y="19" fill="#c2410c" font-size="12" font-weight="700">BƯỚC 4: XUẤT KHO &amp; GIAO VẬN</text>
+    <text x="12" y="46" fill="#334155" font-size="11.5" font-weight="600">• Lập phiếu Xuất kho (XuatKhoModal)</text>
+    <text x="12" y="64" fill="#334155" font-size="11.5">• Trừ tồn kho thực tế: -soLuong</text>
+    <text x="12" y="82" fill="#334155" font-size="11.5">• Giải phóng tồn giữ: -soLuongGiu</text>
+    <text x="12" y="100" fill="#334155" font-size="11.5">• Ghi Thẻ kho: XUAT_BAN_HANG</text>
+    <text x="12" y="116" fill="#c2410c" font-size="11" font-weight="700">➔ trangThaiKho = 'exported'</text>
+  </g>
+
+  <!-- STEP 4A: THU HỒI CÔNG NỢ & TẤT TOÁN -->
+  <g transform="translate(921, 160)" filter="url(#cardShadow)">
+    <rect width="243" height="125" rx="10" fill="#ffffff" stroke="#16a34a" stroke-width="2" />
+    <rect width="243" height="28" rx="10" fill="#f0fdf4" />
+    <text x="12" y="19" fill="#15803d" font-size="12" font-weight="700">BƯỚC 5: THU NỢ &amp; TẤT TOÁN</text>
+    <text x="12" y="46" fill="#334155" font-size="11.5" font-weight="600">• Khách thanh toán phần còn lại</text>
+    <text x="12" y="64" fill="#334155" font-size="11.5">• POST /api/sales-engine/orders/:id/payment</text>
+    <text x="12" y="82" fill="#334155" font-size="11.5">• Cộng dồn daThanhToan = tongTien</text>
+    <text x="12" y="100" fill="#334155" font-size="11.5">• Đóng công nợ TK 131 ➔ status = 'PAID'</text>
+    <text x="12" y="116" fill="#15803d" font-size="11" font-weight="700">➔ Đơn hàng: trangThai = 'completed'</text>
+  </g>
+
+  <!-- STEP 4B: BÁO CÁO ĐA PHÂN HỆ REALTIME -->
+  <g transform="translate(921, 325)" filter="url(#cardShadow)">
+    <rect width="243" height="275" rx="10" fill="#ffffff" stroke="#0d9488" stroke-width="1.5" />
+    <rect width="243" height="28" rx="10" fill="#f0fdfa" />
+    <text x="12" y="19" fill="#0f766e" font-size="12" font-weight="700">ĐỒNG BỘ BÁO CÁO 5 PHÂN HỆ</text>
+    <text x="12" y="48" fill="#0f172a" font-size="11.5" font-weight="700">1. Ban Giám đốc (BOM / CEO):</text>
+    <text x="20" y="64" fill="#475569" font-size="11">Doanh số lũy kế, Thực thu, Tỷ lệ thu tiền</text>
+    <text x="12" y="88" fill="#0f172a" font-size="11.5" font-weight="700">2. Phòng Kinh doanh (Sales):</text>
+    <text x="20" y="104" fill="#475569" font-size="11">Xếp hạng Đại lý, KPI Nhân sự kinh doanh</text>
+    <text x="12" y="128" fill="#0f172a" font-size="11.5" font-weight="700">3. Phòng Tài chính - Kế toán:</text>
+    <text x="20" y="144" fill="#475569" font-size="11">Sổ cái TK 131, Dòng tiền vào TK 111/112</text>
+    <text x="12" y="168" fill="#0f172a" font-size="11.5" font-weight="700">4. Phòng Kho vận &amp; Logistics:</text>
+    <text x="20" y="184" fill="#475569" font-size="11">Tồn thực tế, Tồn đang giữ, Thẻ kho</text>
+    <text x="12" y="208" fill="#0f172a" font-size="11.5" font-weight="700">5. Cổng Đại lý (Dealer Portal):</text>
+    <text x="20" y="224" fill="#475569" font-size="11">Tiến độ đơn, Lịch sử trả nợ, Hạn mức</text>
+    <rect x="12" y="238" width="219" height="26" rx="6" fill="#ccfbf1" />
+    <text x="121" y="255" fill="#0f766e" font-size="11" font-weight="700" text-anchor="middle">Engine: server/salesEngine.js</text>
+  </g>
+
+  <!-- ARROWS & CONNECTIONS -->
+  <!-- Step 1 -> Step 1B -->
+  <line x1="157" y1="278" x2="157" y2="310" stroke="#2563eb" stroke-width="2" marker-end="url(#arrowBlue)" />
+  <!-- Step 1 -> Step 2 -->
+  <line x1="279" y1="218" x2="326" y2="218" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrowBlue)" />
+  <!-- Step 2 -> Step 2B -->
+  <line x1="452" y1="285" x2="452" y2="320" stroke="#4f46e5" stroke-width="2" marker-end="url(#arrowBlue)" />
+  <!-- Step 2 -> Step 2C (Reject) -->
+  <path d="M 331 255 L 308 255 L 308 545 L 326 545" fill="none" stroke="#dc2626" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#arrowRed)" />
+  <!-- Step 2 -> Step 3A (Approve unlocks warehouse) -->
+  <line x1="574" y1="218" x2="621" y2="218" stroke="#16a34a" stroke-width="2.5" marker-end="url(#arrowGreen)" />
+  <!-- Step 3A -> Step 3B -->
+  <line x1="747" y1="285" x2="747" y2="320" stroke="#d97706" stroke-width="2.5" marker-end="url(#arrowAmber)" />
+  <!-- Step 3B -> Step 4A -->
+  <path d="M 869 385 L 895 385 L 895 218 L 916 218" fill="none" stroke="#16a34a" stroke-width="2.5" marker-end="url(#arrowGreen)" />
+  <!-- Step 4A -> Step 4B -->
+  <line x1="1042" y1="285" x2="1042" y2="320" stroke="#16a34a" stroke-width="2" marker-end="url(#arrowGreen)" />
+</svg>
+

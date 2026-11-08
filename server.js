@@ -7158,13 +7158,58 @@ app.post('/api/sales/oem-plan', async (req, res) => {
 // ── GET & POST /api/sales/orders ──────────────────────────────────────────────
 app.get('/api/sales/orders', async (req, res) => {
   try {
-    const orders = await prisma.saleOrder.findMany({
+    const rawOrders = await prisma.saleOrder.findMany({
       include: {
         customer: true,
-        saleOrderItems: true,
+        saleOrderItems: {
+          include: {
+            inventoryItem: {
+              select: { id: true, code: true, tenHang: true, donVi: true, loai: true, soLuong: true }
+            }
+          }
+        },
+        logisticsTickets: {
+          select: { id: true, code: true, type: true, status: true }
+        }
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    const allDebts = await prisma.debt.findMany({
+      where: { type: { in: ['RECEIVABLE', 'phai-thu'] } },
+      select: { customerId: true, amount: true, paidAmount: true }
+    });
+    const debtByCustomer = new Map();
+    for (const d of allDebts) {
+      if (!d.customerId) continue;
+      const cur = debtByCustomer.get(d.customerId) || 0;
+      debtByCustomer.set(d.customerId, cur + ((d.amount || 0) - (d.paidAmount || 0)));
+    }
+
+    const orders = rawOrders.map((o) => {
+      const guest = typeof parseGuestInfo === 'function' ? parseGuestInfo(o.ghiChu) : null;
+      const outstandingDebt = o.customerId ? (debtByCustomer.get(o.customerId) || 0) : 0;
+      const cleanedNote = typeof cleanGhiChu === 'function' ? cleanGhiChu(o.ghiChu) : (o.ghiChu || '');
+      return {
+        ...o,
+        ghiChu: cleanedNote,
+        nguoiPhuTrachName: o.nguoiPhuTrach || 'Phạm Quang Việt',
+        customer: o.customer ? {
+          ...o.customer,
+          outstandingDebt,
+          creditLimit: o.customer.hanMucCongNo || 0,
+        } : (guest ? {
+          id: null,
+          name: guest.name,
+          dienThoai: guest.dienThoai,
+          address: guest.address,
+          nhom: 'khach-le',
+          outstandingDebt: 0,
+          creditLimit: 0,
+        } : null),
+      };
+    });
+
     res.json({ success: true, orders });
   } catch (err) {
     console.error('Lỗi GET /api/sales/orders:', err);
@@ -7542,16 +7587,22 @@ app.post('/api/plan-finance/quotations', async (req, res) => {
       const it = items[idx];
       let invItem = null;
       if (it.inventoryItemId) {
-        invItem = await prisma.inventoryItem.findUnique({ where: { id: it.inventoryItemId } });
+        invItem = await prisma.inventoryItem.findUnique({
+          where: { id: it.inventoryItemId },
+          include: { stocks: true }
+        });
       }
       if (!invItem && it.tenHang) {
         invItem = await prisma.inventoryItem.findFirst({
-          where: { OR: [{ tenHang: it.tenHang }, { code: it.tenHang }] }
+          where: { OR: [{ tenHang: it.tenHang }, { code: it.tenHang }] },
+          include: { stocks: true }
         });
       }
 
       const requiredQty = Number(it.soLuong) || 1;
-      const availableStock = invItem ? (invItem.soLuong || 0) : 0;
+      const availableStock = invItem
+        ? ((invItem.stocks || []).reduce((sum, s) => sum + (s.soLuong || 0), 0) || invItem.soLuong || 0)
+        : 0;
       if (availableStock < requiredQty) {
         insufficientItems.push({
           tenHang: it.tenHang,
@@ -8076,10 +8127,11 @@ app.get('/api/plan-finance/sales/:id', async (req, res) => {
 
     // Calculate missing quantity, BOM, and production feasibility
     for (const item of orderItems) {
-      const requiredQty = item.soLuong || 1;
-      const currentStock = (item.inventoryItem?.stocks || []).reduce((sum, s) => sum + s.soLuong, 0) || item.inventoryItem?.soLuong || 0;
+      const requiredQty = Number(item.soLuong) || 1;
+      const currentStock = (item.inventoryItem?.stocks || []).reduce((sum, s) => sum + (s.soLuong || 0), 0) || item.inventoryItem?.soLuong || 0;
       const missingQty = Math.max(0, requiredQty - currentStock);
       item.missingQty = missingQty;
+      item.currentStock = currentStock;
       item.canProduce = false;
 
       let parsedGhiChu = {};
@@ -8092,29 +8144,59 @@ app.get('/api/plan-finance/sales/:id', async (req, res) => {
       if (resolvedDinhMucId) {
         bom = await prisma.dinhMuc.findUnique({
           where: { id: resolvedDinhMucId },
-          include: { vatTu: true }
+          include: { vatTu: { include: { inventoryItem: { include: { stocks: true } } } } }
         });
+      }
+      if (!bom && parsedGhiChu.bomCode) {
+        bom = await prisma.dinhMuc.findFirst({
+          where: { code: parsedGhiChu.bomCode },
+          include: { vatTu: { include: { inventoryItem: { include: { stocks: true } } } } }
+        });
+        if (bom) resolvedDinhMucId = bom.id;
       }
 
       item.dinhMucId = resolvedDinhMucId;
       item.dinhMucCode = bom?.code || parsedGhiChu.bomCode || null;
       item.dinhMucTen = bom?.tenDinhMuc || parsedGhiChu.dinhMucTen || null;
+      item.donVi = item.donViTinh || item.inventoryItem?.donVi || parsedGhiChu.donVi || 'cái';
+      item.isManufactured = Boolean(resolvedDinhMucId || bom || (item.inventoryItem?.dinhMucs && item.inventoryItem.dinhMucs.length > 0));
 
-      if (missingQty > 0 && bom?.vatTu?.length > 0) {
+      const qtyForMatCheck = missingQty > 0 ? missingQty : requiredQty;
+      const rawVatTu = [];
+      if (bom?.vatTu?.length > 0) {
         let hasEnough = true;
         for (const vt of bom.vatTu) {
-          const needed = (vt.soLuong || 1) * missingQty;
-          const matStocks = await prisma.inventoryStock.findMany({
-            where: { inventoryItemId: vt.inventoryItemId || '' }
-          });
-          const totalStock = matStocks.reduce((sum, s) => sum + (s.soLuong || 0), 0);
-          if (totalStock < needed) {
-            hasEnough = false;
-            break;
+          const needed = (Number(vt.soLuong) || 1) * qtyForMatCheck;
+          let vtInv = vt.inventoryItem;
+          if (!vtInv && (vt.maVatTu || vt.tenVatTu)) {
+            vtInv = await prisma.inventoryItem.findFirst({
+              where: {
+                OR: [
+                  ...(vt.maVatTu ? [{ code: vt.maVatTu }] : []),
+                  ...(vt.tenVatTu ? [{ tenHang: vt.tenVatTu }] : []),
+                ]
+              },
+              include: { stocks: true }
+            });
           }
+          const totalMatStock = (vtInv?.stocks || []).reduce((sum, s) => sum + (s.soLuong || 0), 0) || vtInv?.soLuong || 0;
+          if (totalMatStock < needed) {
+            hasEnough = false;
+          }
+          rawVatTu.push({
+            id: vt.id,
+            maVatTu: vt.maVatTu || vtInv?.code || null,
+            tenVatTu: vt.tenVatTu || vtInv?.tenHang || 'Vật tư',
+            dinhMucQty: Number(vt.soLuong) || 1,
+            donViTinh: vt.donViTinh || vtInv?.donVi || 'cái',
+            ghiChu: vt.ghiChu || null,
+            tonKho: totalMatStock,
+          });
         }
         item.canProduce = hasEnough;
       }
+      item.vatTu = rawVatTu;
+      item.dinhMucGhiChu = parsedGhiChu.dinhMucGhiChu || parsedGhiChu.bomGhiChu || parsedGhiChu.ghiChuDinhMuc || parsedGhiChu.note || null;
     }
 
     const guest = parseGuestInfo(order.ghiChu);
@@ -8136,8 +8218,8 @@ app.get('/api/plan-finance/sales/:id', async (req, res) => {
       where: {
         deptCode: 'logistics',
         title: { contains: order.code || '' },
-        ...(order.ngayDat ? { createdAt: { gte: order.ngayDat } } : {})
-      }
+      },
+      orderBy: { createdAt: 'desc' }
     });
     let logisticsItems = null;
     if (logisticsTask && logisticsTask.actualResult) {
@@ -8146,11 +8228,64 @@ app.get('/api/plan-finance/sales/:id', async (req, res) => {
       } catch (_) { }
     }
 
+    const productionTask = await prisma.task.findFirst({
+      where: {
+        deptCode: 'production',
+        title: { contains: order.code || '' },
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    let productionItemIds = null;
+    let productionTaskCode = null;
+    let productionQuantities = {};
+    if (productionTask) {
+      productionTaskCode = productionTask.title;
+      if (productionTask.actualResult) {
+        try {
+          const prodItems = JSON.parse(productionTask.actualResult);
+          if (Array.isArray(prodItems)) {
+            productionItemIds = prodItems.map((it) => it.id).filter(Boolean);
+            prodItems.forEach((it) => {
+              if (it.id) productionQuantities[it.id] = Number(it.soLuong) || 0;
+            });
+          }
+        } catch (_) { }
+      }
+    }
+
+    const purchaseReq = order.code ? await prisma.purchaseRequest.findFirst({
+      where: {
+        OR: [
+          { lyDo: { contains: order.code } },
+          { ghiChu: { contains: order.code } }
+        ]
+      },
+      orderBy: { createdAt: 'desc' }
+    }) : null;
+
+    const stockMovement = order.code ? await prisma.stockMovement.findFirst({
+      where: {
+        type: 'xuat',
+        OR: [
+          { soChungTu: { contains: order.code } },
+          { lyDo: { contains: order.code } }
+        ]
+      },
+      orderBy: { createdAt: 'desc' }
+    }) : null;
+
     const resolved = {
       ...order,
       ghiChu: cleanGhiChu(order.ghiChu),
+      nguoiPhuTrachName: order.nguoiPhuTrach || 'Phạm Quang Việt',
       items: orderItems,
       logisticsItems,
+      productionItemIds,
+      productionQuantities,
+      productionTaskCode,
+      purchaseRequestCode: purchaseReq?.code || null,
+      stockMovementCode: stockMovement?.soChungTu || (stockMovement ? 'Đã xuất kho' : null),
+      hasLenhXuatKho: Boolean(logisticsTask || (order.logisticsTickets && order.logisticsTickets.length > 0)),
       customer: order.customer ? {
         ...order.customer,
         outstandingDebt,
@@ -8175,7 +8310,11 @@ app.get('/api/plan-finance/sales/:id', async (req, res) => {
 app.delete('/api/plan-finance/sales/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.saleOrder.delete({ where: { id } });
+    const existing = await prisma.saleOrder.findFirst({
+      where: { OR: [{ id }, { code: id }] }
+    });
+    if (!existing) return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
+    await prisma.saleOrder.delete({ where: { id: existing.id } });
     res.json({ success: true, message: 'Đã xoá đơn hàng thành công' });
   } catch (err) {
     console.error('Lỗi DELETE /api/plan-finance/sales/:id:', err);
@@ -8186,11 +8325,23 @@ app.delete('/api/plan-finance/sales/:id', async (req, res) => {
 const handleUpdateSaleOrder = async (req, res) => {
   try {
     const { id } = req.params;
-    const body = req.body;
+    const body = req.body || {};
 
     const existing = await prisma.saleOrder.findFirst({
       where: { OR: [{ id }, { code: id }] },
-      include: { customer: true, saleOrderItems: true }
+      include: {
+        customer: true,
+        saleOrderItems: {
+          include: {
+            inventoryItem: {
+              include: {
+                stocks: true,
+                dinhMucs: true,
+              }
+            }
+          }
+        }
+      }
     });
     if (!existing) {
       // Fallback: update entry inside debt_receivables if it comes from debt_receivables
@@ -8256,7 +8407,7 @@ const handleUpdateSaleOrder = async (req, res) => {
       }
     }
 
-    const order = await prisma.saleOrder.update({
+    let order = await prisma.saleOrder.update({
       where: { id: targetOrderId },
       data: {
         ...(body.ngayGiao && { ngayGiao: new Date(body.ngayGiao) }),
@@ -8268,7 +8419,19 @@ const handleUpdateSaleOrder = async (req, res) => {
         ...(body.keToanDuyet && { keToanDuyet: body.keToanDuyet }),
         ...(body.ghiChu !== undefined && { ghiChu: body.ghiChu }),
       },
-      include: { customer: true, saleOrderItems: true },
+      include: {
+        customer: true,
+        saleOrderItems: {
+          include: {
+            inventoryItem: {
+              include: {
+                stocks: true,
+                dinhMucs: true,
+              }
+            }
+          }
+        }
+      },
     });
 
     if (body.daThanhToan !== undefined) {
@@ -8286,29 +8449,332 @@ const handleUpdateSaleOrder = async (req, res) => {
       });
     }
 
+    let createdProductionTask = false;
+    let createdExportTicket = false;
+    let createdPurchaseRequestCode = null;
+
     if (body.keToanDuyet === 'approved' && existing.keToanDuyet !== 'approved') {
-      const conNo = order.tongTien - order.daThanhToan;
+      // 1. Ghi nhận công nợ nếu chưa tồn tại
+      const conNo = (order.tongTien || 0) - (order.daThanhToan || 0);
       if (conNo > 0) {
-        const doiTuong = order.customer?.name
-          ? `${order.customer.name}${order.customer.dienThoai ? ' – ' + order.customer.dienThoai : ''}`
-          : `Khách hàng lẻ – Đơn ${order.code || order.id}`;
-        await prisma.debt.create({
+        const existingDebt = await prisma.debt.findFirst({
+          where: { referenceId: order.code || order.id }
+        });
+        if (!existingDebt) {
+          const doiTuong = order.customer?.name
+            ? `${order.customer.name}${order.customer.dienThoai ? ' – ' + order.customer.dienThoai : ''}`
+            : `Khách hàng lẻ – Đơn ${order.code || order.id}`;
+          await prisma.debt.create({
+            data: {
+              type: 'phai-thu',
+              partnerName: doiTuong,
+              customerId: order.customerId || null,
+              amount: order.tongTien,
+              paidAmount: order.daThanhToan,
+              status: order.daThanhToan === 0 ? 'UNPAID' : 'PARTIAL',
+              dueDate: order.ngayGiao ? new Date(order.ngayGiao) : new Date(),
+              referenceId: order.code || order.id,
+              description: `Công nợ tự động phát sinh từ đơn hàng ${order.code || order.id}`,
+            }
+          });
+        }
+      }
+
+      // 2. Phân loại hàng hoá cần sản xuất, xuất kho và mua sắm
+      const prItemsToCreate = [];
+      const missingThanhPhamItems = [];
+      const itemsToExport = [];
+
+      for (const item of order.saleOrderItems || []) {
+        let invItem = item.inventoryItem;
+        if (!invItem && item.tenHang) {
+          invItem = await prisma.inventoryItem.findFirst({
+            where: { OR: [{ tenHang: item.tenHang }, { code: item.tenHang }] },
+            include: { stocks: true, dinhMucs: true }
+          });
+        }
+
+        const requiredQty = Number(item.soLuong) || 1;
+        const totalStock = (invItem?.stocks || []).reduce((sum, s) => sum + (s.soLuong || 0), 0) || invItem?.soLuong || 0;
+        const actualMissingQty = Math.max(0, requiredQty - totalStock);
+
+        let parsedGhiChu = {};
+        try {
+          parsedGhiChu = typeof item.ghiChu === 'string' ? JSON.parse(item.ghiChu) : (item.ghiChu || {});
+        } catch (e) { }
+
+        let bomId = item.dinhMucId || parsedGhiChu.dinhMucId || invItem?.dinhMucs?.[0]?.id || null;
+        if (!bomId && parsedGhiChu.bomCode) {
+          const bomByCode = await prisma.dinhMuc.findFirst({ where: { code: parsedGhiChu.bomCode } });
+          if (bomByCode) bomId = bomByCode.id;
+        }
+
+        const isSelectedForProduction = Array.isArray(body.productionItemIds)
+          ? body.productionItemIds.includes(item.id)
+          : Boolean(bomId && (actualMissingQty > 0 || existing.trangThaiKho === 'out_of_stock'));
+
+        const itemDonVi = item.donViTinh || invItem?.donVi || parsedGhiChu.donVi || 'cái';
+
+        itemsToExport.push({
+          inventoryItemId: invItem?.id || item.inventoryItemId || null,
+          code: invItem?.code || '',
+          tenHang: item.tenHang,
+          donVi: itemDonVi,
+          soLuong: requiredQty,
+          donGia: item.donGia || 0,
+          type: 'thanh_pham'
+        });
+
+        if (isSelectedForProduction) {
+          const customQty = body.productionQuantities && body.productionQuantities[item.id] !== undefined
+            ? Number(body.productionQuantities[item.id])
+            : null;
+          const qtyToProduce = (customQty !== null && customQty > 0) ? customQty : (actualMissingQty > 0 ? actualMissingQty : requiredQty);
+          missingThanhPhamItems.push({
+            id: item.id,
+            inventoryItemId: invItem?.id || item.inventoryItemId || null,
+            code: invItem?.code || '',
+            tenHang: item.tenHang,
+            donVi: itemDonVi,
+            soLuong: qtyToProduce,
+            soLuongDat: requiredQty,
+            donGia: item.donGia || 0,
+            dinhMucId: bomId,
+          });
+        } else if (actualMissingQty > 0) {
+          prItemsToCreate.push({
+            inventoryItemId: invItem?.id || item.inventoryItemId || null,
+            tenHang: item.tenHang,
+            donVi: itemDonVi,
+            soLuong: actualMissingQty,
+            donGiaDK: invItem?.giaNhap || item.donGia || 0,
+            ghiChu: `Tự động tạo từ đơn hàng thiếu kho ${order.code || order.id}`
+          });
+        }
+      }
+
+      // 3. Cập nhật trạng thái đơn hàng
+      const nextTrangThai = missingThanhPhamItems.length > 0 ? 'in_production' : (body.trangThai || 'approved');
+      order = await prisma.saleOrder.update({
+        where: { id: targetOrderId },
+        data: {
+          trangThai: nextTrangThai,
+          ...(body.productionDueDate ? { ngayGiao: new Date(body.productionDueDate) } : {})
+        },
+        include: { customer: true, saleOrderItems: true }
+      });
+
+      // 4. Bóc tách định mức vật tư và tạo Lệnh sản xuất nếu có mặt hàng cần sản xuất
+      const extractedMaterials = [];
+      if (missingThanhPhamItems.length > 0) {
+        const materialNeedsMap = new Map();
+        for (const tp of missingThanhPhamItems) {
+          let bom = null;
+          if (tp.dinhMucId) {
+            bom = await prisma.dinhMuc.findUnique({
+              where: { id: tp.dinhMucId },
+              include: { vatTu: { include: { inventoryItem: { include: { stocks: true } } } } }
+            });
+          } else if (tp.inventoryItemId) {
+            bom = await prisma.dinhMuc.findFirst({
+              where: { inventoryItemId: tp.inventoryItemId },
+              include: { vatTu: { include: { inventoryItem: { include: { stocks: true } } } } }
+            });
+          }
+
+          if (bom && bom.vatTu && bom.vatTu.length > 0) {
+            for (const vt of bom.vatTu) {
+              const reqQty = (Number(vt.soLuong) || 1) * (Number(tp.soLuong) || 1);
+              let vtInv = vt.inventoryItem;
+              if (!vtInv && (vt.maVatTu || vt.tenVatTu)) {
+                vtInv = await prisma.inventoryItem.findFirst({
+                  where: {
+                    OR: [
+                      ...(vt.maVatTu ? [{ code: vt.maVatTu }] : []),
+                      ...(vt.tenVatTu ? [{ tenHang: vt.tenVatTu }] : []),
+                    ]
+                  },
+                  include: { stocks: true }
+                });
+              }
+              const key = vtInv?.id || vt.inventoryItemId || vt.maVatTu || vt.tenVatTu;
+              if (materialNeedsMap.has(key)) {
+                materialNeedsMap.get(key).requiredQty += reqQty;
+              } else {
+                materialNeedsMap.set(key, {
+                  inventoryItemId: vtInv?.id || vt.inventoryItemId || null,
+                  maVatTu: vt.maVatTu || vtInv?.code || '',
+                  tenVatTu: vt.tenVatTu || vtInv?.tenHang || '',
+                  donVi: vt.donViTinh || vtInv?.donVi || 'cái',
+                  requiredQty: reqQty,
+                  vtInv
+                });
+              }
+            }
+          }
+        }
+
+        for (const [, mat] of materialNeedsMap.entries()) {
+          extractedMaterials.push({
+            inventoryItemId: mat.inventoryItemId,
+            code: mat.maVatTu || '',
+            tenHang: mat.tenVatTu,
+            donVi: mat.donVi || 'cái',
+            soLuong: mat.requiredQty,
+            donGia: mat.vtInv?.giaNhap || 0,
+            type: 'vat_tu_san_xuat'
+          });
+
+          const currentMatStock = (mat.vtInv?.stocks || []).reduce((sum, s) => sum + (s.soLuong || 0), 0) || mat.vtInv?.soLuong || 0;
+          if (currentMatStock < mat.requiredQty) {
+            const missingMatQty = mat.requiredQty - currentMatStock;
+            prItemsToCreate.push({
+              inventoryItemId: mat.inventoryItemId,
+              tenHang: mat.tenVatTu,
+              donVi: mat.donVi || 'cái',
+              soLuong: missingMatQty,
+              donGiaDK: mat.vtInv?.giaNhap || 0,
+              ghiChu: `Vật tư thiếu để sản xuất cho đơn ${order.code || order.id}`
+            });
+          }
+        }
+
+        await prisma.task.create({
           data: {
-            type: 'phai-thu',
-            partnerName: doiTuong,
-            customerId: order.customerId || null,
-            amount: order.tongTien,
-            paidAmount: order.daThanhToan,
-            status: order.daThanhToan === 0 ? 'UNPAID' : 'PARTIAL',
-            dueDate: order.ngayGiao ? new Date(order.ngayGiao) : new Date(),
-            referenceId: order.code || order.id,
-            description: `Công nợ tự động phát sinh từ đơn hàng ${order.code || order.id}`,
+            title: `Lệnh sản xuất cho đơn hàng ${order.code || order.id}`,
+            description: `Sản xuất bổ sung các mặt hàng thành phẩm cho đơn ${order.code || order.id} (Khách hàng: ${order.customer?.name || 'Khách lẻ'}).\nTổng mặt hàng cần sản xuất: ${missingThanhPhamItems.length}`,
+            deptCode: 'production',
+            priority: 'high',
+            status: 'pending',
+            assigneeId: 'production-team',
+            creatorId: body.approvedBy || 'finance-accountant',
+            dueDate: body.productionDueDate ? new Date(body.productionDueDate) : (order.ngayGiao ? new Date(order.ngayGiao) : new Date(Date.now() + 86400000 * 3)),
+            actualResult: JSON.stringify(missingThanhPhamItems),
           }
         });
+        createdProductionTask = true;
+      }
+
+      // 5. Tạo phiếu xuất kho (LogisticsTicket & Task cho bộ phận Kho vận)
+      const combinedLogisticsItems = [...itemsToExport, ...extractedMaterials];
+      if (combinedLogisticsItems.length > 0) {
+        const now = new Date();
+        const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+
+        const validExportItems = itemsToExport.filter((it) => it.inventoryItemId);
+        if (validExportItems.length > 0) {
+          const pkCount = await prisma.logisticsTicket.count({
+            where: { code: { startsWith: `PK-${dateStr}-` } }
+          });
+          const pkCode = `PK-${dateStr}-${String(pkCount + 1).padStart(3, '0')}-${Math.floor(100 + Math.random() * 900)}`;
+          await prisma.logisticsTicket.create({
+            data: {
+              code: pkCode,
+              type: 'BATCH_PACKING',
+              status: 'PENDING',
+              saleOrderId: order.id,
+              items: {
+                create: validExportItems.map((it) => ({
+                  inventoryItemId: it.inventoryItemId,
+                  requestedQty: Number(it.soLuong) || 1,
+                  pickedQty: 0,
+                }))
+              }
+            }
+          });
+        }
+
+        const validMaterialItems = extractedMaterials.filter((it) => it.inventoryItemId);
+        if (validMaterialItems.length > 0) {
+          const mpCount = await prisma.logisticsTicket.count({
+            where: { code: { startsWith: `MP-${dateStr}-` } }
+          });
+          const mpCode = `MP-${dateStr}-${String(mpCount + 1).padStart(3, '0')}-${Math.floor(100 + Math.random() * 900)}`;
+          await prisma.logisticsTicket.create({
+            data: {
+              code: mpCode,
+              type: 'MATERIAL_PICKING',
+              status: 'PENDING',
+              saleOrderId: order.id,
+              items: {
+                create: validMaterialItems.map((it) => ({
+                  inventoryItemId: it.inventoryItemId,
+                  requestedQty: Number(it.soLuong) || 1,
+                  pickedQty: 0,
+                }))
+              }
+            }
+          });
+        }
+
+        await prisma.task.create({
+          data: {
+            title: `Lệnh xuất kho cho đơn hàng ${order.code || order.id}`,
+            description: `Chuẩn bị và xuất kho các mặt hàng cho đơn ${order.code || order.id} (Khách hàng: ${order.customer?.name || 'Khách lẻ'}).\nTổng mặt hàng cần xuất: ${combinedLogisticsItems.length}`,
+            deptCode: 'logistics',
+            priority: 'high',
+            status: 'pending',
+            assigneeId: 'logistics-team',
+            creatorId: body.approvedBy || 'finance-accountant',
+            dueDate: order.ngayGiao ? new Date(order.ngayGiao) : new Date(Date.now() + 86400000),
+            actualResult: JSON.stringify(combinedLogisticsItems),
+          }
+        });
+        createdExportTicket = true;
+      }
+
+      // 6. Tạo Yêu cầu mua hàng (PurchaseRequest) nếu có hàng hoá hoặc vật tư bị thiếu
+      if (prItemsToCreate.length > 0) {
+        const now = new Date();
+        const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+        const prPrefix = `YC-${dateStr}-`;
+        const todayPRs = await prisma.purchaseRequest.findMany({
+          where: { code: { startsWith: prPrefix } },
+          select: { code: true }
+        });
+        let maxSTT = 0;
+        for (const p of todayPRs) {
+          if (p.code) {
+            const parts = p.code.split('-');
+            const val = parseInt(parts[parts.length - 1], 10);
+            if (!isNaN(val) && val > maxSTT) maxSTT = val;
+          }
+        }
+        const prCode = `${prPrefix}${String(maxSTT + 1).padStart(2, '0')}`;
+        const createdPR = await prisma.purchaseRequest.create({
+          data: {
+            code: prCode,
+            nguoiYeuCau: order.nguoiPhuTrach || body.approvedBy || 'Kế toán duyệt đơn',
+            donVi: 'Phòng Kinh Doanh / Kho',
+            ngayCanCo: order.ngayGiao ? new Date(order.ngayGiao) : new Date(Date.now() + 86400000 * 3),
+            lyDo: `Bổ sung hàng hoá/vật tư do thiếu cho đơn ${order.code || order.id}`,
+            trangThai: 'chua-xu-ly',
+            ghiChu: `Tự động tạo khi Kế toán duyệt đơn hàng ${order.code || order.id}`,
+            items: {
+              create: prItemsToCreate.map((it, idx) => ({
+                inventoryItemId: it.inventoryItemId || null,
+                tenHang: it.tenHang,
+                donVi: it.donVi,
+                soLuong: it.soLuong,
+                donGiaDK: it.donGiaDK,
+                ghiChu: it.ghiChu,
+                sortOrder: idx
+              }))
+            }
+          }
+        });
+        createdPurchaseRequestCode = createdPR.code;
       }
     }
 
-    res.json({ success: true, order, ...order });
+    res.json({
+      success: true,
+      order,
+      ...order,
+      createdProductionTask,
+      createdExportTicket,
+      createdPurchaseRequestCode,
+    });
   } catch (err) {
     console.error('Lỗi UPDATE /api/plan-finance/sales/:id:', err);
     res.status(500).json({ error: err.message });
@@ -8317,6 +8783,10 @@ const handleUpdateSaleOrder = async (req, res) => {
 
 app.put('/api/plan-finance/sales/:id', handleUpdateSaleOrder);
 app.patch('/api/plan-finance/sales/:id', handleUpdateSaleOrder);
+app.post('/api/sales-engine/orders/:id/approve', (req, res) => {
+  req.body = { ...(req.body || {}), keToanDuyet: 'approved' };
+  return handleUpdateSaleOrder(req, res);
+});
 
 // ── GET /api/logistics/inventory & categories ─────────────────────────────────
 app.get('/api/logistics/inventory', async (req, res) => {
@@ -8359,9 +8829,27 @@ app.get('/api/logistics/inventory', async (req, res) => {
         removeAccents(it.maThayThe) === codeNorm
       );
     } else if (categoryId) {
+      const targetItemWithCat = allItems.find(
+        it => it.categoryId === categoryId || it.erpCategoryId === categoryId
+      );
+      const targetCatCode =
+        targetItemWithCat?.category?.id === categoryId
+          ? targetItemWithCat?.category?.code
+          : targetItemWithCat?.erpCategory?.id === categoryId
+            ? targetItemWithCat?.erpCategory?.code
+            : null;
+      const targetCatName =
+        targetItemWithCat?.category?.id === categoryId
+          ? targetItemWithCat?.category?.name
+          : targetItemWithCat?.erpCategory?.id === categoryId
+            ? targetItemWithCat?.erpCategory?.name
+            : null;
+
       filtered = filtered.filter(it =>
         it.categoryId === categoryId ||
-        it.erpCategoryId === categoryId
+        it.erpCategoryId === categoryId ||
+        (targetCatCode && (it.category?.code === targetCatCode || it.erpCategory?.code === targetCatCode)) ||
+        (targetCatName && (it.category?.name === targetCatName || it.erpCategory?.name === targetCatName))
       );
     }
 
@@ -10524,6 +11012,7 @@ app.get('/api/production/bom/:id', async (req, res) => {
       id: bom.id,
       code: bom.code,
       tenDinhMuc: bom.tenDinhMuc,
+      giaBan: bom.giaBan || 0,
       createdAt: bom.createdAt,
       inventoryItemId: bom.inventoryItemId,
       vatTu: (bom.vatTu || []).map((vt) => {
@@ -10531,12 +11020,17 @@ app.get('/api/production/bom/:id', async (req, res) => {
         const mat = inv ? {
           id: inv.id,
           tenHang: inv.tenHang,
+          name: inv.tenHang,
           code: inv.code,
           maThayThe: inv.maThayThe,
           donVi: inv.donVi,
+          unit: inv.donVi,
           giaNhap: inv.giaNhap,
+          giaBan: inv.giaBan,
           thongSoKyThuat: inv.thongSoKyThuat,
           imageUrl: inv.imageUrl,
+          categoryId: inv.categoryId,
+          erpCategoryId: inv.erpCategoryId,
           category: inv.category || inv.erpCategory || null,
           stocks: inv.stocks || [],
         } : null;
@@ -10598,14 +11092,41 @@ app.post('/api/production/bom', async (req, res) => {
       }
     }
 
+    let resolvedCode = finalCode;
+    const existingByCode = await prisma.dinhMuc.findUnique({ where: { code: resolvedCode } });
+    if (existingByCode || (!code && body.originalCode)) {
+      const baseCode = String(body.originalCode || resolvedCode).replace(/-[0-9]+$/, "");
+      const existingBoms = await prisma.dinhMuc.findMany({
+        where: { code: { startsWith: baseCode + "-" } },
+        select: { code: true },
+      });
+      let maxSuffix = 0;
+      for (const b of existingBoms) {
+        if (!b.code) continue;
+        const suffixStr = b.code.slice(baseCode.length + 1);
+        if (/^[0-9]+$/.test(suffixStr)) {
+          const num = parseInt(suffixStr, 10);
+          if (!isNaN(num) && num > maxSuffix) maxSuffix = num;
+        }
+      }
+      resolvedCode = baseCode + "-" + String(maxSuffix + 1).padStart(2, "0");
+    }
+
+    let validInventoryItemId = null;
+    if (finalInventoryItemId) {
+      const invExists = await prisma.inventoryItem.findUnique({
+        where: { id: String(finalInventoryItemId) },
+        select: { id: true },
+      });
+      if (invExists) validInventoryItemId = invExists.id;
+    }
+
     const created = await prisma.dinhMuc.create({
       data: {
-        code: finalCode,
+        code: resolvedCode,
         tenDinhMuc: tenDinhMuc || body.description || 'Định mức mới',
-        inventoryItemId: finalInventoryItemId,
+        inventoryItemId: validInventoryItemId,
         giaBan: Number(body.giaBan) || 0,
-        ghiChu: body.ghiChu || '',
-        status: 'active',
         vatTu: {
           create: vatTu.map((vt) => ({
             inventoryItemId: vt.inventoryItemId || null,
@@ -10618,8 +11139,18 @@ app.post('/api/production/bom', async (req, res) => {
         },
       },
       include: {
-        vatTu: { include: { inventoryItem: true } }
-      }
+        vatTu: {
+          include: {
+            inventoryItem: {
+              include: {
+                stocks: { include: { warehouse: true } },
+                category: true,
+                erpCategory: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     res.status(201).json(created);
@@ -10828,7 +11359,47 @@ app.get('/api/production/dashboard/recent-orders', async (req, res) => {
     let result = await Promise.all(orders.map(async (order) => {
       const isCompleted = order.ngayHoanThanhSanXuat !== null;
       const isRunning = order.trangThai === 'in_production';
-      const materialTicket = (order.logisticsTickets || []).find(t => t.type === 'MATERIAL_PICKING') || null;
+      let materialTicket = (order.logisticsTickets || []).find(t => t.type === 'MATERIAL_PICKING' || t.code?.startsWith('MP-') || t.code?.startsWith('CP-')) || null;
+      let materialExportCode = materialTicket ? materialTicket.code : null;
+      if (!materialExportCode && order.id) {
+        const foundTicket = await prisma.logisticsTicket.findFirst({
+          where: {
+            OR: [
+              { saleOrderId: order.id },
+              ...(order.code ? [{ saleOrder: { code: order.code } }] : []),
+            ],
+            type: { in: ['MATERIAL_PICKING', 'WARRANTY_MATERIAL'] }
+          },
+          select: { code: true, status: true }
+        });
+        if (foundTicket?.code) {
+          materialExportCode = foundTicket.code;
+          materialTicket = foundTicket;
+        }
+      }
+      if (!materialExportCode && order.code) {
+        const sm = await prisma.stockMovement.findFirst({
+          where: {
+            type: 'xuat',
+            OR: [
+              { lyDo: { contains: order.code } },
+              { soChungTu: { contains: order.code } }
+            ]
+          },
+          select: { soChungTu: true }
+        });
+        if (sm?.soChungTu) materialExportCode = sm.soChungTu;
+      }
+
+      let custName = order.customer?.name || null;
+      let custAddress = order.diaChiGiaoHang || order.customer?.address || null;
+      if (!custName && order.ghiChu) {
+        const guest = parseGuestInfo(order.ghiChu);
+        if (guest?.name) {
+          custName = guest.name;
+          custAddress = custAddress || guest.address || null;
+        }
+      }
 
       const prodTask = await prisma.task.findFirst({
         where: {
@@ -10858,7 +11429,18 @@ app.get('/api/production/dashboard/recent-orders', async (req, res) => {
           const dm = await prisma.dinhMuc.findUnique({ where: { id: i.dinhMucId }, select: { code: true } });
           if (dm?.code) dmCode = dm.code;
         }
-        const qtyStr = i.soLuong || 0;
+        let qtyStr = i.soLuong || 0;
+        if (prodTask && prodTask.actualResult) {
+          try {
+            const prodItems = JSON.parse(prodTask.actualResult);
+            if (Array.isArray(prodItems)) {
+              const found = prodItems.find(p => p.saleOrderItemId === i.id || p.id === i.id || p.tenHang === i.tenHang);
+              if (found && (found.soLuong != null || found.missingQty != null || found.qty != null)) {
+                qtyStr = found.soLuong ?? found.missingQty ?? found.qty;
+              }
+            }
+          } catch (_) { }
+        }
         const unitStr = i.inventoryItem?.donVi || 'cái';
         return dmCode ? `${i.tenHang} | ${dmCode} | ${qtyStr} ${unitStr}` : `${i.tenHang} | ${qtyStr} ${unitStr}`;
       }));
@@ -10886,9 +11468,10 @@ app.get('/api/production/dashboard/recent-orders', async (req, res) => {
         progress: isCompleted ? 100 : 0,
         status: isCompleted ? 'completed' : (isRunning ? 'running' : 'pending'),
         trangThai: order.trangThai,
+        materialTicketCode: materialExportCode,
         materialTicketStatus: materialTicket ? materialTicket.status : null,
-        customerName: order.customer?.name || null,
-        customerAddress: order.diaChiGiaoHang || order.customer?.address || null,
+        customerName: custName,
+        customerAddress: custAddress,
         updatedAt: order.updatedAt,
         name: displayName,
         itemsDetail,
@@ -10959,8 +11542,13 @@ app.get('/api/production/orders/:id', async (req, res) => {
     const prodTask = await prisma.task.findFirst({
       where: {
         deptCode: 'production',
-        title: { contains: order.code || '' }
-      }
+        OR: [
+          { title: { contains: order.code || '' } },
+          { description: { contains: order.code || '' } },
+          ...(order.id ? [{ description: { contains: order.id } }] : [])
+        ]
+      },
+      orderBy: { createdAt: 'desc' }
     });
 
     const prodTargets = new Map();
@@ -10968,7 +11556,11 @@ app.get('/api/production/orders/:id', async (req, res) => {
       try {
         const parsed = JSON.parse(prodTask.actualResult);
         for (const pt of parsed) {
-          prodTargets.set(pt.tenHang, pt.missingQty);
+          const qty = Number(pt.soLuong ?? pt.missingQty ?? pt.qty);
+          if (!isNaN(qty)) {
+            prodTargets.set(pt.tenHang, qty);
+            if (pt.id) prodTargets.set(pt.id, qty);
+          }
         }
       } catch (_) { }
     } else if (prodTask && prodTask.description) {
@@ -10991,10 +11583,17 @@ app.get('/api/production/orders/:id', async (req, res) => {
     const materialMap = new Map();
 
     for (const orderItem of order.saleOrderItems) {
-      if (hasProdTargets && !prodTargets.has(orderItem.tenHang)) {
+      if (hasProdTargets && !prodTargets.has(orderItem.id) && !prodTargets.has(orderItem.tenHang)) {
         continue;
       }
-      const targetQty = hasProdTargets ? (prodTargets.get(orderItem.tenHang) || orderItem.soLuong) : orderItem.soLuong;
+      const targetQty = hasProdTargets
+        ? (prodTargets.get(orderItem.id) ?? prodTargets.get(orderItem.tenHang) ?? orderItem.soLuong)
+        : orderItem.soLuong;
+
+      let parsedGhiChu = {};
+      try {
+        parsedGhiChu = typeof orderItem.ghiChu === 'string' ? JSON.parse(orderItem.ghiChu) : (orderItem.ghiChu || {});
+      } catch (_) { }
 
       let bom = null;
       if (orderItem.dinhMucId) {
@@ -11066,12 +11665,32 @@ app.get('/api/production/orders/:id', async (req, res) => {
         id: orderItem.id,
         tenHang: orderItem.tenHang,
         soLuong: targetQty,
+        soLuongDat: orderItem.soLuong,
+        donVi: orderItem.donViTinh || orderItem.inventoryItem?.donVi || 'cái',
         donGia: orderItem.donGia,
         bomFound: !!bom,
         bomCode: bom ? bom.code : null,
+        bomTen: bom ? bom.tenDinhMuc : null,
+        dinhMucGhiChu: bom?.ghiChu || parsedGhiChu.dinhMucGhiChu || parsedGhiChu.bomGhiChu || parsedGhiChu.note || null,
         materials: itemMaterials,
       });
     }
+
+    let materialTicket = await prisma.logisticsTicket.findFirst({
+      where: {
+        OR: [
+          { saleOrderId: order.id },
+          ...(order.code ? [{ saleOrder: { code: order.code } }] : []),
+          ...(order.code ? [{ code: { contains: order.code } }] : [])
+        ],
+        type: { in: ['MATERIAL_PICKING', 'WARRANTY_MATERIAL'] }
+      },
+      select: { id: true, code: true, status: true, type: true }
+    });
+
+    const isMaterialIssued = materialTicket
+      ? (materialTicket.status === 'COMPLETED' || materialTicket.status === 'PICKED' || materialTicket.status === 'PACKED' || materialTicket.status === 'da_cap_phat')
+      : (materialMap.size === 0);
 
     const isCompleted =
       order.ngayHoanThanhSanXuat !== null ||
@@ -11087,11 +11706,17 @@ app.get('/api/production/orders/:id', async (req, res) => {
     res.json({
       order: {
         id: orderCode,
+        saleOrderCode: order.code,
         trangThai: isCompleted ? 'completed' : isRunning ? 'running' : 'pending',
         ngayDat: order.ngayDat,
         ngayHoanThanh: order.ngayHoanThanhSanXuat || order.ngayGiao,
         ngayYeuCauQC: order.ngayYeuCauQC || order.ngayGiao,
         tongTien: order.tongTien,
+        customerName: order.customer?.name || null,
+        customerAddress: order.diaChiGiaoHang || order.customer?.address || null,
+        materialTicketCode: materialTicket ? materialTicket.code : null,
+        materialTicketStatus: materialTicket ? materialTicket.status : null,
+        isMaterialIssued,
       },
       items,
       materials: Array.from(materialMap.values()),

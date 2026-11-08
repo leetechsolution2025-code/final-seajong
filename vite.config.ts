@@ -1888,8 +1888,38 @@ function autoBackendPlugin(): Plugin {
               orders.map(async (order) => {
                 const isCompleted = order.ngayHoanThanhSanXuat !== null
                 const isRunning = order.trangThai === 'in_production'
-                const materialTicket =
-                  (order.logisticsTickets || []).find((t) => t.type === 'MATERIAL_PICKING') || null
+                let materialTicket: any =
+                  (order.logisticsTickets || []).find((t) => t.type === 'MATERIAL_PICKING' || t.code?.startsWith('MP-') || t.code?.startsWith('CP-')) || null
+                let materialExportCode = materialTicket ? materialTicket.code : null
+                if (!materialExportCode && order.id) {
+                  const foundTicket = await vitePrisma.logisticsTicket.findFirst({
+                    where: {
+                      OR: [
+                        { saleOrderId: order.id },
+                        ...(order.code ? [{ saleOrder: { code: order.code } }] : []),
+                      ],
+                      type: { in: ['MATERIAL_PICKING', 'WARRANTY_MATERIAL'] },
+                    },
+                    select: { code: true, status: true },
+                  })
+                  if (foundTicket?.code) {
+                    materialExportCode = foundTicket.code
+                    materialTicket = foundTicket
+                  }
+                }
+                if (!materialExportCode && order.code) {
+                  const sm = await vitePrisma.stockMovement.findFirst({
+                    where: {
+                      type: 'xuat',
+                      OR: [
+                        { lyDo: { contains: order.code } },
+                        { soChungTu: { contains: order.code } },
+                      ],
+                    },
+                    select: { soChungTu: true },
+                  })
+                  if (sm?.soChungTu) materialExportCode = sm.soChungTu
+                }
 
                 const isInternal = !order.code || order.code.startsWith('LSX')
                 const displayName = isInternal
@@ -1912,6 +1942,7 @@ function autoBackendPlugin(): Plugin {
                   progress: isCompleted ? 100 : 0,
                   status: isCompleted ? 'completed' : isRunning ? 'running' : 'pending',
                   trangThai: order.trangThai,
+                  materialTicketCode: materialExportCode,
                   materialTicketStatus: materialTicket ? materialTicket.status : null,
                   customerName: order.customer?.name || null,
                   customerAddress: order.diaChiGiaoHang || order.customer?.address || null,

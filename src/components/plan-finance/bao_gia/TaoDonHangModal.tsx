@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/components/ui/Toast";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
@@ -160,9 +161,10 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
   const { user } = useAuth();
   const isAdmin = user?.role?.toUpperCase() === "ADMIN" || user?.role?.toUpperCase() === "SUPERADMIN";
   const isKinhDoanh = Boolean(
-    user?.employee?.departmentName?.toLowerCase().includes("kinh doanh") ||
-    user?.employee?.departmentCode === "KD" ||
-    isAdmin
+    !isAdmin && (
+      user?.employee?.departmentName?.toLowerCase().includes("kinh doanh") ||
+      user?.employee?.departmentCode === "KD"
+    )
   );
 
   const today = new Date();
@@ -426,15 +428,17 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
       
       const newDinhMucs = (formItem.dinhMucs || []).filter((d: any) => d.id !== formItem.dinhMucId);
       const standardDm = newDinhMucs.length > 0 ? newDinhMucs[0] : null;
-      
-      setFormItem((prev: any) => ({
-        ...prev,
+      const nextDonGia = standardDm
+        ? calculateBomPrice(standardDm, (formItem as any).baseGiaBan || formItem.donGia, (formItem as any).loiNhuanKyVong || 0, (formItem as any).phuongPhapTinhLoiNhuan || "revenue")
+        : formItem.donGia;
+
+      updateFormFields({
         dinhMucs: newDinhMucs,
         dinhMucId: standardDm ? standardDm.id : null,
         dinhMucTen: standardDm ? standardDm.tenDinhMuc : null,
-        code: standardDm ? standardDm.code : prev.code,
-        donGia: standardDm ? (standardDm.giaBan ?? 0) : prev.donGia
-      }));
+        bomCode: standardDm ? standardDm.code : "",
+        donGia: nextDonGia,
+      });
       setConfirmDeleteBom(false);
       toast.success("Xoá thành công", "Đã xoá định mức khỏi hệ thống");
     } catch (e) {
@@ -445,7 +449,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
     }
   };
 
-  const activeDm = formItem.dinhMucs?.find((x: any) => x.id === formItem.dinhMucId);
+  const activeDm = formItem.dinhMucs?.find((x: any) => x.id === formItem.dinhMucId || String(x.id) === String(formItem.dinhMucId));
   const isStandardBom = activeDm ? !/-[0-9]+$/.test(activeDm.code) : true;
 
   const hasBomChanged = React.useMemo(() => {
@@ -481,7 +485,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
 
   React.useEffect(() => {
     if (hasBomChanged && originalBomData?.code) {
-      fetch(`/api/production/bom/next-code?originalCode=${originalBomData.code}`)
+      fetch(`/api/production/bom/next-code?originalCode=${encodeURIComponent(originalBomData.code)}`)
         .then(res => res.json())
         .then(data => {
           if (data.nextCode) setPreviewCode(data.nextCode);
@@ -512,7 +516,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
     if (showAddMaterial) {
       setLoadingAddMaterials(true);
       Promise.all([
-        fetch(`/api/logistics/inventory`).then(res => res.json()),
+        fetch(`/api/logistics/inventory?nolimit=true`).then(res => res.json()),
         fetch(`/api/logistics/categories`).then(res => res.json())
       ])
         .then(([materialsData, categoriesData]) => {
@@ -532,20 +536,19 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
   }, [showAddMaterial]);
 
   React.useEffect(() => {
-    if (showAlternative && alternativeTarget?.material) {
+    if (showAlternative && alternativeTarget) {
       setLoadingAlternatives(true);
-      
-      let exactLetterPrefix = "";
-      if (alternativeTarget.material.code) {
-        const match = alternativeTarget.material.code.match(/^[a-zA-Z]+/);
-        if (match) exactLetterPrefix = match[0];
-      }
-      
+      const mat = alternativeTarget.material || alternativeTarget.inventoryItem || {};
+      const catId = mat.category?.id || mat.categoryId || mat.erpCategoryId || alternativeTarget.inventoryItem?.categoryId || alternativeTarget.inventoryItem?.erpCategoryId || "";
+      const exactCodeVal = mat.maThayThe || mat.code || alternativeTarget.maVatTu || "";
+
       const queryParams = new URLSearchParams();
-      if (swapSearchMode === "exact" && ((alternativeTarget.material as any)?.maThayThe || alternativeTarget.material?.code)) {
-        queryParams.append("exactCode", (alternativeTarget.material as any)?.maThayThe || alternativeTarget.material?.code || "");
-      } else if (swapSearchMode === "group" && alternativeTarget.material.category?.id) {
-        queryParams.append("categoryId", alternativeTarget.material.category.id);
+      if (swapSearchMode === "exact" && exactCodeVal) {
+        queryParams.append("exactCode", exactCodeVal);
+      } else if (swapSearchMode === "group" && catId) {
+        queryParams.append("categoryId", catId);
+      } else if (exactCodeVal) {
+        queryParams.append("exactCode", exactCodeVal);
       }
       queryParams.append("nolimit", "true");
 
@@ -580,24 +583,38 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
       setBomDetailData(null);
       setOriginalBomData(null);
       setNewBomDescription("");
+      setActiveVtMenu(null);
     }
   }, [showBomDetail, formItem.dinhMucId]);
 
   const handleSwapMaterial = (altMaterial: any) => {
     if (!alternativeTarget || !bomDetailData) return;
     const newVatTu = [...(bomDetailData.vatTu || [])];
-    const index = newVatTu.findIndex(v => v.id === alternativeTarget.id);
+    const index = newVatTu.findIndex(v =>
+      (v.id && alternativeTarget.id && v.id === alternativeTarget.id) ||
+      ((v.inventoryItemId || v.material?.id) === (alternativeTarget.inventoryItemId || alternativeTarget.material?.id) && v.maVatTu === alternativeTarget.maVatTu)
+    );
     if (index !== -1) {
+      const resolvedCategory = altMaterial.category || altMaterial.erpCategory || newVatTu[index].material?.category || null;
+      const resolvedStocks = altMaterial.stocks || [];
       newVatTu[index] = {
         ...newVatTu[index],
         inventoryItemId: altMaterial.id,
         maVatTu: altMaterial.code,
         materialId: altMaterial.id,
         tenVatTu: altMaterial.name || altMaterial.tenHang,
+        donViTinh: altMaterial.unit || altMaterial.donVi || newVatTu[index].donViTinh || "cái",
+        inventoryItem: {
+          ...(newVatTu[index].inventoryItem || {}),
+          ...altMaterial,
+          stocks: resolvedStocks,
+          category: resolvedCategory,
+        },
         material: {
-          ...newVatTu[index].material,
+          ...(newVatTu[index].material || {}),
           id: altMaterial.id,
           code: altMaterial.code,
+          maThayThe: altMaterial.maThayThe ?? null,
           tenHang: altMaterial.name || altMaterial.tenHang,
           name: altMaterial.name || altMaterial.tenHang,
           unit: altMaterial.unit || altMaterial.donVi,
@@ -605,6 +622,10 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
           price: altMaterial.giaNhap || altMaterial.price || 0,
           giaNhap: altMaterial.giaNhap || altMaterial.price || 0,
           giaBan: altMaterial.giaBan || 0,
+          categoryId: altMaterial.categoryId,
+          erpCategoryId: altMaterial.erpCategoryId,
+          category: resolvedCategory,
+          stocks: resolvedStocks,
         }
       };
       setBomDetailData({ ...bomDetailData, vatTu: newVatTu });
@@ -620,31 +641,47 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
   };
 
   const handleAddMaterial = (newMaterial: any) => {
-    if (addMaterialTargetIndex === null || !bomDetailData) return;
+    if (!bomDetailData) return;
     const qty = addQuantities[newMaterial.id] || 1;
     const newVatTu = [...(bomDetailData.vatTu || [])];
-    
+    const resolvedCategory = newMaterial.category || newMaterial.erpCategory || null;
+    const resolvedStocks = newMaterial.stocks || [];
+
     const newItem = {
+      id: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       inventoryItemId: newMaterial.id,
       maVatTu: newMaterial.code,
       materialId: newMaterial.id,
       tenVatTu: newMaterial.name || newMaterial.tenHang,
       soLuong: qty,
-      donViTinh: newMaterial.unit || newMaterial.donVi,
+      donViTinh: newMaterial.unit || newMaterial.donVi || "cái",
+      inventoryItem: {
+        ...newMaterial,
+        stocks: resolvedStocks,
+        category: resolvedCategory,
+      },
       material: {
         id: newMaterial.id,
         code: newMaterial.code,
+        maThayThe: newMaterial.maThayThe ?? null,
         tenHang: newMaterial.name || newMaterial.tenHang,
         name: newMaterial.name || newMaterial.tenHang,
-        unit: newMaterial.unit || newMaterial.donVi,
-        donVi: newMaterial.unit || newMaterial.donVi,
+        unit: newMaterial.unit || newMaterial.donVi || "cái",
+        donVi: newMaterial.unit || newMaterial.donVi || "cái",
         price: newMaterial.giaNhap || newMaterial.price || 0,
         giaNhap: newMaterial.giaNhap || newMaterial.price || 0,
         giaBan: newMaterial.giaBan || 0,
+        categoryId: newMaterial.categoryId,
+        erpCategoryId: newMaterial.erpCategoryId,
+        category: resolvedCategory,
+        stocks: resolvedStocks,
       }
     };
 
-    newVatTu.splice(addMaterialTargetIndex + 1, 0, newItem);
+    const insertIdx = addMaterialTargetIndex !== null && addMaterialTargetIndex >= 0
+      ? addMaterialTargetIndex + 1
+      : newVatTu.length;
+    newVatTu.splice(insertIdx, 0, newItem);
     setBomDetailData({ ...bomDetailData, vatTu: newVatTu });
     setShowAddMaterial(false);
   };
@@ -653,18 +690,22 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
     if (!newBomDescription.trim() || !hasBomChanged || !bomDetailData) return;
     setSavingNewBom(true);
     try {
+      const nextPrice = Number(proposedDonGia || 0);
+      const targetInvId = formItem.inventoryId || originalBomData?.inventoryItemId || bomDetailData?.inventoryItemId || null;
       const payload = {
         code: previewCode || undefined,
         originalCode: originalBomData.code,
         tenDinhMuc: newBomDescription.trim(),
-        materialItemId: formItem.inventoryId || null,
+        giaBan: nextPrice,
+        materialItemId: targetInvId,
+        targetInventoryItemId: targetInvId,
         manufacturedProductId: null,
         vatTu: bomDetailData.vatTu.map((v: any) => ({
           inventoryItemId: v.material?.id || v.inventoryItemId || null,
           maVatTu: v.material?.code || v.maVatTu || null,
           tenVatTu: v.material?.tenHang || v.material?.name || v.tenVatTu,
-          soLuong: v.soLuong,
-          donViTinh: v.donViTinh || v.material?.unit || v.material?.donVi || "",
+          soLuong: Number(v.soLuong) || 1,
+          donViTinh: v.donViTinh || v.material?.unit || v.material?.donVi || "cái",
           ghiChu: v.ghiChu || ""
         }))
       };
@@ -674,31 +715,69 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-      if (!res.ok) throw new Error("Failed to save BOM");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData?.error || "Không thể lưu định mức mới");
+      }
 
       const created = await res.json();
       
-      // Update local states so it turns into the new BOM
-      // We need to fetch it to get full details (with vatTu structure) or just rely on what we have.
-      // Re-fetching is safer.
       const res2 = await fetch(`/api/production/bom/${created.id}`);
-      const freshData = await res2.json();
-      
-      setFormItem(prev => ({
-        ...prev,
-        dinhMucs: [...(prev.dinhMucs || []), freshData],
+      const freshData = res2.ok ? await res2.json() : created;
+      if (!freshData.giaBan && nextPrice > 0) {
+        freshData.giaBan = nextPrice;
+      }
+
+      const prevDinhMucId = formItem.dinhMucId;
+      const updatedDinhMucs = [...(formItem.dinhMucs || []), freshData];
+      setFormItem(p => ({
+        ...p,
+        dinhMucs: updatedDinhMucs,
         dinhMucId: freshData.id,
         dinhMucTen: freshData.tenDinhMuc,
-        code: freshData.code,
-        donGia: Number(proposedDonGia || 0)
+        bomCode: freshData.code,
+        donGia: nextPrice,
       }));
+      setItems(prevItems =>
+        prevItems.map(row => {
+          if (formItem.id !== -1 && row.id === formItem.id) {
+            return {
+              ...row,
+              dinhMucs: [...(row.dinhMucs || []), freshData],
+              dinhMucId: freshData.id,
+              dinhMucTen: freshData.tenDinhMuc,
+              bomCode: freshData.code,
+              donGia: nextPrice,
+            };
+          }
+          if (targetInvId && row.inventoryId === targetInvId) {
+            const existsInRow = (row.dinhMucs || []).some((d: any) => d.id === freshData.id);
+            const nextRowDinhMucs = existsInRow ? row.dinhMucs : [...(row.dinhMucs || []), freshData];
+            if (formItem.id === -1 && row.dinhMucId === prevDinhMucId) {
+              return {
+                ...row,
+                dinhMucs: nextRowDinhMucs,
+                dinhMucId: freshData.id,
+                dinhMucTen: freshData.tenDinhMuc,
+                bomCode: freshData.code,
+                donGia: nextPrice,
+              };
+            }
+            return {
+              ...row,
+              dinhMucs: nextRowDinhMucs,
+            };
+          }
+          return row;
+        })
+      );
       
       setBomDetailData(freshData);
       setOriginalBomData(JSON.parse(JSON.stringify(freshData)));
       setNewBomDescription("");
-      initialDonGiaRef.current = Number(proposedDonGia || 0);
+      initialDonGiaRef.current = nextPrice;
       
-      toast.success("Lưu thành công", "Đã tạo định mức mới: " + created.code);
+      toast.success("Lưu thành công", "Đã tạo định mức mới: " + (freshData.code || created.code));
       setShowBomDetail(false);
     } catch (e) {
       console.error(e);
@@ -2160,9 +2239,9 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                               variant="outline"
                               size="sm"
                               onClick={() => setShowBomMenu(v => !v)}
-                              disabled={!formItem.dinhMucId || isKinhDoanh}
+                              disabled={!formItem.dinhMucId}
                               style={{ height: 34, width: 34, padding: 0, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}
-                              title={isKinhDoanh ? "Không có quyền chỉnh sửa định mức" : "Tuỳ chọn định mức"}
+                              title="Tuỳ chọn định mức"
                             >
                               <i className="bi bi-three-dots"></i>
                             </Button>
@@ -2622,53 +2701,79 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                                 const matCheck = checkMaterialShortage(it);
 
                                 return (
-                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
                                     {ton === 0 ? (
-                                      <span title="Hết hàng thành phẩm" style={{ color: "#ef4444", display: "flex", alignItems: "center", gap: 4 }}>
+                                      <span
+                                        title="Hết hàng thành phẩm"
+                                        style={{
+                                          color: "#ef4444",
+                                          background: "rgba(239, 68, 68, 0.1)",
+                                          width: 22,
+                                          height: 22,
+                                          borderRadius: "50%",
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          flexShrink: 0,
+                                        }}
+                                      >
                                         <i className="bi bi-x-circle-fill" style={{ fontSize: 13 }} />
-                                        <span style={{ fontSize: 11, fontWeight: 600 }}>Hết hàng</span>
                                       </span>
                                     ) : (
-                                      <span title={`Thiếu hàng (thực tồn: ${ton})`} style={{ color: "#f97316", display: "flex", alignItems: "center", gap: 4 }}>
+                                      <span
+                                        title={`Thiếu hàng (thực tồn: ${ton})`}
+                                        style={{
+                                          color: "#f97316",
+                                          background: "rgba(249, 115, 22, 0.1)",
+                                          width: 22,
+                                          height: 22,
+                                          borderRadius: "50%",
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          flexShrink: 0,
+                                        }}
+                                      >
                                         <i className="bi bi-exclamation-triangle-fill" style={{ fontSize: 13 }} />
-                                        <span style={{ fontSize: 11, fontWeight: 600 }}>Thiếu hàng (tồn: {ton})</span>
                                       </span>
                                     )}
 
                                     {matCheck.hasBOM && (
                                       matCheck.hasShortage ? (
-                                        <span 
-                                          title={`Không đủ vật tư sản xuất (${matCheck.missingCount} loại vật tư thiếu)`} 
-                                          style={{ 
-                                            color: "#dc2626", 
-                                            background: "rgba(220, 38, 38, 0.08)", 
-                                            padding: "1px 7px", 
-                                            borderRadius: 12, 
-                                            border: "1px solid rgba(220, 38, 38, 0.25)", 
-                                            display: "flex", 
-                                            alignItems: "center", 
-                                            gap: 4 
+                                        <span
+                                          title={`Không đủ vật tư sản xuất (${matCheck.missingCount} loại vật tư thiếu)`}
+                                          style={{
+                                            color: "#dc2626",
+                                            background: "rgba(220, 38, 38, 0.1)",
+                                            border: "1px solid rgba(220, 38, 38, 0.25)",
+                                            width: 22,
+                                            height: 22,
+                                            borderRadius: "50%",
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            flexShrink: 0,
                                           }}
                                         >
-                                          <i className="bi bi-exclamation-octagon-fill" style={{ fontSize: 11 }} />
-                                          <span style={{ fontSize: 11, fontWeight: 700 }}>Không đủ vật tư</span>
+                                          <i className="bi bi-exclamation-octagon-fill" style={{ fontSize: 12 }} />
                                         </span>
                                       ) : (
-                                        <span 
-                                          title="Đủ vật tư để sản xuất" 
-                                          style={{ 
-                                            color: "#059669", 
-                                            background: "rgba(5, 150, 105, 0.08)", 
-                                            padding: "1px 7px", 
-                                            borderRadius: 12, 
-                                            border: "1px solid rgba(5, 150, 105, 0.25)", 
-                                            display: "flex", 
-                                            alignItems: "center", 
-                                            gap: 4 
+                                        <span
+                                          title="Đủ vật tư để sản xuất"
+                                          style={{
+                                            color: "#059669",
+                                            background: "rgba(5, 150, 105, 0.1)",
+                                            border: "1px solid rgba(5, 150, 105, 0.25)",
+                                            width: 22,
+                                            height: 22,
+                                            borderRadius: "50%",
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            flexShrink: 0,
                                           }}
                                         >
-                                          <i className="bi bi-check-circle-fill" style={{ fontSize: 11 }} />
-                                          <span style={{ fontSize: 11, fontWeight: 600 }}>Đủ vật tư SX</span>
+                                          <i className="bi bi-check-circle-fill" style={{ fontSize: 12 }} />
                                         </span>
                                       )
                                     )}
@@ -2734,38 +2839,40 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                                 const matCheck = checkMaterialShortage(it);
                                 if (matCheck.hasShortage) {
                                   return (
-                                    <span style={{
-                                      color: "#dc2626",
-                                      background: "rgba(220, 38, 38, 0.08)",
-                                      padding: "2px 8px",
-                                      borderRadius: 12,
-                                      border: "1px solid rgba(220, 38, 38, 0.25)",
-                                      fontSize: 11,
-                                      fontWeight: 700,
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      gap: 4
-                                    }}>
-                                      <i className="bi bi-exclamation-triangle-fill" style={{ fontSize: 11 }} />
-                                      Không đủ vật tư ({matCheck.missingCount} loại thiếu)
+                                    <span
+                                      title={`Không đủ vật tư (${matCheck.missingCount} loại thiếu)`}
+                                      style={{
+                                        color: "#dc2626",
+                                        background: "rgba(220, 38, 38, 0.1)",
+                                        border: "1px solid rgba(220, 38, 38, 0.25)",
+                                        width: 22,
+                                        height: 22,
+                                        borderRadius: "50%",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                      }}
+                                    >
+                                      <i className="bi bi-exclamation-triangle-fill" style={{ fontSize: 11.5 }} />
                                     </span>
                                   );
                                 }
                                 return (
-                                  <span style={{
-                                    color: "#059669",
-                                    background: "rgba(5, 150, 105, 0.08)",
-                                    padding: "2px 8px",
-                                    borderRadius: 12,
-                                    border: "1px solid rgba(5, 150, 105, 0.25)",
-                                    fontSize: 11,
-                                    fontWeight: 600,
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 4
-                                  }}>
-                                    <i className="bi bi-check-circle-fill" style={{ fontSize: 11 }} />
-                                    Đủ vật tư sản xuất
+                                  <span
+                                    title="Đủ vật tư sản xuất"
+                                    style={{
+                                      color: "#059669",
+                                      background: "rgba(5, 150, 105, 0.1)",
+                                      border: "1px solid rgba(5, 150, 105, 0.25)",
+                                      width: 22,
+                                      height: 22,
+                                      borderRadius: "50%",
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                    }}
+                                  >
+                                    <i className="bi bi-check-circle-fill" style={{ fontSize: 11.5 }} />
                                   </span>
                                 );
                               })()}
@@ -2782,25 +2889,40 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                               </thead>
                               <tbody>
                                 {activeDinhMuc.vatTu && activeDinhMuc.vatTu.length > 0 ? activeDinhMuc.vatTu.map((vt: any, vtIdx: number) => {
-                                  const vtStocks = vt.inventoryItem?.stocks || vt.material?.stocks || [];
-                                  const vtRelevantStocks = vtStocks.filter((s: any) => s.warehouse?.code === "KHO-CHINH" || s.warehouse?.code === "KVP");
+                                  const vtStocks = vt.stocks || vt.inventoryItem?.stocks || vt.material?.stocks || [];
+                                  const vtRelevantStocks = vtStocks.filter((s: any) => {
+                                    const c = s.warehouse?.code?.toUpperCase()?.trim();
+                                    return c === "KHO-CHINH" || c === "KVP" || c === "KHO_CHINH";
+                                  });
                                   const vtSoLuong = vtRelevantStocks.reduce((acc: number, s: any) => acc + (s.soLuong || 0), 0);
                                   const vtSoLuongGiu = vtRelevantStocks.reduce((acc: number, s: any) => acc + (s.soLuongGiu || 0), 0);
                                   const vtThucTon = Math.max(0, vtSoLuong - vtSoLuongGiu);
                                   const needed = vt.soLuong * it.soLuong;
                                   const isVTOOS = vtThucTon < needed;
-                                  const vtName = vt.inventoryItem?.tenHang || vt.tenVatTu;
+                                  const vtName = vt.material?.tenHang || vt.inventoryItem?.tenHang || vt.tenVatTu;
 
                                   return (
                                     <tr key={vt.id || vtIdx} style={{ borderBottom: "1px solid var(--border)" }}>
-                                      <td style={{ padding: "6px 10px", fontFamily: "monospace" }}>{vt.inventoryItem?.code || vt.maVatTu || "-"}</td>
+                                      <td style={{ padding: "6px 10px", fontFamily: "monospace" }}>{vt.material?.code || vt.inventoryItem?.code || vt.maVatTu || "-"}</td>
                                       <td style={{ padding: "6px 10px", fontWeight: 500, color: "var(--foreground)" }}>
                                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                           {vtName}
                                           {isVTOOS && (
-                                            <span title={`Thiếu hàng (thực tồn: ${vtThucTon})`} style={{ color: "#f97316", display: "flex", alignItems: "center", gap: 4 }}>
-                                              <i className="bi bi-exclamation-triangle-fill" style={{ fontSize: 13 }} />
-                                              <span style={{ fontSize: 11, fontWeight: 600 }}>Thiếu {needed - vtThucTon} (tồn {vtThucTon})</span>
+                                            <span
+                                              title={`Thiếu ${needed - vtThucTon} (thực tồn: ${vtThucTon})`}
+                                              style={{
+                                                color: "#f97316",
+                                                background: "rgba(249, 115, 22, 0.1)",
+                                                width: 20,
+                                                height: 20,
+                                                borderRadius: "50%",
+                                                display: "inline-flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                flexShrink: 0,
+                                              }}
+                                            >
+                                              <i className="bi bi-exclamation-triangle-fill" style={{ fontSize: 11.5 }} />
                                             </span>
                                           )}
                                         </div>
@@ -2981,26 +3103,26 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                             </button>
                           </div>
 
-                          {/* Row 2: Badges (Hết hàng / Thiếu vật tư / Đủ vật tư) */}
+                          {/* Row 2: Badges (Icon only) */}
                           {isOutOfFinishedGood && (
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                               {ton === 0 ? (
-                                <span style={{ color: "#ef4444", background: "rgba(239,68,68,0.08)", padding: "1px 6px", borderRadius: 4, fontSize: 10.5, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 3 }}>
-                                  <i className="bi bi-x-circle-fill" style={{ fontSize: 10 }} /> Hết hàng
+                                <span title="Hết hàng thành phẩm" style={{ color: "#ef4444", background: "rgba(239,68,68,0.1)", width: 22, height: 22, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                                  <i className="bi bi-x-circle-fill" style={{ fontSize: 12 }} />
                                 </span>
                               ) : (
-                                <span style={{ color: "#f97316", background: "rgba(249,115,22,0.08)", padding: "1px 6px", borderRadius: 4, fontSize: 10.5, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 3 }}>
-                                  <i className="bi bi-exclamation-triangle-fill" style={{ fontSize: 10 }} /> Thiếu hàng (tồn: {ton})
+                                <span title={`Thiếu hàng (tồn: ${ton})`} style={{ color: "#f97316", background: "rgba(249,115,22,0.1)", width: 22, height: 22, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                                  <i className="bi bi-exclamation-triangle-fill" style={{ fontSize: 12 }} />
                                 </span>
                               )}
                               {matCheck.hasBOM && (
                                 matCheck.hasShortage ? (
-                                  <span style={{ color: "#dc2626", background: "rgba(220, 38, 38, 0.08)", padding: "1px 6px", borderRadius: 4, border: "1px solid rgba(220, 38, 38, 0.25)", fontSize: 10.5, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 3 }}>
-                                    <i className="bi bi-exclamation-octagon-fill" style={{ fontSize: 10 }} /> Không đủ vật tư
+                                  <span title={`Không đủ vật tư (${matCheck.missingCount} loại thiếu)`} style={{ color: "#dc2626", background: "rgba(220, 38, 38, 0.1)", border: "1px solid rgba(220, 38, 38, 0.25)", width: 22, height: 22, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                                    <i className="bi bi-exclamation-octagon-fill" style={{ fontSize: 11 }} />
                                   </span>
                                 ) : (
-                                  <span style={{ color: "#059669", background: "rgba(5, 150, 105, 0.08)", padding: "1px 6px", borderRadius: 4, border: "1px solid rgba(5, 150, 105, 0.25)", fontSize: 10.5, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 3 }}>
-                                    <i className="bi bi-check-circle-fill" style={{ fontSize: 10 }} /> Đủ vật tư SX
+                                  <span title="Đủ vật tư SX" style={{ color: "#059669", background: "rgba(5, 150, 105, 0.1)", border: "1px solid rgba(5, 150, 105, 0.25)", width: 22, height: 22, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                                    <i className="bi bi-check-circle-fill" style={{ fontSize: 11 }} />
                                   </span>
                                 )
                               )}
@@ -3153,397 +3275,782 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
 
       <Offcanvas
         isOpen={showBomDetail}
-        onClose={() => setShowBomDetail(false)}
+        onClose={() => { setShowBomDetail(false); setActiveVtMenu(null); setShowAlternative(false); }}
         title="Chi tiết định mức"
-        width="400px"
+        width="460px"
+        zIndex={3200}
         icon={<i className="bi bi-diagram-3-fill text-blue-600" style={{ fontSize: 20 }} />}
         bodyStyle={{ padding: 0 }}
       >
-              {loadingBom ? (
-                <div className="text-center p-5 text-muted d-flex flex-column align-items-center justify-content-center h-100">
-                  <div className="spinner-border text-primary mb-3" style={{ width: "2rem", height: "2rem" }}></div>
-                  <span style={{ fontSize: 14 }}>Đang tải dữ liệu định mức...</span>
+        {loadingBom ? (
+          <div style={{ padding: 48, textAlign: "center", color: "#64748b", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 12 }}>
+            <i className="bi bi-arrow-repeat animate-spin" style={{ fontSize: 28, color: "#0284c7" }} />
+            <span style={{ fontSize: 14, fontWeight: 500 }}>Đang tải dữ liệu định mức...</span>
+          </div>
+        ) : bomDetailData ? (
+          <div
+            onClick={() => setActiveVtMenu(null)}
+            style={{ display: "flex", flexDirection: "column", height: "100%", background: "#f8fafc" }}
+          >
+            {/* Header thông tin định mức & tạo biến thể */}
+            <div style={{ padding: 16, background: "#ffffff", borderBottom: "1px solid #e2e8f0", flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 6, background: "rgba(59, 130, 246, 0.1)", color: "#2563eb", fontSize: 10.5, letterSpacing: "0.04em", fontWeight: 700 }}>
+                  <i className="bi bi-diagram-3" /> B.O.M
+                </span>
+                {hasBomChanged && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 999, background: "#fef3c7", color: "#d97706", fontSize: 11, fontWeight: 700 }}>
+                    <i className="bi bi-stars" /> Biến thể mới
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, gap: 8 }}>
+                <h5 style={{ margin: 0, fontWeight: 800, fontSize: 16, color: "#0f172a", fontFamily: "monospace" }}>
+                  {hasBomChanged ? (previewCode || `${originalBomData?.code}-XX`) : bomDetailData.code}
+                </h5>
+                <span style={{ fontWeight: 800, color: "#0284c7", fontSize: 15 }}>
+                  {fmt(Number(proposedDonGia || 0))} ₫
+                </span>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                <p style={{ margin: 0, color: "#64748b", fontSize: 12.5, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {originalBomData?.tenDinhMuc || bomDetailData.tenDinhMuc}
+                </p>
+                <div style={{ textAlign: "right", color: "#64748b", fontSize: 11.5, whiteSpace: "nowrap" }}>
+                  Giá vốn:{" "}
+                  <span style={{ fontWeight: 700, color: "#dc2626" }}>
+                    {isKinhDoanh ? "***" : fmt(totalBomCost)} ₫
+                  </span>
+                  <span style={{ margin: "0 4px", color: "#cbd5e1" }}>|</span>
+                  Tỷ lệ:{" "}
+                  <span style={{ fontWeight: 700, color: "#16a34a" }}>
+                    {isKinhDoanh
+                      ? "***"
+                      : (totalBomCost > 0 ? (Number(proposedDonGia || 0) / totalBomCost).toFixed(2) : "0.00")}x
+                  </span>
                 </div>
-              ) : bomDetailData ? (
-                <div className="d-flex flex-column h-100 bg-light">
-                  <div className="p-4 bg-white" style={{ borderBottom: "1px solid var(--border)" }}>
-                    <div className="d-flex align-items-center gap-2 mb-2">
-                      <span className="badge px-2 py-1" style={{ backgroundColor: "rgba(59, 130, 246, 0.1)", color: "#3b82f6", fontSize: 10, letterSpacing: 0.5, fontWeight: 700 }}>
-                        <i className="bi bi-diagram-3 me-1"></i> B.O.M
-                      </span>
-                    </div>
-                    <div className="d-flex justify-content-between align-items-center mb-1">
-                      <h5 className="mb-0 fw-bold" style={{ color: "var(--foreground)" }}>
-                        {hasBomChanged ? (previewCode || `${originalBomData?.code}-XX`) : bomDetailData.code}
-                      </h5>
-                      <span className="fw-bold text-primary" style={{ fontSize: 15 }}>{fmt(Number(proposedDonGia || 0))} ₫</span>
-                    </div>
-                    <div className="d-flex justify-content-between align-items-center">
-                      <p className="mb-0 text-muted" style={{ fontSize: 13 }}>
-                        {originalBomData?.tenDinhMuc || bomDetailData.tenDinhMuc}
-                      </p>
-                      <div className="text-end text-muted" style={{ fontSize: 12 }}>
-                        Giá vốn: <span className="fw-semibold text-danger">*** ₫</span>
-                        <span className="mx-1">|</span>
-                        Tỷ lệ: <span className="fw-semibold text-success">
-                          ***x
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <div className="mt-3 d-flex align-items-center gap-2">
-                      <div className="flex-1">
-                        <Input 
-                          placeholder="Mô tả định mức mới (bắt buộc)" 
-                          value={newBomDescription}
-                          onChange={e => setNewBomDescription(e.target.value)}
-                          disabled={!hasBomChanged || savingNewBom}
-                          style={{ height: 32, fontSize: 13 }}
-                        />
-                      </div>
-                      <Button 
-                        variant="primary"
-                        size="sm"
-                        style={{ width: 32, height: 32, padding: 0 }}
-                        onClick={handleSaveNewBom}
-                        disabled={!hasBomChanged || !newBomDescription.trim() || savingNewBom}
-                        isLoading={savingNewBom}
-                        title="Lưu định mức mới"
+              </div>
+
+              <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <Input
+                    placeholder="Mô tả định mức mới (bắt buộc)"
+                    value={newBomDescription}
+                    onChange={e => setNewBomDescription(e.target.value)}
+                    disabled={!hasBomChanged || savingNewBom}
+                    style={{ height: 34, fontSize: 13 }}
+                  />
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  style={{ width: 34, height: 34, padding: 0, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+                  onClick={handleSaveNewBom}
+                  disabled={!hasBomChanged || !newBomDescription.trim() || savingNewBom}
+                  isLoading={savingNewBom}
+                  title="Lưu định mức mới"
+                >
+                  {!savingNewBom && <i className="bi bi-floppy" />}
+                </Button>
+              </div>
+            </div>
+
+            {/* Danh sách vật tư */}
+            <div style={{ padding: 16, flex: 1, overflowY: "auto" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <span style={{ fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: "#64748b" }}>
+                  Thành phần nguyên vật liệu
+                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ padding: "2px 8px", borderRadius: 999, background: "#e2e8f0", color: "#475569", fontSize: 11, fontWeight: 700 }}>
+                    {bomDetailData.vatTu?.length || 0} mục
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveVtMenu(null);
+                      setAddMaterialTargetIndex((bomDetailData.vatTu?.length || 1) - 1);
+                      setShowAddMaterial(true);
+                    }}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "3px 8px",
+                      borderRadius: 6,
+                      border: "1px solid #cbd5e1",
+                      background: "#ffffff",
+                      color: "#0284c7",
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      cursor: "pointer"
+                    }}
+                  >
+                    <i className="bi bi-plus-lg" /> Thêm vật tư
+                  </button>
+                </div>
+              </div>
+
+              {bomDetailData.vatTu?.length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {bomDetailData.vatTu.map((vt: any, idx: number) => {
+                    const vtStocks = vt.stocks || vt.inventoryItem?.stocks || vt.material?.stocks || [];
+                    const vtRelevantStocks = vtStocks.filter((s: any) => {
+                      const c = s.warehouse?.code?.toUpperCase()?.trim();
+                      return c === "KHO-CHINH" || c === "KVP" || c === "KHO_CHINH";
+                    });
+                    const vtSoLuong = vtRelevantStocks.reduce((acc: number, s: any) => acc + (s.soLuong || 0), 0);
+                    const vtSoLuongGiu = vtRelevantStocks.reduce((acc: number, s: any) => acc + (s.soLuongGiu || 0), 0);
+                    const vtThucTon = Math.max(0, vtSoLuong - vtSoLuongGiu);
+                    const neededQty = (vt.soLuong || 1) * (formItem.soLuong || 1);
+                    const isShort = vtThucTon < neededQty;
+                    const canSwap = Boolean(
+                      vt.material?.category?.id ||
+                      vt.material?.categoryId ||
+                      vt.material?.erpCategoryId ||
+                      vt.material?.maThayThe ||
+                      vt.material?.code ||
+                      vt.inventoryItem?.categoryId ||
+                      vt.inventoryItem?.erpCategoryId
+                    );
+                    const isSwappingThisRow = Boolean(
+                      showAlternative &&
+                      alternativeTarget &&
+                      ((vt.id && alternativeTarget.id && vt.id === alternativeTarget.id) || alternativeTarget === vt)
+                    );
+
+                    const openSwapForRow = () => {
+                      if (isSwappingThisRow) {
+                        setShowAlternative(false);
+                        setAlternativeTarget(null);
+                        return;
+                      }
+                      const hasCat = Boolean(
+                        vt.material?.category?.id ||
+                        vt.material?.categoryId ||
+                        vt.material?.erpCategoryId ||
+                        vt.inventoryItem?.categoryId ||
+                        vt.inventoryItem?.erpCategoryId
+                      );
+                      setSwapSearchMode(hasCat ? "group" : "exact");
+                      setAlternativeTarget(vt);
+                      setShowAlternative(true);
+                    };
+
+                    return (
+                      <div
+                        key={vt.id || idx}
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          padding: "10px 12px",
+                          background: "#ffffff",
+                          border: isSwappingThisRow
+                            ? "1.5px solid #0284c7"
+                            : isShort
+                              ? "1px solid #fed7aa"
+                              : "1px solid #e2e8f0",
+                          borderRadius: 10,
+                          boxShadow: isSwappingThisRow
+                            ? "0 4px 12px rgba(2, 132, 199, 0.1)"
+                            : "0 1px 2px rgba(0,0,0,0.02)",
+                          position: "relative"
+                        }}
                       >
-                        {!savingNewBom && <i className="bi bi-floppy"></i>}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="p-4 flex-grow-1" style={{ overflowY: "auto" }}>
-                    <div className="d-flex align-items-center justify-content-between mb-3">
-                      <p className="fw-bold mb-0 text-uppercase" style={{ fontSize: 11, letterSpacing: 0.5, color: "var(--muted-foreground)" }}>
-                        Thành phần nguyên vật liệu
-                      </p>
-                      <span className="badge bg-secondary bg-opacity-10 text-secondary rounded-pill">
-                        {bomDetailData.vatTu?.length || 0} mục
-                      </span>
-                    </div>
-
-                    {bomDetailData.vatTu?.length > 0 ? (
-                      <div className="d-flex flex-column gap-2">
-                        {bomDetailData.vatTu.map((vt: any, idx: number) => (
-                          <div key={idx} className="d-flex align-items-center justify-content-between p-2 px-3 bg-white" style={{ border: "1px solid var(--border)", borderRadius: 10, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
-                            <div className="d-flex align-items-center gap-3">
-                              <div className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: 32, height: 32, background: "rgba(99, 102, 241, 0.1)", color: "#6366f1" }}>
-                                <i className="bi bi-box-seam" style={{ fontSize: 14 }}></i>
-                              </div>
-                              <div>
-                                <h6 className="mb-0 fw-semibold" style={{ fontSize: 13, color: "var(--foreground)" }}>
-                                  {vt.material?.tenHang || vt.material?.name || vt.tenVatTu}
-                                </h6>
-                                <span className="text-muted" style={{ fontSize: 11 }}>
-                                  Mã: {vt.material?.code || "---"}
-                                </span>
-                              </div>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
+                            <div
+                              style={{
+                                width: 32,
+                                height: 32,
+                                borderRadius: "50%",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                flexShrink: 0,
+                                background: isShort ? "rgba(249, 115, 22, 0.1)" : "rgba(99, 102, 241, 0.1)",
+                                color: isShort ? "#ea580c" : "#6366f1"
+                              }}
+                            >
+                              <i className="bi bi-box-seam" style={{ fontSize: 14 }} />
                             </div>
-                            <div className="d-flex align-items-center gap-3">
-                              <div className="dropdown position-relative">
-                                <button 
-                                  className="btn btn-sm btn-link p-0 text-muted" 
-                                  onClick={(e) => {
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div
+                                onClick={(e) => {
+                                  if (canSwap) {
                                     e.stopPropagation();
-                                    setActiveVtMenu(activeVtMenu === idx ? null : idx);
-                                  }}
-                                  title="Tuỳ chọn"
-                                >
-                                  <i className="bi bi-three-dots-vertical"></i>
-                                </button>
-                                {activeVtMenu === idx && (
-                                  <ul className="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-1 show" style={{ position: "absolute", top: "100%", right: 0, zIndex: 1050, display: "block", fontSize: 13, minWidth: 160, background: "#ffffff", border: "1px solid #e2e8f0", boxShadow: "0 4px 16px rgba(0,0,0,0.15)" }}>
-                                    <li>
-                                      <button 
-                                        className="dropdown-item py-1.5 px-3 rounded-2 text-success d-flex align-items-center" 
-                                        onClick={() => {
-                                          setActiveVtMenu(null);
-                                          setAddMaterialTargetIndex(idx);
-                                          setShowAddMaterial(true);
-                                        }}
-                                      >
-                                        <i className="bi bi-plus-circle me-2"></i>Thêm mới
-                                      </button>
-                                    </li>
-                                    {vt.material?.category?.id && (
-                                      <li>
-                                        <button className="dropdown-item py-1.5 px-3 rounded-2 d-flex align-items-center" onClick={() => {
-                                          setActiveVtMenu(null);
-                                          setAlternativeTarget(vt);
-                                          setShowAlternative(true);
-                                        }}>
-                                          <i className="bi bi-arrow-left-right me-2 text-primary"></i>Thay thế
-                                        </button>
-                                      </li>
-                                    )}
-                                    <li>
-                                      <button 
-                                        className="dropdown-item py-1.5 px-3 rounded-2 text-danger d-flex align-items-center" 
-                                        onClick={() => {
-                                          setActiveVtMenu(null);
-                                          setTargetDeleteMaterial(vt);
-                                        }}
-                                      >
-                                        <i className="bi bi-trash me-2"></i>Xoá bỏ
-                                      </button>
-                                    </li>
-                                  </ul>
+                                    openSwapForRow();
+                                  }
+                                }}
+                                style={{
+                                  fontWeight: 600,
+                                  fontSize: 13,
+                                  color: isSwappingThisRow ? "#0284c7" : "#0f172a",
+                                  lineHeight: 1.3,
+                                  cursor: canSwap ? "pointer" : "default",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 5
+                                }}
+                                title={canSwap ? "Nhấn để chọn vật tư thay thế" : undefined}
+                              >
+                                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                                  {vt.material?.tenHang || vt.material?.name || vt.tenVatTu}
+                                </span>
+                                {canSwap && (
+                                  <i
+                                    className={`bi bi-chevron-${isSwappingThisRow ? "up" : "down"}`}
+                                    style={{ fontSize: 11, color: isSwappingThisRow ? "#0284c7" : "#94a3b8", flexShrink: 0 }}
+                                  />
                                 )}
                               </div>
-                              <div className="text-end border-start ps-3 flex-shrink-0">
-                                <span className="fw-bold d-block text-primary" style={{ fontSize: 15 }}>{vt.soLuong}</span>
-                                <span className="text-muted text-uppercase" style={{ fontSize: 10, fontWeight: 600 }}>{vt.donViTinh || vt.material?.unit || vt.material?.donVi}</span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center p-4 bg-white rounded-3 border" style={{ borderStyle: "dashed !important" }}>
-                        <i className="bi bi-inboxes text-muted opacity-50 d-block mb-2" style={{ fontSize: 24 }}></i>
-                        <p className="small text-muted fst-italic mb-0">Định mức này chưa có thành phần vật tư.</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center p-5 text-muted d-flex flex-column align-items-center h-100 justify-content-center">
-                  <i className="bi bi-exclamation-circle mb-2" style={{ fontSize: 24 }}></i>
-                  Không tải được dữ liệu định mức.
-                </div>
-              )}
-      </Offcanvas>
-
-          {/* Modal xem danh sách vật tư thay thế */}
-          {showAlternative && (
-            <div className="modal fade show d-block" tabIndex={-1} style={{ backgroundColor: "rgba(0,0,0,0.5)", zIndex: 1070 }}>
-              <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-                <div className="modal-content" style={{ height: "85vh" }}>
-                  <div className="modal-header border-bottom-0 pb-0">
-                    <h5 className="modal-title fw-bold">Vật tư thay thế cùng loại</h5>
-                    <button type="button" className="btn-close" onClick={() => setShowAlternative(false)}></button>
-                  </div>
-                  <div className="bg-white p-3 border-bottom rounded-top">
-                    <p className="mb-1 text-muted" style={{ fontSize: 12 }}>Đang xem vật tư thay thế cho:</p>
-                    <h6 className="mb-3 fw-semibold text-primary">{alternativeTarget?.material?.name || alternativeTarget?.material?.tenHang || alternativeTarget?.tenVatTu}</h6>
-                    <div className="d-flex flex-wrap gap-3 text-secondary mb-3" style={{ fontSize: "0.75rem" }}>
-                      <span>Mã TP: <strong className="text-dark">{alternativeTarget?.material?.code || "N/A"}</strong></span>
-                      <span>Mã nhóm PM: <strong className="text-dark">{alternativeTarget?.material?.category?.code || alternativeTarget?.material?.category?.name || "N/A"}</strong></span>
-                      <span>Mã thay thế: <strong className="text-dark">{(alternativeTarget?.material as any)?.maThayThe || "N/A"}</strong></span>
-                    </div>
-                    <div className="d-flex align-items-center gap-1 mb-3 p-1 rounded-lg" style={{ background: "#f1f5f9", width: "fit-content" }}>
-                      <button
-                        type="button"
-                        onClick={() => setSwapSearchMode("exact")}
-                        style={{
-                          padding: "4px 12px",
-                          borderRadius: 6,
-                          border: "none",
-                          fontSize: 12,
-                          fontWeight: swapSearchMode === "exact" ? 600 : 500,
-                          backgroundColor: swapSearchMode === "exact" ? "#ffffff" : "transparent",
-                          color: swapSearchMode === "exact" ? "#003087" : "#64748b",
-                          boxShadow: swapSearchMode === "exact" ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
-                          cursor: "pointer",
-                          transition: "all 0.15s ease",
-                        }}
-                      >
-                        Chính xác
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSwapSearchMode("group")}
-                        style={{
-                          padding: "4px 12px",
-                          borderRadius: 6,
-                          border: "none",
-                          fontSize: 12,
-                          fontWeight: swapSearchMode === "group" ? 600 : 500,
-                          backgroundColor: swapSearchMode === "group" ? "#ffffff" : "transparent",
-                          color: swapSearchMode === "group" ? "#003087" : "#64748b",
-                          boxShadow: swapSearchMode === "group" ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
-                          cursor: "pointer",
-                          transition: "all 0.15s ease",
-                        }}
-                      >
-                        Theo nhóm
-                      </button>
-                    </div>
-                    <div>
-                      <Input 
-                        placeholder="Tìm kiếm theo mã hoặc tên..."
-                        value={altSearch}
-                        onChange={e => setAltSearch(e.target.value)}
-                        leftIcon={<i className="bi bi-search text-muted" />}
-                        style={{ height: 36, fontSize: 13 }}
-                      />
-                    </div>
-                  </div>
-                  <div className="modal-body bg-light p-3">
-                    {loadingAlternatives ? (
-                      <div className="text-center p-4">
-                        <div className="spinner-border text-primary" role="status"></div>
-                      </div>
-                    ) : alternativeMaterials.length > 0 ? (
-                      <div className="d-flex flex-column gap-3">
-                        {Object.entries(
-                          alternativeMaterials.filter(m => {
-                            if (!altSearch.trim()) return true;
-                            const q = altSearch.toLowerCase();
-                            return (m.name || m.tenHang || "").toLowerCase().includes(q) || (m.code || "").toLowerCase().includes(q);
-                          }).reduce((acc: any, alt: any) => {
-                            const cat = alt.categoryName || alt.category?.name || "Vật tư khác";
-                            if (!acc[cat]) acc[cat] = [];
-                            acc[cat].push(alt);
-                            return acc;
-                          }, {})
-                        ).map(([catName, items]: [string, any]) => (
-                          <div key={catName} className="mb-2">
-                            <h6 className="mb-2 fw-bold text-uppercase text-muted" style={{ fontSize: 11, letterSpacing: 0.5 }}>
-                              {catName} <span className="badge bg-secondary bg-opacity-10 text-secondary rounded-pill ms-1">{items.length}</span>
-                            </h6>
-                            <div className="d-flex flex-column gap-2">
-                                    {items.map((alt: any, idx: number) => {
-                                      const targetExactCode = ((alternativeTarget.material as any)?.maThayThe || alternativeTarget.material?.code || "").toLowerCase();
-                                      const altMaThayThe = (alt.maThayThe || "").toLowerCase();
-                                      const altCode = (alt.code || "").toLowerCase();
-                                      const isCungLoai = targetExactCode && ((altMaThayThe && altMaThayThe.includes(targetExactCode)) || altCode.includes(targetExactCode));
-                                      
-                                      return (
-                                        <div key={idx} className="p-3 bg-white d-flex align-items-center justify-content-between" style={{ border: "1px solid var(--border)", borderRadius: 8 }}>
-                                          <div>
-                                            <div className="d-flex align-items-center gap-2 mb-1">
-                                              <h6 className="mb-0 fw-semibold" style={{ fontSize: 13 }}>{alt.name || alt.tenHang}</h6>
-                                              {isCungLoai ? (
-                                                <span className="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" style={{ fontSize: 10, padding: "2px 6px" }}>Cùng loại</span>
-                                              ) : (
-                                                <span className="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style={{ fontSize: 10, padding: "2px 6px" }}>Cùng nhóm</span>
-                                              )}
-                                            </div>
-                                            <span className="text-muted" style={{ fontSize: 11 }}>
-                                              Mã: {alt.code} | Đơn vị: {alt.unit || alt.donVi} <span className="mx-1">|</span> Giá bán: <span className="fw-semibold text-primary">{fmt(alt.giaBan || 0)} ₫</span>
-                                            </span>
-                                          </div>
-                                  <div className="d-flex align-items-center gap-3">
-                                    <div className="text-end ps-2 border-start">
-                                      <span className="d-block text-muted" style={{ fontSize: 10 }}>TỒN KHO</span>
-                                      <span className="fw-bold" style={{ fontSize: 14 }}>{alt.stocks?.reduce((acc: any, s: any) => acc + s.soLuong, 0) || 0}</span>
-                                    </div>
-                                    <Button size="sm" variant="outline" onClick={() => handleSwapMaterial(alt)}>
-                                      Chọn
-                                    </Button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                        ))}
-                        </div>
-                      ) : (
-                        <div className="text-center p-4 text-muted">
-                          Không tìm thấy vật tư nào khác cùng loại.
-                        </div>
-                      )}
-                  </div>
-                  <div className="modal-footer bg-white border-top">
-                    <Button variant="secondary" onClick={() => setShowAlternative(false)}>Đóng</Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Modal tìm và thêm vật tư mới */}
-          {showAddMaterial && (
-            <div className="modal fade show d-block" tabIndex={-1} style={{ backgroundColor: "rgba(0,0,0,0.5)", zIndex: 1070 }}>
-              <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-                <div className="modal-content" style={{ height: "85vh" }}>
-                  <div className="modal-header border-bottom-0 pb-0">
-                    <h5 className="modal-title fw-bold">Thêm mới vật tư</h5>
-                    <button type="button" className="btn-close" onClick={() => setShowAddMaterial(false)}></button>
-                  </div>
-                  <div className="bg-white p-3 border-bottom rounded-top">
-                    <div className="d-flex gap-2">
-                      <div style={{ width: 180 }}>
-                        <Select 
-                          value={addCategory} 
-                          onChange={e => setAddCategory(e.target.value)}
-                          options={[
-                            { value: "", label: "Tất cả danh mục" },
-                            ...addCategories.map((c: any) => ({ value: c.id, label: c.name }))
-                          ]}
-                          style={{ height: 36, fontSize: 13 }}
-                        />
-                      </div>
-                      <div className="flex-grow-1">
-                        <Input 
-                          placeholder="Tìm kiếm theo mã hoặc tên..."
-                          value={addSearch}
-                          onChange={e => setAddSearch(e.target.value)}
-                          leftIcon={<i className="bi bi-search text-muted" />}
-                          style={{ height: 36, fontSize: 13 }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="modal-body bg-light p-3">
-                    {loadingAddMaterials ? (
-                      <div className="text-center p-4">
-                        <div className="spinner-border text-primary" role="status"></div>
-                      </div>
-                    ) : addMaterials.length > 0 ? (
-                      <div className="d-flex flex-column gap-2">
-                        {addMaterials.filter(m => {
-                          if (addCategory && m.categoryId !== addCategory) return false;
-                          if (!addSearch.trim()) return true;
-                          const q = addSearch.toLowerCase();
-                          return (m.name || m.tenHang || "").toLowerCase().includes(q) || (m.code || "").toLowerCase().includes(q);
-                        }).slice(0, 50).map((alt, idx) => (
-                            <div key={idx} className="p-3 bg-white d-flex align-items-center justify-content-between" style={{ border: "1px solid var(--border)", borderRadius: 8 }}>
-                              <div className="flex-grow-1 pe-3">
-                                <h6 className="mb-1 fw-semibold" style={{ fontSize: 13 }}>{alt.name || alt.tenHang}</h6>
-                                <span className="text-muted" style={{ fontSize: 11 }}>
-                                  Mã: {alt.code} | Đơn vị: {alt.unit || alt.donVi} <span className="mx-1">|</span> Giá bán: <span className="fw-semibold text-primary">{fmt(alt.giaBan || 0)} ₫</span>
+                              <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 2 }}>
+                                <span style={{ color: "#64748b", fontSize: 11, fontFamily: "monospace" }}>
+                                  Mã: {vt.material?.code || vt.maVatTu || "---"}
+                                </span>
+                                <span style={{ color: isShort ? "#ea580c" : "#16a34a", fontSize: 11, fontWeight: 600 }}>
+                                  • Tồn: {vtThucTon}
+                                  {isShort ? ` (Cần ${neededQty})` : ""}
                                 </span>
                               </div>
-                              <div className="d-flex align-items-center gap-3">
-                                <div className="text-end ps-2 border-start">
-                                  <span className="d-block text-muted" style={{ fontSize: 10 }}>TỒN KHO</span>
-                                  <span className="fw-bold" style={{ fontSize: 14 }}>{alt.stocks?.reduce((acc: any, s: any) => acc + s.soLuong, 0) || 0}</span>
-                                </div>
-                                <div style={{ width: 64 }}>
-                                  <Input 
-                                    type="number" 
-                                    min="1" 
-                                    value={addQuantities[alt.id] || 1}
-                                    onChange={(e) => setAddQuantities(p => ({ ...p, [alt.id]: Math.max(1, Number(e.target.value)) }))}
-                                    style={{ height: 32, fontSize: 13, textAlign: "center" }} 
-                                  />
-                                </div>
-                                <Button size="sm" variant="success" onClick={() => handleAddMaterial(alt)} title="Thêm vật tư" style={{ padding: "0 10px", height: 32 }}>
-                                  <i className="bi bi-plus-lg"></i>
-                                </Button>
-                              </div>
                             </div>
-                          ))}
+                          </div>
+
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                            <div style={{ position: "relative" }}>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveVtMenu(activeVtMenu === idx ? null : idx);
+                                }}
+                                style={{
+                                  width: 28,
+                                  height: 28,
+                                  borderRadius: 6,
+                                  border: "1px solid transparent",
+                                  background: activeVtMenu === idx ? "#f1f5f9" : "transparent",
+                                  color: "#64748b",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  cursor: "pointer"
+                                }}
+                                title="Tuỳ chọn vật tư"
+                              >
+                                <i className="bi bi-three-dots-vertical" />
+                              </button>
+
+                              {activeVtMenu === idx && (
+                                <ul
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    position: "absolute",
+                                    top: "100%",
+                                    right: 0,
+                                    zIndex: 1060,
+                                    background: "#ffffff",
+                                    border: "1px solid #e2e8f0",
+                                    borderRadius: 8,
+                                    boxShadow: "0 6px 20px rgba(0,0,0,0.15)",
+                                    minWidth: 155,
+                                    margin: "4px 0 0 0",
+                                    padding: 4,
+                                    listStyle: "none",
+                                    fontSize: 13
+                                  }}
+                                >
+                                  <li>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveVtMenu(null);
+                                        setAddMaterialTargetIndex(idx);
+                                        setShowAddMaterial(true);
+                                      }}
+                                      style={{
+                                        width: "100%",
+                                        textAlign: "left",
+                                        background: "none",
+                                        border: "none",
+                                        padding: "7px 10px",
+                                        borderRadius: 6,
+                                        color: "#16a34a",
+                                        fontWeight: 500,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 8,
+                                        cursor: "pointer"
+                                      }}
+                                    >
+                                      <i className="bi bi-plus-circle" /> Thêm mới
+                                    </button>
+                                  </li>
+                                  {canSwap && (
+                                    <li>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveVtMenu(null);
+                                          openSwapForRow();
+                                        }}
+                                        style={{
+                                          width: "100%",
+                                          textAlign: "left",
+                                          background: "none",
+                                          border: "none",
+                                          padding: "7px 10px",
+                                          borderRadius: 6,
+                                          color: "#0284c7",
+                                          fontWeight: 500,
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: 8,
+                                          cursor: "pointer"
+                                        }}
+                                      >
+                                        <i className="bi bi-arrow-left-right" /> Thay thế
+                                      </button>
+                                    </li>
+                                  )}
+                                  <li>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveVtMenu(null);
+                                        setTargetDeleteMaterial(vt);
+                                      }}
+                                      style={{
+                                        width: "100%",
+                                        textAlign: "left",
+                                        background: "none",
+                                        border: "none",
+                                        padding: "7px 10px",
+                                        borderRadius: 6,
+                                        color: "#dc2626",
+                                        fontWeight: 500,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 8,
+                                        cursor: "pointer"
+                                      }}
+                                    >
+                                      <i className="bi bi-trash" /> Xoá bỏ
+                                    </button>
+                                  </li>
+                                </ul>
+                              )}
+                            </div>
+
+                            <div style={{ textAlign: "right", borderLeft: "1px solid #e2e8f0", paddingLeft: 10, minWidth: 42 }}>
+                              <span style={{ fontWeight: 800, display: "block", color: "#0284c7", fontSize: 14, lineHeight: 1.2 }}>
+                                {vt.soLuong}
+                              </span>
+                              <span style={{ color: "#64748b", textTransform: "uppercase", fontSize: 10, fontWeight: 600 }}>
+                                {vt.donViTinh || vt.material?.unit || vt.material?.donVi || "cái"}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                      ) : (
-                        <div className="text-center p-4 text-muted">
-                          Không tìm thấy vật tư nào.
-                        </div>
-                      )}
-                  </div>
-                  <div className="modal-footer bg-white border-top">
-                    <Button variant="secondary" onClick={() => setShowAddMaterial(false)}>Đóng</Button>
-                  </div>
+
+                        {/* Droplist vật tư thay thế hiển thị trực tiếp bên dưới tên hàng hoá */}
+                        {isSwappingThisRow && (
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              marginTop: 10,
+                              paddingTop: 10,
+                              borderTop: "1px dashed #cbd5e1",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 8
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, flexWrap: "wrap" }}>
+                              <div style={{ display: "inline-flex", alignItems: "center", gap: 2, padding: 2, borderRadius: 6, background: "#f1f5f9" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setSwapSearchMode("exact")}
+                                  style={{
+                                    padding: "3px 8px",
+                                    borderRadius: 5,
+                                    border: "none",
+                                    fontSize: 11,
+                                    fontWeight: swapSearchMode === "exact" ? 700 : 500,
+                                    backgroundColor: swapSearchMode === "exact" ? "#ffffff" : "transparent",
+                                    color: swapSearchMode === "exact" ? "#0284c7" : "#64748b",
+                                    boxShadow: swapSearchMode === "exact" ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+                                    cursor: "pointer"
+                                  }}
+                                >
+                                  Chính xác
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSwapSearchMode("group")}
+                                  style={{
+                                    padding: "3px 8px",
+                                    borderRadius: 5,
+                                    border: "none",
+                                    fontSize: 11,
+                                    fontWeight: swapSearchMode === "group" ? 700 : 500,
+                                    backgroundColor: swapSearchMode === "group" ? "#ffffff" : "transparent",
+                                    color: swapSearchMode === "group" ? "#0284c7" : "#64748b",
+                                    boxShadow: swapSearchMode === "group" ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+                                    cursor: "pointer"
+                                  }}
+                                >
+                                  Theo nhóm
+                                </button>
+                              </div>
+
+                              <div style={{ flex: 1, minWidth: 130 }}>
+                                <input
+                                  type="text"
+                                  placeholder="Tìm mã hoặc tên vật tư..."
+                                  value={altSearch}
+                                  onChange={(e) => setAltSearch(e.target.value)}
+                                  style={{
+                                    width: "100%",
+                                    height: 28,
+                                    padding: "0 8px",
+                                    fontSize: 12,
+                                    borderRadius: 6,
+                                    border: "1px solid #cbd5e1",
+                                    background: "#ffffff",
+                                    outline: "none",
+                                    color: "#0f172a"
+                                  }}
+                                />
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowAlternative(false);
+                                  setAlternativeTarget(null);
+                                }}
+                                style={{
+                                  width: 26,
+                                  height: 26,
+                                  borderRadius: 6,
+                                  border: "none",
+                                  background: "#f1f5f9",
+                                  color: "#64748b",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  cursor: "pointer",
+                                  flexShrink: 0
+                                }}
+                                title="Đóng danh sách thay thế"
+                              >
+                                <i className="bi bi-x-lg" style={{ fontSize: 11 }} />
+                              </button>
+                            </div>
+
+                            <div
+                              style={{
+                                maxHeight: 220,
+                                overflowY: "auto",
+                                border: "1px solid #cbd5e1",
+                                borderRadius: 8,
+                                background: "#f8fafc",
+                                padding: 4,
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: 4
+                              }}
+                            >
+                              {loadingAlternatives ? (
+                                <div style={{ padding: 16, textAlign: "center", color: "#64748b", fontSize: 12 }}>
+                                  <i className="bi bi-arrow-repeat animate-spin" style={{ marginRight: 6, color: "#0284c7" }} />
+                                  Đang tải vật tư thay thế...
+                                </div>
+                              ) : (() => {
+                                const filteredAlts = alternativeMaterials.filter(m => {
+                                  if (!altSearch.trim()) return true;
+                                  const q = altSearch.toLowerCase();
+                                  return (
+                                    (m.name || m.tenHang || "").toLowerCase().includes(q) ||
+                                    (m.code || "").toLowerCase().includes(q) ||
+                                    (m.maThayThe || "").toLowerCase().includes(q)
+                                  );
+                                });
+
+                                if (filteredAlts.length === 0) {
+                                  return (
+                                    <div style={{ padding: 14, textAlign: "center", color: "#64748b", fontSize: 12 }}>
+                                      Không tìm thấy vật tư thay thế phù hợp.
+                                    </div>
+                                  );
+                                }
+
+                                return filteredAlts.map((alt: any, altIdx: number) => {
+                                  const targetExactCode = ((alternativeTarget?.material as any)?.maThayThe || alternativeTarget?.material?.code || "").toLowerCase();
+                                  const altMaThayThe = (alt.maThayThe || "").toLowerCase();
+                                  const altCode = (alt.code || "").toLowerCase();
+                                  const isCungLoai = Boolean(targetExactCode && ((altMaThayThe && altMaThayThe.includes(targetExactCode)) || altCode.includes(targetExactCode)));
+                                  const stockQty = alt.thucTon ?? (alt.stocks?.reduce((acc: number, s: any) => acc + (s.soLuong || 0), 0) || 0);
+                                  const isCurrent = alt.id === (vt.inventoryItemId || vt.material?.id);
+
+                                  return (
+                                    <div
+                                      key={alt.id || altIdx}
+                                      onClick={() => {
+                                        if (!isCurrent) handleSwapMaterial(alt);
+                                      }}
+                                      style={{
+                                        padding: "7px 10px",
+                                        borderRadius: 6,
+                                        background: isCurrent ? "#e0f2fe" : "#ffffff",
+                                        border: isCurrent ? "1px solid #7dd3fc" : "1px solid #e2e8f0",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "space-between",
+                                        gap: 8,
+                                        cursor: isCurrent ? "default" : "pointer",
+                                        transition: "background 0.12s"
+                                      }}
+                                    >
+                                      <div style={{ minWidth: 0, flex: 1 }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+                                          <span style={{ fontWeight: 600, fontSize: 12.5, color: "#0f172a" }}>
+                                            {alt.name || alt.tenHang}
+                                          </span>
+                                          {isCungLoai ? (
+                                            <span style={{ fontSize: 9.5, padding: "1px 5px", borderRadius: 4, background: "rgba(2, 132, 199, 0.1)", color: "#0284c7", fontWeight: 700 }}>
+                                              Cùng loại
+                                            </span>
+                                          ) : (
+                                            <span style={{ fontSize: 9.5, padding: "1px 5px", borderRadius: 4, background: "#f1f5f9", color: "#64748b", fontWeight: 600 }}>
+                                              Cùng nhóm
+                                            </span>
+                                          )}
+                                          {isCurrent && (
+                                            <span style={{ fontSize: 9.5, padding: "1px 5px", borderRadius: 4, background: "#dcfce7", color: "#15803d", fontWeight: 700 }}>
+                                              Đang dùng
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                                          Mã: <b style={{ color: "#334155", fontFamily: "monospace" }}>{alt.code}</b>
+                                          {" • "}Giá: <span style={{ fontWeight: 700, color: "#0284c7" }}>{fmt(alt.giaBan || 0)} ₫</span>
+                                        </div>
+                                      </div>
+
+                                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                                        <div style={{ textAlign: "right" }}>
+                                          <span style={{ display: "block", fontSize: 9, color: "#64748b", fontWeight: 600 }}>TỒN</span>
+                                          <span style={{ fontSize: 12.5, fontWeight: 800, color: stockQty > 0 ? "#16a34a" : "#dc2626" }}>
+                                            {stockQty}
+                                          </span>
+                                        </div>
+                                        {!isCurrent && (
+                                          <span
+                                            style={{
+                                              padding: "4px 8px",
+                                              borderRadius: 5,
+                                              background: "#0284c7",
+                                              color: "#ffffff",
+                                              fontSize: 11,
+                                              fontWeight: 700
+                                            }}
+                                          >
+                                            Chọn
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                });
+                              })()}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
+              ) : (
+                <div style={{ textAlign: "center", padding: 24, background: "#ffffff", borderRadius: 10, border: "1px dashed #cbd5e1" }}>
+                  <i className="bi bi-inboxes" style={{ fontSize: 24, color: "#94a3b8", display: "block", marginBottom: 8 }} />
+                  <p style={{ fontSize: 13, color: "#64748b", margin: 0 }}>Định mức này chưa có thành phần vật tư.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div style={{ padding: 48, textAlign: "center", color: "#64748b", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 8 }}>
+            <i className="bi bi-exclamation-circle" style={{ fontSize: 24, color: "#ef4444" }} />
+            <span style={{ fontSize: 13 }}>Không tải được dữ liệu định mức.</span>
+          </div>
+        )}
+      </Offcanvas>
+
+      {/* Modal tìm và thêm vật tư mới (render qua Portal để nằm trên Offcanvas) */}
+      {showAddMaterial && typeof document !== "undefined" && createPortal(
+        <div
+          onClick={() => setShowAddMaterial(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(15, 23, 42, 0.55)",
+            backdropFilter: "blur(2px)",
+            zIndex: 3400,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 600,
+              height: "82vh",
+              maxHeight: 720,
+              background: "#ffffff",
+              borderRadius: 12,
+              boxShadow: "0 20px 50px rgba(0,0,0,0.3)",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden"
+            }}
+          >
+            <div style={{ padding: "14px 18px", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#ffffff" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <i className="bi bi-plus-circle-fill" style={{ color: "#16a34a", fontSize: 16 }} />
+                <h5 style={{ margin: 0, fontWeight: 800, fontSize: 15, color: "#0f172a" }}>Thêm mới vật tư vào định mức</h5>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddMaterial(false)}
+                style={{ width: 30, height: 30, borderRadius: 6, border: "none", background: "#f1f5f9", color: "#475569", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+              >
+                <i className="bi bi-x-lg" style={{ fontSize: 13 }} />
+              </button>
+            </div>
+
+            <div style={{ background: "#ffffff", padding: "12px 18px", borderBottom: "1px solid #e2e8f0", display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ width: 200 }}>
+                <Select
+                  value={addCategory}
+                  onChange={e => setAddCategory(e.target.value)}
+                  options={[
+                    { value: "", label: "Tất cả danh mục" },
+                    ...addCategories.map((c: any) => ({ value: c.id, label: c.name }))
+                  ]}
+                  style={{ height: 36, fontSize: 13 }}
+                />
+              </div>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <Input
+                  placeholder="Tìm kiếm theo mã hoặc tên vật tư..."
+                  value={addSearch}
+                  onChange={e => setAddSearch(e.target.value)}
+                  leftIcon={<i className="bi bi-search" style={{ color: "#64748b" }} />}
+                  style={{ height: 36, fontSize: 13 }}
+                />
               </div>
             </div>
-          )}
+
+            <div style={{ flex: 1, overflowY: "auto", background: "#f8fafc", padding: 16 }}>
+              {loadingAddMaterials ? (
+                <div style={{ textAlign: "center", padding: 32, color: "#64748b" }}>
+                  <i className="bi bi-arrow-repeat animate-spin" style={{ fontSize: 24, color: "#0284c7", display: "block", marginBottom: 8 }} />
+                  <span style={{ fontSize: 13 }}>Đang tải danh sách vật tư...</span>
+                </div>
+              ) : addMaterials.length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {addMaterials
+                    .filter(m => {
+                      if (addCategory && m.categoryId !== addCategory && m.erpCategoryId !== addCategory && m.category?.id !== addCategory && m.erpCategory?.id !== addCategory) {
+                        return false;
+                      }
+                      if (!addSearch.trim()) return true;
+                      const q = addSearch.toLowerCase();
+                      return (
+                        (m.name || m.tenHang || "").toLowerCase().includes(q) ||
+                        (m.code || "").toLowerCase().includes(q)
+                      );
+                    })
+                    .slice(0, 60)
+                    .map((alt, idx) => {
+                      const stockQty = alt.thucTon ?? (alt.stocks?.reduce((acc: number, s: any) => acc + (s.soLuong || 0), 0) || 0);
+                      return (
+                        <div
+                          key={alt.id || idx}
+                          style={{
+                            padding: "10px 12px",
+                            background: "#ffffff",
+                            border: "1px solid #e2e8f0",
+                            borderRadius: 8,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 12
+                          }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, fontSize: 13, color: "#0f172a", marginBottom: 2 }}>
+                              {alt.name || alt.tenHang}
+                            </div>
+                            <div style={{ color: "#64748b", fontSize: 11.5 }}>
+                              Mã: <b style={{ color: "#334155", fontFamily: "monospace" }}>{alt.code}</b>
+                              {" | "}Đơn vị: {alt.unit || alt.donVi || "cái"}
+                              {" | "}Giá bán: <span style={{ fontWeight: 700, color: "#0284c7" }}>{fmt(alt.giaBan || 0)} ₫</span>
+                            </div>
+                          </div>
+
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                            <div style={{ textAlign: "right", paddingLeft: 10, borderLeft: "1px solid #e2e8f0" }}>
+                              <span style={{ display: "block", color: "#64748b", fontSize: 9.5, fontWeight: 600 }}>TỒN KHO</span>
+                              <span style={{ fontWeight: 800, fontSize: 14, color: stockQty > 0 ? "#16a34a" : "#dc2626" }}>
+                                {stockQty}
+                              </span>
+                            </div>
+                            <div style={{ width: 64 }}>
+                              <Input
+                                type="number"
+                                min="1"
+                                value={addQuantities[alt.id] || 1}
+                                onChange={(e) => setAddQuantities(p => ({ ...p, [alt.id]: Math.max(1, Number(e.target.value)) }))}
+                                style={{ height: 32, fontSize: 13, textAlign: "center" }}
+                              />
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="success"
+                              onClick={() => handleAddMaterial(alt)}
+                              title="Thêm vật tư"
+                              style={{ padding: "0 10px", height: 32 }}
+                            >
+                              <i className="bi bi-plus-lg" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              ) : (
+                <div style={{ textAlign: "center", padding: 32, color: "#64748b", fontSize: 13 }}>
+                  Không tìm thấy vật tư nào.
+                </div>
+              )}
+            </div>
+
+            <div style={{ padding: "10px 18px", background: "#ffffff", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end" }}>
+              <Button variant="secondary" onClick={() => setShowAddMaterial(false)}>Đóng</Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       <ConfirmDialog
         open={confirmDeleteBom}
         variant="danger"
@@ -3553,6 +4060,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
         loading={isDeletingBom}
         onConfirm={handleDeleteBom}
         onCancel={() => setConfirmDeleteBom(false)}
+        zIndex={3500}
       />
 
       <ConfirmDialog
@@ -3563,6 +4071,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
         confirmLabel="Xoá"
         onConfirm={handleDeleteMaterial}
         onCancel={() => setTargetDeleteMaterial(null)}
+        zIndex={3500}
       />
     </div>
   );

@@ -14,8 +14,6 @@ import {
   CheckAll,
   ExclamationTriangle,
   InfoCircleFill,
-  ChevronDown,
-  ChevronUp,
   FileEarmarkText,
 } from 'react-bootstrap-icons';
 
@@ -50,7 +48,6 @@ export function ProductionOrderDetailOffcanvas({
   const [qcDate, setQcDate] = useState<string>('');
   const [savingDate, setSavingDate] = useState(false);
   const [activeTab, setActiveTab] = useState<'items' | 'materials'>('items');
-  const [openAccordionIdx, setOpenAccordionIdx] = useState<number | null>(0);
 
   const fetchDetail = async (id: string) => {
     setLoading(true);
@@ -82,7 +79,6 @@ export function ProductionOrderDetailOffcanvas({
     if (effectiveOrderId) {
       fetchDetail(effectiveOrderId);
       setActiveTab('items');
-      setOpenAccordionIdx(0);
     } else {
       setData(null);
     }
@@ -143,6 +139,9 @@ export function ProductionOrderDetailOffcanvas({
     }
   };
 
+  const isMaterialIssued = data?.order ? data.order.isMaterialIssued !== false : true;
+  const canComplete = isProdAdmin && isMaterialIssued;
+
   return (
     <Offcanvas
       isOpen={!!effectiveOrderId}
@@ -151,13 +150,35 @@ export function ProductionOrderDetailOffcanvas({
       icon={<FileEarmarkText size={20} />}
       title={`Chi tiết LSX: ${data?.order?.id || effectiveOrderId || ''}`}
       description={
-        data?.order
-          ? data.order.trangThai === 'completed'
-            ? 'Trạng thái: Đã hoàn thành'
-            : data.order.trangThai === 'running'
-            ? 'Trạng thái: Đang thực hiện'
-            : 'Trạng thái: Chờ xử lý'
-          : 'Thông tin thành phẩm và định mức vật tư'
+        data?.order ? (
+          <div className="space-y-1">
+            <div className="text-[12px] text-slate-500">
+              {data.order.trangThai === 'completed'
+                ? 'Trạng thái: Đã hoàn thành'
+                : data.order.trangThai === 'running'
+                ? 'Trạng thái: Đang thực hiện'
+                : 'Trạng thái: Chờ xử lý'}
+            </div>
+            {data.order.trangThai !== 'completed' && !isMaterialIssued && (
+              <div
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200"
+                title={
+                  data.order.materialTicketCode
+                    ? `Lệnh cấp phát vật tư ${data.order.materialTicketCode} chưa ở trạng thái Đã cấp phát`
+                    : 'Vật tư chưa được cấp phát'
+                }
+              >
+                <ExclamationTriangle size={12} className="shrink-0 text-amber-600" />
+                <span>
+                  Chưa cấp phát vật tư
+                  {data.order.materialTicketCode ? ` (${data.order.materialTicketCode})` : ''}
+                </span>
+              </div>
+            )}
+          </div>
+        ) : (
+          'Thông tin thành phẩm và định mức vật tư'
+        )
       }
       bodyStyle={{ padding: 0, display: 'flex', flexDirection: 'column' }}
       footer={
@@ -174,21 +195,25 @@ export function ProductionOrderDetailOffcanvas({
 
             <div className="flex items-center gap-2">
               {data.order.trangThai !== 'completed' ? (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  leftIcon={<Check2Circle size={15} />}
-                  onClick={() => handleUpdateStatus('completed')}
-                  isLoading={saving}
-                  disabled={!isProdAdmin}
-                  title={
-                    !isProdAdmin
-                      ? 'Chỉ Quản đốc xưởng sản xuất, Trưởng bộ phận, Trưởng phòng mới có quyền báo cáo hoàn thành lệnh sản xuất'
-                      : undefined
-                  }
-                >
-                  Hoàn thành
-                </Button>
+                <>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    leftIcon={<Check2Circle size={15} />}
+                    onClick={() => handleUpdateStatus('completed')}
+                    isLoading={saving}
+                    disabled={!canComplete}
+                    title={
+                      !isProdAdmin
+                        ? 'Chỉ Quản đốc xưởng sản xuất, Trưởng bộ phận, Trưởng phòng mới có quyền báo cáo hoàn thành lệnh sản xuất'
+                        : !isMaterialIssued
+                        ? `Lệnh cấp phát vật tư (${data.order.materialTicketCode || ''}) chưa ở trạng thái Đã cấp phát. Không thể hoàn thành lệnh sản xuất.`
+                        : undefined
+                    }
+                  >
+                    Hoàn thành
+                  </Button>
+                </>
               ) : (
                 <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
                   <CheckAll size={14} /> Đã khép lại
@@ -271,129 +296,80 @@ export function ProductionOrderDetailOffcanvas({
               }`}
             >
               <Layers size={13} />
-              <span>Tổng hợp Vật tư ({data.materials?.length || 0})</span>
+              <span>Tổng hợp vật tư ({data.materials?.length || 0})</span>
             </button>
           </div>
 
           {/* Tab Content */}
           <div className="p-3.5 flex-1 overflow-y-auto space-y-3.5">
             {activeTab === 'items' && (
-              <>
-                <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
-                  <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+              <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
+                <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-600 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
                     <BoxSeam size={13} className="text-sky-600" />
                     <span>Danh sách sản phẩm theo đơn</span>
                   </div>
-                  <FullWidthTable style={{ maxHeight: 220 }}>
-                    <table className="w-full text-left border-collapse" style={{ fontSize: '12px' }}>
-                      <thead className="sticky top-0 z-10 bg-white border-b border-slate-200">
-                        <tr className="text-slate-500 text-[10.5px] uppercase font-bold">
-                          <th className="py-2 px-2.5 text-left">Thành phẩm</th>
-                          <th className="py-2 px-2 w-14 text-center">SL</th>
-                          <th className="py-2 px-2.5 w-28 text-right">Định mức</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {(data.items || []).map((item: any, idx: number) => (
-                          <tr key={item.id || idx} className="hover:bg-slate-50/80">
-                            <td className="py-2 px-2.5 font-semibold text-slate-800">
+                  <span className="text-slate-400 font-normal normal-case text-[11px]">
+                    {data.items?.length || 0} mặt hàng
+                  </span>
+                </div>
+                <FullWidthTable>
+                  <table className="w-full text-left border-collapse" style={{ fontSize: '12px' }}>
+                    <thead className="sticky top-0 z-10 bg-white border-b border-slate-200">
+                      <tr className="text-slate-500 text-[10.5px] uppercase font-bold">
+                        <th className="py-2.5 px-3 text-left">Sản phẩm & Định mức</th>
+                        <th className="py-2.5 px-2.5 w-20 text-center">SL SX</th>
+                        <th className="py-2.5 px-2.5 w-16 text-center">ĐVT</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(data.items || []).map((item: any, idx: number) => (
+                        <tr key={item.id || idx} className="hover:bg-slate-50/80">
+                          <td className="py-2.5 px-3 align-top">
+                            <div className="font-semibold text-slate-800 text-[12.5px] leading-snug">
                               {item.tenHang}
-                            </td>
-                            <td className="py-2 px-2 text-center font-bold text-sky-700 font-mono">
-                              {item.soLuong}
-                            </td>
-                            <td className="py-2 px-2.5 text-right">
-                              {item.bomFound ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                              {item.bomCode ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold bg-sky-50 text-sky-700 border border-sky-200 font-mono">
                                   ✓ {item.bomCode}
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-                                  <ExclamationTriangle size={10} /> Chưa có
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10.5px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
+                                  <ExclamationTriangle size={10} /> Chưa có định mức
                                 </span>
                               )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </FullWidthTable>
-                </div>
-
-                {/* Chi tiết bóc tách theo từng mặt hàng */}
-                <div className="space-y-2">
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 px-0.5">
-                    Chi tiết bóc tách vật tư theo mặt hàng
-                  </div>
-                  {(data.items || []).map((item: any, idx: number) => {
-                    const isOpen = openAccordionIdx === idx;
-                    return (
-                      <div
-                        key={item.id || idx}
-                        className="rounded-lg border border-slate-200 overflow-hidden bg-white"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => setOpenAccordionIdx(isOpen ? null : idx)}
-                          className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/80 flex items-center justify-between text-left transition-colors cursor-pointer"
-                        >
-                          <span className="text-xs font-bold text-slate-800 truncate pr-2">
-                            {item.tenHang}{' '}
-                            <span className="text-sky-600 font-mono">(SL: {item.soLuong})</span>
-                          </span>
-                          {isOpen ? (
-                            <ChevronUp size={13} className="text-slate-500 shrink-0" />
-                          ) : (
-                            <ChevronDown size={13} className="text-slate-500 shrink-0" />
-                          )}
-                        </button>
-                        {isOpen && (
-                          <div className="border-t border-slate-200">
-                            {item.materials && item.materials.length > 0 ? (
-                              <table
-                                className="w-full text-left border-collapse"
-                                style={{ fontSize: '11.5px' }}
-                              >
-                                <thead className="bg-white border-b border-slate-200 text-slate-500 text-[10px] uppercase font-bold">
-                                  <tr>
-                                    <th className="py-1.5 px-2.5">Vật tư</th>
-                                    <th className="py-1.5 px-2 w-16 text-center">Tổng cần</th>
-                                    <th className="py-1.5 px-2 w-14 text-center">ĐVT</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                  {item.materials.map((m: any, mIdx: number) => (
-                                    <tr key={mIdx} className="hover:bg-slate-50">
-                                      <td className="py-1.5 px-2.5">
-                                        <div className="font-medium text-slate-800">{m.tenVatTu}</div>
-                                        {m.code && (
-                                          <div className="font-mono text-[10px] text-slate-400">
-                                            {m.code}
-                                          </div>
-                                        )}
-                                      </td>
-                                      <td className="py-1.5 px-2 text-center font-bold text-rose-600 font-mono">
-                                        {m.soLuong}
-                                      </td>
-                                      <td className="py-1.5 px-2 text-center text-slate-500">
-                                        {m.donViTinh}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            ) : (
-                              <div className="p-3 text-xs text-slate-400 italic">
-                                Không có dữ liệu vật tư. Vui lòng thiết lập Định mức (BOM).
+                              {item.bomTen && item.bomTen !== item.bomCode && (
+                                <span className="text-[11px] text-slate-500 font-medium">
+                                  {item.bomTen}
+                                </span>
+                              )}
+                            </div>
+                            {item.dinhMucGhiChu && (
+                              <div className="text-[11px] text-slate-500 italic mt-1 leading-relaxed bg-slate-50/80 p-1.5 rounded border border-slate-100">
+                                <span className="font-medium text-slate-600 not-italic">Ghi chú:</span> {item.dinhMucGhiChu}
                               </div>
                             )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
+                          </td>
+                          <td className="py-2.5 px-2.5 text-center align-top">
+                            <div className="font-bold text-sky-700 font-mono text-sm">
+                              {item.soLuong}
+                            </div>
+                            {item.soLuongDat && item.soLuongDat !== item.soLuong && (
+                              <div className="text-[10px] text-slate-400 whitespace-nowrap mt-0.5" title="Số lượng trong đơn đặt hàng">
+                                Đơn: {item.soLuongDat}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-2.5 text-center align-top text-xs text-slate-600 font-medium">
+                            {item.donVi || 'Bộ'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </FullWidthTable>
+              </div>
             )}
 
             {activeTab === 'materials' && (
