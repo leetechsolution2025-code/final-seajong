@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Search, ThreeDotsVertical, ArrowRepeat, FileEarmarkExcel, Printer } from 'react-bootstrap-icons';
+import { Search, Gear, ArrowRepeat, FileEarmarkExcel, FileEarmarkArrowUp } from 'react-bootstrap-icons';
 import { Input } from './Input';
 import { Select, type SelectOption } from './Select';
 
@@ -40,12 +40,13 @@ export interface TableToolbarProps {
   wrap?: boolean;
   style?: React.CSSProperties;
 
-  // Cấu hình Dropdown Menu ba chấm ở cuối bên phải
-  showMenu?: boolean; // Luôn mặc định là true (luôn có icon ba chấm ở cuối bên phải)
+  // Cấu hình Dropdown Menu ở cuối bên phải
+  showMenu?: boolean; // Luôn mặc định là true (luôn có icon gear ở cuối bên phải)
   menuItems?: TableToolbarMenuItem[];
   menuContent?: React.ReactNode | ((closeMenu: () => void) => React.ReactNode);
   onRefresh?: () => void;
   onExportExcel?: () => void;
+  onImportExcel?: (file: File) => void;
   onPrint?: () => void;
   printLabel?: string;
   menuTooltip?: string;
@@ -70,12 +71,14 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
   menuContent,
   onRefresh,
   onExportExcel,
+  onImportExcel,
   onPrint,
   printLabel,
   menuTooltip = 'Thao tác khác',
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   // Đóng dropdown khi click bên ngoài hoặc nhấn phím ESC
   useEffect(() => {
@@ -111,15 +114,17 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
       id: 'export-excel',
       label: 'Xuất ra bảng Excel',
       icon: <FileEarmarkExcel size={15} style={{ color: '#10b981', flexShrink: 0 }} />,
-      onClick: onExportExcel || (() => window.print()),
+      onClick: onExportExcel || (() => {}),
     });
 
-    // Mục In ấn / Báo cáo
+    // Mục Nhập từ bảng Excel
     items.push({
-      id: 'print-report',
-      label: printLabel || 'In báo cáo',
-      icon: <Printer size={15} style={{ color: '#3b82f6', flexShrink: 0 }} />,
-      onClick: onPrint || (() => window.print()),
+      id: 'import-excel',
+      label: 'Nhập từ bảng Excel',
+      icon: <FileEarmarkArrowUp size={15} style={{ color: '#3b82f6', flexShrink: 0 }} />,
+      onClick: () => {
+        importInputRef.current?.click();
+      },
     });
 
     // Đường kẻ phân cách
@@ -139,7 +144,7 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
     });
 
     return items;
-  }, [menuItems, onExportExcel, onPrint, onRefresh, printLabel]);
+  }, [menuItems, onExportExcel, onRefresh]);
 
   return (
     <div
@@ -227,6 +232,19 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
 
         {showMenu && (
           <div ref={menuRef} className="table-toolbar-menu-wrap" style={{ position: 'relative' }}>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  onImportExcel?.(file);
+                }
+                e.target.value = '';
+              }}
+            />
             <button
               type="button"
               onClick={() => setIsMenuOpen((prev) => !prev)}
@@ -263,7 +281,7 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
                 }
               }}
             >
-              <ThreeDotsVertical size={16} />
+              <Gear size={16} />
             </button>
 
             {isMenuOpen && (

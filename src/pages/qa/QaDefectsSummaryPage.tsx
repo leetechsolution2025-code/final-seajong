@@ -21,6 +21,7 @@ export function QaDefectsSummaryPage() {
 
   const [selectedDefectId, setSelectedDefectId] = useState<string | null>(null);
   const [isProcessModalOpen, setIsProcessModalOpen] = useState(false);
+  const [processingDefectId, setProcessingDefectId] = useState<string | null>(null);
   const [isCreateOffcanvasOpen, setIsCreateOffcanvasOpen] = useState(false);
   const [isEventCalendarOpen, setIsEventCalendarOpen] = useState(false);
 
@@ -340,7 +341,12 @@ export function QaDefectsSummaryPage() {
           defect={defects.find((d: any) => d.id === selectedDefectId)}
           onClose={() => setSelectedDefectId(null)}
           onRefresh={fetchDefects}
-          onOpenProcess={() => setIsProcessModalOpen(true)}
+          onOpenProcess={(id) => {
+            const targetId = id || selectedDefectId;
+            setProcessingDefectId(targetId);
+            setIsProcessModalOpen(true);
+            setSelectedDefectId(null);
+          }}
         />
 
         <CreateDefectOffcanvas
@@ -351,8 +357,11 @@ export function QaDefectsSummaryPage() {
 
         {isProcessModalOpen && (
           <DefectProcessModal
-            defectId={selectedDefectId}
-            onClose={() => setIsProcessModalOpen(false)}
+            defectId={processingDefectId || selectedDefectId}
+            onClose={() => {
+              setIsProcessModalOpen(false);
+              setProcessingDefectId(null);
+            }}
             onRefresh={fetchDefects}
           />
         )}

@@ -7,6 +7,8 @@ import {
   Printer,
   FileEarmarkText,
   CalendarEvent,
+  ClockHistory,
+  ArrowRepeat,
 } from 'react-bootstrap-icons';
 import { useSession } from 'next-auth/react';
 import {
@@ -16,6 +18,7 @@ import {
 } from '@/lib/logistics-permissions';
 import { StepPage } from '../../components/common/StepPage';
 import { EventOffcanvas } from '../../components/common/EventOffcanvas';
+import { DataRetentionOffcanvas } from '../../components/common/DataRetentionOffcanvas';
 import { TableToolbar, type TableToolbarFilter } from '../../components/common/TableToolbar';
 import { FullWidthTable, SwipeableTableRow } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
@@ -35,6 +38,7 @@ import { NhapKhoModal } from '@/components/plan-finance/kho_hang/NhapKhoModal';
 import { XuatKhoModal } from '@/components/plan-finance/kho_hang/XuatKhoModal';
 import { PhieuNhapKhoPreview } from '@/components/plan-finance/kho_hang/PhieuNhapKhoPreview';
 import { PhieuXuatKhoPreview } from '@/components/plan-finance/kho_hang/PhieuXuatKhoPreview';
+import { exportStandardReportExcel } from '@/utils/excelExport';
 import type { ModernStepItem } from '../../types';
 
 // Cấu hình 3 bước chuẩn
@@ -163,6 +167,7 @@ export const LogisticsOverviewPage: React.FC = () => {
 
   const [showToastMsg, setShowToastMsg] = useState<{ type: 'success' | 'info' | 'error'; message: string } | null>(null);
   const [isEventCalendarOpen, setIsEventCalendarOpen] = useState<boolean>(false);
+  const [showCleanupOffcanvas, setShowCleanupOffcanvas] = useState<boolean>(false);
 
   const showToast = useCallback((type: 'success' | 'info' | 'error', message: string) => {
     setShowToastMsg({ type, message });
@@ -369,13 +374,7 @@ export const LogisticsOverviewPage: React.FC = () => {
       .filter((code) => code !== 'Khác')
       .map((orderCode): GroupedOrder | null => {
         const allGroupItems = grouped[orderCode];
-        // Bước 1: Chỉ lấy các lệnh chưa thực hiện; Bước 3: Chỉ lấy các lệnh đã thực hiện
-        const stepItems =
-          currentStep === 3
-            ? allGroupItems.filter((it: any) => isRowCompleted(it))
-            : allGroupItems.filter((it: any) => !isRowCompleted(it));
-
-        if (stepItems.length === 0) return null;
+        if (!allGroupItems || allGroupItems.length === 0) return null;
 
         let completedCount = 0;
         const totalTickets = allGroupItems.length;
@@ -429,6 +428,30 @@ export const LogisticsOverviewPage: React.FC = () => {
               orderCode.startsWith('QC-')
           );
 
+        const isDefectGroup = orderCode.startsWith('ERR-') || orderCode.startsWith('WR-');
+        const isSaleOrderGroup = !isDefectGroup && !isGroupImport && !orderCode.startsWith('QC-');
+
+        // Nếu đơn bán hàng mới chỉ có lệnh cấp phát vật tư (chưa có lệnh gom hàng/xuất kho thành phẩm hoàn tất)
+        // thì trạng thái vẫn là "Đã xuất vật tư" (chưa hoàn tất xuất kho đơn hàng) -> thuộc Bước 1
+        const hasOnlyMaterialTickets =
+          isSaleOrderGroup &&
+          allGroupItems.every(
+            (it: any) =>
+              it.ticketType === 'MATERIAL_ALLOCATION' ||
+              it.ticketType === 'MATERIAL_PICKING' ||
+              it.type === 'material-export'
+          );
+        if (hasOnlyMaterialTickets) {
+          allExported = false;
+        }
+
+        // Bước 1 (Danh sách công việc): Chỉ hiển thị các đơn/nhóm lệnh chưa hoàn tất toàn bộ (!allExported, gồm cả "Đã xuất vật tư")
+        // Bước 3 (Đã hoàn thành): Chỉ hiển thị các đơn/nhóm lệnh đã hoàn tất toàn bộ (allExported === true, ví dụ "Đã xuất kho" / "Đã nhập kho")
+        if (currentStep === 3 && !allExported) return null;
+        if (currentStep === 1 && allExported) return null;
+
+        const stepItems = allGroupItems;
+
         const isPurchaseOrderGroup =
           isGroupImport &&
           (!!purchaseOrderCode ||
@@ -465,7 +488,6 @@ export const LogisticsOverviewPage: React.FC = () => {
           }
         }
 
-        const isDefectGroup = orderCode.startsWith('ERR-') || orderCode.startsWith('WR-');
         let defectImportType = 'hàng lỗi';
         if (isDefectGroup && isGroupImport) {
           const firstItem = allGroupItems[0];
@@ -535,7 +557,6 @@ export const LogisticsOverviewPage: React.FC = () => {
           priority = 2;
         }
 
-        const isSaleOrderGroup = !isDefectGroup && !isGroupImport && !orderCode.startsWith('QC-');
         const needsProduction =
           isSaleOrderGroup &&
           allGroupItems.some(
@@ -828,6 +849,163 @@ export const LogisticsOverviewPage: React.FC = () => {
     }
   };
 
+  // Xuất danh sách hàng hoá ra file Excel
+  const handleExportInventoryExcel = async () => {
+    try {
+      showToast('info', 'Đang trích xuất dữ liệu kho hàng ra file Excel...');
+      const params = new URLSearchParams();
+      if (searchTerm) params.append('search', searchTerm);
+      if (filterType && filterType !== 'all') params.append('categoryId', filterType);
+      if (filterWarehouse && filterWarehouse !== 'all') params.append('warehouseId', filterWarehouse);
+      params.append('limit', '999999');
+
+      const res = await fetch(`/api/logistics/inventory?${params.toString()}`);
+      const data = await res.json();
+      let exportItems = data.items || [];
+      if (filterStatus && filterStatus !== 'all') {
+        exportItems = exportItems.filter((it: any) => it.trangThai === filterStatus);
+      }
+
+      if (!exportItems.length) {
+        showToast('error', 'Không có dữ liệu hàng hoá để xuất Excel.');
+        return;
+      }
+
+      let totHeThong = 0;
+      let totDaGiu = 0;
+      let totThucTon = 0;
+
+      const dataRows = exportItems.map((item: any, index: number) => {
+        const soLuong = item.soLuong || 0;
+        const daGiu = item.soLuongGiu ?? 0;
+        const thucTon = item.thucTon ?? Math.max(0, soLuong - daGiu);
+        totHeThong += soLuong;
+        totDaGiu += daGiu;
+        totThucTon += thucTon;
+
+        return [
+          index + 1,
+          item.code || '',
+          item.maThayThe || '',
+          item.tenHang || '',
+          item.model || '',
+          item.chatLieu || '',
+          item.categoryName || item.category?.name || 'Thiết bị & Phụ kiện',
+          item.donVi || 'cái',
+          soLuong,
+          daGiu,
+          thucTon,
+          item.trangThai === 'con-hang' ? 'Còn hàng' : item.trangThai === 'sap-het' ? 'Sắp hết' : 'Hết hàng',
+        ];
+      });
+
+      const today = new Date();
+      const dateFormatted = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+      const selectedWhName = filterWarehouse && filterWarehouse !== 'all'
+        ? warehouses.find((w) => w.id === filterWarehouse)?.name || 'Kho hàng đã chọn'
+        : 'Tất cả kho hàng hệ thống';
+
+      exportStandardReportExcel({
+        fileName: `Danh_Sach_Hang_Hoa_Ton_Kho_${today.toISOString().split('T')[0]}`,
+        sheetName: 'Ton_Kho_Thuc_Te',
+        formCode: 'Mẫu số S08-DN',
+        title: 'BÁO CÁO TỒN KHO THỰC TẾ & VỊ TRÍ LƯU TRỮ',
+        subtitle: `Thời điểm kết xuất: Ngày ${dateFormatted}`,
+        extraInfo: [
+          `Kho hàng áp dụng: ${selectedWhName}`,
+          `Bộ phận phụ trách: Khối Vận hành Kho & Chuỗi cung ứng Seajong`,
+        ],
+        headers: [
+          ['STT', 'Mã hàng', 'Mã phụ', 'Tên vật tư, hàng hoá', 'Model / Quy cách', 'Chất liệu', 'Danh mục', 'ĐVT', 'Tồn hệ thống', 'Đã giữ', 'Tồn thực tế', 'Trạng thái'],
+        ],
+        columnsWidths: [6, 15, 15, 36, 20, 16, 22, 10, 14, 12, 14, 14],
+        data: dataRows,
+        totalsRow: [
+          'TỔNG CỘNG', '', '', '', '', '', '', '', totHeThong, totDaGiu, totThucTon, '',
+        ],
+        signatures: ['Người lập biểu', 'Thủ kho', 'Kế toán kho', 'Giám đốc'],
+      });
+
+      showToast('success', `Đã xuất ${exportItems.length} mặt hàng ra file Excel thành công.`);
+    } catch (err) {
+      console.error('Export Excel error:', err);
+      showToast('error', 'Lỗi khi xuất file Excel.');
+    }
+  };
+
+  // Nhập dữ liệu hàng hoá từ file Excel
+  const handleImportInventoryExcel = async (file: File) => {
+    try {
+      showToast('info', `Đang đọc dữ liệu từ file "${file.name}"...`);
+      const XLSX = await import('xlsx');
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: 'array' });
+      const firstSheetName = wb.SheetNames[0];
+      if (!firstSheetName) {
+        showToast('error', 'File Excel không hợp lệ hoặc không có sheet dữ liệu.');
+        return;
+      }
+      const ws = wb.Sheets[firstSheetName];
+      const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' });
+      if (!rows.length) {
+        showToast('error', 'File Excel không có dòng dữ liệu nào.');
+        return;
+      }
+
+      let importedCount = 0;
+      for (const row of rows) {
+        const tenHang = String(
+          row['Tên vật tư, hàng hoá'] ||
+          row['Tên hàng hoá'] ||
+          row['Tên hàng'] ||
+          row['tenHang'] ||
+          row['Name'] ||
+          ''
+        ).trim();
+        const code = String(
+          row['Mã hàng'] ||
+          row['Mã SKU'] ||
+          row['code'] ||
+          row['Code'] ||
+          ''
+        ).trim();
+        const donVi = String(
+          row['Đơn vị tính'] ||
+          row['ĐVT'] ||
+          row['donVi'] ||
+          'cái'
+        ).trim();
+
+        if (!tenHang) continue;
+        try {
+          const res = await fetch('/api/logistics/inventory', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tenHang,
+              code: code || undefined,
+              donVi,
+            }),
+          });
+          if (res.ok) importedCount++;
+        } catch {
+          // Bỏ qua dòng lỗi hoặc trùng mã
+        }
+      }
+
+      loadStepData();
+      showToast(
+        'success',
+        importedCount > 0
+          ? `Đã nhập thành công ${importedCount}/${rows.length} mặt hàng từ "${file.name}".`
+          : `Đã đọc ${rows.length} dòng từ "${file.name}" (các mã hàng đã tồn tại được giữ nguyên).`
+      );
+    } catch (err) {
+      console.error('Import Excel error:', err);
+      showToast('error', 'Không thể đọc file Excel. Vui lòng kiểm tra định dạng file.');
+    }
+  };
+
   // Cấu hình Toolbar Filters cho Step 1 & Step 3 (dùng chung cấu trúc lọc theo loại lệnh)
   const toolbarFilters = useMemo<TableToolbarFilter[]>(() => {
     return [
@@ -917,7 +1095,10 @@ export const LogisticsOverviewPage: React.FC = () => {
               setSearchTerm(val);
               setCurrentPage(1);
             }}
-            onExportExcel={() => showToast('info', 'Đang trích xuất dữ liệu kho hàng ra file Excel...')}
+            onExportExcel={handleExportInventoryExcel}
+            onImportExcel={handleImportInventoryExcel}
+            onRefresh={() => loadStepData()}
+            showMenu={true}
           />
 
           <InventoryTable
@@ -1035,8 +1216,31 @@ export const LogisticsOverviewPage: React.FC = () => {
               </div>
             }
             onRefresh={() => loadStepData()}
-            onExportExcel={() => showToast('info', 'Đang trích xuất dữ liệu kho hàng ra file Excel...')}
-            onPrint={() => window.print()}
+            showMenu={currentStep !== 1}
+            menuItems={
+              currentStep === 3
+                ? [
+                    {
+                      id: 'cleanup-settings',
+                      label: 'Thiết lập xoá',
+                      icon: <ClockHistory size={15} style={{ color: '#d97706', flexShrink: 0 }} />,
+                      onClick: () => setShowCleanupOffcanvas(true),
+                    },
+                    {
+                      id: 'divider',
+                      label: '',
+                      divider: true,
+                      onClick: () => {},
+                    },
+                    {
+                      id: 'refresh-data',
+                      label: 'Làm mới dữ liệu',
+                      icon: <ArrowRepeat size={15} style={{ color: '#8b5cf6', flexShrink: 0 }} />,
+                      onClick: () => loadStepData(),
+                    },
+                  ]
+                : undefined
+            }
           />
 
           {/* ── BẢNG FULLWIDTHTABLE CHO BƯỚC 1 & 3 (CẤU TẠO NHÓM LỆNH ĐỒNG NHẤT) ── */}
@@ -2077,6 +2281,17 @@ export const LogisticsOverviewPage: React.FC = () => {
       <EventOffcanvas
         isOpen={isEventCalendarOpen}
         onClose={() => setIsEventCalendarOpen(false)}
+      />
+
+      {/* ── OFFCANVAS THIẾT LẬP XOÁ DỮ LIỆU LƯU TRỮ (BƯỚC 3: ĐÃ HOÀN THÀNH) ── */}
+      <DataRetentionOffcanvas
+        isOpen={showCleanupOffcanvas}
+        onClose={() => setShowCleanupOffcanvas(false)}
+        ticketType="ALL"
+        title="Thiết lập thời gian lưu trữ"
+        description="Cấu hình tự động dọn dẹp các phiếu và lệnh kho đã lưu trữ"
+        entityLabel="lệnh"
+        onCleanedUp={() => loadStepData()}
       />
     </StepPage>
   );

@@ -4,7 +4,10 @@ import { HoverImage } from "@/components/ui/HoverImage";
 import React, { useState, useEffect, useMemo } from "react";
 import { FullWidthTable } from "@/components/common/FullWidthTable";
 import { TableToolbar } from "@/components/common/TableToolbar";
+import { DatePicker } from "@/components/common/DatePicker";
 import { Pagination } from "@/components/common/Pagination";
+import { DeleteButton } from "@/components/common/DeleteButton";
+import { DataRetentionOffcanvas } from "@/components/common/DataRetentionOffcanvas";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useAuth } from "@/context/AuthContext";
 import { isLogisticsAdmin, canPickAndPack } from "@/lib/logistics-permissions";
@@ -16,6 +19,7 @@ interface BatchItemOrder {
   ticketItemId: string;
   code: string;
   customerName?: string;
+  customerAddress?: string;
   soLuongTrongDon: number;
   daNhatTrongDon?: number;
   ngayGiao?: string;
@@ -57,6 +61,7 @@ interface OrderGroup {
   code: string; // SaleOrder Code or Ticket Code
   ticketCode: string;
   customerName?: string;
+  customerAddress?: string;
   ngayGiao?: string;
   createdAt?: string;
   assignedTo?: string;
@@ -68,7 +73,12 @@ interface Employee {
   fullName: string;
 }
 
-export function LogisticsBatchPacking() {
+interface LogisticsBatchPackingProps {
+  currentStep?: number;
+  onStepChange?: (step: number) => void;
+}
+
+export function LogisticsBatchPacking({ currentStep = 1, onStepChange }: LogisticsBatchPackingProps = {}) {
   const { user, loading: authLoading } = useAuth();
   const isThuKho = isLogisticsAdmin(user);
   const canPick = canPickAndPack(user);
@@ -77,8 +87,8 @@ export function LogisticsBatchPacking() {
   const [items, setItems] = useState<BatchItem[]>([]);
   const [, setTotalOrders] = useState(0);
 
-  // Chế độ xem: 'by-material' (Gom theo hàng hoá) hoặc 'by-order' (Tách theo đơn hàng)
-  const [viewMode, setViewMode] = useState<"by-material" | "by-order">("by-material");
+  // Mặc định hiển thị theo 'by-order' (Tách theo đơn hàng)
+  const [viewMode, setViewMode] = useState<"by-material" | "by-order">("by-order");
 
   const [isManager, setIsManager] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -98,8 +108,25 @@ export function LogisticsBatchPacking() {
   // Trạng thái thu gọn cho chế độ xem tổng hợp (theo ngày)
   const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set());
 
-  // Trạng thái thu gọn cho chế độ xem tách theo đơn hàng (theo order id)
-  const [collapsedOrders, setCollapsedOrders] = useState<Set<string>>(new Set());
+  // Trạng thái chọn checkbox cho bước Đã hoàn thành (để xoá)
+  const [selectedOrdersToDelete, setSelectedOrdersToDelete] = useState<Set<string>>(new Set());
+
+  // Trạng thái thu gọn cho chế độ xem tách theo đơn hàng:
+  // Set chứa các orderId được MỞ (mặc định rỗng => tất cả đều thu gọn/ẩn)
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+
+  // Khi đổi step hoặc fetch lại dữ liệu, mặc định thu gọn tất cả
+  useEffect(() => {
+    setExpandedOrders(new Set());
+  }, [currentStep]);
+
+  // Khi chuyển step hoặc đổi dữ liệu, clear selection
+  useEffect(() => {
+    setSelectedOrdersToDelete(new Set());
+  }, [currentStep]);
+
+  // Trạng thái Offcanvas thiết lập thời gian lưu trữ tự động xoá
+  const [showCleanupOffcanvas, setShowCleanupOffcanvas] = useState(false);
 
   // Trạng thái xác nhận hoàn thành
   const [completingDate, setCompletingDate] = useState<string | null>(null);
@@ -116,7 +143,7 @@ export function LogisticsBatchPacking() {
   };
 
   const toggleOrder = (orderId: string) => {
-    setCollapsedOrders(prev => {
+    setExpandedOrders(prev => {
       const next = new Set(prev);
       if (next.has(orderId)) next.delete(orderId);
       else next.add(orderId);
@@ -126,9 +153,9 @@ export function LogisticsBatchPacking() {
 
   const toggleAllOrders = (collapse: boolean) => {
     if (collapse) {
-      setCollapsedOrders(new Set(allOrderGroups.map(o => o.id)));
+      setExpandedOrders(new Set());
     } else {
-      setCollapsedOrders(new Set());
+      setExpandedOrders(new Set(allOrderGroups.map(o => o.id)));
     }
   };
 
@@ -156,8 +183,11 @@ export function LogisticsBatchPacking() {
     try {
       setLoading(true);
       const token = typeof window !== "undefined" ? localStorage.getItem("seajong_token") : null;
-      const userQuery = user?.id ? `&userId=${encodeURIComponent(user.id)}` : "";
-      const res = await fetch(`/api/logistics/batch-packing?t=${Date.now()}${userQuery}`, {
+      const params = new URLSearchParams();
+      params.set("t", String(Date.now()));
+      if (user?.id) params.set("userId", user.id);
+      params.set("step", String(currentStep));
+      const res = await fetch(`/api/logistics/batch-packing?${params.toString()}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       const data = await res.json();
@@ -177,7 +207,7 @@ export function LogisticsBatchPacking() {
     if (!authLoading) {
       fetchData();
     }
-  }, [authLoading, user?.id, isThuKho]);
+  }, [authLoading, user?.id, isThuKho, currentStep]);
 
   useEffect(() => {
     if (isManager && employees.length === 0) {
@@ -439,7 +469,11 @@ export function LogisticsBatchPacking() {
           });
           return next;
         });
-        fetchData();
+        if (onStepChange && currentStep === 1) {
+          onStepChange(2);
+        } else {
+          fetchData();
+        }
       } else {
         toast.error(data.error || "Có lỗi xảy ra");
       }
@@ -488,7 +522,11 @@ export function LogisticsBatchPacking() {
           });
           return next;
         });
-        fetchData();
+        if (onStepChange && currentStep === 1) {
+          onStepChange(2);
+        } else {
+          fetchData();
+        }
       } else {
         toast.error(data.error || "Có lỗi xảy ra");
       }
@@ -497,6 +535,47 @@ export function LogisticsBatchPacking() {
     } finally {
       setIsSubmitting(false);
       setCompletingOrder(null);
+    }
+  };
+
+  const handleDeleteSelectedOrders = async () => {
+    if (selectedOrdersToDelete.size === 0) return;
+    try {
+      const itemsToDelete = Array.from(selectedOrdersToDelete).map(id => ({
+        id,
+        type: 'logistics-ticket'
+      }));
+      const res = await fetch('/api/logistics/overview-orders/batch-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: itemsToDelete }),
+      });
+      if (res.ok) {
+        toast.success(`Đã xoá ${itemsToDelete.length} đơn hoàn thành khỏi hệ thống.`);
+        setSelectedOrdersToDelete(new Set());
+        fetchData();
+      } else {
+        toast.error("Không thể xoá các đơn đã chọn.");
+      }
+    } catch {
+      toast.error("Có lỗi xảy ra khi xoá dữ liệu.");
+    }
+  };
+
+  const toggleSelectOrderToDelete = (orderId: string) => {
+    setSelectedOrdersToDelete(prev => {
+      const next = new Set(prev);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      return next;
+    });
+  };
+
+  const toggleSelectAllToDelete = () => {
+    if (selectedOrdersToDelete.size === paginatedOrderGroups.length && paginatedOrderGroups.length > 0) {
+      setSelectedOrdersToDelete(new Set());
+    } else {
+      setSelectedOrdersToDelete(new Set(paginatedOrderGroups.map(o => o.id)));
     }
   };
 
@@ -532,6 +611,7 @@ export function LogisticsBatchPacking() {
             code: order.code,
             ticketCode: order.ticketCode || order.code,
             customerName: order.customerName,
+            customerAddress: order.customerAddress,
             ngayGiao: order.ngayGiao,
             createdAt: order.createdAt,
             assignedTo: order.assignedTo,
@@ -669,9 +749,9 @@ export function LogisticsBatchPacking() {
   }, [groupedItems]);
 
   const allOrdersCollapsed = useMemo(() => {
-    if (paginatedOrderGroups.length === 0) return false;
-    return paginatedOrderGroups.every(o => collapsedOrders.has(o.id));
-  }, [paginatedOrderGroups, collapsedOrders]);
+    if (paginatedOrderGroups.length === 0) return true;
+    return paginatedOrderGroups.every(o => !expandedOrders.has(o.id));
+  }, [paginatedOrderGroups, expandedOrders]);
 
   // --- Toolbar Component ---
   const headerContent = (
@@ -679,42 +759,42 @@ export function LogisticsBatchPacking() {
       searchValue={search}
       onSearchChange={(val) => { setSearch(val); setCurrentPage(1); }}
       searchPlaceholder="Tìm tên hàng hoá, mã hàng, số đơn..."
-      searchWidth={280}
-      filters={
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Lọc ngày nâng cấp đẹp chuẩn Enterprise */}
-          <div className="flex items-center gap-2 h-9 px-3 rounded-lg border border-slate-200 bg-white hover:border-slate-300 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all shadow-2xs">
-            <i className="bi bi-calendar3 text-slate-400 text-xs" />
-            <input 
-              type="date"
-              className="h-full bg-transparent border-none text-slate-700 text-xs font-medium outline-none cursor-pointer"
-              value={filterDate}
-              onChange={e => { setFilterDate(e.target.value); setCurrentPage(1); }}
-            />
-            {filterDate && (
-              <button
-                type="button"
-                className="text-slate-400 hover:text-rose-500 transition-colors cursor-pointer p-0.5"
-                onClick={() => { setFilterDate(""); setCurrentPage(1); }}
-                title="Xoá lọc ngày"
-              >
-                <i className="bi bi-x-circle-fill text-xs" />
-              </button>
-            )}
-          </div>
-
-          {/* Lọc trạng thái nâng cấp */}
-          <select
-            className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-medium outline-none hover:border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all shadow-2xs cursor-pointer"
-            style={{ width: 155 }}
-            value={filterStatus}
-            onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}
-          >
-            <option value="all">Tất cả trạng thái</option>
-            <option value="pending">Chưa nhặt xong</option>
-            <option value="done">Đã hoàn thành</option>
-          </select>
+      actionsBeforeSearch={
+        <div style={{ width: "165px", flexShrink: 0 }}>
+          <DatePicker
+            value={filterDate}
+            onChange={(val) => { setFilterDate(val); setCurrentPage(1); }}
+            placeholder="dd/mm/yyyy"
+            clearable={true}
+          />
         </div>
+      }
+      filters={[
+        {
+          id: "status",
+          value: filterStatus,
+          minWidth: "170px",
+          onChange: (val) => { setFilterStatus(val); setCurrentPage(1); },
+          options: [
+            { label: "Tất cả trạng thái", value: "all" },
+            { label: "Chưa nhặt xong", value: "pending" },
+            { label: "Đã hoàn thành", value: "done" },
+          ],
+        },
+      ]}
+      rightActions={
+        currentStep === 2 ? (
+          <DeleteButton
+            itemCount={selectedOrdersToDelete.size}
+            disabled={selectedOrdersToDelete.size === 0}
+            label="Xoá"
+            hideCountBadge={true}
+            dialogTitle="Xác nhận xoá đơn gom hàng hoàn thành"
+            dialogMessage={`Bạn có chắc chắn muốn xoá ${selectedOrdersToDelete.size} đơn gom hàng đã hoàn thành này khỏi danh sách? Thao tác này không thể hoàn tác.`}
+            onConfirm={handleDeleteSelectedOrders}
+            size="sm"
+          />
+        ) : undefined
       }
       menuItems={[
         {
@@ -754,7 +834,22 @@ export function LogisticsBatchPacking() {
             </span>
           ),
           onClick: () => toggleAllOrders(!allOrdersCollapsed),
-        }] : [])
+        }] : []),
+        {
+          divider: true,
+          label: "",
+          onClick: () => {},
+        },
+        {
+          id: "cleanup-settings",
+          label: (
+            <span className="flex items-center gap-2 text-slate-700 py-0.5">
+              <i className="bi bi-clock-history text-amber-600 text-sm" />
+              <span>Thiết lập xoá</span>
+            </span>
+          ),
+          onClick: () => setShowCleanupOffcanvas(true),
+        }
       ]}
     />
   );
@@ -782,7 +877,17 @@ export function LogisticsBatchPacking() {
           <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
             <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
               <th className="py-2.5 px-2.5 md:px-3 w-9 md:w-10 text-center border-0 align-middle">
-                <i className="bi bi-check-all text-sm" />
+                {currentStep === 2 && viewMode === "by-order" ? (
+                  <input
+                    type="checkbox"
+                    checked={paginatedOrderGroups.length > 0 && selectedOrdersToDelete.size === paginatedOrderGroups.length}
+                    onChange={toggleSelectAllToDelete}
+                    className="w-3.5 h-3.5 rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                    title="Chọn tất cả để xoá"
+                  />
+                ) : (
+                  <i className="bi bi-check-all text-sm" />
+                )}
               </th>
               <th className="py-2.5 px-3 md:px-3.5 md:min-w-[280px] border-0 align-middle">
                 Mặt hàng
@@ -802,7 +907,7 @@ export function LogisticsBatchPacking() {
             {/* CHẾ ĐỘ 1: TÁCH THEO ĐƠN HÀNG */}
             {viewMode === "by-order" ? (
               paginatedOrderGroups.map(order => {
-                const isCollapsed = collapsedOrders.has(order.id);
+                const isCollapsed = !expandedOrders.has(order.id);
                 let fullyPickedCount = 0;
                 let partiallyPickedCount = 0;
 
@@ -824,9 +929,23 @@ export function LogisticsBatchPacking() {
 
                 const orderHeaderInner = (
                   <div className="flex items-center justify-between gap-2 w-full">
-                    <div className="flex flex-col md:flex-row md:items-center md:flex-wrap gap-1.5 md:gap-2 min-w-0 flex-1">
-                      {/* Dòng 1 trên mobile: Mũi tên + ĐƠN: DBH-... */}
-                      <div className="order-1 md:order-1 flex items-center flex-wrap gap-1.5 md:gap-2">
+                    <div className="flex flex-col min-w-0 flex-1 gap-1">
+                      {/* Dòng chính: Checkbox (khi hoàn thành) + Mũi tên + Mã đơn + Mã phiếu + Trạng thái + Phân công + Hạn giao + Số lượng mặt hàng */}
+                      <div className="flex items-center flex-wrap gap-1.5 md:gap-2">
+                        {currentStep === 2 && (
+                          <input
+                            type="checkbox"
+                            checked={selectedOrdersToDelete.has(order.id)}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              toggleSelectOrderToDelete(order.id);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer mr-0.5"
+                            title="Chọn để xoá"
+                          />
+                        )}
+
                         {/* Nút mũi tên ẩn/hiện hàng hoá trong đơn */}
                         <button
                           type="button"
@@ -843,10 +962,13 @@ export function LogisticsBatchPacking() {
                         <span className="text-slate-800 font-bold text-xs uppercase tracking-wide">
                           ĐƠN: <span className="text-blue-600 font-mono font-bold text-xs">{order.code}</span>
                         </span>
-                      </div>
 
-                      {/* Dòng 2 trên mobile: Trạng thái + Phân công (trên desktop đứng sau thông tin đơn) */}
-                      <div className="order-2 md:order-3 flex items-center flex-wrap gap-1.5 md:gap-2">
+                        {order.ticketCode && order.ticketCode !== order.code && (
+                          <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-blue-50 text-blue-700 border border-blue-200/80">
+                            {order.ticketCode}
+                          </span>
+                        )}
+
                         {/* Badge trạng thái */}
                         {isOrderDone ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -890,32 +1012,31 @@ export function LogisticsBatchPacking() {
                             </button>
                           )
                         )}
-                      </div>
-
-                      {/* Dòng 3 trên mobile: Mã lệnh + Khách hàng (trên desktop đứng giữa ĐƠN và Trạng thái) */}
-                      <div className={`order-3 md:order-2 ${hasMobileOrderMeta ? "flex" : "hidden md:flex"} items-center flex-wrap gap-1.5 md:gap-2`}>
-                        {order.ticketCode && order.ticketCode !== order.code && (
-                          <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-blue-50 text-blue-700 border border-blue-200/80">
-                            {order.ticketCode}
-                          </span>
-                        )}
-
-                        {isManager && order.customerName && (
-                          <span className="text-slate-500 text-xs font-normal">
-                            Khách hàng: <b className="text-slate-800 font-medium">{order.customerName}</b>
-                          </span>
-                        )}
 
                         {order.ngayGiao && (
-                          <span className="hidden md:inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/80">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/80">
                             <span>{getRelativeDateText(new Date(order.ngayGiao).toLocaleDateString('vi-VN'))}</span>
                           </span>
                         )}
 
-                        <span className="hidden md:inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-white text-slate-700 border border-slate-200 shadow-2xs">
+                        <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-white text-slate-700 border border-slate-200 shadow-2xs">
                           {order.items.length} mặt hàng
                         </span>
                       </div>
+
+                      {/* Dòng thông tin khách hàng dưới mã đơn */}
+                      {order.customerName && (
+                        <div className="flex items-center gap-1.5 text-xs text-slate-500 pl-8 truncate">
+                          <span className="text-slate-400">Khách hàng:</span>
+                          <span className="font-semibold text-slate-800">{order.customerName}</span>
+                          {order.customerAddress && (
+                            <>
+                              <span className="text-slate-300">•</span>
+                              <span className="text-slate-500 truncate">{order.customerAddress}</span>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-3 shrink-0">
@@ -924,30 +1045,32 @@ export function LogisticsBatchPacking() {
                         {isCollapsed ? "(Đang ẩn hàng hoá)" : "(Đang hiển thị hàng hoá)"}
                       </span>
 
-                      <button 
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); if (canPick) handleOrderCompleteClick(order); }} 
-                        className={`inline-flex items-center justify-center gap-1.5 w-8 h-8 md:w-auto md:h-auto md:px-3.5 md:py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                          canPick
-                            ? "text-white hover:brightness-95 active:scale-95 cursor-pointer" 
-                            : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-75"
-                        }`}
-                        style={
-                          canPick
-                            ? {
-                                backgroundColor: "var(--color-primary, #0284c7)",
-                                borderColor: "var(--color-primary, #0284c7)",
-                                boxShadow: "0 0 10px rgba(2, 132, 199, 0.3)",
-                              }
-                            : undefined
-                        }
-                        disabled={!canPick}
-                        title={!canPick ? "Chưa được cấp quyền Cấp phát vật tư & gom hàng" : hasPendingInput ? "Báo cáo hoàn tất gom hàng cho đơn này" : "Báo cáo"}
-                        aria-label="Báo cáo"
-                      >
-                        <i className="bi bi-send text-xs md:text-[11px]" />
-                        <span className="hidden md:inline">Báo cáo</span>
-                      </button>
+                      {currentStep !== 2 && (
+                        <button 
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); if (canPick) handleOrderCompleteClick(order); }} 
+                          className={`inline-flex items-center justify-center gap-1.5 w-8 h-8 md:w-auto md:h-auto md:px-3.5 md:py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                            canPick
+                              ? "text-white hover:brightness-95 active:scale-95 cursor-pointer" 
+                              : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-75"
+                          }`}
+                          style={
+                            canPick
+                              ? {
+                                  backgroundColor: "var(--color-primary, #0284c7)",
+                                  borderColor: "var(--color-primary, #0284c7)",
+                                  boxShadow: "0 0 10px rgba(2, 132, 199, 0.3)",
+                                }
+                              : undefined
+                          }
+                          disabled={!canPick}
+                          title={!canPick ? "Chưa được cấp quyền Cấp phát vật tư & gom hàng" : hasPendingInput ? "Báo cáo hoàn tất gom hàng cho đơn này" : "Báo cáo"}
+                          aria-label="Báo cáo"
+                        >
+                          <i className="bi bi-send text-xs md:text-[11px]" />
+                          <span className="hidden md:inline">Báo cáo</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -981,23 +1104,31 @@ export function LogisticsBatchPacking() {
                             isFullyPicked ? "bg-emerald-50/40 hover:bg-emerald-50/70" : isPicked ? "bg-amber-50/40 hover:bg-amber-50/70" : "bg-white hover:bg-slate-50/80"
                           }`}
                         >
-                          {/* Nút tick nhanh */}
+                          {/* Nút tick nhanh (chỉ hiển thị ở bước 1 đang thực hiện) */}
                           <td 
                             className="text-center py-2.5 px-2.5 align-middle"
-                            onClick={() => handleToggleOrderItemPick(it.ticketItemId, it.soLuongYeuCau)}
+                            onClick={() => {
+                              if (currentStep !== 2) {
+                                handleToggleOrderItemPick(it.ticketItemId, it.soLuongYeuCau);
+                              }
+                            }}
                           >
-                            <div 
-                              className={`w-3.5 h-3.5 mx-auto rounded-[3px] border flex items-center justify-center cursor-pointer transition-all ${
-                                isFullyPicked 
-                                  ? "bg-emerald-600 border-emerald-600 text-white shadow-xs" 
-                                  : isPicked 
-                                  ? "bg-amber-500 border-amber-500 text-white shadow-xs" 
-                                  : "border-slate-300 hover:border-blue-400 bg-white text-transparent"
-                              }`}
-                              title={isFullyPicked ? "Bỏ chọn nhặt" : "Nhặt đủ số lượng"}
-                            >
-                              <i className="bi bi-check text-[10px] font-bold" />
-                            </div>
+                            {currentStep === 2 ? (
+                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-slate-300 mx-auto" />
+                            ) : (
+                              <div 
+                                className={`w-3.5 h-3.5 mx-auto rounded-[3px] border flex items-center justify-center cursor-pointer transition-all ${
+                                  isFullyPicked 
+                                    ? "bg-emerald-600 border-emerald-600 text-white shadow-xs" 
+                                    : isPicked 
+                                    ? "bg-amber-500 border-amber-500 text-white shadow-xs" 
+                                    : "border-slate-300 hover:border-blue-400 bg-white text-transparent"
+                                }`}
+                                title={isFullyPicked ? "Bỏ chọn nhặt" : "Nhặt đủ số lượng"}
+                              >
+                                <i className="bi bi-check text-[10px] font-bold" />
+                              </div>
+                            )}
                           </td>
 
                           {/* Thông tin mặt hàng */}
@@ -1066,26 +1197,32 @@ export function LogisticsBatchPacking() {
                                   </span>
                                   <span className="inline-flex items-center gap-1.5">
                                     <span>Đã nhặt:</span>
-                                    <input
-                                      type="number"
-                                      inputMode="numeric"
-                                      className={`w-14 h-6 px-1 text-center font-mono font-bold text-xs rounded border outline-none transition-all ${
-                                        isFullyPicked
-                                          ? "border-emerald-500 bg-emerald-50 text-emerald-800"
-                                          : isPicked
-                                          ? "border-amber-500 bg-amber-50 text-amber-800"
-                                          : "border-slate-300 bg-white text-slate-700"
-                                      } ${isEdited ? "ring-1 ring-amber-300" : ""}`}
-                                      value={currentInputQty > 0 ? currentInputQty : ""}
-                                      onChange={e => handleOrderItemQuantityChange(it.ticketItemId, e.target.value, it.soLuongYeuCau)}
-                                      onBlur={resetMobileViewportZoom}
-                                      onKeyDown={e => {
-                                        if (e.key === "Enter") e.currentTarget.blur();
-                                      }}
-                                      onClick={e => e.stopPropagation()}
-                                      min={0}
-                                      max={it.soLuongYeuCau}
-                                    />
+                                    {currentStep === 2 ? (
+                                      <span className="inline-block px-2 py-0.5 font-mono font-bold text-xs rounded bg-slate-100 text-slate-800 border border-slate-200">
+                                        {currentInputQty}
+                                      </span>
+                                    ) : (
+                                      <input
+                                        type="number"
+                                        inputMode="numeric"
+                                        className={`w-14 h-6 px-1 text-center font-mono font-bold text-xs rounded border outline-none transition-all ${
+                                          isFullyPicked
+                                            ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                                            : isPicked
+                                            ? "border-amber-500 bg-amber-50 text-amber-800"
+                                            : "border-slate-300 bg-white text-slate-700"
+                                        } ${isEdited ? "ring-1 ring-amber-300" : ""}`}
+                                        value={currentInputQty > 0 ? currentInputQty : ""}
+                                        onChange={e => handleOrderItemQuantityChange(it.ticketItemId, e.target.value, it.soLuongYeuCau)}
+                                        onBlur={resetMobileViewportZoom}
+                                        onKeyDown={e => {
+                                          if (e.key === "Enter") e.currentTarget.blur();
+                                        }}
+                                        onClick={e => e.stopPropagation()}
+                                        min={0}
+                                        max={it.soLuongYeuCau}
+                                      />
+                                    )}
                                   </span>
                                 </div>
                               </div>
@@ -1107,22 +1244,28 @@ export function LogisticsBatchPacking() {
                             )}
                           </td>
 
-                          {/* Ô nhập số lượng Đã nhặt */}
+                          {/* Ô nhập số lượng Đã nhặt hoặc nhãn badge khi đã hoàn thành */}
                           <td className="hidden md:table-cell text-center py-2.5 px-3.5 align-middle">
-                            <input 
-                              type="number"
-                              className={`w-20 h-8 text-center font-mono font-bold text-sm rounded-lg border outline-none transition-all ${
-                                isFullyPicked 
-                                  ? "border-emerald-500 bg-emerald-50 text-emerald-800 focus:ring-1 focus:ring-emerald-500" 
-                                  : isPicked 
-                                  ? "border-amber-500 bg-amber-50 text-amber-800 focus:ring-1 focus:ring-amber-500" 
-                                  : "border-slate-300 bg-white text-slate-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                              } ${isEdited ? "ring-2 ring-amber-300" : ""}`}
-                              value={currentInputQty > 0 || isEdited ? currentInputQty : 0}
-                              onChange={e => handleOrderItemQuantityChange(it.ticketItemId, e.target.value, it.soLuongYeuCau)}
-                              min={0}
-                              max={it.soLuongYeuCau}
-                            />
+                            {currentStep === 2 ? (
+                              <span className="inline-block min-w-[48px] px-2.5 py-1 text-center font-mono font-bold text-sm rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                {currentInputQty}
+                              </span>
+                            ) : (
+                              <input 
+                                type="number"
+                                className={`w-20 h-8 text-center font-mono font-bold text-sm rounded-lg border outline-none transition-all ${
+                                  isFullyPicked 
+                                    ? "border-emerald-500 bg-emerald-50 text-emerald-800 focus:ring-1 focus:ring-emerald-500" 
+                                    : isPicked 
+                                    ? "border-amber-500 bg-amber-50 text-amber-800 focus:ring-1 focus:ring-amber-500" 
+                                    : "border-slate-300 bg-white text-slate-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                } ${isEdited ? "ring-2 ring-amber-300" : ""}`}
+                                value={currentInputQty > 0 || isEdited ? currentInputQty : 0}
+                                onChange={e => handleOrderItemQuantityChange(it.ticketItemId, e.target.value, it.soLuongYeuCau)}
+                                min={0}
+                                max={it.soLuongYeuCau}
+                              />
+                            )}
                           </td>
 
                           {/* Trạng thái mặt hàng */}
@@ -1309,20 +1452,28 @@ export function LogisticsBatchPacking() {
                         {/* Checkbox nhặt nhanh */}
                         <td 
                           className="text-center py-2.5 px-2.5 align-middle" 
-                          onClick={() => handleTogglePick(item)}
+                          onClick={() => {
+                            if (currentStep !== 2) {
+                              handleTogglePick(item);
+                            }
+                          }}
                         >
-                          <div 
-                            className={`w-3.5 h-3.5 mx-auto rounded-[3px] border flex items-center justify-center cursor-pointer transition-all ${
-                              isFullyPicked 
-                                ? "bg-emerald-600 border-emerald-600 text-white shadow-xs" 
-                                : isPicked 
-                                ? "bg-amber-500 border-amber-500 text-white shadow-xs" 
-                                : "border-slate-300 hover:border-blue-400 bg-white text-transparent"
-                            }`}
-                            title={isFullyPicked ? "Bỏ chọn nhặt" : "Nhặt đủ toàn bộ"}
-                          >
-                            <i className="bi bi-check text-[10px] font-bold" />
-                          </div>
+                          {currentStep === 2 ? (
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-slate-300 mx-auto" />
+                          ) : (
+                            <div 
+                              className={`w-3.5 h-3.5 mx-auto rounded-[3px] border flex items-center justify-center cursor-pointer transition-all ${
+                                isFullyPicked 
+                                  ? "bg-emerald-600 border-emerald-600 text-white shadow-xs" 
+                                  : isPicked 
+                                  ? "bg-amber-500 border-amber-500 text-white shadow-xs" 
+                                  : "border-slate-300 hover:border-blue-400 bg-white text-transparent"
+                              }`}
+                              title={isFullyPicked ? "Bỏ chọn nhặt" : "Nhặt đủ toàn bộ"}
+                            >
+                              <i className="bi bi-check text-[10px] font-bold" />
+                            </div>
+                          )}
                         </td>
 
                         {/* Mặt hàng */}
@@ -1383,26 +1534,32 @@ export function LogisticsBatchPacking() {
                                 </span>
                                 <span className="inline-flex items-center gap-1.5">
                                   <span>Đã nhặt:</span>
-                                  <input
-                                    type="number"
-                                    inputMode="numeric"
-                                    className={`w-14 h-6 px-1 text-center font-mono font-bold text-xs rounded border outline-none transition-all ${
-                                      isFullyPicked
-                                        ? "border-emerald-500 bg-emerald-50 text-emerald-800"
-                                        : isPicked
-                                        ? "border-amber-500 bg-amber-50 text-amber-800"
-                                        : "border-slate-300 bg-white text-slate-700"
-                                    } ${isEdited ? "ring-1 ring-amber-300" : ""}`}
-                                    value={currentInputQty > 0 ? currentInputQty : ""}
-                                    onChange={e => handleQuantityChange(item, e.target.value)}
-                                    onBlur={resetMobileViewportZoom}
-                                    onKeyDown={e => {
-                                      if (e.key === "Enter") e.currentTarget.blur();
-                                    }}
-                                    onClick={e => e.stopPropagation()}
-                                    min={0}
-                                    max={maxAllowedQty}
-                                  />
+                                  {currentStep === 2 ? (
+                                    <span className="inline-block px-2 py-0.5 font-mono font-bold text-xs rounded bg-slate-100 text-slate-800 border border-slate-200">
+                                      {currentInputQty}
+                                    </span>
+                                  ) : (
+                                    <input
+                                      type="number"
+                                      inputMode="numeric"
+                                      className={`w-14 h-6 px-1 text-center font-mono font-bold text-xs rounded border outline-none transition-all ${
+                                        isFullyPicked
+                                          ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                                          : isPicked
+                                          ? "border-amber-500 bg-amber-50 text-amber-800"
+                                          : "border-slate-300 bg-white text-slate-700"
+                                      } ${isEdited ? "ring-1 ring-amber-300" : ""}`}
+                                      value={currentInputQty > 0 ? currentInputQty : ""}
+                                      onChange={e => handleQuantityChange(item, e.target.value)}
+                                      onBlur={resetMobileViewportZoom}
+                                      onKeyDown={e => {
+                                        if (e.key === "Enter") e.currentTarget.blur();
+                                      }}
+                                      onClick={e => e.stopPropagation()}
+                                      min={0}
+                                      max={maxAllowedQty}
+                                    />
+                                  )}
                                 </span>
                               </div>
                               {/* Hiển thị thông tin các mã lệnh xuống dòng bên dưới, áp dụng truncate trên màn hình điện thoại */}
@@ -1442,22 +1599,28 @@ export function LogisticsBatchPacking() {
                           )}
                         </td>
 
-                        {/* Đã nhặt */}
+                        {/* Đã nhặt hoặc nhãn badge khi đã hoàn thành */}
                         <td className="hidden md:table-cell text-center py-2.5 px-3.5 align-middle">
-                          <input 
-                            type="number"
-                            className={`w-20 h-8 text-center font-mono font-bold text-sm rounded-lg border outline-none transition-all ${
-                              isFullyPicked 
-                                ? "border-emerald-500 bg-emerald-50 text-emerald-800 focus:ring-1 focus:ring-emerald-500" 
-                                : isPicked 
-                                ? "border-amber-500 bg-amber-50 text-amber-800 focus:ring-1 focus:ring-amber-500" 
-                                : "border-slate-300 bg-white text-slate-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                            } ${isEdited ? "ring-2 ring-amber-300" : ""}`}
-                            value={currentInputQty > 0 || isEdited ? currentInputQty : 0}
-                            onChange={e => handleQuantityChange(item, e.target.value)}
-                            min={0}
-                            max={maxAllowedQty}
-                          />
+                          {currentStep === 2 ? (
+                            <span className="inline-block min-w-[48px] px-2.5 py-1 text-center font-mono font-bold text-sm rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              {currentInputQty}
+                            </span>
+                          ) : (
+                            <input 
+                              type="number"
+                              className={`w-20 h-8 text-center font-mono font-bold text-sm rounded-lg border outline-none transition-all ${
+                                isFullyPicked 
+                                  ? "border-emerald-500 bg-emerald-50 text-emerald-800 focus:ring-1 focus:ring-emerald-500" 
+                                  : isPicked 
+                                  ? "border-amber-500 bg-amber-50 text-amber-800 focus:ring-1 focus:ring-amber-500" 
+                                  : "border-slate-300 bg-white text-slate-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                              } ${isEdited ? "ring-2 ring-amber-300" : ""}`}
+                              value={currentInputQty > 0 || isEdited ? currentInputQty : 0}
+                              onChange={e => handleQuantityChange(item, e.target.value)}
+                              min={0}
+                              max={maxAllowedQty}
+                            />
+                          )}
                         </td>
 
                         {/* Chi tiết theo phiếu */}
@@ -1580,6 +1743,17 @@ export function LogisticsBatchPacking() {
           if (completingOrder) executeOrderComplete(completingOrder);
         }}
         onCancel={() => setCompletingOrder(null)}
+      />
+
+      {/* Offcanvas Thiết lập tự động xoá lưu trữ (Component dùng chung) */}
+      <DataRetentionOffcanvas
+        isOpen={showCleanupOffcanvas}
+        onClose={() => setShowCleanupOffcanvas(false)}
+        ticketType="BATCH_PACKING"
+        title="Thiết lập thời gian lưu trữ"
+        description="Cấu hình tự động dọn dẹp các đơn gom hàng và dán nhãn"
+        entityLabel="đơn"
+        onCleanedUp={fetchData}
       />
     </div>
   );

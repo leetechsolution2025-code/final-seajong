@@ -150,6 +150,8 @@ export interface PrintPreviewProps {
   hideSidebar?: boolean;
   /** Trạng thái hiển thị mặc định của panel tùy biến (mặc định: true) */
   defaultShowSidebar?: boolean;
+  /** Nội dung tùy chỉnh hiển thị thêm trên thanh công cụ giữa (sau nút Dọc / Ngang) */
+  headerCenterExtra?: React.ReactNode;
 }
 
 export const PrintPreview: React.FC<PrintPreviewProps> = ({
@@ -184,6 +186,7 @@ export const PrintPreview: React.FC<PrintPreviewProps> = ({
   children,
   hideSidebar = false,
   defaultShowSidebar = true,
+  headerCenterExtra,
 }) => {
   const company = useCompanyInfo();
   // 1. Cấu hình trang mặc định: Khổ A4/A3, hướng dọc/ngang, lề trái và phải bằng nhau 20mm
@@ -682,6 +685,8 @@ export const PrintPreview: React.FC<PrintPreviewProps> = ({
               Ngang
             </button>
           </div>
+
+          {headerCenterExtra}
         </div>
 
         {/* Nút hành động bên phải: Dùng component Button chuẩn */}

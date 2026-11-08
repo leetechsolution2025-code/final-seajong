@@ -355,6 +355,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
   const [selectedDefect, setSelectedDefect] = useState<DefectReturn | null>(null);
   const [showCreateDefectOffcanvas, setShowCreateDefectOffcanvas] = useState<boolean>(false);
   const [showDefectProcessModal, setShowDefectProcessModal] = useState<boolean>(false);
+  const [processingDefectId, setProcessingDefectId] = useState<string | null>(null);
   const [expandedDefectKeys, setExpandedDefectKeys] = useState<Set<string>>(() => new Set());
 
   // ── Customer Select Drawer ──
@@ -2956,12 +2957,22 @@ export const SalesOrderTrackingPage: React.FC = () => {
           defect={selectedDefect}
           onClose={() => setSelectedDefect(null)}
           onRefresh={fetchDefects}
-          onOpenProcess={() => setShowDefectProcessModal(true)}
+          onOpenProcess={(id) => {
+            const targetId = id || selectedDefect?.id || null;
+            if (targetId) {
+              setProcessingDefectId(targetId);
+              setShowDefectProcessModal(true);
+              setSelectedDefect(null);
+            }
+          }}
         />
 
         <DefectProcessModal
-          defectId={showDefectProcessModal ? selectedDefect?.id || null : null}
-          onClose={() => setShowDefectProcessModal(false)}
+          defectId={showDefectProcessModal ? (processingDefectId || selectedDefect?.id || null) : null}
+          onClose={() => {
+            setShowDefectProcessModal(false);
+            setProcessingDefectId(null);
+          }}
           onRefresh={fetchDefects}
         />
 

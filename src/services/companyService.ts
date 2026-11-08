@@ -23,17 +23,17 @@ export interface CompanyInfo {
 }
 
 export const DEFAULT_COMPANY_INFO: CompanyInfo = {
-  company_name: 'CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM',
-  short_name: 'SEAJONG',
-  tax_code: '0109999999',
-  slogan: 'Kinh doanh thiết bị phòng tắm, nhà bếp - Tiên phong kiến tạo giá trị thực',
+  company_name: 'Công ty cổ phần Seajong Việt Nam',
+  short_name: 'Seajong VietNam.,JSC',
+  tax_code: '0111509681',
+  slogan: 'Tiên phong kiến tạo giá trị thực',
   legal_rep: 'Lê Công Vụ',
-  industry: 'Kinh doanh thiết bị vệ sinh, sen vòi cao cấp',
-  address: 'Hà Nội, Việt Nam',
-  phone: '0988 888 888',
-  email: 'info@seajong.vn',
-  website: 'https://seajong.vn',
-  domain: 'seajong.vn',
+  industry: 'Kinh doanh thiết bị phòng tắm, nhà bếp',
+  address: 'Sàn dịch vụ thương mại tầng 1, chung cư CT3, KHu nhà ở Cầu Diễn, Phường Phú Diễn, Thành Phố Hà Nội, Việt Nam',
+  phone: '0931339343| 1900 633 862',
+  email: '',
+  website: 'https://seajong.com',
+  domain: 'seajong.com',
   logo_url: '/logo.png',
 };
 
@@ -93,21 +93,22 @@ export const fetchCompanyInfo = async (): Promise<CompanyInfo> => {
 
     if (res && res.ok) {
       const data = await res.json();
-      if (data && (data.company_name || data.short_name)) {
+      const raw = data?.data || data;
+      if (raw && (raw.name || raw.company_name || raw.shortName || raw.short_name)) {
         const merged: CompanyInfo = {
           ...DEFAULT_COMPANY_INFO,
-          company_name: data.company_name || local.company_name,
-          short_name: data.short_name || local.short_name,
-          tax_code: data.tax_code || local.tax_code,
-          slogan: data.slogan !== undefined && data.slogan !== null ? data.slogan : local.slogan,
-          legal_rep: data.legal_rep || local.legal_rep,
-          industry: data.industry || local.industry,
-          address: data.address || local.address,
-          phone: data.phone || local.phone,
-          email: data.email || local.email,
-          website: data.website || local.website,
-          domain: data.domain || local.domain,
-          logo_url: data.logo_url || local.logo_url,
+          company_name: raw.name || raw.company_name || DEFAULT_COMPANY_INFO.company_name,
+          short_name: raw.shortName || raw.short_name || DEFAULT_COMPANY_INFO.short_name,
+          tax_code: raw.taxCode !== undefined && raw.taxCode !== null ? String(raw.taxCode) : (raw.tax_code || DEFAULT_COMPANY_INFO.tax_code),
+          slogan: raw.slogan !== undefined && raw.slogan !== null ? raw.slogan : DEFAULT_COMPANY_INFO.slogan,
+          legal_rep: raw.legalRep || raw.legal_rep || DEFAULT_COMPANY_INFO.legal_rep,
+          industry: raw.industry || DEFAULT_COMPANY_INFO.industry,
+          address: raw.address !== undefined && raw.address !== null ? raw.address : DEFAULT_COMPANY_INFO.address,
+          phone: raw.phone !== undefined && raw.phone !== null ? raw.phone : DEFAULT_COMPANY_INFO.phone,
+          email: raw.email !== undefined && raw.email !== null ? raw.email : DEFAULT_COMPANY_INFO.email,
+          website: raw.website !== undefined && raw.website !== null ? raw.website : DEFAULT_COMPANY_INFO.website,
+          domain: raw.domain || DEFAULT_COMPANY_INFO.domain,
+          logo_url: raw.logoUrl || raw.logo_url || DEFAULT_COMPANY_INFO.logo_url,
         };
         saveStoredCompanyInfo(merged);
         return merged;

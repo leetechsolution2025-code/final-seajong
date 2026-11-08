@@ -88,18 +88,25 @@ app.get('/api/company', async (req, res) => {
   try {
     const company = await prisma.companyInfo.findFirst().catch(() => null);
     const info = {
-      name: 'Công ty Cổ phần Seajong Việt Nam',
-      shortName: 'seajong',
+      name: 'Công ty cổ phần Seajong Việt Nam',
+      shortName: 'Seajong VietNam.,JSC',
       logoUrl: '/logo.png',
-      address: 'LK7-D4, KĐT mới Cầu Diễn, Phú Diễn, Bắc Từ Liêm, Hà Nội',
-      phone: '1900.633.862',
+      address: 'Sàn dịch vụ thương mại tầng 1, chung cư CT3, KHu nhà ở Cầu Diễn, Phường Phú Diễn, Thành Phố Hà Nội, Việt Nam',
+      phone: '0931339343| 1900 633 862',
+      email: '',
       website: 'https://seajong.com',
+      taxCode: '0111509681',
       legalRep: 'Lê Công Vụ',
       ...(company || {}),
       logoUrl: company?.logoUrl || '/logo.png',
     };
     res.json({
       ...info,
+      company_name: info.name,
+      short_name: info.shortName,
+      logo_url: info.logoUrl,
+      tax_code: info.taxCode || '',
+      legal_rep: info.legalRep || '',
       success: true,
       data: info,
     });
@@ -9451,8 +9458,23 @@ app.get('/api/logistics/staff', async (_req, res) => {
 app.delete('/api/logistics/tickets/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const tk = await prisma.logisticsTicket.findUnique({
+      where: { id },
+      select: { saleOrderId: true },
+    });
     await prisma.logisticsTicketItem.deleteMany({ where: { ticketId: id } });
     await prisma.logisticsTicket.delete({ where: { id } });
+    if (tk?.saleOrderId) {
+      const remaining = await prisma.logisticsTicket.count({
+        where: { saleOrderId: tk.saleOrderId },
+      });
+      if (remaining === 0) {
+        await prisma.saleOrder.updateMany({
+          where: { id: tk.saleOrderId },
+          data: { trangThai: 'completed' },
+        });
+      }
+    }
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -9475,8 +9497,22 @@ app.post('/api/logistics/overview-orders/batch-delete', async (req, res) => {
     const retailIds = items.filter((it) => it.type === 'retail-invoice').map((it) => it.id);
 
     if (ticketIds.length > 0) {
+      const ticketsWithSo = await prisma.logisticsTicket.findMany({
+        where: { id: { in: ticketIds } },
+        select: { saleOrderId: true },
+      });
+      const affectedSoIds = [...new Set(ticketsWithSo.map((t) => t.saleOrderId).filter(Boolean))];
       await prisma.logisticsTicketItem.deleteMany({ where: { ticketId: { in: ticketIds } } });
       await prisma.logisticsTicket.deleteMany({ where: { id: { in: ticketIds } } });
+      for (const soId of affectedSoIds) {
+        const remaining = await prisma.logisticsTicket.count({ where: { saleOrderId: soId } });
+        if (remaining === 0) {
+          await prisma.saleOrder.updateMany({
+            where: { id: soId },
+            data: { trangThai: 'completed' },
+          });
+        }
+      }
     }
     if (taskIds.length > 0) {
       await prisma.task.deleteMany({ where: { id: { in: taskIds } } });
@@ -10464,13 +10500,28 @@ async function filterTicketsForLogisticsUser(tickets, userCtx) {
 app.get('/api/logistics/material-picking', async (req, res) => {
   try {
     const userCtx = await resolveLogisticsUserContext(req);
+    const step = String(req.query.step || '1').trim();
+    const statusFilter = step === '2'
+      ? { in: ['COMPLETED'] }
+      : { in: ['PENDING', 'PICKING', 'PACKED'] };
+
     const rawTickets = await prisma.logisticsTicket.findMany({
       where: {
         type: { in: ['MATERIAL_PICKING', 'WARRANTY_MATERIAL'] },
-        status: { in: ['PENDING', 'PICKING', 'PACKED'] },
+        status: statusFilter,
       },
+      orderBy: { updatedAt: 'desc' },
+      take: step === '2' ? 100 : undefined,
       include: {
-        saleOrder: { select: { code: true, ngayGiao: true, customer: { select: { name: true } } } },
+        saleOrder: {
+          select: {
+            code: true,
+            ngayGiao: true,
+            diaChiGiaoHang: true,
+            ghiChu: true,
+            customer: { select: { name: true, address: true } }
+          }
+        },
         defectRecord: { select: { code: true } },
         items: {
           include: {
@@ -10530,12 +10581,23 @@ app.get('/api/logistics/material-picking', async (req, res) => {
         batchItem.tongSoLuong += (item.requestedQty || 0);
         batchItem.tongDaNhat += (item.pickedQty || 0);
 
+        let custName = ticket.saleOrder?.customer?.name;
+        let custAddress = ticket.saleOrder?.diaChiGiaoHang || ticket.saleOrder?.customer?.address || null;
+        if (!custName && ticket.saleOrder?.ghiChu) {
+          const guest = typeof parseGuestInfo === 'function' ? parseGuestInfo(ticket.saleOrder.ghiChu) : null;
+          if (guest?.name) {
+            custName = guest.name;
+            custAddress = custAddress || guest.address || null;
+          }
+        }
+
         batchItem.orders.push({
           id: ticket.id,
           ticketCode: ticket.code,
           ticketItemId: item.id,
           code: ticket.saleOrder?.code || ticket.defectRecord?.code || ticket.code,
-          customerName: userCtx.isManager ? ticket.saleOrder?.customer?.name : undefined,
+          customerName: custName || undefined,
+          customerAddress: custAddress || undefined,
           soLuongTrongDon: item.requestedQty || 0,
           daNhatTrongDon: item.pickedQty || 0,
           thucTon: userCtx.isManager ? thucTon : undefined,
@@ -10607,7 +10669,10 @@ app.post('/api/logistics/material-picking', async (req, res) => {
         const allFullyPicked = ticketItems.length > 0 && ticketItems.every(it => (it.pickedQty || 0) >= it.requestedQty);
         await prisma.logisticsTicket.update({
           where: { id: tId },
-          data: { status: allFullyPicked ? "PACKED" : "PICKING" }
+          data: {
+            status: allFullyPicked ? "COMPLETED" : "PICKING",
+            ...(allFullyPicked ? { completedAt: new Date() } : {})
+          }
         });
       }
     }
@@ -10623,13 +10688,28 @@ app.post('/api/logistics/material-picking', async (req, res) => {
 app.get('/api/logistics/batch-packing', async (req, res) => {
   try {
     const userCtx = await resolveLogisticsUserContext(req);
+    const step = String(req.query.step || '1').trim();
+    const statusFilter = step === '2'
+      ? { in: ['COMPLETED'] }
+      : { in: ['PENDING', 'PICKING', 'PACKED'] };
+
     const rawTickets = await prisma.logisticsTicket.findMany({
       where: {
         type: "BATCH_PACKING",
-        status: { in: ["PENDING", "PICKING", "PACKED"] }
+        status: statusFilter
       },
+      orderBy: { updatedAt: 'desc' },
+      take: step === '2' ? 100 : undefined,
       include: {
-        saleOrder: { select: { code: true, ngayGiao: true, customer: { select: { name: true } } } },
+        saleOrder: {
+          select: {
+            code: true,
+            ngayGiao: true,
+            diaChiGiaoHang: true,
+            ghiChu: true,
+            customer: { select: { name: true, address: true } }
+          }
+        },
         items: {
           include: {
             inventoryItem: {
@@ -10695,12 +10775,23 @@ app.get('/api/logistics/batch-packing', async (req, res) => {
         batchItem.tongSoLuong += (item.requestedQty || 0);
         batchItem.tongDaNhat += (item.pickedQty || 0);
 
+        let custName = ticket.saleOrder?.customer?.name;
+        let custAddress = ticket.saleOrder?.diaChiGiaoHang || ticket.saleOrder?.customer?.address || null;
+        if (!custName && ticket.saleOrder?.ghiChu) {
+          const guest = typeof parseGuestInfo === 'function' ? parseGuestInfo(ticket.saleOrder.ghiChu) : null;
+          if (guest?.name) {
+            custName = guest.name;
+            custAddress = custAddress || guest.address || null;
+          }
+        }
+
         batchItem.orders.push({
           id: ticket.id,
           ticketCode: ticket.code,
           ticketItemId: item.id,
           code: ticket.saleOrder?.code || ticket.code,
-          customerName: userCtx.isManager ? ticket.saleOrder?.customer?.name : undefined,
+          customerName: custName || undefined,
+          customerAddress: custAddress || undefined,
           soLuongTrongDon: item.requestedQty || 0,
           daNhatTrongDon: item.pickedQty || 0,
           thucTon: userCtx.isManager ? thucTon : undefined,
@@ -10772,7 +10863,10 @@ app.post('/api/logistics/batch-packing', async (req, res) => {
         const allFullyPicked = ticketItems.length > 0 && ticketItems.every(it => (it.pickedQty || 0) >= it.requestedQty);
         await prisma.logisticsTicket.update({
           where: { id: tId },
-          data: { status: allFullyPicked ? "PACKED" : "PICKING" }
+          data: {
+            status: allFullyPicked ? "COMPLETED" : "PICKING",
+            ...(allFullyPicked ? { completedAt: new Date() } : {})
+          }
         });
       }
     }
@@ -13372,14 +13466,21 @@ app.get('/api/production/defects/:id', async (req, res) => {
     let bomItems = [];
     if (foundDinhMuc) {
       bomCode = foundDinhMuc.code;
-      bomItems = (foundDinhMuc.vatTu || []).map((vt) => ({
-        id: vt.maVatTu || vt.id,
-        realInventoryItemId: vt.inventoryItem?.id || vt.inventoryItemId,
-        name: vt.inventoryItem?.tenHang || vt.tenVatTu,
-        unit: vt.donViTinh || vt.inventoryItem?.donVi || 'Cái',
-        qty: vt.soLuong,
-        stock: vt.inventoryItem?.soLuong || 0
-      }));
+      const defectQty = Number(defect.quantity) > 0 ? Number(defect.quantity) : 1;
+      bomItems = (foundDinhMuc.vatTu || []).map((vt) => {
+        const normQty = Number(vt.soLuong) || 1;
+        const totalQty = normQty * defectQty;
+        return {
+          id: vt.maVatTu || vt.id,
+          realInventoryItemId: vt.inventoryItem?.id || vt.inventoryItemId,
+          name: vt.inventoryItem?.tenHang || vt.tenVatTu,
+          unit: vt.donViTinh || vt.inventoryItem?.donVi || 'Cái',
+          normQty,
+          qty: totalQty,
+          totalQty,
+          stock: vt.inventoryItem?.soLuong || 0
+        };
+      });
     }
 
     const customerName = customerInfo?.name || saleOrder?.customer?.name || defect.customerName;
@@ -13526,7 +13627,7 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
       await tx.defectActivity.create({
         data: {
           defectId: id,
-          action: (nextStatus === 'WAITING_QC' && (action === 'HOÀN THÀNH' || action === 'YÊU CẦU QC KIỂM TRA'))
+          action: (nextStatus === 'WAITING_QC' && (action === 'HOÀN THÀNH' || action === 'YÊU CẦU QC KIỂM TRA' || action === 'HOÀN THÀNH & CHUYỂN QC' || (action && action.includes('QC'))))
             ? 'HOÀN THÀNH (CHUYỂN QC KIỂM TRA)'
             : (action || 'CẬP NHẬT'),
           description: note || 'Kỹ thuật viên hoàn tất xử lý và chuyển thông tin sang bộ phận QC kiểm định chất lượng (OQC).',
@@ -13655,42 +13756,59 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
             actualResult: JSON.stringify(actualResultItems)
           }
         });
-      } else if (action === 'YÊU CẦU QC KIỂM TRA' || nextStatus === 'WAITING_QC' || action === 'HOÀN THÀNH') {
-        const qcCode = `QC-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(10 + Math.random() * 90)}`;
-        await tx.qualityInspection.create({
-          data: {
-            code: qcCode,
-            type: 'OQC',
+      } else if (
+        nextStatus === 'WAITING_QC' ||
+        action === 'YÊU CẦU QC KIỂM TRA' ||
+        action === 'HOÀN THÀNH & CHUYỂN QC' ||
+        (action && action.includes('CHUYỂN QC')) ||
+        (action === 'HOÀN THÀNH' && nextStatus !== 'COMPLETED')
+      ) {
+        const existingQc = await tx.qualityInspection.findFirst({
+          where: {
             status: 'Chưa thực hiện',
-            productName: defect.productName,
-            requesterName: performedBy || 'Bộ phận sản xuất',
-            requesterDept: 'Kỹ thuật / Sản xuất',
-            executionTime: new Date(),
-            notes: `Kiểm tra OQC đầu ra cho hồ sơ ${defect.code}. Nội dung xử lý: ${note || defect.repairPlan || ''}`,
-            metadata: JSON.stringify({
-              defectId: id,
-              defectCode: defect.code,
-              productCode: defect.productCode,
+            OR: [
+              { metadata: { contains: defect.code } },
+              { metadata: { contains: id } }
+            ]
+          }
+        });
+        if (!existingQc) {
+          const qcCode = `QC-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(10 + Math.random() * 90)}`;
+          await tx.qualityInspection.create({
+            data: {
+              code: qcCode,
+              type: 'OQC',
+              status: 'Chưa thực hiện',
               productName: defect.productName,
-              model: defect.productCode,
-              quantity: defect.quantity || 1,
-              totalQuantity: defect.quantity || 1,
-              sampleQuantity: defect.quantity || 1,
-              productionOrder: defect.orderNumber || defect.code,
-              customerName: defect.customerName,
-              repairNote: note || defect.repairPlan,
-              source: 'DEFECT_REPAIR',
-              items: [{
+              requesterName: performedBy || 'Bộ phận sản xuất',
+              requesterDept: 'Kỹ thuật / Sản xuất',
+              executionTime: new Date(),
+              notes: `Kiểm tra OQC đầu ra cho hồ sơ ${defect.code}. Nội dung xử lý: ${note || defect.repairPlan || ''}`,
+              metadata: JSON.stringify({
+                defectId: id,
+                defectCode: defect.code,
+                productCode: defect.productCode,
                 productName: defect.productName,
                 model: defect.productCode,
                 quantity: defect.quantity || 1,
+                totalQuantity: defect.quantity || 1,
                 sampleQuantity: defect.quantity || 1,
-                soLuong: defect.quantity || 1,
-                donVi: 'Bộ'
-              }]
-            })
-          }
-        });
+                productionOrder: defect.orderNumber || defect.code,
+                customerName: defect.customerName,
+                repairNote: note || defect.repairPlan,
+                source: 'DEFECT_REPAIR',
+                items: [{
+                  productName: defect.productName,
+                  model: defect.productCode,
+                  quantity: defect.quantity || 1,
+                  sampleQuantity: defect.quantity || 1,
+                  soLuong: defect.quantity || 1,
+                  donVi: 'Bộ'
+                }]
+              })
+            }
+          });
+        }
       }
     });
 
@@ -17041,79 +17159,107 @@ app.get('/api/logistics/reports/xnt', async (req, res) => {
     const search = (req.query.search || '').trim().toLowerCase();
     const fromDate = (req.query.fromDate || '').trim();
     const toDate = (req.query.toDate || '').trim();
+    const hasMovement = req.query.hasMovement === 'true';
+    const nolimit = req.query.nolimit === 'true';
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.max(1, parseInt(req.query.limit || req.query.pageSize) || 15);
     const skip = (page - 1) * limit;
 
     const where = {};
     if (categoryId && categoryId !== 'all') {
-      where.categoryId = categoryId;
-    }
-    if (search) {
       where.OR = [
-        { code: { contains: search } },
-        { tenHang: { contains: search } },
-        { model: { contains: search } },
+        { categoryId: categoryId },
+        { erpCategoryId: categoryId },
       ];
     }
 
-    const [total, items] = await Promise.all([
-      prisma.inventoryItem.count({ where }),
-      prisma.inventoryItem.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { code: 'asc' },
-        include: {
-          stocks: {
-            include: { warehouse: true },
-          },
-          movements: {
-            where: {
-              ...(warehouseId && warehouseId !== 'all' ? { warehouseId } : {}),
-              ...(fromDate || toDate
-                ? {
-                  createdAt: {
-                    ...(fromDate ? { gte: new Date(`${fromDate}T00:00:00.000Z`) } : {}),
-                    ...(toDate ? { lte: new Date(`${toDate}T23:59:59.999Z`) } : {}),
-                  },
-                }
-                : {}),
-            },
-          },
+    const movementWhere = {};
+    if (warehouseId && warehouseId !== 'all') {
+      movementWhere.OR = [
+        { fromWarehouseId: warehouseId },
+        { toWarehouseId: warehouseId },
+      ];
+    }
+    if (fromDate || toDate) {
+      movementWhere.createdAt = {
+        ...(fromDate ? { gte: new Date(`${fromDate}T00:00:00.000Z`) } : {}),
+        ...(toDate ? { lte: new Date(`${toDate}T23:59:59.999Z`) } : {}),
+      };
+    }
+
+    const items = await prisma.inventoryItem.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        category: true,
+        erpCategory: true,
+        stocks: {
+          include: { warehouse: true },
         },
-      }),
-    ]);
+        movements: {
+          where: movementWhere,
+        },
+      },
+    });
 
     // Lấy thông tin danh mục nếu có
     const categories = await prisma.category.findMany({
-      where: { type: 'product' },
       select: { id: true, name: true },
     });
     const catMap = new Map(categories.map((c) => [c.id, c.name]));
 
-    const mapped = items.map((it) => {
+    let mapped = items.map((it) => {
       const relevantStocks =
         warehouseId && warehouseId !== 'all'
-          ? it.stocks.filter((s) => s.warehouseId === warehouseId)
-          : it.stocks;
+          ? (it.stocks || []).filter(
+              (s) =>
+                s.warehouseId === warehouseId ||
+                s.warehouse?.id === warehouseId ||
+                s.warehouse?.code === warehouseId
+            )
+          : it.stocks || [];
 
-      const tonCuoi = relevantStocks.reduce((sum, s) => sum + (s.quantity || 0), 0);
-      const daGiu = relevantStocks.reduce((sum, s) => sum + (s.reserved || 0), 0);
+      const stockSum = relevantStocks.reduce((sum, s) => sum + (Number(s.soLuong) || 0), 0);
+      const tonCuoi =
+        relevantStocks.length > 0
+          ? stockSum
+          : !warehouseId || warehouseId === 'all'
+            ? Number(it.soLuong) || 0
+            : 0;
+      const daGiu = relevantStocks.reduce((sum, s) => sum + (Number(s.soLuongGiu) || 0), 0);
       const thucTon = Math.max(0, tonCuoi - daGiu);
 
       let nhap = 0;
       let xuat = 0;
       (it.movements || []).forEach((m) => {
-        if (m.type === 'IN' || m.type === 'ADJUST_IN') {
-          nhap += Math.abs(m.quantity || 0);
-        } else if (m.type === 'OUT' || m.type === 'ADJUST_OUT') {
-          xuat += Math.abs(m.quantity || 0);
+        const qty = Math.abs(Number(m.soLuong ?? m.quantity) || 0);
+        const t = String(m.type || '').toLowerCase();
+        if (t === 'nhap' || t === 'in' || t === 'adjust_in') {
+          if (!warehouseId || warehouseId === 'all' || m.toWarehouseId === warehouseId) {
+            nhap += qty;
+          }
+        } else if (t === 'xuat' || t === 'out' || t === 'adjust_out') {
+          if (!warehouseId || warehouseId === 'all' || m.fromWarehouseId === warehouseId) {
+            xuat += qty;
+          }
+        } else if (t === 'dieu-chinh') {
+          if (m.soLuongTruoc !== null && m.soLuongSau !== null && m.soLuongTruoc !== undefined && m.soLuongSau !== undefined) {
+            const diff = Number(m.soLuongSau) - Number(m.soLuongTruoc);
+            if (diff >= 0) nhap += diff;
+            else xuat += Math.abs(diff);
+          } else if (m.toWarehouseId && !m.fromWarehouseId) {
+            nhap += qty;
+          } else if (m.fromWarehouseId && !m.toWarehouseId) {
+            xuat += qty;
+          }
+        } else if (t === 'chuyen' && warehouseId && warehouseId !== 'all') {
+          if (m.toWarehouseId === warehouseId) nhap += qty;
+          if (m.fromWarehouseId === warehouseId) xuat += qty;
         }
       });
 
       const tonDau = Math.max(0, tonCuoi - nhap + xuat);
-      const giaVon = it.giaVon || it.giaNhap || 0;
+      const giaVon = Math.round(Number(it.giaVon || it.giaNhap) || 0);
       const thanhTienTonDau = Math.round(tonDau * giaVon);
       const thanhTienNhap = Math.round(nhap * giaVon);
       const thanhTienXuat = Math.round(xuat * giaVon);
@@ -17128,13 +17274,20 @@ app.get('/api/logistics/reports/xnt', async (req, res) => {
       if (tonCuoi <= 0) itemStatus = 'out';
       else if (it.soLuongMin && tonCuoi <= it.soLuongMin) itemStatus = 'low';
 
+      const catName =
+        it.category?.name ||
+        it.erpCategory?.name ||
+        (it.categoryId && catMap.get(it.categoryId)) ||
+        (it.erpCategoryId && catMap.get(it.erpCategoryId)) ||
+        'Thiết bị & Phụ kiện';
+
       return {
         id: it.id,
         code: it.code || `SP-${it.id.slice(-5)}`,
         tenHang: it.tenHang,
         donVi: it.donVi || 'cái',
-        categoryName: (it.categoryId && catMap.get(it.categoryId)) || 'Thiết bị & Phụ kiện',
-        categoryId: it.categoryId,
+        categoryName: catName,
+        categoryId: it.categoryId || it.erpCategoryId,
         viTriKho: viTriStr || 'Kho chính',
         giaVon,
         tonDau,
@@ -17148,12 +17301,60 @@ app.get('/api/logistics/reports/xnt', async (req, res) => {
         daGiu,
         thucTon,
         trangThai: itemStatus,
+        hasStockInWarehouse: !warehouseId || warehouseId === 'all' || relevantStocks.length > 0 || nhap > 0 || xuat > 0,
       };
     });
 
+    if (warehouseId && warehouseId !== 'all') {
+      mapped = mapped.filter((it) => it.hasStockInWarehouse);
+    }
+
+    if (search) {
+      mapped = mapped.filter(
+        (it) =>
+          (it.code || '').toLowerCase().includes(search) ||
+          (it.tenHang || '').toLowerCase().includes(search) ||
+          (it.categoryName || '').toLowerCase().includes(search)
+      );
+    }
+
+    if (hasMovement) {
+      mapped = mapped.filter((it) => it.nhap > 0 || it.xuat > 0);
+    }
+
+    // Sắp xếp ưu tiên hàng hóa có biến động trong kỳ, sau đó đến hàng hóa có tồn kho > 0
+    mapped.sort((a, b) => {
+      const aMov = (a.nhap > 0 || a.xuat > 0) ? 1 : 0;
+      const bMov = (b.nhap > 0 || b.xuat > 0) ? 1 : 0;
+      if (aMov !== bMov) return bMov - aMov;
+      const aStock = (a.tonCuoi > 0 || a.tonDau > 0) ? 1 : 0;
+      const bStock = (b.tonCuoi > 0 || b.tonDau > 0) ? 1 : 0;
+      if (aStock !== bStock) return bStock - aStock;
+      return String(a.code || '').localeCompare(String(b.code || ''));
+    });
+
+    const summaryTotals = mapped.reduce(
+      (acc, it) => {
+        acc.tonDau += it.tonDau;
+        acc.ttTonDau += it.thanhTienTonDau;
+        acc.nhap += it.nhap;
+        acc.ttNhap += it.thanhTienNhap;
+        acc.xuat += it.xuat;
+        acc.ttXuat += it.thanhTienXuat;
+        acc.tonCuoi += it.tonCuoi;
+        acc.ttTonCuoi += it.thanhTienTonCuoi;
+        return acc;
+      },
+      { tonDau: 0, ttTonDau: 0, nhap: 0, ttNhap: 0, xuat: 0, ttXuat: 0, tonCuoi: 0, ttTonCuoi: 0 }
+    );
+
+    const total = mapped.length;
+    const paginated = nolimit ? mapped : mapped.slice(skip, skip + limit);
+
     res.json({
       success: true,
-      items: mapped,
+      items: paginated,
+      totals: summaryTotals,
       total,
       page,
       limit,
@@ -17173,6 +17374,7 @@ app.get('/api/logistics/reports/the-kho', async (req, res) => {
     const search = (req.query.search || '').trim().toLowerCase();
     const fromDate = (req.query.fromDate || '').trim();
     const toDate = (req.query.toDate || '').trim();
+    const nolimit = req.query.nolimit === 'true';
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.max(1, parseInt(req.query.limit || req.query.pageSize) || 15);
     const skip = (page - 1) * limit;
@@ -17203,26 +17405,41 @@ app.get('/api/logistics/reports/the-kho', async (req, res) => {
       });
     }
 
-    const tonHienTai = currentItem.stocks.reduce((sum, s) => sum + (s.quantity || 0), 0);
+    const relevantStocks =
+      warehouseId && warehouseId !== 'all'
+        ? (currentItem.stocks || []).filter((s) => s.warehouseId === warehouseId)
+        : currentItem.stocks || [];
+    const tonHienTai =
+      relevantStocks.length > 0
+        ? relevantStocks.reduce((sum, s) => sum + (Number(s.soLuong) || 0), 0)
+        : Number(currentItem.soLuong) || 0;
 
     const movWhere = {
       inventoryItemId: currentItem.id,
-      ...(warehouseId && warehouseId !== 'all' ? { warehouseId } : {}),
+      ...(warehouseId && warehouseId !== 'all'
+        ? {
+            OR: [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }],
+          }
+        : {}),
       ...(fromDate || toDate
         ? {
-          createdAt: {
-            ...(fromDate ? { gte: new Date(`${fromDate}T00:00:00.000Z`) } : {}),
-            ...(toDate ? { lte: new Date(`${toDate}T23:59:59.999Z`) } : {}),
-          },
-        }
+            createdAt: {
+              ...(fromDate ? { gte: new Date(`${fromDate}T00:00:00.000Z`) } : {}),
+              ...(toDate ? { lte: new Date(`${toDate}T23:59:59.999Z`) } : {}),
+            },
+          }
         : {}),
     };
 
     if (search) {
-      movWhere.OR = [
-        { referenceCode: { contains: search } },
-        { note: { contains: search } },
-        { createdBy: { contains: search } },
+      movWhere.AND = [
+        {
+          OR: [
+            { soChungTu: { contains: search } },
+            { lyDo: { contains: search } },
+            { nguoiThucHien: { contains: search } },
+          ],
+        },
       ];
     }
 
@@ -17231,20 +17448,25 @@ app.get('/api/logistics/reports/the-kho', async (req, res) => {
       prisma.stockMovement.findMany({
         where: movWhere,
         orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
+        ...(nolimit ? {} : { skip, take: limit }),
         include: {
-          warehouse: true,
+          fromWarehouse: true,
+          toWarehouse: true,
         },
       }),
     ]);
 
     let runningTon = tonHienTai;
     const lines = movements.map((m) => {
-      const isNhap = m.type === 'IN' || m.type === 'ADJUST_IN';
-      const nhap = isNhap ? Math.abs(m.quantity || 0) : 0;
-      const xuat = !isNhap ? Math.abs(m.quantity || 0) : 0;
-      const ton = runningTon;
+      const t = String(m.type || '').toLowerCase();
+      const qty = Math.abs(Number(m.soLuong ?? m.quantity) || 0);
+      let isNhap = t === 'nhap' || t === 'in' || t === 'adjust_in';
+      if (t === 'dieu-chinh' && m.soLuongSau !== null && m.soLuongTruoc !== null) {
+        isNhap = Number(m.soLuongSau) >= Number(m.soLuongTruoc);
+      }
+      const nhap = isNhap ? qty : 0;
+      const xuat = !isNhap ? qty : 0;
+      const ton = m.soLuongSau !== null && m.soLuongSau !== undefined ? Number(m.soLuongSau) : runningTon;
 
       if (isNhap) {
         runningTon = Math.max(0, runningTon - nhap);
@@ -17254,14 +17476,14 @@ app.get('/api/logistics/reports/the-kho', async (req, res) => {
 
       return {
         id: m.id,
-        soChungTu: m.referenceCode || `CT-${m.id.slice(-6).toUpperCase()}`,
+        soChungTu: m.soChungTu || `CT-${m.id.slice(-6).toUpperCase()}`,
         ngayChungTu: new Date(m.createdAt).toLocaleDateString('vi-VN'),
-        dienGiai: m.note || (isNhap ? 'Nhập kho hàng hoá vật tư' : 'Xuất kho phục vụ hoạt động'),
+        dienGiai: m.lyDo || (isNhap ? 'Nhập kho hàng hoá vật tư' : 'Xuất kho phục vụ hoạt động'),
         donVi: currentItem.donVi || 'cái',
         nhap,
         xuat,
         ton,
-        nguoiThucHien: m.createdBy || 'Lưu Xuân Trung',
+        nguoiThucHien: m.nguoiThucHien || 'Lưu Xuân Trung',
       };
     });
 
@@ -17273,6 +17495,7 @@ app.get('/api/logistics/reports/the-kho', async (req, res) => {
         tenHang: currentItem.tenHang,
         donVi: currentItem.donVi || 'cái',
         tonHienTai,
+        tonDauKy: runningTon,
       },
       items: lines,
       total: totalMovs,
@@ -17426,6 +17649,142 @@ app.get('/api/logistics/reports/kiem-kho', async (req, res) => {
   } catch (err) {
     console.error('Lỗi GET /api/logistics/reports/kiem-kho:', err);
     res.status(500).json({ success: false, error: err.message, items: [] });
+  }
+});
+
+// ── 3.1 CHI TIẾT ĐỢT KIỂM KHO (DÙNG CHO IN BIÊN BẢN KIỂM KÊ MẪU 05-VT) ──
+app.get('/api/logistics/reports/kiem-kho/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const stockCount = await prisma.stockCount.findFirst({
+      where: {
+        OR: [
+          { id: id },
+          { soChungTu: id },
+        ],
+      },
+      include: {
+        warehouse: true,
+        lines: true,
+      },
+    });
+
+    if (!stockCount) {
+      return res.status(404).json({ success: false, error: 'Không tìm thấy đợt kiểm kê' });
+    }
+
+    const itemIds = stockCount.lines.map((l) => l.inventoryItemId).filter(Boolean);
+    const items = await prisma.inventoryItem.findMany({
+      where: { id: { in: itemIds } },
+      select: {
+        id: true,
+        code: true,
+        tenHang: true,
+        donVi: true,
+        giaVon: true,
+        giaNhap: true,
+      },
+    });
+    const itemMap = new Map();
+    items.forEach((it) => itemMap.set(it.id, it));
+
+    let tongSoLuongSoSach = 0;
+    let tongTienSoSach = 0;
+    let tongSoLuongThucTe = 0;
+    let tongTienThucTe = 0;
+    let tongLechThuaQty = 0;
+    let tongLechThuaTien = 0;
+    let tongLechThieuQty = 0;
+    let tongLechThieuTien = 0;
+
+    const linesDetail = stockCount.lines.map((l, idx) => {
+      const it = itemMap.get(l.inventoryItemId) || {};
+      const price = it.giaVon || it.giaNhap || 0;
+      const soLuongHeTong = l.soLuongHeTong ?? 0;
+      const soLuongThucTe =
+        l.soLuongThucTe !== null && l.soLuongThucTe !== undefined
+          ? l.soLuongThucTe
+          : soLuongHeTong;
+      const diffQty =
+        l.chenh !== null && l.chenh !== undefined
+          ? l.chenh
+          : soLuongThucTe - soLuongHeTong;
+
+      const tienSoSach = soLuongHeTong * price;
+      const tienThucTe = soLuongThucTe * price;
+
+      const diffExcessQty = diffQty > 0 ? diffQty : 0;
+      const diffExcessTien = diffQty > 0 ? diffQty * price : 0;
+
+      const diffShortageQty = diffQty < 0 ? Math.abs(diffQty) : 0;
+      const diffShortageTien = diffQty < 0 ? Math.abs(diffQty) * price : 0;
+
+      tongSoLuongSoSach += soLuongHeTong;
+      tongTienSoSach += tienSoSach;
+      tongSoLuongThucTe += soLuongThucTe;
+      tongTienThucTe += tienThucTe;
+      tongLechThuaQty += diffExcessQty;
+      tongLechThuaTien += diffExcessTien;
+      tongLechThieuQty += diffShortageQty;
+      tongLechThieuTien += diffShortageTien;
+
+      return {
+        stt: idx + 1,
+        id: l.id,
+        inventoryItemId: l.inventoryItemId,
+        code: it.code || 'Chưa có mã',
+        tenHang: it.tenHang || 'Vật tư chưa đặt tên',
+        donVi: it.donVi || 'cái',
+        donGia: price,
+        soLuongSoSach: soLuongHeTong,
+        thanhTienSoSach: tienSoSach,
+        soLuongThucTe: soLuongThucTe,
+        thanhTienThucTe: tienThucTe,
+        lechThuaQty: diffExcessQty,
+        lechThuaTien: diffExcessTien,
+        lechThieuQty: diffShortageQty,
+        lechThieuTien: diffShortageTien,
+        phamChatTot: soLuongThucTe,
+        phamChatKem: 0,
+        phamChatMat: 0,
+        ghiChu: l.ghiChu || '',
+      };
+    });
+
+    const isCompleted =
+      stockCount.trangThai === 'hoan-thanh' || stockCount.trangThai === 'da_can_bang';
+
+    res.json({
+      success: true,
+      item: {
+        id: stockCount.id,
+        soChungTu: stockCount.soChungTu || `PKK-${stockCount.id.slice(-6).toUpperCase()}`,
+        tenDot: stockCount.ghiChu || `Đợt kiểm kê ${stockCount.warehouse?.name || 'toàn kho'}`,
+        khoId: stockCount.warehouseId || 'all',
+        khoTen: stockCount.warehouse?.name || 'Toàn hệ thống kho',
+        khoDiaChi: stockCount.warehouse?.address || '',
+        ngayKiem: new Date(stockCount.ngayKiem || stockCount.createdAt).toLocaleDateString('vi-VN'),
+        ngayKiemRaw: stockCount.ngayKiem || stockCount.createdAt,
+        nguoiKiem: stockCount.nguoiKiem || 'Ban kiểm kê kho',
+        thanhVien: 'Tổ kiểm kê độc lập & Thủ kho',
+        trangThai: isCompleted ? 'da_can_bang' : 'cho_xu_ly',
+        trangThaiLabel: isCompleted ? 'Đã cân bằng số' : 'Chờ đối soát',
+        ghiChu: stockCount.ghiChu || '',
+        tongMatHang: linesDetail.length,
+        tongSoLuongSoSach,
+        tongTienSoSach,
+        tongSoLuongThucTe,
+        tongTienThucTe,
+        tongLechThuaQty,
+        tongLechThuaTien,
+        tongLechThieuQty,
+        tongLechThieuTien,
+        lines: linesDetail,
+      },
+    });
+  } catch (err) {
+    console.error('Lỗi GET /api/logistics/reports/kiem-kho/:id:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -18034,6 +18393,7 @@ app.post('/api/logistics/audit-logs/delete-batch', async (req, res) => {
 
 // ── 7. CẤU HÌNH TỰ ĐỘNG XOÁ DỮ LIỆU CŨ ─────────────────────────────────
 const AUDIT_CLEANUP_CONFIG_FILE = path.join(__dirname, 'audit_cleanup_config.json');
+const LOGISTICS_CLEANUP_CONFIG_FILE = path.join(__dirname, 'logistics_cleanup_config.json');
 
 function getAuditCleanupConfig() {
   try {
@@ -18060,6 +18420,469 @@ function saveAuditCleanupConfig(cfg) {
     console.error('Lỗi ghi audit_cleanup_config.json:', err);
   }
 }
+
+let logisticsRetentionTableReady = false;
+async function ensureLogisticsRetentionTable() {
+  if (logisticsRetentionTableReady) return;
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "LogisticsRetentionConfig" (
+        "scope" TEXT NOT NULL PRIMARY KEY,
+        "enabled" INTEGER NOT NULL DEFAULT 1,
+        "retentionDays" INTEGER NOT NULL DEFAULT 30,
+        "applyInProgress" INTEGER NOT NULL DEFAULT 0,
+        "applyCompleted" INTEGER NOT NULL DEFAULT 1,
+        "lastRunAt" TEXT,
+        "lastDeletedCount" INTEGER NOT NULL DEFAULT 0,
+        "updatedAt" TEXT NOT NULL
+      )
+    `);
+    logisticsRetentionTableReady = true;
+  } catch (err) {
+    console.error('Lỗi khởi tạo bảng LogisticsRetentionConfig trong DB:', err);
+  }
+}
+
+async function getLogisticsCleanupConfigFromDB(scope = 'ALL') {
+  const normScope = scope || 'ALL';
+  try {
+    await ensureLogisticsRetentionTable();
+    const rows = await prisma.$queryRawUnsafe(
+      `SELECT * FROM "LogisticsRetentionConfig" WHERE "scope" = ? LIMIT 1`,
+      normScope
+    );
+    if (Array.isArray(rows) && rows.length > 0) {
+      const r = rows[0];
+      return {
+        scope: r.scope,
+        enabled: Boolean(r.enabled),
+        retentionDays: Number(r.retentionDays) || 30,
+        applyInProgress: Boolean(r.applyInProgress),
+        applyCompleted: Boolean(r.applyCompleted),
+        lastRunAt: r.lastRunAt || null,
+        lastDeletedCount: Number(r.lastDeletedCount) || 0,
+      };
+    }
+    // Fallback kiểm tra bản ghi ALL hoặc file json cũ
+    const fallbackRows = await prisma.$queryRawUnsafe(
+      `SELECT * FROM "LogisticsRetentionConfig" WHERE "scope" = 'ALL' LIMIT 1`
+    );
+    if (Array.isArray(fallbackRows) && fallbackRows.length > 0) {
+      const r = fallbackRows[0];
+      return {
+        scope: normScope,
+        enabled: Boolean(r.enabled),
+        retentionDays: Number(r.retentionDays) || 30,
+        applyInProgress: Boolean(r.applyInProgress),
+        applyCompleted: Boolean(r.applyCompleted),
+        lastRunAt: r.lastRunAt || null,
+        lastDeletedCount: Number(r.lastDeletedCount) || 0,
+      };
+    }
+    if (fs.existsSync(LOGISTICS_CLEANUP_CONFIG_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(LOGISTICS_CLEANUP_CONFIG_FILE, 'utf8'));
+      return {
+        scope: normScope,
+        enabled: true,
+        retentionDays: Number(parsed.retentionDays) || 30,
+        applyInProgress: Boolean(parsed.applyInProgress),
+        applyCompleted: parsed.applyCompleted !== false,
+        lastRunAt: parsed.lastRunAt || null,
+        lastDeletedCount: Number(parsed.lastDeletedCount) || 0,
+      };
+    }
+  } catch (err) {
+    console.error('Lỗi đọc cấu hình LogisticsRetentionConfig từ DB:', err);
+  }
+  return {
+    scope: normScope,
+    enabled: true,
+    retentionDays: 30,
+    applyInProgress: false,
+    applyCompleted: true,
+    lastRunAt: null,
+    lastDeletedCount: 0,
+  };
+}
+
+async function saveLogisticsCleanupConfigToDB(cfg, scope = 'ALL') {
+  const normScope = scope || cfg.type || cfg.scope || 'ALL';
+  const enabled = cfg.enabled !== false ? 1 : 0;
+  const retentionDays = Math.max(1, parseInt(cfg.retentionDays, 10) || 30);
+  const applyInProgress = cfg.applyInProgress ? 1 : 0;
+  const applyCompleted = cfg.applyCompleted !== false ? 1 : 0;
+  const lastRunAt = cfg.lastRunAt || null;
+  const lastDeletedCount = Number(cfg.lastDeletedCount) || 0;
+  const nowIso = new Date().toISOString();
+
+  try {
+    await ensureLogisticsRetentionTable();
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "LogisticsRetentionConfig" ("scope", "enabled", "retentionDays", "applyInProgress", "applyCompleted", "lastRunAt", "lastDeletedCount", "updatedAt")
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT("scope") DO UPDATE SET
+         "enabled" = excluded."enabled",
+         "retentionDays" = excluded."retentionDays",
+         "applyInProgress" = excluded."applyInProgress",
+         "applyCompleted" = excluded."applyCompleted",
+         "lastRunAt" = COALESCE(excluded."lastRunAt", "LogisticsRetentionConfig"."lastRunAt"),
+         "lastDeletedCount" = excluded."lastDeletedCount",
+         "updatedAt" = excluded."updatedAt"`,
+      normScope,
+      enabled,
+      retentionDays,
+      applyInProgress,
+      applyCompleted,
+      lastRunAt,
+      lastDeletedCount,
+      nowIso
+    );
+    fs.writeFileSync(
+      LOGISTICS_CLEANUP_CONFIG_FILE,
+      JSON.stringify(
+        {
+          scope: normScope,
+          enabled: Boolean(enabled),
+          retentionDays,
+          applyInProgress: Boolean(applyInProgress),
+          applyCompleted: Boolean(applyCompleted),
+          lastRunAt,
+          lastDeletedCount,
+          updatedAt: nowIso,
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+  } catch (err) {
+    console.error('Lỗi lưu cấu hình LogisticsRetentionConfig vào DB:', err);
+  }
+}
+
+async function executeLogisticsRetentionCleanup({
+  type = 'ALL',
+  days = 30,
+  applyInProgress = false,
+  applyCompleted = true,
+}) {
+  if (!applyInProgress && !applyCompleted) return 0;
+
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - days);
+
+  // Trường hợp dọn dẹp Nhật ký hoạt động kho / Nhập, xuất và kiểm kho (AUDIT_LOGS)
+  if (type === 'AUDIT_LOGS') {
+    let deletedAuditCount = 0;
+    if (applyCompleted) {
+      const delMovements = await prisma.stockMovement.deleteMany({
+        where: { createdAt: { lt: cutoffDate } },
+      });
+      deletedAuditCount += delMovements.count;
+    }
+    const stockCountStatuses = [];
+    if (applyInProgress) stockCountStatuses.push('DRAFT', 'PENDING', 'cho_xu_ly');
+    if (applyCompleted) stockCountStatuses.push('COMPLETED', 'BALANCED', 'da_can_bang');
+    if (stockCountStatuses.length > 0) {
+      const countsToDelete = await prisma.stockCount.findMany({
+        where: {
+          trangThai: { in: stockCountStatuses },
+          createdAt: { lt: cutoffDate },
+        },
+        select: { id: true },
+      });
+      const countIds = countsToDelete.map((c) => c.id);
+      if (countIds.length > 0) {
+        await prisma.stockCountLine.deleteMany({ where: { stockCountId: { in: countIds } } });
+        const delCounts = await prisma.stockCount.deleteMany({ where: { id: { in: countIds } } });
+        deletedAuditCount += delCounts.count;
+      }
+    }
+    return deletedAuditCount;
+  }
+
+  const statusList = [];
+  if (applyInProgress) statusList.push('PENDING', 'PICKING', 'PACKED');
+  if (applyCompleted) statusList.push('COMPLETED');
+  if (statusList.length === 0) return 0;
+
+  const typeFilter = type === 'BATCH_PACKING'
+    ? { in: ['BATCH_PACKING'] }
+    : type === 'MATERIAL_PICKING'
+    ? { in: ['MATERIAL_PICKING', 'WARRANTY_MATERIAL'] }
+    : { in: ['BATCH_PACKING', 'MATERIAL_PICKING', 'WARRANTY_MATERIAL'] };
+
+  const ticketsToDelete = await prisma.logisticsTicket.findMany({
+    where: {
+      status: { in: statusList },
+      type: typeFilter,
+      OR: [
+        { completedAt: { lt: cutoffDate } },
+        { completedAt: null, updatedAt: { lt: cutoffDate } },
+      ],
+    },
+    select: { id: true, saleOrderId: true },
+  });
+
+  const ticketIds = ticketsToDelete.map((t) => t.id);
+  const affectedSoIds = [...new Set(ticketsToDelete.map((t) => t.saleOrderId).filter(Boolean))];
+  let deletedCount = 0;
+
+  if (ticketIds.length > 0) {
+    await prisma.logisticsTicketItem.deleteMany({ where: { ticketId: { in: ticketIds } } });
+    const delResult = await prisma.logisticsTicket.deleteMany({ where: { id: { in: ticketIds } } });
+    deletedCount += delResult.count;
+
+    for (const soId of affectedSoIds) {
+      const remaining = await prisma.logisticsTicket.count({ where: { saleOrderId: soId } });
+      if (remaining === 0) {
+        await prisma.saleOrder.updateMany({
+          where: { id: soId },
+          data: { trangThai: 'completed' },
+        });
+      }
+    }
+  }
+
+  // Nếu dọn ở cấp độ toàn bộ kho vận (ALL), dọn cả các Task kho vận quá hạn
+  if (!type || type === 'ALL') {
+    const taskStatusList = [];
+    if (applyInProgress) taskStatusList.push('pending', 'in_progress');
+    if (applyCompleted) taskStatusList.push('completed', 'done');
+    if (taskStatusList.length > 0) {
+      const delTasks = await prisma.task.deleteMany({
+        where: {
+          deptCode: 'logistics',
+          status: { in: taskStatusList },
+          updatedAt: { lt: cutoffDate },
+        },
+      });
+      deletedCount += delTasks.count;
+    }
+  }
+
+  return deletedCount;
+}
+
+// Chạy tự động kiểm tra và áp dụng thiết lập lưu trữ định kỳ từ DB
+async function runScheduledLogisticsRetentionFromDB() {
+  try {
+    await ensureLogisticsRetentionTable();
+    const configs = await prisma.$queryRawUnsafe(`SELECT * FROM "LogisticsRetentionConfig" WHERE "enabled" = 1`);
+    if (!Array.isArray(configs) || configs.length === 0) return;
+    for (const cfg of configs) {
+      const days = Math.max(1, Number(cfg.retentionDays) || 30);
+      const applyInProgress = Boolean(cfg.applyInProgress);
+      const applyCompleted = Boolean(cfg.applyCompleted);
+      if (!applyInProgress && !applyCompleted) continue;
+      const deletedCount = await executeLogisticsRetentionCleanup({
+        type: cfg.scope || 'ALL',
+        days,
+        applyInProgress,
+        applyCompleted,
+      });
+      if (deletedCount > 0) {
+        await saveLogisticsCleanupConfigToDB(
+          {
+            ...cfg,
+            retentionDays: days,
+            applyInProgress,
+            applyCompleted,
+            lastRunAt: new Date().toISOString(),
+            lastDeletedCount: deletedCount,
+          },
+          cfg.scope || 'ALL'
+        );
+      }
+    }
+  } catch (err) {
+    console.error('Lỗi chạy tự động LogisticsRetentionConfig:', err);
+  }
+}
+
+setTimeout(() => {
+  runScheduledLogisticsRetentionFromDB();
+}, 5000);
+setInterval(() => {
+  runScheduledLogisticsRetentionFromDB();
+}, 30 * 60 * 1000);
+
+// Lấy cấu hình tự động xoá và thống kê lệnh cấp phát/gom hàng từ DB
+app.get('/api/logistics/completed-cleanup-settings', async (req, res) => {
+  try {
+    const type = req.query.type || 'ALL';
+    const config = await getLogisticsCleanupConfigFromDB(type);
+    const days = parseInt(req.query.days) || config.retentionDays || 30;
+    const applyInProgress = req.query.applyInProgress !== undefined
+      ? req.query.applyInProgress === 'true'
+      : Boolean(config.applyInProgress);
+    const applyCompleted = req.query.applyCompleted !== undefined
+      ? req.query.applyCompleted === 'true'
+      : config.applyCompleted !== false;
+
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+
+    const typeFilter = type === 'BATCH_PACKING'
+      ? { in: ['BATCH_PACKING'] }
+      : type === 'MATERIAL_PICKING'
+      ? { in: ['MATERIAL_PICKING', 'WARRANTY_MATERIAL'] }
+      : { in: ['BATCH_PACKING', 'MATERIAL_PICKING', 'WARRANTY_MATERIAL'] };
+
+    const statusList = [];
+    if (applyInProgress) statusList.push('PENDING', 'PICKING', 'PACKED');
+    if (applyCompleted) statusList.push('COMPLETED');
+
+    let eligibleTicketsCount = 0;
+    if (type === 'AUDIT_LOGS') {
+      if (applyCompleted) {
+        eligibleTicketsCount += await prisma.stockMovement.count({
+          where: { createdAt: { lt: cutoffDate } },
+        });
+      }
+      const stockCountStatuses = [];
+      if (applyInProgress) stockCountStatuses.push('DRAFT', 'PENDING', 'cho_xu_ly');
+      if (applyCompleted) stockCountStatuses.push('COMPLETED', 'BALANCED', 'da_can_bang');
+      if (stockCountStatuses.length > 0) {
+        eligibleTicketsCount += await prisma.stockCount.count({
+          where: {
+            trangThai: { in: stockCountStatuses },
+            createdAt: { lt: cutoffDate },
+          },
+        });
+      }
+    } else if (statusList.length > 0) {
+      const where = {
+        status: { in: statusList },
+        type: typeFilter,
+        OR: [
+          { completedAt: { lt: cutoffDate } },
+          { completedAt: null, updatedAt: { lt: cutoffDate } },
+        ],
+      };
+      eligibleTicketsCount = await prisma.logisticsTicket.count({ where });
+
+      if (!type || type === 'ALL') {
+        const taskStatusList = [];
+        if (applyInProgress) taskStatusList.push('pending', 'in_progress');
+        if (applyCompleted) taskStatusList.push('completed', 'done');
+        if (taskStatusList.length > 0) {
+          const tasksCount = await prisma.task.count({
+            where: {
+              deptCode: 'logistics',
+              status: { in: taskStatusList },
+              updatedAt: { lt: cutoffDate },
+            },
+          });
+          eligibleTicketsCount += tasksCount;
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      config,
+      stats: {
+        cutoffDate: cutoffDate.toISOString(),
+        eligibleTicketsCount,
+        evaluatedDays: days,
+      },
+    });
+  } catch (err) {
+    console.error('Lỗi GET /api/logistics/completed-cleanup-settings:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Lưu cấu hình vào DB và áp dụng ngay chính sách thời gian lưu trữ
+app.post('/api/logistics/completed-cleanup-settings', async (req, res) => {
+  try {
+    const scope = req.body.type || req.body.scope || 'ALL';
+    const current = await getLogisticsCleanupConfigFromDB(scope);
+    const retentionDays = Math.max(1, parseInt(req.body.retentionDays) || 30);
+    const applyInProgress = Boolean(req.body.applyInProgress);
+    const applyCompleted = req.body.applyCompleted !== undefined ? Boolean(req.body.applyCompleted) : true;
+
+    // Thực thi áp dụng ngay chính sách lưu trữ khi lưu thiết lập
+    const deletedCount = await executeLogisticsRetentionCleanup({
+      type: scope,
+      days: retentionDays,
+      applyInProgress,
+      applyCompleted,
+    });
+
+    const updated = {
+      ...current,
+      ...req.body,
+      scope,
+      retentionDays,
+      applyInProgress,
+      applyCompleted,
+      lastRunAt: new Date().toISOString(),
+      lastDeletedCount: deletedCount,
+    };
+    await saveLogisticsCleanupConfigToDB(updated, scope);
+    res.json({
+      success: true,
+      config: updated,
+      deletedCount,
+      message:
+        deletedCount > 0
+          ? `Đã lưu thiết lập vào DB và tự động dọn dẹp ${deletedCount} bản ghi quá hạn (> ${retentionDays} ngày)`
+          : 'Đã lưu thiết lập thời gian lưu trữ vào DB thành công',
+    });
+  } catch (err) {
+    console.error('Lỗi POST /api/logistics/completed-cleanup-settings:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Chạy dọn dẹp các lệnh quá hạn ngay lập tức và lưu vào DB
+app.post('/api/logistics/completed-cleanup-run', async (req, res) => {
+  try {
+    const type = req.body.type || 'ALL';
+    const config = await getLogisticsCleanupConfigFromDB(type);
+    const days = Math.max(1, parseInt(req.body.retentionDays || config.retentionDays) || 30);
+    const applyInProgress = req.body.applyInProgress !== undefined
+      ? Boolean(req.body.applyInProgress)
+      : Boolean(config.applyInProgress);
+    const applyCompleted = req.body.applyCompleted !== undefined
+      ? Boolean(req.body.applyCompleted)
+      : config.applyCompleted !== false;
+
+    if (!applyInProgress && !applyCompleted) {
+      return res.status(400).json({ error: 'Vui lòng chọn ít nhất một trạng thái áp dụng' });
+    }
+
+    const deletedCount = await executeLogisticsRetentionCleanup({
+      type,
+      days,
+      applyInProgress,
+      applyCompleted,
+    });
+
+    const updatedConfig = {
+      ...config,
+      scope: type,
+      retentionDays: days,
+      applyInProgress,
+      applyCompleted,
+      lastRunAt: new Date().toISOString(),
+      lastDeletedCount: deletedCount,
+    };
+    await saveLogisticsCleanupConfigToDB(updatedConfig, type);
+
+    res.json({
+      success: true,
+      deletedCount,
+      message: `Đã dọn dẹp thành công ${deletedCount} dữ liệu cũ hơn ${days} ngày`,
+      config: updatedConfig,
+    });
+  } catch (err) {
+    console.error('Lỗi POST /api/logistics/completed-cleanup-run:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // Lấy cấu hình tự động xoá và thống kê dữ liệu cũ
 app.get('/api/logistics/audit-logs/auto-cleanup-settings', async (req, res) => {
@@ -18272,7 +19095,7 @@ app.post('/api/plan-finance/stock-movements/batch', async (req, res) => {
 // ── 3. Xuất kho hàng loạt (Lưu vết DB) ─────────────────────────
 app.post('/api/plan-finance/stock-movements/batch-xuat', async (req, res) => {
   try {
-    const { fromWarehouseId, soChungTu, lyDo, nguoiThucHien, lines = [] } = req.body;
+    const { fromWarehouseId, soChungTu, lyDo, nguoiThucHien, salesOrderId, workOrderId, ticketId, lines = [] } = req.body;
     if (!lines.length) {
       return res.status(400).json({ error: 'Danh sách mặt hàng xuất kho không được để trống' });
     }
@@ -18344,6 +19167,50 @@ app.post('/api/plan-finance/stock-movements/batch-xuat', async (req, res) => {
             soLuong: { decrement: qty },
           },
         });
+      }
+
+      // Tự động cập nhật trạng thái phiếu kho / lệnh cấp phát / đơn hàng
+      const targetTicketId = ticketId;
+      if (targetTicketId) {
+        try {
+          await tx.logisticsTicket.update({
+            where: { id: targetTicketId },
+            data: { status: 'COMPLETED', completedAt: new Date() }
+          });
+        } catch (_) {}
+      } else if (salesOrderId || workOrderId) {
+        try {
+          const soCondition = salesOrderId
+            ? { saleOrderId: salesOrderId }
+            : {
+                OR: [
+                  { saleOrder: { code: workOrderId.replace('LSX', 'DBH') } },
+                  { saleOrderId: workOrderId }
+                ]
+              };
+          await tx.logisticsTicket.updateMany({
+            where: {
+              ...soCondition,
+              type: { in: ['MATERIAL_PICKING', 'WARRANTY_MATERIAL'] }
+            },
+            data: { status: 'COMPLETED', completedAt: new Date() }
+          });
+        } catch (_) {}
+      }
+
+      if (salesOrderId) {
+        try {
+          const checkTickets = await tx.logisticsTicket.findMany({
+            where: { saleOrderId: salesOrderId }
+          });
+          const allTicketsCompleted = checkTickets.length > 0 && checkTickets.every(t => t.status === 'COMPLETED');
+          if (allTicketsCompleted) {
+            await tx.saleOrder.update({
+              where: { id: salesOrderId },
+              data: { trangThaiKho: 'exported' }
+            });
+          }
+        } catch (_) {}
       }
     });
 

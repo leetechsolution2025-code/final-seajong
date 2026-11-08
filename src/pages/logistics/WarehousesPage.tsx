@@ -280,6 +280,17 @@ export const WarehousesPage: React.FC = () => {
         filters={toolbarFilters}
         rightActions={
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {selectedIds.size > 0 && (
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => setShowBatchDeleteConfirm(true)}
+                leftIcon={<Trash size={14} />}
+              >
+                Xoá
+              </Button>
+            )}
+
             <Button
               variant="outline"
               size="sm"
@@ -299,17 +310,6 @@ export const WarehousesPage: React.FC = () => {
             >
               Thêm mới
             </Button>
-
-            {selectedIds.size > 0 && (
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={() => setShowBatchDeleteConfirm(true)}
-                leftIcon={<Trash size={14} />}
-              >
-                Xoá ({selectedIds.size})
-              </Button>
-            )}
           </div>
         }
         showMenu={false}
@@ -319,9 +319,9 @@ export const WarehousesPage: React.FC = () => {
       {/* ── BẢNG FULLWIDTHTABLE DANH SÁCH KHO HÀNG ── */}
       <FullWidthTable loading={loading}>
         <table className="w-full text-left border-collapse logistics-overview-compact-table" style={{ fontSize: '13px' }}>
-          <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
+          <thead className="sticky top-0 z-10 bg-slate-50 border-t border-slate-200 border-b border-slate-200">
             <tr className="text-slate-500 text-[11px] sm:text-[11.5px] uppercase tracking-[0.06em] font-bold">
-              <th className="py-2.5 px-2.5 sm:px-3 w-9 sm:w-10 text-center">
+              <th className="py-2.5 px-2.5 sm:px-3 w-10 text-center align-middle">
                 <input
                   type="checkbox"
                   checked={warehouses.length > 0 && selectedIds.size === warehouses.length}
@@ -333,12 +333,12 @@ export const WarehousesPage: React.FC = () => {
                   title="Chọn tất cả"
                 />
               </th>
-              <th className="py-2.5 px-2.5 sm:px-3.5 md:min-w-[260px]">Tên kho & Định vị</th>
-              <th className="hidden md:table-cell py-2.5 px-3.5 w-48">Phân loại kho</th>
-              <th className="hidden md:table-cell py-2.5 px-3.5 w-52">Thủ kho phụ trách</th>
-              <th className="hidden md:table-cell py-2.5 px-3.5 w-40 text-right">Mặt hàng lưu trữ</th>
-              <th className="hidden md:table-cell py-2.5 px-3.5 w-40 text-right">Tổng tồn thực tế</th>
-              <th className="hidden md:table-cell py-2.5 px-3.5 w-36 text-center">Trạng thái</th>
+              <th className="py-2.5 px-3 sm:px-3.5 md:min-w-[260px] align-middle whitespace-nowrap">Tên kho & Định vị</th>
+              <th className="hidden md:table-cell py-2.5 px-3.5 w-44 text-center align-middle whitespace-nowrap">Phân loại kho</th>
+              <th className="hidden md:table-cell py-2.5 px-3.5 w-56 align-middle whitespace-nowrap">Thủ kho phụ trách</th>
+              <th className="hidden md:table-cell py-2.5 px-3.5 w-36 text-right align-middle whitespace-nowrap">Mặt hàng lưu trữ</th>
+              <th className="hidden md:table-cell py-2.5 px-3.5 w-36 text-right align-middle whitespace-nowrap">Tổng tồn thực tế</th>
+              <th className="hidden md:table-cell py-2.5 px-3.5 w-36 text-center align-middle whitespace-nowrap">Trạng thái</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -360,7 +360,7 @@ export const WarehousesPage: React.FC = () => {
                   onClick={() => setDetailWarehouse(wh)}
                   className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 cursor-pointer"
                 >
-                  <td className="py-2.5 px-2.5 sm:px-3 align-top text-center">
+                  <td className="py-3 px-2.5 sm:px-3 align-middle text-center">
                     <input
                       type="checkbox"
                       checked={selectedIds.has(wh.id)}
@@ -371,14 +371,19 @@ export const WarehousesPage: React.FC = () => {
                         else next.delete(wh.id);
                         setSelectedIds(next);
                       }}
-                      className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer align-middle"
                     />
                   </td>
-                  <td className="py-2.5 px-2.5 sm:px-3.5 align-top max-w-0 md:max-w-none w-full">
+                  <td className="py-3 px-3 sm:px-3.5 align-middle max-w-0 md:max-w-none">
                     <div className="flex items-center flex-wrap gap-2">
                       <span className="font-semibold text-slate-900 text-[13px]">{wh.name}</span>
+                      {wh.code && (
+                        <span className="hidden md:inline-block px-1.5 py-0.5 rounded text-[10.5px] font-mono font-medium bg-slate-100 text-slate-600 border border-slate-200/80">
+                          {wh.code}
+                        </span>
+                      )}
                       <span
-                        className={`inline-flex md:hidden items-center px-2 py-0.5 rounded text-[10.5px] font-medium border ${
+                        className={`inline-flex md:hidden items-center px-2 py-0.5 rounded text-[10.5px] font-medium border whitespace-nowrap ${
                           wh.type === 'MATERIAL'
                             ? 'bg-amber-50 text-amber-700 border-amber-200'
                             : wh.type === 'DEFECT'
@@ -439,9 +444,9 @@ export const WarehousesPage: React.FC = () => {
                       </div>
                     </div>
                   </td>
-                  <td className="hidden md:table-cell py-2.5 px-3.5 align-top">
+                  <td className="hidden md:table-cell py-3 px-3.5 align-middle text-center whitespace-nowrap">
                     <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border ${
+                      className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-[11px] font-medium border whitespace-nowrap ${
                         wh.type === 'MATERIAL'
                           ? 'bg-amber-50 text-amber-700 border-amber-200'
                           : wh.type === 'DEFECT'
@@ -454,25 +459,25 @@ export const WarehousesPage: React.FC = () => {
                       {wh.typeLabel}
                     </span>
                   </td>
-                  <td className="hidden md:table-cell py-2.5 px-3.5 align-top">
-                    <div className="font-medium text-slate-800 text-xs flex items-center gap-1">
-                      <Person size={13} className="text-slate-400" />
-                      <span>{wh.managerId}</span>
+                  <td className="hidden md:table-cell py-3 px-3.5 align-middle whitespace-nowrap">
+                    <div className="font-medium text-slate-800 text-xs flex items-center gap-1.5 whitespace-nowrap">
+                      <Person size={13} className="text-slate-400 shrink-0" />
+                      <span>{wh.managerId || 'Chưa phân công'}</span>
                     </div>
                     {wh.phone && (
-                      <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1 font-mono">
-                        <Telephone size={10} />
+                      <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1.5 font-mono whitespace-nowrap">
+                        <Telephone size={10} className="shrink-0" />
                         <span>{wh.phone}</span>
                       </div>
                     )}
                   </td>
-                  <td className="hidden md:table-cell py-2.5 px-3.5 align-top text-right">
+                  <td className="hidden md:table-cell py-3 px-3.5 align-middle text-right whitespace-nowrap">
                     <span className="font-bold text-slate-900 text-xs font-mono">
                       {wh.itemCount.toLocaleString('vi-VN')}
                     </span>
                     <span className="text-[11px] text-slate-400 ml-1">mã SKU</span>
                   </td>
-                  <td className="hidden md:table-cell py-2.5 px-3.5 align-top text-right">
+                  <td className="hidden md:table-cell py-3 px-3.5 align-middle text-right whitespace-nowrap">
                     <div className="font-bold text-emerald-700 text-[13px] font-mono">
                       {wh.totalQuantity.toLocaleString('vi-VN')}
                     </div>
@@ -482,23 +487,23 @@ export const WarehousesPage: React.FC = () => {
                       </div>
                     )}
                   </td>
-                  <td className="hidden md:table-cell py-2.5 px-3.5 align-top text-center">
+                  <td className="hidden md:table-cell py-3 px-3.5 align-middle text-center whitespace-nowrap">
                     <span
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                      className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap ${
                         wh.isActive
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
-                          : 'bg-slate-100 text-slate-600 border border-slate-300'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-slate-100 text-slate-600 border border-slate-200'
                       }`}
                     >
                       {wh.isActive ? (
                         <>
-                          <CheckCircleFill size={10} className="text-emerald-600" />
-                          Hoạt động
+                          <CheckCircleFill size={10} className="text-emerald-600 shrink-0" />
+                          <span>Hoạt động</span>
                         </>
                       ) : (
                         <>
-                          <XCircleFill size={10} className="text-slate-400" />
-                          Tạm dừng
+                          <XCircleFill size={10} className="text-slate-400 shrink-0" />
+                          <span>Tạm dừng</span>
                         </>
                       )}
                     </span>

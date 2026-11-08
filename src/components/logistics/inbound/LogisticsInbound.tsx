@@ -15,6 +15,7 @@ import { ConfirmDialogModal } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useSession } from "next-auth/react";
 import { canExecuteInOut } from "@/lib/logistics-permissions";
+import { exportStandardReportExcel } from "@/utils/excelExport";
 
 interface Warehouse {
   id: string;
@@ -227,31 +228,57 @@ export function LogisticsInbound({ onStatsChange }: { onStatsChange?: (stats: an
         return;
       }
 
-      const exportData = exportItems.map((item: any, index: number) => ({
-        "STT": index + 1,
-        "Tên vật tư, hàng hoá": item.tenHang || "",
-        "Mã hàng": item.code || "",
-        "Danh mục": item.categoryName || item.category?.name || "",
-        "Đơn vị tính": item.donVi || "",
-        "Giá nhập": item.giaNhap || 0,
-        "Giá bán": item.giaBan || 0,
-        "Tồn kho": item.soLuong || 0,
-        "Đã giữ": item.soLuongGiu ?? item.daGiu ?? 0,
-        "Thực tồn": item.thucTon ?? ((item.soLuong || 0) - (item.soLuongGiu ?? item.daGiu ?? 0)),
-        "Trạng thái": item.trangThai === "con-hang" ? "Còn hàng" : item.trangThai === "sap-het" ? "Sắp hết" : "Hết hàng",
-      }));
+      let totTonKho = 0;
+      let totDaGiu = 0;
+      let totThucTon = 0;
 
-      const XLSX = await import("xlsx");
+      const dataRows = exportItems.map((item: any, index: number) => {
+        const soLuong = item.soLuong || 0;
+        const daGiu = item.soLuongGiu ?? item.daGiu ?? 0;
+        const thucTon = item.thucTon ?? Math.max(0, soLuong - daGiu);
+        totTonKho += soLuong;
+        totDaGiu += daGiu;
+        totThucTon += thucTon;
 
-      const ws = XLSX.utils.json_to_sheet(exportData);
-      ws["!cols"] = [
-        { wch: 5 }, { wch: 40 }, { wch: 15 }, { wch: 25 }, { wch: 15 },
-        { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
-      ];
+        return [
+          index + 1,
+          item.code || "",
+          item.tenHang || "",
+          item.categoryName || item.category?.name || "Thiết bị & Phụ kiện",
+          item.donVi || "cái",
+          item.giaNhap || 0,
+          item.giaBan || 0,
+          soLuong,
+          daGiu,
+          thucTon,
+          item.trangThai === "con-hang" ? "Còn hàng" : item.trangThai === "sap-het" ? "Sắp hết" : "Hết hàng",
+        ];
+      });
 
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Kho_Hang");
-      XLSX.writeFile(wb, `Danh_Sach_Hang_Hoa_Trong_Kho_${new Date().toISOString().split("T")[0]}.xlsx`);
+      const today = new Date();
+      const dateFormatted = `${String(today.getDate()).padStart(2, "0")}/${String(today.getMonth() + 1).padStart(2, "0")}/${today.getFullYear()}`;
+      const selectedWh = warehouses.find((w) => w.id === filterWarehouse);
+
+      exportStandardReportExcel({
+        fileName: `Danh_Sach_Hang_Hoa_Trong_Kho_${today.toISOString().split("T")[0]}`,
+        sheetName: "Kho_Hang",
+        formCode: "Mẫu số 01-VT",
+        title: "BẢNG KÊ DANH MỤC HÀNG HÓA VẬT TƯ TRONG KHO",
+        subtitle: `Thời điểm kết xuất: Ngày ${dateFormatted}`,
+        extraInfo: [
+          `Kho hàng áp dụng: ${selectedWh ? selectedWh.name : "Tất cả kho hàng"}`,
+          "Đơn vị tính giá trị: Đồng Việt Nam (VNĐ)",
+        ],
+        headers: [
+          ["STT", "Mã hàng", "Tên vật tư, hàng hoá", "Danh mục", "ĐVT", "Giá nhập (đ)", "Giá bán (đ)", "Tồn kho", "Đã giữ", "Thực tồn", "Trạng thái"],
+        ],
+        columnsWidths: [6, 14, 36, 22, 10, 14, 14, 14, 12, 14, 14],
+        data: dataRows,
+        totalsRow: [
+          "TỔNG CỘNG", "", "", "", "", "", "", totTonKho, totDaGiu, totThucTon, "",
+        ],
+        signatures: ["Người lập biểu", "Thủ kho", "Kế toán kho", "Giám đốc"],
+      });
     } catch (error) {
       console.error("Export error:", error);
       alert("Lỗi khi xuất file Excel");

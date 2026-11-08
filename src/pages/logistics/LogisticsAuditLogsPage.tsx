@@ -5,7 +5,10 @@ import { FullWidthTable } from '@/components/common/FullWidthTable';
 import { Pagination } from '@/components/common/Pagination';
 import { WarehouseCategoryFilter } from '@/components/common/WarehouseCategoryFilter';
 import { Select } from '@/components/common/Select';
+import { DatePicker } from '@/components/common/DatePicker';
 import { Offcanvas } from '@/components/common/Offcanvas';
+import { DataRetentionOffcanvas } from '@/components/common/DataRetentionOffcanvas';
+import { exportStandardReportExcel } from '@/utils/excelExport';
 // Toast nội bộ thông báo nhẹ nhàng
 interface ToastState {
   type: 'success' | 'warning' | 'error' | 'info';
@@ -108,125 +111,6 @@ export const LogisticsAuditLogsPage: React.FC = () => {
 
   // ── States cho Offcanvas Thiết lập tự động xoá (Rộng 400px) ──
   const [isCleanupOffcanvasOpen, setIsCleanupOffcanvasOpen] = useState<boolean>(false);
-  const [cleanupEnabled, setCleanupEnabled] = useState<boolean>(true);
-  const [retentionDays, setRetentionDays] = useState<number>(90);
-  const [customDays, setCustomDays] = useState<string>('90');
-  const [isCustomDays, setIsCustomDays] = useState<boolean>(false);
-  const [keepStockCounts, setKeepStockCounts] = useState<boolean>(true);
-  const [eligibleCount, setEligibleCount] = useState<number>(0);
-  const [cutoffDateStr, setCutoffDateStr] = useState<string>('');
-  const [lastCleanupInfo, setLastCleanupInfo] = useState<{ lastRunAt: string | null; lastDeletedCount: number } | null>(null);
-  const [savingCleanup, setSavingCleanup] = useState<boolean>(false);
-  const [runningCleanup, setRunningCleanup] = useState<boolean>(false);
-
-  // ── Tải cấu hình tự động xoá từ hệ thống ──
-  const fetchCleanupSettings = useCallback(async (daysToEval?: number) => {
-    try {
-      const days = daysToEval || retentionDays;
-      const res = await fetch(`/api/logistics/audit-logs/auto-cleanup-settings?days=${days}`);
-      const data = await res.json();
-      if (data && data.success) {
-        if (daysToEval === undefined) {
-          setCleanupEnabled(data.config.enabled ?? true);
-          setRetentionDays(data.config.retentionDays ?? 90);
-          setCustomDays(String(data.config.retentionDays ?? 90));
-          setKeepStockCounts(data.config.keepStockCounts ?? true);
-          setLastCleanupInfo({
-            lastRunAt: data.config.lastRunAt,
-            lastDeletedCount: data.config.lastDeletedCount || 0,
-          });
-          const standardPresets = [30, 60, 90, 180, 365];
-          setIsCustomDays(!standardPresets.includes(data.config.retentionDays));
-        }
-        setEligibleCount(data.stats.eligibleMovementsCount || 0);
-        if (data.stats.cutoffDate) {
-          setCutoffDateStr(new Date(data.stats.cutoffDate).toLocaleDateString('vi-VN'));
-        }
-      }
-    } catch (err) {
-      console.error('Lỗi nạp cấu hình tự động xoá:', err);
-    }
-  }, [retentionDays]);
-
-  useEffect(() => {
-    if (isCleanupOffcanvasOpen) {
-      fetchCleanupSettings();
-    }
-  }, [isCleanupOffcanvasOpen, fetchCleanupSettings]);
-
-  const handleSelectDays = (days: number) => {
-    setRetentionDays(days);
-    setIsCustomDays(false);
-    setCustomDays(String(days));
-    fetchCleanupSettings(days);
-  };
-
-  const handleCustomDaysChange = (val: string) => {
-    setCustomDays(val);
-    const parsed = parseInt(val);
-    if (!isNaN(parsed) && parsed > 0) {
-      setRetentionDays(parsed);
-      fetchCleanupSettings(parsed);
-    }
-  };
-
-  const handleSaveCleanupSettings = async () => {
-    setSavingCleanup(true);
-    try {
-      const res = await fetch('/api/logistics/audit-logs/auto-cleanup-settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          enabled: cleanupEnabled,
-          retentionDays,
-          keepStockCounts,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        showToast('success', 'Đã lưu thiết lập tự động xoá dữ liệu');
-        setIsCleanupOffcanvasOpen(false);
-      } else {
-        showToast('error', data.error || 'Lỗi lưu thiết lập');
-      }
-    } catch (err) {
-      console.error('Lỗi lưu cấu hình:', err);
-      showToast('error', 'Không thể kết nối đến máy chủ để lưu thiết lập');
-    } finally {
-      setSavingCleanup(false);
-    }
-  };
-
-  const handleRunCleanupNow = async () => {
-    if (eligibleCount === 0) {
-      showToast('info', `Không có dữ liệu nào cũ hơn ${retentionDays} ngày để dọn dẹp`);
-      return;
-    }
-    setRunningCleanup(true);
-    try {
-      const res = await fetch('/api/logistics/audit-logs/run-cleanup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          retentionDays,
-          keepStockCounts,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        showToast('success', data.message || `Đã dọn dẹp ${data.deletedCount} bản ghi`);
-        fetchCleanupSettings();
-        fetchAuditLogs();
-      } else {
-        showToast('error', data.error || 'Lỗi khi dọn dẹp');
-      }
-    } catch (err) {
-      console.error('Lỗi chạy dọn dẹp:', err);
-      showToast('error', 'Không thể thực hiện dọn dẹp dữ liệu');
-    } finally {
-      setRunningCleanup(false);
-    }
-  };
 
   // ── State cho Toast thông báo ──
   const [toastMsg, setToastMsg] = useState<ToastState | null>(null);
@@ -336,13 +220,58 @@ export const LogisticsAuditLogsPage: React.FC = () => {
     );
   };
 
-  // ── Xuất Excel ──
+  // ── Xuất Excel (Định dạng chuẩn bản in) ──
   const handleExportExcel = () => {
     if (items.length === 0) {
       showToast('warning', 'Không có dữ liệu để xuất Excel');
       return;
     }
-    showToast('success', 'Đã xuất dữ liệu nhật ký hoạt động kho ra tệp Excel');
+
+    try {
+      const today = new Date();
+      const dateFormatted = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+
+      const dataRows = items.map((it: any, idx: number) => {
+        const itemNames = (it.lines || []).map((l: any) => l.itemName).filter(Boolean).join(', ') || it.title || '';
+        const itemCodes = (it.lines || []).map((l: any) => l.itemCode).filter(Boolean).join(', ') || '';
+        const totalQty = (it.lines || []).reduce((sum: number, l: any) => sum + (Number(l.soLuong) || 0), 0) || it.soLuong || 0;
+
+        return [
+          idx + 1,
+          it.code || it.soPhieu || `NK-${idx + 1}`,
+          new Date(it.createdAt).toLocaleDateString('vi-VN'),
+          it.typeLabel || it.type || 'Hoạt động kho',
+          itemCodes,
+          itemNames,
+          totalQty,
+          it.warehouseName || it.fromWarehouseName || it.toWarehouseName || 'Kho chính',
+          it.actorName || it.nguoiThucHien || 'Hệ thống',
+          it.note || it.lyDo || it.description || '',
+        ];
+      });
+
+      exportStandardReportExcel({
+        fileName: `Nhat_Ky_Hoat_Dong_Kho_${today.toISOString().split('T')[0]}`,
+        sheetName: 'Nhat_Ky_Kho',
+        formCode: 'Mẫu số 03-VT',
+        title: 'NHẬT KÝ HOẠT ĐỘNG VÀ BIẾN ĐỘNG KHO',
+        subtitle: `Thời điểm kết xuất: Ngày ${dateFormatted}`,
+        extraInfo: [
+          'Hệ thống quản trị chuỗi cung ứng Seajong ERP',
+        ],
+        headers: [
+          ['STT', 'Mã chứng từ', 'Ngày thực hiện', 'Loại biến động', 'Mã vật tư', 'Tên vật tư, hàng hóa', 'Tổng số lượng', 'Kho áp dụng', 'Người thực hiện', 'Diễn giải / Ghi chú'],
+        ],
+        columnsWidths: [6, 16, 14, 18, 16, 36, 14, 18, 18, 28],
+        data: dataRows,
+        signatures: ['Người lập biểu', 'Thủ kho trưởng', 'Kế toán trưởng', 'Giám đốc'],
+      });
+
+      showToast('success', `Đã xuất ${items.length} biên bản nhật ký ra file Excel thành công`);
+    } catch (err) {
+      console.error('Lỗi xuất Excel nhật ký:', err);
+      showToast('error', 'Lỗi khi xuất file Excel');
+    }
   };
 
   return (
@@ -384,7 +313,7 @@ export const LogisticsAuditLogsPage: React.FC = () => {
       )}
 
       <div className="flex flex-col h-full flex-1 overflow-hidden" style={{ minHeight: 0 }}>
-        {/* TableToolbar */}
+        {/* TableToolbar - Đã ẩn drop menu theo yêu cầu */}
         <TableToolbar
           searchValue={search}
           onSearchChange={(val) => {
@@ -393,6 +322,7 @@ export const LogisticsAuditLogsPage: React.FC = () => {
           }}
           searchPlaceholder="Tìm mã chứng từ, đơn hàng, khách hàng, mặt hàng, người thực hiện..."
           searchMinWidth="240px"
+          showMenu={false}
           customFilters={
             <div className="flex items-center gap-2 flex-wrap">
               {/* 1. Component lọc theo kho có lọc theo danh mục */}
@@ -432,30 +362,31 @@ export const LogisticsAuditLogsPage: React.FC = () => {
               </div>
 
               {/* 3. Ô chọn thời gian Từ ngày - Đến ngày */}
-              <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs shadow-2xs h-[38px]">
-                <span className="text-slate-400 font-medium text-xs whitespace-nowrap">Từ:</span>
-                <input
-                  type="date"
-                  value={fromDate}
-                  onChange={(e) => {
-                    setFromDate(e.target.value);
-                    setPage(1);
-                  }}
-                  className="border-0 bg-transparent text-xs text-slate-700 font-medium focus:outline-hidden p-0 cursor-pointer"
-                  style={{ width: '115px' }}
-                />
-                <span className="text-slate-300 mx-0.5">•</span>
-                <span className="text-slate-400 font-medium text-xs whitespace-nowrap">Đến:</span>
-                <input
-                  type="date"
-                  value={toDate}
-                  onChange={(e) => {
-                    setToDate(e.target.value);
-                    setPage(1);
-                  }}
-                  className="border-0 bg-transparent text-xs text-slate-700 font-medium focus:outline-hidden p-0 cursor-pointer"
-                  style={{ width: '115px' }}
-                />
+              <div className="flex items-center gap-2 shrink-0">
+                <div style={{ width: '160px' }}>
+                  <DatePicker
+                    prefix="Từ:"
+                    value={fromDate}
+                    onChange={(val) => {
+                      setFromDate(val);
+                      setPage(1);
+                    }}
+                    placeholder="dd/mm/yyyy"
+                    clearable={true}
+                  />
+                </div>
+                <div style={{ width: '165px' }}>
+                  <DatePicker
+                    prefix="Đến:"
+                    value={toDate}
+                    onChange={(val) => {
+                      setToDate(val);
+                      setPage(1);
+                    }}
+                    placeholder="dd/mm/yyyy"
+                    clearable={true}
+                  />
+                </div>
               </div>
             </div>
           }
@@ -487,7 +418,7 @@ export const LogisticsAuditLogsPage: React.FC = () => {
             },
             {
               id: 'auto-cleanup-settings',
-              label: 'Thiết lập tự động xoá',
+              label: 'Thiết lập xoá',
               icon: <i className="bi bi-clock-history text-amber-600 text-sm" />,
               onClick: () => setIsCleanupOffcanvasOpen(true),
             },
@@ -957,201 +888,16 @@ export const LogisticsAuditLogsPage: React.FC = () => {
           </div>
         </div>
       )}
-      {/* Offcanvas Thiết lập tự động xoá (Rộng 400px) */}
-      <Offcanvas
+      {/* Offcanvas Thiết lập thời gian lưu trữ (Component dùng chung) */}
+      <DataRetentionOffcanvas
         isOpen={isCleanupOffcanvasOpen}
         onClose={() => setIsCleanupOffcanvasOpen(false)}
-        title="Thiết lập tự động xoá"
-        description="Cấu hình hệ thống tự động dọn dẹp các dữ liệu cũ"
-        icon={<i className="bi bi-clock-history text-amber-500 text-lg" />}
-        width="400px"
-        footer={
-          <div className="flex items-center justify-end gap-2 w-full">
-            <button
-              type="button"
-              onClick={() => setIsCleanupOffcanvasOpen(false)}
-              className="px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 border border-slate-300 transition-colors cursor-pointer"
-            >
-              Đóng
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveCleanupSettings}
-              disabled={savingCleanup}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-            >
-              {savingCleanup ? (
-                <>
-                  <i className="bi bi-arrow-repeat animate-spin text-xs" />
-                  <span>Đang lưu...</span>
-                </>
-              ) : (
-                <>
-                  <i className="bi bi-check2 text-xs" />
-                  <span>Lưu thiết lập</span>
-                </>
-              )}
-            </button>
-          </div>
-        }
-      >
-        <div className="p-4 space-y-5 text-slate-700">
-          {/* 1. Switch Bật / Tắt */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
-            <div>
-              <div className="text-xs font-bold text-slate-800">
-                Tự động dọn dẹp định kỳ
-              </div>
-              <div className="text-[11px] text-slate-500 mt-0.5">
-                {cleanupEnabled ? 'Hệ thống đang bật tính năng dọn dẹp' : 'Đang tạm dừng tự động dọn dẹp'}
-              </div>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={cleanupEnabled}
-                onChange={(e) => setCleanupEnabled(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-            </label>
-          </div>
-
-          {/* 2. Thời gian lưu trữ dữ liệu */}
-          <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1.5">
-              Xoá dữ liệu cũ hơn:
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { label: '30 ngày', value: 30 },
-                { label: '60 ngày', value: 60 },
-                { label: '90 ngày', value: 90, recommended: true },
-                { label: '180 ngày', value: 180 },
-                { label: '1 năm', value: 365 },
-              ].map((opt) => {
-                const isSelected = !isCustomDays && retentionDays === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => handleSelectDays(opt.value)}
-                    className={`py-2 px-2.5 rounded-lg text-xs font-semibold text-center border transition-all cursor-pointer relative ${
-                      isSelected
-                        ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-2xs'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
-                    }`}
-                  >
-                    {opt.label}
-                    {opt.recommended && (
-                      <span className="block text-[9px] font-normal text-blue-600">Gợi ý</span>
-                    )}
-                  </button>
-                );
-              })}
-
-              <button
-                type="button"
-                onClick={() => setIsCustomDays(true)}
-                className={`py-2 px-2.5 rounded-lg text-xs font-semibold text-center border transition-all cursor-pointer ${
-                  isCustomDays
-                    ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-2xs'
-                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
-                }`}
-              >
-                Tuỳ chỉnh
-              </button>
-            </div>
-
-            {isCustomDays && (
-              <div className="mt-2.5 flex items-center gap-2">
-                <input
-                  type="number"
-                  min="1"
-                  max="3650"
-                  value={customDays}
-                  onChange={(e) => handleCustomDaysChange(e.target.value)}
-                  placeholder="Nhập số ngày..."
-                  className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-hidden focus:border-blue-500"
-                />
-                <span className="text-xs text-slate-500 font-medium">ngày</span>
-              </div>
-            )}
-          </div>
-
-          {/* 3. Tuỳ chọn bảo lưu kiểm kê */}
-          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-            <label className="flex items-start gap-2.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={keepStockCounts}
-                onChange={(e) => setKeepStockCounts(e.target.checked)}
-                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 mt-0.5 cursor-pointer"
-              />
-              <div className="text-xs">
-                <div className="font-semibold text-slate-800">
-                  Bảo lưu chứng từ cân bằng kiểm kê
-                </div>
-                <div className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
-                  Không xoá các biên bản điều chỉnh số liệu kiểm kho định kỳ để phục vụ kiểm toán tài chính.
-                </div>
-              </div>
-            </label>
-          </div>
-
-          {/* 4. Khối thống kê & tác vụ dọn dẹp */}
-          <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-2.5">
-            <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-              <i className="bi bi-info-circle text-blue-600" />
-              <span>Dự báo dữ liệu dọn dẹp:</span>
-            </div>
-
-            <div className="space-y-1.5 text-xs text-slate-600">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">Mốc thời gian xoá:</span>
-                <span className="font-medium text-slate-800">
-                  Trước ngày {cutoffDateStr || '...'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">Số bản ghi cũ phù hợp:</span>
-                <span className="font-mono font-bold text-rose-600">
-                  {eligibleCount} bản ghi
-                </span>
-              </div>
-              <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px]">
-                <span className="text-slate-400">Lần chạy gần nhất:</span>
-                <span className="text-slate-600 font-mono">
-                  {lastCleanupInfo?.lastRunAt
-                    ? new Date(lastCleanupInfo.lastRunAt).toLocaleString('vi-VN')
-                    : 'Chưa chạy lần nào'}
-                </span>
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={handleRunCleanupNow}
-                disabled={runningCleanup || eligibleCount === 0}
-                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {runningCleanup ? (
-                  <>
-                    <i className="bi bi-arrow-repeat animate-spin text-xs" />
-                    <span>Đang dọn dẹp...</span>
-                  </>
-                ) : (
-                  <>
-                    <i className="bi bi-trash3 text-xs" />
-                    <span>Dọn dẹp ngay {eligibleCount} bản ghi cũ</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      </Offcanvas>
+        ticketType="AUDIT_LOGS"
+        title="Thiết lập thời gian lưu trữ"
+        description="Cấu hình tự động dọn dẹp các chứng từ nhập, xuất và kiểm kho đã lưu trữ"
+        entityLabel="bản ghi"
+        onCleanedUp={fetchAuditLogs}
+      />
     </StandardPage>
   );
 };

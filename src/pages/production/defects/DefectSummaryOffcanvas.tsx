@@ -13,7 +13,7 @@ interface DefectSummaryOffcanvasProps {
   defect?: any | null;
   onClose: () => void;
   onRefresh?: () => void;
-  onOpenProcess?: () => void;
+  onOpenProcess?: (defectId?: string) => void;
 }
 
 export function DefectSummaryOffcanvas({
@@ -136,7 +136,9 @@ export function DefectSummaryOffcanvas({
                     }
                     onClick={() => {
                       if (!isProdAdmin) return;
-                      onOpenProcess();
+                      const targetId = defect?.id || defectId;
+                      onClose();
+                      if (onOpenProcess) onOpenProcess(targetId);
                     }}
                   >
                     Tiến trình xử lý

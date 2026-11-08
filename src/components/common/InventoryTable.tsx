@@ -5,7 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'react-bootstrap-icons';
-import { TableToolbar, type TableToolbarFilter } from './TableToolbar';
+import { TableToolbar, type TableToolbarFilter, type TableToolbarMenuItem } from './TableToolbar';
 import { FullWidthTable } from './FullWidthTable';
 import { Pagination } from './Pagination';
 import { Button } from './Button';
@@ -74,6 +74,11 @@ export interface InventoryToolbarProps {
   onSearchChange: (val: string) => void;
   searchPlaceholder?: string;
   onExportExcel?: () => void;
+  onImportExcel?: (file: File) => void;
+  onRefresh?: () => void;
+  onPrint?: () => void;
+  showMenu?: boolean;
+  menuItems?: TableToolbarMenuItem[];
   extraRightActions?: React.ReactNode;
 }
 
@@ -90,6 +95,11 @@ export const InventoryToolbar: React.FC<InventoryToolbarProps> = ({
   onSearchChange,
   searchPlaceholder = 'Tìm theo mã SKU, tên hàng hoá, model, quy cách, chất liệu...',
   onExportExcel,
+  onImportExcel,
+  onRefresh,
+  onPrint,
+  showMenu = true,
+  menuItems,
   extraRightActions,
 }) => {
   const filters = useMemo<TableToolbarFilter[]>(
@@ -137,22 +147,18 @@ export const InventoryToolbar: React.FC<InventoryToolbarProps> = ({
       searchPlaceholder={searchPlaceholder}
       filters={filters}
       rightActions={
-        <div className="hidden md:flex items-center gap-2">
-          {extraRightActions}
-          {onExportExcel && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onExportExcel}
-              leftIcon={<FileEarmarkExcel size={14} color="#16a34a" />}
-            >
-              Xuất Excel
-            </Button>
-          )}
-        </div>
+        extraRightActions ? (
+          <div className="hidden md:flex items-center gap-2">
+            {extraRightActions}
+          </div>
+        ) : undefined
       }
-      showMenu={false}
-      menuItems={[]}
+      showMenu={showMenu}
+      menuItems={menuItems}
+      onExportExcel={onExportExcel}
+      onImportExcel={onImportExcel}
+      onRefresh={onRefresh}
+      onPrint={onPrint}
     />
   );
 };

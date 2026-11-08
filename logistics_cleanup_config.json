@@ -1,0 +1,10 @@
+{
+  "scope": "ALL",
+  "enabled": true,
+  "retentionDays": 30,
+  "applyInProgress": true,
+  "applyCompleted": true,
+  "lastRunAt": "2026-11-08T16:32:42.313Z",
+  "lastDeletedCount": 4,
+  "updatedAt": "2026-11-08T16:32:42.313Z"
+}

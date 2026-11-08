@@ -18,6 +18,8 @@ export interface DeleteButtonProps {
   dialogMessage?: React.ReactNode;
   /** Nhãn của nút (mặc định: 'Xóa') */
   label?: string;
+  /** Có ẩn số lượng badge (itemCount) trên nhãn nút hay không */
+  hideCountBadge?: boolean;
   /** Kích thước của nút (mặc định: 'md') */
   size?: ButtonSize;
   /** Biến thể màu sắc của nút (mặc định: 'danger') */
@@ -50,6 +52,7 @@ export const DeleteButton: React.FC<DeleteButtonProps> = ({
   dialogTitle = 'Xác nhận xoá dữ liệu',
   dialogMessage,
   label = 'Xóa',
+  hideCountBadge = false,
   size = 'md',
   variant = 'danger',
   showIcon = true,
@@ -109,7 +112,7 @@ export const DeleteButton: React.FC<DeleteButtonProps> = ({
         title={title}
       >
         <span className="delete-btn-label">{label}</span>
-        {hasCount && (
+        {hasCount && !hideCountBadge && (
           <span
             style={{
               display: 'inline-flex',
