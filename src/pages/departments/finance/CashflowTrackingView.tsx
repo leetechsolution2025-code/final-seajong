@@ -371,6 +371,8 @@ interface CashOutflowItem {
   status: 'cho_chi' | 'da_chi';
   voucherCode?: string;
   note: string;
+  approvedBy?: string;
+  approvedDate?: string;
 }
 
 export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
@@ -1002,26 +1004,75 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
       })
       .catch((err) => console.error('Lỗi tải dữ liệu tiền vào từ DB:', err));
 
-    // 4. Tải dữ liệu các lệnh chi tiền thực tế từ DB
+    // 4. Tải dữ liệu các lệnh chi tiền & yêu cầu liên quan đến tiền đã được Giám đốc phê duyệt từ DB
     fetch('/api/finance/payment-orders')
       .then((res) => res.json())
       .then((data) => {
-        if (data?.orders && Array.isArray(data.orders)) {
-          const mapped: CashOutflowItem[] = data.orders.map((o: any) => ({
-            id: String(o.id),
-            code: o.orderCode || `LC-${o.id}`,
-            category: 'dong_thau',
-            categoryTitle: o.description || 'Lệnh chi thanh toán',
-            beneficiary: o.beneficiaryName || 'Đối tác thụ hưởng',
-            method: o.paymentMethod === 'bank' ? 'unc_ngan_hang' : 'tien_mat',
-            accountDebit: 'TK 331/642',
-            accountCredit: o.paymentMethod === 'bank' ? 'TK 1121' : 'TK 1111',
-            dueDate: o.dueDate || new Date().toLocaleDateString('vi-VN'),
-            amount: Number(o.amount) || 0,
-            status: o.status === 'executed' ? 'da_chi' : 'cho_chi',
-            voucherCode: o.voucherCode,
-            note: o.description || '',
-          }));
+        const orderList = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.orders)
+          ? data.orders
+          : Array.isArray(data?.data)
+          ? data.data
+          : [];
+
+        if (orderList.length > 0) {
+          const mapped: CashOutflowItem[] = orderList.map((o: any) => {
+            const isExecuted =
+              o.status === 'executed' ||
+              o.status === 'completed' ||
+              o.status === 'da_chi' ||
+              Boolean(o.voucherId);
+
+            let cat: CashOutflowItem['category'] = 'no_ncc';
+            const titleLower = String(o.title || o.purpose || o.description || '').toLowerCase();
+            const refTypeLower = String(o.refType || '').toLowerCase();
+
+            if (titleLower.includes('tạm ứng') || refTypeLower.includes('advance')) {
+              cat = 'tam_ung';
+            } else if (titleLower.includes('lương') || refTypeLower.includes('payroll')) {
+              cat = 'luong_van_hanh';
+            } else if (titleLower.includes('pvd') || refTypeLower.includes('pvd')) {
+              cat = 'ma_pvd';
+            } else if (titleLower.includes('thầu') || refTypeLower.includes('tender')) {
+              cat = 'dong_thau';
+            }
+
+            const isCash =
+              o.paymentMethod === 'cash' ||
+              o.paymentMethod === 'tien_mat' ||
+              o.method === 'tien_mat';
+
+            return {
+              id: String(o.id),
+              code: o.orderCode || o.refCode || `LC-${o.id}`,
+              category: cat,
+              categoryTitle: o.title || o.purpose || o.description || 'Lệnh chi thanh toán đã phê duyệt',
+              beneficiary: o.beneficiaryName || 'Đối tác / Cán bộ thụ hưởng',
+              method: isCash ? 'tien_mat' : 'unc_ngan_hang',
+              accountDebit:
+                o.accountDebit ||
+                (cat === 'tam_ung'
+                  ? 'TK 141 (Tạm ứng)'
+                  : cat === 'luong_van_hanh'
+                  ? 'TK 334 (Phải trả NLĐ)'
+                  : 'TK 331 (Phải trả NCC)'),
+              accountCredit: isCash
+                ? 'TK 1111 (Quỹ tiền mặt)'
+                : 'TK 1121 (Tiền gửi ngân hàng)',
+              dueDate:
+                o.dueDate ||
+                (o.createdAt
+                  ? new Date(o.createdAt).toLocaleDateString('vi-VN')
+                  : new Date().toLocaleDateString('vi-VN')),
+              amount: Number(o.amount) || 0,
+              status: isExecuted ? 'da_chi' : 'cho_chi',
+              voucherCode: o.voucherId || o.voucherCode || (isExecuted ? o.refCode : undefined),
+              note: o.approvalNote || o.purpose || o.description || '',
+              approvedBy: o.approvedBy || 'Lê Công Vụ (Giám đốc)',
+              approvedDate: o.approvedDate || (o.createdAt ? new Date(o.createdAt).toLocaleDateString('vi-VN') : ''),
+            };
+          });
           setOutflows(mapped);
         }
       })
@@ -2458,6 +2509,11 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                               <span className="text-slate-600 truncate">Thụ hưởng: {out.beneficiary}</span>
                               <span className="font-bold text-rose-600 shrink-0 ml-2">-{formatVND(out.amount)}</span>
                             </div>
+                            {out.approvedBy && (
+                              <div className="text-[10.5px] text-emerald-700 font-medium">
+                                ✓ Đã duyệt: {out.approvedBy}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -2470,6 +2526,19 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                       <div className="text-[11.5px] text-slate-500 mt-0.5">
                         Hạch toán: Nợ <span className="font-mono text-slate-700">{out.accountDebit}</span> • Có <span className="font-mono text-slate-700">{out.accountCredit}</span>
                       </div>
+                      {out.approvedBy && (
+                        <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10.5px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle size={10} className="text-emerald-600" />
+                            <span>Đã duyệt: {out.approvedBy}</span>
+                          </span>
+                          {out.approvedDate && (
+                            <span className="text-[10.5px] text-slate-400 font-mono">
+                              ({out.approvedDate})
+                            </span>
+                          )}
+                        </div>
+                      )}
                       {out.note && (
                         <div className="text-[11.5px] text-slate-400 mt-0.5 line-clamp-1">{out.note}</div>
                       )}
