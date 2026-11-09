@@ -579,8 +579,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
   const isLogisticsDept = activeDeptCode === 'logistics' || activeDeptCode === 'kho' || activeDeptCode === 'kho-hang' || activeDeptCode === 'warehouse';
   const isSalesDept = activeDeptCode === 'sales' || activeDeptCode === 'kd' || activeDeptCode === 'kinh-doanh';
   const isFinanceDept = activeDeptCode === 'finance' || activeDeptCode === 'tai-chinh' || activeDeptCode === 'ke-toan';
+  const isProductionDept = activeDeptCode === 'production' || activeDeptCode === 'san-xuat' || activeDeptCode === 'sx';
 
-  // Nhóm Yêu cầu và duyệt yêu cầu (ẩn ở board, hr, marketing, sales, finance, logistics và dealer)
+  // Tự động chuyển về overview nếu đang ở phòng sản xuất mà activeMenuKey là yêu cầu/duyệt yêu cầu
+  useEffect(() => {
+    if (
+      isProductionDept &&
+      (activeMenuKey === 'recruitment_req' ||
+        activeMenuKey === 'approvals' ||
+        activeMenuKey === 'requests_approvals' ||
+        activeMenuKey === 'hr_requests_approvals')
+    ) {
+      setActiveMenuKey('overview');
+    }
+  }, [activeMenuKey, isProductionDept, setActiveMenuKey]);
+
+  // Nhóm Yêu cầu và duyệt yêu cầu (ẩn ở board, hr, marketing, sales, finance, logistics, production và dealer)
   const showApprovalGroup =
     !isDealer &&
     activeDeptCode !== 'board' &&
@@ -588,7 +602,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
     activeDeptCode !== 'marketing' &&
     !isSalesDept &&
     !isFinanceDept &&
-    !isLogisticsDept;
+    !isLogisticsDept &&
+    !isProductionDept;
 
   // Ẩn nhóm "Lưu trữ" ở trang HR (Nhân sự), Marketing, Sales, Finance, Logistics và Dealer
   const isHrDept = activeDeptCode === 'hr' || activeDeptCode === 'nhan-su' || activeDeptCode === 'admin';

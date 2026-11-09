@@ -207,7 +207,14 @@ export const DashboardView: React.FC = () => {
     if (activeMenuKey === 'inventory') {
       return <SalesInventoryPage />;
     }
-    if (activeMenuKey === 'overview' || !activeMenuKey) {
+    if (
+      activeMenuKey === 'overview' ||
+      !activeMenuKey ||
+      activeMenuKey === 'recruitment_req' ||
+      activeMenuKey === 'approvals' ||
+      activeMenuKey === 'requests_approvals' ||
+      activeMenuKey === 'hr_requests_approvals'
+    ) {
       return <ProductionOverviewPage />;
     }
   }
