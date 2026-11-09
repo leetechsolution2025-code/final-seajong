@@ -2293,145 +2293,206 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                         const itemsList = orderItemsMap[refCode] || [];
 
                         return (
-                          <tr key={tx.id || idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                            <td style={{ border: 'none', padding: '7px 4px', textAlign: 'center', color: '#64748b', verticalAlign: 'top' }}>
-                              {idx + 1}
-                            </td>
-                            <td style={{ border: 'none', padding: '7px 8px', verticalAlign: 'top' }}>
-                              {/* Dòng trên: Ngày và Số chứng từ dồn cùng một dòng */}
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.74rem' }}>
-                                <span style={{ color: '#475569', fontWeight: 600 }}>
-                                  {displayDate}
-                                </span>
-                                <span style={{ color: '#cbd5e1' }}>•</span>
-                                <strong style={{ color: '#003087', fontWeight: 700 }}>
-                                  {refCode}
-                                </strong>
-                                {cleanType ? (
-                                  <span
-                                    style={{
-                                      fontSize: '0.68rem',
-                                      padding: '1px 6px',
-                                      borderRadius: '3px',
-                                      backgroundColor: '#f1f5f9',
-                                      color: '#475569',
-                                      border: '1px solid #e2e8f0',
-                                      fontWeight: 500,
-                                    }}
-                                  >
-                                    {cleanType}
+                          <React.Fragment key={tx.id || idx}>
+                            <tr style={{ borderBottom: itemsList.length > 0 ? 'none' : '1px solid #e2e8f0' }}>
+                              <td style={{ border: 'none', padding: '7px 4px', textAlign: 'center', color: '#64748b', verticalAlign: 'middle' }}>
+                                {idx + 1}
+                              </td>
+                              <td style={{ border: 'none', padding: '7px 8px', verticalAlign: 'middle' }}>
+                                {/* Dòng trên: Ngày và Số chứng từ dồn cùng một dòng */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.74rem' }}>
+                                  <span style={{ color: '#475569', fontWeight: 600 }}>
+                                    {displayDate}
                                   </span>
-                                ) : null}
-                              </div>
+                                  <span style={{ color: '#cbd5e1' }}>•</span>
+                                  <strong style={{ color: '#003087', fontWeight: 700 }}>
+                                    {refCode}
+                                  </strong>
+                                  {cleanType ? (
+                                    <span
+                                      style={{
+                                        fontSize: '0.68rem',
+                                        padding: '1px 6px',
+                                        borderRadius: '3px',
+                                        backgroundColor: '#f1f5f9',
+                                        color: '#475569',
+                                        border: '1px solid #e2e8f0',
+                                        fontWeight: 500,
+                                      }}
+                                    >
+                                      {cleanType}
+                                    </span>
+                                  ) : null}
+                                </div>
 
-                              {/* Dòng dưới: Diễn giải nội dung hiển thị ở dưới số chứng từ */}
-                              <div
-                                style={{
-                                  color: '#1e293b',
-                                  marginTop: '3px',
-                                  fontSize: '0.75rem',
-                                  lineHeight: 1.35,
-                                }}
-                              >
-                                {cleanNote || 'Giao dịch phát sinh công nợ'}
-                              </div>
-
-                              {/* Danh sách hàng hoá trong đơn hàng / hàng trả về (nếu có) */}
-                              {itemsList.length > 0 && (
+                                {/* Dòng dưới: Diễn giải nội dung hiển thị ở dưới số chứng từ */}
                                 <div
                                   style={{
-                                    marginTop: '6px',
-                                    padding: '6px 8px',
-                                    backgroundColor: '#f8fafc',
-                                    borderRadius: '4px',
-                                    border: '1px solid #e2e8f0',
+                                    color: '#1e293b',
+                                    marginTop: '3px',
+                                    fontSize: '0.75rem',
+                                    lineHeight: 1.35,
                                   }}
                                 >
+                                  {cleanNote || 'Giao dịch phát sinh công nợ'}
+                                </div>
+                              </td>
+                              <td
+                                style={{
+                                  border: 'none',
+                                  padding: '7px 6px',
+                                  textAlign: 'right',
+                                  fontWeight: tx.increase > 0 ? 600 : 400,
+                                  color: tx.increase > 0 ? '#0f172a' : '#94a3b8',
+                                  verticalAlign: 'middle',
+                                }}
+                              >
+                                {tx.increase > 0 ? formatCurrency(tx.increase) : '-'}
+                              </td>
+                              <td
+                                style={{
+                                  border: 'none',
+                                  padding: '7px 6px',
+                                  textAlign: 'right',
+                                  fontWeight: tx.decrease > 0 ? 600 : 400,
+                                  color: tx.decrease > 0 ? '#16a34a' : '#94a3b8',
+                                  verticalAlign: 'middle',
+                                }}
+                              >
+                                {tx.decrease > 0 ? formatCurrency(tx.decrease) : '-'}
+                              </td>
+                              <td
+                                style={{
+                                  border: 'none',
+                                  padding: '7px 6px',
+                                  textAlign: 'right',
+                                  fontWeight: 700,
+                                  color: tx.balance > 0 ? '#b91c1c' : '#0f172a',
+                                  verticalAlign: 'middle',
+                                }}
+                              >
+                                {formatCurrency(tx.balance)}
+                              </td>
+                            </tr>
+
+                            {/* DÒNG CHI TIẾT DANH MỤC HÀNG HOÁ TRẢI FULL TOÀN BỘ BỀ RỘNG KHỔ GIẤY IN (COLSPAN=5) */}
+                            {itemsList.length > 0 && (
+                              <tr style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#fafbfc' }}>
+                                <td colSpan={5} style={{ border: 'none', padding: '2px 8px 10px 8px' }}>
                                   <div
                                     style={{
-                                      fontSize: '0.69rem',
-                                      fontWeight: 700,
-                                      color: '#334155',
-                                      marginBottom: '4px',
-                                      display: 'flex',
-                                      justifyContent: 'space-between',
+                                      width: '100%',
+                                      backgroundColor: '#ffffff',
+                                      borderRadius: '6px',
+                                      border: '1px solid #cbd5e1',
+                                      overflow: 'hidden',
+                                      boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                                     }}
                                   >
-                                    <span>Danh mục hàng hoá:</span>
-                                    <span style={{ color: '#64748b', fontWeight: 600 }}>{itemsList.length} mặt hàng</span>
+                                    {/* Header danh mục hàng hoá */}
+                                    <div
+                                      style={{
+                                        backgroundColor: '#f1f5f9',
+                                        padding: '5px 12px',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        borderBottom: '1px solid #e2e8f0',
+                                        fontSize: '0.72rem',
+                                      }}
+                                    >
+                                      <span style={{ fontWeight: 700, color: '#1e3a8a' }}>
+                                        Chi tiết mặt hàng theo chứng từ {refCode}
+                                      </span>
+                                      <span style={{ color: '#64748b', fontStyle: 'italic' }}>
+                                        Tổng cộng: <strong>{itemsList.length}</strong> mặt hàng
+                                      </span>
+                                    </div>
+
+                                    {/* Bảng chi tiết hàng hoá Full chiều ngang */}
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem' }}>
+                                      <thead>
+                                        <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
+                                          <th style={{ padding: '5px 8px', width: '38px', textAlign: 'center', fontWeight: 600 }}>#</th>
+                                          <th style={{ padding: '5px 8px', textAlign: 'left', fontWeight: 600 }}>Tên hàng hoá / Quy cách sản phẩm</th>
+                                          <th style={{ padding: '5px 8px', width: '65px', textAlign: 'center', fontWeight: 600 }}>ĐVT</th>
+                                          <th style={{ padding: '5px 8px', width: '70px', textAlign: 'center', fontWeight: 600 }}>Số lượng</th>
+                                          <th style={{ padding: '5px 10px', width: '120px', textAlign: 'right', fontWeight: 600 }}>Đơn giá (đ)</th>
+                                          <th style={{ padding: '5px 12px', width: '130px', textAlign: 'right', fontWeight: 600 }}>Thành tiền (đ)</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {itemsList.map((it: any, itIdx: number) => {
+                                          const itName = it.tenHang || it.productName || 'Sản phẩm';
+                                          const itQty = Number(it.soLuong || it.quantity) || 1;
+                                          const itUnit = it.donViTinh || it.donVi || 'Bộ';
+                                          const itPrice = Number(it.donGia || it.price) || 0;
+                                          const itTotal = Number(it.thanhTien || it.total) || (itQty * itPrice);
+                                          let parsedNote: any = {};
+                                          if (it.ghiChu && typeof it.ghiChu === 'string' && it.ghiChu.trim().startsWith('{')) {
+                                            try {
+                                              parsedNote = JSON.parse(it.ghiChu);
+                                            } catch {}
+                                          }
+                                          const itCode = it.inventoryCode || it.productCode || parsedNote.code || '';
+
+                                          return (
+                                            <tr
+                                              key={itIdx}
+                                              style={{
+                                                borderBottom: itIdx < itemsList.length - 1 ? '1px dashed #e2e8f0' : 'none',
+                                                backgroundColor: itIdx % 2 === 1 ? '#fbfcfe' : '#ffffff',
+                                              }}
+                                            >
+                                              <td style={{ padding: '5px 8px', textAlign: 'center', color: '#64748b' }}>
+                                                {itIdx + 1}
+                                              </td>
+                                              <td style={{ padding: '5px 8px', color: '#0f172a', fontWeight: 500 }}>
+                                                <span>{itName}</span>
+                                                {itCode && (
+                                                  <span style={{ color: '#64748b', fontSize: '0.68rem', marginLeft: '6px' }}>
+                                                    (Mã: {itCode})
+                                                  </span>
+                                                )}
+                                              </td>
+                                              <td style={{ padding: '5px 8px', textAlign: 'center', color: '#475569' }}>
+                                                {itUnit}
+                                              </td>
+                                              <td style={{ padding: '5px 8px', textAlign: 'center', fontWeight: 700, color: '#0f172a' }}>
+                                                {itQty}
+                                              </td>
+                                              <td style={{ padding: '5px 10px', textAlign: 'right', color: '#475569' }}>
+                                                {formatCurrency(itPrice)}
+                                              </td>
+                                              <td style={{ padding: '5px 12px', textAlign: 'right', fontWeight: 700, color: '#003087' }}>
+                                                {formatCurrency(itTotal)}
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                      <tfoot>
+                                        <tr style={{ backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0', fontWeight: 700 }}>
+                                          <td colSpan={3} style={{ padding: '5px 8px', textAlign: 'right', color: '#475569', fontSize: '0.7rem' }}>
+                                            Cộng tiền hàng:
+                                          </td>
+                                          <td style={{ padding: '5px 8px', textAlign: 'center', color: '#0f172a', fontSize: '0.72rem' }}>
+                                            {itemsList.reduce((acc: number, item: any) => acc + (Number(item.soLuong || item.quantity) || 1), 0)}
+                                          </td>
+                                          <td style={{ padding: '5px 10px' }} />
+                                          <td style={{ padding: '5px 12px', textAlign: 'right', color: '#003087', fontSize: '0.75rem' }}>
+                                            {formatCurrency(
+                                              itemsList.reduce((acc: number, item: any) => acc + (Number(item.thanhTien || item.total) || ((Number(item.soLuong || item.quantity) || 1) * (Number(item.donGia || item.price) || 0))), 0)
+                                            )} đ
+                                          </td>
+                                        </tr>
+                                      </tfoot>
+                                    </table>
                                   </div>
-                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.68rem' }}>
-                                    <thead>
-                                      <tr style={{ color: '#64748b', borderBottom: '1px solid #cbd5e1', textAlign: 'left' }}>
-                                        <th style={{ padding: '2px 4px', fontWeight: 600 }}>Tên hàng / Quy cách</th>
-                                        <th style={{ padding: '2px 4px', width: '55px', textAlign: 'center', fontWeight: 600 }}>SL</th>
-                                        <th style={{ padding: '2px 4px', width: '85px', textAlign: 'right', fontWeight: 600 }}>Đơn giá</th>
-                                        <th style={{ padding: '2px 4px', width: '95px', textAlign: 'right', fontWeight: 600 }}>Thành tiền</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {itemsList.map((it: any, itIdx: number) => {
-                                        const itName = it.tenHang || it.productName || 'Sản phẩm';
-                                        const itQty = Number(it.soLuong || it.quantity) || 1;
-                                        const itUnit = it.donViTinh || it.donVi || 'Bộ';
-                                        const itPrice = Number(it.donGia || it.price) || 0;
-                                        const itTotal = Number(it.thanhTien || it.total) || (itQty * itPrice);
-                                        return (
-                                          <tr key={itIdx} style={{ borderBottom: itIdx < itemsList.length - 1 ? '1px dashed #e2e8f0' : 'none' }}>
-                                            <td style={{ padding: '3px 4px', color: '#1e293b' }}>{itName}</td>
-                                            <td style={{ padding: '3px 4px', textAlign: 'center', color: '#0f172a', fontWeight: 600 }}>
-                                              {itQty} {itUnit}
-                                            </td>
-                                            <td style={{ padding: '3px 4px', textAlign: 'right', color: '#64748b' }}>
-                                              {formatCurrency(itPrice)}
-                                            </td>
-                                            <td style={{ padding: '3px 4px', textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
-                                              {formatCurrency(itTotal)}
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )}
-                            </td>
-                            <td
-                              style={{
-                                border: 'none',
-                                padding: '7px 6px',
-                                textAlign: 'right',
-                                fontWeight: tx.increase > 0 ? 600 : 400,
-                                color: tx.increase > 0 ? '#0f172a' : '#94a3b8',
-                                verticalAlign: 'top',
-                              }}
-                            >
-                              {tx.increase > 0 ? formatCurrency(tx.increase) : '-'}
-                            </td>
-                            <td
-                              style={{
-                                border: 'none',
-                                padding: '7px 6px',
-                                textAlign: 'right',
-                                fontWeight: tx.decrease > 0 ? 600 : 400,
-                                color: tx.decrease > 0 ? '#16a34a' : '#94a3b8',
-                                verticalAlign: 'top',
-                              }}
-                            >
-                              {tx.decrease > 0 ? formatCurrency(tx.decrease) : '-'}
-                            </td>
-                            <td
-                              style={{
-                                border: 'none',
-                                padding: '7px 6px',
-                                textAlign: 'right',
-                                fontWeight: 700,
-                                color: tx.balance > 0 ? '#b91c1c' : '#0f172a',
-                              }}
-                            >
-                              {formatCurrency(tx.balance)}
-                            </td>
-                          </tr>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
                         );
                       })}
                   </tbody>
