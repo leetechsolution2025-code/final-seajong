@@ -4874,8 +4874,8 @@ app.get('/api/sales/dashboard', async (req, res) => {
           finalSales >= 200000000
             ? 'Xuất sắc'
             : finalSales >= 100000000
-            ? 'Tiêu biểu'
-            : 'Đạt chuẩn';
+              ? 'Tiêu biểu'
+              : 'Đạt chuẩn';
         return {
           id: d.id,
           name: d.name,
@@ -9223,9 +9223,43 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
     }).filter(Boolean);
 
     const qcInspections = qcCodes.length > 0 ? await prisma.qualityInspection.findMany({
-      where: { code: { in: qcCodes } },
-      select: { code: true, metadata: true }
+      where: {
+        OR: [
+          { code: { in: qcCodes } },
+          ...qcCodes.map(code => ({ metadata: { contains: code } }))
+        ]
+      },
+      select: { code: true, status: true, result: true, metadata: true }
     }) : [];
+
+    // Bộ lọc kiểm soát: Nếu phiếu QC liên quan chưa hoàn thành hoặc chưa có kết luận,
+    // TUYỆT ĐỐI KHÔNG hiển thị lệnh nhập kho cho bộ phận kho vận
+    const pendingQcIdentifiers = new Set();
+    qcInspections.forEach(qc => {
+      const isCompleted = qc.status === 'Đã hoàn thành' && Boolean(qc.result);
+      if (!isCompleted) {
+        pendingQcIdentifiers.add(qc.code);
+        try {
+          const meta = typeof qc.metadata === 'string' ? JSON.parse(qc.metadata) : qc.metadata;
+          if (meta?.defectCode) pendingQcIdentifiers.add(meta.defectCode);
+          if (meta?.defectId) pendingQcIdentifiers.add(meta.defectId);
+          if (meta?.productionOrder) pendingQcIdentifiers.add(meta.productionOrder);
+        } catch (_) {}
+      }
+    });
+
+    const filteredInboundTasks = inboundTasks.filter(t => {
+      const match = t.title.match(/\(([^)]+)\)/);
+      const code = match ? match[1] : null;
+      if (code && pendingQcIdentifiers.has(code)) return false;
+      for (const pId of pendingQcIdentifiers) {
+        if (t.title.includes(pId) || t.description?.includes(pId) || t.actualResult?.includes(pId)) {
+          return false;
+        }
+      }
+      return true;
+    });
+
     const qcProdOrderMap = new Map();
     const qcPoMap = new Map();
 
@@ -9243,7 +9277,7 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
       }
     });
 
-    inboundTasks.forEach(t => {
+    filteredInboundTasks.forEach(t => {
       try {
         if (t.actualResult) {
           const parsed = JSON.parse(t.actualResult);
@@ -9408,7 +9442,7 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
             items: parsedItems,
           };
         }),
-      ...inboundTasks.map(t => {
+      ...filteredInboundTasks.map(t => {
         let parsedItems = [];
         try {
           if (t.actualResult) parsedItems = JSON.parse(t.actualResult);
@@ -13287,12 +13321,12 @@ app.post('/api/production/defects', async (req, res) => {
       Array.isArray(body.items) && body.items.length > 0
         ? body.items
         : [
-            {
-              productName: body.productName || 'Sản phẩm',
-              productCode: body.productCode || 'SP-001',
-              quantity: parseInt(body.quantity, 10) || 1,
-            },
-          ];
+          {
+            productName: body.productName || 'Sản phẩm',
+            productCode: body.productCode || 'SP-001',
+            quantity: parseInt(body.quantity, 10) || 1,
+          },
+        ];
 
     const createdDefects = [];
     for (let i = 0; i < itemsPayload.length; i++) {
@@ -17314,11 +17348,11 @@ app.get('/api/logistics/reports/xnt', async (req, res) => {
       const relevantStocks =
         warehouseId && warehouseId !== 'all'
           ? (it.stocks || []).filter(
-              (s) =>
-                s.warehouseId === warehouseId ||
-                s.warehouse?.id === warehouseId ||
-                s.warehouse?.code === warehouseId
-            )
+            (s) =>
+              s.warehouseId === warehouseId ||
+              s.warehouse?.id === warehouseId ||
+              s.warehouse?.code === warehouseId
+          )
           : it.stocks || [];
 
       const stockSum = relevantStocks.reduce((sum, s) => sum + (Number(s.soLuong) || 0), 0);
@@ -17520,16 +17554,16 @@ app.get('/api/logistics/reports/the-kho', async (req, res) => {
       inventoryItemId: currentItem.id,
       ...(warehouseId && warehouseId !== 'all'
         ? {
-            OR: [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }],
-          }
+          OR: [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }],
+        }
         : {}),
       ...(fromDate || toDate
         ? {
-            createdAt: {
-              ...(fromDate ? { gte: new Date(`${fromDate}T00:00:00.000Z`) } : {}),
-              ...(toDate ? { lte: new Date(`${toDate}T23:59:59.999Z`) } : {}),
-            },
-          }
+          createdAt: {
+            ...(fromDate ? { gte: new Date(`${fromDate}T00:00:00.000Z`) } : {}),
+            ...(toDate ? { lte: new Date(`${toDate}T23:59:59.999Z`) } : {}),
+          },
+        }
         : {}),
     };
 
@@ -18711,8 +18745,8 @@ async function executeLogisticsRetentionCleanup({
   const typeFilter = type === 'BATCH_PACKING'
     ? { in: ['BATCH_PACKING'] }
     : type === 'MATERIAL_PICKING'
-    ? { in: ['MATERIAL_PICKING', 'WARRANTY_MATERIAL'] }
-    : { in: ['BATCH_PACKING', 'MATERIAL_PICKING', 'WARRANTY_MATERIAL'] };
+      ? { in: ['MATERIAL_PICKING', 'WARRANTY_MATERIAL'] }
+      : { in: ['BATCH_PACKING', 'MATERIAL_PICKING', 'WARRANTY_MATERIAL'] };
 
   const ticketsToDelete = await prisma.logisticsTicket.findMany({
     where: {
@@ -18828,8 +18862,8 @@ app.get('/api/logistics/completed-cleanup-settings', async (req, res) => {
     const typeFilter = type === 'BATCH_PACKING'
       ? { in: ['BATCH_PACKING'] }
       : type === 'MATERIAL_PICKING'
-      ? { in: ['MATERIAL_PICKING', 'WARRANTY_MATERIAL'] }
-      : { in: ['BATCH_PACKING', 'MATERIAL_PICKING', 'WARRANTY_MATERIAL'] };
+        ? { in: ['MATERIAL_PICKING', 'WARRANTY_MATERIAL'] }
+        : { in: ['BATCH_PACKING', 'MATERIAL_PICKING', 'WARRANTY_MATERIAL'] };
 
     const statusList = [];
     if (applyInProgress) statusList.push('PENDING', 'PICKING', 'PACKED');
@@ -19279,17 +19313,17 @@ app.post('/api/plan-finance/stock-movements/batch-xuat', async (req, res) => {
             where: { id: targetTicketId },
             data: { status: 'COMPLETED', completedAt: new Date() }
           });
-        } catch (_) {}
+        } catch (_) { }
       } else if (salesOrderId || workOrderId) {
         try {
           const soCondition = salesOrderId
             ? { saleOrderId: salesOrderId }
             : {
-                OR: [
-                  { saleOrder: { code: workOrderId.replace('LSX', 'DBH') } },
-                  { saleOrderId: workOrderId }
-                ]
-              };
+              OR: [
+                { saleOrder: { code: workOrderId.replace('LSX', 'DBH') } },
+                { saleOrderId: workOrderId }
+              ]
+            };
           await tx.logisticsTicket.updateMany({
             where: {
               ...soCondition,
@@ -19297,7 +19331,7 @@ app.post('/api/plan-finance/stock-movements/batch-xuat', async (req, res) => {
             },
             data: { status: 'COMPLETED', completedAt: new Date() }
           });
-        } catch (_) {}
+        } catch (_) { }
       }
 
       if (salesOrderId) {
@@ -19312,7 +19346,7 @@ app.post('/api/plan-finance/stock-movements/batch-xuat', async (req, res) => {
               data: { trangThaiKho: 'exported' }
             });
           }
-        } catch (_) {}
+        } catch (_) { }
       }
     });
 
@@ -21948,11 +21982,11 @@ app.patch('/api/qa/inspections/:id', async (req, res) => {
 
       const totalSampleQty = Number(
         newMeta.quantity ||
-          newMeta.totalQuantity ||
-          newMeta.sampleQuantity ||
-          inspection.sampleQuantity ||
-          inspection.lotQuantity ||
-          1
+        newMeta.totalQuantity ||
+        newMeta.sampleQuantity ||
+        inspection.sampleQuantity ||
+        inspection.lotQuantity ||
+        1
       );
       let pQty = passedQuantity !== undefined && passedQuantity !== null ? Number(passedQuantity) : NaN;
       let fQty = failedQuantity !== undefined && failedQuantity !== null ? Number(failedQuantity) : NaN;
@@ -22050,16 +22084,15 @@ app.patch('/api/qa/inspections/:id', async (req, res) => {
           pQty > 0 && fQty > 0
             ? 'QC KẾT LUẬN: ĐẠT MỘT PHẦN (CHUYỂN KHO)'
             : pQty > 0
-            ? 'QC KẾT LUẬN: ĐẠT (CHUYỂN KHO THÀNH PHẨM)'
-            : 'QC KẾT LUẬN: KHÔNG ĐẠT (CHUYỂN KHO HÀNG LỖI)';
+              ? 'QC KẾT LUẬN: ĐẠT (CHUYỂN KHO THÀNH PHẨM)'
+              : 'QC KẾT LUẬN: KHÔNG ĐẠT (CHUYỂN KHO HÀNG LỖI)';
 
-        const descText = `QC kết luận: Đạt ${pQty}, Lỗi ${fQty}. Đã tạo ${
-          pQty > 0 && fQty > 0
+        const descText = `QC kết luận: Đạt ${pQty}, Lỗi ${fQty}. Đã tạo ${pQty > 0 && fQty > 0
             ? '2 lệnh nhập kho (Kho Thành Phẩm KTP & Kho Hàng Lỗi KHO-LOI)'
             : pQty > 0
-            ? 'lệnh nhập Kho Thành Phẩm (KTP)'
-            : 'lệnh nhập Kho Hàng Lỗi (KHO-LOI)'
-        } chuyển bộ phận Kho.`;
+              ? 'lệnh nhập Kho Thành Phẩm (KTP)'
+              : 'lệnh nhập Kho Hàng Lỗi (KHO-LOI)'
+          } chuyển bộ phận Kho.`;
 
         await tx.defectRecord.update({
           where: { id: oldMeta.defectId },
