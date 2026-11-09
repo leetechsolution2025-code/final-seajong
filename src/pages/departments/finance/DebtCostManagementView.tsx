@@ -1614,7 +1614,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     return null;
   }, [selectedReceivableForReconcile, selectedPayableForReconcile, customerPaymentHistories]);
 
-  // Offcanvas chi tiết khoản nợ danh mục con rộng 480px kèm 2 slide (Thông tin khoản nợ & Danh sách hàng hoá)
+  // Offcanvas chi tiết khoản nợ danh mục con rộng 400px kèm 2 slide (Thông tin khoản nợ & Danh sách hàng hoá)
   const [subEntryDetailOpen, setSubEntryDetailOpen] = useState(false);
   const [selectedSubEntry, setSelectedSubEntry] = useState<{
     entry: any;
@@ -6548,7 +6548,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
         />
       )}
 
-      {/* ── OFFCANVAS CHI TIẾT KHOẢN NỢ DANH MỤC CON RỘNG 480PX (2 SLIDE: THÔNG TIN & HÀNG HOÁ) ── */}
+      {/* ── OFFCANVAS CHI TIẾT KHOẢN NỢ DANH MỤC CON RỘNG 400PX (2 SLIDE: THÔNG TIN & HÀNG HOÁ) ── */}
       <Offcanvas
         isOpen={subEntryDetailOpen}
         onClose={() => {
@@ -6557,7 +6557,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
         }}
         title="Chi tiết khoản nợ"
         description={selectedSubEntry ? `Phiếu phát sinh mã ${selectedSubEntry.entry.code}` : 'Thông tin chi tiết khoản nợ'}
-        width="480px"
+        width="400px"
         position="right"
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', width: '100%' }}>
@@ -6622,8 +6622,8 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                   onClick={() => setSubEntryActiveTab('info')}
                   style={{
                     flex: 1,
-                    padding: '8px 10px',
-                    fontSize: '0.8125rem',
+                    padding: '6px 8px',
+                    fontSize: '0.7813rem',
                     fontWeight: subEntryActiveTab === 'info' ? 700 : 500,
                     color: subEntryActiveTab === 'info' ? '#0f172a' : '#64748b',
                     backgroundColor: subEntryActiveTab === 'info' ? '#ffffff' : 'transparent',
@@ -6634,11 +6634,11 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '6px',
+                    gap: '5px',
                     transition: 'all 0.15s ease',
                   }}
                 >
-                  <FileText size={14} style={{ color: subEntryActiveTab === 'info' ? '#2563eb' : '#94a3b8' }} />
+                  <FileText size={13} style={{ color: subEntryActiveTab === 'info' ? '#2563eb' : '#94a3b8' }} />
                   <span>Thông tin khoản nợ</span>
                 </button>
                 <button
@@ -6646,8 +6646,8 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                   onClick={() => setSubEntryActiveTab('items')}
                   style={{
                     flex: 1,
-                    padding: '8px 10px',
-                    fontSize: '0.8125rem',
+                    padding: '6px 8px',
+                    fontSize: '0.7813rem',
                     fontWeight: subEntryActiveTab === 'items' ? 700 : 500,
                     color: subEntryActiveTab === 'items' ? '#0f172a' : '#64748b',
                     backgroundColor: subEntryActiveTab === 'items' ? '#ffffff' : 'transparent',
@@ -6658,16 +6658,16 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '6px',
+                    gap: '5px',
                     transition: 'all 0.15s ease',
                   }}
                 >
-                  <BoxSeam size={14} style={{ color: subEntryActiveTab === 'items' ? '#2563eb' : '#94a3b8' }} />
+                  <BoxSeam size={13} style={{ color: subEntryActiveTab === 'items' ? '#2563eb' : '#94a3b8' }} />
                   <span>Danh sách hàng hoá</span>
                   {subEntryItems.length > 0 && (
                     <span
                       style={{
-                        padding: '1px 6px',
+                        padding: '1px 5px',
                         borderRadius: '9999px',
                         fontSize: '0.6875rem',
                         fontWeight: 700,
