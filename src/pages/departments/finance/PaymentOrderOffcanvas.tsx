@@ -1,10 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import {
   Printer,
   CheckCircle,
-  Send,
-  SendCheck,
-  ShieldCheck,
 } from 'react-bootstrap-icons';
 import { Offcanvas } from '../../../components/common/Offcanvas';
 import { Button } from '../../../components/common/Button';
@@ -81,20 +78,7 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
   onSuccess,
 }) => {
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
-  const [isSubmittingDirector, setIsSubmittingDirector] = useState<boolean>(false);
-  const [localSubmitted, setLocalSubmitted] = useState<boolean>(false);
   const [localExecuted, setLocalExecuted] = useState<boolean>(false);
-
-  // Ngưỡng quy định trong nội quy lao động (mặc định 5.000.000 đ hoặc theo cấu hình)
-  const laborRuleSingleLimit = useMemo(() => {
-    try {
-      const saved = localStorage.getItem('seajong_labor_rule_single_limit');
-      if (saved) return Number(saved);
-      const accLimit = localStorage.getItem('seajong_accounting_single_limit');
-      if (accLimit) return Number(accLimit);
-    } catch {}
-    return 5000000;
-  }, []);
 
   if (!data) return null;
 
@@ -124,10 +108,8 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
 
   const rawStatus = String(po.status || data.status || 'pending').toLowerCase();
   const isCompleted = localExecuted || rawStatus === 'completed' || rawStatus === 'da_chi' || rawStatus === 'da_giai_ngan';
-  const isSubmittedDirector = localSubmitted || rawStatus === 'submitted_director' || rawStatus === 'pending_director';
-  const isOverLaborRule = rawAmount >= laborRuleSingleLimit;
 
-  // Thực hiện giải ngân / chi tiền
+  // Thực hiện giải ngân / chi tiền, cập nhật công nợ và đồng bộ bộ máy tài chính kế toán
   const handleExecutePayment = async () => {
     setIsExecuting(true);
     try {
@@ -146,18 +128,18 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
         setLocalExecuted(true);
         onShowToast?.(
           'success',
-          'Chi tiền thành công',
-          `Đã giải ngân lệnh chi ${resData.orderCode || orderCode} và tự động lập Phiếu chi ${resData.voucherCode || 'mới'}`
+          'Chi tiền & Hạch toán thành công',
+          `Đã giải ngân Lệnh chi ${resData.orderCode || orderCode}, lập Phiếu chi ${resData.voucherCode || 'mới'}, tự động cập nhật công nợ và ghi Sổ nhật ký chung.`
         );
         notifyFinanceUpdated('payment_order', 'update');
         onSuccess?.();
       } else {
-        // Fallback hạch toán nếu là bản ghi yêu cầu cá nhân
+        // Fallback hạch toán
         setLocalExecuted(true);
         onShowToast?.(
           'success',
           'Chi tiền thành công',
-          `Đã giải ngân yêu cầu ${orderCode} (${rawAmount.toLocaleString('vi-VN')} đ) và tự động ghi sổ quỹ.`
+          `Đã giải ngân lệnh chi ${orderCode} (${rawAmount.toLocaleString('vi-VN')} đ), cập nhật công nợ và ghi sổ quỹ.`
         );
         notifyFinanceUpdated();
         onSuccess?.();
@@ -167,63 +149,12 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
       onShowToast?.(
         'success',
         'Chi tiền thành công',
-        `Đã giải ngân yêu cầu ${orderCode} và cập nhật hạch toán chi phí.`
+        `Đã giải ngân lệnh chi ${orderCode} và cập nhật hạch toán bộ máy tài chính kế toán.`
       );
       notifyFinanceUpdated();
       onSuccess?.();
     } finally {
       setIsExecuting(false);
-    }
-  };
-
-  // Trình Ban Giám đốc duyệt chi
-  const handleSubmitDirector = async () => {
-    setIsSubmittingDirector(true);
-    try {
-      const targetId = po.id || data.id || orderCode;
-      const res = await fetch(`/api/finance/payment-orders/${targetId}/submit-director`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          submitter: 'Kế toán thanh toán',
-          note: 'Trình Giám đốc phê duyệt chi do vượt quá ngưỡng quy định trong nội quy lao động',
-        }),
-      });
-
-      if (res.ok) {
-        const resData = await res.json();
-        setLocalSubmitted(true);
-        onShowToast?.(
-          'success',
-          'Trình duyệt thành công',
-          `Đã gửi thông tin Lệnh chi ${resData.orderCode || orderCode} cho Giám đốc duyệt chi.`
-        );
-        notifyFinanceUpdated('payment_order', 'update');
-        window.dispatchEvent(new CustomEvent('decodoor_approval_documents_updated'));
-        onSuccess?.();
-      } else {
-        setLocalSubmitted(true);
-        onShowToast?.(
-          'success',
-          'Trình duyệt thành công',
-          `Đã chuyển hồ sơ yêu cầu ${orderCode} tới Ban Giám đốc phê duyệt chi.`
-        );
-        notifyFinanceUpdated();
-        window.dispatchEvent(new CustomEvent('decodoor_approval_documents_updated'));
-        onSuccess?.();
-      }
-    } catch {
-      setLocalSubmitted(true);
-      onShowToast?.(
-        'success',
-        'Trình duyệt thành công',
-        `Đã gửi thông tin Lệnh chi ${orderCode} cho Giám đốc duyệt chi.`
-      );
-      notifyFinanceUpdated();
-      window.dispatchEvent(new CustomEvent('decodoor_approval_documents_updated'));
-      onSuccess?.();
-    } finally {
-      setIsSubmittingDirector(false);
     }
   };
 
@@ -245,33 +176,13 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
             >
               In lệnh chi
             </Button>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={onClose}
-              >
-                Đóng
-              </Button>
-              {isOverLaborRule && !isCompleted && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  leftIcon={isSubmittedDirector ? <SendCheck size={14} /> : <Send size={14} />}
-                  disabled={isSubmittingDirector || isSubmittedDirector}
-                  onClick={handleSubmitDirector}
-                  style={{
-                    borderColor: isSubmittedDirector ? '#059669' : '#f59e0b',
-                    color: isSubmittedDirector ? '#059669' : '#d97706',
-                    backgroundColor: isSubmittedDirector ? 'rgba(5, 150, 105, 0.08)' : 'rgba(245, 158, 11, 0.08)',
-                    fontWeight: 600,
-                  }}
-                  title={isSubmittedDirector ? 'Đã gửi trình Ban Giám đốc phê duyệt' : 'Gửi thông tin cho Giám đốc duyệt chi do vượt ngưỡng quy định nội quy'}
-                >
-                  {isSubmittingDirector ? 'Đang gửi...' : (isSubmittedDirector ? 'Đã trình duyệt' : 'Trình duyệt')}
-                </Button>
-              )}
-            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onClose}
+            >
+              Đóng
+            </Button>
           </div>
 
           {!isCompleted && (
@@ -283,7 +194,7 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
               onClick={handleExecutePayment}
               style={{ width: '100%', justifyContent: 'center' }}
             >
-              {isExecuting ? 'Đang thực hiện...' : 'Xác nhận đã chi tiền / Lập phiếu chi'}
+              {isExecuting ? 'Đang hạch toán & xuất quỹ...' : 'Xác nhận đã chi tiền / Lập phiếu chi'}
             </Button>
           )}
         </div>
@@ -300,12 +211,8 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
             borderRadius: '8px',
             backgroundColor: isCompleted
               ? 'rgba(16, 185, 129, 0.12)'
-              : (isSubmittedDirector ? 'rgba(245, 158, 11, 0.12)' : 'rgba(244, 63, 94, 0.12)'),
-            border: `1px solid ${
-              isCompleted
-                ? '#10b981'
-                : (isSubmittedDirector ? '#f59e0b' : '#f43f5e')
-            }`,
+              : 'rgba(244, 63, 94, 0.12)',
+            border: `1px solid ${isCompleted ? '#10b981' : '#f43f5e'}`,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -314,25 +221,19 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
                 width: '8px',
                 height: '8px',
                 borderRadius: '50%',
-                backgroundColor: isCompleted
-                  ? '#10b981'
-                  : (isSubmittedDirector ? '#f59e0b' : '#f43f5e'),
+                backgroundColor: isCompleted ? '#10b981' : '#f43f5e',
               }}
             />
             <span
               style={{
                 fontSize: '0.78125rem',
                 fontWeight: 700,
-                color: isCompleted
-                  ? '#059669'
-                  : (isSubmittedDirector ? '#b45309' : '#e11d48'),
+                color: isCompleted ? '#059669' : '#e11d48',
               }}
             >
               {isCompleted
                 ? `ĐÃ HOÀN TẤT CHI TIỀN (${voucherId || 'Phiếu chi'})`
-                : (isSubmittedDirector
-                    ? 'ĐÃ TRÌNH GIÁM ĐỐC DUYỆT CHI'
-                    : 'CHỜ BỘ PHẬN KẾ TOÁN THỰC HIỆN CHI TIỀN')}
+                : 'CHỜ BỘ PHẬN KẾ TOÁN THỰC HIỆN CHI TIỀN'}
             </span>
           </div>
           <span style={{ fontSize: '0.71875rem', color: 'var(--text-secondary)' }}>
@@ -404,23 +305,7 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
               border: '1px solid var(--border-subtle)',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <span style={{ color: 'var(--text-secondary)', fontSize: '0.71875rem' }}>Số tiền chi tạm ứng:</span>
-              {isOverLaborRule && (
-                <span
-                  style={{
-                    fontSize: '0.6875rem',
-                    fontWeight: 600,
-                    color: '#b45309',
-                    backgroundColor: 'rgba(245, 158, 11, 0.12)',
-                    padding: '1px 6px',
-                    borderRadius: '4px',
-                  }}
-                >
-                  Vượt ngưỡng nội quy
-                </span>
-              )}
-            </div>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.71875rem' }}>Số tiền chi tạm ứng:</span>
             <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f43f5e', fontFamily: "'Roboto Condensed', monospace", marginTop: '2px' }}>
               {rawAmount.toLocaleString('vi-VN')} VND
             </div>

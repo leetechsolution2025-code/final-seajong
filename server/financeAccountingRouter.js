@@ -2615,9 +2615,27 @@ router.patch('/api/finance/payment-orders/:id/execute', (req, res) => {
           );
         }
 
+        // 5. Tự động cập nhật giảm công nợ phải trả nhà cung cấp (debt_payables) nếu là thanh toán mua hàng/nhà cung cấp
+        if (order.ref_code || order.beneficiary_name) {
+          db.run(
+            `UPDATE debt_payables
+             SET paid_amount = paid_amount + ?,
+                 remaining_amount = MAX(0, total_amount - (paid_amount + ?)),
+                 status = CASE WHEN (total_amount - (paid_amount + ?)) <= 0 THEN 'completed' ELSE 'partial' END,
+                 status_label = CASE WHEN (total_amount - (paid_amount + ?)) <= 0 THEN 'Đã thanh toán' ELSE 'Thanh toán 1 phần' END,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE po_code = ? OR code = ? OR supplier_name = ?`,
+            [order.amount, order.amount, order.amount, order.amount, order.ref_code || '', order.ref_code || '', order.beneficiary_name || ''],
+            () => {}
+          );
+        }
+
+        // 6. Tự động hạch toán ghi Sổ nhật ký chung của bộ máy tài chính kế toán
+        syncAllSubledgersToJournal(db).catch(() => {});
+
         res.json({
           success: true,
-          message: 'Đã thực hiện chi tiền và tự động lập Phiếu chi kế toán thành công',
+          message: 'Đã thực hiện chi tiền, cập nhật công nợ và tự động ghi sổ tài chính kế toán thành công',
           voucherCode,
           orderCode: order.order_code
         });
