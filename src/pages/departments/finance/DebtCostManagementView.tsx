@@ -1109,7 +1109,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
         if (Array.isArray(data) && data.length > 0) {
           const cleanPayables = data.filter((item: any) =>
             !String(item.id || '').startsWith('REC-') &&
-            !String(item.code || '').startsWith('CNPT-') &&
+            !(item.code && String(item.code).startsWith('CNPT-') && !String(item.code).startsWith('CNPT-NCC')) &&
             !(item.customerName && !item.supplierName)
           );
           setPayables(cleanPayables);
@@ -1722,7 +1722,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
       // Hard filter: Chỉ chứa Khách hàng / Đại lý, tuyệt đối không lẫn NCC / Vận chuyển
       if (
         (item.id && String(item.id).startsWith('PAY-')) ||
-        (item.code && (String(item.code).startsWith('CNTR-') || String(item.code).startsWith('CNVC-'))) ||
+        (item.code && (String(item.code).startsWith('CNTR-') || String(item.code).startsWith('CNVC-') || String(item.code).startsWith('CNPT-NCC-'))) ||
         ((item as any).supplierName && !item.customerName)
       ) {
         return false;
@@ -1770,7 +1770,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
       // Hard filter: Chỉ chứa Nhà cung cấp & ĐV Vận chuyển, tuyệt đối không lẫn Khách hàng
       if (
         (item.id && String(item.id).startsWith('REC-')) ||
-        (item.code && String(item.code).startsWith('CNPT-')) ||
+        (item.code && String(item.code).startsWith('CNPT-') && !String(item.code).startsWith('CNPT-NCC')) ||
         ((item as any).customerName && !item.supplierName)
       ) {
         return false;
