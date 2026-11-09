@@ -42,7 +42,7 @@ export interface DeleteButtonProps {
 }
 
 /**
- * Component DeleteButton dùng chung cho toàn bộ dự án decodoor / seajong.
+ * Component DeleteButton dùng chung cho toàn bộ dự án Seajong.
  * Tích hợp sẵn hộp thoại xác nhận ConfirmDialog đẹp mắt, hiện đại thay thế cho window.confirm.
  */
 export const DeleteButton: React.FC<DeleteButtonProps> = ({

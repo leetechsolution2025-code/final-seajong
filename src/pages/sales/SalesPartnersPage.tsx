@@ -2468,6 +2468,7 @@ export const SalesPartnersPage: React.FC = () => {
               ? { ...prev, ...updatedFields }
               : prev
           );
+          window.dispatchEvent(new Event('seajong_contracts_updated'));
           window.dispatchEvent(new Event('decodoor_contracts_updated'));
           setShowDetailDrawer(true);
         }}
@@ -2493,6 +2494,7 @@ export const SalesPartnersPage: React.FC = () => {
               ? { ...prev, ...updatedFields }
               : prev
           );
+          window.dispatchEvent(new Event('seajong_contracts_updated'));
           window.dispatchEvent(new Event('decodoor_contracts_updated'));
           setShowDetailDrawer(true);
         }}

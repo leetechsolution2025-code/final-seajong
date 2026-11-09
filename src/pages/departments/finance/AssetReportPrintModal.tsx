@@ -57,7 +57,7 @@ export const AssetReportPrintModal: React.FC<AssetReportPrintModalProps> = ({
   const [fixedAssets, setFixedAssets] = useState<AssetItem[]>(() => {
     if (initialFixedAssets && initialFixedAssets.length > 0) return initialFixedAssets;
     try {
-      const cached = localStorage.getItem('decodoor_finance_assets');
+      const cached = localStorage.getItem('seajong_finance_assets') || localStorage.getItem('decodoor_finance_assets');
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -321,7 +321,7 @@ export const AssetReportPrintModal: React.FC<AssetReportPrintModalProps> = ({
                     whiteSpace: 'normal',
                   }}
                 >
-                  ĐT: {company.phone || '0346548982'} | Email: {company.email || 'contact@decodoor.vn'}
+                  ĐT: {company.phone || '0931339343'} | Email: {company.email || 'contact@seajong.com'}
                 </div>
               </div>
             </div>

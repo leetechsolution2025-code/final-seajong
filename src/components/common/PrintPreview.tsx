@@ -995,7 +995,7 @@ export const PrintPreview: React.FC<PrintPreviewProps> = ({
                       {company.address || 'Cụm 4, Xã Sơn Đồng, Huyện Hoài Đức, TP. Hà Nội, Việt Nam'}
                     </div>
                     <div style={{ fontSize: '0.75rem', color: '#000000', marginTop: '2px' }}>
-                      Email: {company.email || 'contact@decodoor.vn'} • Website: {company.website || 'decodoor.vn'}{company.phone ? ` • Hotline: ${company.phone}` : ''}
+                      Email: {company.email || 'contact@seajong.com'} • Website: {company.website || 'seajong.com'}{company.phone ? ` • Hotline: ${company.phone}` : ''}
                     </div>
                     <div style={{ width: '60px', height: '2px', background: '#0f172a', margin: '14px auto 0' }} />
 
@@ -1190,7 +1190,7 @@ export const PrintPreview: React.FC<PrintPreviewProps> = ({
               {/* Watermark bảo mật nếu được bật */}
               {showWatermark && (
                 <div className="print-paper-watermark">
-                  BẢN GỐC NỘI BỘ • decodoor ENTERPRISE • CHÍNH THỨC
+                  BẢN GỐC NỘI BỘ • SEAJONG ENTERPRISE • CHÍNH THỨC
                 </div>
               )}
               {typeof children === 'function' ? (
@@ -1215,8 +1215,8 @@ export const PrintPreview: React.FC<PrintPreviewProps> = ({
                   {/* 1. Quốc hiệu tiêu ngữ và Thông tin doanh nghiệp */}
                   <div className="print-doc-header">
                     <div className="print-doc-header-left">
-                      <div className="print-company-name">TẬP ĐOÀN CÔNG NGHỆ decodoor</div>
-                      <div className="print-company-branch">HỆ ĐIỀU HÀNH DOANH NGHIỆP decodoor ERP</div>
+                      <div className="print-company-name">CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM</div>
+                      <div className="print-company-branch">HỆ ĐIỀU HÀNH DOANH NGHIỆP SEAJONG ERP</div>
                       <div className="print-company-sub">Số: {code}</div>
                     </div>
 
@@ -1231,27 +1231,27 @@ export const PrintPreview: React.FC<PrintPreviewProps> = ({
                   <div className="print-doc-title-box">
                     <h1 className="print-doc-title">{title}</h1>
                     <div className="print-doc-subtitle">
-                      (V/v Bàn giao và nghiệm thu cơ sở vật chất hạ tầng CNTT quý 3/2026)
+                      (V/v Bàn giao và nghiệm thu cơ sở vật chất hạ tầng thiết bị quý 3/2026)
                     </div>
                   </div>
 
                   {/* 3. Căn cứ và Thông tin các bên tham gia */}
                   <div className="print-doc-body">
                     <div className="print-doc-legal">
-                      <p><em>- Căn cứ Hợp đồng số 108/2026/HĐ-DCD ký ngày 15/01/2026 giữa Ban điều hành và Khối công nghệ;</em></p>
-                      <p><em>- Căn cứ Kế hoạch nâng cấp hạ tầng số và chuyển đổi đám mây decodoor Cloud Private 2026-2027;</em></p>
+                      <p><em>- Căn cứ Hợp đồng số 108/2026/HĐ-SJ ký ngày 15/01/2026 giữa Ban điều hành và Khối công nghệ;</em></p>
+                      <p><em>- Căn cứ Kế hoạch nâng cấp hạ tầng số và chuyển đổi đám mây Seajong Cloud Private 2026-2027;</em></p>
                       <p><em>- Căn cứ Biên bản kiểm thử an ninh bảo mật và tiêu chuẩn SLA hệ thống ngày 28/09/2026;</em></p>
                     </div>
 
                     <p style={{ marginTop: '12px', fontWeight: 600 }}>
-                      Hôm nay, ngày {docDate}, tại Trụ sở chính Tập đoàn decodoor, chúng tôi gồm có:
+                      Hôm nay, ngày {docDate}, tại Trụ sở chính Công ty Cổ phần Seajong Việt Nam, chúng tôi gồm có:
                     </p>
 
                     <div className="print-doc-parties">
                       <div className="party-block">
-                        <div className="party-title">ĐẠI DIỆN BÊN GIAO (BÊN A): BAN ĐIỀU HÀNH VÀ MUA SẮM TẬP ĐOÀN</div>
+                        <div className="party-title">ĐẠI DIỆN BÊN GIAO (BÊN A): BAN ĐIỀU HÀNH VÀ MUA SẮM CÔNG TY</div>
                         <div className="party-row"><span>Ông/Bà:</span> <strong>{partyA}</strong> - Chức vụ: <strong>Tổng giám đốc (CEO)</strong></div>
-                        <div className="party-row"><span>Phòng ban:</span> Ban điều hành doanh nghiệp decodoor</div>
+                        <div className="party-row"><span>Phòng ban:</span> Ban điều hành doanh nghiệp Seajong</div>
                       </div>
 
                       <div className="party-block">
@@ -1317,7 +1317,7 @@ export const PrintPreview: React.FC<PrintPreviewProps> = ({
                             <div className="seal-container">
                               <div className="seal-circle">
                                 <div className="seal-star">★ ★ ★</div>
-                                <div className="seal-org">CÔNG TY CP TẬP ĐOÀN decodoor</div>
+                                <div className="seal-org">CÔNG TY CP SEAJONG VIỆT NAM</div>
                                 <div className="seal-center">ĐÃ DUYỆT</div>
                                 <div className="seal-sub">TP. HÀ NỘI</div>
                               </div>

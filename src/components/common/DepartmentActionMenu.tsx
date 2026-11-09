@@ -33,7 +33,7 @@ export interface DepartmentActionMenuProps {
 
 /**
  * Component Dropdown Menu 3 chấm dùng chung cho các phân hệ phòng ban
- * Chuẩn thiết kế Enterprise Deco Door: Giao diện bo tròn, bóng đổ mịn, tự động đóng khi click ngoài
+ * Chuẩn thiết kế Enterprise Seajong: Giao diện bo tròn, bóng đổ mịn, tự động đóng khi click ngoài
  */
 export const DepartmentActionMenu: React.FC<DepartmentActionMenuProps> = ({
   items,

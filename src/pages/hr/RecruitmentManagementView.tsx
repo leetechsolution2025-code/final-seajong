@@ -1230,6 +1230,7 @@ export const RecruitmentManagementView: React.FC<RecruitmentManagementViewProps>
             });
           }
 
+          window.dispatchEvent(new CustomEvent('seajong_admin_hr_items_updated'));
           window.dispatchEvent(new CustomEvent('decodoor_admin_hr_items_updated'));
 
           onShowToast?.(

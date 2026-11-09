@@ -78,7 +78,7 @@ export function openAttachmentInNewTab(
 }
 
 /**
- * Xem và in toàn văn Tờ trình pháp lý Deco Door (mẫu trình duyệt văn bản tiêu chuẩn)
+ * Xem và in toàn văn Tờ trình pháp lý Seajong (mẫu trình duyệt văn bản tiêu chuẩn)
  */
 export function openOfficialDocumentSheet(doc: DocumentViewerData, fileNameOverride?: string) {
   const fileName = fileNameOverride || doc.attachmentName || `To_trinh_${doc.code || 'Seajong'}.pdf`;

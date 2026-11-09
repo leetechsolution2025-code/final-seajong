@@ -185,7 +185,7 @@ export const PaymentVoucherPrintModal: React.FC<PaymentVoucherPrintModalProps> =
               {/* Logo của doanh nghiệp */}
               <div style={{ flexShrink: 0 }}>
                 <img
-                  src={company.logo_url || '/decodoor_brand_logo.png'}
+                  src={company.logo_url || '/logo.png'}
                   alt={company.company_name || 'Logo'}
                   style={{
                     height: '52px',

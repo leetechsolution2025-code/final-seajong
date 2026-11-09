@@ -285,7 +285,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     ]);
   };
 
-  // Thêm ảnh từ kho mẫu Deco Door
+  // Thêm ảnh từ kho mẫu Seajong
   const handleAddPresetPhoto = (preset: { url: string; title: string }) => {
     setFormAttachments((prev) => [
       ...prev,
@@ -668,7 +668,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
             />
             <input
               type="text"
-              className="decodoor-input"
+              className="seajong-input"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Tìm kiếm nhật ký, khách hàng, công trình, dự án..."

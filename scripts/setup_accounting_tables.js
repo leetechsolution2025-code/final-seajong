@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const dbPath = path.join(__dirname, '..', 'decodoor.sqlite');
+const dbPath = path.join(__dirname, '..', 'prisma', 'dev.db');
 
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
@@ -202,7 +202,7 @@ const INITIAL_ENTRIES = [
         type: 'CREDIT',
         amount: 15000000,
         description: 'Phiếu chi số 0255 thủ quỹ chi tiền mặt',
-        partner: 'Thủ quỹ Deco Door',
+        partner: 'Thủ quỹ Seajong',
       },
     ],
   },
@@ -228,7 +228,7 @@ const INITIAL_ENTRIES = [
         type: 'DEBIT',
         amount: 88500000,
         description: 'Chi phí phụ kiện lắp đặt vào dây chuyền sản xuất',
-        partner: 'Xưởng sản xuất số 1 - Deco Door',
+        partner: 'Xưởng sản xuất số 1 - Seajong',
       },
       {
         id: 'L12',
@@ -238,7 +238,7 @@ const INITIAL_ENTRIES = [
         type: 'CREDIT',
         amount: 88500000,
         description: 'Xuất kho phụ kiện kho vật tư',
-        partner: 'Kho phụ kiện Deco Door',
+        partner: 'Kho phụ kiện Seajong',
       },
     ],
   },

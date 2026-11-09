@@ -12,7 +12,7 @@ export interface NumberInputProps extends Omit<InputProps, 'value' | 'onChange' 
 }
 
 /**
- * Component NumberInput: Ô nhập liệu số chuẩn hệ thống Deco Door
+ * Component NumberInput: Ô nhập liệu số chuẩn hệ thống Seajong
  * - Không mặc định hiển thị chữ số 0 (hiển thị trống khi 0 hoặc chưa nhập)
  * - Tự động định dạng nhóm phân tách hàng nghìn theo chuẩn Việt Nam (ví dụ 12.000.000)
  * - Chấp nhận cả dấu '.' và dấu ',' khi nhập số thập phân

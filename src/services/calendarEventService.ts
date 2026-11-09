@@ -26,7 +26,7 @@ export interface CalendarEventDTO {
  */
 export function getCurrentSessionUser(): UserProfile {
   try {
-    const raw = localStorage.getItem('seajong_user') || localStorage.getItem('decodoor_session') || sessionStorage.getItem('decodoor_session');
+    const raw = localStorage.getItem('seajong_user') || localStorage.getItem('seajong_session') || localStorage.getItem('decodoor_session') || sessionStorage.getItem('seajong_session') || sessionStorage.getItem('decodoor_session');
     if (raw) {
       const parsed = JSON.parse(raw);
       const u = parsed.user || parsed;
@@ -64,7 +64,7 @@ export function getCurrentSessionUser(): UserProfile {
  */
 export function getUserEventsStorageKey(userEmail: string): string {
   const safeEmail = userEmail.toLowerCase().replace(/[^a-z0-9]/g, '_');
-  return `decodoor_calendar_events_${safeEmail}`;
+  return `seajong_calendar_events_${safeEmail}`;
 }
 
 /**
@@ -106,7 +106,8 @@ export function getLocalCachedEvents(userEmail: string): PlannerItem[] {
     localStorage.removeItem('decodoor_bom_events_planner');
     localStorage.removeItem('seajong_events_planner');
     const key = getUserEventsStorageKey(userEmail);
-    const raw = localStorage.getItem(key);
+    const legacyKey = `decodoor_calendar_events_${userEmail.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+    const raw = localStorage.getItem(key) || localStorage.getItem(legacyKey);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {

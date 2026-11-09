@@ -135,7 +135,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
   // Dữ liệu văn bản từ CSDL thực tế
   const [internalItems, setInternalItems] = useState<ApprovalDocument[]>(() => {
     try {
-      const saved = localStorage.getItem('decodoor_approval_documents');
+      const saved = localStorage.getItem('seajong_approval_documents') || localStorage.getItem('decodoor_approval_documents');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
@@ -149,12 +149,13 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
               d.code !== 'TT-PCCC-04'
           );
           const cleaned = cleanDocumentList(realDocs);
+          localStorage.setItem('seajong_approval_documents', JSON.stringify(cleaned));
           localStorage.setItem('decodoor_approval_documents', JSON.stringify(cleaned));
           return cleaned;
         }
       }
     } catch (e) {
-      console.warn('Failed to parse decodoor_approval_documents', e);
+      console.warn('Failed to parse seajong_approval_documents', e);
     }
     return [];
   });
@@ -162,10 +163,12 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
   const updateItems = (newItems: ApprovalDocument[]) => {
     const cleaned = cleanDocumentList(newItems);
     try {
+      localStorage.setItem('seajong_approval_documents', JSON.stringify(cleaned));
       localStorage.setItem('decodoor_approval_documents', JSON.stringify(cleaned));
+      window.dispatchEvent(new CustomEvent('seajong_approval_documents_updated'));
       window.dispatchEvent(new CustomEvent('decodoor_approval_documents_updated'));
     } catch (e) {
-      console.warn('Failed to save decodoor_approval_documents', e);
+      console.warn('Failed to save seajong_approval_documents', e);
     }
     if (onItemsChange) {
       onItemsChange(cleaned);
@@ -204,6 +207,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
               setInternalItems(cleaned);
             }
             try {
+              localStorage.setItem('seajong_approval_documents', nextJson);
               localStorage.setItem('decodoor_approval_documents', nextJson);
             } catch {}
           }
@@ -224,7 +228,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
   useEffect(() => {
     const handleSync = () => {
       try {
-        const saved = localStorage.getItem('decodoor_approval_documents');
+        const saved = localStorage.getItem('seajong_approval_documents') || localStorage.getItem('decodoor_approval_documents');
         if (saved) {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed)) {
@@ -240,9 +244,11 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
         console.warn('Sync failed', e);
       }
     };
+    window.addEventListener('seajong_approval_documents_updated', handleSync);
     window.addEventListener('decodoor_approval_documents_updated', handleSync);
     window.addEventListener('storage', handleSync);
     return () => {
+      window.removeEventListener('seajong_approval_documents_updated', handleSync);
       window.removeEventListener('decodoor_approval_documents_updated', handleSync);
       window.removeEventListener('storage', handleSync);
     };
@@ -291,8 +297,10 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
       }
     };
 
+    window.addEventListener('seajong:open-document-chat', handleOpenDocumentChat);
     window.addEventListener('decodoor:open-document-chat', handleOpenDocumentChat);
     return () => {
+      window.removeEventListener('seajong:open-document-chat', handleOpenDocumentChat);
       window.removeEventListener('decodoor:open-document-chat', handleOpenDocumentChat);
     };
   }, [items, currentStep, onStepChange]);

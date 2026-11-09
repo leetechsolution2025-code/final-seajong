@@ -58,7 +58,7 @@ export interface AdvancePaymentViewProps {
   user?: any;
 }
 
-// Dữ liệu mẫu thực tế của Deco Door
+// Dữ liệu mẫu thực tế của Seajong
 const INITIAL_ADVANCE_PAYMENTS: AdvancePaymentItem[] = [];
 
 // Định dạng tiền tệ VND

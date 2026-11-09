@@ -104,6 +104,7 @@ export const DebtAgingConfigOffcanvas: React.FC<DebtAgingConfigOffcanvasProps> =
       if (res.ok) {
         onSave(form);
         try {
+          localStorage.setItem('seajong_debt_aging_config', JSON.stringify(form));
           localStorage.setItem('decodoor_debt_aging_config', JSON.stringify(form));
         } catch {}
         if (onShowToast) {
@@ -119,6 +120,7 @@ export const DebtAgingConfigOffcanvas: React.FC<DebtAgingConfigOffcanvasProps> =
       // Fallback lưu local nếu mất mạng
       onSave(form);
       try {
+        localStorage.setItem('seajong_debt_aging_config', JSON.stringify(form));
         localStorage.setItem('decodoor_debt_aging_config', JSON.stringify(form));
       } catch {}
       if (onShowToast) {

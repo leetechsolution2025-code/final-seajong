@@ -1,5 +1,5 @@
 /**
- * EXECUTIVE ANALYTICS ENGINE (Động cơ phân tích điều hành SXKD DecoDoor)
+ * EXECUTIVE ANALYTICS ENGINE (Động cơ phân tích điều hành SXKD Seajong)
  * 
  * NGUYÊN TẮC THIẾT KẾ CỐT LÕI (Zero-Hallucination Architecture):
  * 1. Toán học xác định (Deterministic): Mọi con số (MoM, lũy kế, độ lệch, ASP, tỷ trọng) 

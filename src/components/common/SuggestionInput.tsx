@@ -43,7 +43,7 @@ function removeVietnameseTones(str: string): string {
 
 /**
  * Component SuggestionInput: Ô nhập liệu có danh sách gợi ý và tự động lọc thời gian thực.
- * Chuẩn Design System Deco Door: Hỗ trợ gõ tự do, tìm kiếm nhanh, phân nhóm danh mục.
+ * Chuẩn Design System Seajong: Hỗ trợ gõ tự do, tìm kiếm nhanh, phân nhóm danh mục.
  */
 export const SuggestionInput: React.FC<SuggestionInputProps> = ({
   label,

@@ -65,7 +65,7 @@ export const NewBadge: React.FC<NewBadgeProps> = ({
 
   return (
     <span
-      className={`decodoor-new-badge ${className}`}
+      className={`seajong-new-badge ${className}`}
       style={{
         display: 'inline-flex',
         alignItems: 'center',

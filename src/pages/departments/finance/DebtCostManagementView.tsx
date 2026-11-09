@@ -1025,7 +1025,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
   const [isDebtAgingConfigOpen, setIsDebtAgingConfigOpen] = useState(false);
   const [debtAgingConfig, setDebtAgingConfig] = useState<DebtAgingConfig>(() => {
     try {
-      const cached = localStorage.getItem('decodoor_debt_aging_config');
+      const cached = localStorage.getItem('seajong_debt_aging_config') || localStorage.getItem('decodoor_debt_aging_config');
       if (cached) return JSON.parse(cached);
     } catch {}
     return DEFAULT_DEBT_AGING_CONFIG;
@@ -1038,6 +1038,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
         if (d && typeof d.dueSoonDays === 'number') {
           setDebtAgingConfig(d);
           try {
+            localStorage.setItem('seajong_debt_aging_config', JSON.stringify(d));
             localStorage.setItem('decodoor_debt_aging_config', JSON.stringify(d));
           } catch {}
         }

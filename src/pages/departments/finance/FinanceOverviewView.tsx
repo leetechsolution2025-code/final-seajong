@@ -155,30 +155,30 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
 
   const [cashBalance, setCashBalance] = useState<number>(() => {
     try {
-      const c = localStorage.getItem('decodoor_cached_cash_balance');
+      const c = localStorage.getItem('seajong_cached_cash_balance') || localStorage.getItem('decodoor_cached_cash_balance');
       if (c) return Number(c) || 0;
-    } catch {}
+    } catch { }
     return 0;
   });
   const [receivablesTotal, setReceivablesTotal] = useState<number>(() => {
     try {
-      const c = localStorage.getItem('decodoor_cached_receivables_total');
+      const c = localStorage.getItem('seajong_cached_receivables_total') || localStorage.getItem('decodoor_cached_receivables_total');
       if (c) return Number(c) || 0;
-    } catch {}
+    } catch { }
     return 0;
   });
   const [expensesTotal, setExpensesTotal] = useState<number>(() => {
     try {
-      const c = localStorage.getItem('decodoor_cached_expenses_total');
+      const c = localStorage.getItem('seajong_cached_expenses_total') || localStorage.getItem('decodoor_cached_expenses_total');
       if (c) return Number(c) || 0;
-    } catch {}
+    } catch { }
     return 0;
   });
   const [revenueTotal, setRevenueTotal] = useState<number>(() => {
     try {
-      const c = localStorage.getItem('decodoor_cached_revenue_total');
+      const c = localStorage.getItem('seajong_cached_revenue_total') || localStorage.getItem('decodoor_cached_revenue_total');
       if (c) return Number(c) || 0;
-    } catch {}
+    } catch { }
     return 0;
   });
   const [periodStats, setPeriodStats] = useState<{
@@ -243,11 +243,11 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
               receivablesCollected: Number(d.periodStats.receivablesCollected) || 0,
             });
             try {
-              localStorage.setItem('decodoor_cached_cash_balance', String(cb));
-              localStorage.setItem('decodoor_cached_revenue_total', String(rev));
-              localStorage.setItem('decodoor_cached_expenses_total', String(exp));
-              localStorage.setItem('decodoor_cached_receivables_total', String(rec));
-            } catch {}
+              localStorage.setItem('seajong_cached_cash_balance', String(cb));
+              localStorage.setItem('seajong_cached_revenue_total', String(rev));
+              localStorage.setItem('seajong_cached_expenses_total', String(exp));
+              localStorage.setItem('seajong_cached_receivables_total', String(rec));
+            } catch { }
           } else {
             // Tính toán trực tiếp từ dữ liệu CSDL trả về khi server chưa khởi động lại
             const monthsArr: any[] = d.months || [];
@@ -359,7 +359,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
           }
         }
       })
-      .catch(() => {});
+      .catch(() => { });
 
     fetch('/api/finance/cashflow-notices')
       .then((r) => (r.ok ? r.json() : []))
@@ -368,7 +368,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
           setCashflowNotices(d);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   };
 
   useEffect(() => {
@@ -414,7 +414,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
       if (saved) return Number(saved);
       const accLimit = localStorage.getItem('seajong_accounting_single_limit');
       if (accLimit) return Number(accLimit);
-    } catch {}
+    } catch { }
     return 5000000; // Mặc định 5.000.000 đ theo định mức tạm ứng nội quy lao động
   }, []);
 
@@ -439,6 +439,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
           `Đã gửi thông tin Lệnh chi ${data.orderCode || selectedNotice?.code || ''} cho Giám đốc duyệt chi.`
         );
         notifyFinanceUpdated('payment_order', 'update');
+        window.dispatchEvent(new CustomEvent('seajong_approval_documents_updated'));
         window.dispatchEvent(new CustomEvent('decodoor_approval_documents_updated'));
         loadRealStats(selectedPeriod, selectedMonth);
         if (selectedNotice && selectedNotice.paymentOrder) {
@@ -794,8 +795,8 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                   {selectedPeriod === 'month'
                     ? `Đầu tháng: ${formatVND(periodStats.openingCashBalance)}`
                     : selectedPeriod === 'quarter'
-                    ? `Đầu quý: ${formatVND(periodStats.openingCashBalance)}`
-                    : `Đầu năm: ${formatVND(periodStats.openingCashBalance)}`}
+                      ? `Đầu quý: ${formatVND(periodStats.openingCashBalance)}`
+                      : `Đầu năm: ${formatVND(periodStats.openingCashBalance)}`}
                 </span>
               </div>
             </div>
@@ -852,8 +853,8 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                   {selectedPeriod === 'month'
                     ? `Thu hồi nợ & bán hàng ${currentPeriodLabels.month}`
                     : selectedPeriod === 'quarter'
-                    ? 'Lũy kế 3 tháng trong Quý'
-                    : `Lũy kế cả ${currentPeriodLabels.year}`}
+                      ? 'Lũy kế 3 tháng trong Quý'
+                      : `Lũy kế cả ${currentPeriodLabels.year}`}
                 </span>
               </div>
             </div>
@@ -910,8 +911,8 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                   {selectedPeriod === 'month'
                     ? `Chi phí QL, BH, SX ${currentPeriodLabels.month}`
                     : selectedPeriod === 'quarter'
-                    ? 'Lũy kế 3 tháng trong Quý'
-                    : `Lũy kế cả ${currentPeriodLabels.year}`}
+                      ? 'Lũy kế 3 tháng trong Quý'
+                      : `Lũy kế cả ${currentPeriodLabels.year}`}
                 </span>
               </div>
             </div>
@@ -971,8 +972,8 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                   {selectedPeriod === 'month'
                     ? `Phát sinh: ${formatVND(periodStats.receivablesInvoiced)}`
                     : selectedPeriod === 'quarter'
-                    ? `Phát sinh quý: ${formatVND(periodStats.receivablesInvoiced)}`
-                    : `Phát sinh năm: ${formatVND(periodStats.receivablesInvoiced)}`}
+                      ? `Phát sinh quý: ${formatVND(periodStats.receivablesInvoiced)}`
+                      : `Phát sinh năm: ${formatVND(periodStats.receivablesInvoiced)}`}
                 </span>
               </div>
             </div>
@@ -1454,115 +1455,115 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
               </div>
             ) : (
               activeNotices.filter(item => noticeTab === 'all' || item.type === noticeTab).map((item) => {
-              const isInflow = item.type === 'inflow';
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => setSelectedNotice(item)}
-                  title={item.type === 'outflow' ? 'Nhấn để xem chi tiết Lệnh chi tiền và thực hiện giải ngân' : 'Nhấn để xem chi tiết khoản thu nợ'}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '10px',
-                    padding: '8px 12px',
-                    borderRadius: 'var(--radius-md)',
-                    backgroundColor: 'var(--bg-surface-1)',
-                    border: '1px solid var(--border-subtle)',
-                    transition: 'all 0.15s ease',
-                    flexShrink: 0,
-                    boxSizing: 'border-box',
-                    cursor: 'pointer',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = isInflow ? '#10b981' : '#f43f5e';
-                    e.currentTarget.style.transform = 'translateY(-1px)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = 'var(--border-subtle)';
-                    e.currentTarget.style.transform = 'none';
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        width: '26px',
-                        height: '26px',
-                        borderRadius: '6px',
-                        backgroundColor: isInflow ? 'rgba(16, 185, 129, 0.12)' : 'rgba(244, 63, 94, 0.12)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0,
-                        marginTop: '2px',
-                        color: isInflow ? '#10b981' : '#f43f5e',
-                      }}
-                    >
-                      {isInflow ? <ArrowDownLeft size={15} /> : <ArrowUpRight size={15} />}
+                const isInflow = item.type === 'inflow';
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => setSelectedNotice(item)}
+                    title={item.type === 'outflow' ? 'Nhấn để xem chi tiết Lệnh chi tiền và thực hiện giải ngân' : 'Nhấn để xem chi tiết khoản thu nợ'}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '10px',
+                      padding: '8px 12px',
+                      borderRadius: 'var(--radius-md)',
+                      backgroundColor: 'var(--bg-surface-1)',
+                      border: '1px solid var(--border-subtle)',
+                      transition: 'all 0.15s ease',
+                      flexShrink: 0,
+                      boxSizing: 'border-box',
+                      cursor: 'pointer',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = isInflow ? '#10b981' : '#f43f5e';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--border-subtle)';
+                      e.currentTarget.style.transform = 'none';
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          width: '26px',
+                          height: '26px',
+                          borderRadius: '6px',
+                          backgroundColor: isInflow ? 'rgba(16, 185, 129, 0.12)' : 'rgba(244, 63, 94, 0.12)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          marginTop: '2px',
+                          color: isInflow ? '#10b981' : '#f43f5e',
+                        }}
+                      >
+                        {isInflow ? <ArrowDownLeft size={15} /> : <ArrowUpRight size={15} />}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: '0.78125rem',
+                            fontWeight: 700,
+                            color: 'var(--text-primary)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                          title={item.title}
+                        >
+                          {item.title}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '0.71875rem',
+                            color: 'var(--text-secondary)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            marginTop: '1px',
+                          }}
+                        >
+                          {item.partner} <span style={{ color: 'var(--text-muted)' }}>• {item.code}</span>
+                        </div>
+                        <div style={{ marginTop: '3px' }}>
+                          <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                            Hạn: <strong style={{ color: 'var(--text-secondary)' }}>{item.dueDate}</strong>
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
+
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
                       <div
                         style={{
-                          fontSize: '0.78125rem',
-                          fontWeight: 700,
-                          color: 'var(--text-primary)',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                        title={item.title}
-                      >
-                        {item.title}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '0.71875rem',
-                          color: 'var(--text-secondary)',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          marginTop: '1px',
+                          fontSize: '0.84375rem',
+                          fontWeight: 800,
+                          color: isInflow ? '#10b981' : '#f43f5e',
+                          fontFamily: "'Roboto Condensed', monospace",
                         }}
                       >
-                        {item.partner} <span style={{ color: 'var(--text-muted)' }}>• {item.code}</span>
+                        {item.amount}
                       </div>
-                      <div style={{ marginTop: '3px' }}>
-                        <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-                          Hạn: <strong style={{ color: 'var(--text-secondary)' }}>{item.dueDate}</strong>
+                      <div style={{ marginTop: '2px' }}>
+                        <span
+                          style={{
+                            fontSize: '0.625rem',
+                            fontWeight: 700,
+                            padding: '1px 5px',
+                            borderRadius: '4px',
+                            backgroundColor: isInflow ? 'rgba(16, 185, 129, 0.1)' : 'rgba(244, 63, 94, 0.1)',
+                            color: isInflow ? '#059669' : '#e11d48',
+                          }}
+                        >
+                          {item.status}
                         </span>
                       </div>
                     </div>
                   </div>
-
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div
-                      style={{
-                        fontSize: '0.84375rem',
-                        fontWeight: 800,
-                        color: isInflow ? '#10b981' : '#f43f5e',
-                        fontFamily: "'Roboto Condensed', monospace",
-                      }}
-                    >
-                      {item.amount}
-                    </div>
-                    <div style={{ marginTop: '2px' }}>
-                      <span
-                        style={{
-                          fontSize: '0.625rem',
-                          fontWeight: 700,
-                          padding: '1px 5px',
-                          borderRadius: '4px',
-                          backgroundColor: isInflow ? 'rgba(16, 185, 129, 0.1)' : 'rgba(244, 63, 94, 0.1)',
-                          color: isInflow ? '#059669' : '#e11d48',
-                        }}
-                      >
-                        {item.status}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            }))}
+                );
+              }))}
           </div>
         </div>
       </div>

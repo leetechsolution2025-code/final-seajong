@@ -1,5 +1,5 @@
 /**
- * Financial Report Engine for Deco Door Enterprise
+ * Financial Report Engine for Seajong Enterprise
  * Chuẩn mực kế toán Thông tư 200/2014/TT-BTC
  * 
  * Tự động tổng hợp dữ liệu từ các bảng:

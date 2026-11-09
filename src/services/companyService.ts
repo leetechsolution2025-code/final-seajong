@@ -1,7 +1,7 @@
 /**
  * Dịch vụ quản lý thông tin doanh nghiệp (Company Information Service)
- * Đảm bảo thông tin doanh nghiệp (Deco Door) luôn được lưu trữ bền vững (persistent):
- * 1. Khởi tạo tức thì từ localStorage hoặc giá trị mặc định của Deco Door (không bao giờ bị null / trắng).
+ * Đảm bảo thông tin doanh nghiệp (Seajong) luôn được lưu trữ bền vững (persistent):
+ * 1. Khởi tạo tức thì từ localStorage hoặc giá trị mặc định của Seajong (không bao giờ bị null / trắng).
  * 2. Tự động đồng bộ với SQLite Backend (/api/company).
  * 3. Đồng bộ hóa tức thì giữa tất cả components qua CustomEvent và storage event.
  */
@@ -31,7 +31,7 @@ export const DEFAULT_COMPANY_INFO: CompanyInfo = {
   industry: 'Kinh doanh thiết bị phòng tắm, nhà bếp',
   address: 'Sàn dịch vụ thương mại tầng 1, chung cư CT3, KHu nhà ở Cầu Diễn, Phường Phú Diễn, Thành Phố Hà Nội, Việt Nam',
   phone: '0931339343| 1900 633 862',
-  email: '',
+  email: 'contact@seajong.com',
   website: 'https://seajong.com',
   domain: 'seajong.com',
   logo_url: '/logo.png',

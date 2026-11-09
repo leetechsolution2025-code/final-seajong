@@ -97,6 +97,11 @@ export const userService = {
       if (res.ok) {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(
+            new CustomEvent('seajong_dept_access_updated', {
+              detail: { userId, departmentId, accessLevel },
+            })
+          );
+          window.dispatchEvent(
             new CustomEvent('decodoor_dept_access_updated', {
               detail: { userId, departmentId, accessLevel },
             })

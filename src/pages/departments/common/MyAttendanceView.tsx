@@ -1445,12 +1445,16 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
     const handleRefreshAttendance = () => {
       initData();
     };
+    window.addEventListener('seajong_request_created', handleRefreshAttendance);
     window.addEventListener('decodoor_request_created', handleRefreshAttendance);
+    window.addEventListener('seajong_request_updated', handleRefreshAttendance);
     window.addEventListener('decodoor_request_updated', handleRefreshAttendance);
 
     return () => {
       isMounted = false;
+      window.removeEventListener('seajong_request_created', handleRefreshAttendance);
       window.removeEventListener('decodoor_request_created', handleRefreshAttendance);
+      window.removeEventListener('seajong_request_updated', handleRefreshAttendance);
       window.removeEventListener('decodoor_request_updated', handleRefreshAttendance);
     };
   }, [activeUser?.id, activeUser?.email]);
@@ -1907,6 +1911,7 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
         saveRecords(updated);
       }
 
+      window.dispatchEvent(new CustomEvent('seajong_request_created'));
       window.dispatchEvent(new CustomEvent('decodoor_request_created'));
       setShowExplanationModal(false);
 

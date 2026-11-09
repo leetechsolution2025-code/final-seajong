@@ -1,6 +1,6 @@
 /**
  * Finance Real-time Synchronization Service
- * Cung cấp cơ chế truyền tin thời gian thực (Zero-Reload) cho Phân hệ Tài chính Deco Door / Seajong
+ * Cung cấp cơ chế truyền tin thời gian thực (Zero-Reload) cho Phân hệ Tài chính Seajong
  * 
  * Sử dụng:
  * 1. CustomEvent trong cùng cửa sổ trình duyệt (Same-window instant reactivity)
@@ -11,8 +11,9 @@
 
 import { useEffect, useRef } from 'react';
 
-export const FINANCE_SYNC_EVENT = 'decodoor_finance_updated';
-const CHANNEL_NAME = 'decodoor_finance_sync_channel';
+export const FINANCE_SYNC_EVENT = 'seajong_finance_updated';
+export const LEGACY_FINANCE_SYNC_EVENT = 'decodoor_finance_updated';
+const CHANNEL_NAME = 'seajong_finance_sync_channel';
 
 let broadcastChannel: BroadcastChannel | null = null;
 try {
@@ -43,8 +44,9 @@ export function notifyFinanceUpdated(source = 'finance', action: FinanceSyncPayl
     timestamp: Date.now(),
   };
 
-  // 1. Phát sự kiện nội bộ cửa sổ hiện tại
+  // 1. Phát sự kiện nội bộ cửa sổ hiện tại (hỗ trợ cả sự kiện Seajong và legacy)
   window.dispatchEvent(new CustomEvent(FINANCE_SYNC_EVENT, { detail: payload }));
+  window.dispatchEvent(new CustomEvent(LEGACY_FINANCE_SYNC_EVENT, { detail: payload }));
 
   // 2. Phát qua BroadcastChannel cho các tab khác đang mở
   if (broadcastChannel) {
@@ -121,6 +123,7 @@ export function useFinanceRealtimeSync(onRefresh: () => void, enablePolling = tr
       triggerRefresh(Boolean(e?.detail?.force));
     };
     window.addEventListener(FINANCE_SYNC_EVENT, handleCustomEvent);
+    window.addEventListener(LEGACY_FINANCE_SYNC_EVENT, handleCustomEvent);
 
     // 2. Lắng nghe BroadcastChannel từ các tab khác
     const handleBroadcast = (e: any) => {

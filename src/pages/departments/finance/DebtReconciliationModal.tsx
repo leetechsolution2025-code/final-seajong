@@ -2144,7 +2144,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                         whiteSpace: 'normal',
                       }}
                     >
-                      ĐT: {company.phone || '0346548982'} | Email: {company.email || 'contact@decodoor.vn'}
+                      ĐT: {company.phone || '0931339343'} | Email: {company.email || 'contact@seajong.com'}
                     </div>
                   </div>
                 </div>

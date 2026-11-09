@@ -124,8 +124,12 @@ export const ProbationPage: React.FC = () => {
   useEffect(() => {
     fetchProbationItems();
     const handler = () => fetchProbationItems();
+    window.addEventListener('seajong_admin_hr_items_updated', handler);
     window.addEventListener('decodoor_admin_hr_items_updated', handler);
-    return () => window.removeEventListener('decodoor_admin_hr_items_updated', handler);
+    return () => {
+      window.removeEventListener('seajong_admin_hr_items_updated', handler);
+      window.removeEventListener('decodoor_admin_hr_items_updated', handler);
+    };
   }, [fetchProbationItems]);
 
   const filteredRecords = useMemo(() => {

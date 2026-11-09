@@ -132,7 +132,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
     let u: any = propUser || authUser;
     if (!u || !u.name) {
       try {
-        const saved = localStorage.getItem('decodoor_session');
+        const saved = localStorage.getItem('seajong_session') || localStorage.getItem('decodoor_session');
         if (saved) {
           const parsed = JSON.parse(saved);
           if (parsed.user?.name) u = parsed.user;
@@ -552,13 +552,19 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
       fetchTasks();
     };
 
+    window.addEventListener('seajong_user_tasks_updated', handleUpdate);
     window.addEventListener('decodoor_user_tasks_updated', handleUpdate);
+    window.addEventListener('seajong_contracts_updated', handleUpdate);
     window.addEventListener('decodoor_contracts_updated', handleUpdate);
+    window.addEventListener('seajong_production_tasks_updated', handleUpdate);
     window.addEventListener('decodoor_production_tasks_updated', handleUpdate);
 
     return () => {
+      window.removeEventListener('seajong_user_tasks_updated', handleUpdate);
       window.removeEventListener('decodoor_user_tasks_updated', handleUpdate);
+      window.removeEventListener('seajong_contracts_updated', handleUpdate);
       window.removeEventListener('decodoor_contracts_updated', handleUpdate);
+      window.removeEventListener('seajong_production_tasks_updated', handleUpdate);
       window.removeEventListener('decodoor_production_tasks_updated', handleUpdate);
     };
   }, [propTasks, department, assignee, userId]);
@@ -1314,6 +1320,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
         setNewTaskCustomerName('');
         setNewTaskDesc('');
         fetchTasks();
+        window.dispatchEvent(new Event('seajong_user_tasks_updated'));
         window.dispatchEvent(new Event('decodoor_user_tasks_updated'));
         if (onShowToast) {
           onShowToast('success', 'Thêm công việc', 'Đã thêm mới công việc thành công');

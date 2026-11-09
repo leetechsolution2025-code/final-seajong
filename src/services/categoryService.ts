@@ -114,6 +114,7 @@ export const categoryService = {
       });
       if (res.ok) {
         const data = await res.json();
+        window.dispatchEvent(new CustomEvent('seajong_categories_updated', { detail: item }));
         window.dispatchEvent(new CustomEvent('decodoor_categories_updated', { detail: item }));
         return data;
       }
@@ -134,6 +135,7 @@ export const categoryService = {
       });
       if (res.ok) {
         const data = await res.json();
+        window.dispatchEvent(new CustomEvent('seajong_categories_updated', { detail: { id, ...item } }));
         window.dispatchEvent(new CustomEvent('decodoor_categories_updated', { detail: { id, ...item } }));
         return data;
       }
@@ -152,6 +154,7 @@ export const categoryService = {
       });
       if (res.ok) {
         const data = await res.json();
+        window.dispatchEvent(new CustomEvent('seajong_categories_updated', { detail: { id } }));
         window.dispatchEvent(new CustomEvent('decodoor_categories_updated', { detail: { id } }));
         return data;
       }
