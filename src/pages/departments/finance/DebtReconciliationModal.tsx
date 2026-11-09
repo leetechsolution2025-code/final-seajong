@@ -128,6 +128,34 @@ export function cleanTransactionNote(text?: string, customerName?: string, custo
   return stripParentheses(cleaned);
 }
 
+// ─── KIỂM TRA ĐỢT / CHỨNG TỪ CÓ PHẢI LÀ NỢ ĐẦU KỲ KẾT CHUYỂN HAY KHÔNG ───
+export function isOpeningBalanceEntry(entry?: any): boolean {
+  if (!entry) return false;
+  if (entry.isOpening || entry.isOpeningBalance) return true;
+  const code = String(entry.code || entry.referenceId || '').toLowerCase().trim();
+  const title = String(entry.title || entry.name || entry.projectName || '').toLowerCase().trim();
+  const note = String(entry.notes || entry.note || entry.description || '').toLowerCase().trim();
+  const type = String(entry.type || '').toLowerCase().trim();
+
+  if (code === 'dk' || code === 'sddk' || code === 'dndk') return true;
+
+  const openingKeywords = [
+    'dư nợ đầu kỳ', 'du no dau ky',
+    'nợ đầu kỳ', 'no dau ky',
+    'nợ cũ kết chuyển', 'no cu ket chuyen',
+    'dư nợ cũ kết chuyển', 'du no cu ket chuyen',
+    'kết chuyển nợ cũ', 'ket chuyen no cu',
+    'kết chuyển nợ', 'ket chuyen no',
+    'nợ cũ chuyển sang', 'no cu chuyen sang',
+    'dư nợ cũ chuyển sang', 'du no cu chuyen sang',
+    'nợ cũ', 'no cu',
+    'số dư đầu kỳ', 'so du dau ky',
+    'số dư nợ đầu kỳ', 'so du no dau ky',
+  ];
+
+  return openingKeywords.some(kw => code.includes(kw) || title.includes(kw) || note.includes(kw) || type.includes(kw));
+}
+
 // ─── ĐỌC SỐ TIỀN THÀNH CHỮ TIẾNG VIỆT ─────────────────────────────────
 export function docSoTien(soTien: number): string {
   if (!Number.isFinite(soTien) || isNaN(soTien) || soTien <= 0) return 'Không đồng';
@@ -413,42 +441,52 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
     const timelineList: any[] = [];
     const stageGroupedList: any[] = [];
     let initialBalance = 0;
+    let openingNote = '';
     let orderSeq = 0;
 
     if (entries.length > 0) {
       entries.forEach((entry: any, idx: number) => {
-        const entryValue = Number(entry.contractValue || entry.totalAmount || 0);
+        const entryValue = Number(entry.contractValue || entry.totalAmount || entry.amount || 0);
         const entryPaid = Number(entry.paidAmount || 0);
         const entryIsoDate = parseToIsoDateTime(entry.date, entry.time || '08:30');
         const payments = Array.isArray(entry.payments) ? entry.payments : [];
+        const isOpening = isOpeningBalanceEntry(entry);
 
-        // ── 1. GIAO DỊCH PHÁT SINH TĂNG (Bán hàng / Cung ứng hàng)
-        const stageMainTx = {
-          id: `ENTRY_MAIN_${entry.id || idx}`,
-          stageId: entry.id || `ent-${idx}`,
-          stageCode: entry.code || `${debt.code}-D${idx + 1}`,
-          stageTitle: entry.title || `Đợt ${idx + 1}`,
-          stageValue: entryValue,
-          stagePaid: entryPaid,
-          stageRemaining: Math.max(0, entryValue - entryPaid),
-          stageStatus: entry.status,
-          stageStatusLabel: entry.statusLabel,
-          paymentCount: payments.length || (entryPaid > 0 ? 1 : 0),
-          isStageMain: true,
-          date: entryIsoDate,
-          ref: entry.code || debt.code || `CT-${idx + 1}`,
-          type: isReceivable ? 'Bán hàng' : 'Mua hàng',
-          increase: entryValue,
-          decrease: 0,
-          note: entry.title || `Hợp đồng đơn hàng đợt ${idx + 1} - ${entry.code || debt.code}`,
-          orderIdx: orderSeq++,
-          rawEntry: entry,
-        };
+        if (isOpening) {
+          // Ghi nhận trực tiếp vào số dư đầu kỳ của đối tác
+          initialBalance += entryValue;
+          if (entry.title && !openingNote) {
+            openingNote = entry.title;
+          }
+        } else {
+          // ── 1. GIAO DỊCH PHÁT SINH TĂNG TRONG KỲ (Bán hàng / Mua hàng thông thường)
+          const stageMainTx = {
+            id: `ENTRY_MAIN_${entry.id || idx}`,
+            stageId: entry.id || `ent-${idx}`,
+            stageCode: entry.code || `${debt.code}-D${idx + 1}`,
+            stageTitle: entry.title || `Đợt ${idx + 1}`,
+            stageValue: entryValue,
+            stagePaid: entryPaid,
+            stageRemaining: Math.max(0, entryValue - entryPaid),
+            stageStatus: entry.status,
+            stageStatusLabel: entry.statusLabel,
+            paymentCount: payments.length || (entryPaid > 0 ? 1 : 0),
+            isStageMain: true,
+            date: entryIsoDate,
+            ref: entry.code || debt.code || `CT-${idx + 1}`,
+            type: isReceivable ? 'Bán hàng' : 'Mua hàng',
+            increase: entryValue,
+            decrease: 0,
+            note: entry.title || `Hợp đồng đơn hàng đợt ${idx + 1} - ${entry.code || debt.code}`,
+            orderIdx: orderSeq++,
+            rawEntry: entry,
+          };
 
-        timelineList.push(stageMainTx);
-        stageGroupedList.push(stageMainTx);
+          timelineList.push(stageMainTx);
+          stageGroupedList.push(stageMainTx);
+        }
 
-        // ── 2. CÁC PHIẾU THU / CHI PHÁT SINH GIẢM CỦA ĐỢT
+        // ── 2. CÁC PHIẾU THU / CHI PHÁT SINH GIẢM CỦA ĐỢT (Bao gồm cả thu nợ cũ)
         if (payments.length > 0) {
           payments.forEach((p: any, pIdx: number) => {
             const pAmount = Number(p.amount) || 0;
@@ -477,6 +515,8 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
               decrease: pAmount,
               note: p.title || p.note || (isReturn
                 ? `Giảm trừ công nợ do trả lại hàng theo ${pCode}`
+                : isOpening
+                ? `Khách hàng thanh toán nợ cũ chuyển sang qua ${p.method || 'chuyển khoản'}`
                 : isReceivable
                 ? `Khách hàng thanh toán ${entry.title || `đợt ${idx + 1}`} qua ${p.method || 'chuyển khoản'}`
                 : `Thanh toán tiền hàng cho NCC qua ${p.method || 'chuyển khoản'}`),
@@ -487,7 +527,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
             timelineList.push(payTx);
             stageGroupedList.push(payTx);
           });
-        } else if (entryPaid > 0) {
+        } else if (entryPaid > 0 && !isOpening) {
           const pCode = entry.receiptCode || entry.paymentCode || (isReceivable ? `PT-${entry.code || idx + 1}` : `UNC-${entry.code || idx + 1}`);
           const pIsoDate = parseToIsoDateTime(entry.paidDate || entry.date, entry.paidTime || entry.time || '08:30');
           const payTx = {
@@ -513,20 +553,26 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
         }
       });
     } else {
-      // Trường hợp không có entries con: tạo từ bản ghi gốc
-      const rootIsoDate = parseToIsoDateTime(debt.date || debt.createdAt, debt.time || '08:30');
-      const rootMainTx = {
-        id: `MAIN_${debt.id || debt.code}`,
-        date: rootIsoDate,
-        ref: debt.code || debt.referenceId || 'HD-2026',
-        type: isReceivable ? 'Bán hàng' : 'Mua hàng',
-        increase: totalAmount,
-        decrease: 0,
-        note: debt.projectName || debt.notes || 'Hợp đồng kinh tế cung ứng thiết bị vệ sinh và phụ kiện Seajong',
-        orderIdx: orderSeq++,
-      };
-      timelineList.push(rootMainTx);
-      stageGroupedList.push(rootMainTx);
+      // Trường hợp không có entries con: kiểm tra xem chính debt có phải nợ đầu kỳ kết chuyển hay không
+      const isRootOpening = isOpeningBalanceEntry(debt);
+      if (isRootOpening) {
+        initialBalance = totalAmount;
+        openingNote = debt.projectName || debt.notes || 'Dư nợ cũ kết chuyển từ kỳ trước';
+      } else {
+        const rootIsoDate = parseToIsoDateTime(debt.date || debt.createdAt, debt.time || '08:30');
+        const rootMainTx = {
+          id: `MAIN_${debt.id || debt.code}`,
+          date: rootIsoDate,
+          ref: debt.code || debt.referenceId || 'HD-2026',
+          type: isReceivable ? 'Bán hàng' : 'Mua hàng',
+          increase: totalAmount,
+          decrease: 0,
+          note: debt.projectName || debt.notes || 'Hợp đồng kinh tế cung ứng thiết bị vệ sinh và phụ kiện Seajong',
+          orderIdx: orderSeq++,
+        };
+        timelineList.push(rootMainTx);
+        stageGroupedList.push(rootMainTx);
+      }
 
       const rootPayments = Array.isArray(debt.paymentHistory)
         ? debt.paymentHistory
@@ -555,6 +601,8 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
             decrease: Number(h.amount) || 0,
             note: h.title || h.note || (isReturn
               ? `Giảm trừ công nợ do trả lại hàng theo ${hCode}`
+              : isRootOpening
+              ? `Khách hàng thanh toán nợ cũ chuyển sang qua ${h.method || 'chuyển khoản'}`
               : isReceivable
               ? `Khách hàng thanh toán qua ${h.method || 'chuyển khoản'}`
               : `Thanh toán cho nhà cung cấp qua ${h.method || 'chuyển khoản'}`),
@@ -564,7 +612,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
           timelineList.push(rootPayTx);
           stageGroupedList.push(rootPayTx);
         });
-      } else if (paidAmount > 0) {
+      } else if (paidAmount > 0 && !isRootOpening) {
         const rootPayTx = {
           id: `PAID_${debt.id || debt.code}`,
           date: parseToIsoDateTime(debt.paidDate, '14:15'),
@@ -582,7 +630,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
       }
     }
 
-    // Dòng Dư nợ đầu kỳ
+    // Dòng Dư nợ đầu kỳ duy nhất
     const openingRow = {
       id: 'OPENING_BALANCE',
       date: startDate ? startDate.slice(0, 10) + 'T00:00:00' : '2026-01-01T00:00:00',
@@ -590,7 +638,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
       type: 'Dư nợ đầu kỳ',
       increase: 0,
       decrease: 0,
-      note: 'Dư nợ cũ chuyển sang từ kỳ trước',
+      note: openingNote || (initialBalance > 0 ? 'Dư nợ cũ kết chuyển từ kỳ trước' : 'Dư nợ cũ chuyển sang từ kỳ trước'),
       orderIdx: -1,
     };
 
@@ -2272,7 +2320,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                           <span style={{ color: '#003087', fontWeight: 700 }}>DK</span>
                         </div>
                         <div style={{ color: '#475569', marginTop: '2px', fontSize: '0.74rem', fontStyle: 'italic' }}>
-                          Số dư nợ chuyển sang từ đầu kỳ
+                          {transactions.timelineTransactions.find((t: any) => t.id === 'OPENING_BALANCE')?.note || 'Số dư nợ chuyển sang từ đầu kỳ'}
                         </div>
                       </td>
                       <td style={{ border: 'none', padding: '6px 6px', textAlign: 'right', color: '#94a3b8' }}>-</td>
