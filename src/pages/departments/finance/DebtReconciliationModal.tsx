@@ -23,6 +23,7 @@ import { PaymentVoucherPrintModal } from './PaymentVoucherPrintModal';
 import { PrintPreview } from '../../../components/common/PrintPreview';
 import { useCompanyInfo } from '../../../hooks/useCompanyInfo';
 import { Input } from '../../../components/common/Input';
+import { DebtSubEntryDetailOffcanvas } from './DebtSubEntryDetailOffcanvas';
 
 // ─── CHUẨN HÓA THỜI GIAN SANG ISO CHUẨN ────────────────────────────────
 export function parseToIsoDateTime(dateStr?: string, timeStr?: string): string {
@@ -99,6 +100,32 @@ export function parseToIsoDateTime(dateStr?: string, timeStr?: string): string {
 export function stripParentheses(text?: string): string {
   if (!text) return '';
   return text.replace(/\s*\([^)]*\)/g, '').trim();
+}
+
+// ─── LÀM SẠCH GHI CHÚ GIAO DỊCH, BỎ HẬU TỐ TÊN KHÁCH & SĐT ─────────────
+export function cleanTransactionNote(text?: string, customerName?: string, customerPhone?: string): string {
+  if (!text) return '';
+  let cleaned = String(text);
+
+  // Xóa tên khách hàng nếu xuất hiện sau gạch nối hoặc dấu cách
+  if (customerName) {
+    const escapedName = customerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    cleaned = cleaned.replace(new RegExp(`\\s*[-–—:]\\s*${escapedName}`, 'gi'), '');
+  }
+  // Xóa số điện thoại khách hàng nếu xuất hiện
+  if (customerPhone) {
+    const escapedPhone = customerPhone.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    cleaned = cleaned.replace(new RegExp(`\\s*[-–—:]\\s*${escapedPhone}`, 'gi'), '');
+  }
+
+  // Xóa các mẫu thường gặp: "- Cửa hàng..." hoặc "- Đại lý..." hoặc "- 0988..."
+  cleaned = cleaned.replace(/\s*[-–—]\s*(Cửa hàng|Đại lý|Khách hàng|Công ty)[^-–—\n]+(?=[-–—]|$)/gi, '');
+  cleaned = cleaned.replace(/\s*[-–—]\s*(\+?84|0)[\d\.\s]{8,15}/g, '');
+
+  // Xóa gạch nối lẻ loi ở cuối
+  cleaned = cleaned.replace(/\s*[-–—]\s*$/, '').trim();
+
+  return stripParentheses(cleaned);
 }
 
 // ─── ĐỌC SỐ TIỀN THÀNH CHỮ TIẾNG VIỆT ─────────────────────────────────
@@ -303,6 +330,17 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
   const [receiptPrintOpen, setReceiptPrintOpen] = useState(false);
   const [selectedExpenseForPrint, setSelectedExpenseForPrint] = useState<any | null>(null);
   const [paymentPrintOpen, setPaymentPrintOpen] = useState(false);
+
+  // States for viewing sub-entry / order details Offcanvas
+  const [selectedSubEntryForOffcanvas, setSelectedSubEntryForOffcanvas] = useState<{
+    entry: any;
+    parent: any;
+    type?: 'receivable' | 'payable';
+  } | null>(null);
+  const [isOffcanvasOpen, setIsOffcanvasOpen] = useState(false);
+
+  // Cache danh sách hàng hoá theo mã chứng từ (DBH-..., ERR-...)
+  const [orderItemsMap, setOrderItemsMap] = useState<Record<string, any[]>>({});
 
   useEffect(() => {
     setMounted(true);
@@ -628,6 +666,103 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
       });
       setPaymentPrintOpen(true);
     }
+  };
+
+  // Nạp danh sách hàng hoá cho các đơn hàng và hàng lỗi (DBH-..., ERR-...)
+  useEffect(() => {
+    if (!open || !debt) return;
+    const codesToFetch: string[] = [];
+
+    const scanList = (list: any[]) => {
+      list.forEach((item) => {
+        const code = item.ref || item.code || item.stageCode;
+        if (code && typeof code === 'string' && (code.startsWith('DBH-') || code.startsWith('ERR-') || code.startsWith('DH-') || code.startsWith('PO-'))) {
+          if (!orderItemsMap[code] && !codesToFetch.includes(code)) {
+            codesToFetch.push(code);
+          }
+        }
+      });
+    };
+
+    scanList(transactions.timelineTransactions);
+    if (Array.isArray(debt.entries)) {
+      debt.entries.forEach((e: any) => {
+        if (e.code && !orderItemsMap[e.code] && !codesToFetch.includes(e.code)) {
+          codesToFetch.push(e.code);
+        }
+        if (Array.isArray(e.payments)) {
+          e.payments.forEach((p: any) => {
+            const pCode = p.code || p.receiptCode;
+            if (pCode && typeof pCode === 'string' && (pCode.startsWith('ERR-') || pCode.startsWith('DBH-')) && !orderItemsMap[pCode] && !codesToFetch.includes(pCode)) {
+              codesToFetch.push(pCode);
+            }
+          });
+        }
+      });
+    }
+
+    if (codesToFetch.length === 0) return;
+
+    Promise.all(
+      codesToFetch.map((code) =>
+        fetch(`/api/debts/order-items/${encodeURIComponent(code)}`)
+          .then((res) => res.json())
+          .then((data) => ({ code, items: data.success && Array.isArray(data.items) ? data.items : [] }))
+          .catch(() => ({ code, items: [] }))
+      )
+    ).then((results) => {
+      setOrderItemsMap((prev) => {
+        const next = { ...prev };
+        let hasNew = false;
+        results.forEach(({ code, items }) => {
+          if (items.length > 0) {
+            next[code] = items;
+            hasNew = true;
+          }
+        });
+        return hasNew ? next : prev;
+      });
+    });
+  }, [open, debt, transactions.timelineTransactions]);
+
+  const handleRowClick = (tx: any) => {
+    if (!tx || tx.id === 'OPENING_BALANCE') return;
+
+    const isReturn =
+      tx.isReturn ||
+      tx.type === 'Giảm trừ nợ' ||
+      String(tx.type || '').includes('Giảm trừ') ||
+      String(tx.ref || '').startsWith('ERR-');
+
+    const entryData = tx.rawEntry || {
+      id: tx.stageId || tx.id,
+      code: tx.ref || tx.stageCode,
+      title: tx.note,
+      date: tx.date ? new Date(tx.date).toLocaleDateString('vi-VN') : '',
+      contractValue: tx.increase || 0,
+      totalAmount: tx.increase || 0,
+      paidAmount: isReturn ? tx.decrease : (tx.decrease || 0),
+      remainingAmount: isReturn ? 0 : Math.max(0, (tx.increase || 0) - (tx.decrease || 0)),
+      isReturn,
+      status: isReturn ? 'RETURNED' : 'COMPLETED',
+      statusLabel: isReturn ? 'Trả lại hàng' : 'Đã giao hàng',
+      payments: tx.rawPayment ? [tx.rawPayment] : [],
+      items: orderItemsMap[tx.ref] || [],
+    };
+
+    setSelectedSubEntryForOffcanvas({
+      entry: {
+        ...entryData,
+        code: tx.ref || entryData.code,
+        title: tx.note || entryData.title,
+        isReturn,
+        amount: isReturn ? tx.decrease : (entryData.contractValue || tx.increase || tx.decrease),
+        items: orderItemsMap[tx.ref] || entryData.items || [],
+      },
+      parent: debt,
+      type: isReceivable ? 'receivable' : 'payable',
+    });
+    setIsOffcanvasOpen(true);
   };
 
   // Filtered transactions and computed totals based on date range
@@ -1333,14 +1468,23 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                         if (isStageMain) {
                           const hasPayments = tx.paymentCount > 0;
                           const isCollapsed = collapsedStages[tx.stageCode];
+                          const cleanedNote = cleanTransactionNote(tx.note, partnerDisplayName, debt.customerPhone || debt.phone);
+                          const itemsCount = orderItemsMap[tx.ref]?.length || 0;
+
                           return (
                             <tr
                               key={tx.id || idx}
+                              onClick={() => handleRowClick(tx)}
+                              title="Bấm để xem chi tiết khoản nợ & danh sách hàng hoá"
                               style={{
                                 borderBottom: '1px solid #e2e8f0',
                                 backgroundColor: '#f8fafc',
                                 borderTop: idx > 0 ? '1px solid #e2e8f0' : 'none',
+                                cursor: 'pointer',
+                                transition: 'background-color 0.15s ease',
                               }}
+                              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
                             >
                               <td style={{ padding: '8px 10px', color: '#475569', fontSize: '0.78rem', fontWeight: 600, whiteSpace: 'nowrap', verticalAlign: 'middle', lineHeight: '1.4' }}>
                                 {displayDate}
@@ -1350,7 +1494,10 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                   {hasPayments && (
                                     <button
                                       type="button"
-                                      onClick={() => toggleCollapseStage(tx.stageCode)}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleCollapseStage(tx.stageCode);
+                                      }}
                                       style={{
                                         background: 'none',
                                         border: 'none',
@@ -1365,7 +1512,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                       {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
                                     </button>
                                   )}
-                                  <span>{tx.ref}</span>
+                                  <span style={{ textDecoration: 'underline', textDecorationColor: '#93c5fd' }}>{tx.ref}</span>
                                 </div>
                               </td>
                               <td style={{ padding: '8px 10px', verticalAlign: 'middle' }}>
@@ -1386,7 +1533,22 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                     >
                                       {stripParentheses(tx.type)}
                                     </span>
-                                    <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8rem' }}>{stripParentheses(tx.note)}</span>
+                                    <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8rem' }}>{cleanedNote}</span>
+                                    {itemsCount > 0 && (
+                                      <span
+                                        style={{
+                                          padding: '1px 6px',
+                                          borderRadius: '4px',
+                                          fontSize: '0.675rem',
+                                          fontWeight: 600,
+                                          backgroundColor: '#f1f5f9',
+                                          color: '#0369a1',
+                                          border: '1px solid #bae6fd',
+                                        }}
+                                      >
+                                        📦 {itemsCount} sản phẩm
+                                      </span>
+                                    )}
                                   </div>
 
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.7rem' }}>
@@ -1430,13 +1592,22 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                         }
 
                         if (isStagePayment) {
+                          const cleanedNote = cleanTransactionNote(tx.note, partnerDisplayName, debt.customerPhone || debt.phone);
+                          const itemsCount = orderItemsMap[tx.ref]?.length || 0;
+
                           return (
                             <tr
                               key={tx.id || idx}
+                              onClick={() => handleRowClick(tx)}
+                              title="Bấm để xem chi tiết chứng từ & danh sách hàng hoá"
                               style={{
                                 borderBottom: '1px dashed #e2e8f0',
                                 backgroundColor: '#f0fdf4',
+                                cursor: 'pointer',
+                                transition: 'background-color 0.15s ease',
                               }}
+                              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#dcfce7')}
+                              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f0fdf4')}
                             >
                               <td style={{ padding: '8px 10px', paddingLeft: '24px', color: '#059669', fontSize: '0.78rem', fontWeight: 600, whiteSpace: 'nowrap', verticalAlign: 'middle', lineHeight: '1.4' }}>
                                 <span style={{ color: '#10b981', marginRight: '5px', fontWeight: 800 }}>↳</span>
@@ -1445,7 +1616,10 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                               <td style={{ padding: '8px 10px', paddingLeft: '24px', fontWeight: 700, color: '#059669', whiteSpace: 'nowrap', verticalAlign: 'middle', fontSize: '0.78rem', lineHeight: '1.4' }}>
                                 <button
                                   type="button"
-                                  onClick={() => handleOpenVoucherModal(tx)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenVoucherModal(tx);
+                                  }}
                                   style={{
                                     background: 'none',
                                     border: 'none',
@@ -1470,7 +1644,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                               </td>
                               <td style={{ padding: '8px 10px', paddingLeft: '24px', verticalAlign: 'middle' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                     {(() => {
                                       const isReturnDeduction = tx.isReturn || tx.type === 'Giảm trừ nợ' || String(tx.type || '').includes('Giảm trừ');
                                       return (
@@ -1491,7 +1665,22 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                         </span>
                                       );
                                     })()}
-                                    <span style={{ color: (tx.isReturn || String(tx.type || '').includes('Giảm trừ')) ? '#b45309' : '#166534', fontSize: '0.78rem', fontWeight: 600 }}>{stripParentheses(tx.note)}</span>
+                                    <span style={{ color: (tx.isReturn || String(tx.type || '').includes('Giảm trừ')) ? '#b45309' : '#166534', fontSize: '0.78rem', fontWeight: 600 }}>{cleanedNote}</span>
+                                    {itemsCount > 0 && (
+                                      <span
+                                        style={{
+                                          padding: '1px 6px',
+                                          borderRadius: '4px',
+                                          fontSize: '0.675rem',
+                                          fontWeight: 600,
+                                          backgroundColor: '#fffbeb',
+                                          color: '#b45309',
+                                          border: '1px solid #fde68a',
+                                        }}
+                                      >
+                                        📦 {itemsCount} sản phẩm
+                                      </span>
+                                    )}
                                   </div>
                                   {tx.rawPayment?.method && (
                                     <span style={{ fontSize: '0.675rem', color: '#64748b', fontStyle: 'italic', paddingLeft: '4px' }}>
@@ -1516,12 +1705,25 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
 
                       // ── CHẾ ĐỘ 2: THEO TRÌNH TỰ THỜI GIAN (TIMELINE) HOẶC DÒNG ĐẦU KỲ ──
                       const isMain = tx.type.includes('Bán hàng') || tx.type.includes('Mua hàng');
+                      const cleanedNote = cleanTransactionNote(tx.note, partnerDisplayName, debt.customerPhone || debt.phone);
+                      const itemsCount = orderItemsMap[tx.ref]?.length || 0;
+
                       return (
                         <tr
                           key={tx.id || idx}
+                          onClick={() => !isOpening && handleRowClick(tx)}
+                          title={isOpening ? '' : 'Bấm để xem chi tiết chứng từ & danh sách hàng hoá'}
                           style={{
                             borderBottom: '1px solid #f1f5f9',
                             backgroundColor: isOpening ? '#fafafa' : '#ffffff',
+                            cursor: isOpening ? 'default' : 'pointer',
+                            transition: 'background-color 0.15s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isOpening) e.currentTarget.style.backgroundColor = '#f8fafc';
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isOpening) e.currentTarget.style.backgroundColor = '#ffffff';
                           }}
                         >
                           <td style={{ padding: '8px 10px', color: '#475569', fontSize: '0.78rem', whiteSpace: 'nowrap', verticalAlign: 'middle', lineHeight: '1.4' }}>
@@ -1531,7 +1733,10 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                             {isReceipt ? (
                               <button
                                 type="button"
-                                onClick={() => handleOpenVoucherModal(tx)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenVoucherModal(tx);
+                                }}
                                 style={{
                                   background: 'none',
                                   border: 'none',
@@ -1553,7 +1758,9 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                 <span>{tx.ref}</span>
                               </button>
                             ) : (
-                              <span style={{ display: 'inline-block', verticalAlign: 'middle' }}>{tx.ref}</span>
+                              <span style={{ display: 'inline-block', verticalAlign: 'middle', textDecoration: isOpening ? 'none' : 'underline', textDecorationColor: '#bfdbfe' }}>
+                                {tx.ref}
+                              </span>
                             )}
                           </td>
                           <td style={{ padding: '8px 10px', verticalAlign: 'middle' }}>
@@ -1578,7 +1785,22 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                   </span>
                                 );
                               })()}
-                              <span style={{ color: '#334155', fontSize: '0.78rem', fontWeight: 500 }}>{stripParentheses(tx.note)}</span>
+                              <span style={{ color: '#334155', fontSize: '0.78rem', fontWeight: 500 }}>{cleanedNote}</span>
+                              {itemsCount > 0 && (
+                                <span
+                                  style={{
+                                    padding: '1px 6px',
+                                    borderRadius: '4px',
+                                    fontSize: '0.675rem',
+                                    fontWeight: 600,
+                                    backgroundColor: isMain ? '#eff6ff' : '#fffbeb',
+                                    color: isMain ? '#0369a1' : '#b45309',
+                                    border: `1px solid ${isMain ? '#bae6fd' : '#fde68a'}`,
+                                  }}
+                                >
+                                  📦 {itemsCount} sản phẩm
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#1d4ed8', verticalAlign: 'middle', fontSize: '0.78rem' }}>
@@ -1946,24 +2168,24 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                       fontSize: '0.825rem',
                       textTransform: 'uppercase',
                       marginBottom: '4px',
-                      whiteSpace: 'nowrap',
+                      wordBreak: 'break-word',
                     }}
                   >
                     BÊN A (BÊN BÁN / ĐƠN VỊ CUNG CẤP): {company.company_name || 'CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM'}
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr', gap: '8px', fontSize: '0.78rem' }}>
-                    <div style={{ whiteSpace: 'nowrap' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1fr)', gap: '8px', fontSize: '0.78rem', lineHeight: '1.4' }}>
+                    <div style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                       Địa chỉ: <strong>{company.address || 'Cụm 4, Xã Sơn Đồng, Thành phố Hà Nội, Việt Nam'}</strong>
                     </div>
-                    <div style={{ whiteSpace: 'nowrap' }}>
+                    <div style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                       Điện thoại: <strong>{company.phone || '0346548982'}</strong>
                     </div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr', gap: '8px', fontSize: '0.78rem', marginTop: '2px' }}>
-                    <div style={{ whiteSpace: 'nowrap' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1fr)', gap: '8px', fontSize: '0.78rem', marginTop: '3px', lineHeight: '1.4' }}>
+                    <div style={{ wordBreak: 'break-word' }}>
                       Đại diện: <strong>{meta.performerName || 'Hà Hải Lâm'}</strong>
                     </div>
-                    <div style={{ whiteSpace: 'nowrap' }}>
+                    <div style={{ wordBreak: 'break-word' }}>
                       Chức vụ: <strong>{meta.performerRole || 'Kế toán trưởng'}</strong>
                     </div>
                   </div>
@@ -1986,23 +2208,24 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                       fontSize: '0.825rem',
                       textTransform: 'uppercase',
                       marginBottom: '4px',
+                      wordBreak: 'break-word',
                     }}
                   >
                     BÊN B ({isReceivable ? 'KHÁCH HÀNG' : 'NHÀ CUNG CẤP'}): {partnerDisplayName}
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '8px', fontSize: '0.78rem' }}>
-                    <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1fr)', gap: '8px', fontSize: '0.78rem', lineHeight: '1.4' }}>
+                    <div style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                       Địa chỉ: <strong>{debt.customerAddress || debt.supplierAddress || debt.address || 'Khu vực hoạt động kinh doanh'}</strong>
                     </div>
-                    <div>
+                    <div style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                       Hợp đồng / Mã CT: <strong>{debt.code || debt.referenceId || '---'}</strong>
                     </div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '8px', fontSize: '0.78rem', marginTop: '2px' }}>
-                    <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1fr)', gap: '8px', fontSize: '0.78rem', marginTop: '3px', lineHeight: '1.4' }}>
+                    <div style={{ wordBreak: 'break-word' }}>
                       Đại diện: <strong>{meta.supervisorName || partnerDisplayName}</strong>
                     </div>
-                    <div>
+                    <div style={{ wordBreak: 'break-word' }}>
                       Chức vụ: <strong>{meta.supervisorRole || (isReceivable ? 'Đại diện Khách hàng' : 'Đại diện Đối tác')}</strong>
                     </div>
                   </div>
@@ -2063,17 +2286,18 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                     {allDisplayTransactions
                       .filter((tx: any) => tx.id !== 'OPENING_BALANCE')
                       .map((tx: any, idx: number) => {
-                        const cleanNote = stripParentheses(tx.note);
+                        const cleanNote = cleanTransactionNote(tx.note, partnerDisplayName, debt.customerPhone || debt.phone);
                         const cleanType = stripParentheses(tx.type);
                         const refCode = tx.ref || tx.code || '---';
                         const displayDate = tx.date ? new Date(tx.date).toLocaleDateString('vi-VN') : '---';
+                        const itemsList = orderItemsMap[refCode] || [];
 
                         return (
                           <tr key={tx.id || idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                            <td style={{ border: 'none', padding: '7px 4px', textAlign: 'center', color: '#64748b' }}>
+                            <td style={{ border: 'none', padding: '7px 4px', textAlign: 'center', color: '#64748b', verticalAlign: 'top' }}>
                               {idx + 1}
                             </td>
-                            <td style={{ border: 'none', padding: '7px 8px' }}>
+                            <td style={{ border: 'none', padding: '7px 8px', verticalAlign: 'top' }}>
                               {/* Dòng trên: Ngày và Số chứng từ dồn cùng một dòng */}
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.74rem' }}>
                                 <span style={{ color: '#475569', fontWeight: 600 }}>
@@ -2111,6 +2335,66 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                               >
                                 {cleanNote || 'Giao dịch phát sinh công nợ'}
                               </div>
+
+                              {/* Danh sách hàng hoá trong đơn hàng / hàng trả về (nếu có) */}
+                              {itemsList.length > 0 && (
+                                <div
+                                  style={{
+                                    marginTop: '6px',
+                                    padding: '6px 8px',
+                                    backgroundColor: '#f8fafc',
+                                    borderRadius: '4px',
+                                    border: '1px solid #e2e8f0',
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      fontSize: '0.69rem',
+                                      fontWeight: 700,
+                                      color: '#334155',
+                                      marginBottom: '4px',
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                    }}
+                                  >
+                                    <span>Danh mục hàng hoá:</span>
+                                    <span style={{ color: '#64748b', fontWeight: 600 }}>{itemsList.length} mặt hàng</span>
+                                  </div>
+                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.68rem' }}>
+                                    <thead>
+                                      <tr style={{ color: '#64748b', borderBottom: '1px solid #cbd5e1', textAlign: 'left' }}>
+                                        <th style={{ padding: '2px 4px', fontWeight: 600 }}>Tên hàng / Quy cách</th>
+                                        <th style={{ padding: '2px 4px', width: '55px', textAlign: 'center', fontWeight: 600 }}>SL</th>
+                                        <th style={{ padding: '2px 4px', width: '85px', textAlign: 'right', fontWeight: 600 }}>Đơn giá</th>
+                                        <th style={{ padding: '2px 4px', width: '95px', textAlign: 'right', fontWeight: 600 }}>Thành tiền</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {itemsList.map((it: any, itIdx: number) => {
+                                        const itName = it.tenHang || it.productName || 'Sản phẩm';
+                                        const itQty = Number(it.soLuong || it.quantity) || 1;
+                                        const itUnit = it.donViTinh || it.donVi || 'Bộ';
+                                        const itPrice = Number(it.donGia || it.price) || 0;
+                                        const itTotal = Number(it.thanhTien || it.total) || (itQty * itPrice);
+                                        return (
+                                          <tr key={itIdx} style={{ borderBottom: itIdx < itemsList.length - 1 ? '1px dashed #e2e8f0' : 'none' }}>
+                                            <td style={{ padding: '3px 4px', color: '#1e293b' }}>{itName}</td>
+                                            <td style={{ padding: '3px 4px', textAlign: 'center', color: '#0f172a', fontWeight: 600 }}>
+                                              {itQty} {itUnit}
+                                            </td>
+                                            <td style={{ padding: '3px 4px', textAlign: 'right', color: '#64748b' }}>
+                                              {formatCurrency(itPrice)}
+                                            </td>
+                                            <td style={{ padding: '3px 4px', textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
+                                              {formatCurrency(itTotal)}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
                             </td>
                             <td
                               style={{
@@ -2119,6 +2403,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                 textAlign: 'right',
                                 fontWeight: tx.increase > 0 ? 600 : 400,
                                 color: tx.increase > 0 ? '#0f172a' : '#94a3b8',
+                                verticalAlign: 'top',
                               }}
                             >
                               {tx.increase > 0 ? formatCurrency(tx.increase) : '-'}
@@ -2130,6 +2415,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                 textAlign: 'right',
                                 fontWeight: tx.decrease > 0 ? 600 : 400,
                                 color: tx.decrease > 0 ? '#16a34a' : '#94a3b8',
+                                verticalAlign: 'top',
                               }}
                             >
                               {tx.decrease > 0 ? formatCurrency(tx.decrease) : '-'}
@@ -2270,6 +2556,16 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
           voucher={selectedExpenseForPrint}
         />
       )}
+
+      {/* OFFCANVAS CHI TIẾT KHOẢN NỢ & DANH SÁCH HÀNG HOÁ (400PX) */}
+      <DebtSubEntryDetailOffcanvas
+        isOpen={isOffcanvasOpen}
+        onClose={() => {
+          setIsOffcanvasOpen(false);
+          setSelectedSubEntryForOffcanvas(null);
+        }}
+        selectedSubEntry={selectedSubEntryForOffcanvas}
+      />
     </div>,
     document.body
   );

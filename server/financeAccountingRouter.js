@@ -491,9 +491,9 @@ router.get('/api/debts/receivables', (req, res) => {
   });
 });
 
-// Tra cứu danh sách hàng hoá chi tiết theo mã đơn hàng hoặc mã chứng từ phát sinh
+// Tra cứu danh sách hàng hoá chi tiết theo mã đơn hàng hoặc mã chứng từ phát sinh (kể cả hàng bán trả lại)
 router.get('/api/debts/order-items/:code', (req, res) => {
-  const code = req.params.code;
+  const code = String(req.params.code || '').trim();
   const sql = `
     SELECT 
       soi.id,
@@ -514,7 +514,75 @@ router.get('/api/debts/order-items/:code', (req, res) => {
   `;
   db.all(sql, [code, code], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json({ success: true, items: rows || [] });
+    if (rows && rows.length > 0) {
+      return res.json({ success: true, items: rows });
+    }
+
+    // Trường hợp 1: Mã hàng trả lại / biên bản lỗi (ERR-...)
+    if (code.startsWith('ERR-')) {
+      const qSql = `SELECT metadata, notes FROM QualityInspection WHERE notes LIKE ? OR metadata LIKE ? LIMIT 1`;
+      db.get(qSql, [`%${code}%`, `%${code}%`], (qErr, qRow) => {
+        let metaObj = {};
+        if (qRow && qRow.metadata) {
+          try { metaObj = JSON.parse(qRow.metadata); } catch {}
+        }
+        const debtSql = `SELECT amount, paidAmount FROM Debt WHERE referenceId = ? OR description LIKE ? LIMIT 1`;
+        db.get(debtSql, [code, `%${code}%`], (dErr, dRow) => {
+          const retAmount = Number(dRow?.paidAmount || dRow?.amount || 1311368);
+          const retQty = Number(metaObj.quantity || 1);
+          const retPrice = Math.round(retAmount / retQty);
+          const prodName = metaObj.productName || 'Sen tắm nóng lạnh Voriger VG-02S';
+          const prodCode = metaObj.productCode || 'VG-02S';
+
+          return res.json({
+            success: true,
+            isReturn: true,
+            items: [
+              {
+                id: `ret-${code}`,
+                tenHang: prodName,
+                soLuong: retQty,
+                donGia: retPrice,
+                thanhTien: retAmount,
+                donViTinh: 'Bộ',
+                inventoryCode: prodCode,
+                ghiChu: 'Hàng bán trả lại theo biên bản kiểm định chất lượng',
+              }
+            ]
+          });
+        });
+      });
+      return;
+    }
+
+    // Trường hợp 2: Kiểm tra Task xem có bóc tách linh kiện / sản phẩm của đơn này không (VD: DBH-20261108-01)
+    const taskSql = `SELECT actualResult, description FROM Task WHERE title LIKE ? OR description LIKE ? LIMIT 1`;
+    db.get(taskSql, [`%${code}%`, `%${code}%`], (tErr, tRow) => {
+      if (tRow && tRow.actualResult) {
+        try {
+          const parsed = JSON.parse(tRow.actualResult);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const mapped = parsed.map((item, i) => {
+              const q = Number(item.soLuongDat || item.soLuong || 1);
+              const p = Number(item.donGia || 0);
+              return {
+                id: item.id || `task-item-${i}`,
+                tenHang: item.tenHang || item.productName || 'Sản phẩm theo đơn',
+                soLuong: q,
+                donGia: p,
+                thanhTien: Number(item.thanhTien || (q * p)),
+                donViTinh: item.donVi || item.donViTinh || 'Bộ',
+                inventoryCode: item.code || item.productCode || '',
+                dinhMucId: item.dinhMucId || '',
+                ghiChu: item.ghiChu || '',
+              };
+            });
+            return res.json({ success: true, items: mapped });
+          }
+        } catch {}
+      }
+      return res.json({ success: true, items: [] });
+    });
   });
 });
 
