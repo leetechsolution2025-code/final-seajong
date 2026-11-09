@@ -5,21 +5,24 @@ import { useDepartment } from '../../context/DepartmentContext';
 import { useAuth } from '../../context/AuthContext';
 import type { UserProfile } from '../../types';
 
+const _nowSales = new Date();
+const _salesCurMonthFull = `Tháng ${_nowSales.getMonth() + 1 < 10 ? `0${_nowSales.getMonth() + 1}` : _nowSales.getMonth() + 1}/${_nowSales.getFullYear()}`;
+
 const DEFAULT_OVERVIEW_TICKER = [
   {
     badge: 'TỔNG DOANH SỐ',
     badgeColor: 'bg-blue-50 text-blue-700 border-blue-200 font-bold',
-    text: 'Tháng 10/2026: Tổng doanh số đạt <strong>0,15 tỷ đồng</strong> (Seajong: <strong>0,14 tỷ</strong> • OEM: <strong>0,01 tỷ</strong>) — Đạt <strong>9.7%</strong> chỉ tiêu (1,55 tỷ, tăng trưởng <strong>+275%</strong>)',
+    text: `${_salesCurMonthFull}: Tổng doanh số đạt <strong>0,15 tỷ đồng</strong> (Seajong: <strong>0,14 tỷ</strong> • OEM: <strong>0,01 tỷ</strong>) — Đạt <strong>9.7%</strong> chỉ tiêu (1,55 tỷ, tăng trưởng <strong>+275%</strong>)`,
   },
   {
     badge: 'TỔNG DOANH THU',
     badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold',
-    text: 'Tháng 10/2026: Tổng doanh thu đạt <strong>0,07 tỷ đồng</strong> (Seajong: <strong>0,06 tỷ</strong> • OEM: <strong>0,01 tỷ</strong>) — Đạt <strong>5.3%</strong> kế hoạch (1,32 tỷ)',
+    text: `${_salesCurMonthFull}: Tổng doanh thu đạt <strong>0,07 tỷ đồng</strong> (Seajong: <strong>0,06 tỷ</strong> • OEM: <strong>0,01 tỷ</strong>) — Đạt <strong>5.3%</strong> kế hoạch (1,32 tỷ)`,
   },
   {
     badge: 'PHÁT TRIỂN ĐẠI LÝ',
     badgeColor: 'bg-amber-50 text-amber-800 border-amber-200 font-bold',
-    text: 'Tháng 10/2026: Phát triển <strong>8/11 đại lý</strong> (Đạt <strong>72.7%</strong> mục tiêu) • Đang theo dõi <strong>4 đối tác tiềm năng</strong> (3 chăm sóc, 1 báo giá/HĐ)',
+    text: `${_salesCurMonthFull}: Phát triển <strong>8/11 đại lý</strong> (Đạt <strong>72.7%</strong> mục tiêu) • Đang theo dõi <strong>4 đối tác tiềm năng</strong> (3 chăm sóc, 1 báo giá/HĐ)`,
   },
   {
     badge: 'HỖ TRỢ ĐẠI LÝ',

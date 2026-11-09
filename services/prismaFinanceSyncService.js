@@ -81,6 +81,8 @@ export async function syncPrismaFinanceToAccountingTables(db) {
       prismaEmployees,
       prismaSaleOrders,
       prismaSaleOrderItems,
+      prismaPurchaseOrders,
+      prismaPurchaseOrderItems,
       prismaInventoryItems,
       prismaInventoryCategories,
       prismaStockMovements,
@@ -104,6 +106,8 @@ export async function syncPrismaFinanceToAccountingTables(db) {
       dbAll(db, 'SELECT * FROM "Employee"'),
       dbAll(db, 'SELECT * FROM "SaleOrder" ORDER BY ngayDat DESC'),
       dbAll(db, 'SELECT * FROM "SaleOrderItem"'),
+      dbAll(db, 'SELECT * FROM "PurchaseOrder" ORDER BY ngayDat DESC'),
+      dbAll(db, 'SELECT * FROM "PurchaseOrderItem"'),
       dbAll(db, 'SELECT * FROM "InventoryItem" ORDER BY soLuong DESC'),
       dbAll(db, 'SELECT * FROM "InventoryCategory"'),
       dbAll(db, 'SELECT * FROM "StockMovement" ORDER BY createdAt DESC LIMIT 500'),
@@ -160,6 +164,37 @@ export async function syncPrismaFinanceToAccountingTables(db) {
 
       if (!orderItemsByOrderId.has(item.saleOrderId)) orderItemsByOrderId.set(item.saleOrderId, []);
       orderItemsByOrderId.get(item.saleOrderId).push(itemObj);
+    });
+
+    const purchaseOrderById = new Map();
+    const purchaseOrderByCode = new Map();
+    (prismaPurchaseOrders || []).forEach((po) => {
+      purchaseOrderById.set(po.id, po);
+      if (po.code) purchaseOrderByCode.set(po.code, po);
+    });
+
+    const purchaseOrderItemsByCode = new Map();
+    const purchaseOrderItemsByOrderId = new Map();
+    (prismaPurchaseOrderItems || []).forEach((item) => {
+      const po = purchaseOrderById.get(item.purchaseOrderId);
+      const code = po?.code || item.purchaseOrderId;
+
+      const itemObj = {
+        id: item.id,
+        tenHang: item.tenHang,
+        soLuong: Number(item.soLuong) || 1,
+        donGia: Number(item.donGia) || 0,
+        thanhTien: Number(item.thanhTien) || ((Number(item.soLuong) || 1) * (Number(item.donGia) || 0)),
+        donViTinh: item.donVi || 'cái',
+        dinhMucId: item.dinhMucId,
+        ghiChu: item.ghiChu,
+      };
+
+      if (!purchaseOrderItemsByCode.has(code)) purchaseOrderItemsByCode.set(code, []);
+      purchaseOrderItemsByCode.get(code).push(itemObj);
+
+      if (!purchaseOrderItemsByOrderId.has(item.purchaseOrderId)) purchaseOrderItemsByOrderId.set(item.purchaseOrderId, []);
+      purchaseOrderItemsByOrderId.get(item.purchaseOrderId).push(itemObj);
     });
 
     // ============================================================================
@@ -626,6 +661,11 @@ export async function syncPrismaFinanceToAccountingTables(db) {
           const bRemain = Math.max(0, bVal - allocPaid);
           const refCode = b.referenceId || `${code}-PO${idx + 1}`;
           const descClean = (b.description || '').split('\n\n[PAYMENT_LOGS]')[0].trim();
+          const poItems =
+            purchaseOrderItemsByCode.get(refCode) ||
+            purchaseOrderItemsByOrderId.get(refCode) ||
+            (b.id ? purchaseOrderItemsByOrderId.get(b.id) : []) ||
+            [];
 
           return {
             id: b.id || `ENT-PAY-${idx + 1}`,
@@ -638,6 +678,7 @@ export async function syncPrismaFinanceToAccountingTables(db) {
             dueDate: formatEpochToVNDate(b.dueDate || b.createdAt),
             status: bRemain <= 0 ? 'completed' : 'pending',
             statusLabel: bRemain <= 0 ? 'Đã thanh toán' : 'Chờ thanh toán',
+            items: poItems,
           };
         });
 

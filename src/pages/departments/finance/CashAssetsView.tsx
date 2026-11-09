@@ -592,7 +592,7 @@ export const CashAssetsView: React.FC<CashAssetsViewProps> = ({ onShowToast }) =
         searchPlaceholder="Tìm theo tên tài khoản, số TK, ngân hàng, chi nhánh..."
         searchMinWidth="240px"
         filters={toolbarFilters}
-        printLabel="In báo cáo"
+        printLabel="Tạo báo cáo"
         onPrint={() => setIsReportPrintOpen(true)}
         onExportExcel={handleExportExcel}
         onRefresh={() => loadData(false)}

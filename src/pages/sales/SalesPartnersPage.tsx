@@ -794,7 +794,7 @@ export const SalesPartnersPage: React.FC = () => {
     {
       badge: 'MỤC TIÊU PHÁT TRIỂN',
       badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
-      text: `Mục tiêu tháng 10/2026: Ký mới <b>5</b> đại lý showroom thiết bị vệ sinh Seajong`,
+      text: `Mục tiêu Tháng ${new Date().getMonth() + 1 < 10 ? `0${new Date().getMonth() + 1}` : new Date().getMonth() + 1}/${new Date().getFullYear()}: Ký mới <b>5</b> đại lý showroom thiết bị vệ sinh Seajong`,
     },
   ];
 

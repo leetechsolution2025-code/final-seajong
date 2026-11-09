@@ -616,7 +616,7 @@ const FixedAssetsManagementView: React.FC<{ onShowToast?: (type: 'success' | 'er
         searchPlaceholder="Tìm kiếm tài sản theo tên, mã hoặc số serial..."
         searchMinWidth="240px"
         filters={toolbarFilters}
-        printLabel="In báo cáo"
+        printLabel="Tạo báo cáo"
         onPrint={() => setIsReportPrintOpen(true)}
         onExportExcel={handleExportExcel}
         onRefresh={loadAssets}

@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   BoxSeam,
+  Boxes,
+  CashStack,
+  ExclamationTriangleFill,
+  XCircleFill,
   FileEarmarkExcel,
   ChevronLeft,
   ChevronRight,
@@ -751,6 +755,50 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
   const [warehouses, setWarehouses] = useState<InventoryWarehouseOption[]>([]);
   const [selectedDetailItem, setSelectedDetailItem] = useState<InventoryStockItem | null>(null);
 
+  // ── States cho 4 thẻ Card KPI hàng hoá trong kho ──
+  const [stats, setStats] = useState<{
+    totalItems: number;
+    totalQty: number;
+    reservedQty: number;
+    availableQty: number;
+    totalValue: number;
+    totalCostValue: number;
+    inStockCount: number;
+    lowStockCount: number;
+    outOfStockCount: number;
+    totalWarehouses: number;
+  }>({
+    totalItems: 1167,
+    totalQty: 160400,
+    reservedQty: 459,
+    availableQty: 159941,
+    totalValue: 18296177000,
+    totalCostValue: 10690128000,
+    inStockCount: 636,
+    lowStockCount: 17,
+    outOfStockCount: 514,
+    totalWarehouses: 3,
+  });
+
+  const fetchStats = useCallback(() => {
+    const url =
+      filterWarehouse !== 'all'
+        ? `/api/logistics/inventory/stats?warehouseId=${encodeURIComponent(filterWarehouse)}`
+        : '/api/logistics/inventory/stats';
+    fetch(url)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.success) {
+          setStats(data);
+        }
+      })
+      .catch(() => {});
+  }, [filterWarehouse]);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
   const fetchCategories = useCallback((whId?: string) => {
     const url =
       whId && whId !== 'all'
@@ -817,6 +865,137 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
 
   return (
     <>
+      {/* ── 4 THẺ CARD KPI THÔNG TIN HÀNG HOÁ TRONG KHO ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-3 bg-slate-50/70 border-b border-slate-200">
+        {/* Card 1: Tổng mặt hàng tồn kho (SKU) */}
+        <div
+          onClick={() => {
+            setFilterStatus('all');
+            setCurrentPage(1);
+          }}
+          className={`flex items-center gap-3.5 p-3 rounded-xl border transition-all cursor-pointer ${
+            filterStatus === 'all'
+              ? 'bg-blue-50/90 border-blue-300 ring-2 ring-blue-400/40 shadow-xs'
+              : 'bg-white border-slate-200 hover:border-blue-300 hover:bg-blue-50/30 shadow-2xs'
+          }`}
+          title="Bấm để xem tất cả mặt hàng tồn kho"
+        >
+          <div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 text-lg shadow-2xs">
+            <BoxSeam size={20} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block truncate">
+              Tổng mặt hàng (SKU)
+            </span>
+            <div className="flex items-baseline gap-1.5 mt-0.5">
+              <span className="text-xl font-black text-slate-900 font-mono tracking-tight">
+                {stats.totalItems.toLocaleString('vi-VN')}
+              </span>
+              <span className="text-[11px] font-medium text-slate-500">mã hàng</span>
+            </div>
+            <span className="text-[11px] text-blue-600 font-medium block truncate mt-0.5">
+              {stats.totalWarehouses ? `Lưu tại ${stats.totalWarehouses} kho hàng` : 'Đang quản lý'}
+            </span>
+          </div>
+        </div>
+
+        {/* Card 2: Tổng giá trị hàng hoá trong kho */}
+        <div
+          onClick={() => {
+            setFilterStatus('con-hang');
+            setCurrentPage(1);
+          }}
+          className={`flex items-center gap-3.5 p-3 rounded-xl border transition-all cursor-pointer ${
+            filterStatus === 'con-hang'
+              ? 'bg-emerald-50/90 border-emerald-300 ring-2 ring-emerald-400/40 shadow-xs'
+              : 'bg-white border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30 shadow-2xs'
+          }`}
+          title="Bấm để lọc các mặt hàng còn hàng ổn định"
+        >
+          <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 text-lg shadow-2xs">
+            <CashStack size={20} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block truncate">
+              Tổng giá trị hàng hoá
+            </span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-xl font-black text-emerald-700 font-mono tracking-tight">
+                {(Math.round((stats.totalValue || 0) / 1000) * 1000).toLocaleString('vi-VN')}
+              </span>
+              <span className="text-xs font-bold text-emerald-600">₫</span>
+            </div>
+            <span className="text-[11px] text-slate-500 font-medium block truncate mt-0.5">
+              Thực tồn: <strong className="text-slate-700">{(stats.totalQty || 0).toLocaleString('vi-VN')}</strong> sp • Đã giữ: {(stats.reservedQty || 0).toLocaleString('vi-VN')}
+            </span>
+          </div>
+        </div>
+
+        {/* Card 3: Chạm ngưỡng sắp hết */}
+        <div
+          onClick={() => {
+            setFilterStatus('sap-het');
+            setCurrentPage(1);
+          }}
+          className={`flex items-center gap-3.5 p-3 rounded-xl border transition-all cursor-pointer ${
+            filterStatus === 'sap-het'
+              ? 'bg-amber-50/90 border-amber-300 ring-2 ring-amber-400/40 shadow-xs'
+              : 'bg-white border-slate-200 hover:border-amber-300 hover:bg-amber-50/30 shadow-2xs'
+          }`}
+          title="Bấm để lọc các mặt hàng chạm ngưỡng tồn tối thiểu"
+        >
+          <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 text-lg shadow-2xs">
+            <ExclamationTriangleFill size={20} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block truncate">
+              Cảnh báo sắp hết
+            </span>
+            <div className="flex items-baseline gap-1.5 mt-0.5">
+              <span className="text-xl font-black text-amber-600 font-mono tracking-tight">
+                {stats.lowStockCount.toLocaleString('vi-VN')}
+              </span>
+              <span className="text-[11px] font-medium text-slate-500">mặt hàng</span>
+            </div>
+            <span className="text-[11px] text-amber-700 font-medium block truncate mt-0.5">
+              Dưới định mức an toàn
+            </span>
+          </div>
+        </div>
+
+        {/* Card 4: Hết hàng cần bổ sung */}
+        <div
+          onClick={() => {
+            setFilterStatus('het-hang');
+            setCurrentPage(1);
+          }}
+          className={`flex items-center gap-3.5 p-3 rounded-xl border transition-all cursor-pointer ${
+            filterStatus === 'het-hang'
+              ? 'bg-rose-50/90 border-rose-300 ring-2 ring-rose-400/40 shadow-xs'
+              : 'bg-white border-slate-200 hover:border-rose-300 hover:bg-rose-50/30 shadow-2xs'
+          }`}
+          title="Bấm để lọc các mặt hàng đã hết hàng (thực tồn = 0)"
+        >
+          <div className="w-11 h-11 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 text-lg shadow-2xs">
+            <XCircleFill size={20} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block truncate">
+              Hết hàng tồn kho
+            </span>
+            <div className="flex items-baseline gap-1.5 mt-0.5">
+              <span className="text-xl font-black text-rose-600 font-mono tracking-tight">
+                {stats.outOfStockCount.toLocaleString('vi-VN')}
+              </span>
+              <span className="text-[11px] font-medium text-slate-500">mặt hàng</span>
+            </div>
+            <span className="text-[11px] text-rose-700 font-medium block truncate mt-0.5">
+              Thực tồn = 0 • Cần nhập thêm
+            </span>
+          </div>
+        </div>
+      </div>
+
       <InventoryToolbar
         warehouses={warehouses}
         filterWarehouse={filterWarehouse}

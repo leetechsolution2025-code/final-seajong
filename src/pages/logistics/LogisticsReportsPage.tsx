@@ -3,7 +3,11 @@ import { StepPage } from '@/components/common/StepPage';
 import { LogisticsReports } from '@/components/logistics/reports/LogisticsReports';
 import type { ModernStepItem } from '@/types';
 
-export const LogisticsReportsPage: React.FC = () => {
+export interface LogisticsReportsPageProps {
+  onShowToast?: (type: 'success' | 'warning' | 'error' | 'info', title: string, message: string) => void;
+}
+
+export const LogisticsReportsPage: React.FC<LogisticsReportsPageProps> = () => {
   const [currentStep, setCurrentStep] = useState<number>(1);
 
   const steps: ModernStepItem[] = [

@@ -157,9 +157,10 @@ export const DealerOverviewView: React.FC<DealerOverviewViewProps> = ({
       activeMonths = fullYearMonthlyData.filter((m: any) => m.monthNum >= 10 && m.monthNum <= 12);
       label = 'Quý 4/2026';
     } else if (periodType === 'month') {
-      // Tháng 10
-      activeMonths = fullYearMonthlyData.filter((m: any) => m.monthNum === 10);
-      label = 'Tháng 10/2026';
+      const curMonth = new Date().getMonth() + 1;
+      const curYear = new Date().getFullYear();
+      activeMonths = fullYearMonthlyData.filter((m: any) => m.monthNum === curMonth);
+      label = `Tháng ${curMonth < 10 ? `0${curMonth}` : curMonth}/${curYear}`;
     }
 
     const plan = activeMonths.reduce((s: number, m: any) => s + (m.planRevenue || 0), 0);

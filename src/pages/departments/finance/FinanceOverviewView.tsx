@@ -14,11 +14,14 @@ import {
   ArrowRepeat,
   ChevronLeft,
   ChevronRight,
+  Send,
+  SendCheck,
+  ShieldCheck,
 } from 'react-bootstrap-icons';
 import { EventOffcanvas } from '../../../components/common/EventOffcanvas';
 import { DepartmentActionMenu, type DepartmentActionMenuItem } from '../../../components/common/DepartmentActionMenu';
 import { useFinanceRealtimeSync, notifyFinanceUpdated } from '../../../services/financeSyncService';
-import { Modal } from '../../../components/common/Modal';
+import { PaymentOrderOffcanvas } from './PaymentOrderOffcanvas';
 import { Button } from '../../../components/common/Button';
 
 export interface FinanceOverviewViewProps {
@@ -42,15 +45,34 @@ export interface CashflowMonthData {
   val: string;
 }
 
-// Dữ liệu dòng tiền 6 tháng gần nhất (khởi tạo sạch từ CSDL)
-const INITIAL_CASHFLOW_DATA: CashflowMonthData[] = [
-  { month: 'T05/26', inFlow: 0, outFlow: 0, inFlowRaw: 0, outFlowRaw: 0, netBalance: 0, cx: 84.6, cy: 175, val: '0 đ' },
-  { month: 'T06/26', inFlow: 0, outFlow: 0, inFlowRaw: 0, outFlowRaw: 0, netBalance: 0, cx: 183.8, cy: 175, val: '0 đ' },
-  { month: 'T07/26', inFlow: 0, outFlow: 0, inFlowRaw: 0, outFlowRaw: 0, netBalance: 0, cx: 282.9, cy: 175, val: '0 đ' },
-  { month: 'T08/26', inFlow: 0, outFlow: 0, inFlowRaw: 0, outFlowRaw: 0, netBalance: 0, cx: 382.1, cy: 175, val: '0 đ' },
-  { month: 'T09/26', inFlow: 0, outFlow: 0, inFlowRaw: 0, outFlowRaw: 0, netBalance: 0, cx: 481.3, cy: 175, val: '0 đ' },
-  { month: 'T10/26 (HT)', inFlow: 0, outFlow: 0, inFlowRaw: 0, outFlowRaw: 0, netBalance: 0, cx: 580.4, cy: 175, val: '0 đ' },
-];
+// Dữ liệu dòng tiền 6 tháng gần nhất (khởi tạo động theo tháng hiện hành)
+const INITIAL_CASHFLOW_DATA: CashflowMonthData[] = (() => {
+  const d = new Date();
+  const curM = d.getMonth() + 1;
+  const curY = d.getFullYear() % 100;
+  const cxList = [84.6, 183.8, 282.9, 382.1, 481.3, 580.4];
+  return Array.from({ length: 6 }, (_, idx) => {
+    let m = curM - (5 - idx);
+    let y = curY;
+    if (m <= 0) {
+      m += 12;
+      y -= 1;
+    }
+    const mStr = String(m).padStart(2, '0');
+    const isCurrent = idx === 5;
+    return {
+      month: isCurrent ? `T${mStr}/${y} (HT)` : `T${mStr}/${y}`,
+      inFlow: 0,
+      outFlow: 0,
+      inFlowRaw: 0,
+      outFlowRaw: 0,
+      netBalance: 0,
+      cx: cxList[idx],
+      cy: 175,
+      val: '0 đ',
+    };
+  });
+})();
 
 export interface CashflowNotice {
   id: string;
@@ -175,10 +197,17 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
   const [selectedNotice, setSelectedNotice] = useState<CashflowNotice | null>(null);
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
 
-  // Chỉ hiển thị các nội dung chưa thực hiện (chưa chi tiền, chưa thu nợ)
+  // Chỉ hiển thị các nội dung đã được giám đốc phê duyệt, đợi chi tiền (và công nợ chưa thu đủ)
   const activeNotices = useMemo(() => {
     return cashflowNotices.filter((n) => {
       if (n.status === 'completed' || n.paymentOrder?.status === 'completed' || n.status === 'Đã chi tiền') return false;
+      if (n.type === 'outflow') {
+        const po = n.paymentOrder;
+        if (!po) return false;
+        // Chỉ hiển thị các nội dung đã được giám đốc phê duyệt, đợi chi tiền
+        if (po.status === 'submitted_director' || po.status === 'pending_director') return false;
+        if (!po.approvedBy || po.approvedBy.trim() === '') return false;
+      }
       return true;
     });
   }, [cashflowNotices]);
@@ -375,6 +404,64 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
       onShowToast?.('error', 'Lỗi kết nối', 'Không thể gửi yêu cầu chi tiền');
     } finally {
       setIsExecuting(false);
+    }
+  };
+
+  // Ngưỡng quy định trong nội quy lao động / thẩm quyền chi tiêu công ty
+  const laborRuleSingleLimit = useMemo(() => {
+    try {
+      const saved = localStorage.getItem('seajong_labor_rule_single_limit');
+      if (saved) return Number(saved);
+      const accLimit = localStorage.getItem('seajong_accounting_single_limit');
+      if (accLimit) return Number(accLimit);
+    } catch {}
+    return 5000000; // Mặc định 5.000.000 đ theo định mức tạm ứng nội quy lao động
+  }, []);
+
+  const [isSubmittingDirector, setIsSubmittingDirector] = useState<boolean>(false);
+
+  const handleSubmitDirector = async (orderId: string) => {
+    setIsSubmittingDirector(true);
+    try {
+      const res = await fetch(`/api/finance/payment-orders/${orderId}/submit-director`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          submitter: 'Kế toán thanh toán',
+          note: 'Trình Giám đốc phê duyệt chi do vượt quá ngưỡng quy định trong nội quy lao động',
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        onShowToast?.(
+          'success',
+          'Trình duyệt thành công',
+          `Đã gửi thông tin Lệnh chi ${data.orderCode || selectedNotice?.code || ''} cho Giám đốc duyệt chi.`
+        );
+        notifyFinanceUpdated('payment_order', 'update');
+        window.dispatchEvent(new CustomEvent('decodoor_approval_documents_updated'));
+        loadRealStats(selectedPeriod, selectedMonth);
+        if (selectedNotice && selectedNotice.paymentOrder) {
+          setSelectedNotice({
+            ...selectedNotice,
+            status: 'Chờ Giám đốc duyệt',
+            statusVariant: 'warning',
+            paymentOrder: {
+              ...selectedNotice.paymentOrder,
+              status: 'submitted_director',
+              statusLabel: 'Chờ Giám đốc duyệt',
+              approvalNote: 'Đã trình Ban Giám đốc phê duyệt chi do vượt quá ngưỡng quy định trong nội quy lao động',
+            },
+          });
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        onShowToast?.('error', 'Lỗi trình duyệt', err.error || 'Không thể gửi trình duyệt lệnh chi này');
+      }
+    } catch {
+      onShowToast?.('error', 'Lỗi kết nối', 'Không thể kết nối tới máy chủ');
+    } finally {
+      setIsSubmittingDirector(false);
     }
   };
 
@@ -1480,175 +1567,14 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
         </div>
       </div>
 
-      {/* ── MODAL CHI TIẾT LỆNH CHI TIỀN (HÌNH 2) ── */}
-      {selectedNotice && selectedNotice.type === 'outflow' && (
-        <Modal
-          isOpen={Boolean(selectedNotice)}
-          onClose={() => setSelectedNotice(null)}
-          title={`LỆNH CHI TIỀN: ${selectedNotice.code}`}
-          maxWidth="750px"
-          footer={
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-              <Button
-                variant="outline"
-                size="sm"
-                leftIcon={<Printer size={15} />}
-                onClick={() => window.print()}
-              >
-                In lệnh chi
-              </Button>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setSelectedNotice(null)}
-                >
-                  Đóng
-                </Button>
-                {selectedNotice.paymentOrder?.status !== 'completed' && (
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    leftIcon={<CheckCircle size={15} />}
-                    disabled={isExecuting}
-                    onClick={() => handleExecutePayment(selectedNotice.paymentOrder?.id || selectedNotice.id)}
-                  >
-                    {isExecuting ? 'Đang thực hiện...' : 'Xác nhận đã chi tiền / Lập phiếu chi'}
-                  </Button>
-                )}
-              </div>
-            </div>
-          }
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Banner trạng thái */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '10px 14px',
-                borderRadius: '8px',
-                backgroundColor: selectedNotice.paymentOrder?.status === 'completed' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(244, 63, 94, 0.12)',
-                border: `1px solid ${selectedNotice.paymentOrder?.status === 'completed' ? '#10b981' : '#f43f5e'}`,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div
-                  style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    backgroundColor: selectedNotice.paymentOrder?.status === 'completed' ? '#10b981' : '#f43f5e',
-                  }}
-                />
-                <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: selectedNotice.paymentOrder?.status === 'completed' ? '#059669' : '#e11d48' }}>
-                  {selectedNotice.paymentOrder?.status === 'completed'
-                    ? `ĐÃ HOÀN TẤT CHI TIỀN (Chứng từ: ${selectedNotice.paymentOrder?.voucherId || 'Phiếu chi'})`
-                    : 'CHỜ BỘ PHẬN KẾ TOÁN THỰC HIỆN CHI TIỀN (GIẢI NGÂN)'}
-                </span>
-              </div>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                Ngày lập lệnh: <strong>{selectedNotice.paymentOrder?.approvedDate || selectedNotice.dueDate}</strong>
-              </span>
-            </div>
-
-            {/* Khung tài liệu lệnh chi */}
-            <div
-              style={{
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '8px',
-                padding: '16px',
-                backgroundColor: 'var(--bg-surface-2)',
-              }}
-            >
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px 20px', fontSize: '0.8125rem' }}>
-                <div>
-                  <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Mã lệnh chi:</span>
-                  <strong style={{ color: 'var(--color-primary)', fontSize: '0.9375rem', fontFamily: 'monospace' }}>
-                    {selectedNotice.code}
-                  </strong>
-                </div>
-
-                <div>
-                  <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Căn cứ phê duyệt:</span>
-                  <strong style={{ color: 'var(--text-primary)' }}>
-                    {selectedNotice.paymentOrder?.refCode ? `Hồ sơ tạm ứng ${selectedNotice.paymentOrder.refCode}` : 'Ban Giám đốc phê duyệt'}
-                  </strong>
-                </div>
-
-                <div>
-                  <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Người thụ hưởng:</span>
-                  <strong style={{ color: 'var(--text-primary)', fontSize: '0.875rem' }}>
-                    {selectedNotice.paymentOrder?.beneficiaryName || selectedNotice.partner}
-                  </strong>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    Bộ phận: {selectedNotice.paymentOrder?.department || 'Khối văn phòng'}
-                  </div>
-                </div>
-
-                <div>
-                  <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Hình thức thanh toán:</span>
-                  <strong style={{ color: 'var(--text-primary)' }}>
-                    {selectedNotice.paymentOrder?.paymentMethod === 'cash' ? 'Tiền mặt tại quỹ (TK 111)' : 'Chuyển khoản ngân hàng (TK 112)'}
-                  </strong>
-                  {selectedNotice.paymentOrder?.bankName && (
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                      {selectedNotice.paymentOrder.bankName} - STK: <strong>{selectedNotice.paymentOrder.bankAccount}</strong>
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ gridColumn: 'span 2', padding: '10px 14px', backgroundColor: 'var(--bg-surface-1)', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', display: 'block' }}>Số tiền chi tạm ứng:</span>
-                      <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f43f5e', fontFamily: "'Roboto Condensed', monospace" }}>
-                        {(selectedNotice.paymentOrder?.amount || selectedNotice.rawAmount || 0).toLocaleString('vi-VN')} VND
-                      </span>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Bằng chữ:</span>
-                      <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', fontStyle: 'italic' }}>
-                        {selectedNotice.paymentOrder?.amountInWords || 'Đồng chẵn'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ gridColumn: 'span 2' }}>
-                  <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Mục đích / Nội dung chi:</span>
-                  <div style={{ color: 'var(--text-primary)', marginTop: '2px', lineHeight: 1.5 }}>
-                    {selectedNotice.paymentOrder?.purpose || selectedNotice.title}
-                  </div>
-                </div>
-
-                <div>
-                  <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Người ký duyệt lệnh:</span>
-                  <strong style={{ color: '#059669' }}>
-                    {selectedNotice.paymentOrder?.approvedBy || 'Ban Giám Đốc'}
-                  </strong>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    Bút phê: <em>"{selectedNotice.paymentOrder?.approvalNote || 'Đồng ý phê duyệt'}"</em>
-                  </div>
-                </div>
-
-                <div>
-                  <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Kế toán thực chi:</span>
-                  <strong style={{ color: 'var(--text-primary)' }}>
-                    {selectedNotice.paymentOrder?.executedBy || 'Chờ bộ phận kế toán giải ngân'}
-                  </strong>
-                  {selectedNotice.paymentOrder?.executedDate && (
-                    <div style={{ fontSize: '0.75rem', color: '#059669' }}>
-                      Đã chi ngày: {selectedNotice.paymentOrder.executedDate}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </Modal>
-      )}
+      {/* ── OFFCANVAS CHI TIẾT LỆNH CHI TIỀN (RỘNG 400PX - COMPONENT TÁCH DÙNG CHUNG) ── */}
+      <PaymentOrderOffcanvas
+        isOpen={Boolean(selectedNotice && selectedNotice.type === 'outflow')}
+        onClose={() => setSelectedNotice(null)}
+        data={selectedNotice}
+        onShowToast={onShowToast}
+        onSuccess={() => loadRealStats(selectedPeriod, selectedMonth)}
+      />
 
       {/* ── 5. OFFCANVAS LỊCH SỰ KIỆN ĐẦY ĐỦ (THÁNG, TUẦN, NGÀY, LỊCH BIỂU) ── */}
       <EventOffcanvas

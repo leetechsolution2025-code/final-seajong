@@ -716,16 +716,39 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
     }
   };
 
-  // Nạp danh sách hàng hoá cho các đơn hàng và hàng lỗi (DBH-..., ERR-...)
+  // Nạp danh sách hàng hoá cho các đơn hàng và hàng lỗi (DBH-..., ERR-..., DH-..., PO-...)
   useEffect(() => {
     if (!open || !debt) return;
+
+    // 1. Tự động đồng bộ ngay lập tức các items đã có sẵn trong debt.entries vào orderItemsMap
+    const initialMap: Record<string, any[]> = {};
+    if (Array.isArray(debt.entries)) {
+      debt.entries.forEach((e: any) => {
+        if (e.code && Array.isArray(e.items) && e.items.length > 0) {
+          initialMap[e.code] = e.items;
+        }
+        if (Array.isArray(e.payments)) {
+          e.payments.forEach((p: any) => {
+            const pCode = p.code || p.receiptCode || p.paymentCode;
+            if (pCode && Array.isArray(p.items) && p.items.length > 0) {
+              initialMap[pCode] = p.items;
+            }
+          });
+        }
+      });
+    }
+
+    if (Object.keys(initialMap).length > 0) {
+      setOrderItemsMap((prev) => ({ ...initialMap, ...prev }));
+    }
+
     const codesToFetch: string[] = [];
 
     const scanList = (list: any[]) => {
       list.forEach((item) => {
         const code = item.ref || item.code || item.stageCode;
         if (code && typeof code === 'string' && (code.startsWith('DBH-') || code.startsWith('ERR-') || code.startsWith('DH-') || code.startsWith('PO-'))) {
-          if (!orderItemsMap[code] && !codesToFetch.includes(code)) {
+          if (!orderItemsMap[code] && !initialMap[code] && !codesToFetch.includes(code)) {
             codesToFetch.push(code);
           }
         }
@@ -735,13 +758,13 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
     scanList(transactions.timelineTransactions);
     if (Array.isArray(debt.entries)) {
       debt.entries.forEach((e: any) => {
-        if (e.code && !orderItemsMap[e.code] && !codesToFetch.includes(e.code)) {
+        if (e.code && !orderItemsMap[e.code] && !initialMap[e.code] && !codesToFetch.includes(e.code)) {
           codesToFetch.push(e.code);
         }
         if (Array.isArray(e.payments)) {
           e.payments.forEach((p: any) => {
-            const pCode = p.code || p.receiptCode;
-            if (pCode && typeof pCode === 'string' && (pCode.startsWith('ERR-') || pCode.startsWith('DBH-')) && !orderItemsMap[pCode] && !codesToFetch.includes(pCode)) {
+            const pCode = p.code || p.receiptCode || p.paymentCode;
+            if (pCode && typeof pCode === 'string' && (pCode.startsWith('ERR-') || pCode.startsWith('DBH-') || pCode.startsWith('DH-') || pCode.startsWith('PO-')) && !orderItemsMap[pCode] && !initialMap[pCode] && !codesToFetch.includes(pCode)) {
               codesToFetch.push(pCode);
             }
           });
@@ -782,6 +805,12 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
       String(tx.type || '').includes('Giảm trừ') ||
       String(tx.ref || '').startsWith('ERR-');
 
+    const rawItems = (Array.isArray(tx.rawEntry?.items) && tx.rawEntry.items.length > 0 ? tx.rawEntry.items : null) ||
+                     (Array.isArray(tx.rawPayment?.items) && tx.rawPayment.items.length > 0 ? tx.rawPayment.items : null) ||
+                     orderItemsMap[tx.ref] ||
+                     orderItemsMap[tx.code] ||
+                     [];
+
     const entryData = tx.rawEntry || {
       id: tx.stageId || tx.id,
       code: tx.ref || tx.stageCode,
@@ -795,7 +824,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
       status: isReturn ? 'RETURNED' : 'COMPLETED',
       statusLabel: isReturn ? 'Trả lại hàng' : 'Đã giao hàng',
       payments: tx.rawPayment ? [tx.rawPayment] : [],
-      items: orderItemsMap[tx.ref] || [],
+      items: rawItems,
     };
 
     setSelectedSubEntryForOffcanvas({
@@ -805,7 +834,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
         title: tx.note || entryData.title,
         isReturn,
         amount: isReturn ? tx.decrease : (entryData.contractValue || tx.increase || tx.decrease),
-        items: orderItemsMap[tx.ref] || entryData.items || [],
+        items: rawItems.length > 0 ? rawItems : (entryData.items || []),
       },
       parent: debt,
       type: isReceivable ? 'receivable' : 'payable',
@@ -1517,7 +1546,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                           const hasPayments = tx.paymentCount > 0;
                           const isCollapsed = collapsedStages[tx.stageCode];
                           const cleanedNote = cleanTransactionNote(tx.note, partnerDisplayName, debt.customerPhone || debt.phone);
-                          const itemsCount = orderItemsMap[tx.ref]?.length || 0;
+                          const itemsCount = (Array.isArray(tx.rawEntry?.items) && tx.rawEntry.items.length > 0 ? tx.rawEntry.items.length : 0) || orderItemsMap[tx.ref]?.length || 0;
 
                           return (
                             <tr
@@ -1641,7 +1670,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
 
                         if (isStagePayment) {
                           const cleanedNote = cleanTransactionNote(tx.note, partnerDisplayName, debt.customerPhone || debt.phone);
-                          const itemsCount = orderItemsMap[tx.ref]?.length || 0;
+                          const itemsCount = (Array.isArray(tx.rawPayment?.items) && tx.rawPayment.items.length > 0 ? tx.rawPayment.items.length : 0) || (Array.isArray(tx.rawEntry?.items) && tx.rawEntry.items.length > 0 ? tx.rawEntry.items.length : 0) || orderItemsMap[tx.ref]?.length || 0;
 
                           return (
                             <tr
@@ -1754,7 +1783,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                       // ── CHẾ ĐỘ 2: THEO TRÌNH TỰ THỜI GIAN (TIMELINE) HOẶC DÒNG ĐẦU KỲ ──
                       const isMain = tx.type.includes('Bán hàng') || tx.type.includes('Mua hàng');
                       const cleanedNote = cleanTransactionNote(tx.note, partnerDisplayName, debt.customerPhone || debt.phone);
-                      const itemsCount = orderItemsMap[tx.ref]?.length || 0;
+                      const itemsCount = (Array.isArray(tx.rawEntry?.items) && tx.rawEntry.items.length > 0 ? tx.rawEntry.items.length : 0) || (Array.isArray(tx.rawPayment?.items) && tx.rawPayment.items.length > 0 ? tx.rawPayment.items.length : 0) || orderItemsMap[tx.ref]?.length || 0;
 
                       return (
                         <tr
@@ -2027,16 +2056,18 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                   alignItems: 'flex-start',
                   paddingBottom: '14px',
                   borderBottom: '2px solid #003087',
+                  gap: '16px',
                 }}
               >
                 <div
                   className="print-doc-header-left"
                   style={{
                     display: 'flex',
-                    alignItems: 'center',
+                    alignItems: 'flex-start',
                     gap: '12px',
-                    flex: 1,
+                    flex: '1 1 auto',
                     minWidth: 0,
+                    maxWidth: '62%',
                   }}
                 >
                   {company.logo_url ? (
@@ -2049,6 +2080,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                         maxWidth: '110px',
                         objectFit: 'contain',
                         flexShrink: 0,
+                        marginTop: '2px',
                       }}
                     />
                   ) : (
@@ -2066,12 +2098,13 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                         fontSize: '0.95rem',
                         letterSpacing: '1px',
                         flexShrink: 0,
+                        marginTop: '2px',
                       }}
                     >
                       DCD
                     </div>
                   )}
-                  <div style={{ minWidth: 0 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
                     <div
                       className="print-company-name"
                       style={{
@@ -2080,7 +2113,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                         textTransform: 'uppercase',
                         color: '#003087',
                         lineHeight: 1.25,
-                        whiteSpace: 'nowrap',
+                        wordBreak: 'break-word',
                       }}
                     >
                       {company.company_name || 'CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM'}
@@ -2090,9 +2123,11 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                       style={{
                         fontSize: '0.71rem',
                         color: '#475569',
-                        marginTop: '2px',
-                        lineHeight: 1.3,
-                        whiteSpace: 'nowrap',
+                        marginTop: '3px',
+                        lineHeight: 1.35,
+                        wordBreak: 'break-word',
+                        overflowWrap: 'break-word',
+                        whiteSpace: 'normal',
                       }}
                     >
                       Địa chỉ: {company.address || 'Cụm 4, Xã Sơn Đồng, Thành phố Hà Nội, Việt Nam'}
@@ -2102,8 +2137,11 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                       style={{
                         fontSize: '0.71rem',
                         color: '#64748b',
-                        marginTop: '1px',
-                        whiteSpace: 'nowrap',
+                        marginTop: '2px',
+                        lineHeight: 1.35,
+                        wordBreak: 'break-word',
+                        overflowWrap: 'break-word',
+                        whiteSpace: 'normal',
                       }}
                     >
                       ĐT: {company.phone || '0346548982'} | Email: {company.email || 'contact@decodoor.vn'}
@@ -2119,7 +2157,9 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                     flexDirection: 'column',
                     alignItems: 'center',
                     flexShrink: 0,
-                    marginLeft: '14px',
+                    width: '38%',
+                    maxWidth: '260px',
+                    marginLeft: '8px',
                   }}
                 >
                   <div
@@ -2338,7 +2378,12 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                         const cleanType = stripParentheses(tx.type);
                         const refCode = tx.ref || tx.code || '---';
                         const displayDate = tx.date ? new Date(tx.date).toLocaleDateString('vi-VN') : '---';
-                        const itemsList = orderItemsMap[refCode] || [];
+                        const itemsList =
+                          (Array.isArray(tx.rawEntry?.items) && tx.rawEntry.items.length > 0 ? tx.rawEntry.items : null) ||
+                          (Array.isArray(tx.rawPayment?.items) && tx.rawPayment.items.length > 0 ? tx.rawPayment.items : null) ||
+                          orderItemsMap[refCode] ||
+                          orderItemsMap[tx.ref] ||
+                          [];
 
                         return (
                           <React.Fragment key={tx.id || idx}>

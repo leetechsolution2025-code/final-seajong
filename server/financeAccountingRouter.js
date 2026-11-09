@@ -518,7 +518,45 @@ router.get('/api/debts/order-items/:code', (req, res) => {
       return res.json({ success: true, items: rows });
     }
 
-    // Trường hợp 1: Mã hàng trả lại / biên bản lỗi (ERR-...)
+    // Kiểm tra đơn mua hàng (PurchaseOrderItem / PurchaseOrder) cho Nhà cung cấp
+    const poSql = `
+      SELECT 
+        poi.id,
+        poi.tenHang,
+        poi.soLuong,
+        poi.donGia,
+        poi.thanhTien,
+        COALESCE(poi.donVi, 'cái') as donViTinh,
+        poi.dinhMucId,
+        poi.ghiChu,
+        ii.code as inventoryCode,
+        ii.tenHang as inventoryName
+      FROM PurchaseOrderItem poi
+      LEFT JOIN PurchaseOrder po ON poi.purchaseOrderId = po.id
+      LEFT JOIN InventoryItem ii ON poi.inventoryItemId = ii.id
+      WHERE po.code = ? OR poi.purchaseOrderId = ? OR po.code LIKE ? OR poi.purchaseOrderId LIKE ?
+      ORDER BY poi.rowid ASC
+    `;
+    db.all(poSql, [code, code, `%${code}%`, `%${code}%`], (poErr, poRows) => {
+      if (!poErr && poRows && poRows.length > 0) {
+        return res.json({ success: true, items: poRows });
+      }
+
+      // Kiểm tra thêm trong entries_json của debt_payables hoặc debt_receivables
+      db.all("SELECT entries_json FROM debt_payables WHERE entries_json LIKE ? LIMIT 5", [`%${code}%`], (dpErr, dpRows) => {
+        if (!dpErr && dpRows && dpRows.length > 0) {
+          for (const dpRow of dpRows) {
+            try {
+              const entries = JSON.parse(dpRow.entries_json || '[]');
+              const matched = entries.find((e) => e.code === code || e.code?.includes(code));
+              if (matched && Array.isArray(matched.items) && matched.items.length > 0) {
+                return res.json({ success: true, items: matched.items });
+              }
+            } catch {}
+          }
+        }
+
+      // Trường hợp 1: Mã hàng trả lại / biên bản lỗi (ERR-...)
     if (code.startsWith('ERR-')) {
       const qSql = `SELECT metadata, notes FROM QualityInspection WHERE notes LIKE ? OR metadata LIKE ? LIMIT 1`;
       db.get(qSql, [`%${code}%`, `%${code}%`], (qErr, qRow) => {
@@ -584,6 +622,8 @@ router.get('/api/debts/order-items/:code', (req, res) => {
       return res.json({ success: true, items: [] });
     });
   });
+  });
+});
 });
 
 // 1b. Cấu hình mốc tuổi nợ (Đến hạn, Quá hạn) để xác định trạng thái các khoản nợ
@@ -1109,6 +1149,47 @@ router.post('/api/debts/payables/:id/payments', (req, res) => {
           ],
           (vErr) => {
             if (vErr) console.warn('Lỗi ghi financial_vouchers từ trả nợ NCC:', vErr.message);
+
+            // Đồng bộ trực tiếp vào bảng Quản lý chi phí (financial_expenses)
+            const expSql = `
+              INSERT INTO financial_expenses (
+                id, code, title, category, category_label, amount, department,
+                spend_date, spender, status, status_label, notes,
+                debit_account, debit_account_name, credit_account, credit_account_name,
+                operation_type, proposer, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 'Đã chi tiền', ?, ?, ?, ?, ?, 'payment', ?, CURRENT_TIMESTAMP)
+              ON CONFLICT(code) DO UPDATE SET
+                title = excluded.title,
+                amount = excluded.amount,
+                spend_date = excluded.spend_date,
+                spender = excluded.spender,
+                updated_at = CURRENT_TIMESTAMP
+            `;
+            const dateParts = (paymentDate || '').split(' ');
+            const rawDate = dateParts[0].includes('/') ? dateParts[0] : (dateParts[1] || '09/11/2026');
+            db.run(
+              expSql,
+              [
+                `EXP-${vCode}`,
+                vCode,
+                paymentNote || `Thanh toán công nợ NCC ${row.supplier_name}`,
+                'production',
+                'Chi phí mua hàng & sản xuất',
+                payAmt,
+                'Phòng Mua hàng & Kho vận',
+                rawDate,
+                receiverName || row.supplier_name || 'Nhà cung cấp',
+                paymentNote || `Ủy nhiệm chi thanh toán cho ${row.supplier_name}`,
+                debitAccount || '331',
+                'Phải trả cho người bán',
+                creditAccount || '1121',
+                'Tiền gửi Ngân hàng',
+                creator || 'Kế toán viên',
+              ],
+              (eErr) => {
+                if (eErr) console.warn('Lỗi đồng bộ financial_expenses từ trả nợ NCC:', eErr.message);
+              }
+            );
           }
         );
 
@@ -2545,11 +2626,71 @@ router.patch('/api/finance/payment-orders/:id/execute', (req, res) => {
   });
 });
 
+// 3a. Trình duyệt Lệnh chi tiền lên Ban Giám đốc phê duyệt (khi vượt hạn mức nội quy lao động)
+router.patch('/api/finance/payment-orders/:id/submit-director', (req, res) => {
+  const { id } = req.params;
+  const { submitter = 'Kế toán thanh toán', note = '' } = req.body || {};
+  const nowStr = new Date().toLocaleDateString('vi-VN');
+
+  db.get('SELECT * FROM payment_orders WHERE id = ? OR order_code = ?', [id, id], (err, order) => {
+    if (err || !order) return res.status(404).json({ error: 'Không tìm thấy lệnh chi tiền' });
+
+    db.run(
+      `UPDATE payment_orders
+       SET status = 'submitted_director',
+           status_label = 'Chờ Giám đốc duyệt',
+           approval_note = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [note || 'Trình Ban Giám đốc phê duyệt chi do vượt quá hạn mức định mức nội quy lao động', order.id],
+      function (upErr) {
+        if (upErr) return res.status(500).json({ error: upErr.message });
+
+        // Đồng bộ sang bảng approval_documents để Giám đốc duyệt trong module Phê duyệt văn bản
+        const docId = `APR-${order.order_code}`;
+        const docSummary = `Lệnh chi: ${order.order_code} • Thụ hưởng: ${order.beneficiary_name} (${order.department || 'Bộ phận'}) • Số tiền: ${Number(order.amount).toLocaleString('vi-VN')} đ`;
+        const docContent = `Kính gửi Ban Giám đốc,\n\nBộ phận Kế toán kính trình Ban Giám đốc phê duyệt Lệnh chi tiền số ${order.order_code}.\n- Đối tượng thụ hưởng: ${order.beneficiary_name} (${order.department || 'Nhân sự'})\n- Số tiền chi đề xuất: ${Number(order.amount).toLocaleString('vi-VN')} đ (${order.amount_in_words || ''})\n- Lý do / Mục đích chi: ${order.purpose || order.title}\n- Hình thức thanh toán: ${order.payment_method === 'cash' ? 'Tiền mặt' : `Chuyển khoản (${order.bank_name || ''} - STK: ${order.bank_account || ''})`}\n- Căn cứ: Hồ sơ đề xuất ${order.ref_code || ''} (Vượt định mức phê duyệt theo Nội quy lao động)\n\nKính đề nghị Ban Giám đốc xem xét phê duyệt.`;
+
+        db.run(
+          `INSERT OR REPLACE INTO approval_documents (
+            id, code, title, doc_type, doc_type_name, department,
+            submitter, submitter_code, submitter_role, submit_date,
+            value, value_label, summary, content, priority, status, is_read,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, 'payment_order', 'Lệnh chi tiền', ?, ?, 'KT', 'Kế toán viên', ?, ?, ?, ?, ?, 'high', 'pending', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          [
+            docId,
+            order.order_code,
+            `Trình duyệt Lệnh chi ${order.order_code} - ${Number(order.amount).toLocaleString('vi-VN')} đ (${order.beneficiary_name})`,
+            order.department || 'Tài chính - Kế toán',
+            submitter,
+            nowStr,
+            order.amount,
+            `${Number(order.amount).toLocaleString('vi-VN')} đ`,
+            docSummary,
+            docContent,
+          ],
+          () => {}
+        );
+
+        res.json({
+          success: true,
+          message: 'Đã gửi trình Ban Giám đốc phê duyệt lệnh chi thành công',
+          orderCode: order.order_code,
+        });
+      }
+    );
+  });
+});
+
 // 3b. API Biểu đồ diễn biến dòng tiền Thu - Chi và Số dư quỹ 6 tháng + KPI theo kỳ (Tháng / Quý / Năm)
 router.get('/api/finance/cashflow-chart', (req, res) => {
+  const now = new Date();
+  const currentActualMonth = now.getMonth() + 1;
+  const currentActualYear = now.getFullYear();
   const period = String(req.query.period || 'month'); // 'month' | 'quarter' | 'year'
-  const selectedMonthNum = Math.min(Math.max(Number(req.query.month) || 10, 1), 12);
-  const selectedYear = Number(req.query.year) || 2026;
+  const selectedMonthNum = Math.min(Math.max(Number(req.query.month) || currentActualMonth, 1), 12);
+  const selectedYear = Number(req.query.year) || currentActualYear;
   const selectedIsoPrefix = `${selectedYear}-${String(selectedMonthNum).padStart(2, '0')}`;
 
   const allYearMonths = Array.from({ length: 12 }, (_, idx) => {
@@ -2557,14 +2698,14 @@ router.get('/api/finance/cashflow-chart', (req, res) => {
     const mStr = String(m).padStart(2, '0');
     return {
       monthNum: m,
-      month: m === 10 ? `T${mStr}/26 (HT)` : `T${mStr}/26`,
+      month: m === currentActualMonth ? `T${mStr}/26 (HT)` : `T${mStr}/26`,
       key: `${mStr}/${selectedYear}`,
       isoPrefix: `${selectedYear}-${mStr}`,
     };
   });
 
   const cxPositions = [84.6, 183.8, 282.9, 382.1, 481.3, 580.4];
-  const endWindowMonth = selectedMonthNum < 6 ? 6 : selectedMonthNum > 10 ? selectedMonthNum : 10;
+  const endWindowMonth = selectedMonthNum < 6 ? 6 : Math.min(selectedMonthNum, 12);
   const startWindowMonth = Math.max(1, endWindowMonth - 5);
 
   const journalSql = `
@@ -2642,7 +2783,7 @@ router.get('/api/finance/cashflow-chart', (req, res) => {
                         runningBalance = Math.max(0, runningBalance + inFlowRaw - outFlowRaw);
                       }
 
-                      const hasActivity = inFlowRaw > 0 || outFlowRaw > 0 || (cfg.monthNum >= 7 && cfg.monthNum <= 10);
+                      const hasActivity = inFlowRaw > 0 || outFlowRaw > 0 || (cfg.monthNum >= 7 && cfg.monthNum <= currentActualMonth);
                       const netBalRaw = hasActivity ? runningBalance : 0;
 
                       // Tính Công nợ phải thu phát sinh và đã thu trong tháng
@@ -2723,8 +2864,10 @@ router.get('/api/finance/cashflow-chart', (req, res) => {
                     const cumulativeReceivables = Math.round(Number(drSumRow?.total_rem) || 0);
                     let targetMonths = fullYearCalculated.filter((m) => m.monthNum === selectedMonthNum);
                     if (period === 'quarter') {
-                      // Kỳ Quý: tổng hợp 3 tháng gần nhất có dữ liệu thực tế trên biểu đồ (T08, T09, T10/2026) đồng bộ với Phòng Kinh doanh
-                      targetMonths = fullYearCalculated.filter((m) => [8, 9, 10].includes(m.monthNum));
+                      // Kỳ Quý: tổng hợp 3 tháng của quý hiện tại
+                      const curQ = Math.ceil(selectedMonthNum / 3);
+                      const qMonths = [curQ * 3 - 2, curQ * 3 - 1, curQ * 3];
+                      targetMonths = fullYearCalculated.filter((m) => qMonths.includes(m.monthNum));
                     } else if (period === 'year') {
                       // Kỳ Năm: tổng hợp toàn bộ 12 tháng trong năm 2026
                       targetMonths = fullYearCalculated;
@@ -2742,7 +2885,7 @@ router.get('/api/finance/cashflow-chart', (req, res) => {
 
                     const activeTargetWithBal = [...targetMonths].reverse().find((m) => m.netBalRaw > 0);
                     const periodCashBalance =
-                      period === 'month' && selectedMonthNum <= 10
+                      period === 'month' && selectedMonthNum <= currentActualMonth
                         ? activeTargetWithBal?.netBalRaw || totalCurrentBalance
                         : totalCurrentBalance;
                     const periodOpeningCash =
@@ -2832,10 +2975,10 @@ router.delete('/api/finance/payment-orders/:id', (req, res) => {
 });
 
 // 5. API Thông báo dòng tiền (Cashflow notices) cho trang Tổng quan Phòng tài chính (Hình 2)
-// CHỈ HIỂN THỊ CÁC NỘI DUNG CHƯA THỰC HIỆN (Lệnh chi chưa thanh toán & Công nợ chưa thu đủ)
+// CHỈ HIỂN THỊ CÁC NỘI DUNG ĐÃ ĐƯỢC GIÁM ĐỐC PHÊ DUYỆT, ĐỢI CHI TIỀN (Lệnh chi đã duyệt & Công nợ chưa thu đủ)
 router.get('/api/finance/cashflow-notices', (req, res) => {
   db.all(
-    "SELECT * FROM payment_orders WHERE status != 'completed' AND status != 'cancelled' ORDER BY created_at DESC",
+    "SELECT * FROM payment_orders WHERE status != 'completed' AND status != 'cancelled' AND (approved_by IS NOT NULL AND approved_by != '') AND status != 'submitted_director' AND status != 'pending_director' ORDER BY created_at DESC",
     [],
     (poErr, poRows) => {
       const notices = [];
@@ -2851,7 +2994,7 @@ router.get('/api/finance/cashflow-notices', (req, res) => {
           rawAmount: Number(r.amount || 0),
           dueDate: r.due_date || r.approved_date || 'Ngay khi duyệt',
           status: r.status_label || 'Chờ chi tiền',
-          statusVariant: 'danger',
+          statusVariant: r.status === 'submitted_director' ? 'warning' : 'danger',
           paymentOrder: {
             id: r.id,
             orderCode: r.order_code,

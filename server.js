@@ -23,6 +23,7 @@ const {
   syncOrderToAccountingAndDebt,
   syncAllExistingOrdersToAccounting,
 } = await import(`./server/orderAccountingSync.js?t=${_moduleBust}`);
+const { syncPersonalRequestAdvanceToFinance } = await import(`./services/advanceAccountingSyncService.js?t=${_moduleBust}`);
 
 dotenv.config();
 
@@ -45,7 +46,7 @@ const prisma = new Proxy({}, {
           const msg = String(err?.message || '');
           if (msg.includes('malformed') || msg.includes('QueryError') || msg.includes('ConnectorError')) {
             console.warn('⚠️ [Prisma Auto-Heal] Phát hiện kết nối SQLite lỗi, đang tự động kết nối lại PrismaClient...');
-            try { await rawPrisma.$disconnect(); } catch {}
+            try { await rawPrisma.$disconnect(); } catch { }
             rawPrisma = new PrismaClient();
             return await rawPrisma[prop](...args);
           }
@@ -69,7 +70,7 @@ const prisma = new Proxy({}, {
                 const msg = String(err?.message || '');
                 if (msg.includes('malformed') || msg.includes('QueryError') || msg.includes('ConnectorError')) {
                   console.warn('⚠️ [Prisma Auto-Heal] Phát hiện kết nối SQLite lỗi, đang tự động kết nối lại PrismaClient...');
-                  try { await rawPrisma.$disconnect(); } catch {}
+                  try { await rawPrisma.$disconnect(); } catch { }
                   rawPrisma = new PrismaClient();
                   return await rawPrisma[prop][mProp](...args);
                 }
@@ -8887,6 +8888,80 @@ app.post('/api/sales-engine/orders/:id/approve', (req, res) => {
   return handleUpdateSaleOrder(req, res);
 });
 
+// ── GET /api/logistics/inventory/stats ────────────────────────────────────────
+app.get('/api/logistics/inventory/stats', async (req, res) => {
+  try {
+    const warehouseId = (req.query.warehouseId || '').trim();
+
+    const totalItems = await prisma.inventoryItem.count();
+
+    const stocksAgg = await prisma.inventoryStock.aggregate({
+      _sum: {
+        soLuong: true,
+        soLuongGiu: true,
+      },
+      ...(warehouseId && warehouseId !== 'all' ? { where: { warehouseId } } : {}),
+    });
+
+    const totalQty = stocksAgg._sum.soLuong || 0;
+    const reservedQty = stocksAgg._sum.soLuongGiu || 0;
+    const availableQty = Math.max(0, totalQty - reservedQty);
+
+    const allItems = await prisma.inventoryItem.findMany({
+      select: {
+        id: true,
+        soLuong: true,
+        soLuongMin: true,
+        stocks: {
+          select: {
+            soLuong: true,
+            soLuongGiu: true,
+            warehouseId: true,
+          }
+        }
+      }
+    });
+
+    let inStockCount = 0;
+    let lowStockCount = 0;
+    let outOfStockCount = 0;
+
+    for (const it of allItems) {
+      const relevantStocks = (warehouseId && warehouseId !== 'all')
+        ? (it.stocks || []).filter(s => s.warehouseId === warehouseId)
+        : (it.stocks || []);
+      const q = relevantStocks.reduce((sum, s) => sum + (s.soLuong || 0), 0);
+      const qGiu = relevantStocks.reduce((sum, s) => sum + (s.soLuongGiu || 0), 0);
+      const remain = Math.max(0, q - qGiu);
+
+      if (remain <= 0) {
+        outOfStockCount++;
+      } else if (it.soLuongMin && q <= it.soLuongMin) {
+        lowStockCount++;
+      } else {
+        inStockCount++;
+      }
+    }
+
+    const totalWarehouses = await prisma.warehouse.count();
+
+    res.json({
+      success: true,
+      totalItems,
+      totalQty,
+      reservedQty,
+      availableQty,
+      inStockCount,
+      lowStockCount,
+      outOfStockCount,
+      totalWarehouses,
+    });
+  } catch (err) {
+    console.error('Lỗi GET /api/logistics/inventory/stats:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── GET /api/logistics/inventory & categories ─────────────────────────────────
 app.get('/api/logistics/inventory', async (req, res) => {
   try {
@@ -9295,7 +9370,7 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
           if (meta?.defectCode) pendingQcIdentifiers.add(meta.defectCode);
           if (meta?.defectId) pendingQcIdentifiers.add(meta.defectId);
           if (meta?.productionOrder) pendingQcIdentifiers.add(meta.productionOrder);
-        } catch (_) {}
+        } catch (_) { }
       }
     });
 
@@ -12215,13 +12290,82 @@ const mapApprovalRequestToDoc = (row, idx = 0) => {
 
 app.get('/api/approval-requests', async (req, res) => {
   try {
-    const requests = await prisma.approvalRequest.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: {
-        comments: { orderBy: { createdAt: 'asc' } },
-      },
+    const [requests, personalReqs] = await Promise.all([
+      prisma.approvalRequest.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: {
+          comments: { orderBy: { createdAt: 'asc' } },
+        },
+      }),
+      prisma.personalRequest.findMany({
+        where: {
+          OR: [
+            { type: { in: ['advance', 'salary-advance', 'advance_payment', 'refund', 'expense', 'business_trip'] } },
+            { reason: { contains: 'tạm ứng' } },
+            { details: { contains: 'advanceAmount' } },
+          ],
+        },
+        include: { employee: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    // Lọc bỏ các yêu cầu hành chính thuần túy không liên quan đến tiền (như nghỉ phép leave, late_early 0đ) khỏi danh sách yêu cầu tài chính
+    const filteredRequests = requests.filter((r) => {
+      let meta = {};
+      try { meta = typeof r.metadata === 'string' ? JSON.parse(r.metadata) : r.metadata || {}; } catch {}
+      const ent = String(r.entityType || '').toLowerCase();
+      const title = String(r.entityTitle || '').toLowerCase();
+      const amt = Number(meta?.totalAmount || meta?.soTien || meta?.amount || 0);
+      if ((ent === 'personal_request' || ent.includes('leave')) && (title.includes('nghỉ phép') || title.includes('đi muộn')) && amt === 0) {
+        return false;
+      }
+      return true;
     });
-    res.json({ success: true, data: requests, items: requests.map((r, i) => mapApprovalRequestToDoc(r, i)) });
+
+    const existingCodes = new Set(filteredRequests.map((r) => r.entityCode || r.id));
+
+    // Thêm các yêu cầu cá nhân về tiền / tạm ứng vào danh sách
+    for (const pr of personalReqs) {
+      if (existingCodes.has(pr.id) || existingCodes.has(pr.code)) continue;
+      let details = {};
+      try { details = typeof pr.details === 'string' ? JSON.parse(pr.details) : pr.details || {}; } catch {}
+      const advAmt = Number(details.advanceAmount || details.amount || 0);
+      const prStatus = String(pr.status || 'pending').toLowerCase();
+      const mappedPr = {
+        id: pr.id,
+        entityType: 'advance',
+        entityId: pr.id,
+        entityCode: pr.id,
+        entityTitle: details.title || `Tạm ứng: ${details.advancePurpose || pr.reason || 'Tạm ứng công tác phí'}`,
+        status: prStatus === 'approved' ? 'approved' : prStatus === 'rejected' ? 'rejected' : 'pending',
+        priority: details.priority === 'urgent' ? 'urgent' : details.priority === 'high' ? 'high' : 'normal',
+        dueDate: details.advanceDueDate || details.deadlineRefund || '',
+        department: pr.employee?.department || details.department || 'Phòng ban Seajong',
+        requestedById: pr.employeeId || '',
+        requestedByName: pr.employee?.name || details.applicantName || 'Cán bộ Seajong',
+        approverId: details.approver || 'Lãnh đạo phê duyệt',
+        createdAt: pr.createdAt,
+        updatedAt: pr.updatedAt,
+        comments: [],
+        metadata: JSON.stringify({
+          ...details,
+          totalAmount: advAmt,
+          soTien: advAmt,
+          amount: advAmt,
+          proposer: pr.employee?.name || details.applicantName || 'Cán bộ Seajong',
+          departmentName: pr.employee?.department || details.department || 'Phòng ban Seajong',
+          reason: details.advancePurpose || details.content || pr.reason,
+          paymentMethod: details.paymentMethod || 'bank_transfer',
+          bankName: details.bankName,
+          bankAccount: details.bankAccount,
+        }),
+      };
+      filteredRequests.unshift(mappedPr);
+      existingCodes.add(pr.id);
+    }
+
+    res.json({ success: true, data: filteredRequests, items: filteredRequests.map((r, i) => mapApprovalRequestToDoc(r, i)) });
   } catch (err) {
     console.error('[GET /api/approval-requests]', err);
     res.status(500).json({ error: err.message });
@@ -15306,14 +15450,18 @@ app.get('/api/sales/internal-reports/income', async (req, res) => {
           parsed = null;
         }
 
-        const reqAmount = Number(parsed?.amount || 0);
+        const reqAmount = Number(parsed?.advanceAmount || parsed?.amount || 0);
         if (reqAmount <= 0) continue;
+
+        const isDeductFromSalary = parsed?.deductFromSalary !== undefined ? Boolean(parsed.deductFromSalary) : true;
+        const isSettled = Boolean(parsed?.settled || parsed?.isRefunded || reqItem.status === 'COMPLETED');
+        if (!isDeductFromSalary || isSettled) continue;
 
         const salaryMonth = String(parsed?.salaryMonth || '').trim();
         if (salaryMonth === monthYearStr1 || salaryMonth === monthYearStr2) {
           totalAdvanceFromRequests += reqAmount;
-        } else if (!salaryMonth) {
-          const refDate = reqItem.startDate || reqItem.createdAt;
+        } else {
+          const refDate = parseFlexibleDate(parsed?.advanceDueDate || parsed?.deadlineRefund) || reqItem.endDate || reqItem.startDate || reqItem.createdAt;
           if (refDate && refDate >= startDate && refDate <= endDate) {
             totalAdvanceFromRequests += reqAmount;
           }
@@ -21543,6 +21691,8 @@ const mapPersonalRequestRow = (r, posMap = null) => {
       details.advancePurpose || details.purpose || details.expenseCategory || r.reason || '',
     advanceDueDate:
       details.advanceDueDate || (r.endDate ? formatDmyFromDate(r.endDate) : ''),
+    deductFromSalary:
+      details.deductFromSalary !== undefined ? Boolean(details.deductFromSalary) : true,
     paymentMethod:
       details.paymentMethod === 'Tiền mặt' || details.paymentMethod === 'cash'
         ? 'cash'
@@ -21568,6 +21718,14 @@ const mapPersonalRequestRow = (r, posMap = null) => {
     tripEstimatedCost:
       normalizedType === 'business_trip' ? rawAmount : details.tripEstimatedCost,
     approver: details.approver || 'Lê Công Vụ - Ban Giám đốc',
+    targetDepartment:
+      details.targetDepartment ||
+      (normalizedType === 'advance' || normalizedType === 'refund' ? 'finance' : 'hr'),
+    targetDepartmentName:
+      details.targetDepartmentName ||
+      (normalizedType === 'advance' || normalizedType === 'refund'
+        ? 'Phòng Tài chính – Kế toán'
+        : 'Phòng Hành chính - Nhân sự'),
     status: statusNorm,
     statusLabel,
     note: details.note || r.directorNote || r.hrNote || r.deptNote || '',
@@ -21688,6 +21846,13 @@ app.post('/api/personal-requests', async (req, res) => {
       await syncLeaveRequestToAttendance(employee.id);
     }
 
+    // Tự động đồng bộ sang Quản lý Chi phí, Tạm ứng và Sổ nhật ký kế toán nếu là phiếu tạm ứng
+    try {
+      await syncPersonalRequestAdvanceToFinance(created.id, prisma);
+    } catch (syncAdvErr) {
+      console.warn('⚠️ Lỗi đồng bộ phiếu tạm ứng sau POST:', syncAdvErr.message);
+    }
+
     const mapped = mapPersonalRequestRow(created);
     res.json({ ...mapped, success: true, data: mapped });
   } catch (err) {
@@ -21752,6 +21917,13 @@ app.put('/api/personal-requests/:id', async (req, res) => {
       await syncLeaveRequestToAttendance(existing.employeeId);
     }
 
+    // Tự động cập nhật / đồng bộ sang Quản lý Chi phí, Tạm ứng và Kế toán khi trạng thái thay đổi
+    try {
+      await syncPersonalRequestAdvanceToFinance(updated.id, prisma);
+    } catch (syncAdvErr) {
+      console.warn('⚠️ Lỗi đồng bộ phiếu tạm ứng sau PUT:', syncAdvErr.message);
+    }
+
     res.json(mapPersonalRequestRow(updated));
   } catch (err) {
     console.error('Lỗi PUT /api/personal-requests/:id:', err);
@@ -21767,6 +21939,9 @@ app.delete('/api/personal-requests/:id', async (req, res) => {
     if (existing?.employeeId) {
       await syncLeaveRequestToAttendance(existing.employeeId);
     }
+    try {
+      await syncPersonalRequestAdvanceToFinance(id, prisma);
+    } catch { }
     res.json({ success: true });
   } catch (err) {
     console.error('Lỗi DELETE /api/personal-requests/:id:', err);
@@ -21780,7 +21955,7 @@ app.post('/api/personal-requests/bulk-delete', async (req, res) => {
     if (Array.isArray(ids) && ids.length > 0) {
       const targetRows = await prisma.personalRequest.findMany({
         where: { id: { in: ids } },
-        select: { employeeId: true },
+        select: { employeeId: true, id: true },
       });
       await prisma.personalRequest.deleteMany({
         where: { id: { in: ids } },
@@ -21790,6 +21965,11 @@ app.post('/api/personal-requests/bulk-delete', async (req, res) => {
       ];
       for (const empId of uniqueEmpIds) {
         await syncLeaveRequestToAttendance(empId);
+      }
+      for (const row of targetRows) {
+        try {
+          await syncPersonalRequestAdvanceToFinance(row.id, prisma);
+        } catch { }
       }
     }
     res.json({ success: true });
@@ -22139,10 +22319,10 @@ app.patch('/api/qa/inspections/:id', async (req, res) => {
               : 'QC KẾT LUẬN: KHÔNG ĐẠT (CHUYỂN KHO HÀNG LỖI)';
 
         const descText = `QC kết luận: Đạt ${pQty}, Lỗi ${fQty}. Đã tạo ${pQty > 0 && fQty > 0
-            ? '2 lệnh nhập kho (Kho Thành Phẩm KTP & Kho Hàng Lỗi KHO-LOI)'
-            : pQty > 0
-              ? 'lệnh nhập Kho Thành Phẩm (KTP)'
-              : 'lệnh nhập Kho Hàng Lỗi (KHO-LOI)'
+          ? '2 lệnh nhập kho (Kho Thành Phẩm KTP & Kho Hàng Lỗi KHO-LOI)'
+          : pQty > 0
+            ? 'lệnh nhập Kho Thành Phẩm (KTP)'
+            : 'lệnh nhập Kho Hàng Lỗi (KHO-LOI)'
           } chuyển bộ phận Kho.`;
 
         await tx.defectRecord.update({
@@ -24870,14 +25050,18 @@ const computeHrAttendanceAndPayroll = async (month, year) => {
       const statusLower = String(reqItem.status || details.status || 'pending').toLowerCase();
       const rawType = String(details.type || reqItem.type || '').toLowerCase();
 
-      // Tạm ứng đã duyệt trong tháng
+      // Tạm ứng đã duyệt trong tháng: Tự động khấu trừ vào lương nếu được cấu hình trừ lương và chưa quyết toán
       if (
         (rawType === 'advance' || rawType === 'salary-advance') &&
         (statusLower === 'approved' || statusLower === 'completed')
       ) {
-        const advDate = parseFlexibleDate(details.advanceDueDate || reqItem.startDate || reqItem.createdAt);
-        if (advDate && advDate.getFullYear() === y && advDate.getMonth() + 1 === m) {
-          approvedAdvanceTotal += Number(details.advanceAmount || details.amount || 0);
+        const isDeductFromSalary = details.deductFromSalary !== undefined ? Boolean(details.deductFromSalary) : true;
+        const isSettled = Boolean(details.settled || details.isRefunded || statusLower === 'completed');
+        if (isDeductFromSalary && !isSettled) {
+          const advDate = parseFlexibleDate(details.advanceDueDate || details.deadlineRefund || reqItem.endDate || reqItem.startDate || reqItem.createdAt);
+          if (advDate && advDate.getFullYear() === y && advDate.getMonth() + 1 === m) {
+            approvedAdvanceTotal += Number(details.advanceAmount || details.amount || 0);
+          }
         }
       }
 

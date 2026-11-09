@@ -154,8 +154,14 @@ export const DashboardView: React.FC = () => {
     if (activeMenuKey === 'assets') {
       return <FinanceAssetsPage />;
     }
-    if (activeMenuKey === 'inventory' || activeMenuKey === 'inventory-reports' || activeMenuKey === 'audit-logs') {
+    if (activeMenuKey === 'inventory') {
       return <SalesInventoryPage />;
+    }
+    if (activeMenuKey === 'audit-logs' || activeMenuKey === 'nhat-ky-kho' || activeMenuKey === 'nhat-ky-hoat-dong-kho') {
+      return <LogisticsAuditLogsPage />;
+    }
+    if (activeMenuKey === 'inventory-reports' || activeMenuKey === 'bao-cao-kho') {
+      return <LogisticsReportsPage />;
     }
     if (activeMenuKey === 'reports' || activeMenuKey === 'financial-reports') {
       return <FinanceReportsPage />;

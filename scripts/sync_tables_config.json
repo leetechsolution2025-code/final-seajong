@@ -3,7 +3,13 @@
   "_instructions": "Thêm hoặc bớt tên bảng trong mảng 'tables_to_sync' bên dưới. Các bảng không nằm trong danh sách này trên VPS sẽ được giữ nguyên tuyệt đối.",
   "tables_to_sync": [
     "CompanyInfo",
-    "DepartmentCategory"
+    "DepartmentCategory",
+    "PersonalRequest",
+    "advance_payments",
+    "financial_expenses",
+    "financial_vouchers",
+    "accounting_journal_entries",
+    "accounting_journal_lines",
+    "Expense"
   ]
 }
-

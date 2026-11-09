@@ -301,8 +301,10 @@ export const AssetReportPrintModal: React.FC<AssetReportPrintModalProps> = ({
                     fontSize: '0.71rem',
                     color: '#475569',
                     marginTop: '2px',
-                    lineHeight: 1.3,
-                    whiteSpace: 'nowrap',
+                    lineHeight: 1.35,
+                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word',
+                    whiteSpace: 'normal',
                   }}
                 >
                   Địa chỉ: {company.address || 'Cụm 4, Xã Sơn Đồng, Thành phố Hà Nội, Việt Nam'}
@@ -313,7 +315,10 @@ export const AssetReportPrintModal: React.FC<AssetReportPrintModalProps> = ({
                     fontSize: '0.71rem',
                     color: '#64748b',
                     marginTop: '1px',
-                    whiteSpace: 'nowrap',
+                    lineHeight: 1.35,
+                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word',
+                    whiteSpace: 'normal',
                   }}
                 >
                   ĐT: {company.phone || '0346548982'} | Email: {company.email || 'contact@decodoor.vn'}

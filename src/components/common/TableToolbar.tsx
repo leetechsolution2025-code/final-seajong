@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Search, Gear, ArrowRepeat, FileEarmarkExcel, FileEarmarkArrowUp } from 'react-bootstrap-icons';
+import { Search, Gear, ArrowRepeat, FileEarmarkExcel, FileEarmarkArrowUp, Printer } from 'react-bootstrap-icons';
 import { Input } from './Input';
 import { Select, type SelectOption } from './Select';
 
@@ -117,6 +117,16 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
       onClick: onExportExcel || (() => {}),
     });
 
+    // Mục Tạo báo cáo (khi có onPrint)
+    if (onPrint) {
+      items.push({
+        id: 'create-report',
+        label: printLabel || 'Tạo báo cáo',
+        icon: <Printer size={15} style={{ color: '#0284c7', flexShrink: 0 }} />,
+        onClick: onPrint,
+      });
+    }
+
     // Mục Nhập từ bảng Excel
     items.push({
       id: 'import-excel',
@@ -144,7 +154,7 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
     });
 
     return items;
-  }, [menuItems, onExportExcel, onRefresh]);
+  }, [menuItems, onExportExcel, onPrint, printLabel, onRefresh]);
 
   return (
     <div

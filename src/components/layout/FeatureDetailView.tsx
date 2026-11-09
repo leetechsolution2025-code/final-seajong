@@ -73,7 +73,7 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
           groupName: 'CÔNG VIỆC CÁ NHÂN',
           icon: 'bi-clock-history',
           color: 'blue',
-          desc: 'Dữ liệu chấm công máy quét vân tay & GPS phân xưởng Seajong tháng 10/2026',
+          desc: `Dữ liệu chấm công máy quét vân tay & GPS phân xưởng Seajong tháng ${new Date().getMonth() + 1}/${new Date().getFullYear()}`,
           badge: 'CÔNG CA',
         };
       case 'my_requests':
@@ -662,7 +662,7 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
           code: t.code || `CV-${String(idx + 1).padStart(3, '0')}`,
           title: t.title || t.name || 'Nhiệm vụ công việc',
           dept: t.departmentName || t.department || `Khối ${deptCode.toUpperCase()}`,
-          deadline: t.dueDate || t.deadline ? new Date(t.dueDate || t.deadline).toLocaleDateString('vi-VN') : 'Tháng 10/2026',
+          deadline: t.dueDate || t.deadline ? new Date(t.dueDate || t.deadline).toLocaleDateString('vi-VN') : `Tháng ${new Date().getMonth() + 1}/${new Date().getFullYear()}`,
           priority: t.priority === 'urgent' || t.priority === 'high' ? 'Cao' : 'Bình thường',
           status:
             t.status === 'done' || t.status === 'completed'
@@ -676,7 +676,7 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
           code: r.code || `TT-${String(idx + 1).padStart(3, '0')}`,
           title: r.title || 'Hồ sơ đề xuất nghiệp vụ',
           dept: r.department || `Khối ${deptCode.toUpperCase()}`,
-          deadline: r.createdAt ? new Date(r.createdAt).toLocaleDateString('vi-VN') : 'Tháng 10/2026',
+          deadline: r.createdAt ? new Date(r.createdAt).toLocaleDateString('vi-VN') : `Tháng ${new Date().getMonth() + 1}/${new Date().getFullYear()}`,
           priority: r.priority === 'urgent' ? 'Gấp' : 'Tiêu chuẩn',
           status:
             r.status === 'approved'

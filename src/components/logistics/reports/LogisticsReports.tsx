@@ -1973,15 +1973,8 @@ export const LogisticsReports: React.FC<LogisticsReportsProps> = ({ currentStep 
         department="Bộ phận Kho vận"
         defaultPaperSize="A4"
         defaultOrientation="landscape"
-        headerInfo={{
-          companyName: companyDisplay.name,
-          address: companyDisplay.address,
-          phone: companyDisplay.phone,
-          taxCode: companyDisplay.taxCode,
-          email: companyDisplay.email,
-        }}
       >
-        {({ paperSize, orientation, zoom, margins }) => {
+        {() => {
           const doc = kkPrintDetail || selectedKkDoc || {};
           const lines: any[] = kkPrintDetail?.lines || [];
 

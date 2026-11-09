@@ -44,6 +44,8 @@ export interface MyRequestItem {
   department: string;
   applicantName: string;
   applicantRole: string;
+  targetDepartment?: 'finance' | 'hr' | string;
+  targetDepartmentName?: string;
 
   // Đi muộn về sớm
   lateEarlyType?: 'late' | 'early';
@@ -63,6 +65,7 @@ export interface MyRequestItem {
   advanceAmount?: number;
   advancePurpose?: string;
   advanceDueDate?: string;
+  deductFromSalary?: boolean;
   paymentMethod?: 'bank' | 'cash';
   bankAccount?: string;
   bankName?: string;
@@ -474,10 +477,16 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
       leaveQuotaSummary.currentReqDays > leaveQuotaSummary.remainingMonthPaidBefore ||
       leaveQuotaSummary.remainingYearBefore <= 0);
 
+  // Khóa cập nhật / chỉnh sửa nếu yêu cầu đã được phê duyệt hoặc hoàn tất
+  const isEditingApproved = Boolean(
+    editingRequest && (editingRequest.status === 'approved' || editingRequest.status === 'completed')
+  );
+
   // Form Tạm ứng
   const [advanceAmount, setAdvanceAmount] = useState('5000000');
   const [advancePurpose, setAdvancePurpose] = useState('Tạm ứng công tác phí');
   const [advanceDueDate, setAdvanceDueDate] = useState('20/10/2026');
+  const [deductFromSalary, setDeductFromSalary] = useState<boolean>(true);
   const [advancePaymentMethod, setAdvancePaymentMethod] = useState<'bank' | 'cash'>('bank');
   const [bankAccount, setBankAccount] = useState('19033458992011');
   const [bankName, setBankName] = useState('Techcombank Đà Nẵng');
@@ -805,6 +814,83 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
     }
   };
 
+  const isMoneyRequest = (t: RequestType) => t === 'advance' || t === 'refund';
+  const isHrRequest = (t: RequestType) => t === 'late_early' || t === 'leave' || t === 'business_trip';
+
+  // Nhóm người phê duyệt điều hướng tự động theo phân luồng Kế toán (Tiền) / Nhân sự (Công, Nghỉ, Đi lại)
+  const relevantApproverGroups = useMemo(() => {
+    const isMoney = isMoneyRequest(selectedCreateType);
+    if (isMoney) {
+      return [
+        {
+          group: 'Phòng Tài chính – Kế toán (Bộ phận xử lý)',
+          options: [
+            { label: 'Trần Thị Linh - Phòng Tài chính – Kế toán', value: 'Trần Thị Linh - Phòng Tài chính – Kế toán' },
+          ],
+        },
+        {
+          group: 'Ban Giám đốc (Phê duyệt chi ngân sách)',
+          options: [
+            { label: 'Lê Công Vụ - Ban Giám đốc', value: 'Lê Công Vụ - Ban Giám đốc' },
+            { label: 'Đoàn Thị Yến - Ban Giám đốc', value: 'Đoàn Thị Yến - Ban Giám đốc' },
+          ],
+        },
+        {
+          group: 'Trưởng các phòng ban khác',
+          options: [
+            { label: 'Cao Thị Phương - Phòng Nhân sự', value: 'Cao Thị Phương - Phòng Nhân sự' },
+            { label: 'Hà Thị Bích Ngọc - Phòng Sản xuất', value: 'Hà Thị Bích Ngọc - Phòng Sản xuất' },
+            { label: 'Nguyễn Văn Tiền - Phòng Kho vận', value: 'Nguyễn Văn Tiền - Phòng Kho vận' },
+            { label: 'Nguyễn Thu Huyền - Phòng Marketing', value: 'Nguyễn Thu Huyền - Phòng Marketing' },
+            { label: 'Lê Anh Vân - Phòng Đảm bảo chất lượng', value: 'Lê Anh Vân - Phòng Đảm bảo chất lượng' },
+          ],
+        },
+      ];
+    } else {
+      return [
+        {
+          group: 'Phòng Hành chính - Nhân sự (Bộ phận xử lý)',
+          options: [
+            { label: 'Cao Thị Phương - Phòng Nhân sự', value: 'Cao Thị Phương - Phòng Nhân sự' },
+          ],
+        },
+        {
+          group: 'Ban Giám đốc (Phê duyệt cấp cao)',
+          options: [
+            { label: 'Lê Công Vụ - Ban Giám đốc', value: 'Lê Công Vụ - Ban Giám đốc' },
+            { label: 'Đoàn Thị Yến - Ban Giám đốc', value: 'Đoàn Thị Yến - Ban Giám đốc' },
+          ],
+        },
+        {
+          group: 'Trưởng các phòng ban trực tiếp',
+          options: [
+            { label: 'Hà Thị Bích Ngọc - Phòng Sản xuất', value: 'Hà Thị Bích Ngọc - Phòng Sản xuất' },
+            { label: 'Nguyễn Văn Tiền - Phòng Kho vận', value: 'Nguyễn Văn Tiền - Phòng Kho vận' },
+            { label: 'Nguyễn Thu Huyền - Phòng Marketing', value: 'Nguyễn Thu Huyền - Phòng Marketing' },
+            { label: 'Lê Anh Vân - Phòng Đảm bảo chất lượng', value: 'Lê Anh Vân - Phòng Đảm bảo chất lượng' },
+            { label: 'Trần Thị Linh - Phòng Tài chính – Kế toán', value: 'Trần Thị Linh - Phòng Tài chính – Kế toán' },
+          ],
+        },
+      ];
+    }
+  }, [selectedCreateType]);
+
+  // Xử lý chuyển đổi loại yêu cầu và tự động chuyển phòng ban tiếp nhận
+  const handleTypeChange = (newType: RequestType) => {
+    setSelectedCreateType(newType);
+    if (isMoneyRequest(newType)) {
+      // Các vấn đề liên quan đến tiền: chuyển phòng kế toán xử lý
+      if (!formApprover.includes('Kế toán') && !formApprover.includes('Ban Giám đốc')) {
+        setFormApprover('Trần Thị Linh - Phòng Tài chính – Kế toán');
+      }
+    } else {
+      // Các vấn đề liên quan đến đi muộn, về sớm, nghỉ phép: chuyển phòng nhân sự xử lý
+      if (formApprover.includes('Kế toán')) {
+        setFormApprover('Cao Thị Phương - Phòng Nhân sự');
+      }
+    }
+  };
+
   // Reset và mở modal tạo mới
   const handleOpenCreateModal = (type: RequestType = 'late_early') => {
     setEditingRequest(null);
@@ -813,7 +899,13 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
     setFormTitle('');
     setFormContent('');
     setFormNote('');
-    setFormApprover('Lê Công Vụ - Ban Giám đốc');
+    setDeductFromSalary(true);
+    // Tự động phân luồng phòng ban xử lý ngay khi mở form
+    if (isMoneyRequest(type)) {
+      setFormApprover('Trần Thị Linh - Phòng Tài chính – Kế toán');
+    } else {
+      setFormApprover('Cao Thị Phương - Phòng Nhân sự');
+    }
     setFormPriority('medium');
     setCreateModalOpen(true);
   };
@@ -826,7 +918,11 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
     setFormTitle(item.title || '');
     setFormContent(item.content || '');
     setFormNote(item.note || item.content || '');
-    setFormApprover(item.approver || 'Lê Công Vụ - Ban Giám đốc');
+    setDeductFromSalary(item.deductFromSalary !== undefined ? Boolean(item.deductFromSalary) : true);
+    const defaultApprover = isMoneyRequest(item.type)
+      ? 'Trần Thị Linh - Phòng Tài chính – Kế toán'
+      : 'Cao Thị Phương - Phòng Nhân sự';
+    setFormApprover(item.approver || defaultApprover);
     setFormPriority(item.priority || 'medium');
 
     if (item.type === 'late_early') {
@@ -868,6 +964,16 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
   // Submit tạo mới hoặc lưu chỉnh sửa yêu cầu
   const handleSubmitCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isEditingApproved) {
+      if (onShowToast) {
+        onShowToast(
+          'warning',
+          'Yêu cầu đã được phê duyệt',
+          'Phiếu yêu cầu này đã được phê duyệt, hệ thống đã khóa chức năng chỉnh sửa.'
+        );
+      }
+      return;
+    }
     if (isAnnualLeaveQuotaExceeded) {
       if (onShowToast) {
         onShowToast(
@@ -929,9 +1035,12 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
 
     // Nếu đang ở chế độ chỉnh sửa (Edit mode)
     if (editingRequest) {
+      const isMoney = isMoneyRequest(selectedCreateType);
       const updatedItem: MyRequestItem = {
         ...editingRequest,
         type: selectedCreateType,
+        targetDepartment: isMoney ? 'finance' : 'hr',
+        targetDepartmentName: isMoney ? 'Phòng Tài chính – Kế toán' : 'Phòng Hành chính - Nhân sự',
         title: computedTitle,
         content: computedContent,
         approver: formApprover,
@@ -952,6 +1061,7 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
         advanceAmount: parseFloat(advanceAmount.replace(/[^0-9]/g, '')) || 0,
         advancePurpose,
         advanceDueDate,
+        deductFromSalary,
         paymentMethod: advancePaymentMethod,
         bankAccount,
         bankName,
@@ -1037,10 +1147,13 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
     };
     const finalDept = userDept || deptMap[department] || 'Phòng hành chính nhân sự';
 
+    const isMoney = isMoneyRequest(selectedCreateType);
     const newItem: MyRequestItem = {
       id: newId,
       code: newCode,
       type: selectedCreateType,
+      targetDepartment: isMoney ? 'finance' : 'hr',
+      targetDepartmentName: isMoney ? 'Phòng Tài chính – Kế toán' : 'Phòng Hành chính - Nhân sự',
       title: computedTitle,
       content: computedContent,
       createdAt: dateStr,
@@ -1069,6 +1182,7 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
       advanceAmount: parseFloat(advanceAmount.replace(/[^0-9]/g, '')) || 0,
       advancePurpose,
       advanceDueDate,
+      deductFromSalary,
       paymentMethod: advancePaymentMethod,
       bankAccount,
       bankName,
@@ -1280,7 +1394,7 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
               <th className="!px-2.5 md:!px-[14px] !py-2.5 md:!py-3 whitespace-nowrap">Nội dung yêu cầu</th>
               <th className="hidden md:table-cell" style={{ padding: '12px 14px', width: '150px', minWidth: '140px', whiteSpace: 'nowrap' }}>Thời gian gửi</th>
               <th className="hidden md:table-cell" style={{ padding: '12px 14px', width: '130px', minWidth: '120px', textAlign: 'right', whiteSpace: 'nowrap' }}>Số tiền VND</th>
-              <th className="hidden md:table-cell" style={{ padding: '12px 14px', width: '220px', minWidth: '200px', whiteSpace: 'nowrap' }}>Người phê duyệt</th>
+              <th className="hidden md:table-cell" style={{ padding: '12px 14px', width: '230px', minWidth: '210px', whiteSpace: 'nowrap' }}>Đơn vị & Người duyệt</th>
               <th className="hidden md:table-cell" style={{ padding: '12px 14px', width: '130px', minWidth: '120px', textAlign: 'center', whiteSpace: 'nowrap' }}>Trạng thái</th>
             </tr>
           </thead>
@@ -1432,19 +1546,20 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                         <span style={{ color: '#cbd5e1' }}>—</span>
                       )}
                     </td>
-                    <td className="hidden md:table-cell" style={{ padding: '12px 14px', width: '220px', minWidth: '200px', whiteSpace: 'nowrap' }}>
+                    <td className="hidden md:table-cell" style={{ padding: '12px 14px', width: '230px', minWidth: '210px', whiteSpace: 'nowrap' }}>
                       {(() => {
                         const { name, role } = parseApprover(item.approver);
+                        const isMoney = isMoneyRequest(item.type);
                         return (
                           <div>
                             <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.85rem', lineHeight: 1.35, whiteSpace: 'nowrap' }}>
                               {name}
                             </div>
-                            {role && (
-                              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', lineHeight: 1.3, whiteSpace: 'nowrap' }}>
-                                {role}
-                              </div>
-                            )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', fontSize: '0.72rem', color: isMoney ? '#0284c7' : '#7c3aed', fontWeight: 600 }}>
+                              <i className={`bi ${isMoney ? 'bi-bank' : 'bi-people'}`} style={{ fontSize: '0.7rem' }} />
+                              <span>{isMoney ? 'Phòng Kế toán' : 'Phòng Nhân sự'}</span>
+                              {role && <span style={{ color: '#94a3b8', fontWeight: 400 }}>• {role}</span>}
+                            </div>
                           </div>
                         );
                       })()}
@@ -1522,16 +1637,18 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
               type="submit"
               form="create-request-form"
               variant="primary"
-              disabled={isAnnualLeaveQuotaExceeded}
+              disabled={isAnnualLeaveQuotaExceeded || isEditingApproved}
               title={
-                isAnnualLeaveQuotaExceeded
+                isEditingApproved
+                  ? 'Yêu cầu đã được phê duyệt, không thể thay đổi nội dung.'
+                  : isAnnualLeaveQuotaExceeded
                   ? `Tháng ${leaveQuotaSummary.targetMonth}/${leaveQuotaSummary.targetYear} đã hết hoặc không đủ ngày nghỉ phép có lương khả dụng (${leaveQuotaSummary.remainingMonthPaidBefore}/1 ngày). Vui lòng chọn hình thức nghỉ khác.`
                   : undefined
               }
               style={{
                 fontWeight: 700,
-                opacity: isAnnualLeaveQuotaExceeded ? 0.5 : 1,
-                cursor: isAnnualLeaveQuotaExceeded ? 'not-allowed' : 'pointer',
+                opacity: isAnnualLeaveQuotaExceeded || isEditingApproved ? 0.45 : 1,
+                cursor: isAnnualLeaveQuotaExceeded || isEditingApproved ? 'not-allowed' : 'pointer',
               }}
             >
               {editingRequest ? 'Lưu thay đổi' : 'Gửi yêu cầu phê duyệt'}
@@ -1539,158 +1656,72 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
           </div>
         }
       >
-        {/* Banner thông tin và Phê duyệt / Từ chối khi ở chế độ chỉnh sửa */}
+        {/* Banner thông tin phiếu yêu cầu khi ở chế độ chỉnh sửa / xem chi tiết */}
         {editingRequest && (
           <div
             style={{
               display: 'flex',
-              flexDirection: 'column',
-              gap: '8px',
-              padding: '10px 12px',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 14px',
               backgroundColor: '#f8fafc',
-              borderRadius: '6px',
+              borderRadius: '8px',
               border: '1px solid #e2e8f0',
-              marginBottom: '12px',
+              marginBottom: '14px',
               flexShrink: 0,
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0f172a' }}>
-                  Mã: {editingRequest.code}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '1px' }}>
-                  Gửi lúc: {editingRequest.createdAt}
-                </div>
+            <div>
+              <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0f172a' }}>
+                Mã: {editingRequest.code}
               </div>
-              <div>
-                {getStatusBadge(editingRequest.status, editingRequest.statusLabel)}
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                Gửi lúc: {editingRequest.createdAt}
               </div>
             </div>
-
-            {/* Thao tác Phê duyệt / Từ chối trực tiếp cho cấp quản lý / Nhân sự */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                paddingTop: '8px',
-                borderTop: '1px dashed #cbd5e1',
-              }}
-            >
-              <Button
-                type="button"
-                size="sm"
-                variant="primary"
-                onClick={async () => {
-                  try {
-                    const res = await fetch(`/api/personal-requests/${editingRequest.id}`, {
-                      method: 'PUT',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        status: 'approved',
-                        statusLabel: 'Đã phê duyệt',
-                        leaveCategory,
-                        leaveSession,
-                        leaveFromDate,
-                        leaveToDate,
-                        leaveDays: parseFloat(leaveDays) || (leaveSession === 'all_day' ? 1 : 0.5),
-                        note: formNote.trim() || undefined,
-                      }),
-                    });
-                    if (res.ok) {
-                      const updated = await res.json();
-                      setRequests((prev) =>
-                        prev.map((r) => (r.id === editingRequest.id ? updated : r))
-                      );
-                      setEditingRequest(updated);
-                      window.dispatchEvent(new CustomEvent('decodoor_request_updated', { detail: updated }));
-                    }
-                  } catch {}
-                  setCreateModalOpen(false);
-                  setEditingRequest(null);
-                  if (onShowToast) {
-                    onShowToast(
-                      'success',
-                      'Đã phê duyệt đơn',
-                      `Đơn ${editingRequest.code} đã được phê duyệt. Hệ thống đã tự động cập nhật bảng chấm công và chế độ lương tương ứng.`
-                    );
-                  }
-                }}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span
                 style={{
-                  flex: 1,
-                  backgroundColor: '#16a34a',
-                  borderColor: '#16a34a',
-                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  backgroundColor: isMoneyRequest(selectedCreateType) ? '#f0f9ff' : '#fdf4ff',
+                  color: isMoneyRequest(selectedCreateType) ? '#0284c7' : '#9333ea',
+                  border: `1px solid ${isMoneyRequest(selectedCreateType) ? '#bae6fd' : '#f5d0fe'}`,
                 }}
               >
-                Phê duyệt đơn
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="danger"
-                onClick={async () => {
-                  try {
-                    const res = await fetch(`/api/personal-requests/${editingRequest.id}`, {
-                      method: 'PUT',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        status: 'rejected',
-                        statusLabel: 'Từ chối duyệt',
-                        leaveCategory,
-                        leaveSession,
-                        leaveFromDate,
-                        leaveToDate,
-                        leaveDays: parseFloat(leaveDays) || (leaveSession === 'all_day' ? 1 : 0.5),
-                        note: formNote.trim() || 'Không phê duyệt đơn xin nghỉ',
-                      }),
-                    });
-                    if (res.ok) {
-                      const updated = await res.json();
-                      setRequests((prev) =>
-                        prev.map((r) => (r.id === editingRequest.id ? updated : r))
-                      );
-                      setEditingRequest(updated);
-                      window.dispatchEvent(new CustomEvent('decodoor_request_updated', { detail: updated }));
-                    }
-                  } catch {}
-                  setCreateModalOpen(false);
-                  setEditingRequest(null);
-                  if (onShowToast) {
-                    onShowToast(
-                      'warning',
-                      'Đã từ chối đơn',
-                      `Đơn ${editingRequest.code} không được duyệt. Nếu nhân viên đi làm sẽ tính công bình thường; nếu vắng mặt thực tế sẽ ghi nhận "Vắng mặt chưa được chấp thuận" chuyển Nhân sự kiểm tra.`
-                    );
-                  }
-                }}
-                style={{ flex: 1, fontWeight: 700 }}
-              >
-                Từ chối duyệt
-              </Button>
+                <i className={`bi ${isMoneyRequest(selectedCreateType) ? 'bi-bank' : 'bi-people'}`} />
+                {isMoneyRequest(selectedCreateType) ? 'Phòng Kế toán' : 'Phòng Nhân sự'}
+              </span>
+              {getStatusBadge(editingRequest.status, editingRequest.statusLabel)}
             </div>
           </div>
         )}
 
         {/* Loại yêu cầu đề xuất và Mức độ ưu tiên trên cùng một dòng */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: '12px', marginBottom: '14px', flexShrink: 0 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: '12px', marginBottom: '10px', flexShrink: 0 }}>
           <Select
             label="Loại yêu cầu đề xuất"
             required
+            disabled={isEditingApproved}
             value={selectedCreateType}
-            onChange={(e) => setSelectedCreateType(e.target.value as RequestType)}
+            onChange={(e) => handleTypeChange(e.target.value as RequestType)}
             style={{ fontWeight: 600 }}
           >
             <option value="late_early">Đi muộn về sớm</option>
             <option value="leave">Nghỉ phép</option>
-            <option value="advance">Tạm ứng</option>
-            <option value="refund">Hoàn tạm ứng</option>
+            <option value="advance">Tạm ứng (Tài chính)</option>
+            <option value="refund">Hoàn tạm ứng (Tài chính)</option>
             <option value="business_trip">Đi công tác</option>
           </Select>
 
           <Select
             label="Mức độ ưu tiên"
+            disabled={isEditingApproved}
             value={formPriority}
             onChange={(e) => setFormPriority(e.target.value as any)}
             style={{
@@ -1712,12 +1743,56 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
           </Select>
         </div>
 
+        {/* Chỉ báo bộ phận tiếp nhận xử lý yêu cầu theo đúng nghiệp vụ */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '7px 12px',
+            borderRadius: '6px',
+            backgroundColor: isMoneyRequest(selectedCreateType) ? '#f0fdf4' : '#faf5ff',
+            border: `1px solid ${isMoneyRequest(selectedCreateType) ? '#bbf7d0' : '#e9d5ff'}`,
+            color: isMoneyRequest(selectedCreateType) ? '#15803d' : '#7e22ce',
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+            marginBottom: '14px',
+            flexShrink: 0,
+          }}
+        >
+          <i className={`bi ${isMoneyRequest(selectedCreateType) ? 'bi-wallet2' : 'bi-person-badge'}`} style={{ fontSize: '0.95rem' }} />
+          <span>
+            {isMoneyRequest(selectedCreateType) ? (
+              <>
+                Nội dung tài chính/tiền: Chuyển <strong>Phòng Tài chính – Kế toán</strong> giải quyết & giải ngân
+              </>
+            ) : (
+              <>
+                Nội dung thời gian/nhân sự: Chuyển <strong>Phòng Hành chính - Nhân sự</strong> theo dõi & tính công
+              </>
+            )}
+          </span>
+        </div>
+
         {/* Form Fields Body */}
         <form
           id="create-request-form"
           onSubmit={handleSubmitCreate}
           style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1, minHeight: 0 }}
         >
+          <fieldset
+            disabled={isEditingApproved}
+            style={{
+              border: 'none',
+              padding: 0,
+              margin: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px',
+              flex: 1,
+              minHeight: 0,
+            }}
+          >
               {/* 1. Form Đi muộn về sớm */}
               {selectedCreateType === 'late_early' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1941,22 +2016,55 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
               {selectedCreateType === 'advance' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                    <Input
-                      label="Số tiền xin tạm ứng VND"
-                      required
-                      type="text"
-                      value={formatNumberGroup(advanceAmount)}
-                      onChange={(e) => setAdvanceAmount(e.target.value.replace(/[^0-9]/g, ''))}
-                      style={{ fontWeight: 700, color: '#b91c1c' }}
-                    />
-                    <Input
-                      label="Hạn hoàn ứng dự kiến"
-                      required
-                      type="text"
-                      value={advanceDueDate}
-                      onChange={(e) => setAdvanceDueDate(e.target.value)}
-                      placeholder="DD/MM/YYYY"
-                    />
+                    <div>
+                      <Input
+                        label="Số tiền xin tạm ứng VND"
+                        required
+                        type="text"
+                        value={formatNumberGroup(advanceAmount)}
+                        onChange={(e) => setAdvanceAmount(e.target.value.replace(/[^0-9]/g, ''))}
+                        style={{ fontWeight: 700, color: '#b91c1c' }}
+                      />
+                      <div style={{ marginTop: '8px' }}>
+                        <label
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '7px',
+                            cursor: 'pointer',
+                            fontSize: '0.8125rem',
+                            fontWeight: 600,
+                            color: '#1e293b',
+                            userSelect: 'none',
+                          }}
+                          title="Tự động khấu trừ vào thu nhập của người dùng đúng vào tháng hoàn tạm ứng nếu khoản tạm ứng chưa được quyết toán"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={deductFromSalary}
+                            onChange={(e) => setDeductFromSalary(e.target.checked)}
+                            style={{
+                              width: '15px',
+                              height: '15px',
+                              accentColor: '#2563eb',
+                              cursor: 'pointer',
+                            }}
+                          />
+                          <span>Trừ tạm ứng vào lương</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Input
+                        label="Hạn hoàn ứng dự kiến"
+                        required
+                        type="text"
+                        value={advanceDueDate}
+                        onChange={(e) => setAdvanceDueDate(e.target.value)}
+                        placeholder="DD/MM/YYYY"
+                      />
+                    </div>
                   </div>
 
                   <Input
@@ -2123,7 +2231,7 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                   onChange={(e) => setFormApprover(e.target.value)}
                   style={{ fontWeight: 600 }}
                 >
-                  {APPROVER_GROUPS.map((grp) => (
+                  {relevantApproverGroups.map((grp) => (
                     <optgroup key={grp.group} label={grp.group}>
                       {grp.options.map((opt) => (
                         <option key={opt.value} value={opt.value}>
@@ -2157,7 +2265,7 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                 </div>
               </div>
 
-              
+          </fieldset>
         </form>
       </Offcanvas>
 
@@ -2256,8 +2364,11 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                 </div>
 
                 <div>
-                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Thời gian gửi:</div>
-                  <div style={{ fontWeight: 700, color: '#0f172a' }}>{viewingRequest.createdAt}</div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Đơn vị xử lý & Thời gian gửi:</div>
+                  <div style={{ fontWeight: 700, color: isMoneyRequest(viewingRequest.type) ? '#0284c7' : '#7c3aed' }}>
+                    {isMoneyRequest(viewingRequest.type) ? 'Phòng Tài chính – Kế toán' : 'Phòng Hành chính - Nhân sự'}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{viewingRequest.createdAt}</div>
                 </div>
 
                 <div>
@@ -2280,6 +2391,20 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                   </div>
                 </div>
               </div>
+
+              {viewingRequest.type === 'advance' && (
+                <div style={{ backgroundColor: '#f0f9ff', padding: '10px 14px', borderRadius: '8px', border: '1px solid #bae6fd', fontSize: '0.8125rem' }}>
+                  <div style={{ fontWeight: 700, color: '#0369a1', marginBottom: '4px' }}>
+                    Chi tiết tạm ứng & Kế hoạch hoàn ứng:
+                  </div>
+                  <div style={{ color: '#0f172a' }}>
+                    • Số tiền: <strong>{formatNumberGroup(viewingRequest.advanceAmount)} đ</strong> • Hạn hoàn ứng: <strong>{viewingRequest.advanceDueDate || '—'}</strong>
+                  </div>
+                  <div style={{ color: '#334155', marginTop: '2px' }}>
+                    • Trừ tạm ứng vào lương: <strong style={{ color: viewingRequest.deductFromSalary !== false ? '#15803d' : '#b91c1c' }}>{viewingRequest.deductFromSalary !== false ? 'Có (Tự động trừ lương tháng hoàn ứng nếu chưa quyết toán)' : 'Không trừ vào lương'}</strong>
+                  </div>
+                </div>
+              )}
 
               {viewingRequest.note && (
                 <div>
@@ -2305,53 +2430,29 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {viewingRequest.status === 'pending' && (
-                  <>
-                    <Button
-                      type="button"
-                      variant="danger"
-                      onClick={() => {
-                        setRequestToCancel(viewingRequest);
-                        setDetailModalOpen(false);
-                        setConfirmCancelOpen(true);
-                      }}
-                    >
-                      Hủy yêu cầu này
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="primary"
-                      onClick={async () => {
-                        try {
-                          const res = await fetch(`/api/personal-requests/${viewingRequest.id}`, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              status: 'approved',
-                              statusLabel: 'Đã phê duyệt',
-                            }),
-                          });
-                          if (res.ok) {
-                            const updated = await res.json();
-                            setRequests((prev) =>
-                              prev.map((r) => (r.id === viewingRequest.id ? updated : r))
-                            );
-                          }
-                        } catch {}
-                        setDetailModalOpen(false);
-                        if (onShowToast) {
-                          onShowToast(
-                            'success',
-                            'Đã phê duyệt yêu cầu',
-                            `Phiếu yêu cầu ${viewingRequest.code} đã được phê duyệt và tự động đồng bộ sang bảng chấm công.`
-                          );
-                        }
-                      }}
-                      style={{ backgroundColor: '#16a34a', borderColor: '#16a34a' }}
-                    >
-                      Phê duyệt ngay
-                    </Button>
-                  </>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    onClick={() => {
+                      setRequestToCancel(viewingRequest);
+                      setDetailModalOpen(false);
+                      setConfirmCancelOpen(true);
+                    }}
+                  >
+                    Hủy yêu cầu này
+                  </Button>
                 )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const req = viewingRequest;
+                    setDetailModalOpen(false);
+                    handleOpenEditModal(req);
+                  }}
+                >
+                  Chỉnh sửa
+                </Button>
               </div>
               <Button type="button" variant="primary" onClick={() => setDetailModalOpen(false)}>
                 Đóng

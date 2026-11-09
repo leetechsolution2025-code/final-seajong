@@ -62,6 +62,7 @@ import {
 } from './DebtCostManagementView';
 import { notifyFinanceUpdated, useFinanceRealtimeSync } from '../../../services/financeSyncService';
 import { getCustomerGroupInfo, STANDARD_CUSTOMER_GROUPS } from '../../../utils/customerGroupUtils';
+import { PaymentOrderOffcanvas } from './PaymentOrderOffcanvas';
 
 // ── 1. DANH MỤC TÀI KHOẢN KẾ TOÁN CÓ CHO DÒNG TIỀN RA (OUTFLOW - TT 200/133) ──
 export const ACCOUNTING_CREDIT_ACCOUNTS = [
@@ -334,6 +335,7 @@ interface RequestApprovalItem {
   priority: 'urgent' | 'high' | 'normal';
   status: 'cho_duyet' | 'da_duyet' | 'da_giai_ngan' | 'tu_choi';
   reason: string;
+  metadata?: any;
 }
 
 // ── KIỂU DỮ LIỆU BƯỚC 3: TIỀN VÀO (INFLOW) ──
@@ -418,7 +420,10 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
   const [showSingleOrderDeleteConfirm, setShowSingleOrderDeleteConfirm] = useState<boolean>(false);
   const [selectedRequest, setSelectedRequest] = useState<RequestApprovalItem | null>(null);
   const [selectedOutflow, setSelectedOutflow] = useState<CashOutflowItem | null>(null);
-  const [payoutExecutionDate, setPayoutExecutionDate] = useState<string>('27/10/2026');
+  const [payoutExecutionDate, setPayoutExecutionDate] = useState<string>(() => {
+    const d = new Date();
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+  });
   const [payoutMethod, setPayoutMethod] = useState<'unc_ngan_hang' | 'tien_mat'>('unc_ngan_hang');
   const [financeEmployees, setFinanceEmployees] = useState<FinanceEmployeeOption[]>(DEFAULT_FINANCE_EMPLOYEES);
   const [payoutExecutor, setPayoutExecutor] = useState<string>('Trần Thị Linh (Kế toán trưởng - Phòng Tài chính – Kế toán)');
@@ -499,7 +504,10 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
 
   // ── STATE & HANDLERS CHO BƯỚC 3: XÁC NHẬN THU TIỀN (INFLOW) ──
   const [selectedInflow, setSelectedInflow] = useState<CashInflowItem | null>(null);
-  const [inflowExecutionDate, setInflowExecutionDate] = useState<string>('27/10/2026');
+  const [inflowExecutionDate, setInflowExecutionDate] = useState<string>(() => {
+    const d = new Date();
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+  });
   const [inflowMethod, setInflowMethod] = useState<'ngan_hang' | 'tien_mat'>('ngan_hang');
   const [inflowCollector, setInflowCollector] = useState<string>('Trần Thị Linh (Kế toán trưởng - Phòng Tài chính – Kế toán)');
   const [inflowDebitAccount, setInflowDebitAccount] = useState<string>('1121');
@@ -883,46 +891,60 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
       .then((res) => res.json())
       .then((json) => {
         const rows = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-        const mappedReqs: RequestApprovalItem[] = rows.map((r: any, idx: number) => {
-          let meta: any = {};
-          try {
-            meta = typeof r.metadata === 'string' ? JSON.parse(r.metadata) : r.metadata || {};
-          } catch {}
-          const ent = String(r.entityType || '').toLowerCase();
-          let reqType: RequestApprovalItem['type'] = 'hanh_chinh';
-          if (ent.includes('purchase') || ent.includes('vat_tu')) reqType = 'vat_tu';
-          else if (ent.includes('advance') || meta?.type?.includes('advance')) reqType = 'tam_ung';
-          else if (ent.includes('business_trip') || meta?.type?.includes('trip')) reqType = 'cong_tac';
+        const mappedReqs: RequestApprovalItem[] = rows
+          .filter((r: any) => {
+            const title = String(r.entityTitle || '').toLowerCase();
+            let meta: any = {};
+            try { meta = typeof r.metadata === 'string' ? JSON.parse(r.metadata) : r.metadata || {}; } catch {}
+            const amt = Number(meta?.totalAmount || meta?.soTien || meta?.details?.amount || meta?.amount || 0);
+            // Loại bỏ các yêu cầu nghỉ phép, đi muộn về sớm thuộc Phòng Nhân sự (số tiền = 0)
+            if ((title.includes('nghỉ phép') || title.includes('đi muộn') || title.includes('về sớm')) && amt === 0) {
+              return false;
+            }
+            return true;
+          })
+          .map((r: any, idx: number) => {
+            let meta: any = {};
+            try {
+              meta = typeof r.metadata === 'string' ? JSON.parse(r.metadata) : r.metadata || {};
+            } catch {}
+            const ent = String(r.entityType || '').toLowerCase();
+            const titleLower = String(r.entityTitle || '').toLowerCase();
+            let reqType: RequestApprovalItem['type'] = 'hanh_chinh';
+            if (ent.includes('purchase') || ent.includes('vat_tu')) reqType = 'vat_tu';
+            else if (ent.includes('advance') || meta?.type?.includes('advance') || titleLower.includes('tạm ứng')) reqType = 'tam_ung';
+            else if (ent.includes('business_trip') || meta?.type?.includes('trip')) reqType = 'cong_tac';
 
-          const amt = Number(meta?.totalAmount || meta?.soTien || meta?.details?.amount || meta?.amount || 0);
-          const rawSt = String(r.status || 'pending').toLowerCase();
-          const st: RequestApprovalItem['status'] =
-            rawSt === 'completed'
-              ? 'da_giai_ngan'
-              : rawSt === 'approved'
-              ? 'da_duyet'
-              : rawSt === 'rejected'
-              ? 'tu_choi'
-              : 'cho_duyet';
+            const amt = Number(meta?.totalAmount || meta?.soTien || meta?.details?.amount || meta?.amount || 0);
+            const rawSt = String(r.status || 'pending').toLowerCase();
+            const st: RequestApprovalItem['status'] =
+              rawSt === 'completed'
+                ? 'da_giai_ngan'
+                : rawSt === 'approved'
+                ? 'da_duyet'
+                : rawSt === 'rejected'
+                ? 'tu_choi'
+                : 'cho_duyet';
 
-          const rawPr = String(r.priority || 'normal').toLowerCase();
-          const pr: RequestApprovalItem['priority'] =
-            rawPr === 'urgent' ? 'urgent' : rawPr === 'high' ? 'high' : 'normal';
+            const rawPr = String(r.priority || 'normal').toLowerCase();
+            const pr: RequestApprovalItem['priority'] =
+              rawPr === 'urgent' ? 'urgent' : rawPr === 'high' ? 'high' : 'normal';
 
-          return {
-            id: String(r.id || `req-${idx + 1}`),
-            code: String(r.entityCode || meta?.personalRequestId || `YCD-${String(idx + 1).padStart(4, '0')}`),
-            type: reqType,
-            title: String(r.entityTitle || 'Yêu cầu phê duyệt'),
-            department: String(r.department || meta?.departmentName || (ent.includes('purchase') ? 'Phòng Mua hàng' : 'Phòng ban Seajong')),
-            proposer: String(r.requestedByName || meta?.employeeName || 'Cán bộ Seajong'),
-            requestDate: r.createdAt ? new Date(r.createdAt).toLocaleDateString('vi-VN') : '',
-            amount: amt,
-            priority: pr,
-            status: st,
-            reason: String(meta?.reason || meta?.details?.reason || r.note || r.entityTitle || ''),
-          };
-        });
+            return {
+              id: String(r.id || `req-${idx + 1}`),
+              code: String(r.entityCode || meta?.personalRequestId || `YCD-${String(idx + 1).padStart(4, '0')}`),
+              type: reqType,
+              title: String(r.entityTitle || 'Yêu cầu phê duyệt'),
+              department: String(r.department || meta?.departmentName || (ent.includes('purchase') ? 'Phòng Mua hàng' : 'Phòng ban Seajong')),
+              proposer: String(r.requestedByName || meta?.employeeName || 'Cán bộ Seajong'),
+              requestDate: r.createdAt ? new Date(r.createdAt).toLocaleDateString('vi-VN') : '',
+              amount: amt,
+              priority: pr,
+              status: st,
+              reason: String(meta?.reason || meta?.details?.reason || r.note || r.entityTitle || ''),
+              metadata: meta,
+            };
+          });
         setRequests(mappedReqs);
       })
       .catch((err) => console.error('Lỗi tải danh sách yêu cầu từ DB:', err));
@@ -3255,65 +3277,22 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
         onClose={() => setShowDeleteConfirm(false)}
       />
 
-      {/* ── MODAL XEM CHI TIẾT TỜ TRÌNH YÊU CẦU (BƯỚC 2) ── */}
+      {/* ── OFFCANVAS XỬ LÝ YÊU CẦU TẠM ỨNG & ĐỀ NGHỊ CHI TIỀN (BƯỚC 2 - COMPONENT DÙNG CHUNG) ── */}
       {selectedRequest && (
-        <Modal
-          isOpen={true}
+        <PaymentOrderOffcanvas
+          isOpen={Boolean(selectedRequest)}
           onClose={() => setSelectedRequest(null)}
-          title={`TỜ TRÌNH ĐỀ NGHỊ CHI TIỀN: ${selectedRequest.code}`}
-          maxWidth="540px"
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.85rem' }}>
-            <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
-              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a', marginBottom: '4px' }}>
-                {selectedRequest.title}
-              </div>
-              <div style={{ color: '#64748b', fontSize: '0.75rem' }}>
-                Đề xuất bởi: <strong style={{ color: '#1e293b' }}>{selectedRequest.proposer}</strong> ({selectedRequest.department}) • Ngày gửi: {selectedRequest.requestDate}
-              </div>
-            </div>
-
-            <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px' }}>
-              <div style={{ fontWeight: 700, marginBottom: '6px' }}>Căn cứ và lý do chi:</div>
-              <p style={{ margin: 0, color: '#334155', lineHeight: '1.5' }}>{selectedRequest.reason}</p>
-            </div>
-
-            <div style={{ padding: '10px 14px', backgroundColor: '#f0fdf4', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontWeight: 600, color: '#166534' }}>Số tiền đề xuất giải ngân:</span>
-              <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#15803d' }}>
-                {formatVND(selectedRequest.amount)}
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px' }}>
-              {selectedRequest.status === 'cho_duyet' && (
-                <>
-                  <Button
-                    variant="primary"
-                    onClick={() => {
-                      handleApproveRequest(selectedRequest.id);
-                      setSelectedRequest(null);
-                    }}
-                  >
-                    Duyệt chi tiền
-                  </Button>
-                  <Button
-                    variant="danger"
-                    onClick={() => {
-                      handleRejectRequest(selectedRequest.id);
-                      setSelectedRequest(null);
-                    }}
-                  >
-                    Từ chối
-                  </Button>
-                </>
-              )}
-              <Button variant="outline" onClick={() => setSelectedRequest(null)}>
-                Đóng
-              </Button>
-            </div>
-          </div>
-        </Modal>
+          data={selectedRequest}
+          onShowToast={onShowToast}
+          onSuccess={() => {
+            setSelectedRequest(null);
+            setRequests((prev) =>
+              prev.map((r) =>
+                r.id === selectedRequest.id ? { ...r, status: 'da_giai_ngan' } : r
+              )
+            );
+          }}
+        />
       )}
 
       {/* ── OFFCANVAS XEM CHI TIẾT & HẠCH TOÁN LỆNH CHI (BƯỚC 4) ── */}

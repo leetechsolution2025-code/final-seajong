@@ -253,6 +253,8 @@ export interface PayableEntryItem {
   remainingAmount: number;
   status: 'pending' | 'due_soon' | 'overdue' | 'completed';
   statusLabel: string;
+  items?: any[];
+  payments?: any[];
 }
 
 // Bước 2: Công nợ phải trả theo từng nhà cung cấp
@@ -979,9 +981,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     // 4. Dữ liệu chuyên biệt Bước 4: Quản lý chi phí
     const totalExpense = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
     const approvedExpense = expenses.filter((e) => e.status === 'approved').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const curMonthNum = new Date().getMonth() + 1;
     const currentMonthExpenses = expenses.filter((e) => {
       const parts = e.spendDate.split('/');
-      return parts.length >= 3 && parts[1] === '10' && parts[2] === selectedYear;
+      return parts.length >= 3 && parseInt(parts[1], 10) === curMonthNum && parts[2] === selectedYear;
     });
     const currentMonthTotal = currentMonthExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
@@ -999,7 +1002,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
       {
         tag: 'CHI PHÍ THÁNG NÀY',
         tagVariant: 'warning' as const,
-        text: `Chi phí phát sinh trong tháng 10/${selectedYear}: **${formatNumberGroup(currentMonthTotal)} đ**`,
+        text: `Chi phí phát sinh trong tháng ${curMonthNum < 10 ? `0${curMonthNum}` : curMonthNum}/${selectedYear}: **${formatNumberGroup(currentMonthTotal)} đ**`,
       },
       {
         tag: 'KHẤU HAO TỰ ĐỘNG',
@@ -1544,13 +1547,22 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
   const [selectedPayableForPayment, setSelectedPayableForPayment] = useState<PayableItem | null>(null);
   const [paymentAmountInput, setPaymentAmountInput] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Chuyển khoản');
-  const [paymentDate, setPaymentDate] = useState('19:14 04/10/2026');
+  const [paymentDate, setPaymentDate] = useState(() => {
+    const now = new Date();
+    const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const date = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+    return `${time} ${date}`;
+  });
   const [paymentNote, setPaymentNote] = useState('');
 
   // Offcanvas Ghi nhận thanh toán thu nợ khách hàng rộng 480px (chuẩn nghiệp vụ kế toán)
   const [paymentOffcanvasOpen, setPaymentOffcanvasOpen] = useState(false);
   const [selectedStageForPayment, setSelectedStageForPayment] = useState<DebtEntryItem | null>(null);
-  const [receiptCodeInput, setReceiptCodeInput] = useState('PT-20261004-396');
+  const [receiptCodeInput, setReceiptCodeInput] = useState(() => {
+    const now = new Date();
+    const dStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    return `PT-${dStr}-${Math.floor(100 + Math.random() * 900)}`;
+  });
   const [printReceiptChecked, setPrintReceiptChecked] = useState(true);
   const [linkedOrderInput, setLinkedOrderInput] = useState('Dư nợ đầu kỳ');
 
@@ -1566,9 +1578,19 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
 
   // ── CÁC TRƯỜNG NGHIỆP VỤ HẠCH TOÁN KẾ TOÁN CHO OFFCANVAS LẬP PHIẾU CHI NHÀ CUNG CẤP (BƯỚC 2) ──
   const [selectedPayableEntryId, setSelectedPayableEntryId] = useState<string>('');
-  const [payableVoucherCode, setPayableVoucherCode] = useState<string>('PC-20261027-01');
-  const [payablePaymentDate, setPayablePaymentDate] = useState<string>('27/10/2026');
-  const [payablePaymentTime, setPayablePaymentTime] = useState<string>('09:30');
+  const [payableVoucherCode, setPayableVoucherCode] = useState<string>(() => {
+    const now = new Date();
+    const dStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    return `PC-${dStr}-${Math.floor(100 + Math.random() * 900)}`;
+  });
+  const [payablePaymentDate, setPayablePaymentDate] = useState<string>(() => {
+    const now = new Date();
+    return `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+  });
+  const [payablePaymentTime, setPayablePaymentTime] = useState<string>(() => {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  });
   const [payableDebitAccount, setPayableDebitAccount] = useState<string>('331');
   const [payableCreditAccount, setPayableCreditAccount] = useState<string>('1121');
   const [payableSourceBank, setPayableSourceBank] = useState<string>('Vietcombank - 0011004329999 (Seajong VN)');
@@ -1666,9 +1688,9 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
   // Kích hoạt đồng bộ thời gian thực (tự động tạm dừng polling ngầm khi bất kỳ modal/offcanvas nào đang mở)
   useFinanceRealtimeSync(handleSyncAll, !isAnyModalOpen);
 
-  // Mac dinh chi mo rong noi dung con cua thang hien hanh la thang 10
-  // Dam bao chi co duy nhat mot thang duoc hien noi dung con tai mot thoi diem
-  const [activeExpandedMonth, setActiveExpandedMonth] = useState<number | null>(10);
+  // Mặc định chỉ mở rộng nội dung con của tháng hiện hành (ví dụ: tháng 11)
+  // Đảm bảo chỉ có duy nhất một tháng được hiện nội dung con tại một thời điểm
+  const [activeExpandedMonth, setActiveExpandedMonth] = useState<number | null>(new Date().getMonth() + 1);
 
   const toggleExpandMonth = (monthNum: number) => {
     setActiveExpandedMonth((prev) => (prev === monthNum ? null : monthNum));
@@ -1867,7 +1889,9 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     // Sinh các khoản trích khấu hao TSCĐ tự động định kỳ tính chung vào 1 mục duy nhất mỗi tháng
     const autoDeprecItems: ExpenseItem[] = [];
     if (selectedYear && (statusFilter === 'all' || statusFilter === 'approved') && fixedAssetDepreciationMonthly.total > 0) {
-      const maxMonths = selectedYear === '2026' ? 10 : 12;
+      const curYearNum = new Date().getFullYear();
+      const curMonthNum = new Date().getMonth() + 1;
+      const maxMonths = parseInt(selectedYear, 10) === curYearNum ? curMonthNum : 12;
       for (let m = 1; m <= maxMonths; m++) {
         const monthStr = m < 10 ? `0${m}` : `${m}`;
         const query = searchValue.toLowerCase().trim();
@@ -2597,6 +2621,20 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
   const handleOpenPayableReconciliation = (item: PayableItem) => {
     setSelectedPayableForReconcile(item);
     setReconcileModalOpen(true);
+
+    // Tự động làm tươi dữ liệu công nợ nhà cung cấp với các items mới nhất từ CSDL
+    fetch('/api/debts/payables')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          const fresh = data.find((p: any) => p.id === item.id || p.code === item.code);
+          if (fresh) {
+            setSelectedPayableForReconcile(fresh);
+            setPayables((prev) => prev.map((p) => (p.id === fresh.id ? fresh : p)));
+          }
+        }
+      })
+      .catch(() => {});
   };
 
   const handleSendPayablePaymentRequest = (item: PayableItem) => {
@@ -3084,7 +3122,16 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                   </tr>
 
                   {/* CÁC DÒNG THÁNG TRONG NĂM SẮP XẾP NGƯỢC LẠI TỪ THÁNG HIỆN TẠI VỀ THÁNG 1 */}
-                  {(selectedYear === '2026' ? [10, 9, 8, 7, 6, 5, 4, 3, 2, 1] : [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]).map((monthNum) => {
+                  {(() => {
+                    const currentYearNum = new Date().getFullYear();
+                    const currentMonthNum = new Date().getMonth() + 1;
+                    const maxM = parseInt(selectedYear, 10) === currentYearNum ? currentMonthNum : 12;
+                    const months: number[] = [];
+                    for (let m = maxM; m >= 1; m--) {
+                      months.push(m);
+                    }
+                    return months;
+                  })().map((monthNum) => {
                     const monthItems = filteredExpenses.filter((item) => {
                       const parts = item.spendDate.split('/');
                       return parts.length >= 2 && parseInt(parts[1], 10) === monthNum;
@@ -3209,7 +3256,26 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                       <span style={{ color: '#cbd5e1' }}>•</span>
                                       <span>{item.department}</span>
                                       <span style={{ color: '#cbd5e1' }}>•</span>
-                                      <span>Người chi: {item.spender}</span>
+                                      {(() => {
+                                        const isSupplierPay =
+                                          item.debitAccount === '331' ||
+                                          item.title.toLowerCase().includes('ncc') ||
+                                          item.title.toLowerCase().includes('mua hàng') ||
+                                          item.title.toLowerCase().includes('tiền điện') ||
+                                          item.title.toLowerCase().includes('vận chuyển') ||
+                                          item.title.toLowerCase().includes('kho bãi');
+                                        const isAdvance =
+                                          item.debitAccount === '141' ||
+                                          item.title.toLowerCase().includes('tạm ứng');
+
+                                        if (isSupplierPay) {
+                                          return <span>Đơn vị nhận: <strong className="text-slate-700">{item.spender}</strong></span>;
+                                        }
+                                        if (isAdvance) {
+                                          return <span>Người nhận: <strong className="text-slate-700">{item.spender}</strong> (Tạm ứng)</span>;
+                                        }
+                                        return <span>Người thực hiện: <strong className="text-slate-700">{item.spender}</strong></span>;
+                                      })()}
                                     </>
                                   )}
                                 </div>

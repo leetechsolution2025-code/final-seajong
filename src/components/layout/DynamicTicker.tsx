@@ -18,6 +18,11 @@ export interface DynamicTickerProps {
 }
 
 // ── 1. NHẬN DIỆN THƯƠNG HIỆU (BRAND IDENTITY) ──────────────────────────────
+const _now = new Date();
+const _curM = _now.getMonth() + 1;
+const _curY = _now.getFullYear();
+const _curMonthFull = `Tháng ${_curM < 10 ? `0${_curM}` : _curM}/${_curY}`;
+
 export const BRAND_TICKER_ITEMS: TickerItem[] = [
   {
     badge: 'LOGO QUY CHUẨN',
@@ -218,9 +223,9 @@ export const DEALERS_TICKER_ITEMS: TickerItem[] = [
     text: 'Vinh danh <strong>Showroom Thiên Thuận Lạng Sơn (KH0014)</strong> xuất sắc dẫn đầu doanh số toàn quốc năm 2026 👑',
   },
   {
-    badge: '🌟 DẪN ĐẦU THÁNG 10',
+    badge: `🌟 DẪN ĐẦU ${_curMonthFull.toUpperCase()}`,
     badgeColor: 'bg-emerald-100 text-emerald-900 border-emerald-300 font-bold',
-    text: 'Chúc mừng <strong>Showroom Thiên Thuận Lạng Sơn (KH0014)</strong> xuất sắc dẫn đầu doanh số tháng 10/2026 trên toàn hệ thống Seajong 🌟',
+    text: `Chúc mừng <strong>Showroom Thiên Thuận Lạng Sơn (KH0014)</strong> xuất sắc dẫn đầu doanh số ${_curMonthFull.toLowerCase()} trên toàn hệ thống Seajong 🌟`,
   },
   {
     badge: 'MẠNG LƯỚI ĐẠI LÝ',
@@ -460,17 +465,17 @@ export const SALES_TICKER_ITEMS: TickerItem[] = [
   {
     badge: 'TỔNG DOANH SỐ',
     badgeColor: 'bg-blue-50 text-blue-700 border-blue-200 font-bold',
-    text: 'Tháng 10/2026: Tổng doanh số đạt <strong>0,15 tỷ đồng</strong> (Seajong: <strong>0,14 tỷ</strong> • OEM: <strong>0,01 tỷ</strong>) — Đạt <strong>9.7%</strong> chỉ tiêu (1,55 tỷ, tăng trưởng <strong>+275%</strong>)',
+    text: `${_curMonthFull}: Tổng doanh số đạt <strong>0,15 tỷ đồng</strong> (Seajong: <strong>0,14 tỷ</strong> • OEM: <strong>0,01 tỷ</strong>) — Đạt <strong>9.7%</strong> chỉ tiêu (1,55 tỷ, tăng trưởng <strong>+275%</strong>)`,
   },
   {
     badge: 'TỔNG DOANH THU',
     badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold',
-    text: 'Tháng 10/2026: Tổng doanh thu đạt <strong>0,07 tỷ đồng</strong> (Seajong: <strong>0,06 tỷ</strong> • OEM: <strong>0,01 tỷ</strong>) — Đạt <strong>5.3%</strong> kế hoạch (1,32 tỷ)',
+    text: `${_curMonthFull}: Tổng doanh thu đạt <strong>0,07 tỷ đồng</strong> (Seajong: <strong>0,06 tỷ</strong> • OEM: <strong>0,01 tỷ</strong>) — Đạt <strong>5.3%</strong> kế hoạch (1,32 tỷ)`,
   },
   {
     badge: 'PHÁT TRIỂN ĐẠI LÝ',
     badgeColor: 'bg-amber-50 text-amber-800 border-amber-200 font-bold',
-    text: 'Tháng 10/2026: Phát triển <strong>8/11 đại lý</strong> (Đạt <strong>72.7%</strong> mục tiêu) • Đang theo dõi <strong>4 đối tác tiềm năng</strong> (3 chăm sóc, 1 báo giá/HĐ)',
+    text: `${_curMonthFull}: Phát triển <strong>8/11 đại lý</strong> (Đạt <strong>72.7%</strong> mục tiêu) • Đang theo dõi <strong>4 đối tác tiềm năng</strong> (3 chăm sóc, 1 báo giá/HĐ)`,
   },
   {
     badge: 'HỖ TRỢ ĐẠI LÝ',
@@ -704,7 +709,7 @@ export const BOARD_TICKER_ITEMS: TickerItem[] = [
   {
     badge: 'CƠ CẤU 2 KÊNH',
     badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
-    text: 'Thương hiệu Seajong đóng góp <strong>1.30 tỷ đồng</strong> • Gia công OEM đóng góp <strong>0.82 tỷ đồng</strong> trong tháng 10/2026',
+    text: `Thương hiệu Seajong đóng góp <strong>1.30 tỷ đồng</strong> • Gia công OEM đóng góp <strong>0.82 tỷ đồng</strong> trong ${_curMonthFull.toLowerCase()}`,
   },
   {
     badge: 'CHI PHÍ HOẠT ĐỘNG',

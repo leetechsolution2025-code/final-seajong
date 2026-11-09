@@ -13,7 +13,7 @@ export const SalesInventoryPage: React.FC = () => {
   return (
     <StandardPage
       title="Hàng hoá trong kho"
-      description="Tra cứu 989 mặt hàng tồn kho thực tế, vị trí lưu trữ và trạng thái sẵn sàng xuất kho"
+      description="Tra cứu danh mục mặt hàng tồn kho thực tế, vị trí lưu trữ và trạng thái sẵn sàng xuất kho"
       icon="bi-box-seam"
       color="emerald"
       badge="KHO HÀNG"
