@@ -17,7 +17,7 @@ import {
   Building,
   PersonCheck,
 } from 'react-bootstrap-icons';
-import { Pagination } from '../../../components/common/Pagination';
+import { Pagination, getStoredPageSize } from '../../../components/common/Pagination';
 import { ReceiptVoucherPrintModal, type ReceiptVoucherData } from './ReceiptVoucherPrintModal';
 import { PaymentVoucherPrintModal } from './PaymentVoucherPrintModal';
 import { PrintPreview } from '../../../components/common/PrintPreview';
@@ -350,7 +350,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(() => getStoredPageSize(10));
 
 
   // States for viewing vouchers

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -24,7 +24,25 @@ export interface PaginationProps {
   style?: React.CSSProperties;
   totalPages?: number;
   compact?: boolean;
+  /** Key lưu số dòng vào localStorage (mặc định: 'seajong_table_page_size') */
+  storageKey?: string;
+  /** Bật/tắt tính năng ghi nhớ số dòng (mặc định: true) */
+  rememberPageSize?: boolean;
 }
+
+/**
+ * Helper function lấy số dòng trang đã lưu từ localStorage
+ */
+export const getStoredPageSize = (defaultSize = 10, storageKey = 'seajong_table_page_size'): number => {
+  try {
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+      const num = Number(saved);
+      if (!isNaN(num) && num > 0) return num;
+    }
+  } catch {}
+  return defaultSize;
+};
 
 export const Pagination: React.FC<PaginationProps> = ({
   currentPage,
@@ -43,7 +61,30 @@ export const Pagination: React.FC<PaginationProps> = ({
   style,
   totalPages: propTotalPages,
   compact = false,
+  storageKey,
+  rememberPageSize = true,
 }) => {
+  const effectiveStorageKey = storageKey || 'seajong_table_page_size';
+  const hasRestoredRef = useRef(false);
+
+  // Tự động khôi phục số dòng mỗi trang đã lưu từ localStorage khi component mount
+  useEffect(() => {
+    if (hasRestoredRef.current) return;
+    hasRestoredRef.current = true;
+    if (rememberPageSize === false || !onPageSizeChange) return;
+
+    try {
+      const saved = localStorage.getItem(effectiveStorageKey);
+      if (saved) {
+        const num = Number(saved);
+        if (!isNaN(num) && num > 0 && num !== pageSize) {
+          if (!pageSizeOptions || pageSizeOptions.includes(num)) {
+            onPageSizeChange(num);
+          }
+        }
+      }
+    } catch {}
+  }, [effectiveStorageKey, rememberPageSize, onPageSizeChange, pageSize, pageSizeOptions]);
   const effectiveCurrentPage = currentPage ?? page ?? 1;
   const effectiveOnPageChange = onPageChange ?? onChange ?? (() => {});
 
@@ -133,7 +174,13 @@ export const Pagination: React.FC<PaginationProps> = ({
               <select
                 value={pageSize}
                 onChange={(e) => {
-                  onPageSizeChange(Number(e.target.value));
+                  const newSize = Number(e.target.value);
+                  if (rememberPageSize !== false) {
+                    try {
+                      localStorage.setItem(effectiveStorageKey, String(newSize));
+                    } catch {}
+                  }
+                  onPageSizeChange(newSize);
                   effectiveOnPageChange(1);
                 }}
                 className="pagination-select"

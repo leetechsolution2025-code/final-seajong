@@ -33,7 +33,7 @@ import {
   type TableToolbarFilter,
   type TableToolbarMenuItem,
 } from '../../../components/common/TableToolbar';
-import { Pagination } from '../../../components/common/Pagination';
+import { Pagination, getStoredPageSize } from '../../../components/common/Pagination';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import { Modal } from '../../../components/common/Modal';
@@ -1295,7 +1295,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
 
   // Phân trang
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(() => getStoredPageSize(10));
 
   // Tự động làm sạch và đặt lại bộ lọc về 'all' khi chuyển tab/bước để không bị ẩn dữ liệu nhầm
   useEffect(() => {
