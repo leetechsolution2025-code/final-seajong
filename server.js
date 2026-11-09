@@ -18,6 +18,10 @@ import {
   updateCalendarEvent,
   deleteCalendarEvent,
 } from './server/salesOverviewHelper.js';
+import {
+  syncOrderToAccountingAndDebt,
+  syncAllExistingOrdersToAccounting,
+} from './server/orderAccountingSync.js';
 
 dotenv.config();
 
@@ -1690,6 +1694,14 @@ app.post('/api/dealer/orders', authenticateToken, async (req, res) => {
         }
       } catch (notifErr) {
         console.warn('Không thể gửi notification:', notifErr.message);
+      }
+    }
+
+    if (!isDraft) {
+      try {
+        await syncOrderToAccountingAndDebt(saleOrder.id);
+      } catch (accErr) {
+        console.warn('[DealerOrder] Cảnh báo đồng bộ kế toán công nợ:', accErr.message);
       }
     }
 
@@ -7239,10 +7251,32 @@ app.post('/api/sales/orders', async (req, res) => {
         ghiChu: body.ghiChu || '',
         nguoiPhuTrach: body.nguoiPhuTrach || 'Phạm Quang Việt',
       },
+      include: {
+        customer: true,
+      },
     });
+
+    // Tự động kết nối và cập nhật vào bộ máy kế toán, quản lý công nợ
+    try {
+      await syncOrderToAccountingAndDebt(order.id);
+    } catch (accErr) {
+      console.warn('[SaleOrder] Cảnh báo đồng bộ kế toán công nợ:', accErr.message);
+    }
+
     res.json({ success: true, order });
   } catch (err) {
     console.error('Lỗi POST /api/sales/orders:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/finance/sync-orders-accounting ───────────────────────────────
+app.post('/api/finance/sync-orders-accounting', async (req, res) => {
+  try {
+    const result = await syncAllExistingOrdersToAccounting();
+    res.json({ success: true, result });
+  } catch (err) {
+    console.error('Lỗi POST /api/finance/sync-orders-accounting:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -8772,6 +8806,13 @@ const handleUpdateSaleOrder = async (req, res) => {
         });
         createdPurchaseRequestCode = createdPR.code;
       }
+    }
+
+    // Luôn đồng bộ vào bộ máy kế toán & quản lý công nợ
+    try {
+      await syncOrderToAccountingAndDebt(order.id);
+    } catch (accErr) {
+      console.warn('[handleUpdateSaleOrder] Cảnh báo đồng bộ kế toán công nợ:', accErr.message);
     }
 
     res.json({
@@ -13607,7 +13648,7 @@ app.delete('/api/production/defects/:id', async (req, res) => {
 app.post('/api/production/defects/:id/process', async (req, res) => {
   try {
     const { id } = req.params;
-    const { nextStatus, note, performedBy, action, bomUpdates, returnQty } = req.body || {};
+    const { nextStatus, note, performedBy, action, bomUpdates, returnQty, requireQc } = req.body || {};
 
     const defect = await prisma.defectRecord.findUnique({ where: { id } });
     if (!defect) return res.status(404).json({ error: 'Not found' });
@@ -13615,11 +13656,25 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
     const oldStatus = defect.status;
 
     await prisma.$transaction(async (tx) => {
+      // ── XÁC ĐỊNH HỒ SƠ CÓ CẦN QUA BỘ PHẬN ĐẢM BẢO CHẤT LƯỢNG (QA / QC) ──
+      const shouldNotifyQc =
+        requireQc === true ||
+        nextStatus === 'WAITING_QC' ||
+        (action && (
+          action.startsWith('QUYẾT ĐỊNH:') ||
+          action.includes('CHUYỂN QC') ||
+          action.includes('QC') ||
+          action === 'HOÀN THÀNH & CHUYỂN QC' ||
+          (action === 'HOÀN THÀNH' && nextStatus !== 'COMPLETED')
+        ));
+
+      const finalStatus = shouldNotifyQc ? 'WAITING_QC' : (nextStatus || oldStatus);
+
       await tx.defectRecord.update({
         where: { id },
         data: {
-          ...(nextStatus && nextStatus !== oldStatus ? { status: nextStatus } : {}),
-          ...(nextStatus === 'COMPLETED' ? { completionDate: new Date() } : {}),
+          status: finalStatus,
+          ...(finalStatus === 'COMPLETED' ? { completionDate: new Date() } : {}),
           ...(note ? { repairPlan: note } : {})
         }
       });
@@ -13627,12 +13682,12 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
       await tx.defectActivity.create({
         data: {
           defectId: id,
-          action: (nextStatus === 'WAITING_QC' && (action === 'HOÀN THÀNH' || action === 'YÊU CẦU QC KIỂM TRA' || action === 'HOÀN THÀNH & CHUYỂN QC' || (action && action.includes('QC'))))
-            ? 'HOÀN THÀNH (CHUYỂN QC KIỂM TRA)'
+          action: shouldNotifyQc
+            ? 'HOÀN THÀNH (CHUYỂN QC KIỂM ĐỊNH CHẤT LƯỢNG)'
             : (action || 'CẬP NHẬT'),
-          description: note || 'Kỹ thuật viên hoàn tất xử lý và chuyển thông tin sang bộ phận QC kiểm định chất lượng (OQC).',
+          description: note || (shouldNotifyQc ? 'Kỹ thuật viên hoàn tất xử lý và chuyển hồ sơ sang bộ phận QA/QC kiểm định chất lượng (OQC).' : 'Cập nhật tiến độ xử lý lỗi.'),
           oldStatus,
-          newStatus: nextStatus || oldStatus,
+          newStatus: finalStatus,
           performedBy: performedBy || 'Hệ thống'
         }
       });
@@ -13687,31 +13742,34 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
         });
       } else if (action === 'QUYẾT ĐỊNH: HUỶ BỎ THAY THẾ BẰNG HÀNG HOÁ MỚI') {
         const qty = defect.quantity || 1;
-        const actualResultItems = [{
-          tenHang: `${defect.productName || 'Sản phẩm'} (Hàng lỗi)`,
-          code: defect.productCode,
-          soLuong: qty,
-          qty,
-          donVi: 'Bộ',
-          type: 'Kho Hàng Lỗi (KHO-LOI)',
-          warehouseCode: 'KHO-LOI',
-          loaiNhapKho: 'Nhập kho hàng lỗi',
-          isDefect: true,
-          defectCode: defect.code,
-          isShortage: false
-        }];
-        await tx.task.create({
-          data: {
-            title: `Yêu cầu nhập kho hàng lỗi (${defect.code})`,
-            description: `Yêu cầu nhập kho hàng lỗi (Mức 4).\nHồ sơ: ${defect.code}\nSản phẩm lỗi: ${defect.productName}\nSố lượng: ${qty}\nGhi chú: ${note}`,
-            status: 'pending',
-            priority: 'high',
-            creatorId: 'system',
-            assigneeId: defaultAssignee,
-            deptCode: 'logistics',
-            actualResult: JSON.stringify(actualResultItems)
-          }
-        });
+        // Chỉ tạo lệnh nhập kho nếu không qua QC. Nếu qua QC, kho chỉ nhập khi QC đã kết luận!
+        if (!shouldNotifyQc) {
+          const actualResultItems = [{
+            tenHang: `${defect.productName || 'Sản phẩm'} (Hàng lỗi)`,
+            code: defect.productCode,
+            soLuong: qty,
+            qty,
+            donVi: 'Bộ',
+            type: 'Kho Hàng Lỗi (KHO-LOI)',
+            warehouseCode: 'KHO-LOI',
+            loaiNhapKho: 'Nhập kho hàng lỗi',
+            isDefect: true,
+            defectCode: defect.code,
+            isShortage: false
+          }];
+          await tx.task.create({
+            data: {
+              title: `Yêu cầu nhập kho hàng lỗi (${defect.code})`,
+              description: `Yêu cầu nhập kho hàng lỗi (Mức 4).\nHồ sơ: ${defect.code}\nSản phẩm lỗi: ${defect.productName}\nSố lượng: ${qty}\nGhi chú: ${note}`,
+              status: 'pending',
+              priority: 'high',
+              creatorId: 'system',
+              assigneeId: defaultAssignee,
+              deptCode: 'logistics',
+              actualResult: JSON.stringify(actualResultItems)
+            }
+          });
+        }
         await tx.approvalRequest.create({
           data: {
             entityType: 'DEFECT_PRODUCT_EXPORT',
@@ -13730,46 +13788,38 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
           }
         });
       } else if (action === 'QUYẾT ĐỊNH: NHẬP LẠI KHO') {
-        const qty = Number(returnQty) > 0 ? Number(returnQty) : (Number(defect.quantity) > 0 ? Number(defect.quantity) : 1);
-        const actualResultItems = [{
-          tenHang: defect.productName || 'Thành phẩm',
-          code: defect.productCode,
-          soLuong: qty,
-          qty,
-          donVi: 'Bộ',
-          type: 'Kho Hàng Lỗi (KHO-LOI)',
-          warehouseCode: 'KHO-LOI',
-          loaiNhapKho: 'Nhập kho hàng trả lại',
-          isReturn: true,
-          defectCode: defect.code,
-          isShortage: false
-        }];
-        await tx.task.create({
-          data: {
-            title: `Yêu cầu nhập kho hàng trả lại (${defect.code})`,
-            description: `Yêu cầu nhập kho hàng trả lại (Mức 5).\nHồ sơ: ${defect.code}\nSản phẩm: ${defect.productName}\nSố lượng: ${qty}\nGhi chú: ${note}`,
-            status: 'pending',
-            priority: 'high',
-            creatorId: 'system',
-            assigneeId: defaultAssignee,
-            deptCode: 'logistics',
-            actualResult: JSON.stringify(actualResultItems)
-          }
-        });
+        // Chỉ tạo lệnh kho trực tiếp nếu không qua QC. Nếu qua QC, kho chỉ nhập khi QC đã kết luận!
+        if (!shouldNotifyQc) {
+          const qty = Number(returnQty) > 0 ? Number(returnQty) : (Number(defect.quantity) > 0 ? Number(defect.quantity) : 1);
+          const actualResultItems = [{
+            tenHang: defect.productName || 'Thành phẩm',
+            code: defect.productCode,
+            soLuong: qty,
+            qty,
+            donVi: 'Bộ',
+            type: 'Kho Hàng Lỗi (KHO-LOI)',
+            warehouseCode: 'KHO-LOI',
+            loaiNhapKho: 'Nhập kho hàng trả lại',
+            isReturn: true,
+            defectCode: defect.code,
+            isShortage: false
+          }];
+          await tx.task.create({
+            data: {
+              title: `Yêu cầu nhập kho hàng trả lại (${defect.code})`,
+              description: `Yêu cầu nhập kho hàng trả lại (Mức 5).\nHồ sơ: ${defect.code}\nSản phẩm: ${defect.productName}\nSố lượng: ${qty}\nGhi chú: ${note}`,
+              status: 'pending',
+              priority: 'high',
+              creatorId: 'system',
+              assigneeId: defaultAssignee,
+              deptCode: 'logistics',
+              actualResult: JSON.stringify(actualResultItems)
+            }
+          });
+        }
       }
 
       // ── TỰ ĐỘNG CHUYỂN THÔNG TIN SANG BỘ PHẬN ĐẢM BẢO CHẤT LƯỢNG (QA / QC) ──
-      const shouldNotifyQc =
-        requireQc === true ||
-        nextStatus === 'WAITING_QC' ||
-        (action && (
-          action.startsWith('QUYẾT ĐỊNH:') ||
-          action.includes('CHUYỂN QC') ||
-          action.includes('QC') ||
-          action === 'HOÀN THÀNH & CHUYỂN QC' ||
-          (action === 'HOÀN THÀNH' && nextStatus !== 'COMPLETED')
-        ));
-
       if (shouldNotifyQc) {
         const existingQc = await tx.qualityInspection.findFirst({
           where: {
@@ -21884,26 +21934,148 @@ app.patch('/api/qa/inspections/:id', async (req, res) => {
         });
       }
 
-      // Nếu phiếu OQC liên kết hồ sơ hàng lỗi
-      if (inspection.type === 'OQC' && oldMeta.defectId) {
+      // ── TỰ ĐỘNG CHUYỂN THÔNG TIN SANG BỘ PHẬN KHO KHI QC KẾT LUẬN ──
+      // Chỉ khi QC kết luận mới chuyển cho bộ phận kho để nhập kho.
+      // Nếu có cả hàng đạt và không đạt: tạo 2 lệnh nhập kho độc lập (KTP & KHO-LOI)
+      const storekeeperUser = await tx.employee.findFirst({
+        where: {
+          departmentCode: { in: ['logistics', 'warehouse', 'kho'] },
+          userId: { not: null },
+        },
+        select: { userId: true },
+      });
+      const defaultWarehouseAssignee = storekeeperUser?.userId || 'system';
+
+      const totalSampleQty = Number(
+        newMeta.quantity ||
+          newMeta.totalQuantity ||
+          newMeta.sampleQuantity ||
+          inspection.sampleQuantity ||
+          inspection.lotQuantity ||
+          1
+      );
+      let pQty = passedQuantity !== undefined && passedQuantity !== null ? Number(passedQuantity) : NaN;
+      let fQty = failedQuantity !== undefined && failedQuantity !== null ? Number(failedQuantity) : NaN;
+
+      if (isNaN(pQty) && isNaN(fQty)) {
         const isPassed =
           result === 'Đạt' ||
-          (result && result.toLowerCase().includes('đạt') && !result.toLowerCase().includes('không'));
+          (result &&
+            result.toLowerCase().includes('đạt') &&
+            !result.toLowerCase().includes('không') &&
+            !result.toLowerCase().includes('lỗi một phần'));
+        if (isPassed) {
+          pQty = totalSampleQty;
+          fQty = 0;
+        } else {
+          pQty = 0;
+          fQty = totalSampleQty;
+        }
+      } else {
+        pQty = isNaN(pQty) ? 0 : Math.max(0, pQty);
+        fQty = isNaN(fQty) ? 0 : Math.max(0, fQty);
+      }
+
+      // 1. Lệnh nhập kho Thành Phẩm (KTP) nếu có hàng đạt
+      if (pQty > 0) {
+        const actualResultPassed = [
+          {
+            tenHang: inspection.productName || oldMeta.productName || 'Thành phẩm đạt chuẩn QC',
+            code: oldMeta.productCode || oldMeta.model || 'TP-QC',
+            soLuong: pQty,
+            qty: pQty,
+            donVi: 'Bộ',
+            type: 'Kho Thành Phẩm (KTP)',
+            warehouseCode: 'KTP',
+            loaiNhapKho: 'Nhập kho thành phẩm',
+            isPassedQc: true,
+            qcCode: inspection.code,
+            defectCode: oldMeta.defectCode,
+            isShortage: false,
+          },
+        ];
+
+        await tx.task.create({
+          data: {
+            title: `Lệnh nhập kho thành phẩm đạt chuẩn QC (${inspection.code})`,
+            description: `Bộ phận QA/QC đã kiểm định chất lượng: ĐẠT TIÊU CHUẨN (${pQty} sản phẩm).\nBiên bản kiểm định: ${inspection.code}\nSản phẩm: ${inspection.productName || oldMeta.productName || 'Thành phẩm'}\nSố lượng đạt: ${pQty}\nKho nhập: Kho Thành Phẩm (KTP)\nNgười kiểm định: ${inspectorName || inspection.inspectorName || 'Phòng QA/QC'}`,
+            status: 'pending',
+            priority: 'high',
+            creatorId: 'system',
+            assigneeId: defaultWarehouseAssignee,
+            deptCode: 'logistics',
+            actualResult: JSON.stringify(actualResultPassed),
+          },
+        });
+      }
+
+      // 2. Lệnh nhập kho Hàng Lỗi (KHO-LOI) nếu có hàng không đạt
+      if (fQty > 0) {
+        const actualResultFailed = [
+          {
+            tenHang: `${inspection.productName || oldMeta.productName || 'Sản phẩm'} (Hàng không đạt QC)`,
+            code: oldMeta.productCode || oldMeta.model || 'LOI-QC',
+            soLuong: fQty,
+            qty: fQty,
+            donVi: 'Bộ',
+            type: 'Kho Hàng Lỗi (KHO-LOI)',
+            warehouseCode: 'KHO-LOI',
+            loaiNhapKho: 'Nhập kho hàng lỗi',
+            isDefect: true,
+            qcCode: inspection.code,
+            defectCode: oldMeta.defectCode,
+            defectReason: notes || 'Không đạt kiểm định chất lượng',
+            isShortage: false,
+          },
+        ];
+
+        await tx.task.create({
+          data: {
+            title: `Lệnh nhập kho hàng lỗi / không đạt QC (${inspection.code})`,
+            description: `Bộ phận QA/QC kiểm định kết luận: KHÔNG ĐẠT TIÊU CHUẨN (${fQty} sản phẩm).\nBiên bản kiểm định: ${inspection.code}\nSản phẩm: ${inspection.productName || oldMeta.productName || 'Sản phẩm'} (Hàng lỗi)\nSố lượng không đạt: ${fQty}\nKho nhập: Kho Hàng Lỗi (KHO-LOI)\nLý do: ${notes || 'Không đạt kiểm định chất lượng'}\nNgười kiểm định: ${inspectorName || inspection.inspectorName || 'Phòng QA/QC'}`,
+            status: 'pending',
+            priority: 'high',
+            creatorId: 'system',
+            assigneeId: defaultWarehouseAssignee,
+            deptCode: 'logistics',
+            actualResult: JSON.stringify(actualResultFailed),
+          },
+        });
+      }
+
+      // 3. Nếu phiếu OQC liên kết hồ sơ hàng lỗi: Cập nhật trạng thái và nhật ký
+      if (oldMeta.defectId) {
+        const nextDefectStatus = 'WAITING_INVENTORY';
+        const actionText =
+          pQty > 0 && fQty > 0
+            ? 'QC KẾT LUẬN: ĐẠT MỘT PHẦN (CHUYỂN KHO)'
+            : pQty > 0
+            ? 'QC KẾT LUẬN: ĐẠT (CHUYỂN KHO THÀNH PHẨM)'
+            : 'QC KẾT LUẬN: KHÔNG ĐẠT (CHUYỂN KHO HÀNG LỖI)';
+
+        const descText = `QC kết luận: Đạt ${pQty}, Lỗi ${fQty}. Đã tạo ${
+          pQty > 0 && fQty > 0
+            ? '2 lệnh nhập kho (Kho Thành Phẩm KTP & Kho Hàng Lỗi KHO-LOI)'
+            : pQty > 0
+            ? 'lệnh nhập Kho Thành Phẩm (KTP)'
+            : 'lệnh nhập Kho Hàng Lỗi (KHO-LOI)'
+        } chuyển bộ phận Kho.`;
+
         await tx.defectRecord.update({
           where: { id: oldMeta.defectId },
           data: {
-            status: isPassed ? 'COMPLETED' : 'PROCESSING',
-            ...(isPassed ? { completionDate: new Date() } : {}),
+            status: nextDefectStatus,
           },
         });
+
         await tx.defectActivity.create({
           data: {
             defectId: oldMeta.defectId,
-            action: isPassed ? 'QC KẾT LUẬN: ĐẠT' : 'QC KẾT LUẬN: KHÔNG ĐẠT',
-            description: `QC kết luận ${result}. Phiếu kiểm định ${inspection.code}.`,
+            action: actionText,
+            description: descText,
             oldStatus: 'WAITING_QC',
-            newStatus: isPassed ? 'COMPLETED' : 'PROCESSING',
-            performedBy: inspectorName || 'Bộ phận QA/QC',
+            newStatus: nextDefectStatus,
+            performedBy: inspectorName || inspection.inspectorName || 'Bộ phận QA/QC',
           },
         });
       }
