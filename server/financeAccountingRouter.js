@@ -401,6 +401,7 @@ router.get('/api/debts/receivables', (req, res) => {
             status: e.status || (rAmt <= 0 ? 'completed' : 'ontime'),
             statusLabel: e.statusLabel || (rAmt <= 0 ? 'Đã thu đủ' : (pAmt > 0 ? 'Thu một phần' : (idx === 0 ? 'Chờ thanh toán' : 'Chưa tới hạn'))),
             payments: e.payments || [],
+            items: e.items || [],
           };
         });
       } catch (e) {
@@ -427,6 +428,33 @@ router.get('/api/debts/receivables', (req, res) => {
       };
     });
     res.json(formatted);
+  });
+});
+
+// Tra cứu danh sách hàng hoá chi tiết theo mã đơn hàng hoặc mã chứng từ phát sinh
+router.get('/api/debts/order-items/:code', (req, res) => {
+  const code = req.params.code;
+  const sql = `
+    SELECT 
+      soi.id,
+      soi.tenHang,
+      soi.soLuong,
+      soi.donGia,
+      soi.thanhTien,
+      COALESCE(soi.donViTinh, 'Bộ') as donViTinh,
+      soi.dinhMucId,
+      soi.ghiChu,
+      ii.code as inventoryCode,
+      ii.tenHang as inventoryName
+    FROM SaleOrderItem soi
+    LEFT JOIN SaleOrder so ON soi.saleOrderId = so.id
+    LEFT JOIN InventoryItem ii ON soi.inventoryItemId = ii.id
+    WHERE so.code = ? OR soi.saleOrderId = ?
+    ORDER BY soi.rowid ASC
+  `;
+  db.all(sql, [code, code], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true, items: rows || [] });
   });
 });
 

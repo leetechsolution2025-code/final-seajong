@@ -80,6 +80,7 @@ export async function syncPrismaFinanceToAccountingTables(db) {
       prismaCarriers,
       prismaEmployees,
       prismaSaleOrders,
+      prismaSaleOrderItems,
       prismaInventoryItems,
       prismaInventoryCategories,
       prismaStockMovements,
@@ -102,6 +103,7 @@ export async function syncPrismaFinanceToAccountingTables(db) {
       dbAll(db, 'SELECT * FROM "Carrier"'),
       dbAll(db, 'SELECT * FROM "Employee"'),
       dbAll(db, 'SELECT * FROM "SaleOrder" ORDER BY ngayDat DESC'),
+      dbAll(db, 'SELECT * FROM "SaleOrderItem"'),
       dbAll(db, 'SELECT * FROM "InventoryItem" ORDER BY soLuong DESC'),
       dbAll(db, 'SELECT * FROM "InventoryCategory"'),
       dbAll(db, 'SELECT * FROM "StockMovement" ORDER BY createdAt DESC LIMIT 500'),
@@ -128,6 +130,37 @@ export async function syncPrismaFinanceToAccountingTables(db) {
 
     const employeeById = new Map();
     prismaEmployees.forEach((e) => employeeById.set(e.id, e));
+
+    const saleOrderById = new Map();
+    const saleOrderByCode = new Map();
+    (prismaSaleOrders || []).forEach((so) => {
+      saleOrderById.set(so.id, so);
+      if (so.code) saleOrderByCode.set(so.code, so);
+    });
+
+    const orderItemsByCode = new Map();
+    const orderItemsByOrderId = new Map();
+    (prismaSaleOrderItems || []).forEach((item) => {
+      const so = saleOrderById.get(item.saleOrderId);
+      const code = so?.code || item.saleOrderId;
+
+      const itemObj = {
+        id: item.id,
+        tenHang: item.tenHang,
+        soLuong: Number(item.soLuong) || 1,
+        donGia: Number(item.donGia) || 0,
+        thanhTien: Number(item.thanhTien) || 0,
+        donViTinh: item.donViTinh || 'Bộ',
+        dinhMucId: item.dinhMucId,
+        ghiChu: item.ghiChu,
+      };
+
+      if (!orderItemsByCode.has(code)) orderItemsByCode.set(code, []);
+      orderItemsByCode.get(code).push(itemObj);
+
+      if (!orderItemsByOrderId.has(item.saleOrderId)) orderItemsByOrderId.set(item.saleOrderId, []);
+      orderItemsByOrderId.get(item.saleOrderId).push(itemObj);
+    });
 
     // ============================================================================
     // A. ĐỒNG BỘ HỆ THỐNG TÀI KHOẢN KẾ TOÁN (accounting_chart_of_accounts)
@@ -409,20 +442,33 @@ export async function syncPrismaFinanceToAccountingTables(db) {
         const code = `CNPT-${String(recIndex).padStart(3, '0')}`;
         recIndex++;
 
-        const paymentRecords = g.payments.map((p, idx) => ({
-          id: p.id || `PAY-REC-${idx}`,
-          code: p.referenceId || `PT-${idx + 1}`,
-          receiptCode: p.referenceId || `PT-${idx + 1}`,
-          title: (p.description || '').split('\n')[0] || `Thu nợ khách hàng ${g.customerName}`,
-          date: formatEpochToVNDate(p.createdAt || p.dueDate),
-          time: '09:00',
-          amount: Math.round(Number(p.paidAmount) || 0),
-          method: 'Chuyển khoản',
-          debitAccount: '1121',
-          creditAccount: '131',
-          payerName: g.customerName,
-          payerAddress: g.customerAddress,
-        }));
+        const paymentRecords = g.payments.map((p, idx) => {
+          const ref = String(p.referenceId || '');
+          const desc = String(p.description || '').toLowerCase();
+          const isReturn =
+            p.type === 'RETURN' ||
+            ref.startsWith('ERR-') ||
+            desc.includes('trả lại') ||
+            desc.includes('hàng lỗi');
+
+          return {
+            id: p.id || `PAY-REC-${idx}`,
+            code: ref || `PT-${idx + 1}`,
+            receiptCode: ref || `PT-${idx + 1}`,
+            title: (p.description || '').split('\n')[0] || (isReturn ? `Giảm trừ công nợ do trả lại hàng theo ${ref}` : `Thu nợ khách hàng ${g.customerName}`),
+            date: formatEpochToVNDate(p.createdAt || p.dueDate),
+            time: '09:00',
+            amount: Math.round(Number(p.paidAmount) || 0),
+            method: isReturn ? 'Cấn trừ hàng trả lại' : 'Chuyển khoản',
+            type: isReturn ? 'return_deduction' : 'receipt',
+            typeLabel: isReturn ? 'Giảm trừ công nợ' : 'Phiếu thu',
+            isReturn,
+            debitAccount: isReturn ? '5212' : '1121',
+            creditAccount: '131',
+            payerName: g.customerName,
+            payerAddress: g.customerAddress,
+          };
+        });
 
         // Phân bổ tiền đã thu vào các đợt hóa đơn
         let unallocatedPaid = totalPaid;
@@ -433,6 +479,7 @@ export async function syncPrismaFinanceToAccountingTables(db) {
           const invRemain = Math.max(0, invVal - allocPaid);
           const refCode = inv.referenceId || `${code}-D${idx + 1}`;
           const descClean = (inv.description || '').split('\n\n[PAYMENT_LOGS]')[0].trim();
+          const entryItems = orderItemsByCode.get(refCode) || orderItemsByOrderId.get(refCode) || [];
 
           return {
             id: inv.id || `ENT-REC-${idx + 1}`,
@@ -446,6 +493,7 @@ export async function syncPrismaFinanceToAccountingTables(db) {
             dueDate: formatEpochToVNDate(inv.dueDate || inv.createdAt),
             status: invRemain <= 0 ? 'completed' : allocPaid > 0 ? 'partial' : 'ontime',
             statusLabel: invRemain <= 0 ? 'Đã thu đủ' : allocPaid > 0 ? 'Thu một phần' : 'Chờ thanh toán',
+            items: entryItems,
             payments: idx === 0 ? paymentRecords : [],
           };
         });

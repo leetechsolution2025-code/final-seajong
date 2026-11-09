@@ -416,19 +416,30 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
             const pAmount = Number(p.amount) || 0;
             const pCode = p.code || p.receiptCode || p.paymentCode || (isReceivable ? `PT-${entry.code}` : `UNC-${entry.code}`);
             const pIsoDate = parseToIsoDateTime(p.date || p.dateTime || entry.date, p.time || entry.time || '08:30');
+            const isReturn =
+              p.type === 'return_deduction' ||
+              p.isReturn ||
+              String(pCode).startsWith('ERR-') ||
+              String(p.title || '').toLowerCase().includes('trả lại') ||
+              String(p.title || '').toLowerCase().includes('hàng lỗi') ||
+              String(p.note || '').toLowerCase().includes('trả lại');
+
             const payTx = {
               id: `ENTRY_PAY_${entry.id || idx}_${p.id || pIdx}`,
               stageId: entry.id || `ent-${idx}`,
               stageCode: entry.code || `${debt.code}-D${idx + 1}`,
               isStagePayment: true,
+              isReturn,
               parentStageCode: entry.code,
               parentStageTitle: entry.title,
               date: pIsoDate,
               ref: pCode,
-              type: isReceivable ? 'Phiếu thu' : 'Phiếu chi',
+              type: isReturn ? 'Giảm trừ nợ' : isReceivable ? 'Phiếu thu' : 'Phiếu chi',
               increase: 0,
               decrease: pAmount,
-              note: p.title || p.note || (isReceivable
+              note: p.title || p.note || (isReturn
+                ? `Giảm trừ công nợ do trả lại hàng theo ${pCode}`
+                : isReceivable
                 ? `Khách hàng thanh toán ${entry.title || `đợt ${idx + 1}`} qua ${p.method || 'chuyển khoản'}`
                 : `Thanh toán tiền hàng cho NCC qua ${p.method || 'chuyển khoản'}`),
               orderIdx: orderSeq++,
@@ -487,14 +498,26 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
 
       if (rootPayments.length > 0) {
         rootPayments.forEach((h: any, hIdx: number) => {
+          const hCode = h.code || h.receiptCode || (isReceivable ? `PT-${debt.code || '01'}` : `UNC-${debt.code || '01'}`);
+          const isReturn =
+            h.type === 'return_deduction' ||
+            h.isReturn ||
+            String(hCode).startsWith('ERR-') ||
+            String(h.title || '').toLowerCase().includes('trả lại') ||
+            String(h.title || '').toLowerCase().includes('hàng lỗi') ||
+            String(h.note || '').toLowerCase().includes('trả lại');
+
           const rootPayTx = {
             id: `PAID_HIST_${h.id || hIdx}`,
             date: parseToIsoDateTime(h.dateTime || h.date, h.time || '10:00'),
-            ref: h.code || h.receiptCode || (isReceivable ? `PT-${debt.code || '01'}` : `UNC-${debt.code || '01'}`),
-            type: isReceivable ? 'Phiếu thu' : 'Phiếu chi',
+            ref: hCode,
+            type: isReturn ? 'Giảm trừ nợ' : isReceivable ? 'Phiếu thu' : 'Phiếu chi',
+            isReturn,
             increase: 0,
             decrease: Number(h.amount) || 0,
-            note: h.title || h.note || (isReceivable
+            note: h.title || h.note || (isReturn
+              ? `Giảm trừ công nợ do trả lại hàng theo ${hCode}`
+              : isReceivable
               ? `Khách hàng thanh toán qua ${h.method || 'chuyển khoản'}`
               : `Thanh toán cho nhà cung cấp qua ${h.method || 'chuyển khoản'}`),
             orderIdx: orderSeq++,
@@ -1448,22 +1471,27 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                               <td style={{ padding: '8px 10px', paddingLeft: '24px', verticalAlign: 'middle' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <span
-                                      style={{
-                                        display: 'inline-block',
-                                        padding: '1px 6px',
-                                        borderRadius: '3px',
-                                        fontSize: '0.675rem',
-                                        fontWeight: 700,
-                                        width: 'fit-content',
-                                        backgroundColor: '#dcfce7',
-                                        color: '#15803d',
-                                        border: '1px solid #86efac',
-                                      }}
-                                    >
-                                      {stripParentheses(tx.type)}
-                                    </span>
-                                    <span style={{ color: '#166534', fontSize: '0.78rem', fontWeight: 600 }}>{stripParentheses(tx.note)}</span>
+                                    {(() => {
+                                      const isReturnDeduction = tx.isReturn || tx.type === 'Giảm trừ nợ' || String(tx.type || '').includes('Giảm trừ');
+                                      return (
+                                        <span
+                                          style={{
+                                            display: 'inline-block',
+                                            padding: '1px 6px',
+                                            borderRadius: '3px',
+                                            fontSize: '0.675rem',
+                                            fontWeight: 700,
+                                            width: 'fit-content',
+                                            backgroundColor: isReturnDeduction ? '#fef3c7' : '#dcfce7',
+                                            color: isReturnDeduction ? '#b45309' : '#15803d',
+                                            border: `1px solid ${isReturnDeduction ? '#fde68a' : '#86efac'}`,
+                                          }}
+                                        >
+                                          {stripParentheses(tx.type)}
+                                        </span>
+                                      );
+                                    })()}
+                                    <span style={{ color: (tx.isReturn || String(tx.type || '').includes('Giảm trừ')) ? '#b45309' : '#166534', fontSize: '0.78rem', fontWeight: 600 }}>{stripParentheses(tx.note)}</span>
                                   </div>
                                   {tx.rawPayment?.method && (
                                     <span style={{ fontSize: '0.675rem', color: '#64748b', fontStyle: 'italic', paddingLeft: '4px' }}>
@@ -1475,7 +1503,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                               <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#1d4ed8', verticalAlign: 'middle', fontSize: '0.78rem' }}>
                                 {tx.increase > 0 ? formatCurrency(tx.increase) : '-'}
                               </td>
-                              <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#059669', verticalAlign: 'middle', fontSize: '0.78rem' }}>
+                              <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: (tx.isReturn || String(tx.type || '').includes('Giảm trừ')) ? '#d97706' : '#059669', verticalAlign: 'middle', fontSize: '0.78rem' }}>
                                 {tx.decrease > 0 ? formatCurrency(tx.decrease) : '-'}
                               </td>
                               <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#0f172a', verticalAlign: 'middle', fontSize: '0.78rem' }}>
@@ -1530,28 +1558,33 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                           </td>
                           <td style={{ padding: '8px 10px', verticalAlign: 'middle' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                              <span
-                                style={{
-                                  display: 'inline-block',
-                                  padding: '1px 6px',
-                                  borderRadius: '3px',
-                                  fontSize: '0.675rem',
-                                  fontWeight: 700,
-                                  width: 'fit-content',
-                                  backgroundColor: isOpening ? '#f1f5f9' : isMain ? '#eff6ff' : isReceipt ? '#ecfdf5' : '#fef2f2',
-                                  color: isOpening ? '#475569' : isMain ? '#1d4ed8' : isReceipt ? '#059669' : '#dc2626',
-                                  border: `1px solid ${isOpening ? '#cbd5e1' : isMain ? '#bfdbfe' : isReceipt ? '#a7f3d0' : '#fecaca'}`,
-                                }}
-                              >
-                                {stripParentheses(tx.type)}
-                              </span>
+                              {(() => {
+                                const isReturnDeduction = tx.isReturn || tx.type === 'Giảm trừ nợ' || String(tx.type || '').includes('Giảm trừ');
+                                return (
+                                  <span
+                                    style={{
+                                      display: 'inline-block',
+                                      padding: '1px 6px',
+                                      borderRadius: '3px',
+                                      fontSize: '0.675rem',
+                                      fontWeight: 700,
+                                      width: 'fit-content',
+                                      backgroundColor: isOpening ? '#f1f5f9' : isMain ? '#eff6ff' : isReturnDeduction ? '#fef3c7' : isReceipt ? '#ecfdf5' : '#fef2f2',
+                                      color: isOpening ? '#475569' : isMain ? '#1d4ed8' : isReturnDeduction ? '#b45309' : isReceipt ? '#059669' : '#dc2626',
+                                      border: `1px solid ${isOpening ? '#cbd5e1' : isMain ? '#bfdbfe' : isReturnDeduction ? '#fde68a' : isReceipt ? '#a7f3d0' : '#fecaca'}`,
+                                    }}
+                                  >
+                                    {stripParentheses(tx.type)}
+                                  </span>
+                                );
+                              })()}
                               <span style={{ color: '#334155', fontSize: '0.78rem', fontWeight: 500 }}>{stripParentheses(tx.note)}</span>
                             </div>
                           </td>
                           <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#1d4ed8', verticalAlign: 'middle', fontSize: '0.78rem' }}>
                             {tx.increase > 0 ? formatCurrency(tx.increase) : '-'}
                           </td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#059669', verticalAlign: 'middle', fontSize: '0.78rem' }}>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: (tx.isReturn || String(tx.type || '').includes('Giảm trừ')) ? '#d97706' : '#059669', verticalAlign: 'middle', fontSize: '0.78rem' }}>
                             {tx.decrease > 0 ? formatCurrency(tx.decrease) : '-'}
                           </td>
                           <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#0f172a', verticalAlign: 'middle', fontSize: '0.78rem' }}>

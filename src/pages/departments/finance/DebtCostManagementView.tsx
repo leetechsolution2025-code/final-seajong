@@ -25,6 +25,8 @@ import {
   ArrowRepeat,
   Truck,
   Building,
+  BoxSeam,
+  FileText,
 } from 'react-bootstrap-icons';
 import {
   TableToolbar,
@@ -1612,13 +1614,43 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     return null;
   }, [selectedReceivableForReconcile, selectedPayableForReconcile, customerPaymentHistories]);
 
-  // Offcanvas chi tiết khoản nợ danh mục con rộng 400px
+  // Offcanvas chi tiết khoản nợ danh mục con rộng 480px kèm 2 slide (Thông tin khoản nợ & Danh sách hàng hoá)
   const [subEntryDetailOpen, setSubEntryDetailOpen] = useState(false);
   const [selectedSubEntry, setSelectedSubEntry] = useState<{
     entry: any;
     parent: any;
     type: 'receivable' | 'payable';
   } | null>(null);
+  const [subEntryActiveTab, setSubEntryActiveTab] = useState<'info' | 'items'>('info');
+  const [subEntryItems, setSubEntryItems] = useState<any[]>([]);
+  const [loadingSubEntryItems, setLoadingSubEntryItems] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!selectedSubEntry) {
+      setSubEntryActiveTab('info');
+      setSubEntryItems([]);
+      return;
+    }
+    const entry = selectedSubEntry.entry;
+    if (entry?.items && Array.isArray(entry.items) && entry.items.length > 0) {
+      setSubEntryItems(entry.items);
+    } else if (entry?.code) {
+      setLoadingSubEntryItems(true);
+      fetch(`/api/debts/order-items/${encodeURIComponent(entry.code)}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.items) && data.items.length > 0) {
+            setSubEntryItems(data.items);
+          } else {
+            setSubEntryItems([]);
+          }
+        })
+        .catch(() => setSubEntryItems([]))
+        .finally(() => setLoadingSubEntryItems(false));
+    } else {
+      setSubEntryItems([]);
+    }
+  }, [selectedSubEntry]);
 
   const isAnyModalOpen = Boolean(
     reconcileModalOpen ||
@@ -3673,8 +3705,17 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                       </td>
                                     </tr>
 
-                                    {/* CÁC PHIẾU THU TIỀN ĐƯỢC NHÓM TRỰC TIẾP VÀO ĐỢT NÀY */}
-                                    {stagePayments.map((pay: any, pIdx: number) => (
+                                    {/* CÁC PHIẾU THU HOẶC GIẢM TRỪ CÔNG NỢ ĐƯỢC NHÓM TRỰC TIẾP VÀO ĐỢT NÀY */}
+                                    {stagePayments.map((pay: any, pIdx: number) => {
+                                      const isReturnDeduction =
+                                        pay.isReturn ||
+                                        pay.type === 'return_deduction' ||
+                                        String(pay.code || pay.receiptCode || '').startsWith('ERR-') ||
+                                        String(pay.title || '').toLowerCase().includes('trả lại') ||
+                                        String(pay.note || '').toLowerCase().includes('trả lại') ||
+                                        String(pay.title || '').toLowerCase().includes('hàng lỗi');
+
+                                      return (
                                       <tr
                                         key={pay.id || `pay-${pIdx}`}
                                         style={{
@@ -3683,33 +3724,34 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                           fontSize: '0.7813rem',
                                         }}
                                       >
-                                        {/* Cột Khách hàng: Thụt lề với ký hiệu nhánh ↳ và badge Phiếu thu */}
+                                        {/* Cột Khách hàng: Thụt lề với ký hiệu nhánh ↳ và badge Phiếu thu / Giảm trừ công nợ */}
                                         <td style={{ padding: '6px 14px 6px 56px' }}>
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                            <span style={{ color: '#059669', fontWeight: 800 }}>↳</span>
+                                            <span style={{ color: isReturnDeduction ? '#d97706' : '#059669', fontWeight: 800 }}>↳</span>
                                             <span
                                               style={{
-                                                backgroundColor: '#dcfce7',
-                                                color: '#15803d',
+                                                backgroundColor: isReturnDeduction ? '#fef3c7' : '#dcfce7',
+                                                color: isReturnDeduction ? '#b45309' : '#15803d',
+                                                border: `1px solid ${isReturnDeduction ? '#fde68a' : '#86efac'}`,
                                                 padding: '1px 6px',
                                                 borderRadius: '4px',
                                                 fontSize: '0.6875rem',
                                                 fontWeight: 700,
                                               }}
                                             >
-                                              Phiếu thu
+                                              {isReturnDeduction ? 'Giảm trừ công nợ' : 'Phiếu thu'}
                                             </span>
                                             <span style={{ fontWeight: 700, color: '#0f172a' }}>{pay.code || pay.receiptCode}</span>
                                             <span style={{ color: '#cbd5e1' }}>|</span>
                                             <span style={{ color: '#64748b', fontSize: '0.7188rem' }}>
                                               {pay.time || '08:30'} • {pay.date}
                                             </span>
-                                            <span style={{ color: '#64748b', fontSize: '0.7188rem', fontStyle: 'italic' }}>
-                                              ({pay.method || 'Chuyển khoản'})
+                                            <span style={{ color: isReturnDeduction ? '#b45309' : '#64748b', fontSize: '0.7188rem', fontStyle: 'italic' }}>
+                                              ({isReturnDeduction ? (pay.method || 'Cấn trừ hàng trả lại') : (pay.method || 'Chuyển khoản')})
                                             </span>
                                           </div>
                                           <div style={{ fontSize: '0.7188rem', color: '#64748b', marginTop: '2px', paddingLeft: '18px' }}>
-                                            {pay.title || pay.note || `Thu tiền khách hàng theo phiếu ${pay.code || pay.receiptCode}`}
+                                            {pay.title || pay.note || (isReturnDeduction ? `Giảm trừ công nợ do trả lại hàng theo ${pay.code || pay.receiptCode}` : `Thu tiền khách hàng theo phiếu ${pay.code || pay.receiptCode}`)}
                                           </div>
                                         </td>
 
@@ -3718,42 +3760,42 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                           —
                                         </td>
 
-                                        {/* Đã thanh toán (hiển thị số tiền thu được của phiếu này) */}
-                                        <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 700, color: '#059669' }}>
-                                          +{formatNumberGroup(pay.amount)}
+                                        {/* Đã thanh toán / Giảm trừ */}
+                                        <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 700, color: isReturnDeduction ? '#d97706' : '#059669' }}>
+                                          {isReturnDeduction ? '-' : '+'}{formatNumberGroup(pay.amount)}
                                         </td>
 
                                         {/* Hạn thanh toán / Trạng thái */}
-                                        <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'center', color: '#059669', fontWeight: 600, fontSize: '0.75rem' }}>
-                                          Đã thu
+                                        <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'center', color: isReturnDeduction ? '#d97706' : '#059669', fontWeight: 600, fontSize: '0.75rem' }}>
+                                          {isReturnDeduction ? 'Đã giảm trừ' : 'Đã thu'}
                                         </td>
 
                                         {/* Còn lại */}
                                         <td style={{ padding: '6px 14px', textAlign: 'right', color: '#94a3b8' }}>
                                           <span className="hidden sm:inline">—</span>
-                                          <span className="sm:hidden font-bold text-emerald-600">+{formatNumberGroup(pay.amount)}</span>
+                                          <span className={`sm:hidden font-bold ${isReturnDeduction ? 'text-amber-600' : 'text-emerald-600'}`}>{isReturnDeduction ? '-' : '+'}{formatNumberGroup(pay.amount)}</span>
                                         </td>
 
                                       <td style={{ padding: '6px 8px', textAlign: 'center' }}>
                                         <button
                                           type="button"
-                                          title="Xem và in phiếu thu A4"
+                                          title={isReturnDeduction ? "Xem chứng từ giảm trừ công nợ A4" : "Xem và in phiếu thu A4"}
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            const isBankTransfer = (pay.method || '').toLowerCase().includes('khoản') || (pay.method || '').toLowerCase().includes('ngân hàng');
+                                            const isBankTransfer = !isReturnDeduction && ((pay.method || '').toLowerCase().includes('khoản') || (pay.method || '').toLowerCase().includes('ngân hàng'));
                                             setReceiptToPrint({
-                                              code: pay.code || pay.receiptCode || 'PT-20261004',
+                                              code: pay.code || pay.receiptCode || (isReturnDeduction ? 'BBGT-20261109' : 'PT-20261004'),
                                               date: pay.date || item.createdAt || '23/10/2026',
                                               customerName: item.customerName,
                                               customerAddress: item.customerAddress || '',
                                               amount: pay.amount,
-                                              reason: pay.title || pay.note || `Thu tiền khách hàng - ${entry.title}`,
+                                              reason: pay.title || pay.note || (isReturnDeduction ? `Giảm trừ công nợ do trả lại hàng - ${entry.title}` : `Thu tiền khách hàng - ${entry.title}`),
                                               contractCode: item.code,
                                               stageTitle: entry.title,
-                                              paymentMethod: pay.method || 'Chuyển khoản',
-                                              debitAccount: isBankTransfer ? '1121' : '1111',
+                                              paymentMethod: isReturnDeduction ? (pay.method || 'Cấn trừ hàng trả lại') : (pay.method || 'Chuyển khoản'),
+                                              debitAccount: isReturnDeduction ? '5212' : isBankTransfer ? '1121' : '1111',
                                               creditAccount: '131',
-                                              notes: isBankTransfer ? 'Giấy báo Có ngân hàng' : '01 Chứng từ gốc',
+                                              notes: isReturnDeduction ? 'Hồ sơ hàng trả lại (ERR)' : isBankTransfer ? 'Giấy báo Có ngân hàng' : '01 Chứng từ gốc',
                                               creator: getLoggedInUserName(user) || 'Nguyễn Thị Tuyết',
                                               accountant: 'Mai Thị Ngọc',
                                               cashier: '',
@@ -3762,20 +3804,20 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                             setIsPrintReceiptModalOpen(true);
                                           }}
                                           onMouseEnter={(e) => {
-                                            e.currentTarget.style.backgroundColor = '#dbeafe';
-                                            e.currentTarget.style.borderColor = '#93c5fd';
+                                            e.currentTarget.style.backgroundColor = isReturnDeduction ? '#fef3c7' : '#dbeafe';
+                                            e.currentTarget.style.borderColor = isReturnDeduction ? '#fde68a' : '#93c5fd';
                                           }}
                                           onMouseLeave={(e) => {
-                                            e.currentTarget.style.backgroundColor = '#eff6ff';
-                                            e.currentTarget.style.borderColor = '#bfdbfe';
+                                            e.currentTarget.style.backgroundColor = isReturnDeduction ? '#fffbeb' : '#eff6ff';
+                                            e.currentTarget.style.borderColor = isReturnDeduction ? '#fde68a' : '#bfdbfe';
                                           }}
                                           style={{
                                             width: '24px',
                                             height: '24px',
                                             borderRadius: '4px',
-                                            border: '1px solid #bfdbfe',
-                                            backgroundColor: '#eff6ff',
-                                            color: '#2563eb',
+                                            border: `1px solid ${isReturnDeduction ? '#fde68a' : '#bfdbfe'}`,
+                                            backgroundColor: isReturnDeduction ? '#fffbeb' : '#eff6ff',
+                                            color: isReturnDeduction ? '#d97706' : '#2563eb',
                                             display: 'inline-flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
@@ -3788,7 +3830,8 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                         </button>
                                       </td>
                                     </tr>
-                                  ))}
+                                    );
+                                  })}
                                 </React.Fragment>
                               );
                             })}
@@ -6505,7 +6548,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
         />
       )}
 
-      {/* ── OFFCANVAS CHI TIẾT KHOẢN NỢ DANH MỤC CON RỘNG 400PX ── */}
+      {/* ── OFFCANVAS CHI TIẾT KHOẢN NỢ DANH MỤC CON RỘNG 480PX (2 SLIDE: THÔNG TIN & HÀNG HOÁ) ── */}
       <Offcanvas
         isOpen={subEntryDetailOpen}
         onClose={() => {
@@ -6514,7 +6557,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
         }}
         title="Chi tiết khoản nợ"
         description={selectedSubEntry ? `Phiếu phát sinh mã ${selectedSubEntry.entry.code}` : 'Thông tin chi tiết khoản nợ'}
-        width="400px"
+        width="480px"
         position="right"
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', width: '100%' }}>
@@ -6564,176 +6607,438 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
 
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.8125rem' }}>
-              {/* Thẻ hiển thị số tiền còn lại nổi bật */}
+              {/* Bộ chuyển Slide: Thông tin khoản nợ vs Danh sách hàng hoá */}
               <div
                 style={{
-                  padding: '14px 16px',
-                  borderRadius: '10px',
-                  backgroundColor: entry.remainingAmount > 0 ? '#fef2f2' : '#f0fdf4',
-                  border: `1px solid ${entry.remainingAmount > 0 ? '#fecaca' : '#bbf7d0'}`,
+                  display: 'flex',
+                  padding: '3px',
+                  backgroundColor: '#f1f5f9',
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0',
                 }}
               >
-                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: entry.remainingAmount > 0 ? '#991b1b' : '#166534' }}>
-                  {isRec ? 'Số tiền còn phải thu' : 'Số tiền còn phải trả'}
-                </div>
-                <div
+                <button
+                  type="button"
+                  onClick={() => setSubEntryActiveTab('info')}
                   style={{
-                    fontSize: '1.5rem',
-                    fontWeight: 800,
-                    color: entry.remainingAmount > 0 ? '#dc2626' : '#16a34a',
-                    marginTop: '2px',
+                    flex: 1,
+                    padding: '8px 10px',
+                    fontSize: '0.8125rem',
+                    fontWeight: subEntryActiveTab === 'info' ? 700 : 500,
+                    color: subEntryActiveTab === 'info' ? '#0f172a' : '#64748b',
+                    backgroundColor: subEntryActiveTab === 'info' ? '#ffffff' : 'transparent',
+                    borderRadius: '6px',
+                    border: 'none',
+                    boxShadow: subEntryActiveTab === 'info' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.15s ease',
                   }}
                 >
-                  {formatNumberGroup(entry.remainingAmount)} đ
-                </div>
-
-                <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: `1px dashed ${entry.remainingAmount > 0 ? '#fca5a5' : '#86efac'}`, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  <div>
-                    <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>Số tiền gốc</div>
-                    <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#334155' }}>
-                      {formatNumberGroup(origAmount)} đ
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>Đã thanh toán</div>
-                    <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#059669' }}>
-                      {formatNumberGroup(entry.paidAmount)} đ
-                    </div>
-                  </div>
-                </div>
+                  <FileText size={14} style={{ color: subEntryActiveTab === 'info' ? '#2563eb' : '#94a3b8' }} />
+                  <span>Thông tin khoản nợ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSubEntryActiveTab('items')}
+                  style={{
+                    flex: 1,
+                    padding: '8px 10px',
+                    fontSize: '0.8125rem',
+                    fontWeight: subEntryActiveTab === 'items' ? 700 : 500,
+                    color: subEntryActiveTab === 'items' ? '#0f172a' : '#64748b',
+                    backgroundColor: subEntryActiveTab === 'items' ? '#ffffff' : 'transparent',
+                    borderRadius: '6px',
+                    border: 'none',
+                    boxShadow: subEntryActiveTab === 'items' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <BoxSeam size={14} style={{ color: subEntryActiveTab === 'items' ? '#2563eb' : '#94a3b8' }} />
+                  <span>Danh sách hàng hoá</span>
+                  {subEntryItems.length > 0 && (
+                    <span
+                      style={{
+                        padding: '1px 6px',
+                        borderRadius: '9999px',
+                        fontSize: '0.6875rem',
+                        fontWeight: 700,
+                        backgroundColor: subEntryActiveTab === 'items' ? '#eff6ff' : '#e2e8f0',
+                        color: subEntryActiveTab === 'items' ? '#1d4ed8' : '#475569',
+                      }}
+                    >
+                      {subEntryItems.length}
+                    </span>
+                  )}
+                </button>
               </div>
 
-              {/* Thông tin chứng từ phát sinh */}
-              <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8125rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '6px' }}>
-                  Thông tin khoản nợ
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: '#64748b' }}>Mã phiếu phát sinh:</span>
-                  <span style={{ fontWeight: 700, color: '#0f172a' }}>{entry.code}</span>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: '#64748b' }}>Thời gian lập phiếu:</span>
-                  <span style={{ fontWeight: 600, color: '#334155' }}>
-                    {entry.time || '08:30'} • Ngày {entry.date}
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: '#64748b' }}>Hạn thanh toán:</span>
-                  <span style={{ fontWeight: 700, color: '#b91c1c' }}>{entry.dueDate}</span>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: '#64748b' }}>Trạng thái:</span>
-                  {renderStatusBadge(entry.status, entry.statusLabel)}
-                </div>
-              </div>
-
-              {/* Nội dung diễn giải */}
-              <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8125rem' }}>
-                  Nội dung chi tiết
-                </div>
-                <div style={{ fontSize: '0.8125rem', color: '#334155', lineHeight: '1.45', backgroundColor: '#f8fafc', padding: '8px 10px', borderRadius: '6px', border: '1px solid #f1f5f9' }}>
-                  {entry.title}
-                </div>
-              </div>
-
-              {/* Thông tin đối tác liên quan */}
-              <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8125rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '6px' }}>
-                  {partnerTitle}
-                </div>
-
-                <div>
+              {/* ── NỘI DUNG SLIDE 2: DANH SÁCH HÀNG HOÁ TRONG ĐƠN HÀNG ── */}
+              {subEntryActiveTab === 'items' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {/* Header tóm tắt đơn hàng */}
                   <div
                     style={{
-                      fontWeight: 800,
-                      fontSize: '0.875rem',
-                      color: isRec ? '#0284c7' : '#b91c1c',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.02em',
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      backgroundColor: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
                     }}
                   >
-                    {partnerName}
+                    <div>
+                      <div style={{ fontSize: '0.6875rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Mã đơn hàng</div>
+                      <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0f172a' }}>{entry.code}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '0.6875rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Tổng sản phẩm</div>
+                      <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#2563eb' }}>
+                        {subEntryItems.length} mặt hàng
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '3px' }}>
-                    {partnerAddress}
-                  </div>
-                </div>
 
-                <div style={{ fontSize: '0.75rem', color: '#475569', paddingTop: '4px', borderTop: '1px dashed #e2e8f0' }}>
-                  Căn cứ theo: <strong>{docParentCode}</strong>
-                </div>
-              </div>
+                  {loadingSubEntryItems ? (
+                    <div style={{ padding: '36px', textAlign: 'center', color: '#64748b' }}>
+                      <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-primary-500 border-t-transparent" />
+                      <div style={{ fontSize: '0.7813rem', marginTop: '10px' }}>Đang nạp danh sách hàng hoá...</div>
+                    </div>
+                  ) : subEntryItems.length === 0 ? (
+                    <div
+                      style={{
+                        padding: '36px 20px',
+                        textAlign: 'center',
+                        backgroundColor: '#f8fafc',
+                        borderRadius: '8px',
+                        border: '1px dashed #cbd5e1',
+                        color: '#64748b',
+                      }}
+                    >
+                      <BoxSeam size={32} style={{ margin: '0 auto 8px', color: '#94a3b8' }} />
+                      <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>Chưa có danh sách mặt hàng</div>
+                      <div style={{ fontSize: '0.75rem', marginTop: '4px' }}>
+                        Khoản nợ này không chứa chi tiết bóc tách từng mặt hàng.
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {subEntryItems.map((prod: any, pIdx: number) => {
+                        const qty = Number(prod.soLuong) || 1;
+                        const price = Number(prod.donGia) || 0;
+                        const total = Number(prod.thanhTien) || (qty * price);
+                        const unit = prod.donViTinh || prod.donVi || 'Bộ';
 
-              {/* Lịch sử các phiếu thu của đợt thanh toán này */}
-              {entry.payments && entry.payments.length > 0 && (
-                <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8125rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>Phiếu thu của đợt này</span>
-                    <Badge variant="brand">{entry.payments.length} phiếu</Badge>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {entry.payments.map((p: any, idx: number) => (
-                      <div key={p.id || idx} style={{ backgroundColor: '#f8fafc', padding: '8px 10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontWeight: 700, color: '#0369a1' }}>{p.code || p.receiptCode}</span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontWeight: 800, color: '#059669' }}>+{formatNumberGroup(p.amount)} đ</span>
-                            <button
-                              type="button"
-                              title="Xem và in phiếu thu A4"
-                              onClick={() => {
-                                const isBankTransfer = (p.method || '').toLowerCase().includes('khoản') || (p.method || '').toLowerCase().includes('ngân hàng');
-                                setReceiptToPrint({
-                                  code: p.code || p.receiptCode || 'PT-20261004',
-                                  date: p.date || '23/10/2026',
-                                  customerName: parent.customerName || (parent as any).supplierName,
-                                  customerAddress: parent.customerAddress || '',
-                                  amount: p.amount,
-                                  reason: p.title || p.note || `Thu tiền khách hàng - ${entry.title}`,
-                                  contractCode: parent.code,
-                                  stageTitle: entry.title,
-                                  paymentMethod: p.method || 'Chuyển khoản',
-                                  debitAccount: isBankTransfer ? '1121' : '1111',
-                                  creditAccount: '131',
-                                  notes: isBankTransfer ? 'Giấy báo Có ngân hàng' : '01 Chứng từ gốc',
-                                  creator: getLoggedInUserName(user) || 'Nguyễn Thị Tuyết',
-                                  accountant: 'Mai Thị Ngọc',
-                                  cashier: '',
-                                  director: 'Hà Hải Lâm',
-                                });
-                                setIsPrintReceiptModalOpen(true);
-                              }}
+                        return (
+                          <div
+                            key={prod.id || pIdx}
+                            style={{
+                              backgroundColor: '#ffffff',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: '8px',
+                              padding: '12px 14px',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '8px',
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                              <div>
+                                <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.875rem', lineHeight: '1.3' }}>
+                                  {prod.tenHang}
+                                </div>
+                                {(prod.dinhMucId || prod.inventoryCode) && (
+                                  <div style={{ fontSize: '0.7188rem', color: '#64748b', marginTop: '3px', display: 'flex', gap: '6px' }}>
+                                    {prod.inventoryCode && <span>Mã: <strong>{prod.inventoryCode}</strong></span>}
+                                    {prod.dinhMucId && <span>• Định mức: <strong>{prod.dinhMucId}</strong></span>}
+                                  </div>
+                                )}
+                              </div>
+                              <span
+                                style={{
+                                  backgroundColor: '#eff6ff',
+                                  color: '#1d4ed8',
+                                  border: '1px solid #bfdbfe',
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                SL: {qty} {unit}
+                              </span>
+                            </div>
+
+                            <div
                               style={{
-                                width: '22px',
-                                height: '22px',
-                                borderRadius: '4px',
-                                border: '1px solid #bfdbfe',
-                                backgroundColor: '#eff6ff',
-                                color: '#2563eb',
-                                display: 'inline-flex',
+                                display: 'flex',
+                                justifyContent: 'space-between',
                                 alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                                padding: 0,
+                                paddingTop: '8px',
+                                borderTop: '1px dashed #f1f5f9',
+                                fontSize: '0.7813rem',
                               }}
                             >
-                              <Printer size={11} />
-                            </button>
+                              <div style={{ color: '#64748b' }}>
+                                Đơn giá: <strong style={{ color: '#334155' }}>{formatNumberGroup(price)} đ</strong>
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <span style={{ color: '#64748b', marginRight: '6px' }}>Thành tiền:</span>
+                                <strong style={{ color: '#0369a1', fontSize: '0.875rem' }}>
+                                  {formatNumberGroup(total)} đ
+                                </strong>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Tổng kết tiền hàng */}
+                      <div
+                        style={{
+                          marginTop: '4px',
+                          padding: '12px 14px',
+                          backgroundColor: '#f0fdf4',
+                          border: '1px solid #bbf7d0',
+                          borderRadius: '8px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: '0.7188rem', fontWeight: 600, color: '#166534' }}>Tổng tiền hàng</div>
+                          <div style={{ fontSize: '0.6875rem', color: '#15803d' }}>
+                            ({subEntryItems.reduce((acc: number, item: any) => acc + (Number(item.soLuong) || 1), 0)} sản phẩm)
                           </div>
                         </div>
-                        <div style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '2px' }}>
-                          {p.time || '08:30'} • {p.date} • {p.method || 'Chuyển khoản'}
+                        <div style={{ fontSize: '1.125rem', fontWeight: 800, color: '#15803d' }}>
+                          {formatNumberGroup(
+                            subEntryItems.reduce((acc: number, item: any) => acc + (Number(item.thanhTien) || ((Number(item.soLuong) || 1) * (Number(item.donGia) || 0))), 0)
+                          )} đ
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )}
                 </div>
+              )}
+
+              {/* ── NỘI DUNG SLIDE 1: THÔNG TIN KHOẢN NỢ ── */}
+              {subEntryActiveTab === 'info' && (
+                <>
+                  {/* Thẻ hiển thị số tiền còn lại nổi bật */}
+                  <div
+                    style={{
+                      padding: '14px 16px',
+                      borderRadius: '10px',
+                      backgroundColor: entry.remainingAmount > 0 ? '#fef2f2' : '#f0fdf4',
+                      border: `1px solid ${entry.remainingAmount > 0 ? '#fecaca' : '#bbf7d0'}`,
+                    }}
+                  >
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600, color: entry.remainingAmount > 0 ? '#991b1b' : '#166534' }}>
+                      {isRec ? 'Số tiền còn phải thu' : 'Số tiền còn phải trả'}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: '1.5rem',
+                        fontWeight: 800,
+                        color: entry.remainingAmount > 0 ? '#dc2626' : '#16a34a',
+                        marginTop: '2px',
+                      }}
+                    >
+                      {formatNumberGroup(entry.remainingAmount)} đ
+                    </div>
+
+                    <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: `1px dashed ${entry.remainingAmount > 0 ? '#fca5a5' : '#86efac'}`, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <div>
+                        <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>Số tiền gốc</div>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#334155' }}>
+                          {formatNumberGroup(origAmount)} đ
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>Đã thanh toán / Giảm trừ</div>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#059669' }}>
+                          {formatNumberGroup(entry.paidAmount)} đ
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Thông tin chứng từ phát sinh */}
+                  <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8125rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '6px' }}>
+                      Thông tin khoản nợ
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: '#64748b' }}>Mã phiếu phát sinh:</span>
+                      <span style={{ fontWeight: 700, color: '#0f172a' }}>{entry.code}</span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: '#64748b' }}>Thời gian lập phiếu:</span>
+                      <span style={{ fontWeight: 600, color: '#334155' }}>
+                        {entry.time || '08:30'} • Ngày {entry.date}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: '#64748b' }}>Hạn thanh toán:</span>
+                      <span style={{ fontWeight: 700, color: '#b91c1c' }}>{entry.dueDate}</span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: '#64748b' }}>Trạng thái:</span>
+                      {renderStatusBadge(entry.status, entry.statusLabel)}
+                    </div>
+                  </div>
+
+                  {/* Nội dung diễn giải */}
+                  <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8125rem' }}>
+                      Nội dung chi tiết
+                    </div>
+                    <div style={{ fontSize: '0.8125rem', color: '#334155', lineHeight: '1.45', backgroundColor: '#f8fafc', padding: '8px 10px', borderRadius: '6px', border: '1px solid #f1f5f9' }}>
+                      {entry.title}
+                    </div>
+                  </div>
+
+                  {/* Thông tin đối tác liên quan */}
+                  <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8125rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '6px' }}>
+                      {partnerTitle}
+                    </div>
+
+                    <div>
+                      <div
+                        style={{
+                          fontWeight: 800,
+                          fontSize: '0.875rem',
+                          color: isRec ? '#0284c7' : '#b91c1c',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.02em',
+                        }}
+                      >
+                        {partnerName}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '3px' }}>
+                        {partnerAddress}
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '0.75rem', color: '#475569', paddingTop: '4px', borderTop: '1px dashed #e2e8f0' }}>
+                      Căn cứ theo: <strong>{docParentCode}</strong>
+                    </div>
+                  </div>
+
+                  {/* Lịch sử các phiếu thu / Giảm trừ công nợ của đợt thanh toán này */}
+                  {entry.payments && entry.payments.length > 0 && (
+                    <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8125rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Chứng từ thanh toán & Giảm trừ</span>
+                        <Badge variant="brand">{entry.payments.length} chứng từ</Badge>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {entry.payments.map((p: any, idx: number) => {
+                          const isRet =
+                            p.isReturn ||
+                            p.type === 'return_deduction' ||
+                            String(p.code || p.receiptCode || '').startsWith('ERR-') ||
+                            String(p.title || '').toLowerCase().includes('trả lại') ||
+                            String(p.note || '').toLowerCase().includes('trả lại') ||
+                            String(p.title || '').toLowerCase().includes('hàng lỗi');
+
+                          return (
+                          <div key={p.id || idx} style={{ backgroundColor: '#f8fafc', padding: '8px 10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span
+                                  style={{
+                                    backgroundColor: isRet ? '#fef3c7' : '#eff6ff',
+                                    color: isRet ? '#b45309' : '#1d4ed8',
+                                    border: `1px solid ${isRet ? '#fde68a' : '#bfdbfe'}`,
+                                    padding: '1px 6px',
+                                    borderRadius: '3px',
+                                    fontSize: '0.6875rem',
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  {isRet ? 'Giảm trừ công nợ' : 'Phiếu thu'}
+                                </span>
+                                <span style={{ fontWeight: 700, color: '#0f172a' }}>{p.code || p.receiptCode}</span>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontWeight: 800, color: isRet ? '#d97706' : '#059669' }}>
+                                  {isRet ? '-' : '+'}{formatNumberGroup(p.amount)} đ
+                                </span>
+                                <button
+                                  type="button"
+                                  title={isRet ? "Xem chứng từ giảm trừ công nợ A4" : "Xem và in phiếu thu A4"}
+                                  onClick={() => {
+                                    const isBankTransfer = !isRet && ((p.method || '').toLowerCase().includes('khoản') || (p.method || '').toLowerCase().includes('ngân hàng'));
+                                    setReceiptToPrint({
+                                      code: p.code || p.receiptCode || (isRet ? 'BBGT-20261109' : 'PT-20261004'),
+                                      date: p.date || '23/10/2026',
+                                      customerName: parent.customerName || (parent as any).supplierName,
+                                      customerAddress: parent.customerAddress || '',
+                                      amount: p.amount,
+                                      reason: p.title || p.note || (isRet ? `Giảm trừ công nợ do trả lại hàng - ${entry.title}` : `Thu tiền khách hàng - ${entry.title}`),
+                                      contractCode: parent.code,
+                                      stageTitle: entry.title,
+                                      paymentMethod: isRet ? (p.method || 'Cấn trừ hàng trả lại') : (p.method || 'Chuyển khoản'),
+                                      debitAccount: isRet ? '5212' : isBankTransfer ? '1121' : '1111',
+                                      creditAccount: '131',
+                                      notes: isRet ? 'Hồ sơ hàng trả lại (ERR)' : isBankTransfer ? 'Giấy báo Có ngân hàng' : '01 Chứng từ gốc',
+                                      creator: getLoggedInUserName(user) || 'Nguyễn Thị Tuyết',
+                                      accountant: 'Mai Thị Ngọc',
+                                      cashier: '',
+                                      director: 'Hà Hải Lâm',
+                                    });
+                                    setIsPrintReceiptModalOpen(true);
+                                  }}
+                                  style={{
+                                    width: '22px',
+                                    height: '22px',
+                                    borderRadius: '4px',
+                                    border: `1px solid ${isRet ? '#fde68a' : '#bfdbfe'}`,
+                                    backgroundColor: isRet ? '#fffbeb' : '#eff6ff',
+                                    color: isRet ? '#d97706' : '#2563eb',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer',
+                                    padding: 0,
+                                  }}
+                                >
+                                  <Printer size={11} />
+                                </button>
+                              </div>
+                            </div>
+                            <div style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '3px' }}>
+                              {p.time || '08:30'} • {p.date} • <span style={{ fontStyle: 'italic' }}>({isRet ? (p.method || 'Cấn trừ hàng trả lại') : (p.method || 'Chuyển khoản')})</span>
+                            </div>
+                            <div style={{ fontSize: '0.6875rem', color: '#475569', marginTop: '2px' }}>
+                              {p.title || p.note || (isRet ? `Giảm trừ công nợ do trả lại hàng` : `Thu tiền khách hàng`)}
+                            </div>
+                          </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           );
