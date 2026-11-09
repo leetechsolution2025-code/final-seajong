@@ -1753,9 +1753,9 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
       }
       if (searchValue.trim()) {
         const query = searchValue.toLowerCase().trim();
-        const matchCode = item.code.toLowerCase().includes(query);
-        const matchCust = item.customerName.toLowerCase().includes(query);
-        const matchProj = item.projectName.toLowerCase().includes(query);
+        const matchCode = (item.code || '').toLowerCase().includes(query);
+        const matchCust = (item.customerName || '').toLowerCase().includes(query);
+        const matchProj = (item.projectName || '').toLowerCase().includes(query);
         if (!matchCode && !matchCust && !matchProj) return false;
       }
       return true;
@@ -1854,9 +1854,9 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
       }
       if (searchValue.trim()) {
         const query = searchValue.toLowerCase().trim();
-        const matchCode = item.code.toLowerCase().includes(query);
-        const matchTitle = item.title.toLowerCase().includes(query);
-        const matchDept = item.department.toLowerCase().includes(query);
+        const matchCode = (item.code || '').toLowerCase().includes(query);
+        const matchTitle = (item.title || '').toLowerCase().includes(query);
+        const matchDept = (item.department || '').toLowerCase().includes(query);
         if (!matchCode && !matchTitle && !matchDept) return false;
       }
       return true;
@@ -2375,7 +2375,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
 
       if (res.ok) {
         const updated = await res.json();
-        setReceivables((prev) => prev.map((rec) => (rec.id === updated.id ? updated : rec)));
+        setReceivables((prev) => prev.map((rec) => (rec.id === updated.id ? { ...rec, ...updated } : rec)));
       } else {
         setReceivables((prev) =>
           prev.map((rec) => {
@@ -3618,7 +3618,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
 
                         {/* Danh sách các đợt phát sinh công nợ con khi mở rộng, kèm phiếu thu được nhóm vào từng đợt */}
                         {isExpanded &&
-                          item.entries
+                          (item.entries || [])
                             .filter((entry) => !entry.code?.startsWith('PT-'))
                             .filter((entry) => {
                               if (statusFilter === 'all') return true;
@@ -5851,7 +5851,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                               type="button"
                               title="Xem và in phiếu thu A4"
                               onClick={() => {
-                                const isBankTransfer = hist.method.toLowerCase().includes('khoản') || hist.method.toLowerCase().includes('ngân hàng');
+                                const isBankTransfer = (hist.method || '').toLowerCase().includes('khoản') || (hist.method || '').toLowerCase().includes('ngân hàng');
                                 setReceiptToPrint({
                                   code: hist.code,
                                   date: hist.dateTime,
