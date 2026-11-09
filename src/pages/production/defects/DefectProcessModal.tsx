@@ -864,32 +864,54 @@ export function DefectProcessModal({ defectId, onClose, onRefresh }: DefectProce
                                         {isImportCompleted ? 'Đã nhập kho' : 'Chờ kho nhập'}
                                       </span>
                                     </div>
+                                    {defect.qcInspection && (
+                                      <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/80">
+                                        <span className="text-slate-500">Phiếu kiểm định QC:</span>
+                                        <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 text-[11px]">
+                                          {defect.qcInspection.code} • {defect.qcInspection.status || 'Chờ kiểm định'}
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
-                                  <Button
-                                    variant={
-                                      isImportCompleted
-                                        ? isReturnResolution
-                                          ? 'success'
-                                          : 'primary'
-                                        : 'secondary'
-                                    }
-                                    className="w-full"
-                                    disabled={!isImportCompleted || isSubmitting || !isProdAdmin}
-                                    leftIcon={
-                                      !isImportCompleted ? (
-                                        <LockFill size={14} />
-                                      ) : (
-                                        <Check2Circle size={15} />
-                                      )
-                                    }
-                                    onClick={() =>
-                                      isReturnResolution
-                                        ? handleProcess('HOÀN THÀNH', 'COMPLETED')
-                                        : handleProcess('TIẾP TỤC XỬ LÝ', 'PROCESSING')
-                                    }
-                                  >
-                                    {isReturnResolution ? 'Hoàn thành hồ sơ' : 'Tiếp tục xử lý'}
-                                  </Button>
+                                  <div className="space-y-2">
+                                    <Button
+                                      variant={
+                                        isImportCompleted
+                                          ? isReturnResolution
+                                            ? 'success'
+                                            : 'primary'
+                                          : 'secondary'
+                                      }
+                                      className="w-full"
+                                      disabled={!isImportCompleted || isSubmitting || !isProdAdmin}
+                                      leftIcon={
+                                        !isImportCompleted ? (
+                                          <LockFill size={14} />
+                                        ) : (
+                                          <Check2Circle size={15} />
+                                        )
+                                      }
+                                      onClick={() =>
+                                        isReturnResolution
+                                          ? handleProcess('HOÀN THÀNH & CHUYỂN QC', 'WAITING_QC')
+                                          : handleProcess('TIẾP TỤC XỬ LÝ', 'PROCESSING')
+                                      }
+                                    >
+                                      {isReturnResolution ? 'Hoàn tất nhập kho & Chuyển QC' : 'Tiếp tục xử lý'}
+                                    </Button>
+                                    {!defect.qcInspection && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="w-full text-indigo-700 border-indigo-200 hover:bg-indigo-50"
+                                        disabled={isSubmitting || !isProdAdmin}
+                                        leftIcon={<i className="bi bi-shield-check" />}
+                                        onClick={() => handleProcess('CHUYỂN QC KIỂM ĐỊNH', 'WAITING_QC')}
+                                      >
+                                        Chuyển sang Bộ phận QC kiểm định ngay
+                                      </Button>
+                                    )}
+                                  </div>
                                 </div>
                               );
                             }

@@ -61,6 +61,7 @@ export function QaDefectsSummaryPage() {
         d.status !== 'NEW' &&
         d.status !== 'TECH_EVALUATING' &&
         d.status !== 'WAITING_APPROVAL' &&
+        d.status !== 'WAITING_INVENTORY' &&
         d.status !== 'PROCESSING' &&
         d.status !== 'WAITING_QC'
       ) {
@@ -96,18 +97,34 @@ export function QaDefectsSummaryPage() {
         </span>
       );
     }
-    if (status === 'TECH_EVALUATING' || status === 'PROCESSING') {
+    if (status === 'WAITING_QC') {
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/80 whitespace-nowrap">
-          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
-          Đang đánh giá
+          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse shrink-0" />
+          Chờ QC kiểm tra
+        </span>
+      );
+    }
+    if (status === 'WAITING_INVENTORY') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/80 whitespace-nowrap">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+          Chờ kho
+        </span>
+      );
+    }
+    if (status === 'TECH_EVALUATING' || status === 'PROCESSING') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/80 whitespace-nowrap">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+          {status === 'PROCESSING' ? 'Đang xử lý' : 'Đang đánh giá'}
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/80 whitespace-nowrap">
-        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-        Chờ xử lý
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200 whitespace-nowrap">
+        <span className="w-1.5 h-1.5 rounded-full bg-slate-500 shrink-0" />
+        Chờ tiếp nhận
       </span>
     );
   };

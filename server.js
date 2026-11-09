@@ -13756,24 +13756,58 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
             actualResult: JSON.stringify(actualResultItems)
           }
         });
-      } else if (
+      }
+
+      // ── TỰ ĐỘNG CHUYỂN THÔNG TIN SANG BỘ PHẬN ĐẢM BẢO CHẤT LƯỢNG (QA / QC) ──
+      const shouldNotifyQc =
+        requireQc === true ||
         nextStatus === 'WAITING_QC' ||
-        action === 'YÊU CẦU QC KIỂM TRA' ||
-        action === 'HOÀN THÀNH & CHUYỂN QC' ||
-        (action && action.includes('CHUYỂN QC')) ||
-        (action === 'HOÀN THÀNH' && nextStatus !== 'COMPLETED')
-      ) {
+        (action && (
+          action.startsWith('QUYẾT ĐỊNH:') ||
+          action.includes('CHUYỂN QC') ||
+          action.includes('QC') ||
+          action === 'HOÀN THÀNH & CHUYỂN QC' ||
+          (action === 'HOÀN THÀNH' && nextStatus !== 'COMPLETED')
+        ));
+
+      if (shouldNotifyQc) {
         const existingQc = await tx.qualityInspection.findFirst({
           where: {
-            status: 'Chưa thực hiện',
             OR: [
               { metadata: { contains: defect.code } },
               { metadata: { contains: id } }
             ]
           }
         });
+
+        const qcCode = existingQc?.code || `QC-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(10 + Math.random() * 90)}`;
+        const resolutionName = action ? action.replace('QUYẾT ĐỊNH: ', '') : (defect.repairPlan || 'Xử lý kỹ thuật');
+        const qcNotes = `Kiểm tra đánh giá chất lượng cho hồ sơ ${defect.code} (${resolutionName}). Nội dung xử lý: ${note || defect.repairPlan || ''}`;
+        const qcMeta = JSON.stringify({
+          defectId: id,
+          defectCode: defect.code,
+          productCode: defect.productCode,
+          productName: defect.productName,
+          model: defect.productCode,
+          quantity: defect.quantity || 1,
+          totalQuantity: defect.quantity || 1,
+          sampleQuantity: defect.quantity || 1,
+          productionOrder: defect.orderNumber || defect.code,
+          customerName: defect.customerName,
+          repairNote: note || defect.repairPlan,
+          resolution: resolutionName,
+          source: 'DEFECT_REPAIR',
+          items: [{
+            productName: defect.productName,
+            model: defect.productCode,
+            quantity: defect.quantity || 1,
+            sampleQuantity: defect.quantity || 1,
+            soLuong: defect.quantity || 1,
+            donVi: 'Bộ'
+          }]
+        });
+
         if (!existingQc) {
-          const qcCode = `QC-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(10 + Math.random() * 90)}`;
           await tx.qualityInspection.create({
             data: {
               code: qcCode,
@@ -13783,29 +13817,47 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
               requesterName: performedBy || 'Bộ phận sản xuất',
               requesterDept: 'Kỹ thuật / Sản xuất',
               executionTime: new Date(),
-              notes: `Kiểm tra OQC đầu ra cho hồ sơ ${defect.code}. Nội dung xử lý: ${note || defect.repairPlan || ''}`,
-              metadata: JSON.stringify({
-                defectId: id,
-                defectCode: defect.code,
-                productCode: defect.productCode,
-                productName: defect.productName,
-                model: defect.productCode,
-                quantity: defect.quantity || 1,
-                totalQuantity: defect.quantity || 1,
-                sampleQuantity: defect.quantity || 1,
-                productionOrder: defect.orderNumber || defect.code,
-                customerName: defect.customerName,
-                repairNote: note || defect.repairPlan,
-                source: 'DEFECT_REPAIR',
-                items: [{
-                  productName: defect.productName,
-                  model: defect.productCode,
-                  quantity: defect.quantity || 1,
-                  sampleQuantity: defect.quantity || 1,
-                  soLuong: defect.quantity || 1,
-                  donVi: 'Bộ'
-                }]
-              })
+              notes: qcNotes,
+              metadata: qcMeta
+            }
+          });
+        } else {
+          await tx.qualityInspection.update({
+            where: { id: existingQc.id },
+            data: {
+              notes: qcNotes,
+              metadata: qcMeta
+            }
+          });
+        }
+
+        // Tạo Task giao việc cho phòng QA nếu chưa có
+        const existingQaTask = await tx.task.findFirst({
+          where: {
+            deptCode: 'qa',
+            OR: [
+              { description: { contains: defect.code } },
+              { title: { contains: defect.code } }
+            ]
+          }
+        });
+        if (!existingQaTask) {
+          const qaUser = await tx.employee.findFirst({
+            where: {
+              departmentCode: { in: ['qa', 'qc', 'quality'] },
+              userId: { not: null }
+            },
+            select: { userId: true }
+          });
+          await tx.task.create({
+            data: {
+              title: `Kiểm tra chất lượng hồ sơ hàng lỗi (${defect.code})`,
+              description: `Yêu cầu bộ phận QA/QC kiểm định chất lượng xuất xưởng / hàng trả về cho hồ sơ ${defect.code}.\nSản phẩm: ${defect.productName}\nSố lượng: ${defect.quantity || 1}\nNội dung xử lý: ${note || defect.repairPlan || ''}\nPhiếu QC: ${qcCode}`,
+              status: 'pending',
+              priority: 'high',
+              creatorId: 'system',
+              assigneeId: qaUser?.userId || defaultAssignee,
+              deptCode: 'qa'
             }
           });
         }
