@@ -9373,12 +9373,28 @@ app.post('/api/logistics/inventory/:id/release-hold', async (req, res) => {
     const newTotalGiu = updatedStocks.reduce((sum, s) => sum + (s.soLuongGiu || 0), 0);
     const newThucTon = Math.max(0, totalQty - newTotalGiu);
 
+    let calculatedStatus = 'con-hang';
+    if (newThucTon === 0) {
+      calculatedStatus = 'het-hang';
+    } else if ((item.soLuongMin || 0) > 0 && totalQty <= item.soLuongMin) {
+      calculatedStatus = 'sap-het';
+    }
+
+    await prisma.inventoryItem.update({
+      where: { id },
+      data: {
+        soLuong: totalQty,
+        trangThai: calculatedStatus
+      }
+    });
+
     res.json({
       success: true,
       message: 'Đã giải phóng giữ chỗ thành công',
       newSoLuongGiu: newTotalGiu,
       newThucTon: newThucTon,
-      totalQty
+      totalQty,
+      trangThai: calculatedStatus
     });
   } catch (err) {
     console.error('Lỗi POST /api/logistics/inventory/:id/release-hold:', err);

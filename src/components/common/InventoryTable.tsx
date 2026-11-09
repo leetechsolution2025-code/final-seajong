@@ -565,8 +565,23 @@ export const InventoryDetailOffcanvas: React.FC<InventoryDetailOffcanvasProps> =
       if (data.success) {
         const newHoldQty = Number(data.newSoLuongGiu) || 0;
         const newThucTon = Number(data.newThucTon) ?? Math.max(0, (item.soLuong || 0) - newHoldQty);
+        const calculatedStatus =
+          data.trangThai ||
+          (newThucTon === 0
+            ? 'het-hang'
+            : (item.soLuongMin || 0) > 0 && (item.soLuong || 0) <= (item.soLuongMin || 0)
+            ? 'sap-het'
+            : 'con-hang');
+
         setCurrentHoldQty(newHoldQty);
         setCurrentThucTon(newThucTon);
+
+        // Đồng bộ dữ liệu vào item đang hiển thị trên Offcanvas
+        if (item) {
+          item.soLuongGiu = newHoldQty;
+          item.thucTon = newThucTon;
+          item.trangThai = calculatedStatus;
+        }
 
         const msg = isAll
           ? `Đã giải phóng toàn bộ số lượng giữ chỗ (${(item.donVi || 'sản phẩm')}) thành công!`
@@ -583,10 +598,20 @@ export const InventoryDetailOffcanvas: React.FC<InventoryDetailOffcanvasProps> =
         onUpdated?.({
           soLuongGiu: newHoldQty,
           thucTon: newThucTon,
+          trangThai: calculatedStatus,
         });
 
         // Bắn sự kiện cập nhật toàn hệ thống
-        window.dispatchEvent(new CustomEvent('inventory_updated'));
+        window.dispatchEvent(
+          new CustomEvent('inventory_updated', {
+            detail: {
+              itemId: item.id,
+              soLuongGiu: newHoldQty,
+              thucTon: newThucTon,
+              trangThai: calculatedStatus,
+            },
+          })
+        );
         setConfirmRelease(null);
       } else {
         alert(data.message || 'Không thể bỏ giữ chỗ');
@@ -1337,6 +1362,16 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
     loadInventory();
   }, [loadInventory]);
 
+  // Lắng nghe sự kiện cập nhật kho hàng để làm mới danh sách và thống kê tức thời
+  useEffect(() => {
+    const handleUpdate = () => {
+      loadInventory();
+      fetchStats();
+    };
+    window.addEventListener('inventory_updated', handleUpdate);
+    return () => window.removeEventListener('inventory_updated', handleUpdate);
+  }, [loadInventory, fetchStats]);
+
   return (
     <>
       {/* ── 4 THẺ CARD KPI THÔNG TIN HÀNG HOÁ TRONG KHO ── */}
@@ -1540,6 +1575,9 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
           setInventory((prev) =>
             prev.map((it) => (it.id === selectedDetailItem.id ? { ...it, ...updated } : it))
           );
+          // Tự động tải lại bảng và số liệu thống kê tức thời để chuẩn theo bộ lọc và trạng thái
+          loadInventory();
+          fetchStats();
         }}
       />
     </>
