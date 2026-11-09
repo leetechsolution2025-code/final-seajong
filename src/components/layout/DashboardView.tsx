@@ -19,6 +19,7 @@ import { SalesCustomersPage } from '../../pages/sales/SalesCustomersPage';
 import { SalesPricingPage } from '../../pages/sales/SalesPricingPage';
 import { SalesPlanPage } from '../../pages/sales/SalesPlanPage';
 import { SalesBusinessResultsPage } from '../../pages/sales/SalesBusinessResultsPage';
+import { SalesReportPage } from '../../pages/sales/SalesReportPage';
 import { SalesInternalReportsPage } from '../../pages/sales/SalesInternalReportsPage';
 import { SalesOrdersPage } from '../../pages/sales/SalesOrdersPage';
 import { SalesOrderTrackingPage } from '../../pages/sales/SalesOrderTrackingPage';
@@ -164,7 +165,7 @@ export const DashboardView: React.FC = () => {
       return <LogisticsReportsPage />;
     }
     if (activeMenuKey === 'sales-reports' || activeMenuKey === 'sales-report' || activeMenuKey === 'bao-cao-ban-hang') {
-      return <SalesBusinessResultsPage />;
+      return <SalesReportPage />;
     }
     if (activeMenuKey === 'reports' || activeMenuKey === 'financial-reports') {
       return <FinanceReportsPage />;
@@ -318,13 +319,15 @@ export const DashboardView: React.FC = () => {
   if (activeMenuKey === 'sales_plan' || (activeMenuKey === 'plan' && activeDeptCode === 'sales')) {
     return <SalesPlanPage />;
   }
+  if (activeMenuKey === 'business-results') {
+    return <SalesBusinessResultsPage />;
+  }
   if (
-    activeMenuKey === 'business-results' ||
     activeMenuKey === 'sales-reports' ||
     activeMenuKey === 'sales-report' ||
     activeMenuKey === 'bao-cao-ban-hang'
   ) {
-    return <SalesBusinessResultsPage />;
+    return <SalesReportPage />;
   }
   if (activeMenuKey === 'internal-reports') {
     return <SalesInternalReportsPage />;
