@@ -128,6 +128,7 @@ export const InventoryToolbar: React.FC<InventoryToolbarProps> = ({
           { label: 'Còn hàng', value: 'con-hang' },
           { label: 'Sắp hết hàng', value: 'sap-het' },
           { label: 'Hết hàng', value: 'het-hang' },
+          { label: 'Đang giữ hàng', value: 'dang-giu' },
         ],
       },
       {
@@ -925,6 +926,8 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
           className={`flex items-center gap-3.5 p-3 rounded-xl border transition-all cursor-pointer ${
             filterStatus === 'con-hang'
               ? 'bg-emerald-50/90 border-emerald-300 ring-2 ring-emerald-400/40 shadow-xs'
+              : filterStatus === 'dang-giu'
+              ? 'bg-amber-50/90 border-amber-300 ring-2 ring-amber-400/40 shadow-xs'
               : 'bg-white border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30 shadow-2xs'
           }`}
           title="Bấm để lọc các mặt hàng còn hàng ổn định (hoặc bấm lại để hủy lọc)"
@@ -942,9 +945,22 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
               </span>
               <span className="text-xs font-bold text-emerald-600">₫</span>
             </div>
-            <span className="text-[11px] text-slate-500 font-medium block truncate mt-0.5">
-              Thực tồn: <strong className="text-slate-700">{(stats.totalQty || 0).toLocaleString('vi-VN')}</strong> sp • Đã giữ: {(stats.reservedQty || 0).toLocaleString('vi-VN')}
-            </span>
+            <div className="text-[11px] text-slate-500 font-medium block truncate mt-0.5">
+              Thực tồn: <strong className="text-slate-700">{(stats.totalQty || 0).toLocaleString('vi-VN')}</strong> sp •{' '}
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFilterStatus((prev) => (prev === 'dang-giu' ? 'all' : 'dang-giu'));
+                  setCurrentPage(1);
+                }}
+                className={`underline decoration-dotted cursor-pointer hover:text-amber-700 font-semibold ${
+                  filterStatus === 'dang-giu' ? 'text-amber-700 bg-amber-100/70 px-1 rounded' : ''
+                }`}
+                title="Bấm để lọc các mặt hàng đang giữ chỗ (cam kết đơn hàng)"
+              >
+                Đã giữ: {(stats.reservedQty || 0).toLocaleString('vi-VN')}
+              </span>
+            </div>
           </div>
         </div>
 

@@ -9108,7 +9108,11 @@ app.get('/api/logistics/inventory', async (req, res) => {
 
     let resultItems = mapped;
     if (status && status !== 'all') {
-      resultItems = resultItems.filter(it => it.trangThai === status);
+      if (status === 'dang-giu' || status === 'dang-giu-hang') {
+        resultItems = resultItems.filter(it => (it.soLuongGiu || 0) > 0);
+      } else {
+        resultItems = resultItems.filter(it => it.trangThai === status);
+      }
     }
 
     const total = resultItems.length;
