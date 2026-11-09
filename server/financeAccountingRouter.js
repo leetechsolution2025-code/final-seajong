@@ -77,7 +77,15 @@ export const db = new Proxy({}, {
 
 console.log('✓ FinanceAccountingRouter đã kết nối SQLite (Auto-Heal):', dbPath);
 syncPrismaFinanceToAccountingTables(db)
-  .then((res) => console.log('✓ Đã đồng bộ dữ liệu Tài chính - Kế toán từ DB thực tế:', res))
+  .then(async (res) => {
+    console.log('✓ Đã đồng bộ dữ liệu Tài chính - Kế toán từ DB thực tế:', res);
+    try {
+      await syncAllSubledgersToJournal(db);
+      console.log('✓ Đã đồng bộ toàn bộ phân hệ Chi phí, Tạm ứng & Công nợ vào Sổ nhật ký chung.');
+    } catch (e) {
+      console.warn('Cảnh báo đồng bộ Sổ nhật ký chung:', e.message);
+    }
+  })
   .catch((e) => console.warn('Cảnh báo đồng bộ Finance:', e.message));
 
 const router = express.Router();
@@ -1730,8 +1738,28 @@ router.get('/api/finance/chart-of-accounts', (req, res) => {
 });
 
 // 2. API Lấy danh sách Sổ nhật ký chung + Các dòng định khoản + Tổng hợp số liệu KPI
-router.get('/api/finance/journal-entries', (req, res) => {
+router.get('/api/finance/journal-entries', async (req, res) => {
   const { month, sourceModule, accountCode, search } = req.query;
+
+  // Tự động kiểm tra và phục hồi đồng bộ phân hệ Chi phí & Tạm ứng nếu bảng sổ nhật ký chưa đủ
+  try {
+    const needSync = await new Promise((resolve) => {
+      db.get("SELECT COUNT(*) as expCnt FROM accounting_journal_entries WHERE id LIKE 'JE-EXP-%'", [], (err, row) => {
+        if (err || !row || row.expCnt === 0) {
+          db.get("SELECT COUNT(*) as expTotal FROM financial_expenses", [], (eErr, eRow) => {
+            resolve(!eErr && eRow && eRow.expTotal > 0);
+          });
+        } else {
+          resolve(false);
+        }
+      });
+    });
+    if (needSync) {
+      await syncAllSubledgersToJournal(db);
+    }
+  } catch (syncErr) {
+    console.warn('Lỗi kiểm tra auto-sync Sổ nhật ký chung:', syncErr.message);
+  }
 
   let query = 'SELECT * FROM accounting_journal_entries WHERE 1=1';
   const params = [];
@@ -2503,145 +2531,166 @@ router.post('/api/finance/payment-orders', (req, res) => {
 });
 
 // 3. Kế toán xác nhận thực hiện chi tiền (giải ngân)
-router.patch('/api/finance/payment-orders/:id/execute', (req, res) => {
+router.patch('/api/finance/payment-orders/:id/execute', async (req, res) => {
   const { id } = req.params;
   const { executedBy, paymentMethod, bankAccount, note } = req.body || {};
   const nowStr = new Date().toLocaleDateString('vi-VN');
 
-  db.get('SELECT * FROM payment_orders WHERE id = ? OR order_code = ?', [id, id], (err, order) => {
-    if (err || !order) return res.status(404).json({ error: 'Không tìm thấy lệnh chi tiền' });
+  try {
+    const order = await new Promise((resolve, reject) => {
+      db.get('SELECT * FROM payment_orders WHERE id = ? OR order_code = ?', [id, id], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    if (!order) return res.status(404).json({ error: 'Không tìm thấy lệnh chi tiền' });
 
     const voucherCode = `PC-${order.order_code}`;
     const voucherId = `vch-${Date.now()}`;
 
     // Cập nhật trạng thái lệnh chi
-    db.run(
-      `UPDATE payment_orders
-       SET status = 'completed',
-           status_label = 'Đã chi tiền',
-           executed_by = ?,
-           executed_date = ?,
-           voucher_id = ?,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = ?`,
-      [executedBy || 'Kế toán thanh toán', nowStr, voucherCode, order.id],
-      function (upErr) {
-        if (upErr) return res.status(500).json({ error: upErr.message });
+    await new Promise((resolve, reject) => {
+      db.run(
+        `UPDATE payment_orders
+         SET status = 'completed',
+             status_label = 'Đã chi tiền',
+             executed_by = ?,
+             executed_date = ?,
+             voucher_id = ?,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [executedBy || 'Kế toán thanh toán', nowStr, voucherCode, order.id],
+        (err) => (err ? reject(err) : resolve())
+      );
+    });
 
-        // 1. Tự động lập Phiếu chi trong sổ kế toán financial_vouchers
-        db.run(
-          `INSERT OR REPLACE INTO financial_vouchers (
-            id, voucher_code, voucher_type, date, partner_type, partner_name,
-            partner_code, payer_receiver_name, amount, amount_in_words,
-            reason, payment_method, debit_account, credit_account, reference_code,
-            creator, accountant, director, has_stamp, status, created_at, updated_at
-          ) VALUES (?, ?, 'PC', ?, 'employee', ?, ?, ?, ?, ?, ?, ?, '141', ?, ?, ?, ?, ?, 1, 'completed', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-          [
-            voucherId,
-            voucherCode,
-            nowStr,
-            order.beneficiary_name,
-            order.beneficiary_code,
-            order.beneficiary_name,
-            order.amount,
-            order.amount_in_words,
-            order.purpose || order.title,
-            paymentMethod || (order.payment_method === 'cash' ? 'Tiền mặt' : 'Chuyển khoản'),
-            order.payment_method === 'cash' ? '1111' : '1121',
-            order.ref_code,
-            executedBy || 'Kế toán viên',
-            executedBy || 'Kế toán thanh toán',
-            order.approved_by || 'Ban Giám đốc'
-          ],
-          () => {}
-        );
-
-        // 2. Tự động ghi nhận vào phân hệ Quản lý chi phí (financial_expenses)
-        const expenseId = `EXP-${order.order_code}`;
-        const creditAcc = order.payment_method === 'cash' ? '1111' : '1121';
-        const creditName = order.payment_method === 'cash' ? 'Tiền mặt quỹ (TK 1111)' : 'Tiền gửi ngân hàng (TK 1121)';
-        db.run(
-          `INSERT OR REPLACE INTO financial_expenses (
-            id, code, title, category, category_label, amount, department,
-            spend_date, spender, status, status_label, notes,
-            debit_account, debit_account_name, credit_account, credit_account_name, operation_type, proposer,
-            updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-          [
-            expenseId,
-            voucherCode,
-            order.title || order.purpose,
-            'administrative',
-            'Chi phí quản lý doanh nghiệp',
-            order.amount,
-            order.department || 'Ban giám đốc',
-            nowStr,
-            order.beneficiary_name,
-            'approved',
-            'Đã chi tiền',
-            `Chi theo Lệnh chi ${order.order_code} (Căn cứ ${order.ref_code || ''}). Bút phê duyệt: ${order.approval_note || 'Đồng ý phê duyệt'}`,
-            '141',
-            'Tạm ứng người lao động',
-            creditAcc,
-            creditName,
-            'advance_payment',
-            order.beneficiary_name
-          ],
-          () => {}
-        );
-
-        // 3. Tự động cập nhật giảm số dư quỹ tiền mặt (TK 1111) hoặc ngân hàng (TK 1121)
-        if (order.payment_method === 'cash') {
-          db.run(
-            "UPDATE cash_and_bank_assets SET balance = MAX(0, balance - ?), updated_at = CURRENT_TIMESTAMP WHERE type = 'cash' LIMIT 1",
-            [order.amount]
-          );
-        } else {
-          // Trừ vào tài khoản ngân hàng hoạt động chính (cba-002 Vietcombank hoặc tài khoản có số dư lớn nhất)
-          db.run(
-            "UPDATE cash_and_bank_assets SET balance = MAX(0, balance - ?), updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT id FROM cash_and_bank_assets WHERE type = 'bank' AND balance >= ? ORDER BY balance DESC LIMIT 1)",
-            [order.amount, order.amount]
-          );
-        }
-
-        // 4. Đồng bộ trạng thái đã giải ngân trong bảng advance_payments
-        if (order.ref_code) {
-          db.run(
-            `UPDATE advance_payments
-             SET status = 'approved', review_status = 'disbursed', updated_at = CURRENT_TIMESTAMP
-             WHERE code = ?`,
-            [order.ref_code],
-            () => {}
-          );
-        }
-
-        // 5. Tự động cập nhật giảm công nợ phải trả nhà cung cấp (debt_payables) nếu là thanh toán mua hàng/nhà cung cấp
-        if (order.ref_code || order.beneficiary_name) {
-          db.run(
-            `UPDATE debt_payables
-             SET paid_amount = paid_amount + ?,
-                 remaining_amount = MAX(0, total_amount - (paid_amount + ?)),
-                 status = CASE WHEN (total_amount - (paid_amount + ?)) <= 0 THEN 'completed' ELSE 'partial' END,
-                 status_label = CASE WHEN (total_amount - (paid_amount + ?)) <= 0 THEN 'Đã thanh toán' ELSE 'Thanh toán 1 phần' END,
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE po_code = ? OR code = ? OR supplier_name = ?`,
-            [order.amount, order.amount, order.amount, order.amount, order.ref_code || '', order.ref_code || '', order.beneficiary_name || ''],
-            () => {}
-          );
-        }
-
-        // 6. Tự động hạch toán ghi Sổ nhật ký chung của bộ máy tài chính kế toán
-        syncAllSubledgersToJournal(db).catch(() => {});
-
-        res.json({
-          success: true,
-          message: 'Đã thực hiện chi tiền, cập nhật công nợ và tự động ghi sổ tài chính kế toán thành công',
+    // 1. Tự động lập Phiếu chi trong sổ kế toán financial_vouchers
+    await new Promise((resolve, reject) => {
+      db.run(
+        `INSERT OR REPLACE INTO financial_vouchers (
+          id, voucher_code, voucher_type, date, partner_type, partner_name,
+          partner_code, payer_receiver_name, amount, amount_in_words,
+          reason, payment_method, debit_account, credit_account, reference_code,
+          creator, accountant, director, has_stamp, status, created_at, updated_at
+        ) VALUES (?, ?, 'PC', ?, 'employee', ?, ?, ?, ?, ?, ?, ?, '141', ?, ?, ?, ?, ?, 1, 'completed', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        [
+          voucherId,
           voucherCode,
-          orderCode: order.order_code
-        });
+          nowStr,
+          order.beneficiary_name,
+          order.beneficiary_code,
+          order.beneficiary_name,
+          order.amount,
+          order.amount_in_words,
+          order.purpose || order.title,
+          paymentMethod || (order.payment_method === 'cash' ? 'Tiền mặt' : 'Chuyển khoản'),
+          order.payment_method === 'cash' ? '1111' : '1121',
+          order.ref_code,
+          executedBy || 'Kế toán viên',
+          executedBy || 'Kế toán thanh toán',
+          order.approved_by || 'Ban Giám đốc'
+        ],
+        (err) => (err ? reject(err) : resolve())
+      );
+    });
+
+    // 2. Tự động ghi nhận vào phân hệ Quản lý chi phí (financial_expenses)
+    const expenseId = `EXP-${order.order_code}`;
+    const creditAcc = order.payment_method === 'cash' ? '1111' : '1121';
+    const creditName = order.payment_method === 'cash' ? 'Tiền mặt quỹ (TK 1111)' : 'Tiền gửi ngân hàng (TK 1121)';
+    await new Promise((resolve, reject) => {
+      db.run(
+        `INSERT OR REPLACE INTO financial_expenses (
+          id, code, title, category, category_label, amount, department,
+          spend_date, spender, status, status_label, notes,
+          debit_account, debit_account_name, credit_account, credit_account_name, operation_type, proposer,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        [
+          expenseId,
+          voucherCode,
+          order.title || order.purpose,
+          'administrative',
+          'Chi phí quản lý doanh nghiệp',
+          order.amount,
+          order.department || 'Ban giám đốc',
+          nowStr,
+          order.beneficiary_name,
+          'approved',
+          'Đã chi tiền',
+          `Chi theo Lệnh chi ${order.order_code} (Căn cứ ${order.ref_code || ''}). Bút phê duyệt: ${order.approval_note || 'Đồng ý phê duyệt'}`,
+          '141',
+          'Tạm ứng người lao động',
+          creditAcc,
+          creditName,
+          'advance_payment',
+          order.beneficiary_name
+        ],
+        (err) => (err ? reject(err) : resolve())
+      );
+    });
+
+    // 3. Tự động cập nhật giảm số dư quỹ tiền mặt (TK 1111) hoặc ngân hàng (TK 1121)
+    await new Promise((resolve) => {
+      if (order.payment_method === 'cash') {
+        db.run(
+          "UPDATE cash_and_bank_assets SET balance = MAX(0, balance - ?), updated_at = CURRENT_TIMESTAMP WHERE type = 'cash' LIMIT 1",
+          [order.amount],
+          () => resolve()
+        );
+      } else {
+        db.run(
+          "UPDATE cash_and_bank_assets SET balance = MAX(0, balance - ?), updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT id FROM cash_and_bank_assets WHERE type = 'bank' AND balance >= ? ORDER BY balance DESC LIMIT 1)",
+          [order.amount, order.amount],
+          () => resolve()
+        );
       }
-    );
-  });
+    });
+
+    // 4. Đồng bộ trạng thái đã giải ngân trong bảng advance_payments
+    if (order.ref_code) {
+      await new Promise((resolve) => {
+        db.run(
+          `UPDATE advance_payments
+           SET status = 'approved', review_status = 'disbursed', updated_at = CURRENT_TIMESTAMP
+           WHERE code = ?`,
+          [order.ref_code],
+          () => resolve()
+        );
+      });
+    }
+
+    // 5. Tự động cập nhật giảm công nợ phải trả nhà cung cấp (debt_payables) nếu là thanh toán mua hàng/nhà cung cấp
+    if (order.ref_code || order.beneficiary_name) {
+      await new Promise((resolve) => {
+        db.run(
+          `UPDATE debt_payables
+           SET paid_amount = paid_amount + ?,
+               remaining_amount = MAX(0, total_amount - (paid_amount + ?)),
+               status = CASE WHEN (total_amount - (paid_amount + ?)) <= 0 THEN 'completed' ELSE 'partial' END,
+               status_label = CASE WHEN (total_amount - (paid_amount + ?)) <= 0 THEN 'Đã thanh toán' ELSE 'Thanh toán 1 phần' END,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE po_code = ? OR code = ? OR supplier_name = ?`,
+          [order.amount, order.amount, order.amount, order.amount, order.ref_code || '', order.ref_code || '', order.beneficiary_name || ''],
+          () => resolve()
+        );
+      });
+    }
+
+    // 6. Tự động hạch toán ghi Sổ nhật ký chung của bộ máy tài chính kế toán (AWAITED ĐẢM BẢO GHI SỔ HOÀN TẤT)
+    await syncAllSubledgersToJournal(db);
+
+    return res.json({
+      success: true,
+      message: 'Đã thực hiện chi tiền, cập nhật công nợ và tự động ghi sổ tài chính kế toán thành công',
+      voucherCode,
+      orderCode: order.order_code
+    });
+  } catch (err) {
+    console.error('Lỗi khi thực hiện chi tiền:', err);
+    return res.status(500).json({ error: err.message || 'Lỗi xử lý nghiệp vụ chi tiền' });
+  }
 });
 
 // 3a. Trình duyệt Lệnh chi tiền lên Ban Giám đốc phê duyệt (khi vượt hạn mức nội quy lao động)

@@ -245,9 +245,9 @@ export async function syncPrismaFinanceToAccountingTables(db) {
       };
 
       await dbRun(db, 'BEGIN TRANSACTION');
-      // Làm sạch hoàn toàn các bút toán mẫu cũ trước khi đồng bộ 100% từ JournalEntry thực tế
-      await dbRun(db, 'DELETE FROM accounting_journal_lines');
-      await dbRun(db, 'DELETE FROM accounting_journal_entries');
+      // Làm sạch các bút toán đồng bộ từ Prisma JournalEntry (giữ nguyên các bút toán phân hệ chi phí, công nợ, khấu hao JE-%)
+      await dbRun(db, "DELETE FROM accounting_journal_lines WHERE entry_id NOT LIKE 'JE-%'");
+      await dbRun(db, "DELETE FROM accounting_journal_entries WHERE id NOT LIKE 'JE-%'");
 
       let seq = 1;
       for (const je of prismaJournalEntries) {
@@ -1427,6 +1427,13 @@ export async function syncPrismaFinanceToAccountingTables(db) {
         );
       }
       await dbRun(db, 'COMMIT');
+    }
+
+    try {
+      const { syncAllSubledgersToJournal } = await import('./journalSyncService.js');
+      await syncAllSubledgersToJournal(db);
+    } catch (subErr) {
+      console.warn('⚠️ Lỗi đồng bộ subledgers trong prismaFinanceSyncService:', subErr.message);
     }
 
     return {

@@ -27,17 +27,19 @@ export interface FinanceSyncPayload {
   source?: string;
   action?: 'create' | 'update' | 'delete' | 'close_period' | 'import';
   timestamp: number;
+  force?: boolean;
 }
 
 /**
  * Phát tín hiệu cập nhật tài chính cho toàn bộ hệ thống
  */
-export function notifyFinanceUpdated(source = 'finance', action: FinanceSyncPayload['action'] = 'update') {
+export function notifyFinanceUpdated(source = 'finance', action: FinanceSyncPayload['action'] = 'update', force = true) {
   if (typeof window === 'undefined') return;
 
   const payload: FinanceSyncPayload = {
     source,
     action,
+    force,
     timestamp: Date.now(),
   };
 
@@ -114,15 +116,15 @@ export function useFinanceRealtimeSync(onRefresh: () => void, enablePolling = tr
       }
     };
 
-    // 1. Lắng nghe CustomEvent nội bộ (nếu có modal thì bỏ qua để không giật màn hình)
-    const handleCustomEvent = () => {
-      triggerRefresh(false);
+    // 1. Lắng nghe CustomEvent nội bộ (nếu có modal thì bỏ qua trừ khi force)
+    const handleCustomEvent = (e: any) => {
+      triggerRefresh(Boolean(e?.detail?.force));
     };
     window.addEventListener(FINANCE_SYNC_EVENT, handleCustomEvent);
 
     // 2. Lắng nghe BroadcastChannel từ các tab khác
-    const handleBroadcast = () => {
-      triggerRefresh(false);
+    const handleBroadcast = (e: any) => {
+      triggerRefresh(Boolean(e?.data?.force));
     };
     if (broadcastChannel) {
       broadcastChannel.addEventListener('message', handleBroadcast);

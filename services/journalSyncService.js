@@ -54,15 +54,12 @@ export async function syncAllSubledgersToJournal(db) {
               // Xóa các bút toán đã được đồng bộ tự động trước đó để ghi đè cập nhật mới nhất
               db.run(`
                 DELETE FROM accounting_journal_lines 
-                WHERE entry_id IN (
-                  SELECT id FROM accounting_journal_entries 
-                  WHERE id LIKE 'JE-EXP-%' OR id LIKE 'JE-REC-%' OR id LIKE 'JE-PAY-%' OR id LIKE 'JE-DEP-%'
-                )
+                WHERE id LIKE 'JE-%' OR entry_id LIKE 'JE-%'
               `);
 
               db.run(`
                 DELETE FROM accounting_journal_entries 
-                WHERE id LIKE 'JE-EXP-%' OR id LIKE 'JE-REC-%' OR id LIKE 'JE-PAY-%' OR id LIKE 'JE-DEP-%'
+                WHERE id LIKE 'JE-%'
               `);
 
             const insertEntryStmt = db.prepare(`
@@ -74,7 +71,7 @@ export async function syncAllSubledgersToJournal(db) {
             `);
 
             const insertLineStmt = db.prepare(`
-              INSERT INTO accounting_journal_lines (
+              INSERT OR REPLACE INTO accounting_journal_lines (
                 id, entry_id, line_number, account_id, account_code,
                 account_name, type, amount, description, partner, created_at
               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -126,17 +123,21 @@ export async function syncAllSubledgersToJournal(db) {
                 }
               }
 
+              const isAdvance = exp.operation_type === 'advance_payment' || exp.debit_account === '141' || titleLower.includes('tạm ứng');
+              const srcModule = isAdvance ? 'ADVANCE' : 'CASH';
+              const srcLabel = isAdvance ? 'Tạm ứng' : (exp.credit_account === '1121' ? 'Ngân hàng' : 'Quỹ tiền mặt');
+
               insertEntryStmt.run(
                 entryId,
                 exp.code,
                 entryDate,
                 entryDate,
                 exp.code,
-                'CASH',
-                'Chi phí',
+                srcModule,
+                srcLabel,
                 exp.title,
                 amount,
-                exp.spender || exp.department || 'Phòng Kế toán'
+                exp.spender || exp.proposer || exp.department || 'Phòng Kế toán'
               );
 
               // Dòng Nợ
@@ -150,7 +151,7 @@ export async function syncAllSubledgersToJournal(db) {
                 'DEBIT',
                 amount,
                 exp.title,
-                exp.spender || exp.department || 'Deco Door'
+                exp.spender || exp.proposer || exp.department || 'Cán bộ nhân viên Seajong'
               );
 
               // Dòng Có
@@ -164,7 +165,7 @@ export async function syncAllSubledgersToJournal(db) {
                 'CREDIT',
                 amount,
                 creditAccCode === '1121' ? 'Chuyển khoản Vietcombank thanh toán' : 'Chi tiền mặt theo phiếu chi',
-                creditAccCode === '1121' ? 'Ngân hàng TMCP Ngoại Thương VN (VCB)' : 'Thủ quỹ Deco Door'
+                creditAccCode === '1121' ? 'Ngân hàng TMCP Ngoại Thương VN (VCB)' : 'Thủ quỹ Seajong'
               );
 
               syncedCount++;
@@ -636,7 +637,7 @@ export async function syncAllSubledgersToJournal(db) {
                 'CREDIT',
                 depTotal,
                 `Trích khấu hao lũy kế 12 TSCĐ Tháng ${monthStr}/2026`,
-                'Deco Door Enterprise'
+                'Seajong Enterprise'
               );
 
               syncedCount++;
