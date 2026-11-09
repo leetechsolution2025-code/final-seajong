@@ -146,10 +146,13 @@ const DEPT_SIDEBAR_CONFIGS: Record<string, { deptName: string; sections: NavSect
         ],
       },
       {
-        id: 'reports',
-        label: 'Báo cáo tài chính',
-        icon: 'bi-file-earmark-bar-graph',
-        flat: true,
+        id: 'statistics_reports',
+        label: 'Thống kê và báo cáo',
+        icon: 'bi-bar-chart-line',
+        items: [
+          { id: 'sales-reports', name: 'Báo cáo bán hàng' },
+          { id: 'reports', name: 'Báo cáo tài chính' },
+        ],
       },
     ],
   },
@@ -549,16 +552,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
   // Trạng thái mở accordion của các section: chỉ duy nhất 1 section mở tại 1 thời điểm
   const [openSectionId, setOpenSectionId] = useState<string | null>(null);
 
-  // Tự động mở accordion đầu tiên khi chuyển phòng ban
+  // Tự động mở accordion khi chuyển phòng ban hoặc khi activeMenuKey thuộc một section
   useEffect(() => {
     const config = DEPT_SIDEBAR_CONFIGS[activeDeptCode] || DEPT_SIDEBAR_CONFIGS.board;
-    const firstExpandable = config.sections.find((s) => !s.flat && s.items && s.items.length > 0);
-    if (firstExpandable) {
-      setOpenSectionId(firstExpandable.id);
-    } else {
-      setOpenSectionId(null);
+    // Nếu activeMenuKey thuộc về một accordion section, tự động mở section đó
+    const matchingSection = config.sections.find(
+      (s) => !s.flat && s.items && s.items.some((item) => item.id === activeMenuKey)
+    );
+    if (matchingSection) {
+      setOpenSectionId(matchingSection.id);
+      return;
     }
-  }, [activeDeptCode]);
+    setOpenSectionId((prev) => {
+      const prevExists = config.sections.some((s) => s.id === prev && !s.flat && s.items && s.items.length > 0);
+      if (prevExists) return prev;
+      const firstExpandable = config.sections.find((s) => !s.flat && s.items && s.items.length > 0);
+      return firstExpandable ? firstExpandable.id : null;
+    });
+  }, [activeDeptCode, activeMenuKey]);
 
   const toggleSection = (id: string) => {
     setOpenSectionId((prev) => (prev === id ? null : id));

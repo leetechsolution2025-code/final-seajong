@@ -163,6 +163,9 @@ export const DashboardView: React.FC = () => {
     if (activeMenuKey === 'inventory-reports' || activeMenuKey === 'bao-cao-kho') {
       return <LogisticsReportsPage />;
     }
+    if (activeMenuKey === 'sales-reports' || activeMenuKey === 'sales-report' || activeMenuKey === 'bao-cao-ban-hang') {
+      return <SalesBusinessResultsPage />;
+    }
     if (activeMenuKey === 'reports' || activeMenuKey === 'financial-reports') {
       return <FinanceReportsPage />;
     }
@@ -315,7 +318,12 @@ export const DashboardView: React.FC = () => {
   if (activeMenuKey === 'sales_plan' || (activeMenuKey === 'plan' && activeDeptCode === 'sales')) {
     return <SalesPlanPage />;
   }
-  if (activeMenuKey === 'business-results') {
+  if (
+    activeMenuKey === 'business-results' ||
+    activeMenuKey === 'sales-reports' ||
+    activeMenuKey === 'sales-report' ||
+    activeMenuKey === 'bao-cao-ban-hang'
+  ) {
     return <SalesBusinessResultsPage />;
   }
   if (activeMenuKey === 'internal-reports') {

@@ -411,9 +411,9 @@ export function getRequiredPermissionsForMenu(
       label: 'Hiển thị giá & chiết khấu',
     };
   }
-  if (key === 'business-results' || key === 'internal-reports') {
+  if (key === 'business-results' || key === 'internal-reports' || key === 'sales-reports') {
     return {
-      keys: ['report'],
+      keys: ['report', 'finance_reports'],
       label: 'Xem báo cáo tổng hợp',
     };
   }

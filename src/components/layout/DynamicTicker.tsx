@@ -843,7 +843,7 @@ export function resolveContext(
     if (m === 'defects' || m === 'defects-summary' || m === 'bom') return 'qa';
     if (m === 'fac_crm' || m === 'complaints') return 'crm';
     if (m === 'suppliers' || m === 'purchase-orders' || m === 'evaluations') return 'suppliers';
-    if (m === 'customers' || m === 'pricing' || m === 'business-results' || m === 'internal-reports' || m === 'retail') return 'sales';
+    if (m === 'customers' || m === 'pricing' || m === 'business-results' || m === 'sales-reports' || m === 'internal-reports' || m === 'retail') return 'sales';
     if (m === 'marketing') return 'marketing';
     if (m === 'cashflow' || m === 'dong-tien' || m === 'dong_tien') return 'cashflow';
     if (m === 'assets' || m === 'debts' || m === 'journal-entries' || m === 'advances' || m === 'reports') return 'finance';
