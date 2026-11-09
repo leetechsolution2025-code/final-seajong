@@ -17,10 +17,20 @@ try {
   currentInode = fs.statSync(dbPath).ino;
 } catch {}
 
-let rawDb = new sqlite3.Database(dbPath);
-if (typeof rawDb.configure === 'function') {
-  rawDb.configure('busyTimeout', 5000);
+function createSafeSqliteDb(p) {
+  const instance = new sqlite3.Database(p, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
+    if (err) console.warn('⚠️ [FinanceSQLite] Kết nối DB cảnh báo:', err.message);
+  });
+  if (typeof instance.configure === 'function') {
+    instance.configure('busyTimeout', 30000);
+  }
+  instance.on('error', (err) => {
+    console.warn('⚠️ [FinanceSQLite rawDb error event]', err.message);
+  });
+  return instance;
 }
+
+let rawDb = createSafeSqliteDb(dbPath);
 
 function ensureHealthyDb() {
   try {
@@ -29,8 +39,7 @@ function ensureHealthyDb() {
       console.warn('⚠️ [FinanceSQLite Auto-Heal] Phát hiện file dev.db được thay mới (inode thay đổi), đang kết nối lại...');
       try { rawDb.close(); } catch {}
       currentInode = stat.ino;
-      rawDb = new sqlite3.Database(dbPath);
-      if (typeof rawDb.configure === 'function') rawDb.configure('busyTimeout', 5000);
+      rawDb = createSafeSqliteDb(dbPath);
     }
   } catch {}
   return rawDb;
@@ -42,8 +51,7 @@ function reconnectRawDb() {
   try {
     currentInode = fs.statSync(dbPath).ino;
   } catch {}
-  rawDb = new sqlite3.Database(dbPath);
-  if (typeof rawDb.configure === 'function') rawDb.configure('busyTimeout', 5000);
+  rawDb = createSafeSqliteDb(dbPath);
   return rawDb;
 }
 

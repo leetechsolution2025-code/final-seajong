@@ -8,6 +8,14 @@ import {
   FileEarmarkExcel,
   ChevronLeft,
   ChevronRight,
+  LockFill,
+  UnlockFill,
+  ArrowLeft,
+  CheckCircleFill,
+  PersonFill,
+  Calendar3,
+  GeoAltFill,
+  TelephoneFill,
 } from 'react-bootstrap-icons';
 import { TableToolbar, type TableToolbarFilter, type TableToolbarMenuItem } from './TableToolbar';
 import { FullWidthTable } from './FullWidthTable';
@@ -426,23 +434,62 @@ export const InventoryPagination: React.FC<InventoryPaginationProps> = ({
 /* ============================================================================
  * 4. COMPONENT OFFCANVAS CHI TIẾT HÀNG HOÁ (InventoryDetailOffcanvas)
  * ============================================================================ */
+export interface InventoryHoldItem {
+  id: string;
+  reservationId?: string;
+  stockId?: string;
+  warehouseName?: string;
+  warehouseCode?: string;
+  orderId?: string | null;
+  orderCode?: string;
+  ticketCode?: string;
+  customerName?: string;
+  customerPhone?: string;
+  orderDate?: string;
+  orderStatus?: string;
+  reservedQty: number;
+  type?: 'reservation' | 'sale_order' | 'manual';
+  canRelease?: boolean;
+}
+
 export interface InventoryDetailOffcanvasProps {
   item: InventoryStockItem | null;
   onClose: () => void;
+  onUpdated?: (updatedItem: Partial<InventoryStockItem>) => void;
 }
 
 export const InventoryDetailOffcanvas: React.FC<InventoryDetailOffcanvasProps> = ({
   item,
   onClose,
+  onUpdated,
 }) => {
+  const [activeSlide, setActiveSlide] = useState<'info' | 'holds'>('info');
   const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
   const [isSlidePaused, setIsSlidePaused] = useState<boolean>(false);
 
+  // Quản lý trạng thái giữ chỗ
+  const [holds, setHolds] = useState<InventoryHoldItem[]>([]);
+  const [loadingHolds, setLoadingHolds] = useState<boolean>(false);
+  const [releasingId, setReleasingId] = useState<string | null>(null);
+  const [confirmRelease, setConfirmRelease] = useState<{
+    hold: InventoryHoldItem | null;
+    isAll?: boolean;
+  } | null>(null);
+  const [currentHoldQty, setCurrentHoldQty] = useState<number>(item?.soLuongGiu || 0);
+  const [currentThucTon, setCurrentThucTon] = useState<number>(item?.thucTon ?? item?.soLuong ?? 0);
+  const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+
   useEffect(() => {
+    setActiveSlide('info');
     setActiveImageIndex(0);
     setFailedImages(new Set());
     setIsSlidePaused(false);
+    setCurrentHoldQty(item?.soLuongGiu || 0);
+    setCurrentThucTon(item?.thucTon ?? item?.soLuong ?? 0);
+    setActionSuccessMsg(null);
+    setConfirmRelease(null);
+    setHolds([]);
   }, [item]);
 
   useEffect(() => {
@@ -463,6 +510,94 @@ export const InventoryDetailOffcanvas: React.FC<InventoryDetailOffcanvasProps> =
     return () => clearInterval(timer);
   }, [item, failedImages, isSlidePaused]);
 
+  // Nạp danh sách đơn hàng giữ chỗ từ backend
+  const fetchHolds = useCallback(async () => {
+    if (!item?.id) return;
+    setLoadingHolds(true);
+    try {
+      const res = await fetch(`/api/logistics/inventory/${item.id}/holds`);
+      const data = await res.json();
+      if (data.success) {
+        setHolds(data.holds || []);
+        if (typeof data.totalReserved === 'number') {
+          setCurrentHoldQty(data.totalReserved);
+        }
+      }
+    } catch (err) {
+      console.error('Lỗi nạp danh sách giữ chỗ:', err);
+    } finally {
+      setLoadingHolds(false);
+    }
+  }, [item?.id]);
+
+  useEffect(() => {
+    if (activeSlide === 'holds' && item?.id) {
+      fetchHolds();
+    }
+  }, [activeSlide, item?.id, fetchHolds]);
+
+  // Thực hiện bỏ giữ chỗ
+  const handleExecuteRelease = async () => {
+    if (!confirmRelease || !item?.id) return;
+    const { hold, isAll } = confirmRelease;
+    const key = isAll ? 'all' : (hold?.id || 'single');
+    setReleasingId(key);
+    setActionSuccessMsg(null);
+
+    try {
+      const res = await fetch(`/api/logistics/inventory/${item.id}/release-hold`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          isAll
+            ? { releaseAll: true }
+            : {
+                holdId: hold?.id,
+                reservationId: hold?.reservationId,
+                stockId: hold?.stockId,
+                releaseQty: hold?.reservedQty,
+              }
+        ),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        const newHoldQty = Number(data.newSoLuongGiu) || 0;
+        const newThucTon = Number(data.newThucTon) ?? Math.max(0, (item.soLuong || 0) - newHoldQty);
+        setCurrentHoldQty(newHoldQty);
+        setCurrentThucTon(newThucTon);
+
+        const msg = isAll
+          ? `Đã giải phóng toàn bộ số lượng giữ chỗ (${(item.donVi || 'sản phẩm')}) thành công!`
+          : `Đã bỏ giữ ${hold?.reservedQty} ${item.donVi || 'cái'} cho đơn ${hold?.orderCode || 'hàng'}!`;
+        setActionSuccessMsg(msg);
+
+        if (isAll) {
+          setHolds([]);
+        } else if (hold?.id) {
+          setHolds((prev) => prev.filter((h) => h.id !== hold.id));
+        }
+
+        // Báo lên component cha
+        onUpdated?.({
+          soLuongGiu: newHoldQty,
+          thucTon: newThucTon,
+        });
+
+        // Bắn sự kiện cập nhật toàn hệ thống
+        window.dispatchEvent(new CustomEvent('inventory_updated'));
+        setConfirmRelease(null);
+      } else {
+        alert(data.message || 'Không thể bỏ giữ chỗ');
+      }
+    } catch (err) {
+      console.error('Lỗi khi bỏ giữ chỗ:', err);
+      alert('Không thể kết nối đến máy chủ để giải phóng giữ chỗ');
+    } finally {
+      setReleasingId(null);
+    }
+  };
+
   if (!item) return null;
 
   return (
@@ -472,7 +607,7 @@ export const InventoryDetailOffcanvas: React.FC<InventoryDetailOffcanvasProps> =
       icon={<BoxSeam size={20} />}
       title="Thông tin hàng hoá"
       description={`Mã SKU: ${item.code || 'Chưa cập nhật'}`}
-      width="400px"
+      width="440px"
       position="right"
       footer={
         <div className="flex justify-between items-center w-full">
@@ -486,273 +621,596 @@ export const InventoryDetailOffcanvas: React.FC<InventoryDetailOffcanvasProps> =
       }
     >
       <div className="space-y-4 text-xs sm:text-[13px] text-slate-700">
-        {/* Header sản phẩm: Tên + Mã hàng hoá + Vùng hiển thị ảnh */}
-        <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-          <div>
-            <div className="font-bold text-slate-900 text-[14px] leading-snug">
-              {item.tenHang}
-            </div>
+        {/* Nút chuyển đổi Slide khi hàng hoá có số lượng giữ chỗ > 0 */}
+        {(currentHoldQty > 0 || (item.soLuongGiu || 0) > 0) && (
+          <div className="flex border border-slate-200 bg-slate-100/90 p-1 rounded-xl gap-1 select-none">
+            <button
+              type="button"
+              onClick={() => setActiveSlide('info')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeSlide === 'info'
+                  ? 'bg-white text-slate-800 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+              }`}
+            >
+              <BoxSeam size={13} />
+              <span>Thông tin sản phẩm</span>
+            </button>
 
-            <div className="flex flex-wrap items-center gap-1.5 mt-2">
-              <span className="font-mono font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded text-xs border border-sky-200">
-                {item.code}
-              </span>
-              {item.maThayThe && (
-                <span className="font-mono text-slate-600 bg-white px-2 py-0.5 rounded text-xs border border-slate-200">
-                  Mã phụ: {item.maThayThe}
-                </span>
-              )}
+            <button
+              type="button"
+              onClick={() => setActiveSlide('holds')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeSlide === 'holds'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'text-amber-800 bg-amber-100/70 hover:bg-amber-100'
+              }`}
+            >
+              <LockFill size={12} className={activeSlide === 'holds' ? 'text-white' : 'text-amber-700'} />
+              <span>Giữ chỗ đơn hàng</span>
               <span
-                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                  item.trangThai === 'con-hang'
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
-                    : item.trangThai === 'sap-het'
-                    ? 'bg-amber-50 text-amber-700 border border-amber-300'
-                    : 'bg-rose-50 text-rose-700 border border-rose-300'
+                className={`ml-1 px-1.5 py-0.2 rounded-full text-[10.5px] font-mono font-bold ${
+                  activeSlide === 'holds'
+                    ? 'bg-white text-amber-800'
+                    : 'bg-amber-600 text-white'
                 }`}
               >
-                {item.trangThai === 'con-hang'
-                  ? 'Còn hàng'
-                  : item.trangThai === 'sap-het'
-                  ? 'Sắp hết'
-                  : 'Hết hàng'}
+                {currentHoldQty.toLocaleString('vi-VN')}
               </span>
-            </div>
-          </div>
-
-          {/* Vùng hiển thị ảnh */}
-          {(() => {
-            const rawImages: string[] =
-              Array.isArray(item.images) && item.images.length > 0
-                ? item.images
-                : item.imageUrl
-                ? [item.imageUrl]
-                : [];
-            const images = rawImages.filter((u: string) => !failedImages.has(u));
-
-            if (images.length === 0) {
-              return (
-                <div className="w-full h-48 bg-white border border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-300 py-6 shadow-xs">
-                  <BoxSeam size={44} className="mb-1 text-slate-300 stroke-[1.2]" />
-                  <span className="text-[11px] text-slate-400 font-medium">Chưa có ảnh sản phẩm</span>
-                </div>
-              );
-            }
-
-            if (images.length === 1) {
-              return (
-                <div className="w-full h-52 bg-white border border-slate-200 rounded-lg flex items-center justify-center overflow-hidden p-2 relative shadow-xs">
-                  <img
-                    src={images[0]}
-                    alt={item.tenHang}
-                    className="w-full h-full object-contain"
-                    onError={() => {
-                      setFailedImages((prev) => new Set(prev).add(images[0]));
-                    }}
-                  />
-                </div>
-              );
-            }
-
-            const safeIndex = Math.min(Math.max(0, activeImageIndex), images.length - 1);
-            return (
-              <div
-                className="space-y-2"
-                onMouseEnter={() => setIsSlidePaused(true)}
-                onMouseLeave={() => setIsSlidePaused(false)}
-              >
-                <div className="w-full h-52 bg-white border border-slate-200 rounded-lg flex items-center justify-center overflow-hidden p-2 relative shadow-xs group">
-                  <img
-                    src={images[safeIndex]}
-                    alt={`${item.tenHang} - ảnh ${safeIndex + 1}`}
-                    className="w-full h-full object-contain transition-all duration-300"
-                    onError={() => {
-                      setFailedImages((prev) => new Set(prev).add(images[safeIndex]));
-                    }}
-                  />
-
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
-                    }}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/95 hover:bg-white shadow-md border border-slate-200 flex items-center justify-center text-slate-700 transition-all hover:scale-105 active:scale-95 cursor-pointer z-10"
-                    title="Ảnh trước"
-                  >
-                    <ChevronLeft size={14} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
-                    }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/95 hover:bg-white shadow-md border border-slate-200 flex items-center justify-center text-slate-700 transition-all hover:scale-105 active:scale-95 cursor-pointer z-10"
-                    title="Ảnh tiếp theo"
-                  >
-                    <ChevronRight size={14} />
-                  </button>
-
-                  <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-slate-900/70 text-white text-[10.5px] font-mono font-medium backdrop-blur-xs select-none">
-                    {safeIndex + 1} / {images.length}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 px-0.5">
-                  {images.map((imgUrl: string, idx: number) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setActiveImageIndex(idx)}
-                      className={`w-11 h-11 rounded-lg border-2 overflow-hidden shrink-0 transition-all p-0.5 bg-white cursor-pointer ${
-                        safeIndex === idx
-                          ? 'border-blue-600 ring-2 ring-blue-100 shadow-xs'
-                          : 'border-slate-200 opacity-60 hover:opacity-100'
-                      }`}
-                      title={`Xem ảnh ${idx + 1}`}
-                    >
-                      <img
-                        src={imgUrl}
-                        alt=""
-                        className="w-full h-full object-contain"
-                        onError={() => {
-                          setFailedImages((prev) => new Set(prev).add(imgUrl));
-                        }}
-                      />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
-        </div>
-
-        {/* Chỉ số Tồn kho thực tế */}
-        <div>
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
-            Hiện trạng tồn kho
-          </div>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-              <div className="text-[11px] text-slate-500 font-medium">Tồn hệ thống</div>
-              <div className="text-base font-bold text-slate-900 font-mono mt-1">
-                {(item.soLuong || 0).toLocaleString('vi-VN')}
-              </div>
-              <div className="text-[10px] text-slate-400 mt-0.5">{item.donVi || 'đơn vị'}</div>
-            </div>
-
-            <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl">
-              <div className="text-[11px] text-amber-700 font-medium">Đang giữ chỗ</div>
-              <div className="text-base font-bold text-amber-700 font-mono mt-1">
-                {(item.soLuongGiu || 0).toLocaleString('vi-VN')}
-              </div>
-              <div className="text-[10px] text-amber-600 mt-0.5">cam kết đơn</div>
-            </div>
-
-            <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl">
-              <div className="text-[11px] text-emerald-700 font-medium">Khả dụng (Thực tế)</div>
-              <div className="text-base font-bold text-emerald-700 font-mono mt-1">
-                {(item.thucTon ?? item.soLuong ?? 0).toLocaleString('vi-VN')}
-              </div>
-              <div className="text-[10px] text-emerald-600 mt-0.5">sẵn sàng xuất</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Thông tin quy cách & Phân loại */}
-        <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-            Quy cách & Phân loại
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div>
-              <span className="text-slate-400 text-[11px] block">Danh mục hàng:</span>
-              <span className="font-semibold text-slate-800">
-                {item.categoryName || 'Thiết bị vệ sinh'}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-400 text-[11px] block">Thương hiệu:</span>
-              <span className="font-semibold text-slate-800">{item.brand || 'Seajong'}</span>
-            </div>
-            <div>
-              <span className="text-slate-400 text-[11px] block">Đơn vị tính (ĐVT):</span>
-              <span className="font-semibold text-slate-800">{item.donVi || 'Bộ / Cái'}</span>
-            </div>
-            <div>
-              <span className="text-slate-400 text-[11px] block">Định mức an toàn min:</span>
-              <span className="font-mono font-semibold text-slate-800">
-                {item.soLuongMin || 0} {item.donVi || ''}
-              </span>
-            </div>
-          </div>
-
-          {(item.model || item.chatLieu) && (
-            <div className="pt-2 border-t border-slate-200 text-xs">
-              {item.model && (
-                <div className="mb-1">
-                  <span className="text-slate-400 text-[11px]">Model: </span>
-                  <span className="font-medium text-slate-800">{item.model}</span>
-                </div>
-              )}
-              {item.chatLieu && (
-                <div>
-                  <span className="text-slate-400 text-[11px]">Chất liệu: </span>
-                  <span className="font-medium text-slate-800">{item.chatLieu}</span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Chi tiết vị trí kho lưu trữ */}
-        {item.stocks && item.stocks.length > 0 && (
-          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-              Vị trí kệ & Kho lưu trữ
-            </div>
-            {item.stocks.map((stk) => (
-              <div
-                key={stk.id}
-                className="p-2.5 bg-white rounded-lg border border-slate-200 flex justify-between items-center text-xs"
-              >
-                <div>
-                  <div className="font-semibold text-slate-800">
-                    {stk.warehouse?.name || 'Kho Seajong'}
-                  </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
-                    Dãy/Hàng:{' '}
-                    <span className="font-mono text-slate-600">
-                      {stk.viTriHang || 'Chờ sắp xếp'}
-                    </span>
-                    {stk.viTriCot && ` • Cột: ${stk.viTriCot}`}
-                    {stk.viTriTang && ` • Tầng: ${stk.viTriTang}`}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="font-bold text-slate-900 font-mono">
-                    {stk.soLuong} {item.donVi || 'cái'}
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    Mã kho: {stk.warehouse?.code || 'KHO'}
-                  </div>
-                </div>
-              </div>
-            ))}
+            </button>
           </div>
         )}
 
-        {/* Ghi chú lưu kho */}
-        {item.ghiChu && (
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
-            <span className="text-slate-400 text-[11px] block font-semibold mb-0.5">
-              Ghi chú lưu kho:
-            </span>
-            <p className="text-slate-700 whitespace-pre-wrap">{item.ghiChu}</p>
+        {/* ══════════════════════════════════════════════════════════════════
+            SLIDE 2: CHI TIẾT ĐƠN HÀNG GIỮ CHỖ (activeSlide === 'holds')
+            ══════════════════════════════════════════════════════════════════ */}
+        {activeSlide === 'holds' ? (
+          <div className="space-y-3.5">
+            {/* Thanh điều hướng quay lại */}
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setActiveSlide('info')}
+                className="flex items-center gap-1.5 text-xs text-sky-700 hover:text-sky-900 font-semibold cursor-pointer group"
+              >
+                <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
+                <span>Quay lại thông tin sản phẩm</span>
+              </button>
+              <span className="text-[11px] text-slate-400 font-mono">
+                SKU: {item.code}
+              </span>
+            </div>
+
+            {/* Thông báo thao tác thành công nếu có */}
+            {actionSuccessMsg && (
+              <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-800 text-xs flex items-center gap-2.5">
+                <CheckCircleFill size={16} className="text-emerald-600 shrink-0" />
+                <span className="font-medium">{actionSuccessMsg}</span>
+              </div>
+            )}
+
+            {/* Khối Card tóm tắt giữ chỗ */}
+            <div className="p-3.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                    <LockFill size={13} className="text-amber-600" />
+                    <span>Cam kết & Giữ chỗ kho</span>
+                  </div>
+                  <div className="text-xs text-amber-800 mt-1">
+                    Tổng đang giữ:{' '}
+                    <strong className="text-base text-amber-950 font-mono font-bold">
+                      {currentHoldQty.toLocaleString('vi-VN')}
+                    </strong>{' '}
+                    {item.donVi || 'cái'}
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">
+                    Khả dụng thực tế:{' '}
+                    <strong className="text-emerald-700 font-mono">
+                      {currentThucTon.toLocaleString('vi-VN')}
+                    </strong>{' '}
+                    {item.donVi || 'cái'}
+                  </div>
+                </div>
+
+                {currentHoldQty > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setConfirmRelease({ hold: null, isAll: true })}
+                    disabled={releasingId !== null}
+                    className="border-rose-300 text-rose-700 hover:bg-rose-50 text-[11px] h-8 px-2.5 shadow-xs"
+                  >
+                    Bỏ giữ tất cả
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Trạng thái Loading hoặc Danh sách Holds */}
+            {loadingHolds ? (
+              <div className="p-8 text-center bg-slate-50 rounded-xl border border-slate-200">
+                <div className="inline-block w-6 h-6 border-2 border-amber-600 border-t-transparent rounded-full animate-spin mb-2"></div>
+                <div className="text-xs text-slate-500 font-medium">
+                  Đang tải danh sách đơn hàng giữ chỗ...
+                </div>
+              </div>
+            ) : holds.length === 0 ? (
+              <div className="p-6 text-center bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+                  <CheckCircleFill size={20} />
+                </div>
+                <div className="font-semibold text-slate-800 text-xs">
+                  Không còn đơn hàng nào đang giữ chỗ
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Tất cả số lượng đã sẵn sàng xuất kho ({currentThucTon.toLocaleString('vi-VN')} {item.donVi || 'cái'}).
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setActiveSlide('info')}
+                  className="mt-2 text-xs"
+                >
+                  Về thông tin sản phẩm
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Danh sách đơn hàng ({holds.length} đơn/chứng từ)
+                </div>
+
+                {holds.map((hold) => (
+                  <div
+                    key={hold.id}
+                    className="p-3 bg-white border border-slate-200 rounded-xl shadow-xs space-y-2.5 hover:border-amber-300 transition-colors"
+                  >
+                    {/* Header card đơn: Mã đơn + Trạng thái */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-mono font-bold text-sky-800 bg-sky-50 px-2 py-0.5 rounded text-xs border border-sky-200">
+                          {hold.orderCode || 'Đơn hàng'}
+                        </span>
+                        {hold.ticketCode && hold.ticketCode !== hold.orderCode && (
+                          <span className="font-mono text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded text-[10.5px]">
+                            {hold.ticketCode}
+                          </span>
+                        )}
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[10.5px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                        {hold.orderStatus === 'completed'
+                          ? 'Đã hoàn thành'
+                          : hold.orderStatus === 'in_production'
+                          ? 'Đang sản xuất'
+                          : hold.orderStatus === 'approved'
+                          ? 'Đã phê duyệt'
+                          : hold.orderStatus === 'holding' || hold.orderStatus === 'reserved'
+                          ? 'Giữ kho'
+                          : 'Đang xử lý'}
+                      </span>
+                    </div>
+
+                    {/* Chi tiết khách hàng, ngày đặt, kho */}
+                    <div className="grid grid-cols-2 gap-1.5 text-xs text-slate-600">
+                      <div className="flex items-center gap-1.5">
+                        <PersonFill size={13} className="text-slate-400 shrink-0" />
+                        <span className="truncate font-medium text-slate-800" title={hold.customerName}>
+                          {hold.customerName || 'Dự trữ nội bộ'}
+                        </span>
+                      </div>
+
+                      {hold.orderDate && (
+                        <div className="flex items-center gap-1.5 text-right justify-end">
+                          <Calendar3 size={12} className="text-slate-400 shrink-0" />
+                          <span className="font-mono text-[11px] text-slate-500">
+                            {new Date(hold.orderDate).toLocaleDateString('vi-VN')}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="col-span-2 flex items-center gap-1.5 text-[11.5px] text-slate-500">
+                        <GeoAltFill size={12} className="text-slate-400 shrink-0" />
+                        <span>Kho: <strong className="text-slate-700 font-medium">{hold.warehouseName || 'Kho Seajong'}</strong></span>
+                      </div>
+                    </div>
+
+                    {/* Footer card: Số lượng giữ + Nút Bỏ giữ chỗ */}
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                      <div>
+                        <span className="text-[11px] text-slate-400 block">Số lượng giữ:</span>
+                        <div className="text-sm font-bold text-amber-700 font-mono">
+                          {hold.reservedQty.toLocaleString('vi-VN')} {item.donVi || 'cái'}
+                        </div>
+                      </div>
+
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => setConfirmRelease({ hold, isAll: false })}
+                        disabled={releasingId !== null}
+                        className="text-xs px-3 py-1 flex items-center gap-1.5 shadow-xs"
+                      >
+                        {releasingId === hold.id ? (
+                          <>
+                            <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                            <span>Đang xử lý...</span>
+                          </>
+                        ) : (
+                          <>
+                            <UnlockFill size={12} />
+                            <span>Bỏ giữ chỗ</span>
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Modal / Dialog xác nhận Bỏ giữ chỗ */}
+            {confirmRelease && (
+              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl space-y-2.5 animate-fadeIn">
+                <div className="font-bold text-rose-900 text-xs flex items-center gap-1.5">
+                  <ExclamationTriangleFill size={14} className="text-rose-600" />
+                  <span>
+                    {confirmRelease.isAll
+                      ? 'Xác nhận bỏ giữ toàn bộ kho?'
+                      : `Xác nhận bỏ giữ chỗ cho đơn ${confirmRelease.hold?.orderCode || 'này'}?`}
+                  </span>
+                </div>
+                <p className="text-[11.5px] text-rose-700 leading-relaxed">
+                  {confirmRelease.isAll ? (
+                    <>
+                      Toàn bộ <strong>{currentHoldQty} {item.donVi || 'sản phẩm'}</strong> đang cam kết sẽ được giải phóng và cộng lại vào tồn thực tế khả dụng.
+                    </>
+                  ) : (
+                    <>
+                      Số lượng <strong>{confirmRelease.hold?.reservedQty} {item.donVi || 'cái'}</strong> của đơn hàng này sẽ được hủy cam kết giữ và sẵn sàng để xuất cho đơn khác.
+                    </>
+                  )}
+                </p>
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setConfirmRelease(null)}
+                    disabled={releasingId !== null}
+                    className="text-xs h-7 px-3 bg-white"
+                  >
+                    Hủy bỏ
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={handleExecuteRelease}
+                    disabled={releasingId !== null}
+                    className="text-xs h-7 px-3"
+                  >
+                    {releasingId !== null ? 'Đang thực hiện...' : 'Đồng ý bỏ giữ'}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
+        ) : (
+          /* ══════════════════════════════════════════════════════════════════
+              SLIDE 1: THÔNG TIN SẢN PHẨM (activeSlide === 'info')
+              ══════════════════════════════════════════════════════════════════ */
+          <>
+            {/* Header sản phẩm: Tên + Mã hàng hoá + Vùng hiển thị ảnh */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+              <div>
+                <div className="font-bold text-slate-900 text-[14px] leading-snug">
+                  {item.tenHang}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  <span className="font-mono font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded text-xs border border-sky-200">
+                    {item.code}
+                  </span>
+                  {item.maThayThe && (
+                    <span className="font-mono text-slate-600 bg-white px-2 py-0.5 rounded text-xs border border-slate-200">
+                      Mã phụ: {item.maThayThe}
+                    </span>
+                  )}
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                      item.trangThai === 'con-hang'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
+                        : item.trangThai === 'sap-het'
+                        ? 'bg-amber-50 text-amber-700 border border-amber-300'
+                        : 'bg-rose-50 text-rose-700 border border-rose-300'
+                    }`}
+                  >
+                    {item.trangThai === 'con-hang'
+                      ? 'Còn hàng'
+                      : item.trangThai === 'sap-het'
+                      ? 'Sắp hết'
+                      : 'Hết hàng'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Vùng hiển thị ảnh */}
+              {(() => {
+                const rawImages: string[] =
+                  Array.isArray(item.images) && item.images.length > 0
+                    ? item.images
+                    : item.imageUrl
+                    ? [item.imageUrl]
+                    : [];
+                const images = rawImages.filter((u: string) => !failedImages.has(u));
+
+                if (images.length === 0) {
+                  return (
+                    <div className="w-full h-48 bg-white border border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-300 py-6 shadow-xs">
+                      <BoxSeam size={44} className="mb-1 text-slate-300 stroke-[1.2]" />
+                      <span className="text-[11px] text-slate-400 font-medium">Chưa có ảnh sản phẩm</span>
+                    </div>
+                  );
+                }
+
+                if (images.length === 1) {
+                  return (
+                    <div className="w-full h-52 bg-white border border-slate-200 rounded-lg flex items-center justify-center overflow-hidden p-2 relative shadow-xs">
+                      <img
+                        src={images[0]}
+                        alt={item.tenHang}
+                        className="w-full h-full object-contain"
+                        onError={() => {
+                          setFailedImages((prev) => new Set(prev).add(images[0]));
+                        }}
+                      />
+                    </div>
+                  );
+                }
+
+                const safeIndex = Math.min(Math.max(0, activeImageIndex), images.length - 1);
+                return (
+                  <div
+                    className="space-y-2"
+                    onMouseEnter={() => setIsSlidePaused(true)}
+                    onMouseLeave={() => setIsSlidePaused(false)}
+                  >
+                    <div className="w-full h-52 bg-white border border-slate-200 rounded-lg flex items-center justify-center overflow-hidden p-2 relative shadow-xs group">
+                      <img
+                        src={images[safeIndex]}
+                        alt={`${item.tenHang} - ảnh ${safeIndex + 1}`}
+                        className="w-full h-full object-contain transition-all duration-300"
+                        onError={() => {
+                          setFailedImages((prev) => new Set(prev).add(images[safeIndex]));
+                        }}
+                      />
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
+                        }}
+                        className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/95 hover:bg-white shadow-md border border-slate-200 flex items-center justify-center text-slate-700 transition-all hover:scale-105 active:scale-95 cursor-pointer z-10"
+                        title="Ảnh trước"
+                      >
+                        <ChevronLeft size={14} />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
+                        }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/95 hover:bg-white shadow-md border border-slate-200 flex items-center justify-center text-slate-700 transition-all hover:scale-105 active:scale-95 cursor-pointer z-10"
+                        title="Ảnh tiếp theo"
+                      >
+                        <ChevronRight size={14} />
+                      </button>
+
+                      <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-slate-900/70 text-white text-[10.5px] font-mono font-medium backdrop-blur-xs select-none">
+                        {safeIndex + 1} / {images.length}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 px-0.5">
+                      {images.map((imgUrl: string, idx: number) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setActiveImageIndex(idx)}
+                          className={`w-11 h-11 rounded-lg border-2 overflow-hidden shrink-0 transition-all p-0.5 bg-white cursor-pointer ${
+                            safeIndex === idx
+                              ? 'border-blue-600 ring-2 ring-blue-100 shadow-xs'
+                              : 'border-slate-200 opacity-60 hover:opacity-100'
+                          }`}
+                          title={`Xem ảnh ${idx + 1}`}
+                        >
+                          <img
+                            src={imgUrl}
+                            alt=""
+                            className="w-full h-full object-contain"
+                            onError={() => {
+                              setFailedImages((prev) => new Set(prev).add(imgUrl));
+                            }}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Chỉ số Tồn kho thực tế */}
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                Hiện trạng tồn kho
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="text-[11px] text-slate-500 font-medium">Tồn hệ thống</div>
+                  <div className="text-base font-bold text-slate-900 font-mono mt-1">
+                    {(item.soLuong || 0).toLocaleString('vi-VN')}
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">{item.donVi || 'đơn vị'}</div>
+                </div>
+
+                <div
+                  onClick={() => {
+                    if (currentHoldQty > 0) setActiveSlide('holds');
+                  }}
+                  className={`p-3 border rounded-xl transition-all ${
+                    currentHoldQty > 0
+                      ? 'bg-amber-50/90 border-amber-300 hover:bg-amber-100/80 cursor-pointer shadow-xs group'
+                      : 'bg-slate-50 border-slate-200'
+                  }`}
+                  title={currentHoldQty > 0 ? 'Nhấn để xem chi tiết đơn hàng giữ chỗ' : undefined}
+                >
+                  <div className="text-[11px] text-amber-700 font-medium flex items-center justify-center gap-1">
+                    {currentHoldQty > 0 && <LockFill size={10} className="text-amber-600" />}
+                    <span>Đang giữ chỗ</span>
+                  </div>
+                  <div className="text-base font-bold text-amber-700 font-mono mt-1">
+                    {currentHoldQty.toLocaleString('vi-VN')}
+                  </div>
+                  <div className="text-[10px] text-amber-600 mt-0.5 flex items-center justify-center gap-0.5">
+                    <span>cam kết đơn</span>
+                    {currentHoldQty > 0 && (
+                      <span className="font-semibold text-amber-800 underline ml-0.5 group-hover:translate-x-0.5 transition-transform">
+                        →
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl">
+                  <div className="text-[11px] text-emerald-700 font-medium">Khả dụng (Thực tế)</div>
+                  <div className="text-base font-bold text-emerald-700 font-mono mt-1">
+                    {currentThucTon.toLocaleString('vi-VN')}
+                  </div>
+                  <div className="text-[10px] text-emerald-600 mt-0.5">sẵn sàng xuất</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Banner lối tắt chuyển sang slide Đơn hàng giữ chỗ */}
+            {currentHoldQty > 0 && (
+              <div
+                onClick={() => setActiveSlide('holds')}
+                className="p-3 bg-amber-500/10 border border-amber-300/80 rounded-xl flex items-center justify-between cursor-pointer hover:bg-amber-500/15 transition-all group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <LockFill size={15} />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-amber-950">
+                      Có {currentHoldQty.toLocaleString('vi-VN')} {item.donVi || 'cái'} đang được giữ chỗ
+                    </div>
+                    <div className="text-[11px] text-amber-700">
+                      Bấm để xem danh sách đơn hàng & bỏ giữ chỗ
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight size={16} className="text-amber-700 group-hover:translate-x-0.5 transition-transform" />
+              </div>
+            )}
+
+            {/* Thông tin quy cách & Phân loại */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                Quy cách & Phân loại
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-slate-400 text-[11px] block">Danh mục hàng:</span>
+                  <span className="font-semibold text-slate-800">
+                    {item.categoryName || 'Thiết bị vệ sinh'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[11px] block">Thương hiệu:</span>
+                  <span className="font-semibold text-slate-800">{item.brand || 'Seajong'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[11px] block">Đơn vị tính (ĐVT):</span>
+                  <span className="font-semibold text-slate-800">{item.donVi || 'Bộ / Cái'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[11px] block">Định mức an toàn min:</span>
+                  <span className="font-mono font-semibold text-slate-800">
+                    {item.soLuongMin || 0} {item.donVi || ''}
+                  </span>
+                </div>
+              </div>
+
+              {(item.model || item.chatLieu) && (
+                <div className="pt-2 border-t border-slate-200 text-xs">
+                  {item.model && (
+                    <div className="mb-1">
+                      <span className="text-slate-400 text-[11px]">Model: </span>
+                      <span className="font-medium text-slate-800">{item.model}</span>
+                    </div>
+                  )}
+                  {item.chatLieu && (
+                    <div>
+                      <span className="text-slate-400 text-[11px]">Chất liệu: </span>
+                      <span className="font-medium text-slate-800">{item.chatLieu}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Chi tiết vị trí kho lưu trữ */}
+            {item.stocks && item.stocks.length > 0 && (
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Vị trí kệ & Kho lưu trữ
+                </div>
+                {item.stocks.map((stk) => (
+                  <div
+                    key={stk.id}
+                    className="p-2.5 bg-white rounded-lg border border-slate-200 flex justify-between items-center text-xs"
+                  >
+                    <div>
+                      <div className="font-semibold text-slate-800">
+                        {stk.warehouse?.name || 'Kho Seajong'}
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        Dãy/Hàng:{' '}
+                        <span className="font-mono text-slate-600">
+                          {stk.viTriHang || 'Chờ sắp xếp'}
+                        </span>
+                        {stk.viTriCot && ` • Cột: ${stk.viTriCot}`}
+                        {stk.viTriTang && ` • Tầng: ${stk.viTriTang}`}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold text-slate-900 font-mono">
+                        {stk.soLuong} {item.donVi || 'cái'}
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        Mã kho: {stk.warehouse?.code || 'KHO'}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Ghi chú lưu kho */}
+            {item.ghiChu && (
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+                <span className="text-slate-400 text-[11px] block font-semibold mb-0.5">
+                  Ghi chú lưu kho:
+                </span>
+                <p className="text-slate-700 whitespace-pre-wrap">{item.ghiChu}</p>
+              </div>
+            )}
+          </>
         )}
       </div>
     </Offcanvas>
@@ -1091,6 +1549,13 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
       <InventoryDetailOffcanvas
         item={selectedDetailItem}
         onClose={() => setSelectedDetailItem(null)}
+        onUpdated={(updated) => {
+          if (!selectedDetailItem) return;
+          setSelectedDetailItem((prev) => (prev ? { ...prev, ...updated } : null));
+          setInventory((prev) =>
+            prev.map((it) => (it.id === selectedDetailItem.id ? { ...it, ...updated } : it))
+          );
+        }}
       />
     </>
   );

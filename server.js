@@ -9133,6 +9133,259 @@ app.get('/api/logistics/inventory', async (req, res) => {
   }
 });
 
+// ── GET /api/logistics/inventory/:id/holds ──────────────────────────────────
+app.get('/api/logistics/inventory/:id/holds', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const item = await prisma.inventoryItem.findUnique({
+      where: { id },
+      include: {
+        stocks: {
+          include: {
+            warehouse: true,
+            reservations: {
+              include: {
+                ticketItem: {
+                  include: {
+                    ticket: {
+                      include: {
+                        saleOrder: {
+                          include: { customer: true }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        saleOrderItems: {
+          include: {
+            saleOrder: {
+              include: { customer: true }
+            }
+          },
+          orderBy: { id: 'desc' }
+        }
+      }
+    });
+
+    if (!item) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy hàng hoá' });
+    }
+
+    const holds = [];
+    let totalReserved = 0;
+
+    // 1. Duyệt reservations từ các stocks
+    const coveredOrders = new Set();
+    const coveredStocks = new Map(); // stockId -> totalHoldFound
+
+    for (const stock of item.stocks || []) {
+      const stockGiu = stock.soLuongGiu || 0;
+      totalReserved += stockGiu;
+      let holdInStock = 0;
+
+      for (const resv of stock.reservations || []) {
+        const ticket = resv.ticketItem?.ticket;
+        const saleOrder = ticket?.saleOrder;
+        const qty = resv.reservedQty || 0;
+        holdInStock += qty;
+        if (saleOrder?.id) coveredOrders.add(saleOrder.id);
+
+        holds.push({
+          id: `res-${resv.id}`,
+          reservationId: resv.id,
+          stockId: stock.id,
+          warehouseName: stock.warehouse?.name || 'Kho Seajong',
+          warehouseCode: stock.warehouse?.code || '',
+          orderId: saleOrder?.id,
+          orderCode: saleOrder?.code || ticket?.code || 'Phiếu kho',
+          ticketCode: ticket?.code,
+          customerName: saleOrder?.customer?.name || 'Khách hàng',
+          customerPhone: saleOrder?.customer?.dienThoai || '',
+          orderDate: saleOrder?.ngayDat || saleOrder?.createdAt || resv.createdAt,
+          orderStatus: saleOrder?.trangThai || 'active',
+          reservedQty: qty,
+          type: 'reservation',
+          canRelease: true
+        });
+      }
+
+      coveredStocks.set(stock.id, holdInStock);
+    }
+
+    // 2. Nếu stock có soLuongGiu > holdInStock, tìm từ saleOrderItems
+    for (const stock of item.stocks || []) {
+      const stockGiu = stock.soLuongGiu || 0;
+      let currentHold = coveredStocks.get(stock.id) || 0;
+      let remainingHold = stockGiu - currentHold;
+
+      if (remainingHold > 0) {
+        // Tìm saleOrderItems của item này
+        for (const soi of item.saleOrderItems || []) {
+          if (remainingHold <= 0) break;
+          const order = soi.saleOrder;
+          if (!order) continue;
+          if (order.trangThai === 'cancelled' || coveredOrders.has(order.id)) continue;
+
+          const qtyToAssign = Math.min(remainingHold, soi.soLuong || remainingHold);
+          coveredOrders.add(order.id);
+          holds.push({
+            id: `so-${soi.id}-${stock.id}`,
+            saleOrderItemId: soi.id,
+            stockId: stock.id,
+            warehouseName: stock.warehouse?.name || 'Kho Seajong',
+            warehouseCode: stock.warehouse?.code || '',
+            orderId: order.id,
+            orderCode: order.code || 'Đơn hàng',
+            customerName: order.customer?.name || 'Khách hàng',
+            customerPhone: order.customer?.dienThoai || '',
+            orderDate: order.ngayDat || order.createdAt,
+            orderStatus: order.trangThai || 'active',
+            reservedQty: qtyToAssign,
+            type: 'sale_order',
+            canRelease: true
+          });
+          remainingHold -= qtyToAssign;
+          currentHold += qtyToAssign;
+        }
+
+        // 3. Nếu vẫn còn remainingHold (giữ chỗ không gán đơn / giữ dự phòng kho)
+        if (remainingHold > 0) {
+          holds.push({
+            id: `manual-${stock.id}`,
+            stockId: stock.id,
+            warehouseName: stock.warehouse?.name || 'Kho Seajong',
+            warehouseCode: stock.warehouse?.code || '',
+            orderId: null,
+            orderCode: 'Giữ chỗ kho / Dự trữ xuất',
+            customerName: 'Dự trữ nội bộ',
+            customerPhone: '',
+            orderDate: stock.updatedAt || stock.createdAt,
+            orderStatus: 'reserved',
+            reservedQty: remainingHold,
+            type: 'manual',
+            canRelease: true
+          });
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      inventoryItemId: item.id,
+      itemCode: item.code,
+      itemName: item.tenHang,
+      donVi: item.donVi,
+      totalReserved,
+      holds
+    });
+  } catch (err) {
+    console.error('Lỗi GET /api/logistics/inventory/:id/holds:', err);
+    res.status(500).json({ success: false, error: err.message, holds: [] });
+  }
+});
+
+// ── POST /api/logistics/inventory/:id/release-hold ──────────────────────────
+app.post('/api/logistics/inventory/:id/release-hold', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { holdId, reservationId, stockId, releaseQty, releaseAll } = req.body || {};
+
+    const item = await prisma.inventoryItem.findUnique({
+      where: { id },
+      include: { stocks: true }
+    });
+
+    if (!item) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy hàng hoá' });
+    }
+
+    if (releaseAll) {
+      // Giải phóng toàn bộ giữ chỗ của tất cả stocks thuộc item này
+      const stockIds = item.stocks.map(s => s.id);
+      await prisma.inventoryReservation.deleteMany({
+        where: { inventoryStockId: { in: stockIds } }
+      });
+      await prisma.inventoryStock.updateMany({
+        where: { id: { in: stockIds } },
+        data: { soLuongGiu: 0 }
+      });
+    } else {
+      // Giải phóng từng phần hoặc theo reservation/stock
+      if (reservationId) {
+        const resv = await prisma.inventoryReservation.findUnique({
+          where: { id: reservationId },
+          include: { inventoryStock: true }
+        });
+        if (resv) {
+          const qty = Number(releaseQty) > 0 ? Number(releaseQty) : resv.reservedQty;
+          if (qty >= resv.reservedQty) {
+            await prisma.inventoryReservation.delete({ where: { id: reservationId } });
+          } else {
+            await prisma.inventoryReservation.update({
+              where: { id: reservationId },
+              data: { reservedQty: { decrement: qty } }
+            });
+          }
+          if (resv.inventoryStockId) {
+            const currentStock = await prisma.inventoryStock.findUnique({
+              where: { id: resv.inventoryStockId }
+            });
+            const newGiu = Math.max(0, (currentStock?.soLuongGiu || 0) - qty);
+            await prisma.inventoryStock.update({
+              where: { id: resv.inventoryStockId },
+              data: { soLuongGiu: newGiu }
+            });
+          }
+        }
+      } else if (stockId) {
+        const targetStock = item.stocks.find(s => s.id === stockId);
+        if (targetStock) {
+          const qty = Number(releaseQty) > 0 ? Number(releaseQty) : (targetStock.soLuongGiu || 0);
+          const newGiu = Math.max(0, (targetStock.soLuongGiu || 0) - qty);
+          await prisma.inventoryStock.update({
+            where: { id: stockId },
+            data: { soLuongGiu: newGiu }
+          });
+        }
+      } else {
+        // Fallback: giảm từ stock đầu tiên có soLuongGiu > 0
+        const stockWithHold = item.stocks.find(s => (s.soLuongGiu || 0) > 0);
+        if (stockWithHold) {
+          const qty = Number(releaseQty) > 0 ? Number(releaseQty) : (stockWithHold.soLuongGiu || 0);
+          const newGiu = Math.max(0, (stockWithHold.soLuongGiu || 0) - qty);
+          await prisma.inventoryStock.update({
+            where: { id: stockWithHold.id },
+            data: { soLuongGiu: newGiu }
+          });
+        }
+      }
+    }
+
+    // Lấy lại dữ liệu tồn kho mới nhất
+    const updatedStocks = await prisma.inventoryStock.findMany({
+      where: { inventoryItemId: id }
+    });
+    const totalQty = updatedStocks.reduce((sum, s) => sum + (s.soLuong || 0), 0);
+    const newTotalGiu = updatedStocks.reduce((sum, s) => sum + (s.soLuongGiu || 0), 0);
+    const newThucTon = Math.max(0, totalQty - newTotalGiu);
+
+    res.json({
+      success: true,
+      message: 'Đã giải phóng giữ chỗ thành công',
+      newSoLuongGiu: newTotalGiu,
+      newThucTon: newThucTon,
+      totalQty
+    });
+  } catch (err) {
+    console.error('Lỗi POST /api/logistics/inventory/:id/release-hold:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.get('/api/logistics/categories', async (req, res) => {
   try {
     const warehouseId = (req.query.warehouseId || '').trim();
