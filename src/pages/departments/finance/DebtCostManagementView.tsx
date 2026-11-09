@@ -115,12 +115,13 @@ export const calculateReceivableAgingStatus = (
   };
 };
 
-// Ham dinh dang so phan tach hang nghin
+// Ham dinh dang so phan tach hang nghin va lam tron den hang nghin (1.230.345 -> 1.230.000)
 const formatNumberGroup = (val: number | string | undefined | null): string => {
   if (val === undefined || val === null || val === '') return '0';
   const num = typeof val === 'number' ? val : Number(String(val).replace(/\D/g, ''));
   if (isNaN(num)) return '0';
-  return num.toLocaleString('vi-VN');
+  const rounded = Math.round(num / 1000) * 1000;
+  return rounded.toLocaleString('vi-VN');
 };
 
 // Giao dich lich su thu no
@@ -141,9 +142,10 @@ export interface PaymentHistoryRecord {
   note?: string;
 }
 
-// Ham doc so tien thanh chu tieng Viet khong dung dau ngoac don
+// Ham doc so tien thanh chu tieng Viet (lam tron den hang nghin) khong dung dau ngoac don
 export const convertNumberToVietnameseWords = (num: number): string => {
-  if (!num || isNaN(num) || num <= 0) return 'Không đồng chẵn.';
+  const rounded = Math.round((Number(num) || 0) / 1000) * 1000;
+  if (!rounded || isNaN(rounded) || rounded <= 0) return 'Không đồng chẵn.';
   const digits = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
 
   const readThreeDigits = (n: number, showLeadingZeroHundred: boolean): string => {
@@ -173,7 +175,7 @@ export const convertNumberToVietnameseWords = (num: number): string => {
   };
 
   const scaleNames = ['', 'nghìn', 'triệu', 'tỷ', 'nghìn tỷ', 'triệu tỷ'];
-  let remaining = Math.floor(num);
+  let remaining = Math.floor(rounded);
   const blocks: number[] = [];
   while (remaining > 0) {
     blocks.push(remaining % 1000);
@@ -3616,9 +3618,80 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                           </td>
                         </tr>
 
-                        {/* Danh sách các đợt phát sinh công nợ con khi mở rộng, kèm phiếu thu được nhóm vào từng đợt */}
-                        {isExpanded &&
-                          (item.entries || [])
+                        {/* Danh sách các đợt phát sinh công nợ con khi mở rộng: Các đơn bán hàng và các phiếu thu đặt cùng cấp */}
+                        {isExpanded && (() => {
+                          // Gom danh sách tất cả các phiếu thu của khách hàng (loại bỏ các khoản giảm trừ hàng trả về)
+                          const customerReceipts: any[] = [];
+                          const seenReceiptCodes = new Set<string>();
+
+                          (item.entries || []).forEach((ent) => {
+                            (ent.payments || []).forEach((pay: any) => {
+                              const isReturn =
+                                pay.isReturn ||
+                                pay.type === 'return_deduction' ||
+                                String(pay.code || pay.receiptCode || '').startsWith('ERR-') ||
+                                String(pay.title || '').toLowerCase().includes('trả lại') ||
+                                String(pay.note || '').toLowerCase().includes('trả lại') ||
+                                String(pay.title || '').toLowerCase().includes('hàng lỗi');
+                              if (!isReturn) {
+                                const c = pay.code || pay.receiptCode || pay.id;
+                                if (c && !seenReceiptCodes.has(c)) {
+                                  seenReceiptCodes.add(c);
+                                  customerReceipts.push({ ...pay, parentEntryTitle: ent.title, parentEntryCode: ent.code });
+                                }
+                              }
+                            });
+                          });
+
+                          (item.entries || []).forEach((ent) => {
+                            if (ent.code?.startsWith('PT-')) {
+                              const c = ent.code || ent.id;
+                              if (c && !seenReceiptCodes.has(c)) {
+                                seenReceiptCodes.add(c);
+                                customerReceipts.push({
+                                  id: ent.id,
+                                  code: ent.code,
+                                  receiptCode: ent.code,
+                                  title: ent.title,
+                                  date: ent.date,
+                                  time: ent.time || '08:30',
+                                  amount: ent.paidAmount || (ent as any).amount || 0,
+                                  method: (ent as any).method || 'Chuyển khoản',
+                                  debitAccount: (ent as any).debitAccount || '1121',
+                                  creditAccount: (ent as any).creditAccount || '131',
+                                });
+                              }
+                            }
+                          });
+
+                          const histories = customerPaymentHistories[item.id] || [];
+                          histories.forEach((h) => {
+                            const c = h.code || h.id;
+                            if (c && !seenReceiptCodes.has(c)) {
+                              seenReceiptCodes.add(c);
+                              customerReceipts.push({
+                                id: h.id,
+                                code: h.code,
+                                receiptCode: h.code,
+                                title: h.note || `Thu tiền khách hàng theo phiếu ${h.code}`,
+                                date: h.dateTime,
+                                time: h.dateTime.includes(' ') ? h.dateTime.split(' ')[0] : '08:30',
+                                amount: h.amount,
+                                method: h.method || 'Chuyển khoản',
+                                debitAccount: h.debitAccount || '1121',
+                                creditAccount: h.creditAccount || '131',
+                                bankAccount: h.bankAccount,
+                                bankRef: h.bankRef,
+                                payerName: h.payerName,
+                                payerAddress: h.payerAddress,
+                                accountant: h.accountant,
+                                originalDocsCount: h.originalDocsCount,
+                                note: h.note,
+                              });
+                            }
+                          });
+
+                          const visibleEntries = (item.entries || [])
                             .filter((entry) => !entry.code?.startsWith('PT-'))
                             .filter((entry) => {
                               if (statusFilter === 'all') return true;
@@ -3636,59 +3709,78 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                 return entry.status === 'overdue';
                               }
                               return entry.status === statusFilter;
-                            })
-                            .map((entry) => {
-                              const stagePayments = entry.payments || [];
-                              const isStageDone = (entry.remainingAmount !== undefined ? entry.remainingAmount : (entry.contractValue - (entry.paidAmount || 0))) <= 0;
-                              return (
-                                <React.Fragment key={entry.id}>
-                                  <tr
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedSubEntry({ entry, parent: item, type: 'receivable' });
-                                      setSubEntryDetailOpen(true);
-                                    }}
-                                    title="Nhấn để xem chi tiết khoản nợ"
-                                    style={{
-                                      backgroundColor: '#f8fafc',
-                                      borderBottom: stagePayments.length > 0 ? '1px dashed #e2e8f0' : '1px solid #f1f5f9',
-                                      cursor: 'pointer',
-                                      transition: 'background-color 0.15s ease',
-                                    }}
-                                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
-                                  >
-                                    {/* Cột Khách hàng: Giảm chiều cao, font thường, mã phiếu và giờ ngày tháng trên cùng dòng cách nhau | */}
-                                    <td style={{ padding: '8px 14px 8px 36px' }}>
-                                      <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                        <span style={{ color: '#0369a1', fontWeight: 700 }}>{entry.code}</span>
-                                        <span style={{ color: '#cbd5e1' }}>|</span>
-                                        <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 400 }}>
-                                          {entry.time || '08:30'} • {entry.date}
-                                        </span>
-                                        {isStageDone ? (
-                                          <span style={{ fontSize: '0.6875rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#dcfce7', color: '#15803d', fontWeight: 700 }}>
-                                            Đã thu đủ
+                            });
+
+                          return (
+                            <React.Fragment>
+                              {/* 1. CÁC ĐƠN BÁN HÀNG: Chỉ hiển thị các khoản hàng trả lại lồng bên trong đơn tương ứng */}
+                              {visibleEntries.map((entry) => {
+                                const stagePayments = entry.payments || [];
+                                // Chỉ giữ các khoản giảm trừ do hàng trả lại bên trong đơn hàng
+                                const returnDeductions = stagePayments.filter((pay: any) => {
+                                  return (
+                                    pay.isReturn ||
+                                    pay.type === 'return_deduction' ||
+                                    String(pay.code || pay.receiptCode || '').startsWith('ERR-') ||
+                                    String(pay.title || '').toLowerCase().includes('trả lại') ||
+                                    String(pay.note || '').toLowerCase().includes('trả lại') ||
+                                    String(pay.title || '').toLowerCase().includes('hàng lỗi')
+                                  );
+                                });
+                                const returnDeductionsTotal = returnDeductions.reduce((sum: number, r: any) => sum + (Number(r.amount) || 0), 0);
+                                const entryDisplayPaid = returnDeductionsTotal > 0 ? returnDeductionsTotal : (entry.paidAmount || 0);
+                                const entryDisplayRemaining = Math.max(0, (entry.contractValue || (entry as any).amount || 0) - entryDisplayPaid);
+                                const isStageDone = entryDisplayRemaining <= 0;
+
+                                return (
+                                  <React.Fragment key={entry.id}>
+                                    <tr
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedSubEntry({ entry, parent: item, type: 'receivable' });
+                                        setSubEntryDetailOpen(true);
+                                      }}
+                                      title="Nhấn để xem chi tiết khoản nợ"
+                                      style={{
+                                        backgroundColor: '#f8fafc',
+                                        borderBottom: returnDeductions.length > 0 ? '1px dashed #e2e8f0' : '1px solid #f1f5f9',
+                                        cursor: 'pointer',
+                                        transition: 'background-color 0.15s ease',
+                                      }}
+                                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+                                    >
+                                      {/* Cột Khách hàng: Mã phiếu và giờ ngày tháng trên cùng dòng cách nhau | */}
+                                      <td style={{ padding: '8px 14px 8px 36px' }}>
+                                        <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                          <span style={{ color: '#0369a1', fontWeight: 700 }}>{entry.code}</span>
+                                          <span style={{ color: '#cbd5e1' }}>|</span>
+                                          <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 400 }}>
+                                            {entry.time || '08:30'} • {entry.date}
                                           </span>
-                                        ) : (entry.paidAmount || 0) > 0 ? (
-                                          <span style={{ fontSize: '0.6875rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#fef3c7', color: '#b45309', fontWeight: 700 }}>
-                                            Thu một phần
-                                          </span>
-                                        ) : null}
-                                      </div>
-                                      <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '2px', fontWeight: 500 }}>
-                                        {entry.title}
-                                      </div>
-                                    </td>
+                                          {isStageDone ? (
+                                            <span style={{ fontSize: '0.6875rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#dcfce7', color: '#15803d', fontWeight: 700 }}>
+                                              Đã thu đủ
+                                            </span>
+                                          ) : entryDisplayPaid > 0 ? (
+                                            <span style={{ fontSize: '0.6875rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#fef3c7', color: '#b45309', fontWeight: 700 }}>
+                                              {returnDeductionsTotal > 0 ? 'Giảm trừ một phần' : 'Thu một phần'}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                        <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '2px', fontWeight: 500 }}>
+                                          {entry.title}
+                                        </div>
+                                      </td>
 
                                       {/* Cột Số tiền gốc: font thường không đậm */}
                                       <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 600, color: '#334155', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
                                         {formatNumberGroup(entry.contractValue || (entry as any).amount || 0)}
                                       </td>
 
-                                      {/* Cột Đã thanh toán: font thường không đậm */}
-                                      <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: (entry.paidAmount || 0) > 0 ? '#059669' : '#94a3b8', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                        {formatNumberGroup(entry.paidAmount || 0)}
+                                      {/* Cột Đã thanh toán / Giảm trừ: font thường không đậm */}
+                                      <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: entryDisplayPaid > 0 ? (returnDeductionsTotal > 0 ? '#d97706' : '#059669') : '#94a3b8', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                        {formatNumberGroup(entryDisplayPaid)}
                                       </td>
 
                                       {/* Cột Hạn thanh toán: font thường không đậm */}
@@ -3697,145 +3789,267 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                       </td>
 
                                       {/* Cột Còn lại: font thường không đậm */}
-                                      <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: (entry.remainingAmount !== undefined ? entry.remainingAmount : (entry.contractValue || (entry as any).amount || 0)) > 0 ? '#dc2626' : '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                        {formatNumberGroup(entry.remainingAmount !== undefined ? entry.remainingAmount : (entry.contractValue || (entry as any).amount || 0))}
+                                      <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: entryDisplayRemaining > 0 ? '#dc2626' : '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                        {formatNumberGroup(entryDisplayRemaining)}
                                       </td>
 
-                                      {/* Cột Thao tác: để trống cho đồng bộ và gọn gàng */}
+                                      {/* Cột Thao tác */}
                                       <td style={{ padding: '8px 6px', textAlign: 'center' }}>
                                       </td>
                                     </tr>
 
-                                    {/* CÁC PHIẾU THU HOẶC GIẢM TRỪ CÔNG NỢ ĐƯỢC NHÓM TRỰC TIẾP VÀO ĐỢT NÀY */}
-                                    {stagePayments.map((pay: any, pIdx: number) => {
-                                      const isReturnDeduction =
-                                        pay.isReturn ||
-                                        pay.type === 'return_deduction' ||
-                                        String(pay.code || pay.receiptCode || '').startsWith('ERR-') ||
-                                        String(pay.title || '').toLowerCase().includes('trả lại') ||
-                                        String(pay.note || '').toLowerCase().includes('trả lại') ||
-                                        String(pay.title || '').toLowerCase().includes('hàng lỗi');
-
+                                    {/* CHỈ CÁC CHỨNG TỪ GIẢM TRỪ CÔNG NỢ DO TRẢ LẠI HÀNG ĐƯỢC ĐẶT TRONG ĐƠN HÀNG NÀY */}
+                                    {returnDeductions.map((pay: any, pIdx: number) => {
                                       return (
-                                      <tr
-                                        key={pay.id || `pay-${pIdx}`}
-                                        style={{
-                                          backgroundColor: '#f1f5f9',
-                                          borderBottom: pIdx === stagePayments.length - 1 ? '1px solid #e2e8f0' : '1px dashed #e2e8f0',
-                                          fontSize: '0.7813rem',
-                                        }}
-                                      >
-                                        {/* Cột Khách hàng: Thụt lề với ký hiệu nhánh ↳ và badge Phiếu thu / Giảm trừ công nợ */}
-                                        <td style={{ padding: '6px 14px 6px 56px' }}>
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                            <span style={{ color: isReturnDeduction ? '#d97706' : '#059669', fontWeight: 800 }}>↳</span>
-                                            <span
-                                              style={{
-                                                backgroundColor: isReturnDeduction ? '#fef3c7' : '#dcfce7',
-                                                color: isReturnDeduction ? '#b45309' : '#15803d',
-                                                border: `1px solid ${isReturnDeduction ? '#fde68a' : '#86efac'}`,
-                                                padding: '1px 6px',
-                                                borderRadius: '4px',
-                                                fontSize: '0.6875rem',
-                                                fontWeight: 700,
-                                              }}
-                                            >
-                                              {isReturnDeduction ? 'Giảm trừ công nợ' : 'Phiếu thu'}
-                                            </span>
-                                            <span style={{ fontWeight: 700, color: '#0f172a' }}>{pay.code || pay.receiptCode}</span>
-                                            <span style={{ color: '#cbd5e1' }}>|</span>
-                                            <span style={{ color: '#64748b', fontSize: '0.7188rem' }}>
-                                              {pay.time || '08:30'} • {pay.date}
-                                            </span>
-                                            <span style={{ color: isReturnDeduction ? '#b45309' : '#64748b', fontSize: '0.7188rem', fontStyle: 'italic' }}>
-                                              ({isReturnDeduction ? (pay.method || 'Cấn trừ hàng trả lại') : (pay.method || 'Chuyển khoản')})
-                                            </span>
-                                          </div>
-                                          <div style={{ fontSize: '0.7188rem', color: '#64748b', marginTop: '2px', paddingLeft: '18px' }}>
-                                            {pay.title || pay.note || (isReturnDeduction ? `Giảm trừ công nợ do trả lại hàng theo ${pay.code || pay.receiptCode}` : `Thu tiền khách hàng theo phiếu ${pay.code || pay.receiptCode}`)}
-                                          </div>
-                                        </td>
-
-                                        {/* Số tiền gốc của phiếu thu */}
-                                        <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', color: '#94a3b8' }}>
-                                          —
-                                        </td>
-
-                                        {/* Đã thanh toán / Giảm trừ */}
-                                        <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 700, color: isReturnDeduction ? '#d97706' : '#059669' }}>
-                                          {isReturnDeduction ? '-' : '+'}{formatNumberGroup(pay.amount)}
-                                        </td>
-
-                                        {/* Hạn thanh toán / Trạng thái */}
-                                        <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'center', color: isReturnDeduction ? '#d97706' : '#059669', fontWeight: 600, fontSize: '0.75rem' }}>
-                                          {isReturnDeduction ? 'Đã giảm trừ' : 'Đã thu'}
-                                        </td>
-
-                                        {/* Còn lại */}
-                                        <td style={{ padding: '6px 14px', textAlign: 'right', color: '#94a3b8' }}>
-                                          <span className="hidden sm:inline">—</span>
-                                          <span className={`sm:hidden font-bold ${isReturnDeduction ? 'text-amber-600' : 'text-emerald-600'}`}>{isReturnDeduction ? '-' : '+'}{formatNumberGroup(pay.amount)}</span>
-                                        </td>
-
-                                      <td style={{ padding: '6px 8px', textAlign: 'center' }}>
-                                        <button
-                                          type="button"
-                                          title={isReturnDeduction ? "Xem chứng từ giảm trừ công nợ A4" : "Xem và in phiếu thu A4"}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            const isBankTransfer = !isReturnDeduction && ((pay.method || '').toLowerCase().includes('khoản') || (pay.method || '').toLowerCase().includes('ngân hàng'));
-                                            setReceiptToPrint({
-                                              code: pay.code || pay.receiptCode || (isReturnDeduction ? 'BBGT-20261109' : 'PT-20261004'),
-                                              date: pay.date || item.createdAt || '23/10/2026',
-                                              customerName: item.customerName,
-                                              customerAddress: item.customerAddress || '',
-                                              amount: pay.amount,
-                                              reason: pay.title || pay.note || (isReturnDeduction ? `Giảm trừ công nợ do trả lại hàng - ${entry.title}` : `Thu tiền khách hàng - ${entry.title}`),
-                                              contractCode: item.code,
-                                              stageTitle: entry.title,
-                                              paymentMethod: isReturnDeduction ? (pay.method || 'Cấn trừ hàng trả lại') : (pay.method || 'Chuyển khoản'),
-                                              debitAccount: isReturnDeduction ? '5212' : isBankTransfer ? '1121' : '1111',
-                                              creditAccount: '131',
-                                              notes: isReturnDeduction ? 'Hồ sơ hàng trả lại (ERR)' : isBankTransfer ? 'Giấy báo Có ngân hàng' : '01 Chứng từ gốc',
-                                              creator: getLoggedInUserName(user) || 'Nguyễn Thị Tuyết',
-                                              accountant: 'Mai Thị Ngọc',
-                                              cashier: '',
-                                              director: 'Hà Hải Lâm',
-                                            });
-                                            setIsPrintReceiptModalOpen(true);
-                                          }}
-                                          onMouseEnter={(e) => {
-                                            e.currentTarget.style.backgroundColor = isReturnDeduction ? '#fef3c7' : '#dbeafe';
-                                            e.currentTarget.style.borderColor = isReturnDeduction ? '#fde68a' : '#93c5fd';
-                                          }}
-                                          onMouseLeave={(e) => {
-                                            e.currentTarget.style.backgroundColor = isReturnDeduction ? '#fffbeb' : '#eff6ff';
-                                            e.currentTarget.style.borderColor = isReturnDeduction ? '#fde68a' : '#bfdbfe';
-                                          }}
+                                        <tr
+                                          key={pay.id || `return-${pIdx}`}
                                           style={{
-                                            width: '24px',
-                                            height: '24px',
-                                            borderRadius: '4px',
-                                            border: `1px solid ${isReturnDeduction ? '#fde68a' : '#bfdbfe'}`,
-                                            backgroundColor: isReturnDeduction ? '#fffbeb' : '#eff6ff',
-                                            color: isReturnDeduction ? '#d97706' : '#2563eb',
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            cursor: 'pointer',
-                                            padding: 0,
-                                            transition: 'all 0.15s ease',
+                                            backgroundColor: '#f1f5f9',
+                                            borderBottom: pIdx === returnDeductions.length - 1 ? '1px solid #e2e8f0' : '1px dashed #e2e8f0',
+                                            fontSize: '0.7813rem',
                                           }}
                                         >
-                                          <Printer size={12} />
-                                        </button>
-                                      </td>
-                                    </tr>
-                                    );
-                                  })}
-                                </React.Fragment>
-                              );
-                            })}
+                                          {/* Cột Khách hàng: Thụt lề với ký hiệu nhánh ↳ và badge Giảm trừ công nợ */}
+                                          <td style={{ padding: '6px 14px 6px 56px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                              <span style={{ color: '#d97706', fontWeight: 800 }}>↳</span>
+                                              <span
+                                                style={{
+                                                  backgroundColor: '#fef3c7',
+                                                  color: '#b45309',
+                                                  border: '1px solid #fde68a',
+                                                  padding: '1px 6px',
+                                                  borderRadius: '4px',
+                                                  fontSize: '0.6875rem',
+                                                  fontWeight: 700,
+                                                }}
+                                              >
+                                                Giảm trừ công nợ
+                                              </span>
+                                              <span style={{ fontWeight: 700, color: '#0f172a' }}>{pay.code || pay.receiptCode}</span>
+                                              <span style={{ color: '#cbd5e1' }}>|</span>
+                                              <span style={{ color: '#64748b', fontSize: '0.7188rem' }}>
+                                                {pay.time || '08:30'} • {pay.date}
+                                              </span>
+                                              <span style={{ color: '#b45309', fontSize: '0.7188rem', fontStyle: 'italic' }}>
+                                                ({pay.method || 'Cấn trừ hàng trả lại'})
+                                              </span>
+                                            </div>
+                                            <div style={{ fontSize: '0.7188rem', color: '#64748b', marginTop: '2px', paddingLeft: '18px' }}>
+                                              {pay.title || pay.note || `Giảm trừ công nợ do trả lại hàng theo ${pay.code || pay.receiptCode}`}
+                                            </div>
+                                          </td>
+
+                                          {/* Số tiền gốc */}
+                                          <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', color: '#94a3b8' }}>
+                                            —
+                                          </td>
+
+                                          {/* Đã giảm trừ */}
+                                          <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 700, color: '#d97706' }}>
+                                            -{formatNumberGroup(pay.amount)}
+                                          </td>
+
+                                          {/* Trạng thái */}
+                                          <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'center', color: '#d97706', fontWeight: 600, fontSize: '0.75rem' }}>
+                                            Đã giảm trừ
+                                          </td>
+
+                                          {/* Còn lại */}
+                                          <td style={{ padding: '6px 14px', textAlign: 'right', color: '#94a3b8' }}>
+                                            <span className="hidden sm:inline">—</span>
+                                            <span className="sm:hidden font-bold text-amber-600">-{formatNumberGroup(pay.amount)}</span>
+                                          </td>
+
+                                          {/* Nút xem chứng từ giảm trừ */}
+                                          <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                                            <button
+                                              type="button"
+                                              title="Xem chứng từ giảm trừ công nợ A4"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setReceiptToPrint({
+                                                  code: pay.code || pay.receiptCode || 'BBGT-20261109',
+                                                  date: pay.date || item.createdAt || '09/11/2026',
+                                                  customerName: item.customerName,
+                                                  customerAddress: item.customerAddress || '',
+                                                  amount: pay.amount,
+                                                  reason: pay.title || pay.note || `Giảm trừ công nợ do trả lại hàng - ${entry.title}`,
+                                                  contractCode: item.code,
+                                                  stageTitle: entry.title,
+                                                  paymentMethod: pay.method || 'Cấn trừ hàng trả lại',
+                                                  debitAccount: '5212',
+                                                  creditAccount: '131',
+                                                  notes: 'Hồ sơ hàng trả lại (ERR)',
+                                                  creator: getLoggedInUserName(user) || 'Nguyễn Thị Tuyết',
+                                                  accountant: 'Mai Thị Ngọc',
+                                                  cashier: '',
+                                                  director: 'Hà Hải Lâm',
+                                                });
+                                                setIsPrintReceiptModalOpen(true);
+                                              }}
+                                              onMouseEnter={(e) => {
+                                                e.currentTarget.style.backgroundColor = '#fef3c7';
+                                                e.currentTarget.style.borderColor = '#fde68a';
+                                              }}
+                                              onMouseLeave={(e) => {
+                                                e.currentTarget.style.backgroundColor = '#fffbeb';
+                                                e.currentTarget.style.borderColor = '#fde68a';
+                                              }}
+                                              style={{
+                                                width: '24px',
+                                                height: '24px',
+                                                borderRadius: '4px',
+                                                border: '1px solid #fde68a',
+                                                backgroundColor: '#fffbeb',
+                                                color: '#d97706',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                cursor: 'pointer',
+                                                padding: 0,
+                                                transition: 'all 0.15s ease',
+                                              }}
+                                            >
+                                              <Printer size={12} />
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </React.Fragment>
+                                );
+                              })}
+
+                              {/* 2. CÁC PHIẾU THU ĐƯỢC ĐẶT Ở NGOÀI CÁC ĐƠN HÀNG, CÙNG CẤP VỚI ĐƠN BÁN HÀNG */}
+                              {customerReceipts.map((pay: any, pIdx: number) => {
+                                const isBankTransfer = (pay.method || '').toLowerCase().includes('khoản') || (pay.method || '').toLowerCase().includes('ngân hàng');
+                                return (
+                                  <tr
+                                    key={pay.id || `cust-receipt-${pIdx}`}
+                                    style={{
+                                      backgroundColor: '#f8fafc',
+                                      borderBottom: '1px solid #e2e8f0',
+                                      transition: 'background-color 0.15s ease',
+                                    }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+                                  >
+                                    {/* Cột Khách hàng: Thụt lề 36px đúng bằng cấp độ của đơn hàng DBH */}
+                                    <td style={{ padding: '8px 14px 8px 36px' }}>
+                                      <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                        <span
+                                          style={{
+                                            backgroundColor: '#dcfce7',
+                                            color: '#15803d',
+                                            border: '1px solid #86efac',
+                                            padding: '1px 6px',
+                                            borderRadius: '4px',
+                                            fontSize: '0.6875rem',
+                                            fontWeight: 700,
+                                          }}
+                                        >
+                                          Phiếu thu
+                                        </span>
+                                        <span style={{ color: '#0369a1', fontWeight: 700 }}>{pay.code || pay.receiptCode}</span>
+                                        <span style={{ color: '#cbd5e1' }}>|</span>
+                                        <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 400 }}>
+                                          {pay.time || '08:30'} • {pay.date}
+                                        </span>
+                                        <span style={{ color: '#64748b', fontSize: '0.75rem', fontStyle: 'italic', fontWeight: 400 }}>
+                                          ({pay.method || 'Chuyển khoản'})
+                                        </span>
+                                      </div>
+                                      <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '2px', fontWeight: 500 }}>
+                                        {pay.title || pay.note || `Thu tiền khách hàng theo phiếu ${pay.code || pay.receiptCode}`}
+                                      </div>
+                                    </td>
+
+                                    {/* Cột Số tiền gốc: để trống hoặc — */}
+                                    <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'right', color: '#94a3b8' }}>
+                                      —
+                                    </td>
+
+                                    {/* Cột Đã thanh toán: Hiển thị số tiền đã thu */}
+                                    <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                      +{formatNumberGroup(pay.amount)}
+                                    </td>
+
+                                    {/* Cột Hạn thanh toán / Trạng thái */}
+                                    <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'center', color: '#059669', fontWeight: 600, fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                      Đã thu
+                                    </td>
+
+                                    {/* Cột Còn lại */}
+                                    <td style={{ padding: '8px 14px', textAlign: 'right', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                                      <span className="hidden sm:inline">—</span>
+                                      <span className="sm:hidden font-bold text-emerald-600">+{formatNumberGroup(pay.amount)}</span>
+                                    </td>
+
+                                    {/* Cột Thao tác: Nút in phiếu thu A4 */}
+                                    <td style={{ padding: '8px 8px', textAlign: 'center' }}>
+                                      <button
+                                        type="button"
+                                        title="Xem và in phiếu thu A4"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setReceiptToPrint({
+                                            code: pay.code || pay.receiptCode || 'PT-20261004',
+                                            date: pay.date || item.createdAt || '09/11/2026',
+                                            customerName: item.customerName,
+                                            customerAddress: pay.payerAddress || item.customerAddress || '',
+                                            amount: pay.amount,
+                                            reason: pay.title || pay.note || `Thu tiền khách hàng theo phiếu ${pay.code || pay.receiptCode}`,
+                                            contractCode: item.code,
+                                            stageTitle: pay.parentEntryTitle || item.customerName,
+                                            paymentMethod: pay.method || 'Chuyển khoản',
+                                            debitAccount: pay.debitAccount || (isBankTransfer ? '1121' : '1111'),
+                                            creditAccount: pay.creditAccount || '131',
+                                            notes: [
+                                              pay.bankAccount ? `TK: ${pay.bankAccount}` : '',
+                                              pay.bankRef ? `Số GD/UNC: ${pay.bankRef}` : '',
+                                              pay.originalDocsCount ? `Kèm theo: ${pay.originalDocsCount}` : '',
+                                              pay.note || pay.title,
+                                            ].filter(Boolean).join(' | ') || (isBankTransfer ? 'Giấy báo Có ngân hàng' : '01 Chứng từ gốc'),
+                                            creator: getLoggedInUserName(user) || 'Phạm Thu Hằng (Kế toán)',
+                                            accountant: pay.accountant || 'Trần Bích Thủy (Kế toán trưởng)',
+                                            cashier: isBankTransfer ? '' : 'Vũ Thu Trang (Thủ quỹ)',
+                                            director: 'Hà Hải Lâm',
+                                          });
+                                          setIsPrintReceiptModalOpen(true);
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          e.currentTarget.style.backgroundColor = '#dbeafe';
+                                          e.currentTarget.style.borderColor = '#93c5fd';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          e.currentTarget.style.backgroundColor = '#eff6ff';
+                                          e.currentTarget.style.borderColor = '#bfdbfe';
+                                        }}
+                                        style={{
+                                          width: '24px',
+                                          height: '24px',
+                                          borderRadius: '4px',
+                                          border: '1px solid #bfdbfe',
+                                          backgroundColor: '#eff6ff',
+                                          color: '#2563eb',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          cursor: 'pointer',
+                                          padding: 0,
+                                          transition: 'all 0.15s ease',
+                                        }}
+                                      >
+                                        <Printer size={12} />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </React.Fragment>
+                          );
+                        })()}
                       </React.Fragment>
                     );
                   }

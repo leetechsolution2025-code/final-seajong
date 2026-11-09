@@ -159,7 +159,7 @@ export function isOpeningBalanceEntry(entry?: any): boolean {
 // ─── ĐỌC SỐ TIỀN THÀNH CHỮ TIẾNG VIỆT ─────────────────────────────────
 export function docSoTien(soTien: number): string {
   if (!Number.isFinite(soTien) || isNaN(soTien) || soTien <= 0) return 'Không đồng';
-  const target = Math.round(Math.abs(soTien));
+  const target = Math.round(Math.round(Math.abs(soTien)) / 1000) * 1000;
   if (target === 0) return 'Không đồng';
   const chuSo = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
 
@@ -313,7 +313,7 @@ export interface DebtReconciliationModalProps {
   user?: any;
 }
 
-const formatCurrency = (val: number) => (Number(val) || 0).toLocaleString('vi-VN');
+const formatCurrency = (val: number) => (Math.round((Number(val) || 0) / 1000) * 1000).toLocaleString('vi-VN');
 
 export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = ({
   open,

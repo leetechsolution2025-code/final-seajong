@@ -9,17 +9,19 @@ export interface PaymentVoucherPrintModalProps {
   voucher: ExpenseItem | null;
 }
 
-// Hàm định dạng số có dấu phân cách hàng nghìn
+// Hàm định dạng số có dấu phân cách hàng nghìn và làm tròn đến hàng nghìn
 const formatNumber = (val: number | string | undefined | null): string => {
   if (val === undefined || val === null || val === '') return '0';
   const num = typeof val === 'number' ? val : Number(String(val).replace(/\D/g, ''));
   if (isNaN(num)) return '0';
-  return num.toLocaleString('vi-VN');
+  const rounded = Math.round(num / 1000) * 1000;
+  return rounded.toLocaleString('vi-VN');
 };
 
-// Hàm đọc số tiền thành chữ tiếng Việt
+// Hàm đọc số tiền thành chữ tiếng Việt (làm tròn đến hàng nghìn)
 const convertNumberToVietnameseWords = (num: number): string => {
-  if (!num || isNaN(num) || num <= 0) return 'Không đồng chẵn.';
+  const rounded = Math.round((Number(num) || 0) / 1000) * 1000;
+  if (!rounded || isNaN(rounded) || rounded <= 0) return 'Không đồng chẵn.';
   const digits = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
 
   const readThreeDigits = (n: number, showLeadingZeroHundred: boolean): string => {
@@ -49,7 +51,7 @@ const convertNumberToVietnameseWords = (num: number): string => {
   };
 
   const scaleNames = ['', 'nghìn', 'triệu', 'tỷ', 'nghìn tỷ', 'triệu tỷ'];
-  let remaining = Math.floor(num);
+  let remaining = Math.floor(rounded);
   const blocks: number[] = [];
   while (remaining > 0) {
     blocks.push(remaining % 1000);
