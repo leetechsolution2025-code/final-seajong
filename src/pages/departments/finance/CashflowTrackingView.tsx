@@ -413,6 +413,7 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
   const [productionQuantities, setProductionQuantities] = useState<Record<string, number | string>>({});
   const [productionDueDate, setProductionDueDate] = useState<string>('');
   const [selectedItemIdForBreakdown, setSelectedItemIdForBreakdown] = useState<string | null>(null);
+  const [isItemSelectOpen, setIsItemSelectOpen] = useState<boolean>(false);
   const [isSubmittingOrderAction, setIsSubmittingOrderAction] = useState<boolean>(false);
   const [showSingleOrderDeleteConfirm, setShowSingleOrderDeleteConfirm] = useState<boolean>(false);
   const [selectedRequest, setSelectedRequest] = useState<RequestApprovalItem | null>(null);
@@ -2632,33 +2633,99 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                     <div className="flex-1 min-h-0 flex flex-col pt-2.5">
                       {/* BỘ CHỌN SẢN PHẨM (KHI ĐƠN HÀNG CÓ NHIỀU HƠN 1 MẶT HÀNG) */}
                       {orderDetails.length > 1 && (
-                        <div className="shrink-0 mb-2">
-                          <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                            Chọn mặt hàng kiểm tra:
+                        <div className="shrink-0 mb-2.5 relative">
+                          <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                            Danh sách hàng hoá
                           </label>
-                          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-                            {orderDetails.map((it: any) => {
-                              const isActive = String(it.id) === String(activeItem?.id);
-                              const itChecked = productionItemIds.includes(String(it.id));
-                              return (
-                                <button
-                                  key={it.id}
-                                  type="button"
-                                  onClick={() => setSelectedItemIdForBreakdown(String(it.id))}
-                                  className={`text-left text-xs px-2.5 py-1.5 rounded-lg border transition-all shrink-0 max-w-[200px] cursor-pointer ${
-                                    isActive
-                                      ? 'border-blue-500 bg-blue-50/80 text-blue-900 font-semibold shadow-xs'
-                                      : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium'
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setIsItemSelectOpen((prev) => !prev)}
+                              className="w-full flex items-center justify-between gap-2 px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg hover:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all text-left shadow-2xs cursor-pointer"
+                            >
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <BoxSeam size={13} className="text-blue-600 shrink-0" />
+                                <span className="font-semibold text-slate-900 truncate text-[12px]">
+                                  {activeItem.tenHang || activeItem.productName}
+                                </span>
+                                {isChecked && (
+                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 text-blue-700 shrink-0">
+                                    Lập SX
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0 ml-2">
+                                <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-800 border border-slate-200">
+                                  {activeItem.soLuong || 1} {activeItem.donVi || 'Bộ'}
+                                </span>
+                                <ChevronDown
+                                  size={12}
+                                  className={`text-slate-500 transition-transform duration-150 ${
+                                    isItemSelectOpen ? 'rotate-180' : ''
                                   }`}
-                                >
-                                  <div className="truncate text-[11.5px]">{it.tenHang || it.productName}</div>
-                                  <div className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
-                                    <span>SL: {it.soLuong}</span>
-                                    {itChecked && <span className="text-blue-600 font-bold">• Lập SX</span>}
-                                  </div>
-                                </button>
-                              );
-                            })}
+                                />
+                              </div>
+                            </button>
+
+                            {/* DROPDOWN MENU */}
+                            {isItemSelectOpen && (
+                              <>
+                                <div
+                                  className="fixed inset-0 z-40"
+                                  onClick={() => setIsItemSelectOpen(false)}
+                                />
+                                <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 py-1 max-h-56 overflow-y-auto divide-y divide-slate-100 animate-in fade-in zoom-in-95 duration-100">
+                                  {orderDetails.map((it: any) => {
+                                    const isActive = String(it.id) === String(activeItem?.id);
+                                    const itChecked = productionItemIds.includes(String(it.id));
+                                    return (
+                                      <button
+                                        key={it.id}
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedItemIdForBreakdown(String(it.id));
+                                          setIsItemSelectOpen(false);
+                                        }}
+                                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-xs text-left transition-colors cursor-pointer ${
+                                          isActive
+                                            ? 'bg-blue-50/80 text-blue-900 font-semibold'
+                                            : 'hover:bg-slate-50 text-slate-700 font-medium'
+                                        }`}
+                                      >
+                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                          <div
+                                            className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${
+                                              isActive
+                                                ? 'bg-blue-600 text-white'
+                                                : 'border border-slate-300'
+                                            }`}
+                                          >
+                                            {isActive && <Check2 size={11} strokeWidth={2} />}
+                                          </div>
+                                          <span className="truncate text-[12px]">
+                                            {it.tenHang || it.productName}
+                                          </span>
+                                          {itChecked && (
+                                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 text-blue-700 shrink-0">
+                                              Lập SX
+                                            </span>
+                                          )}
+                                        </div>
+                                        <span
+                                          className={`px-2 py-0.5 rounded-md text-[11px] font-bold shrink-0 ml-2 ${
+                                            isActive
+                                              ? 'bg-blue-100 text-blue-800'
+                                              : 'bg-slate-100 text-slate-700'
+                                          }`}
+                                        >
+                                          {it.soLuong || 1} {it.donVi || 'Bộ'}
+                                        </span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
                       )}
