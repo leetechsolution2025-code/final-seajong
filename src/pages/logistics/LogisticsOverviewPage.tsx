@@ -317,6 +317,7 @@ export const LogisticsOverviewPage: React.FC = () => {
         page: String(currentPage),
         limit: String(pageSize),
         search: searchTerm,
+        status: filterStatus !== 'all' ? filterStatus : '',
         categoryId: filterType !== 'all' ? filterType : '',
         warehouseId: filterWarehouse !== 'all' ? filterWarehouse : '',
       });
@@ -325,12 +326,8 @@ export const LogisticsOverviewPage: React.FC = () => {
         .then((res) => res.json())
         .then((data) => {
           if (data.success) {
-            let items = data.items || [];
-            if (filterStatus && filterStatus !== 'all') {
-              items = items.filter((it: any) => it.trangThai === filterStatus);
-            }
-            setInventory(items);
-            setTotalInventory(filterStatus !== 'all' ? items.length : data.total || 0);
+            setInventory(data.items || []);
+            setTotalInventory(data.total || 0);
           }
         })
         .catch((err) => console.error('Lỗi tải inventory:', err))

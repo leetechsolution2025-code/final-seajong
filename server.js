@@ -8912,6 +8912,9 @@ app.get('/api/logistics/inventory/stats', async (req, res) => {
         id: true,
         soLuong: true,
         soLuongMin: true,
+        giaBan: true,
+        giaVon: true,
+        giaNhap: true,
         stocks: {
           select: {
             soLuong: true,
@@ -8925,6 +8928,8 @@ app.get('/api/logistics/inventory/stats', async (req, res) => {
     let inStockCount = 0;
     let lowStockCount = 0;
     let outOfStockCount = 0;
+    let totalValue = 0;
+    let totalCostValue = 0;
 
     for (const it of allItems) {
       const relevantStocks = (warehouseId && warehouseId !== 'all')
@@ -8933,6 +8938,12 @@ app.get('/api/logistics/inventory/stats', async (req, res) => {
       const q = relevantStocks.reduce((sum, s) => sum + (s.soLuong || 0), 0);
       const qGiu = relevantStocks.reduce((sum, s) => sum + (s.soLuongGiu || 0), 0);
       const remain = Math.max(0, q - qGiu);
+
+      const price = it.giaBan || 0;
+      const cost = it.giaVon || it.giaNhap || (price * 0.6);
+
+      totalValue += remain * price;
+      totalCostValue += remain * cost;
 
       if (remain <= 0) {
         outOfStockCount++;
@@ -8951,6 +8962,8 @@ app.get('/api/logistics/inventory/stats', async (req, res) => {
       totalQty,
       reservedQty,
       availableQty,
+      totalValue,
+      totalCostValue,
       inStockCount,
       lowStockCount,
       outOfStockCount,
@@ -8969,6 +8982,7 @@ app.get('/api/logistics/inventory', async (req, res) => {
     const exactCode = (req.query.exactCode || '').trim();
     const categoryId = (req.query.categoryId || '').trim();
     const warehouseId = (req.query.warehouseId || '').trim();
+    const status = (req.query.status || '').trim();
     const nolimit = req.query.nolimit === 'true';
     const limit = Math.max(1, parseInt(req.query.limit || req.query.pageSize) || 20);
     const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -9086,14 +9100,20 @@ app.get('/api/logistics/inventory', async (req, res) => {
         soLuongGiu,
         thucTon,
         trangThai,
+        giaBanLe: item.giaBan || 0,
         source: item.loai === 'hang-hoa' ? 'inventory' : (item.loai === 'vat-tu' ? 'material' : 'manufactured'),
         categoryName: item.category?.name || item.erpCategory?.name || '',
       };
     });
 
-    const total = mapped.length;
+    let resultItems = mapped;
+    if (status && status !== 'all') {
+      resultItems = resultItems.filter(it => it.trangThai === status);
+    }
+
+    const total = resultItems.length;
     const totalPages = Math.ceil(total / limit) || 1;
-    const paginated = nolimit ? mapped : mapped.slice(skip, skip + limit);
+    const paginated = nolimit ? resultItems : resultItems.slice(skip, skip + limit);
 
     res.json({
       success: true,

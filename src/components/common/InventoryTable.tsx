@@ -175,6 +175,7 @@ export interface InventoryTableProps {
   loading?: boolean;
   onSelectItem?: (item: InventoryStockItem) => void;
   showPrice?: boolean;
+  onTogglePrice?: () => void;
   emptyText?: string;
 }
 
@@ -183,6 +184,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
   loading = false,
   onSelectItem,
   showPrice = false,
+  onTogglePrice,
   emptyText = 'Không tìm thấy mặt hàng nào trong kho khớp điều kiện',
 }) => {
   return (
@@ -195,7 +197,24 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
             <th className="hidden md:table-cell py-2.5 px-3.5 w-32 text-right">Tồn hệ thống</th>
             <th className="hidden md:table-cell py-2.5 px-3.5 w-28 text-right">Đã giữ</th>
             <th className="hidden md:table-cell py-2.5 px-3.5 w-32 text-right">Tồn thực tế</th>
-            <th className="hidden md:table-cell py-2.5 px-3.5 w-32 text-right">Giá niêm yết</th>
+            <th className="hidden md:table-cell py-2.5 px-3.5 w-36 text-right">
+              <span className="inline-flex items-center gap-1.5 justify-end">
+                <span>Giá niêm yết</span>
+                {onTogglePrice && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onTogglePrice();
+                    }}
+                    title={showPrice ? 'Ẩn giá niêm yết' : 'Hiển thị giá niêm yết'}
+                    className="p-1 text-slate-400 hover:text-slate-700 rounded transition-colors cursor-pointer border-0 bg-transparent"
+                  >
+                    <i className={`bi ${showPrice ? 'bi-eye-slash-fill' : 'bi-eye-fill'} text-xs`} />
+                  </button>
+                )}
+              </span>
+            </th>
             <th className="hidden md:table-cell py-2.5 px-3.5 w-28 text-center">Trạng thái</th>
           </tr>
         </thead>
@@ -325,9 +344,9 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                   </div>
                 </td>
                 <td className="hidden md:table-cell py-2.5 px-3.5 align-top text-right font-medium text-slate-400 text-xs font-mono">
-                  {showPrice && item.giaBanLe ? (
+                  {showPrice && (item.giaBanLe || item.giaBan) ? (
                     <span className="font-semibold text-slate-800">
-                      {Number(item.giaBanLe).toLocaleString('vi-VN')} ₫
+                      {Number(item.giaBanLe || item.giaBan).toLocaleString('vi-VN')} ₫
                     </span>
                   ) : (
                     <span className="tracking-widest font-semibold text-slate-400 select-none">
@@ -737,10 +756,11 @@ export interface WarehouseInventoryViewProps {
 }
 
 export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
-  showPrice = false,
+  showPrice: initialShowPrice = false,
   onExportExcel,
   extraRightActions,
 }) => {
+  const [showPrice, setShowPrice] = useState<boolean>(initialShowPrice);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [filterWarehouse, setFilterWarehouse] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -839,6 +859,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
       page: String(currentPage),
       limit: String(pageSize),
       search: searchTerm,
+      status: filterStatus !== 'all' ? filterStatus : '',
       categoryId: filterCategory !== 'all' ? filterCategory : '',
       warehouseId: filterWarehouse !== 'all' ? filterWarehouse : '',
     });
@@ -847,12 +868,8 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
-          let items: InventoryStockItem[] = data.items || [];
-          if (filterStatus && filterStatus !== 'all') {
-            items = items.filter((it) => it.trangThai === filterStatus);
-          }
-          setInventory(items);
-          setTotalInventory(filterStatus !== 'all' ? items.length : data.total || 0);
+          setInventory(data.items || []);
+          setTotalInventory(data.total || 0);
         }
       })
       .catch((err) => console.error('Lỗi tải inventory:', err))
@@ -902,7 +919,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
         {/* Card 2: Tổng giá trị hàng hoá trong kho */}
         <div
           onClick={() => {
-            setFilterStatus('con-hang');
+            setFilterStatus((prev) => (prev === 'con-hang' ? 'all' : 'con-hang'));
             setCurrentPage(1);
           }}
           className={`flex items-center gap-3.5 p-3 rounded-xl border transition-all cursor-pointer ${
@@ -910,7 +927,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
               ? 'bg-emerald-50/90 border-emerald-300 ring-2 ring-emerald-400/40 shadow-xs'
               : 'bg-white border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30 shadow-2xs'
           }`}
-          title="Bấm để lọc các mặt hàng còn hàng ổn định"
+          title="Bấm để lọc các mặt hàng còn hàng ổn định (hoặc bấm lại để hủy lọc)"
         >
           <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 text-lg shadow-2xs">
             <CashStack size={20} />
@@ -934,7 +951,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
         {/* Card 3: Chạm ngưỡng sắp hết */}
         <div
           onClick={() => {
-            setFilterStatus('sap-het');
+            setFilterStatus((prev) => (prev === 'sap-het' ? 'all' : 'sap-het'));
             setCurrentPage(1);
           }}
           className={`flex items-center gap-3.5 p-3 rounded-xl border transition-all cursor-pointer ${
@@ -942,7 +959,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
               ? 'bg-amber-50/90 border-amber-300 ring-2 ring-amber-400/40 shadow-xs'
               : 'bg-white border-slate-200 hover:border-amber-300 hover:bg-amber-50/30 shadow-2xs'
           }`}
-          title="Bấm để lọc các mặt hàng chạm ngưỡng tồn tối thiểu"
+          title="Bấm để lọc các mặt hàng chạm ngưỡng tồn tối thiểu (hoặc bấm lại để hủy lọc)"
         >
           <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 text-lg shadow-2xs">
             <ExclamationTriangleFill size={20} />
@@ -966,7 +983,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
         {/* Card 4: Hết hàng cần bổ sung */}
         <div
           onClick={() => {
-            setFilterStatus('het-hang');
+            setFilterStatus((prev) => (prev === 'het-hang' ? 'all' : 'het-hang'));
             setCurrentPage(1);
           }}
           className={`flex items-center gap-3.5 p-3 rounded-xl border transition-all cursor-pointer ${
@@ -974,7 +991,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
               ? 'bg-rose-50/90 border-rose-300 ring-2 ring-rose-400/40 shadow-xs'
               : 'bg-white border-slate-200 hover:border-rose-300 hover:bg-rose-50/30 shadow-2xs'
           }`}
-          title="Bấm để lọc các mặt hàng đã hết hàng (thực tồn = 0)"
+          title="Bấm để lọc các mặt hàng đã hết hàng (hoặc bấm lại để hủy lọc)"
         >
           <div className="w-11 h-11 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 text-lg shadow-2xs">
             <XCircleFill size={20} />
@@ -1027,6 +1044,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
         items={inventory}
         loading={loading}
         showPrice={showPrice}
+        onTogglePrice={() => setShowPrice((prev) => !prev)}
         onSelectItem={(item) => setSelectedDetailItem(item)}
       />
 
