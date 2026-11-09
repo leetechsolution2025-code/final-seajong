@@ -195,9 +195,9 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
           <tr className="text-slate-500 text-[11px] sm:text-[11.5px] uppercase tracking-[0.06em] font-bold">
             <th className="py-2.5 px-2.5 sm:px-3.5 md:min-w-[320px]">Hàng hoá & Quy cách</th>
             <th className="py-2.5 px-2 sm:px-3.5 w-14 sm:w-20 text-center whitespace-nowrap">ĐVT</th>
-            <th className="hidden md:table-cell py-2.5 px-3.5 w-32 text-right">Tồn hệ thống</th>
-            <th className="hidden md:table-cell py-2.5 px-3.5 w-28 text-right">Đã giữ</th>
-            <th className="hidden md:table-cell py-2.5 px-3.5 w-32 text-right">Tồn thực tế</th>
+            <th className="hidden md:table-cell py-2.5 px-3.5 w-28 text-right">Tồn hệ thống</th>
+            <th className="hidden md:table-cell py-2.5 px-3.5 w-24 text-right">Đã giữ</th>
+            <th className="hidden md:table-cell py-2.5 px-3.5 w-36 text-right">Tồn thực tế | Min</th>
             <th className="hidden md:table-cell py-2.5 px-3.5 w-36 text-right">
               <span className="inline-flex items-center gap-1.5 justify-end">
                 <span>Giá niêm yết</span>
@@ -319,6 +319,10 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                           <strong className="font-mono text-emerald-700">
                             {(item.thucTon ?? item.soLuong ?? 0).toLocaleString('vi-VN')}
                           </strong>
+                          <span className="text-slate-300 mx-1">|</span>
+                          <span className="font-mono text-slate-500 text-[10px]" title="Định mức tồn tối thiểu (Min)">
+                            {(item.soLuongMin || 0).toLocaleString('vi-VN')}
+                          </span>
                         </span>
                       </div>
                     </div>
@@ -340,8 +344,17 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                   )}
                 </td>
                 <td className="hidden md:table-cell py-2.5 px-3.5 align-top text-right">
-                  <div className="font-bold text-slate-900 text-[13.5px] font-mono">
-                    {(item.thucTon ?? item.soLuong ?? 0).toLocaleString('vi-VN')}
+                  <div className="font-mono flex items-baseline justify-end gap-1.5 whitespace-nowrap">
+                    <span className="font-bold text-slate-900 text-[13.5px]">
+                      {(item.thucTon ?? item.soLuong ?? 0).toLocaleString('vi-VN')}
+                    </span>
+                    <span className="text-slate-300 font-normal text-xs">|</span>
+                    <span
+                      className="font-medium text-slate-500 text-[11px]"
+                      title="Định mức tồn tối thiểu (Min)"
+                    >
+                      {(item.soLuongMin || 0).toLocaleString('vi-VN')}
+                    </span>
                   </div>
                 </td>
                 <td className="hidden md:table-cell py-2.5 px-3.5 align-top text-right font-medium text-slate-400 text-xs font-mono">
