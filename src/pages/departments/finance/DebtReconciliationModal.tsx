@@ -320,8 +320,31 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
     const isDifferentDebt = Boolean(open && debt && debt.id && debt.id !== prevDebtIdRef.current);
 
     if (isJustOpened || isDifferentDebt) {
-      setStartDate('2026-09-01T00:00:00');
-      setEndDate('2026-10-31T23:59:59');
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const lastDayOfMonth = new Date(yyyy, now.getMonth() + 1, 0).getDate();
+      let defaultEnd = `${yyyy}-${mm}-${String(lastDayOfMonth).padStart(2, '0')}T23:59:59`;
+
+      // Nếu có các đơn hàng/đợt nợ có ngày xa hơn tháng hiện tại, tự động mở rộng endDate
+      if (Array.isArray(debt?.entries)) {
+        debt.entries.forEach((en: any) => {
+          const dStr = en.dueDate || en.date;
+          if (dStr) {
+            const iso = parseToIsoDateTime(dStr);
+            if (iso > defaultEnd) {
+              const enDate = new Date(iso);
+              const enYear = enDate.getFullYear();
+              const enMonth = String(enDate.getMonth() + 1).padStart(2, '0');
+              const enLastDay = new Date(enYear, enDate.getMonth() + 1, 0).getDate();
+              defaultEnd = `${enYear}-${enMonth}-${String(enLastDay).padStart(2, '0')}T23:59:59`;
+            }
+          }
+        });
+      }
+
+      setStartDate('2026-01-01T00:00:00');
+      setEndDate(defaultEnd);
       setCurrentPage(1);
       setIsPrintPreviewOpen(false);
       setCollapsedStages({});
@@ -501,7 +524,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
     // Dòng Dư nợ đầu kỳ
     const openingRow = {
       id: 'OPENING_BALANCE',
-      date: '2026-09-01T00:00:00',
+      date: startDate ? startDate.slice(0, 10) + 'T00:00:00' : '2026-01-01T00:00:00',
       ref: 'DK',
       type: 'Dư nợ đầu kỳ',
       increase: 0,
