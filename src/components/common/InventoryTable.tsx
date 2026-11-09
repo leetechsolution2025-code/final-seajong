@@ -608,7 +608,7 @@ export const InventoryDetailOffcanvas: React.FC<InventoryDetailOffcanvasProps> =
       icon={<BoxSeam size={20} />}
       title="Thông tin hàng hoá"
       description={`Mã SKU: ${item.code || 'Chưa cập nhật'}`}
-      width="440px"
+      width="400px"
       position="right"
       footer={
         <div className="flex justify-between items-center w-full">
