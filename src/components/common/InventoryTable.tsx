@@ -22,6 +22,7 @@ import { FullWidthTable } from './FullWidthTable';
 import { Pagination } from './Pagination';
 import { Button } from './Button';
 import { Offcanvas } from './Offcanvas';
+import { ConfirmDialog } from './ConfirmDialog';
 import { HoverImage } from '../ui/HoverImage';
 
 export interface InventoryWarehouseOption {
@@ -849,50 +850,34 @@ export const InventoryDetailOffcanvas: React.FC<InventoryDetailOffcanvasProps> =
               </div>
             )}
 
-            {/* Modal / Dialog xác nhận Bỏ giữ chỗ */}
-            {confirmRelease && (
-              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl space-y-2.5 animate-fadeIn">
-                <div className="font-bold text-rose-900 text-xs flex items-center gap-1.5">
-                  <ExclamationTriangleFill size={14} className="text-rose-600" />
+            {/* Hộp thoại xác nhận ConfirmDialog chuẩn hệ thống */}
+            <ConfirmDialog
+              isOpen={Boolean(confirmRelease)}
+              variant="danger"
+              zIndex={2000}
+              title={
+                confirmRelease?.isAll
+                  ? 'Xác nhận bỏ giữ toàn bộ kho?'
+                  : `Xác nhận bỏ giữ chỗ đơn ${confirmRelease?.hold?.orderCode || 'hàng'}?`
+              }
+              message={
+                confirmRelease?.isAll ? (
                   <span>
-                    {confirmRelease.isAll
-                      ? 'Xác nhận bỏ giữ toàn bộ kho?'
-                      : `Xác nhận bỏ giữ chỗ cho đơn ${confirmRelease.hold?.orderCode || 'này'}?`}
+                    Toàn bộ <strong className="text-rose-700 font-mono">{currentHoldQty.toLocaleString('vi-VN')} {item.donVi || 'sản phẩm'}</strong> đang cam kết sẽ được giải phóng và cộng lại vào tồn thực tế khả dụng.
                   </span>
-                </div>
-                <p className="text-[11.5px] text-rose-700 leading-relaxed">
-                  {confirmRelease.isAll ? (
-                    <>
-                      Toàn bộ <strong>{currentHoldQty} {item.donVi || 'sản phẩm'}</strong> đang cam kết sẽ được giải phóng và cộng lại vào tồn thực tế khả dụng.
-                    </>
-                  ) : (
-                    <>
-                      Số lượng <strong>{confirmRelease.hold?.reservedQty} {item.donVi || 'cái'}</strong> của đơn hàng này sẽ được hủy cam kết giữ và sẵn sàng để xuất cho đơn khác.
-                    </>
-                  )}
-                </p>
-                <div className="flex justify-end gap-2 pt-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setConfirmRelease(null)}
-                    disabled={releasingId !== null}
-                    className="text-xs h-7 px-3 bg-white"
-                  >
-                    Hủy bỏ
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={handleExecuteRelease}
-                    disabled={releasingId !== null}
-                    className="text-xs h-7 px-3"
-                  >
-                    {releasingId !== null ? 'Đang thực hiện...' : 'Đồng ý bỏ giữ'}
-                  </Button>
-                </div>
-              </div>
-            )}
+                ) : (
+                  <span>
+                    Số lượng <strong className="text-rose-700 font-mono">{confirmRelease?.hold?.reservedQty?.toLocaleString('vi-VN')} {item.donVi || 'cái'}</strong> của đơn hàng <strong className="text-sky-700 font-mono">{confirmRelease?.hold?.orderCode}</strong> sẽ được hủy cam kết giữ và sẵn sàng để xuất cho đơn khác.
+                  </span>
+                )
+              }
+              confirmText={releasingId !== null ? 'Đang thực hiện...' : 'Đồng ý bỏ giữ'}
+              cancelText="Hủy bỏ"
+              isLoading={releasingId !== null}
+              onConfirm={handleExecuteRelease}
+              onCancel={() => setConfirmRelease(null)}
+              onClose={() => setConfirmRelease(null)}
+            />
           </div>
         ) : (
           /* ══════════════════════════════════════════════════════════════════
