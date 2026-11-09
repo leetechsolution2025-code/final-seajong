@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { syncPrismaFinanceToAccountingTables } from '../services/prismaFinanceSyncService.js';
+import { db as defaultDb } from './financeAccountingRouter.js';
 
 /**
  * Service đồng bộ đơn hàng bán hàng vào Bộ máy Kế toán & Quản lý Công nợ Seajong
@@ -11,7 +12,7 @@ import { syncPrismaFinanceToAccountingTables } from '../services/prismaFinanceSy
  * 3. Đồng bộ tức thời sang hệ thống bảng SQLite chi tiết qua prismaFinanceSyncService
  */
 
-export async function syncOrderToAccountingAndDebt(orderIdentifier, db = null, prismaInstance = null) {
+export async function syncOrderToAccountingAndDebt(orderIdentifier, db = null, prismaInstance = null, syncSqlite = true) {
   const prisma = prismaInstance || new PrismaClient();
 
   try {
@@ -288,13 +289,16 @@ export async function syncOrderToAccountingAndDebt(orderIdentifier, db = null, p
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // 3. ĐỒNG BỘ SANG BẢNG SQLITE PHỤC VỤ VIEW TÀI CHÍNH KẾ TOÁN (NẾU CÓ DB)
+    // 3. ĐỒNG BỘ SANG BẢNG SQLITE PHỤC VỤ VIEW TÀI CHÍNH KẾ TOÁN (QUẢN LÝ CÔNG NỢ & SỔ NHẬT KÝ)
     // ──────────────────────────────────────────────────────────────────────────
-    if (db) {
-      try {
-        await syncPrismaFinanceToAccountingTables(db);
-      } catch (syncErr) {
-        console.warn('[SyncOrderAccounting] Cảnh báo đồng bộ sang SQLite:', syncErr.message);
+    if (syncSqlite) {
+      const targetDb = db || defaultDb;
+      if (targetDb) {
+        try {
+          await syncPrismaFinanceToAccountingTables(targetDb);
+        } catch (syncErr) {
+          console.warn('[SyncOrderAccounting] Cảnh báo đồng bộ sang SQLite:', syncErr.message);
+        }
       }
     }
 
@@ -323,13 +327,14 @@ export async function syncAllExistingOrdersToAccounting(db = null, prismaInstanc
   console.log(`[SyncAllOrders] Bắt đầu đồng bộ ${allOrders.length} đơn hàng vào Kế toán & Công nợ...`);
   let successCount = 0;
   for (const o of allOrders) {
-    const res = await syncOrderToAccountingAndDebt(o.id, null, prisma);
+    const res = await syncOrderToAccountingAndDebt(o.id, null, prisma, false);
     if (res.success) successCount++;
   }
 
-  if (db) {
+  const targetDb = db || defaultDb;
+  if (targetDb) {
     try {
-      await syncPrismaFinanceToAccountingTables(db);
+      await syncPrismaFinanceToAccountingTables(targetDb);
       console.log('✓ Đã đồng bộ toàn bộ bảng Kế toán - Tài chính SQLite thành công!');
     } catch (e) {
       console.warn('Cảnh báo đồng bộ SQLite:', e.message);
@@ -338,3 +343,4 @@ export async function syncAllExistingOrdersToAccounting(db = null, prismaInstanc
 
   return { total: allOrders.length, synced: successCount };
 }
+
