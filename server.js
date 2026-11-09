@@ -9,8 +9,9 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import * as cheerio from 'cheerio';
-import financeAccountingRouter from './server/financeAccountingRouter.js';
-import { syncPrismaFinanceToAccountingTables } from './services/prismaFinanceSyncService.js';
+const _moduleBust = Date.now();
+const { default: financeAccountingRouter } = await import(`./server/financeAccountingRouter.js?t=${_moduleBust}`);
+const { syncPrismaFinanceToAccountingTables } = await import(`./services/prismaFinanceSyncService.js?t=${_moduleBust}`);
 import {
   computeSalesOverviewStats,
   getCalendarEvents,
@@ -18,10 +19,10 @@ import {
   updateCalendarEvent,
   deleteCalendarEvent,
 } from './server/salesOverviewHelper.js';
-import {
+const {
   syncOrderToAccountingAndDebt,
   syncAllExistingOrdersToAccounting,
-} from './server/orderAccountingSync.js';
+} = await import(`./server/orderAccountingSync.js?t=${_moduleBust}`);
 
 dotenv.config();
 

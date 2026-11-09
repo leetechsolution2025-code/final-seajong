@@ -6737,6 +6737,14 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                         const price = Number(prod.donGia) || 0;
                         const total = Number(prod.thanhTien) || (qty * price);
                         const unit = prod.donViTinh || prod.donVi || 'Bộ';
+                        let parsedNote: any = {};
+                        if (prod.ghiChu && typeof prod.ghiChu === 'string' && prod.ghiChu.trim().startsWith('{')) {
+                          try {
+                            parsedNote = JSON.parse(prod.ghiChu);
+                          } catch {}
+                        }
+                        const displayCode = prod.inventoryCode || parsedNote.code || '';
+                        const displayBom = parsedNote.bomCode || (prod.dinhMucId && !String(prod.dinhMucId).startsWith('cm') ? prod.dinhMucId : '');
 
                         return (
                           <div
@@ -6757,10 +6765,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                 <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.875rem', lineHeight: '1.3' }}>
                                   {prod.tenHang}
                                 </div>
-                                {(prod.dinhMucId || prod.inventoryCode) && (
-                                  <div style={{ fontSize: '0.7188rem', color: '#64748b', marginTop: '3px', display: 'flex', gap: '6px' }}>
-                                    {prod.inventoryCode && <span>Mã: <strong>{prod.inventoryCode}</strong></span>}
-                                    {prod.dinhMucId && <span>• Định mức: <strong>{prod.dinhMucId}</strong></span>}
+                                {(displayCode || displayBom) && (
+                                  <div style={{ fontSize: '0.7188rem', color: '#64748b', marginTop: '3px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                    {displayCode && <span>Mã: <strong>{displayCode}</strong></span>}
+                                    {displayBom && <span>{displayCode ? '• ' : ''}Định mức: <strong>{displayBom}</strong></span>}
                                   </div>
                                 )}
                               </div>

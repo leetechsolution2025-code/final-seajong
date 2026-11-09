@@ -1,24 +1,84 @@
 import express from 'express';
 import sqlite3 from 'sqlite3';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { computeFinancialReports } from '../services/financialReportEngine.js';
 import { syncAllSubledgersToJournal } from '../services/journalSyncService.js';
-import { syncPrismaFinanceToAccountingTables } from '../services/prismaFinanceSyncService.js';
+
+const { syncPrismaFinanceToAccountingTables } = await import(`../services/prismaFinanceSyncService.js?t=${Date.now()}`);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const dbPath = path.join(__dirname, '..', 'prisma', 'dev.db');
 
-export const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) console.error('Lỗi kết nối SQLite tại financeAccountingRouter:', err);
-  else {
-    console.log('✓ FinanceAccountingRouter đã kết nối SQLite:', dbPath);
-    syncPrismaFinanceToAccountingTables(db)
-      .then((res) => console.log('✓ Đã đồng bộ dữ liệu Tài chính - Kế toán từ DB thực tế:', res))
-      .catch((e) => console.warn('Cảnh báo đồng bộ Finance:', e.message));
+let currentInode = null;
+try {
+  currentInode = fs.statSync(dbPath).ino;
+} catch {}
+
+let rawDb = new sqlite3.Database(dbPath);
+if (typeof rawDb.configure === 'function') {
+  rawDb.configure('busyTimeout', 5000);
+}
+
+function ensureHealthyDb() {
+  try {
+    const stat = fs.statSync(dbPath);
+    if (currentInode && stat.ino !== currentInode) {
+      console.warn('⚠️ [FinanceSQLite Auto-Heal] Phát hiện file dev.db được thay mới (inode thay đổi), đang kết nối lại...');
+      try { rawDb.close(); } catch {}
+      currentInode = stat.ino;
+      rawDb = new sqlite3.Database(dbPath);
+      if (typeof rawDb.configure === 'function') rawDb.configure('busyTimeout', 5000);
+    }
+  } catch {}
+  return rawDb;
+}
+
+function reconnectRawDb() {
+  console.warn('⚠️ [FinanceSQLite Auto-Heal] Đang khởi tạo lại kết nối SQLite cho FinanceAccountingRouter...');
+  try { rawDb.close(); } catch {}
+  try {
+    currentInode = fs.statSync(dbPath).ino;
+  } catch {}
+  rawDb = new sqlite3.Database(dbPath);
+  if (typeof rawDb.configure === 'function') rawDb.configure('busyTimeout', 5000);
+  return rawDb;
+}
+
+export const db = new Proxy({}, {
+  get(_target, prop) {
+    const activeDb = ensureHealthyDb();
+    if (prop === 'all' || prop === 'get' || prop === 'exec' || prop === 'run') {
+      return function (...args) {
+        const lastArg = args[args.length - 1];
+        if (typeof lastArg === 'function') {
+          const origCb = lastArg;
+          const wrappedArgs = [...args.slice(0, -1), function (err, ...rest) {
+            if (err && (String(err.message || '').includes('malformed') || String(err.message || '').includes('SQLITE_CORRUPT') || String(err.message || '').includes('closed'))) {
+              const freshDb = reconnectRawDb();
+              return freshDb[prop](...args);
+            }
+            return origCb.call(this, err, ...rest);
+          }];
+          return activeDb[prop](...wrappedArgs);
+        }
+        return activeDb[prop](...args);
+      };
+    }
+    const val = activeDb[prop];
+    if (typeof val === 'function') {
+      return val.bind(activeDb);
+    }
+    return val;
   }
 });
+
+console.log('✓ FinanceAccountingRouter đã kết nối SQLite (Auto-Heal):', dbPath);
+syncPrismaFinanceToAccountingTables(db)
+  .then((res) => console.log('✓ Đã đồng bộ dữ liệu Tài chính - Kế toán từ DB thực tế:', res))
+  .catch((e) => console.warn('Cảnh báo đồng bộ Finance:', e.message));
 
 const router = express.Router();
 
