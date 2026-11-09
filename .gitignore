@@ -5,6 +5,8 @@ dist
 uploads/*
 !uploads/.gitkeep
 dev.db-journal
+*.db-wal
+*.db-shm
 *.tsbuildinfo
 *.bak
 .DS_Store

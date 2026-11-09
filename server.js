@@ -32,7 +32,57 @@ const app = express();
 const PORT = process.env.PORT || 3005;
 const JWT_SECRET = process.env.JWT_SECRET || 'seajong_default_secret_key_2026';
 
-const prisma = new PrismaClient();
+// Khởi tạo PrismaClient với cơ chế Auto-Heal (tự động phục hồi kết nối nếu SQLite gặp lỗi gián đoạn hoặc stale socket)
+let rawPrisma = new PrismaClient();
+const prisma = new Proxy({}, {
+  get(_target, prop) {
+    if (prop === '$transaction' || prop === '$queryRaw' || prop === '$executeRaw' || prop === '$disconnect' || prop === '$connect') {
+      return async (...args) => {
+        try {
+          return await rawPrisma[prop](...args);
+        } catch (err) {
+          const msg = String(err?.message || '');
+          if (msg.includes('malformed') || msg.includes('QueryError') || msg.includes('ConnectorError')) {
+            console.warn('⚠️ [Prisma Auto-Heal] Phát hiện kết nối SQLite lỗi, đang tự động kết nối lại PrismaClient...');
+            try { await rawPrisma.$disconnect(); } catch {}
+            rawPrisma = new PrismaClient();
+            return await rawPrisma[prop](...args);
+          }
+          throw err;
+        }
+      };
+    }
+    const val = rawPrisma[prop];
+    if (typeof val === 'function') {
+      return val.bind(rawPrisma);
+    }
+    if (val && typeof val === 'object') {
+      return new Proxy(val, {
+        get(mTarget, mProp) {
+          const mVal = mTarget[mProp];
+          if (typeof mVal === 'function') {
+            return async (...args) => {
+              try {
+                return await mVal.apply(mTarget, args);
+              } catch (err) {
+                const msg = String(err?.message || '');
+                if (msg.includes('malformed') || msg.includes('QueryError') || msg.includes('ConnectorError')) {
+                  console.warn('⚠️ [Prisma Auto-Heal] Phát hiện kết nối SQLite lỗi, đang tự động kết nối lại PrismaClient...');
+                  try { await rawPrisma.$disconnect(); } catch {}
+                  rawPrisma = new PrismaClient();
+                  return await rawPrisma[prop][mProp](...args);
+                }
+                throw err;
+              }
+            };
+          }
+          return mVal;
+        }
+      });
+    }
+    return val;
+  }
+});
 
 // Thư mục uploads
 const uploadDir = path.join(__dirname, 'public', 'uploads');

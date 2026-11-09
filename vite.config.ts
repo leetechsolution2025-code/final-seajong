@@ -15,7 +15,56 @@ import {
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const vitePrisma = new PrismaClient()
+let rawVitePrisma = new PrismaClient()
+const vitePrisma: PrismaClient = new Proxy({} as any, {
+  get(_target, prop) {
+    if (prop === '$transaction' || prop === '$queryRaw' || prop === '$executeRaw' || prop === '$disconnect' || prop === '$connect') {
+      return async (...args: any[]) => {
+        try {
+          return await (rawVitePrisma as any)[prop](...args)
+        } catch (err: any) {
+          const msg = String(err?.message || '')
+          if (msg.includes('malformed') || msg.includes('QueryError') || msg.includes('ConnectorError')) {
+            console.warn('⚠️ [VitePrisma Auto-Heal] Phát hiện kết nối SQLite lỗi, đang tự động kết nối lại...')
+            try { await rawVitePrisma.$disconnect() } catch {}
+            rawVitePrisma = new PrismaClient()
+            return await (rawVitePrisma as any)[prop](...args)
+          }
+          throw err
+        }
+      }
+    }
+    const val = (rawVitePrisma as any)[prop]
+    if (typeof val === 'function') {
+      return val.bind(rawVitePrisma)
+    }
+    if (val && typeof val === 'object') {
+      return new Proxy(val, {
+        get(mTarget, mProp) {
+          const mVal = mTarget[mProp]
+          if (typeof mVal === 'function') {
+            return async (...args: any[]) => {
+              try {
+                return await mVal.apply(mTarget, args)
+              } catch (err: any) {
+                const msg = String(err?.message || '')
+                if (msg.includes('malformed') || msg.includes('QueryError') || msg.includes('ConnectorError')) {
+                  console.warn('⚠️ [VitePrisma Auto-Heal] Phát hiện kết nối SQLite lỗi, đang tự động kết nối lại...')
+                  try { await rawVitePrisma.$disconnect() } catch {}
+                  rawVitePrisma = new PrismaClient()
+                  return await (rawVitePrisma as any)[prop][mProp](...args)
+                }
+                throw err
+              }
+            }
+          }
+          return mVal
+        }
+      })
+    }
+    return val
+  }
+})
 
 /**
  * Plugin tự động kích hoạt backend Express server.js cùng lúc với Vite dev server
