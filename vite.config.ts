@@ -2548,9 +2548,16 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
       'next-auth/react': path.resolve(__dirname, './src/lib/next-auth-shim.ts'),
     },
+    dedupe: ['react', 'react-dom', 'react-router-dom'],
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react-router-dom'],
   },
   server: {
     port: 5175,
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:3005',

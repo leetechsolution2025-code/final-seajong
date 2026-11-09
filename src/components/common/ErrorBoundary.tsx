@@ -27,11 +27,15 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public handleReload = () => {
-    window.location.reload();
+    window.location.href = window.location.origin + window.location.pathname + '?_t=' + Date.now();
   };
 
-  public handleClearCacheAndReload = () => {
+  public handleClearCacheAndReload = async () => {
     try {
+      if (typeof window !== 'undefined' && 'caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
       sessionStorage.clear();
       // Giữ lại token và user để không bị đăng xuất nếu không cần thiết
       const token = localStorage.getItem('seajong_token');
@@ -40,7 +44,7 @@ export class ErrorBoundary extends Component<Props, State> {
       if (token) localStorage.setItem('seajong_token', token);
       if (user) localStorage.setItem('seajong_user', user);
     } catch {}
-    window.location.reload();
+    window.location.href = window.location.origin + window.location.pathname + '?_t=' + Date.now();
   };
 
   public render() {
