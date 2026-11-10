@@ -8,6 +8,7 @@ import { Button } from '../common/Button';
 import { Input } from '../common/Input';
 import { Select } from '../common/Select';
 import { EmployeesPage } from '../../pages/hr/EmployeesPage';
+import { StationeryToolsPage } from '../../pages/hr/StationeryToolsPage';
 import { DocumentApprovalPage } from '../../pages/departments/bom/DocumentApprovalPage';
 
 interface FeatureDetailViewProps {
@@ -37,6 +38,10 @@ interface FeatureRowItem {
 export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, deptCode }) => {
   if (menuKey === 'employees') {
     return <EmployeesPage />;
+  }
+
+  if (menuKey === 'stationery') {
+    return <StationeryToolsPage />;
   }
 
   if (menuKey === 'approvals' || menuKey === 'requests_approvals' || menuKey === 'hr_requests_approvals') {
@@ -258,11 +263,11 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
         };
       case 'stationery':
         return {
-          title: 'Văn phòng phẩm & Dụng cụ làm việc',
+          title: 'Văn phòng phẩm và dụng cụ',
           groupName: 'HÀNH CHÍNH NHÂN SỰ',
           icon: 'bi-archive',
           color: 'rose',
-          desc: 'Cấp phát sổ tay, đồng phục công ty, bảo hộ lao động và thiết bị văn phòng',
+          desc: 'Quản lý định mức, phê duyệt và cấp phát vật tư doanh nghiệp',
           badge: 'DỤNG CỤ',
         };
 

@@ -406,6 +406,82 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
     return { totalDays, totalPaidDays };
   };
 
+  // Tự động sinh danh sách ngày nghỉ (days) theo khoảng startDate .. endDate
+  const buildDaysForPeriodRange = (
+    periodId: string,
+    periodName: string,
+    startStr: string,
+    endStr: string,
+    existingDays: HolidayDayItem[] = [],
+  ): { days: HolidayDayItem[]; totalDays: number; totalPaidDays: number } => {
+    if (!startStr || !endStr) {
+      const { totalDays, totalPaidDays } = recalculatePeriodCounts(existingDays);
+      return { days: existingDays, totalDays, totalPaidDays };
+    }
+    const sDate = new Date(`${startStr}T00:00:00`);
+    const eDate = new Date(`${endStr}T00:00:00`);
+    if (isNaN(sDate.getTime()) || isNaN(eDate.getTime()) || eDate < sDate) {
+      const { totalDays, totalPaidDays } = recalculatePeriodCounts(existingDays);
+      return { days: existingDays, totalDays, totalPaidDays };
+    }
+    const dowMap = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    const prevByDate = new Map(existingDays.map((d) => [d.date, d]));
+    const generated: HolidayDayItem[] = [];
+    const cur = new Date(sDate);
+    let idx = 1;
+    while (cur <= eDate && idx <= 31) {
+      const ymd = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+      const dow = dowMap[cur.getDay()] || 'T2';
+      const existing = prevByDate.get(ymd);
+      if (existing) {
+        generated.push({ ...existing, dayOfWeek: dow });
+      } else {
+        const isSunday = cur.getDay() === 0;
+        const isPaidDay = !isSunday || startStr === endStr;
+        generated.push({
+          id: `${periodId}-D${idx}-${Date.now()}`,
+          date: ymd,
+          dayOfWeek: dow,
+          name: periodName || 'Nghỉ Lễ / Tết',
+          isPaid: isPaidDay,
+          isCompensation: false,
+          note: isPaidDay ? 'Hưởng 100% lương' : 'Nghỉ hàng tuần',
+        });
+      }
+      cur.setDate(cur.getDate() + 1);
+      idx++;
+    }
+    const { totalDays, totalPaidDays } = recalculatePeriodCounts(generated);
+    return {
+      days: generated,
+      totalDays,
+      totalPaidDays: totalPaidDays > 0 ? totalPaidDays : 1,
+    };
+  };
+
+  // Đồng bộ ngay lập tức với localStorage, API /api/holiday-rules và thông báo cho Bảng chấm công
+  const persistHolidayRulesImmediate = (nextData: HolidayRulesData) => {
+    const payload: HolidayRulesData = {
+      ...nextData,
+      lastUpdated: new Date().toLocaleDateString('vi-VN'),
+      updatedBy: 'Lê Công Vụ - Giám đốc',
+    };
+    try {
+      localStorage.setItem('seajong_holiday_rules', JSON.stringify(payload));
+    } catch {}
+    fetch('/api/holiday-rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(() => {
+        window.dispatchEvent(new CustomEvent('attendance-updated'));
+      })
+      .catch(() => {
+        window.dispatchEvent(new CustomEvent('attendance-updated'));
+      });
+  };
+
   // Mở modal thêm kỳ nghỉ
   const handleOpenAddPeriod = () => {
     setEditingPeriod(null);
@@ -441,34 +517,55 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
       return;
     }
 
-    setHasChanges(true);
+    setHasChanges(false);
     if (editingPeriod) {
       // Cập nhật
-      setData((prev) => ({
-        ...prev,
-        periods: prev.periods.map((p) => {
-          if (p.id !== editingPeriod.id) return p;
-          return {
-            ...p,
-            name: periodForm.name.trim(),
-            code: periodForm.code.trim() || p.code,
-            category: periodForm.category,
-            categoryLabel:
-              periodForm.category === 'statutory'
-                ? 'Theo luật lao động'
-                : periodForm.category === 'company'
-                ? 'Kỳ nghỉ công ty'
-                : 'Đặc thù',
-            startDate: periodForm.startDate,
-            endDate: periodForm.endDate,
-            description: periodForm.description.trim(),
-          };
-        }),
-      }));
+      setData((prev) => {
+        const next: HolidayRulesData = {
+          ...prev,
+          periods: prev.periods.map((p) => {
+            if (p.id !== editingPeriod.id) return p;
+            const built = buildDaysForPeriodRange(
+              p.id,
+              periodForm.name.trim(),
+              periodForm.startDate,
+              periodForm.endDate,
+              p.days,
+            );
+            return {
+              ...p,
+              name: periodForm.name.trim(),
+              code: periodForm.code.trim() || p.code,
+              category: periodForm.category,
+              categoryLabel:
+                periodForm.category === 'statutory'
+                  ? 'Theo luật lao động'
+                  : periodForm.category === 'company'
+                  ? 'Kỳ nghỉ công ty'
+                  : 'Đặc thù',
+              startDate: periodForm.startDate,
+              endDate: periodForm.endDate,
+              days: built.days,
+              totalDays: built.totalDays,
+              totalPaidDays: built.totalPaidDays,
+              description: periodForm.description.trim(),
+            };
+          }),
+        };
+        persistHolidayRulesImmediate(next);
+        return next;
+      });
       if (onShowToast) onShowToast('success', 'Đã cập nhật', 'Thông tin kỳ nghỉ đã được sửa thành công');
     } else {
       // Thêm mới
       const newId = `HP-${selectedYear}-${Date.now()}`;
+      const built = buildDaysForPeriodRange(
+        newId,
+        periodForm.name.trim(),
+        periodForm.startDate,
+        periodForm.endDate,
+        [],
+      );
       const newPeriod: HolidayPeriodItem = {
         id: newId,
         name: periodForm.name.trim(),
@@ -483,17 +580,21 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
         year: selectedYear,
         startDate: periodForm.startDate,
         endDate: periodForm.endDate,
-        totalDays: 0,
-        totalPaidDays: 0,
+        totalDays: built.totalDays,
+        totalPaidDays: built.totalPaidDays,
         description: periodForm.description.trim() || 'Kỳ nghỉ do người dùng thiết lập',
         isStatutory: periodForm.category === 'statutory',
-        days: [],
+        days: built.days,
       };
 
-      setData((prev) => ({
-        ...prev,
-        periods: [newPeriod, ...prev.periods],
-      }));
+      setData((prev) => {
+        const next: HolidayRulesData = {
+          ...prev,
+          periods: [newPeriod, ...prev.periods],
+        };
+        persistHolidayRulesImmediate(next);
+        return next;
+      });
       setExpandedPeriodIds((prev) => [newId, ...prev]);
       if (onShowToast) onShowToast('success', 'Đã thêm kỳ nghỉ', 'Kỳ nghỉ mới đã được tạo thành công');
     }
@@ -510,11 +611,15 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
       cancelText: 'Huỷ',
       type: 'danger',
       onConfirm: () => {
-        setHasChanges(true);
-        setData((prev) => ({
-          ...prev,
-          periods: prev.periods.filter((p) => p.id !== period.id),
-        }));
+        setHasChanges(false);
+        setData((prev) => {
+          const next: HolidayRulesData = {
+            ...prev,
+            periods: prev.periods.filter((p) => p.id !== period.id),
+          };
+          persistHolidayRulesImmediate(next);
+          return next;
+        });
         setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
         if (onShowToast) onShowToast('info', 'Đã xóa', 'Kỳ nghỉ đã được gỡ khỏi danh sách');
       },
@@ -556,24 +661,36 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
       return;
     }
 
-    setHasChanges(true);
+    setHasChanges(false);
     // Tính thứ trong tuần từ date
     const dObj = new Date(dayForm.date);
     const dayIndex = dObj.getDay();
     const dowMap = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
     const calculatedDow = dowMap[dayIndex] || 'T2';
 
-    setData((prev) => ({
-      ...prev,
-      periods: prev.periods.map((p) => {
-        if (p.id !== targetPeriodId) return p;
+    setData((prev) => {
+      const next: HolidayRulesData = {
+        ...prev,
+        periods: prev.periods.map((p) => {
+          if (p.id !== targetPeriodId) return p;
 
-        let newDays: HolidayDayItem[];
-        if (editingDay) {
-          newDays = p.days.map((d) => {
-            if (d.id !== editingDay.id) return d;
-            return {
-              ...d,
+          let newDays: HolidayDayItem[];
+          if (editingDay) {
+            newDays = p.days.map((d) => {
+              if (d.id !== editingDay.id) return d;
+              return {
+                ...d,
+                date: dayForm.date,
+                dayOfWeek: calculatedDow,
+                name: dayForm.name.trim(),
+                isPaid: dayForm.isPaid,
+                isCompensation: dayForm.isCompensation,
+                note: dayForm.note.trim(),
+              };
+            });
+          } else {
+            const newDay: HolidayDayItem = {
+              id: `HD-${Date.now()}`,
               date: dayForm.date,
               dayOfWeek: calculatedDow,
               name: dayForm.name.trim(),
@@ -581,29 +698,21 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
               isCompensation: dayForm.isCompensation,
               note: dayForm.note.trim(),
             };
-          });
-        } else {
-          const newDay: HolidayDayItem = {
-            id: `HD-${Date.now()}`,
-            date: dayForm.date,
-            dayOfWeek: calculatedDow,
-            name: dayForm.name.trim(),
-            isPaid: dayForm.isPaid,
-            isCompensation: dayForm.isCompensation,
-            note: dayForm.note.trim(),
-          };
-          newDays = [...p.days, newDay].sort((a, b) => a.date.localeCompare(b.date));
-        }
+            newDays = [...p.days, newDay].sort((a, b) => a.date.localeCompare(b.date));
+          }
 
-        const { totalDays, totalPaidDays } = recalculatePeriodCounts(newDays);
-        return {
-          ...p,
-          days: newDays,
-          totalDays,
-          totalPaidDays,
-        };
-      }),
-    }));
+          const { totalDays, totalPaidDays } = recalculatePeriodCounts(newDays);
+          return {
+            ...p,
+            days: newDays,
+            totalDays,
+            totalPaidDays,
+          };
+        }),
+      };
+      persistHolidayRulesImmediate(next);
+      return next;
+    });
 
     if (onShowToast) {
       onShowToast(
@@ -625,21 +734,25 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
       cancelText: 'Huỷ',
       type: 'danger',
       onConfirm: () => {
-        setHasChanges(true);
-        setData((prev) => ({
-          ...prev,
-          periods: prev.periods.map((p) => {
-            if (p.id !== periodId) return p;
-            const newDays = p.days.filter((d) => d.id !== day.id);
-            const { totalDays, totalPaidDays } = recalculatePeriodCounts(newDays);
-            return {
-              ...p,
-              days: newDays,
-              totalDays,
-              totalPaidDays,
-            };
-          }),
-        }));
+        setHasChanges(false);
+        setData((prev) => {
+          const next: HolidayRulesData = {
+            ...prev,
+            periods: prev.periods.map((p) => {
+              if (p.id !== periodId) return p;
+              const newDays = p.days.filter((d) => d.id !== day.id);
+              const { totalDays, totalPaidDays } = recalculatePeriodCounts(newDays);
+              return {
+                ...p,
+                days: newDays,
+                totalDays,
+                totalPaidDays,
+              };
+            }),
+          };
+          persistHolidayRulesImmediate(next);
+          return next;
+        });
         setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
         if (onShowToast) onShowToast('info', 'Đã xóa ngày', 'Ngày nghỉ đã được gỡ khỏi kỳ nghỉ');
       },
@@ -648,21 +761,25 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
 
   // Toggle nhanh hưởng lương cho một ngày
   const handleToggleDayPaid = (periodId: string, dayId: string, currentPaid: boolean) => {
-    setHasChanges(true);
-    setData((prev) => ({
-      ...prev,
-      periods: prev.periods.map((p) => {
-        if (p.id !== periodId) return p;
-        const newDays = p.days.map((d) => (d.id === dayId ? { ...d, isPaid: !currentPaid } : d));
-        const { totalDays, totalPaidDays } = recalculatePeriodCounts(newDays);
-        return {
-          ...p,
-          days: newDays,
-          totalDays,
-          totalPaidDays,
-        };
-      }),
-    }));
+    setHasChanges(false);
+    setData((prev) => {
+      const next: HolidayRulesData = {
+        ...prev,
+        periods: prev.periods.map((p) => {
+          if (p.id !== periodId) return p;
+          const newDays = p.days.map((d) => (d.id === dayId ? { ...d, isPaid: !currentPaid } : d));
+          const { totalDays, totalPaidDays } = recalculatePeriodCounts(newDays);
+          return {
+            ...p,
+            days: newDays,
+            totalDays,
+            totalPaidDays,
+          };
+        }),
+      };
+      persistHolidayRulesImmediate(next);
+      return next;
+    });
   };
 
   // Khôi phục lịch chuẩn theo Bộ luật Lao động
@@ -675,11 +792,15 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
       cancelText: 'Huỷ',
       type: 'warning',
       onConfirm: () => {
-        setData((prev) => ({
-          ...prev,
-          periods: DEFAULT_HOLIDAY_PERIODS_2026,
-        }));
-        setHasChanges(true);
+        setData((prev) => {
+          const next: HolidayRulesData = {
+            ...prev,
+            periods: DEFAULT_HOLIDAY_PERIODS_2026,
+          };
+          persistHolidayRulesImmediate(next);
+          return next;
+        });
+        setHasChanges(false);
         setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
         if (onShowToast) {
           onShowToast('info', 'Đã khôi phục', 'Lịch nghỉ lễ Tết đã trở về chuẩn Bộ luật Lao động');
@@ -724,6 +845,7 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
 
       setData(updatedData);
       setHasChanges(false);
+      window.dispatchEvent(new CustomEvent('attendance-updated'));
       if (onShowToast) {
         onShowToast('success', 'Lưu thành công', 'Đã lưu toàn bộ danh mục lịch nghỉ lễ vào hệ thống');
       } else {
@@ -769,32 +891,31 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
   // Cập nhật ngày bắt đầu hoặc kết thúc của kỳ nghỉ lễ
   const handleUpdatePeriodDate = (periodId: string, field: 'startDate' | 'endDate', value: string) => {
     setHasChanges(true);
-    setData((prev) => ({
-      ...prev,
-      periods: prev.periods.map((p) => {
-        if (p.id !== periodId) return p;
-        const newStart = field === 'startDate' ? value : p.startDate;
-        const newEnd = field === 'endDate' ? value : p.endDate;
-        let calculatedTotal = p.totalDays;
-        if (newStart && newEnd) {
-          const s = new Date(newStart).getTime();
-          const e = new Date(newEnd).getTime();
-          if (!isNaN(s) && !isNaN(e) && e >= s) {
-            calculatedTotal = Math.round((e - s) / (1000 * 60 * 60 * 24)) + 1;
-          }
-        }
-        return {
-          ...p,
-          [field]: value,
-          totalDays: calculatedTotal,
-        };
-      }),
-    }));
+    setData((prev) => {
+      const next: HolidayRulesData = {
+        ...prev,
+        periods: prev.periods.map((p) => {
+          if (p.id !== periodId) return p;
+          const newStart = field === 'startDate' ? value : p.startDate;
+          const newEnd = field === 'endDate' ? value : p.endDate;
+          const built = buildDaysForPeriodRange(p.id, p.name, newStart, newEnd, p.days);
+          return {
+            ...p,
+            [field]: value,
+            days: built.days,
+            totalDays: built.totalDays,
+            totalPaidDays: built.totalPaidDays,
+          };
+        }),
+      };
+      persistHolidayRulesImmediate(next);
+      return next;
+    });
   };
 
-  // Danh sách các kỳ nghỉ lễ tết theo quy định của pháp luật (Điều 112 Bộ luật Lao động)
+  // Danh sách các kỳ nghỉ lễ tết theo quy định của pháp luật và công ty
   const statutoryPeriods = useMemo(() => {
-    return data.periods.filter((p) => p.isStatutory || p.category === 'statutory');
+    return [...data.periods].sort((a, b) => String(a.startDate || '').localeCompare(String(b.startDate || '')));
   }, [data.periods]);
 
   // Tham chiếu tạm thời để không bị lỗi unused biến trong khi chờ thiết kế giao diện mới

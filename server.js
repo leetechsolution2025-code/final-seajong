@@ -9,9 +9,8 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import * as cheerio from 'cheerio';
-const _moduleBust = Date.now();
-const { default: financeAccountingRouter } = await import(`./server/financeAccountingRouter.js?t=${_moduleBust}`);
-const { syncPrismaFinanceToAccountingTables } = await import(`./services/prismaFinanceSyncService.js?t=${_moduleBust}`);
+import financeAccountingRouter from './server/financeAccountingRouter.js';
+import { syncPrismaFinanceToAccountingTables } from './services/prismaFinanceSyncService.js';
 import {
   computeSalesOverviewStats,
   getCalendarEvents,
@@ -19,11 +18,11 @@ import {
   updateCalendarEvent,
   deleteCalendarEvent,
 } from './server/salesOverviewHelper.js';
-const {
+import {
   syncOrderToAccountingAndDebt,
   syncAllExistingOrdersToAccounting,
-} = await import(`./server/orderAccountingSync.js?t=${_moduleBust}`);
-const { syncPersonalRequestAdvanceToFinance } = await import(`./services/advanceAccountingSyncService.js?t=${_moduleBust}`);
+} from './server/orderAccountingSync.js';
+import { syncPersonalRequestAdvanceToFinance } from './services/advanceAccountingSyncService.js';
 
 dotenv.config();
 
@@ -16291,9 +16290,258 @@ app.post('/api/labor-rules', async (req, res) => {
 });
 
 // API Quy định nghỉ lễ và Tết
-app.get('/api/holiday-rules', async (req, res) => {
+const DEFAULT_HOLIDAY_PERIODS_2026_SERVER = [
+  {
+    id: 'HP-2026-01',
+    name: 'Tết Dương Lịch 2026',
+    code: 'TET_DUONG_LICH',
+    category: 'statutory',
+    categoryLabel: 'Theo luật lao động',
+    year: 2026,
+    startDate: '2026-01-01',
+    endDate: '2026-01-01',
+    totalDays: 1,
+    totalPaidDays: 1,
+    description: 'Nghỉ 01 ngày tết dương lịch hưởng nguyên lương theo Điều 112 Bộ luật Lao động',
+    isStatutory: true,
+    days: [
+      {
+        id: 'HD-01',
+        date: '2026-01-01',
+        dayOfWeek: 'T5',
+        name: 'Tết Dương Lịch chính thức',
+        isPaid: true,
+        isCompensation: false,
+        note: 'Hưởng 100% lương tiêu chuẩn',
+      },
+    ],
+  },
+  {
+    id: 'HP-2026-02',
+    name: 'Tết Nguyên Đán Bính Ngọ 2026',
+    code: 'TET_AM_LICH',
+    category: 'statutory',
+    categoryLabel: 'Theo luật lao động',
+    year: 2026,
+    startDate: '2026-02-14',
+    endDate: '2026-02-22',
+    totalDays: 9,
+    totalPaidDays: 5,
+    description: 'Kỳ nghỉ Tết Âm lịch gồm 5 ngày chính thức theo Luật và 4 ngày nghỉ cuối tuần hoán đổi',
+    isStatutory: true,
+    days: [
+      { id: 'HD-02', date: '2026-02-14', dayOfWeek: 'T7', name: 'Nghỉ cuối tuần trước Tết', isPaid: false, isCompensation: false, note: 'Nghỉ hàng tuần' },
+      { id: 'HD-03', date: '2026-02-15', dayOfWeek: 'CN', name: 'Nghỉ Chủ nhật trước Tết', isPaid: false, isCompensation: false, note: 'Nghỉ hàng tuần' },
+      { id: 'HD-04', date: '2026-02-16', dayOfWeek: 'T2', name: 'Nghỉ Tết Âm lịch ngày 29 tháng Chạp', isPaid: true, isCompensation: false, note: 'Hưởng 100% lương' },
+      { id: 'HD-05', date: '2026-02-17', dayOfWeek: 'T3', name: 'Nghỉ Tết Âm lịch ngày 30 tháng Chạp Giao thừa', isPaid: true, isCompensation: false, note: 'Hưởng 100% lương' },
+      { id: 'HD-06', date: '2026-02-18', dayOfWeek: 'T4', name: 'Nghỉ Tết Mùng 1 Tết Bính Ngọ', isPaid: true, isCompensation: false, note: 'Hưởng 100% lương' },
+      { id: 'HD-07', date: '2026-02-19', dayOfWeek: 'T5', name: 'Nghỉ Tết Mùng 2 Tết Bính Ngọ', isPaid: true, isCompensation: false, note: 'Hưởng 100% lương' },
+      { id: 'HD-08', date: '2026-02-20', dayOfWeek: 'T6', name: 'Nghỉ Tết Mùng 3 Tết Bính Ngọ', isPaid: true, isCompensation: false, note: 'Hưởng 100% lương' },
+      { id: 'HD-09', date: '2026-02-21', dayOfWeek: 'T7', name: 'Nghỉ Mùng 4 Tết bù ngày Thứ Bảy', isPaid: false, isCompensation: true, note: 'Nghỉ bù cuối tuần' },
+      { id: 'HD-10', date: '2026-02-22', dayOfWeek: 'CN', name: 'Nghỉ Mùng 5 Tết bù ngày Chủ nhật', isPaid: false, isCompensation: true, note: 'Nghỉ bù cuối tuần' },
+    ],
+  },
+  {
+    id: 'HP-2026-03',
+    name: 'Giỗ Tổ Hùng Vương 2026',
+    code: 'GIO_TO_HUNG_VUONG',
+    category: 'statutory',
+    categoryLabel: 'Theo luật lao động',
+    year: 2026,
+    startDate: '2026-04-26',
+    endDate: '2026-04-27',
+    totalDays: 2,
+    totalPaidDays: 1,
+    description: 'Ngày 10 tháng 3 Âm lịch trùng vào Chủ nhật nên người lao động được nghỉ bù vào Thứ Hai',
+    isStatutory: true,
+    days: [
+      { id: 'HD-11', date: '2026-04-26', dayOfWeek: 'CN', name: 'Giỗ Tổ Hùng Vương 10 tháng 3 Âm lịch', isPaid: true, isCompensation: false, note: 'Hưởng 100% lương' },
+      { id: 'HD-12', date: '2026-04-27', dayOfWeek: 'T2', name: 'Nghỉ bù ngày Giỗ Tổ do trùng Chủ nhật', isPaid: false, isCompensation: true, note: 'Nghỉ bù ngày làm việc' },
+    ],
+  },
+  {
+    id: 'HP-2026-04',
+    name: 'Ngày Chiến Thắng 30/04 và Quốc Tế Lao Động 01/05',
+    code: 'CHIEN_THANG_LAO_DONG',
+    category: 'statutory',
+    categoryLabel: 'Theo luật lao động',
+    year: 2026,
+    startDate: '2026-04-30',
+    endDate: '2026-05-03',
+    totalDays: 4,
+    totalPaidDays: 2,
+    description: 'Nghỉ 2 ngày chính thức hưởng nguyên lương và nối liền 2 ngày nghỉ cuối tuần',
+    isStatutory: true,
+    days: [
+      { id: 'HD-13', date: '2026-04-30', dayOfWeek: 'T5', name: 'Kỷ niệm Ngày Giải phóng miền Nam 30/04', isPaid: true, isCompensation: false, note: 'Hưởng 100% lương' },
+      { id: 'HD-14', date: '2026-05-01', dayOfWeek: 'T6', name: 'Ngày Quốc tế Lao động 01/05', isPaid: true, isCompensation: false, note: 'Hưởng 100% lương' },
+      { id: 'HD-15', date: '2026-05-02', dayOfWeek: 'T7', name: 'Nghỉ cuối tuần Thứ Bảy', isPaid: false, isCompensation: false, note: 'Nghỉ hàng tuần' },
+      { id: 'HD-16', date: '2026-05-03', dayOfWeek: 'CN', name: 'Nghỉ cuối tuần Chủ nhật', isPaid: false, isCompensation: false, note: 'Nghỉ hàng tuần' },
+    ],
+  },
+  {
+    id: 'HP-2026-05',
+    name: 'Lễ Quốc Khánh 02/09 năm 2026',
+    code: 'QUOC_KHANH',
+    category: 'statutory',
+    categoryLabel: 'Theo luật lao động',
+    year: 2026,
+    startDate: '2026-09-01',
+    endDate: '2026-09-02',
+    totalDays: 2,
+    totalPaidDays: 2,
+    description: 'Nghỉ 02 ngày gồm ngày Quốc khánh 02/09 và 01 ngày liền kề trước đó hưởng nguyên lương',
+    isStatutory: true,
+    days: [
+      { id: 'HD-17', date: '2026-09-01', dayOfWeek: 'T3', name: 'Ngày nghỉ liền kề trước Lễ Quốc khánh', isPaid: true, isCompensation: false, note: 'Hưởng 100% lương theo Luật' },
+      { id: 'HD-18', date: '2026-09-02', dayOfWeek: 'T4', name: 'Ngày Quốc khánh nước Cộng hòa xã hội chủ nghĩa Việt Nam', isPaid: true, isCompensation: false, note: 'Hưởng 100% lương theo Luật' },
+    ],
+  },
+  {
+    id: 'HP-2026-06',
+    name: 'Ngày Văn hoá Việt Nam',
+    code: 'NGAY_VAN_HOA_VN',
+    category: 'statutory',
+    categoryLabel: 'Theo quy định',
+    year: 2026,
+    startDate: '2026-11-24',
+    endDate: '2026-11-24',
+    totalDays: 1,
+    totalPaidDays: 1,
+    description: 'Nghỉ ngày Văn hoá Việt Nam ngày 24/11 hưởng nguyên lương',
+    isStatutory: true,
+    days: [
+      {
+        id: 'HD-22',
+        date: '2026-11-24',
+        dayOfWeek: 'T3',
+        name: 'Ngày Văn hoá Việt Nam 24/11',
+        isPaid: true,
+        isCompensation: false,
+        note: 'Hưởng 100% lương',
+      },
+    ],
+  },
+  {
+    id: 'HP-2026-07',
+    name: 'Kỳ Nghỉ Mát Hè Nhà Máy Seajong 2026',
+    code: 'NGHI_MAT_HE',
+    category: 'company',
+    categoryLabel: 'Kỳ nghỉ công ty',
+    year: 2026,
+    startDate: '2026-07-10',
+    endDate: '2026-07-12',
+    totalDays: 3,
+    totalPaidDays: 1,
+    description: 'Chương trình du lịch dã ngoại và gắn kết văn hóa doanh nghiệp do Seajong đài thọ',
+    isStatutory: false,
+    days: [
+      { id: 'HD-19', date: '2026-07-10', dayOfWeek: 'T6', name: 'Ngày hội văn hóa nội bộ công ty Seajong', isPaid: true, isCompensation: false, note: 'Công ty đài thọ 100% lương' },
+      { id: 'HD-20', date: '2026-07-11', dayOfWeek: 'T7', name: 'Tham quan dã ngoại toàn thể cán bộ công nhân viên', isPaid: false, isCompensation: false, note: 'Nghỉ cuối tuần Thứ Bảy' },
+      { id: 'HD-21', date: '2026-07-12', dayOfWeek: 'CN', name: 'Nghỉ ngơi chuẩn bị sản xuất', isPaid: false, isCompensation: false, note: 'Nghỉ cuối tuần Chủ nhật' },
+    ],
+  },
+];
+
+const DEFAULT_HOLIDAY_RULES_DATA_SERVER = {
+  year: 2026,
+  periods: DEFAULT_HOLIDAY_PERIODS_2026_SERVER,
+  annualLeavePolicy: {
+    standardLeaveDaysPerYear: 12,
+    heavyHazardousLeaveDays: 14,
+    specialHazardousLeaveDays: 16,
+    seniorityBonusYears: 5,
+    seniorityBonusDays: 1,
+    marriageLeaveDays: 3,
+    childMarriageLeaveDays: 1,
+    bereavementLeaveDays: 3,
+    grandparentSiblingBereavementDays: 1,
+    parentRemarriageLeaveDays: 1,
+    siblingMarriageLeaveDays: 1,
+    allowTransferToNextYear: true,
+    maxTransferredDays: 5,
+    transferExpiryMonth: 3,
+  },
+  lastUpdated: '04/10/2026 12:00',
+  updatedBy: 'Lê Công Vụ - Giám đốc',
+};
+
+function normalizeHolidayRulesServer(rawRules) {
+  if (!rawRules || typeof rawRules !== 'object' || !Array.isArray(rawRules.periods)) {
+    return DEFAULT_HOLIDAY_RULES_DATA_SERVER;
+  }
+  const dowLabels = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+  let periods = [...rawRules.periods];
+  const hasVanHoa = periods.some(
+    (p) => p && (p.code === 'NGAY_VAN_HOA_VN' || String(p.name || '').includes('Ngày Văn hoá Việt Nam'))
+  );
+  if (!hasVanHoa) {
+    const vh = DEFAULT_HOLIDAY_PERIODS_2026_SERVER.find((p) => p.code === 'NGAY_VAN_HOA_VN');
+    if (vh) periods.push(vh);
+  }
+
+  periods = periods.map((p) => {
+    if (!p || typeof p !== 'object') return p;
+    const existingDays = Array.isArray(p.days) ? p.days : [];
+    const startStr = String(p.startDate || '').trim();
+    const endStr = String(p.endDate || startStr).trim();
+    const hasStartInDays = existingDays.some((d) => d.date === startStr);
+    const hasEndInDays = existingDays.some((d) => d.date === endStr);
+
+    if (startStr && endStr && (existingDays.length === 0 || !hasStartInDays || !hasEndInDays)) {
+      const sDate = new Date(`${startStr}T00:00:00`);
+      const eDate = new Date(`${endStr}T00:00:00`);
+      if (!isNaN(sDate.getTime()) && !isNaN(eDate.getTime()) && eDate >= sDate) {
+        const prevMap = new Map(existingDays.map((d) => [d.date, d]));
+        const generatedDays = [];
+        const cur = new Date(sDate);
+        let idx = 1;
+        while (cur <= eDate && idx <= 31) {
+          const yStr = cur.getFullYear();
+          const mStr = String(cur.getMonth() + 1).padStart(2, '0');
+          const dStr = String(cur.getDate()).padStart(2, '0');
+          const ymd = `${yStr}-${mStr}-${dStr}`;
+          const dow = dowLabels[cur.getDay()] || 'T2';
+          const prevDay = prevMap.get(ymd);
+          if (prevDay) {
+            generatedDays.push({ ...prevDay, dayOfWeek: dow });
+          } else {
+            const isSun = cur.getDay() === 0;
+            generatedDays.push({
+              id: `${p.id || 'HP'}-D${idx}`,
+              date: ymd,
+              dayOfWeek: dow,
+              name: p.name || 'Nghỉ Lễ / Tết',
+              isPaid: !isSun || startStr === endStr,
+              isCompensation: false,
+              note: !isSun || startStr === endStr ? 'Hưởng 100% lương' : 'Nghỉ hàng tuần',
+            });
+          }
+          cur.setDate(cur.getDate() + 1);
+          idx++;
+        }
+        const paidCount = generatedDays.filter((d) => d.isPaid).length;
+        return {
+          ...p,
+          days: generatedDays,
+          totalDays: generatedDays.length,
+          totalPaidDays: paidCount > 0 ? paidCount : p.totalPaidDays || 1,
+        };
+      }
+    }
+    return p;
+  });
+
+  return {
+    ...DEFAULT_HOLIDAY_RULES_DATA_SERVER,
+    ...rawRules,
+    periods,
+  };
+}
+
+async function getResolvedHolidayRules() {
   try {
-    const policy = await prisma.laborPolicy.findUnique({
+    let policy = await prisma.laborPolicy.findUnique({
       where: {
         clientId_type: {
           clientId: 'seajong',
@@ -16301,12 +16549,119 @@ app.get('/api/holiday-rules', async (req, res) => {
         },
       },
     });
-    if (!policy || !policy.content) return res.json(null);
-    try {
-      res.json(JSON.parse(policy.content));
-    } catch {
-      res.json(null);
+    if (!policy) {
+      policy = await prisma.laborPolicy.findFirst({
+        where: { type: { in: ['holiday_rules', 'holiday_regulation'] } },
+      });
     }
+    if (policy && policy.content) {
+      try {
+        const parsed = JSON.parse(policy.content);
+        if (parsed && typeof parsed === 'object' && Array.isArray(parsed.periods)) {
+          return normalizeHolidayRulesServer(parsed);
+        }
+      } catch {}
+    }
+    // Auto-seed default holiday_rules into LaborPolicy so DB is always synchronized
+    const defaultNormalized = normalizeHolidayRulesServer(DEFAULT_HOLIDAY_RULES_DATA_SERVER);
+    await prisma.laborPolicy
+      .upsert({
+        where: {
+          clientId_type: {
+            clientId: 'seajong',
+            type: 'holiday_rules',
+          },
+        },
+        update: {
+          content: JSON.stringify(defaultNormalized),
+          updatedAt: new Date(),
+        },
+        create: {
+          clientId: 'seajong',
+          type: 'holiday_rules',
+          title: 'Quy định nghỉ lễ & phép năm Seajong',
+          content: JSON.stringify(defaultNormalized),
+        },
+      })
+      .catch(() => {});
+    return defaultNormalized;
+  } catch {
+    return DEFAULT_HOLIDAY_RULES_DATA_SERVER;
+  }
+}
+
+function extractPaidHolidaysMap(holidayRulesData, targetYear) {
+  const paidMap = new Map();
+  const normalized = normalizeHolidayRulesServer(holidayRulesData);
+  const periods = Array.isArray(normalized?.periods) ? normalized.periods : [];
+  const yPrefix = targetYear ? `${targetYear}-` : null;
+
+  for (const period of periods) {
+    if (!period || typeof period !== 'object') continue;
+    const days = Array.isArray(period.days) ? period.days : [];
+    const hasPaidSunday = days.some((d) => {
+      if (!d?.isPaid || !d?.date) return false;
+      const dt = new Date(`${d.date}T00:00:00`);
+      return dt.getDay() === 0;
+    });
+    const hasWeekdayCompensation = days.some((d) => {
+      if (!d?.isCompensation || !d?.date) return false;
+      const dt = new Date(`${d.date}T00:00:00`);
+      return dt.getDay() !== 0;
+    });
+
+    if (days.length > 0) {
+      for (const day of days) {
+        if (!day || !day.date) continue;
+        if (yPrefix && !String(day.date).startsWith(yPrefix)) continue;
+        const dt = new Date(`${day.date}T00:00:00`);
+        const isSunday = dt.getDay() === 0;
+
+        // Ngày được hưởng nguyên lương từ nội quy lao động (hoặc ngày nghỉ bù trong tuần cho ngày lễ trùng Chủ nhật)
+        const isEffectivePaidHoliday =
+          (Boolean(day.isPaid) && !(isSunday && hasWeekdayCompensation)) ||
+          (Boolean(day.isCompensation) && !isSunday && hasPaidSunday);
+
+        if (isEffectivePaidHoliday) {
+          paidMap.set(day.date, {
+            date: day.date,
+            name: day.name || period.name || 'Nghỉ Lễ / Tết',
+            periodName: period.name || 'Nghỉ Lễ / Tết',
+            isPaid: true,
+            isCompensation: Boolean(day.isCompensation),
+            note: day.note || 'Hưởng 100% nguyên lương',
+          });
+        }
+      }
+    } else if (period.startDate && period.endDate && Number(period.totalPaidDays ?? 1) > 0) {
+      const sDate = new Date(`${period.startDate}T00:00:00`);
+      const eDate = new Date(`${period.endDate}T00:00:00`);
+      if (!isNaN(sDate.getTime()) && !isNaN(eDate.getTime()) && eDate >= sDate) {
+        const cur = new Date(sDate);
+        while (cur <= eDate) {
+          const ymd = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+          if ((!yPrefix || ymd.startsWith(yPrefix)) && (cur.getDay() !== 0 || period.startDate === period.endDate)) {
+            paidMap.set(ymd, {
+              date: ymd,
+              name: period.name || 'Nghỉ Lễ / Tết',
+              periodName: period.name || 'Nghỉ Lễ / Tết',
+              isPaid: true,
+              isCompensation: false,
+              note: 'Hưởng 100% nguyên lương',
+            });
+          }
+          cur.setDate(cur.getDate() + 1);
+        }
+      }
+    }
+  }
+  return paidMap;
+}
+
+app.get('/api/holiday-rules', async (req, res) => {
+  try {
+    const resolved = await getResolvedHolidayRules();
+    res.json(resolved);
   } catch (err) {
     console.error('Lỗi GET /api/holiday-rules:', err);
     res.status(500).json({ error: err.message });
@@ -16315,7 +16670,8 @@ app.get('/api/holiday-rules', async (req, res) => {
 
 app.post('/api/holiday-rules', async (req, res) => {
   try {
-    const jsonStr = JSON.stringify(req.body);
+    const normalized = normalizeHolidayRulesServer(req.body);
+    const jsonStr = JSON.stringify(normalized);
     await prisma.laborPolicy.upsert({
       where: {
         clientId_type: {
@@ -16334,7 +16690,7 @@ app.post('/api/holiday-rules', async (req, res) => {
         content: jsonStr,
       },
     });
-    res.json({ success: true });
+    res.json({ success: true, data: normalized });
   } catch (err) {
     console.error('Lỗi POST /api/holiday-rules:', err);
     res.status(500).json({ error: err.message });
@@ -21616,7 +21972,7 @@ app.get('/api/timekeeping', async (req, res) => {
       return res.json([]);
     }
 
-    const [attendances, company, leaveRequests] = await Promise.all([
+    const [attendances, company, leaveRequests, holidayRulesData] = await Promise.all([
       prisma.attendance.findMany({
         where: { employeeId: employee.id },
         orderBy: { date: 'desc' },
@@ -21628,6 +21984,7 @@ app.get('/api/timekeeping', async (req, res) => {
         },
         orderBy: { createdAt: 'asc' },
       }),
+      getResolvedHolidayRules().catch(() => DEFAULT_HOLIDAY_RULES_DATA_SERVER),
     ]);
 
     const defaultLocationName = 'Trụ sở chính và Văn phòng điều hành Seajong';
@@ -21797,6 +22154,46 @@ app.get('/api/timekeeping', async (req, res) => {
           registeredLunch: false,
           registeredDinner: false,
           leaveInfo: null,
+          overtimeInfo,
+        });
+      }
+    }
+
+    // Bổ sung các ngày nghỉ lễ được hưởng nguyên lương từ Nội quy lao động (holiday_rules)
+    const paidHolidaysMap = extractPaidHolidaysMap(holidayRulesData, null);
+    for (const [dateStr, holidayInfo] of paidHolidaysMap.entries()) {
+      if (!recordsByDate.has(dateStr)) {
+        const d = parseFlexibleDate(dateStr) || new Date();
+        const overtimeInfo = overtimeMapByDate.get(dateStr) || null;
+        const holidayTitle = holidayInfo.name || holidayInfo.periodName || 'Nghỉ Lễ / Tết';
+        recordsByDate.set(dateStr, {
+          id: `TK-HOLIDAY-${dateStr.replace(/-/g, '')}`,
+          dateStr,
+          dayOfWeek: getDayOfWeekLabel(d),
+          morningCheckIn: '--:--',
+          morningCheckOut: '--:--',
+          afternoonCheckIn: '--:--',
+          afternoonCheckOut: '--:--',
+          locationName: `Nghỉ lễ hưởng lương (${holidayTitle})`,
+          locationCoords: defaultAddress,
+          method: 'Nội quy lao động Seajong',
+          status: 'paid_leave',
+          note: `${holidayTitle} • Hưởng 100% nguyên lương (1.0 công)`,
+          registeredLunch: false,
+          registeredDinner: false,
+          leaveInfo: {
+            requestId: `HOLIDAY-${dateStr}`,
+            status: 'approved',
+            leaveCategory: 'special',
+            leaveCategoryLabel: holidayTitle,
+            leaveSession: 'all_day',
+            isPaidLeave: true,
+            paidCredit: 1.0,
+            morningPaidCredit: 0.5,
+            afternoonPaidCredit: 0.5,
+            reason: `${holidayTitle} (Hưởng 100% nguyên lương theo Nội quy lao động)`,
+            approver: 'Nội quy lao động Seajong',
+          },
           overtimeInfo,
         });
       }
@@ -25381,7 +25778,7 @@ const computeHrAttendanceAndPayroll = async (month, year) => {
   const calculatedStandardWorkDays = daysInMonthCount - sundaysCount;
 
   const [
-    holidayPolicy,
+    holidayRulesData,
     laborPolicy,
     employees,
     insuranceHistories,
@@ -25391,8 +25788,10 @@ const computeHrAttendanceAndPayroll = async (month, year) => {
     payrollRecords,
     posCategories,
   ] = await Promise.all([
-    prisma.laborPolicy.findFirst({ where: { type: 'holiday_regulation' } }).catch(() => null),
-    prisma.laborPolicy.findFirst({ where: { type: 'labor_regulation' } }).catch(() => null),
+    getResolvedHolidayRules().catch(() => DEFAULT_HOLIDAY_RULES_DATA_SERVER),
+    prisma.laborPolicy
+      .findFirst({ where: { type: { in: ['labor_rules', 'labor_regulation'] } } })
+      .catch(() => null),
     prisma.employee.findMany({
       where: { status: { not: 'resigned' } },
       include: {
@@ -25422,13 +25821,8 @@ const computeHrAttendanceAndPayroll = async (month, year) => {
 
   const posMap = new Map(posCategories.map((p) => [p.code, p.name]));
 
-  let holidays = [];
-  if (holidayPolicy?.content) {
-    try {
-      const parsed = JSON.parse(holidayPolicy.content);
-      holidays = parsed[y] || [];
-    } catch { }
-  }
+  // Trích xuất bản đồ các ngày nghỉ lễ được hưởng nguyên lương từ Nội quy lao động (holiday_rules)
+  const paidHolidaysMap = extractPaidHolidaysMap(holidayRulesData, y);
 
   const defaultRules = {
     summer: { inMorning: '08:00', outLunch: '12:00', inAfternoon: '13:30', outAfternoon: '17:30' },
@@ -25436,11 +25830,33 @@ const computeHrAttendanceAndPayroll = async (month, year) => {
     late: { allowance: 30, t75: 30, t50: 60 },
     ot: { weekday: 1.5, sat: 2, sun: 2, hol: 3, min: 30 },
   };
-  let rules = defaultRules;
+  let rules = { ...defaultRules };
   if (laborPolicy?.content) {
     try {
       const parsed = JSON.parse(laborPolicy.content);
-      rules = { ...defaultRules, ...parsed };
+      if (parsed && Array.isArray(parsed.shifts)) {
+        const activeShift =
+          parsed.shifts.find((s) => s.id === parsed.selectedShiftId) || parsed.shifts[0];
+        if (activeShift) {
+          rules.summer = {
+            inMorning: activeShift.morningStart || '08:00',
+            outLunch: activeShift.morningEnd || '12:00',
+            inAfternoon: activeShift.afternoonStart || '13:30',
+            outAfternoon: activeShift.afternoonEnd || '17:30',
+          };
+        }
+        if (parsed.overtimeRule) {
+          rules.ot = {
+            weekday: Number(parsed.overtimeRule.weekdayRatePercent || 150) / 100,
+            sat: Number(parsed.overtimeRule.weekendRatePercent || 200) / 100,
+            sun: Number(parsed.overtimeRule.weekendRatePercent || 200) / 100,
+            hol: Number(parsed.overtimeRule.holidayRatePercent || 300) / 100,
+            min: Number(parsed.overtimeRule.minOvertimeMinutes || 30),
+          };
+        }
+      } else {
+        rules = { ...defaultRules, ...parsed };
+      }
     } catch { }
   }
 
@@ -25578,13 +25994,8 @@ const computeHrAttendanceAndPayroll = async (month, year) => {
       const dayDate = new Date(y, m - 1, d, 0, 0, 0, 0);
       const dateStr = formatDateYmd(dayDate);
 
-      const isHoliday = holidays.some((h) => {
-        const hStart = new Date(h.startDate);
-        const hEnd = new Date(h.endDate);
-        hStart.setHours(0, 0, 0, 0);
-        hEnd.setHours(23, 59, 59, 999);
-        return dayDate >= hStart && dayDate <= hEnd;
-      });
+      const holidayInfo = paidHolidaysMap.get(dateStr) || null;
+      const isHoliday = Boolean(holidayInfo);
 
       const leaveInfo = leaveMapByDate.get(dateStr);
       const lateEarlyInfo = lateEarlyByDate.get(dateStr);
@@ -25609,15 +26020,17 @@ const computeHrAttendanceAndPayroll = async (month, year) => {
       }
 
       if (isHoliday) {
+        const holOtHours = otInfo ? Number(otInfo.hours || 0) * Number(rules.ot?.hol || 3) : 0;
+        const holidayTitle = holidayInfo?.name || holidayInfo?.periodName || 'Nghỉ Lễ / Tết';
         days.push({
           code: 'L',
           workday: 1.0,
           leaveDays: 0,
-          otHours: 0,
+          otHours: holOtHours,
           violationMinutes: 0,
           registeredLunch: Boolean(att?.registeredLunch),
           registeredDinner: Boolean(att?.registeredDinner),
-          label: 'Nghỉ Lễ / Tết (1.0 công)',
+          label: `${holidayTitle} (Hưởng nguyên lương: 1.0 công)${holOtHours > 0 ? ` • Làm thêm ngày lễ: ${holOtHours.toFixed(1)}h` : ''}`,
         });
         continue;
       }
@@ -27104,6 +27517,1111 @@ app.delete('/api/board/data', async (req, res) => {
     res.json({ success: true, message: `Đã xóa bản sao lưu ${safeFilename}` });
   } catch (error) {
     console.error('[Data Backup DELETE Error]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// API VĂN PHÒNG PHẨM VÀ DỤNG CỤ (HR STATIONERY & TOOLS - CHUẨN CLIENT-SEAJONG)
+// ══════════════════════════════════════════════════════════════════════════════
+
+app.get('/api/hr/departments', async (req, res) => {
+  try {
+    const departments = await prisma.departmentCategory.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { nameVi: 'asc' }],
+    });
+    res.json({ departments });
+  } catch (error) {
+    console.error('[GET /api/hr/departments]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/procurement/suppliers', async (req, res) => {
+  try {
+    const suppliers = await prisma.supplier.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        contactName: true,
+        phone: true,
+        email: true,
+        address: true,
+      },
+    });
+    res.json({ suppliers });
+  } catch (error) {
+    console.error('[GET /api/procurement/suppliers]', error);
+    res.json({ suppliers: [] });
+  }
+});
+
+app.get('/api/hr/stationery/stats', async (req, res) => {
+  try {
+    const [allItems, pendingRequestsCount, totalNormsCount, activeAssetsCount, recentTransactionsCount] =
+      await Promise.all([
+        prisma.hrSupplyItem.findMany({
+          where: { isActive: true },
+          select: { stockQty: true, minStock: true },
+        }),
+        prisma.hrSupplyRequest.count({
+          where: { status: { in: ['PENDING', 'OVER_NORM'] } },
+        }),
+        prisma.hrStationeryDepartmentBudget.count(),
+        prisma.hrAssetHandover.count({
+          where: { status: 'USING' },
+        }),
+        prisma.hrSupplyTransaction.count({
+          where: {
+            date: {
+              gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+            },
+          },
+        }),
+      ]);
+
+    const lowStockCount = allItems.filter((item) => item.stockQty <= item.minStock).length;
+
+    res.json({
+      lowStockCount,
+      pendingRequestsCount,
+      totalNormsCount,
+      activeAssetsCount,
+      recentTransactionsCount,
+    });
+  } catch (error) {
+    console.error('[GET /api/hr/stationery/stats]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/hr/stationery/categories', async (req, res) => {
+  try {
+    const categories = await prisma.hrSupplyCategory.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+    });
+    res.json({ categories });
+  } catch (error) {
+    console.error('[GET /api/hr/stationery/categories]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/hr/stationery/categories', async (req, res) => {
+  try {
+    const { name, code } = req.body || {};
+    if (!name) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+    const cleanCode = (code || name)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'D')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+
+    const category = await prisma.hrSupplyCategory.create({
+      data: {
+        name: String(name).trim(),
+        code: cleanCode || `CAT${Date.now().toString().slice(-4)}`,
+      },
+    });
+    res.status(201).json({ category });
+  } catch (error) {
+    console.error('[POST /api/hr/stationery/categories]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/hr/stationery/categories/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const itemCount = await prisma.hrSupplyItem.count({
+      where: { categoryId: id, isActive: true },
+    });
+    if (itemCount > 0) {
+      return res.status(400).json({
+        error: `Không thể xóa danh mục này vì đang có ${itemCount} mặt hàng sử dụng. Vui lòng chuyển hoặc xóa các mặt hàng trước.`,
+      });
+    }
+    await prisma.hrSupplyCategory.delete({
+      where: { id },
+    });
+    res.json({ message: 'Đã xóa danh mục thành công' });
+  } catch (error) {
+    console.error('[DELETE /api/hr/stationery/categories/:id]', error);
+    res.status(500).json({ error: 'Không thể xóa danh mục do có dữ liệu lịch sử liên quan.' });
+  }
+});
+
+app.get('/api/hr/stationery/items/next-code', async (req, res) => {
+  try {
+    const categoryId = req.query.categoryId ? String(req.query.categoryId) : '';
+    let prefix = 'VPP';
+    if (categoryId) {
+      const cat = await prisma.hrSupplyCategory.findUnique({ where: { id: categoryId } });
+      if (cat && cat.name) {
+        const cleanName = cat.name
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/đ/g, 'd')
+          .replace(/Đ/g, 'D');
+        const words = cleanName.trim().split(/\s+/);
+        if (words.length >= 2) {
+          prefix = words
+            .map((w) => w[0])
+            .join('')
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, '');
+        } else if (words.length === 1 && words[0].length > 0) {
+          prefix = words[0]
+            .substring(0, 3)
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, '');
+        }
+        if (!prefix) prefix = 'VPP';
+      }
+    }
+
+    const items = await prisma.hrSupplyItem.findMany({
+      where: { code: { startsWith: `${prefix}-` } },
+      select: { code: true },
+    });
+
+    let maxNum = 0;
+    const regex = new RegExp(`^${prefix}-(\\d+)$`);
+    for (const item of items) {
+      const match = item.code.match(regex);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    }
+
+    const nextCode = `${prefix}-${String(maxNum + 1).padStart(3, '0')}`;
+    res.json({ nextCode });
+  } catch (error) {
+    console.error('[GET /api/hr/stationery/items/next-code]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/hr/stationery/items', async (req, res) => {
+  try {
+    const categoryId = req.query.categoryId ? String(req.query.categoryId) : '';
+    const isAsset = req.query.isAsset;
+    const search = req.query.search ? String(req.query.search) : '';
+
+    const where = { isActive: true };
+    if (categoryId) where.categoryId = categoryId;
+    if (isAsset !== undefined && isAsset !== null && isAsset !== '') {
+      where.isAsset = isAsset === 'true';
+    }
+    if (search) {
+      where.OR = [
+        { name: { contains: search } },
+        { code: { contains: search } },
+      ];
+    }
+
+    const items = await prisma.hrSupplyItem.findMany({
+      where,
+      include: { category: true },
+      orderBy: { name: 'asc' },
+    });
+    res.json({ items });
+  } catch (error) {
+    console.error('[GET /api/hr/stationery/items]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/hr/stationery/items', async (req, res) => {
+  try {
+    const { code, name, unit, categoryId, stockQty, minStock, unitPrice, isAsset, note } = req.body || {};
+    if (!code || !name || !unit) {
+      return res.status(400).json({ error: 'Code, Name and Unit are required' });
+    }
+    const item = await prisma.hrSupplyItem.create({
+      data: {
+        code: String(code).trim(),
+        name: String(name).trim(),
+        unit: String(unit).trim(),
+        categoryId: categoryId || null,
+        stockQty: Number(stockQty) || 0,
+        minStock: Number(minStock) || 0,
+        unitPrice: Number(unitPrice) || 0,
+        isAsset: Boolean(isAsset),
+        note: note || null,
+      },
+      include: { category: true },
+    });
+    res.status(201).json({ item });
+  } catch (error) {
+    console.error('[POST /api/hr/stationery/items]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/hr/stationery/items', async (req, res) => {
+  try {
+    const { id, code, name, unit, categoryId, stockQty, minStock, unitPrice, isAsset, note, isActive } =
+      req.body || {};
+    if (!id) {
+      return res.status(400).json({ error: 'Item ID is required' });
+    }
+    const item = await prisma.hrSupplyItem.update({
+      where: { id },
+      data: {
+        code,
+        name,
+        unit,
+        categoryId: categoryId || null,
+        stockQty: stockQty !== undefined ? Number(stockQty) : undefined,
+        minStock: minStock !== undefined ? Number(minStock) : undefined,
+        unitPrice: unitPrice !== undefined ? Number(unitPrice) : undefined,
+        isAsset: isAsset !== undefined ? Boolean(isAsset) : undefined,
+        note,
+        isActive: isActive !== undefined ? Boolean(isActive) : undefined,
+      },
+      include: { category: true },
+    });
+    res.json({ item });
+  } catch (error) {
+    console.error('[PUT /api/hr/stationery/items]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/hr/stationery/items', async (req, res) => {
+  try {
+    const id = req.query.id ? String(req.query.id) : '';
+    if (!id) {
+      return res.status(400).json({ error: 'ID is required' });
+    }
+    await prisma.hrSupplyItem.update({
+      where: { id },
+      data: { isActive: false },
+    });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[DELETE /api/hr/stationery/items]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/hr/stationery/budgets', async (req, res) => {
+  try {
+    const monthStr = req.query.month ? String(req.query.month) : '';
+    const departments = await prisma.departmentCategory.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+    const budgets = await prisma.hrStationeryDepartmentBudget.findMany();
+
+    let startDate;
+    let endDate;
+    if (monthStr) {
+      const [year, month] = monthStr.split('-').map(Number);
+      startDate = new Date(year, month - 1, 1);
+      endDate = new Date(year, month, 1);
+    } else {
+      const now = new Date();
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    }
+
+    const requests = await prisma.hrSupplyRequest.findMany({
+      where: {
+        createdAt: { gte: startDate, lt: endDate },
+        status: { in: ['APPROVED', 'DELIVERED'] },
+        type: 'STATIONERY',
+      },
+      select: { departmentId: true, totalAmount: true },
+    });
+
+    const data = departments.map((dept) => {
+      const b = budgets.find((x) => x.departmentId === dept.id);
+      const deptRequests = requests.filter((r) => r.departmentId === dept.id);
+      const usedAmount = deptRequests.reduce((sum, r) => sum + (r.totalAmount || 0), 0);
+      return {
+        departmentId: dept.id,
+        departmentName: dept.nameVi,
+        departmentCode: dept.code,
+        monthlyBudget: b ? b.monthlyBudget : 0,
+        usedAmount,
+        remainingAmount: (b ? b.monthlyBudget : 0) - usedAmount,
+      };
+    });
+
+    res.json({ budgets: data });
+  } catch (error) {
+    console.error('[GET /api/hr/stationery/budgets]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/hr/stationery/budgets', async (req, res) => {
+  try {
+    const { departmentId, monthlyBudget } = req.body || {};
+    if (!departmentId || monthlyBudget === undefined) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    const budget = await prisma.hrStationeryDepartmentBudget.upsert({
+      where: { departmentId },
+      update: { monthlyBudget: Number(monthlyBudget) },
+      create: {
+        departmentId,
+        monthlyBudget: Number(monthlyBudget),
+      },
+    });
+    res.json({ budget });
+  } catch (error) {
+    console.error('[POST /api/hr/stationery/budgets]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/hr/stationery/norms', async (req, res) => {
+  try {
+    const departmentId = req.query.departmentId ? String(req.query.departmentId) : '';
+    const position = req.query.position ? String(req.query.position) : '';
+    const where = {};
+    if (departmentId) where.departmentId = departmentId;
+    if (position) where.position = position;
+
+    const norms = await prisma.hrStationeryNorm.findMany({
+      where,
+      include: {
+        item: {
+          include: { category: true },
+        },
+      },
+    });
+    res.json({ norms });
+  } catch (error) {
+    console.error('[GET /api/hr/stationery/norms]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/hr/stationery/norms', async (req, res) => {
+  try {
+    const { departmentId, position, itemId, limitQty, period, limitAmount } = req.body || {};
+    if (!itemId) {
+      return res.status(400).json({ error: 'Item ID is required' });
+    }
+    const existing = await prisma.hrStationeryNorm.findFirst({
+      where: {
+        departmentId: departmentId || null,
+        position: position || null,
+        itemId,
+      },
+    });
+
+    let norm;
+    if (existing) {
+      norm = await prisma.hrStationeryNorm.update({
+        where: { id: existing.id },
+        data: {
+          limitQty: Number(limitQty) || 0,
+          period: period || 'MONTHLY',
+          limitAmount: Number(limitAmount) || 0,
+        },
+        include: { item: true },
+      });
+    } else {
+      norm = await prisma.hrStationeryNorm.create({
+        data: {
+          departmentId: departmentId || null,
+          position: position || null,
+          itemId,
+          limitQty: Number(limitQty) || 0,
+          period: period || 'MONTHLY',
+          limitAmount: Number(limitAmount) || 0,
+        },
+        include: { item: true },
+      });
+    }
+    res.json({ norm });
+  } catch (error) {
+    console.error('[POST /api/hr/stationery/norms]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/hr/stationery/assets/available', async (req, res) => {
+  try {
+    const supplyAssets = await prisma.hrSupplyItem.findMany({
+      where: { isAsset: true, isActive: true, stockQty: { gt: 0 } },
+      select: { id: true, code: true, name: true, stockQty: true },
+    });
+
+    const formatted = supplyAssets.map((item) => ({
+      id: `SUPPLY_${item.id}`,
+      rawId: item.id,
+      type: 'SUPPLY',
+      code: item.code,
+      name: `${item.name} (Tồn: ${item.stockQty})`,
+      sourceLabel: 'Kho VPP / Dụng cụ',
+    }));
+
+    res.json({ assets: formatted });
+  } catch (error) {
+    console.error('[GET /api/hr/stationery/assets/available]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/hr/stationery/handovers', async (req, res) => {
+  try {
+    const employeeId = req.query.employeeId ? String(req.query.employeeId) : '';
+    const status = req.query.status ? String(req.query.status) : '';
+
+    const where = {};
+    if (employeeId) where.employeeId = employeeId;
+    if (status) where.status = status;
+
+    const handovers = await prisma.hrAssetHandover.findMany({
+      where,
+      include: {
+        employee: {
+          select: {
+            id: true,
+            fullName: true,
+            code: true,
+            departmentName: true,
+            position: true,
+          },
+        },
+        supplyItem: true,
+        asset: true,
+      },
+      orderBy: { handoverDate: 'desc' },
+    });
+
+    const formatted = handovers.map((h) => ({
+      ...h,
+      item: h.asset
+        ? { id: h.asset.id, code: h.asset.code, name: h.asset.name, source: 'FINANCE' }
+        : h.supplyItem
+          ? { id: h.supplyItem.id, code: h.supplyItem.code, name: h.supplyItem.name, source: 'SUPPLY' }
+          : { id: '', code: 'N/A', name: 'Thiết bị đã xóa', source: 'UNKNOWN' },
+    }));
+
+    res.json({ handovers: formatted });
+  } catch (error) {
+    console.error('[GET /api/hr/stationery/handovers]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/hr/stationery/handovers', async (req, res) => {
+  try {
+    const { employeeId, itemId, handoverDate, conditionOnHandover, note } = req.body || {};
+    if (!employeeId || !itemId) {
+      return res.status(400).json({ error: 'Employee and Item are required' });
+    }
+
+    const handover = await prisma.$transaction(async (tx) => {
+      let supplyItemId = null;
+      let assetId = null;
+
+      if (String(itemId).startsWith('FINANCE_')) {
+        assetId = String(itemId).replace('FINANCE_', '');
+        await tx.fixedAsset.update({
+          where: { id: assetId },
+          data: { status: 'in_use' },
+        });
+      } else {
+        supplyItemId = String(itemId).startsWith('SUPPLY_')
+          ? String(itemId).replace('SUPPLY_', '')
+          : String(itemId);
+        const sItem = await tx.hrSupplyItem.findUnique({ where: { id: supplyItemId } });
+        if (!sItem || sItem.stockQty < 1) {
+          throw new Error('Dụng cụ trong kho VPP đã hết tồn kho');
+        }
+        await tx.hrSupplyItem.update({
+          where: { id: supplyItemId },
+          data: { stockQty: { decrement: 1 } },
+        });
+        await tx.hrSupplyTransaction.create({
+          data: {
+            itemId: supplyItemId,
+            type: 'OUT',
+            quantity: 1,
+            note: `Bàn giao dụng cụ cho nhân viên (ID: ${employeeId})`,
+          },
+        });
+      }
+
+      return await tx.hrAssetHandover.create({
+        data: {
+          employeeId,
+          itemId: supplyItemId,
+          assetId,
+          handoverDate: handoverDate ? new Date(handoverDate) : new Date(),
+          conditionOnHandover: conditionOnHandover || 'Mới / Tốt',
+          status: 'USING',
+          note: note || null,
+        },
+        include: {
+          employee: true,
+          supplyItem: true,
+          asset: true,
+        },
+      });
+    });
+
+    res.status(201).json({ handover });
+  } catch (error) {
+    console.error('[POST /api/hr/stationery/handovers]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/hr/stationery/handovers', async (req, res) => {
+  try {
+    const { id, returnDate, conditionOnReturn, status, note } = req.body || {};
+    if (!id) {
+      return res.status(400).json({ error: 'Handover ID is required' });
+    }
+
+    const handover = await prisma.$transaction(async (tx) => {
+      const existing = await tx.hrAssetHandover.findUnique({ where: { id } });
+      if (!existing) throw new Error('Không tìm thấy bản ghi bàn giao');
+
+      const updated = await tx.hrAssetHandover.update({
+        where: { id },
+        data: {
+          returnDate: returnDate
+            ? new Date(returnDate)
+            : status === 'RETURNED'
+              ? new Date()
+              : undefined,
+          conditionOnReturn,
+          status: status || 'RETURNED',
+          note,
+        },
+        include: {
+          employee: true,
+          supplyItem: true,
+          asset: true,
+        },
+      });
+
+      if (existing.status === 'USING' && status === 'RETURNED') {
+        if (existing.itemId) {
+          await tx.hrSupplyItem.update({
+            where: { id: existing.itemId },
+            data: { stockQty: { increment: 1 } },
+          });
+          await tx.hrSupplyTransaction.create({
+            data: {
+              itemId: existing.itemId,
+              type: 'IN',
+              quantity: 1,
+              note: `Thu hồi dụng cụ từ nhân viên ${updated.employee?.fullName || ''}`,
+            },
+          });
+        }
+        if (existing.assetId) {
+          await tx.fixedAsset.update({
+            where: { id: existing.assetId },
+            data: { status: 'available' },
+          });
+        }
+      } else if (existing.status === 'USING' && (status === 'LOST' || status === 'DAMAGED')) {
+        if (existing.assetId) {
+          await tx.fixedAsset.update({
+            where: { id: existing.assetId },
+            data: { status: status === 'LOST' ? 'lost' : 'broken' },
+          });
+        }
+      }
+
+      return updated;
+    });
+
+    res.json({ handover });
+  } catch (error) {
+    console.error('[PUT /api/hr/stationery/handovers]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/hr/stationery/transactions', async (req, res) => {
+  try {
+    // Auto-seed sample transactions if table is empty so history tab is populated
+    const existingCount = await prisma.hrSupplyTransaction.count();
+    if (existingCount === 0) {
+      const sampleItems = await prisma.hrSupplyItem.findMany({
+        where: { isActive: true },
+        take: 4,
+      });
+      if (sampleItems.length > 0) {
+        const now = new Date();
+        for (let i = 0; i < sampleItems.length; i++) {
+          const it = sampleItems[i];
+          await prisma.hrSupplyTransaction.create({
+            data: {
+              itemId: it.id,
+              type: i % 2 === 0 ? 'IN' : 'OUT',
+              quantity: i % 2 === 0 ? 20 : 5,
+              unitPrice: it.unitPrice || 25000,
+              date: new Date(now.getTime() - i * 86400000 * 2),
+              performedBy: 'Phòng Hành chính Nhân sự',
+              note:
+                i % 2 === 0
+                  ? `Nhập kho định kỳ vật tư ${it.name}`
+                  : `Xuất kho cấp phát cho các bộ phận (${it.name})`,
+            },
+          });
+        }
+      }
+    }
+
+    const itemId = req.query.itemId ? String(req.query.itemId) : '';
+    const type = req.query.type ? String(req.query.type) : '';
+    const where = {};
+    if (itemId) where.itemId = itemId;
+    if (type) where.type = type;
+
+    const transactions = await prisma.hrSupplyTransaction.findMany({
+      where,
+      include: { item: true },
+      orderBy: { date: 'desc' },
+      take: 100,
+    });
+    res.json({ transactions });
+  } catch (error) {
+    console.error('[GET /api/hr/stationery/transactions]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/hr/stationery/transactions', async (req, res) => {
+  try {
+    const { itemId, type, quantity, unitPrice, performedBy, note, date } = req.body || {};
+    if (!itemId || !type || !quantity) {
+      return res.status(400).json({ error: 'Item, Type and Quantity are required' });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const transaction = await tx.hrSupplyTransaction.create({
+        data: {
+          itemId,
+          type,
+          quantity: Number(quantity),
+          unitPrice: unitPrice ? Number(unitPrice) : null,
+          performedBy: performedBy || null,
+          note: note || null,
+          date: date ? new Date(date) : new Date(),
+        },
+        include: { item: true },
+      });
+
+      const adjustment = type === 'IN' ? Number(quantity) : -Number(quantity);
+      const updatedItem = await tx.hrSupplyItem.update({
+        where: { id: itemId },
+        data: {
+          stockQty: { increment: adjustment },
+          unitPrice: unitPrice && type === 'IN' ? Number(unitPrice) : undefined,
+        },
+      });
+
+      return { transaction, updatedItem };
+    });
+
+    res.status(201).json(result);
+  } catch (error) {
+    console.error('[POST /api/hr/stationery/transactions]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/hr/stationery/requests', async (req, res) => {
+  try {
+    const status = req.query.status ? String(req.query.status) : '';
+    const departmentId = req.query.departmentId ? String(req.query.departmentId) : '';
+    const requesterId = req.query.requesterId ? String(req.query.requesterId) : '';
+    const monthStr = req.query.month ? String(req.query.month) : '';
+
+    const where = {};
+    if (status) {
+      if (status.includes(',')) {
+        where.status = { in: status.split(',') };
+      } else {
+        where.status = status;
+      }
+    }
+    if (departmentId) where.departmentId = departmentId;
+    if (requesterId) where.requesterId = requesterId;
+    if (monthStr) {
+      const [year, month] = monthStr.split('-').map(Number);
+      if (year && month) {
+        where.createdAt = {
+          gte: new Date(year, month - 1, 1),
+          lt: new Date(year, month, 1),
+        };
+      }
+    }
+
+    const [requests, employees, users, departments, suppliers] = await Promise.all([
+      prisma.hrSupplyRequest.findMany({
+        where,
+        include: {
+          items: {
+            include: { item: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.employee.findMany({
+        select: { id: true, userId: true, fullName: true, departmentName: true },
+      }),
+      prisma.user.findMany({
+        select: { id: true, name: true, department: true },
+      }),
+      prisma.departmentCategory.findMany({
+        select: { id: true, nameVi: true, code: true },
+      }),
+      prisma.supplier
+        ? prisma.supplier
+            .findMany({ select: { id: true, name: true, code: true, phone: true } })
+            .catch(() => [])
+        : Promise.resolve([]),
+    ]);
+
+    const enrichedRequests = requests.map((reqItem) => {
+      const emp = employees.find(
+        (e) => e.id === reqItem.requesterId || e.userId === reqItem.requesterId
+      );
+      const usr = users.find((u) => u.id === reqItem.requesterId);
+      const dept = departments.find(
+        (d) => d.id === reqItem.departmentId || d.code === reqItem.departmentId
+      );
+      const supp = reqItem.supplierId
+        ? suppliers.find((s) => s.id === reqItem.supplierId)
+        : null;
+
+      return {
+        ...reqItem,
+        requesterName: emp?.fullName || usr?.name || 'Nhân sự HCNS',
+        departmentName: dept?.nameVi || emp?.departmentName || usr?.department || 'Hành chính - Nhân sự',
+        supplierName: supp?.name || null,
+        supplierCode: supp?.code || null,
+      };
+    });
+
+    res.json({ requests: enrichedRequests });
+  } catch (error) {
+    console.error('[GET /api/hr/stationery/requests]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/hr/stationery/requests', async (req, res) => {
+  try {
+    const { requesterId, departmentId, type, note, items, supplierId, invoiceNo } = req.body || {};
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Danh sách mặt hàng không được để trống' });
+    }
+
+    let finalRequesterId = requesterId || 'system';
+    let finalDeptId = departmentId || '';
+
+    if (!finalDeptId) {
+      const firstDept = await prisma.departmentCategory.findFirst({ where: { isActive: true } });
+      if (firstDept) finalDeptId = firstDept.id;
+    }
+
+    const now = new Date();
+    const prefix = `REQ-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const count = await prisma.hrSupplyRequest.count({
+      where: { code: { startsWith: prefix } },
+    });
+    const code = `${prefix}-${String(count + 1).padStart(3, '0')}`;
+
+    let totalAmount = 0;
+    let isOverNorm = false;
+
+    const norms = await prisma.hrStationeryNorm.findMany({
+      where: { departmentId: finalDeptId },
+    });
+
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const prevRequests = await prisma.hrSupplyRequest.findMany({
+      where: {
+        departmentId: finalDeptId,
+        createdAt: { gte: startOfMonth },
+        status: { in: ['APPROVED', 'DELIVERED', 'PENDING', 'OVER_NORM'] },
+      },
+      include: { items: true },
+    });
+
+    const itemDetails = await Promise.all(
+      items.map(async (it) => {
+        const dbItem = await prisma.hrSupplyItem.findUnique({ where: { id: it.itemId } });
+        const price =
+          it.unitPrice !== undefined ? Number(it.unitPrice) : dbItem?.unitPrice || 0;
+        const qty = Number(it.requestQty) || 0;
+        totalAmount += price * qty;
+
+        const norm = norms.find((n) => n.itemId === it.itemId);
+        if (norm && norm.limitQty > 0) {
+          const usedQty = prevRequests.reduce((acc, r) => {
+            const match = r.items.find((ri) => ri.itemId === it.itemId);
+            return acc + (match ? match.requestQty : 0);
+          }, 0);
+          if (usedQty + qty > norm.limitQty) {
+            isOverNorm = true;
+          }
+        }
+
+        return {
+          itemId: it.itemId,
+          requestQty: qty,
+          unitPrice: price,
+          note: it.note || null,
+        };
+      })
+    );
+
+    const deptBudget = await prisma.hrStationeryDepartmentBudget.findUnique({
+      where: { departmentId: finalDeptId },
+    });
+
+    if (deptBudget && deptBudget.monthlyBudget > 0) {
+      const usedBudget = prevRequests.reduce((acc, r) => acc + (r.totalAmount || 0), 0);
+      if (usedBudget + totalAmount > deptBudget.monthlyBudget) {
+        isOverNorm = true;
+      }
+    }
+
+    const isPurchaseOrder = type === 'PURCHASE';
+    const finalOverNorm = isPurchaseOrder ? false : isOverNorm;
+
+    const request = await prisma.hrSupplyRequest.create({
+      data: {
+        code,
+        requesterId: finalRequesterId,
+        departmentId: finalDeptId,
+        type: type || 'STATIONERY',
+        status: isPurchaseOrder ? 'PURCHASING' : finalOverNorm ? 'OVER_NORM' : 'PENDING',
+        totalAmount,
+        requiresDirector: isPurchaseOrder ? false : finalOverNorm,
+        note: note || null,
+        supplierId: supplierId || null,
+        invoiceNo: invoiceNo || null,
+        items: {
+          create: itemDetails,
+        },
+      },
+      include: {
+        items: { include: { item: true } },
+      },
+    });
+
+    res.status(201).json({ request });
+  } catch (error) {
+    console.error('[POST /api/hr/stationery/requests]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/hr/stationery/requests/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action, rejectionNote, items, performedBy, supplierId, invoiceNo } = req.body || {};
+
+    const existing = await prisma.hrSupplyRequest.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+
+    if (action === 'REJECT') {
+      const updated = await prisma.hrSupplyRequest.update({
+        where: { id },
+        data: {
+          status: 'REJECTED',
+          rejectionNote: rejectionNote || null,
+        },
+      });
+      return res.json({ request: updated });
+    }
+
+    if (action === 'APPROVE') {
+      const updated = await prisma.$transaction(async (tx) => {
+        if (items && Array.isArray(items)) {
+          for (const it of items) {
+            await tx.hrSupplyRequestItem.updateMany({
+              where: { requestId: id, itemId: it.itemId },
+              data: { approvedQty: Number(it.approvedQty) },
+            });
+          }
+        } else {
+          for (const it of existing.items) {
+            await tx.hrSupplyRequestItem.update({
+              where: { id: it.id },
+              data: { approvedQty: it.requestQty },
+            });
+          }
+        }
+        return await tx.hrSupplyRequest.update({
+          where: { id },
+          data: { status: 'APPROVED' },
+          include: { items: { include: { item: true } } },
+        });
+      });
+      return res.json({ request: updated });
+    }
+
+    if (action === 'DELIVER') {
+      const updated = await prisma.$transaction(async (tx) => {
+        const reqWithItems = await tx.hrSupplyRequest.findUnique({
+          where: { id },
+          include: { items: { include: { item: true } } },
+        });
+        if (!reqWithItems) throw new Error('Request not found');
+
+        for (const reqItem of reqWithItems.items) {
+          const qtyToDeliver = reqItem.approvedQty ?? reqItem.requestQty;
+          if (qtyToDeliver <= 0) continue;
+
+          if (reqItem.item.stockQty < qtyToDeliver) {
+            throw new Error(
+              `Mặt hàng ${reqItem.item.name} không đủ tồn kho (Tồn: ${reqItem.item.stockQty}, Cần: ${qtyToDeliver})`
+            );
+          }
+
+          await tx.hrSupplyItem.update({
+            where: { id: reqItem.itemId },
+            data: { stockQty: { decrement: qtyToDeliver } },
+          });
+
+          await tx.hrSupplyTransaction.create({
+            data: {
+              itemId: reqItem.itemId,
+              type: 'OUT',
+              quantity: qtyToDeliver,
+              unitPrice: reqItem.unitPrice,
+              performedBy: performedBy || 'HCNS',
+              note: `Cấp phát theo phiếu ${reqWithItems.code}`,
+              date: new Date(),
+            },
+          });
+        }
+
+        return await tx.hrSupplyRequest.update({
+          where: { id },
+          data: { status: 'DELIVERED' },
+          include: { items: { include: { item: true } } },
+        });
+      });
+      return res.json({ request: updated });
+    }
+
+    if (action === 'SUBMIT_TO_DIRECTOR') {
+      const updated = await prisma.hrSupplyRequest.update({
+        where: { id },
+        data: {
+          requiresDirector: true,
+          status: 'OVER_NORM',
+        },
+        include: { items: { include: { item: true } } },
+      });
+      return res.json({ request: updated });
+    }
+
+    if (action === 'START_PURCHASING') {
+      const updated = await prisma.hrSupplyRequest.update({
+        where: { id },
+        data: {
+          status: 'PURCHASING',
+          supplierId: supplierId || existing.supplierId,
+        },
+        include: { items: { include: { item: true } } },
+      });
+      return res.json({ request: updated });
+    }
+
+    if (action === 'RECEIVE') {
+      const updated = await prisma.$transaction(async (tx) => {
+        const reqWithItems = await tx.hrSupplyRequest.findUnique({
+          where: { id },
+          include: { items: { include: { item: true } } },
+        });
+        if (!reqWithItems) throw new Error('Request not found');
+
+        let finalTotalAmount = 0;
+
+        for (const reqItem of reqWithItems.items) {
+          const Override = Array.isArray(items)
+            ? items.find((i) => i.itemId === reqItem.itemId)
+            : null;
+          const qtyReceived =
+            Override?.receivedQty !== undefined
+              ? Number(Override.receivedQty)
+              : reqItem.approvedQty ?? reqItem.requestQty;
+          const actualPrice =
+            Override?.unitPrice !== undefined ? Number(Override.unitPrice) : reqItem.unitPrice;
+
+          if (qtyReceived <= 0) continue;
+          finalTotalAmount += qtyReceived * actualPrice;
+
+          await tx.hrSupplyRequestItem.update({
+            where: { id: reqItem.id },
+            data: { approvedQty: qtyReceived, unitPrice: actualPrice },
+          });
+
+          await tx.hrSupplyItem.update({
+            where: { id: reqItem.itemId },
+            data: {
+              stockQty: { increment: qtyReceived },
+              unitPrice: actualPrice > 0 ? actualPrice : undefined,
+            },
+          });
+
+          await tx.hrSupplyTransaction.create({
+            data: {
+              itemId: reqItem.itemId,
+              type: 'IN',
+              quantity: qtyReceived,
+              unitPrice: actualPrice,
+              performedBy: performedBy || 'HCNS',
+              note: `Nhập kho từ đơn hàng ${reqWithItems.code}${invoiceNo ? ` (HĐ: ${invoiceNo})` : ''}`,
+              date: new Date(),
+            },
+          });
+        }
+
+        return await tx.hrSupplyRequest.update({
+          where: { id },
+          data: {
+            status: 'RECEIVED',
+            totalAmount: finalTotalAmount,
+            supplierId: supplierId !== undefined ? supplierId : reqWithItems.supplierId,
+            invoiceNo: invoiceNo !== undefined ? invoiceNo : reqWithItems.invoiceNo,
+          },
+          include: { items: { include: { item: true } } },
+        });
+      });
+
+      return res.json({ request: updated });
+    }
+
+    res.status(400).json({ error: 'Invalid action' });
+  } catch (error) {
+    console.error('[PUT /api/hr/stationery/requests/:id]', error);
     res.status(500).json({ error: error.message });
   }
 });

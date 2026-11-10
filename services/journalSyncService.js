@@ -32,10 +32,22 @@ export function normalizeDate(d) {
   return str.substring(0, 10);
 }
 
+let _journalSyncPromise = null;
+
 /**
  * Đồng bộ toàn bộ Chi phí, Công nợ phải thu và Công nợ phải trả vào Sổ nhật ký chung
  */
 export async function syncAllSubledgersToJournal(db) {
+  if (_journalSyncPromise) {
+    return _journalSyncPromise;
+  }
+  _journalSyncPromise = _runSyncAllSubledgersToJournal(db).finally(() => {
+    _journalSyncPromise = null;
+  });
+  return _journalSyncPromise;
+}
+
+function _runSyncAllSubledgersToJournal(db) {
   return new Promise((resolve, reject) => {
     // 1. Lấy toàn bộ dữ liệu từ 3 phân hệ
     db.all('SELECT * FROM financial_expenses', [], (expErr, expenses) => {

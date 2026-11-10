@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { DEFAULT_WORK_LOCATIONS, type WorkLocationItem } from '../bom/IntranetSetupView';
+import { DEFAULT_HOLIDAY_RULES_DATA, DEFAULT_HOLIDAY_PERIODS_2026 } from '../bom/HolidayRulesView';
 import {
   GeoAlt,
   ArrowRepeat,
@@ -2219,6 +2220,59 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
     return dayOfWeekStr || '';
   };
 
+  // Bản đồ các ngày nghỉ lễ được hưởng nguyên lương từ Nội quy lao động
+  const paidHolidaysByDate = useMemo(() => {
+    const map = new Map<string, string>();
+    const rawPeriods =
+      holidayRulesData && Array.isArray(holidayRulesData.periods) && holidayRulesData.periods.length > 0
+        ? [...holidayRulesData.periods]
+        : [...DEFAULT_HOLIDAY_RULES_DATA.periods];
+    const hasVanHoa = rawPeriods.some(
+      (p: any) => p && (p.code === 'NGAY_VAN_HOA_VN' || String(p.name || '').includes('Ngày Văn hoá Việt Nam')),
+    );
+    if (!hasVanHoa) {
+      const vh = DEFAULT_HOLIDAY_PERIODS_2026.find((p) => p.code === 'NGAY_VAN_HOA_VN');
+      if (vh) rawPeriods.push(vh);
+    }
+
+    for (const p of rawPeriods) {
+      if (!p) continue;
+      const days = Array.isArray(p.days) ? p.days : [];
+      const hasPaidSun = days.some(
+        (d: any) => d?.isPaid && d?.date && new Date(`${d.date}T00:00:00`).getDay() === 0,
+      );
+      const hasWeekdayComp = days.some(
+        (d: any) => d?.isCompensation && d?.date && new Date(`${d.date}T00:00:00`).getDay() !== 0,
+      );
+      if (days.length > 0) {
+        for (const d of days) {
+          if (!d?.date) continue;
+          const isSun = new Date(`${d.date}T00:00:00`).getDay() === 0;
+          const isPaid =
+            (Boolean(d.isPaid) && !(isSun && hasWeekdayComp)) ||
+            (Boolean(d.isCompensation) && !isSun && hasPaidSun);
+          if (isPaid) {
+            map.set(d.date, d.name || p.name || 'Nghỉ Lễ / Tết');
+          }
+        }
+      } else if (p.startDate && p.endDate && Number(p.totalPaidDays ?? 1) > 0) {
+        const s = new Date(`${p.startDate}T00:00:00`);
+        const e = new Date(`${p.endDate}T00:00:00`);
+        if (!isNaN(s.getTime()) && !isNaN(e.getTime()) && e >= s) {
+          const cur = new Date(s);
+          while (cur <= e) {
+            const ymd = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+            if (cur.getDay() !== 0 || p.startDate === p.endDate) {
+              map.set(ymd, p.name || 'Nghỉ Lễ / Tết');
+            }
+            cur.setDate(cur.getDate() + 1);
+          }
+        }
+      }
+    }
+    return map;
+  }, [holidayRulesData]);
+
   // Danh sách đầy đủ các ngày trong tháng (hiển thị theo thứ tự từ ngày cuối tháng về ngày 1)
   const fullMonthRecords = useMemo(() => {
     const now = new Date();
@@ -2229,7 +2283,7 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
 
     if (selectedMonth === 'all') {
       return [...records]
-        .filter((r) => r.dateStr <= todayStr)
+        .filter((r) => r.dateStr <= todayStr || paidHolidaysByDate.has(r.dateStr))
         .sort((a, b) => b.dateStr.localeCompare(a.dateStr));
     }
 
@@ -2248,14 +2302,85 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
     for (let day = daysInMonth; day >= 1; day--) {
       const dayStr = day < 10 ? `0${day}` : `${day}`;
       const dateStr = `${yearStr}-${monthStr}-${dayStr}`;
+      const holidayName = paidHolidaysByDate.get(dateStr);
 
-      // Chỉ hiển thị dữ liệu đến ngày hôm nay nếu đang ở tháng hiện tại
-      if (selectedMonth === `${currentYear}-${currentMonth}` && dateStr > todayStr) {
+      // Chỉ hiển thị dữ liệu đến ngày hôm nay (hoặc các ngày nghỉ lễ hưởng nguyên lương trong tháng)
+      if (selectedMonth === `${currentYear}-${currentMonth}` && dateStr > todayStr && !holidayName) {
         continue;
       }
 
       if (recordsMap.has(dateStr)) {
-        fullList.push(recordsMap.get(dateStr)!);
+        const rec = recordsMap.get(dateStr)!;
+        if (holidayName && (rec.totalCredit || 0) === 0) {
+          fullList.push({
+            ...rec,
+            morningCredit: 0.5,
+            afternoonCredit: 0.5,
+            totalCredit: 1.0,
+            totalWorkHoursFormatted: '8 giờ 00 phút (Nghỉ lễ hưởng lương)',
+            locationName: `Nghỉ lễ hưởng lương (${holidayName})`,
+            method: 'Nội quy lao động Seajong',
+            statusLabel: `${holidayName} (Hưởng nguyên lương: 1.0 công)`,
+            note: `${holidayName} • Hưởng 100% nguyên lương`,
+            leaveInfo: {
+              requestId: `HOLIDAY-${dateStr}`,
+              status: 'approved',
+              leaveCategory: 'special',
+              leaveCategoryLabel: holidayName,
+              leaveSession: 'all_day',
+              isPaidLeave: true,
+              paidCredit: 1.0,
+              morningPaidCredit: 0.5,
+              afternoonPaidCredit: 0.5,
+              reason: `${holidayName} (Hưởng nguyên lương theo Nội quy lao động)`,
+              approver: 'Nội quy lao động Seajong',
+            },
+          });
+        } else {
+          fullList.push(rec);
+        }
+      } else if (holidayName) {
+        const d = new Date(year, month - 1, day);
+        const dayIdx = d.getDay();
+        const dayNames = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+        const dayName = dayNames[dayIdx] || `Thứ ${dayIdx + 1}`;
+        fullList.push({
+          id: `TK-HOLIDAY-${dateStr.replace(/-/g, '')}`,
+          dateStr,
+          dayOfWeek: dayName,
+          morningCheckIn: '--:--',
+          morningCheckOut: '--:--',
+          morningCredit: 0.5,
+          morningLateMinutes: 0,
+          morningStatus: 'completed',
+          afternoonCheckIn: '--:--',
+          afternoonCheckOut: '--:--',
+          afternoonCredit: 0.5,
+          afternoonLateMinutes: 0,
+          afternoonEarlyMinutes: 0,
+          afternoonStatus: 'completed',
+          totalCredit: 1.0,
+          otHours: 0,
+          totalWorkHoursFormatted: '8 giờ 00 phút (Nghỉ lễ hưởng lương)',
+          locationName: `Nghỉ lễ hưởng lương (${holidayName})`,
+          method: 'Nội quy lao động Seajong',
+          statusLabel: `${holidayName} (Hưởng nguyên lương: 1.0 công)`,
+          note: `${holidayName} • Hưởng 100% nguyên lương`,
+          explanationStatus: 'none',
+          leaveInfo: {
+            requestId: `HOLIDAY-${dateStr}`,
+            status: 'approved',
+            leaveCategory: 'special',
+            leaveCategoryLabel: holidayName,
+            leaveSession: 'all_day',
+            isPaidLeave: true,
+            paidCredit: 1.0,
+            morningPaidCredit: 0.5,
+            afternoonPaidCredit: 0.5,
+            reason: `${holidayName} (Hưởng nguyên lương theo Nội quy lao động)`,
+            approver: 'Nội quy lao động Seajong',
+          },
+        });
       } else {
         const d = new Date(year, month - 1, day);
         const dayIdx = d.getDay();
@@ -2288,7 +2413,7 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       }
     }
     return fullList;
-  }, [records, selectedMonth, monthRecords]);
+  }, [records, selectedMonth, monthRecords, paidHolidaysByDate]);
 
   // Danh sách hiển thị sau khi lọc bảng
   const displayRecords = useMemo(() => {

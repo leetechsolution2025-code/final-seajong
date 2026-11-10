@@ -1259,9 +1259,9 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
                   const p3 = pts[i + 2] || p2;
 
                   const cp1x = p1.x + (p2.x - p0.x) / 6;
-                  const cp1y = p1.y + (p2.y - p0.y) / 6;
+                  const cp1y = Math.min(baselineY, Math.max(12, p1.y + (p2.y - p0.y) / 6));
                   const cp2x = p2.x - (p3.x - p1.x) / 6;
-                  const cp2y = p2.y - (p3.y - p1.y) / 6;
+                  const cp2y = Math.min(baselineY, Math.max(12, p2.y - (p3.y - p1.y) / 6));
 
                   d += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
                 }
@@ -1296,6 +1296,14 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
 
               const revenueCurve = getSmoothCurve(revenuePoints);
               const salesCurve = getSmoothCurve(salesPoints);
+              const revenueAreaPath =
+                revenuePoints.length > 0
+                  ? `${revenueCurve} L ${revenuePoints[revenuePoints.length - 1].x.toFixed(1)},${baselineY} L ${revenuePoints[0].x.toFixed(1)},${baselineY} Z`
+                  : '';
+              const salesAreaPath =
+                salesPoints.length > 0
+                  ? `${salesCurve} L ${salesPoints[salesPoints.length - 1].x.toFixed(1)},${baselineY} L ${salesPoints[0].x.toFixed(1)},${baselineY} Z`
+                  : '';
 
               const hoveredItem = hoveredMonth !== null ? displayedChartData[hoveredMonth] : null;
               const hoveredPlanPt = hoveredMonth !== null ? planPoints[hoveredMonth] : null;
@@ -1332,6 +1340,18 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
                       <linearGradient id="oemBarGradient" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#f59e0b" />
                         <stop offset="100%" stopColor="#fbbf24" />
+                      </linearGradient>
+
+                      <linearGradient id="bomRevAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity="0.28" />
+                        <stop offset="65%" stopColor="#10b981" stopOpacity="0.10" />
+                        <stop offset="100%" stopColor="#10b981" stopOpacity="0.01" />
+                      </linearGradient>
+
+                      <linearGradient id="bomSalesAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.28" />
+                        <stop offset="65%" stopColor="#8b5cf6" stopOpacity="0.10" />
+                        <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.01" />
                       </linearGradient>
 
                       <filter id="barDropShadow" x="-10%" y="-10%" width="120%" height="130%">
@@ -1489,10 +1509,17 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
                       />
                     ))}
 
-                    {/* ĐỒ THỊ DẠNG LINE: CHỈ HIỂN THỊ 1 ĐƯỜNG PHÙ HỢP VỚI CHỌN DOANH THU HOẶC DOANH SỐ */}
+                    {/* ĐỒ THỊ DẠNG AREA + LINE: CHỈ HIỂN THỊ 1 ĐƯỜNG PHÙ HỢP VỚI CHỌN DOANH THU HOẶC DOANH SỐ */}
                     {chartMetric === 'revenue' ? (
                       /* ĐƯỜNG TỔNG DOANH THU (Màu xanh ngọc lục bảo) */
                       <>
+                        {revenueAreaPath && (
+                          <path
+                            d={revenueAreaPath}
+                            fill="url(#bomRevAreaGradient)"
+                            style={{ pointerEvents: 'none' }}
+                          />
+                        )}
                         <path
                           d={revenueCurve}
                           fill="none"
@@ -1516,6 +1543,13 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
                     ) : (
                       /* ĐƯỜNG TỔNG DOANH SỐ (Màu tím hoàng gia) */
                       <>
+                        {salesAreaPath && (
+                          <path
+                            d={salesAreaPath}
+                            fill="url(#bomSalesAreaGradient)"
+                            style={{ pointerEvents: 'none' }}
+                          />
+                        )}
                         <path
                           d={salesCurve}
                           fill="none"

@@ -61,7 +61,19 @@ function dbRun(db, sql, params = []) {
   });
 }
 
+let _prismaFinanceSyncPromise = null;
+
 export async function syncPrismaFinanceToAccountingTables(db) {
+  if (_prismaFinanceSyncPromise) {
+    return _prismaFinanceSyncPromise;
+  }
+  _prismaFinanceSyncPromise = _runSyncPrismaFinanceToAccountingTables(db).finally(() => {
+    _prismaFinanceSyncPromise = null;
+  });
+  return _prismaFinanceSyncPromise;
+}
+
+async function _runSyncPrismaFinanceToAccountingTables(db) {
   try {
     await dbRun(db, 'PRAGMA foreign_keys = OFF');
     // 1. Kiểm tra xem bảng Prisma có dữ liệu thực tế không

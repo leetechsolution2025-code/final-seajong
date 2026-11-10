@@ -10,6 +10,7 @@ import { ProbationPage } from '../../pages/hr/ProbationPage';
 import { TrainingPage } from '../../pages/hr/TrainingPage';
 import { AttendancePayrollPage } from '../../pages/hr/AttendancePayrollPage';
 import { InsurancePage } from '../../pages/hr/InsurancePage';
+import { StationeryToolsPage } from '../../pages/hr/StationeryToolsPage';
 import { MarketingProductsPage } from '../../pages/marketing/MarketingProductsPage';
 import { BrandIdentityPage } from '../../pages/marketing/BrandIdentityPage';
 import { MarketingPlanPage } from '../../pages/marketing/MarketingPlanPage';
@@ -441,6 +442,15 @@ export const DashboardView: React.FC = () => {
     activeMenuKey === 'bhxh'
   ) {
     return <InsurancePage />;
+  }
+
+  // Khi người dùng chọn Văn phòng phẩm và dụng cụ của bộ phận Nhân sự
+  if (
+    activeMenuKey === 'stationery' ||
+    activeMenuKey === 'stationery-tools' ||
+    activeMenuKey === 'van-phong-pham'
+  ) {
+    return <StationeryToolsPage />;
   }
 
   // Khi người dùng chọn Chấm công cá nhân

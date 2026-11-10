@@ -25,6 +25,11 @@ import { ConfirmDialog, type ConfirmDialogVariant } from '../../components/commo
 import { Input } from '../../components/common/Input';
 import { useAuth } from '../../context/AuthContext';
 import type { ModernStepItem } from '../../types';
+import {
+  DEFAULT_HOLIDAY_RULES_DATA,
+  DEFAULT_HOLIDAY_PERIODS_2026,
+  type HolidayRulesData,
+} from '../departments/bom/HolidayRulesView';
 
 interface AttendanceDayCell {
   code: string;
@@ -178,11 +183,18 @@ function getStatusStyles(code: string) {
   );
 }
 
-const DayHeader: React.FC<{ day: number | null; year: number; month: number; currentDay?: number }> = ({
+const DayHeader: React.FC<{
+  day: number | null;
+  year: number;
+  month: number;
+  currentDay?: number;
+  holidayName?: string;
+}> = ({
   day,
   year,
   month,
   currentDay,
+  holidayName,
 }) => {
   if (day === null) {
     return (
@@ -207,10 +219,12 @@ const DayHeader: React.FC<{ day: number | null; year: number; month: number; cur
   const dow = dowMap[date.getDay()];
   const isActive = currentDay !== undefined && day === currentDay;
   const isWeekend = date.getDay() === 0;
+  const isHoliday = Boolean(holidayName);
 
   return (
     <th
       className="day-col-header"
+      title={holidayName ? `${holidayName} (Nghỉ lễ hưởng nguyên lương)` : undefined}
       style={{
         width: '38px',
         minWidth: '38px',
@@ -219,10 +233,16 @@ const DayHeader: React.FC<{ day: number | null; year: number; month: number; cur
         borderBottom: '1px solid var(--border-default, #e2e8f0)',
         backgroundColor: isActive
           ? 'rgba(23, 92, 211, 0.08)'
+          : isHoliday
+          ? '#eef2ff'
           : isWeekend
           ? 'var(--bg-surface-3, #f1f5f9)'
           : 'var(--bg-surface-2, #f8fafc)',
-        color: isActive ? 'var(--brand-600, #175cd3)' : 'var(--text-secondary, #64748b)',
+        color: isActive
+          ? 'var(--brand-600, #175cd3)'
+          : isHoliday
+          ? '#4f46e5'
+          : 'var(--text-secondary, #64748b)',
       }}
     >
       <div style={{ fontSize: '12.5px', fontWeight: 700, lineHeight: 1.1 }}>{day}</div>
@@ -230,6 +250,79 @@ const DayHeader: React.FC<{ day: number | null; year: number; month: number; cur
     </th>
   );
 };
+
+function buildPaidHolidayMapForMonth(
+  rawRules: HolidayRulesData | null | undefined,
+  year: number,
+  month: number,
+): Map<number, { date: string; name: string; periodName: string }> {
+  const result = new Map<number, { date: string; name: string; periodName: string }>();
+  const basePeriods =
+    rawRules && Array.isArray(rawRules.periods) && rawRules.periods.length > 0
+      ? [...rawRules.periods]
+      : [...DEFAULT_HOLIDAY_RULES_DATA.periods];
+
+  const hasVanHoa = basePeriods.some(
+    (p) => p && (p.code === 'NGAY_VAN_HOA_VN' || String(p.name || '').includes('Ngày Văn hoá Việt Nam')),
+  );
+  if (!hasVanHoa) {
+    const vh = DEFAULT_HOLIDAY_PERIODS_2026.find((p) => p.code === 'NGAY_VAN_HOA_VN');
+    if (vh) basePeriods.push(vh);
+  }
+
+  const ymPrefix = `${year}-${String(month).padStart(2, '0')}-`;
+
+  for (const period of basePeriods) {
+    if (!period) continue;
+    const days = Array.isArray(period.days) ? period.days : [];
+    const hasPaidSunday = days.some((d) => {
+      if (!d?.isPaid || !d?.date) return false;
+      return new Date(`${d.date}T00:00:00`).getDay() === 0;
+    });
+    const hasWeekdayCompensation = days.some((d) => {
+      if (!d?.isCompensation || !d?.date) return false;
+      return new Date(`${d.date}T00:00:00`).getDay() !== 0;
+    });
+
+    if (days.length > 0) {
+      for (const d of days) {
+        if (!d?.date || !d.date.startsWith(ymPrefix)) continue;
+        const dt = new Date(`${d.date}T00:00:00`);
+        const isSunday = dt.getDay() === 0;
+        const isEffectivePaid =
+          (Boolean(d.isPaid) && !(isSunday && hasWeekdayCompensation)) ||
+          (Boolean(d.isCompensation) && !isSunday && hasPaidSunday);
+        if (isEffectivePaid) {
+          const dayNum = dt.getDate();
+          result.set(dayNum, {
+            date: d.date,
+            name: d.name || period.name || 'Nghỉ Lễ / Tết',
+            periodName: period.name || 'Nghỉ Lễ / Tết',
+          });
+        }
+      }
+    } else if (period.startDate && period.endDate && Number(period.totalPaidDays ?? 1) > 0) {
+      const sDate = new Date(`${period.startDate}T00:00:00`);
+      const eDate = new Date(`${period.endDate}T00:00:00`);
+      if (!isNaN(sDate.getTime()) && !isNaN(eDate.getTime()) && eDate >= sDate) {
+        const cur = new Date(sDate);
+        while (cur <= eDate) {
+          const ymd = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+          if (ymd.startsWith(ymPrefix) && (cur.getDay() !== 0 || period.startDate === period.endDate)) {
+            result.set(cur.getDate(), {
+              date: ymd,
+              name: period.name || 'Nghỉ Lễ / Tết',
+              periodName: period.name || 'Nghỉ Lễ / Tết',
+            });
+          }
+          cur.setDate(cur.getDate() + 1);
+        }
+      }
+    }
+  }
+
+  return result;
+}
 
 export const AttendancePayrollPage: React.FC = () => {
   const { user: currentUser } = useAuth();
@@ -384,14 +477,44 @@ export const AttendancePayrollPage: React.FC = () => {
     return list;
   }, [year]);
 
+  const [paidHolidaysByDay, setPaidHolidaysByDay] = useState<
+    Map<number, { date: string; name: string; periodName: string }>
+  >(() => buildPaidHolidayMapForMonth(DEFAULT_HOLIDAY_RULES_DATA, year, month));
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [res, insParticipantsRes, insConfigRes] = await Promise.all([
+      const [res, insParticipantsRes, insConfigRes, holidayRulesRes] = await Promise.all([
         fetch(`/api/hr/attendance-payroll?month=${month}&year=${year}`),
         fetch('/api/hr/insurance/participants').catch(() => null),
         fetch('/api/hr/insurance/config').catch(() => null),
+        fetch('/api/holiday-rules').catch(() => null),
       ]);
+
+      let resolvedHolidayRules: HolidayRulesData | null = null;
+      if (holidayRulesRes && holidayRulesRes.ok) {
+        const hrJson = await holidayRulesRes.json().catch(() => null);
+        if (hrJson && typeof hrJson === 'object' && Array.isArray(hrJson.periods)) {
+          resolvedHolidayRules = hrJson;
+        }
+      }
+      if (!resolvedHolidayRules) {
+        try {
+          const cachedHr = localStorage.getItem('seajong_holiday_rules');
+          if (cachedHr) {
+            const parsedHr = JSON.parse(cachedHr);
+            if (parsedHr && Array.isArray(parsedHr.periods)) {
+              resolvedHolidayRules = parsedHr;
+            }
+          }
+        } catch {}
+      }
+      const holidayMapForMonth = buildPaidHolidayMapForMonth(
+        resolvedHolidayRules || DEFAULT_HOLIDAY_RULES_DATA,
+        year,
+        month,
+      );
+      setPaidHolidaysByDay(holidayMapForMonth);
 
       let empRate = 10.5;
       if (insConfigRes && insConfigRes.ok) {
@@ -420,6 +543,28 @@ export const AttendancePayrollPage: React.FC = () => {
         const enrichedDepts = rawDepts.map((dept) => ({
           ...dept,
           employees: (dept.employees || []).map((emp) => {
+            // Đồng bộ các ngày nghỉ lễ được hưởng nguyên lương từ Nội quy lao động sang Bảng chấm công
+            const baseAtt = Array.isArray(emp.attendance) ? [...emp.attendance] : [];
+            const syncedAttendance = Array.from({ length: daysInMonthCount }, (_, idx) => {
+              const dayNum = idx + 1;
+              const existingCell = baseAtt[idx] || null;
+              const holidayInfo = holidayMapForMonth.get(dayNum);
+              if (holidayInfo) {
+                return {
+                  ...(existingCell || {}),
+                  code: 'L',
+                  workday: 1.0,
+                  leaveDays: 0,
+                  otHours: existingCell?.otHours || 0,
+                  violationMinutes: 0,
+                  registeredLunch: Boolean(existingCell?.registeredLunch),
+                  registeredDinner: Boolean(existingCell?.registeredDinner),
+                  label: `${holidayInfo.name} (Hưởng nguyên lương: 1.0 công)`,
+                };
+              }
+              return existingCell;
+            });
+
             const matchedIns = insParticipants.find(
               (p) =>
                 p.employeeId === emp.id ||
@@ -436,12 +581,16 @@ export const AttendancePayrollPage: React.FC = () => {
                 isEnrolled && insSalary > 0 ? Math.round((insSalary * empRate) / 100) : 0;
               return {
                 ...emp,
+                attendance: syncedAttendance,
                 isInsuranceEnrolled: isEnrolled,
                 insuranceSalary: insSalary,
                 insuranceDeduction: empDeduction,
               };
             }
-            return emp;
+            return {
+              ...emp,
+              attendance: syncedAttendance,
+            };
           }),
         }));
         setData(enrichedDepts);
@@ -456,7 +605,7 @@ export const AttendancePayrollPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [month, year]);
+  }, [month, year, daysInMonthCount]);
 
   useEffect(() => {
     fetchData();
@@ -1077,6 +1226,7 @@ export const AttendancePayrollPage: React.FC = () => {
                       year={year}
                       month={month}
                       currentDay={currentDay}
+                      holidayName={day ? paidHolidaysByDay.get(day)?.name : undefined}
                     />
                   ))}
                   <th

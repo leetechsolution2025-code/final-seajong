@@ -5,8 +5,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { computeFinancialReports } from '../services/financialReportEngine.js';
 import { syncAllSubledgersToJournal } from '../services/journalSyncService.js';
-
-const { syncPrismaFinanceToAccountingTables } = await import(`../services/prismaFinanceSyncService.js?t=${Date.now()}`);
+import { syncPrismaFinanceToAccountingTables } from '../services/prismaFinanceSyncService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,27 +30,39 @@ function createSafeSqliteDb(p) {
 }
 
 let rawDb = createSafeSqliteDb(dbPath);
+let lastReconnectTime = 0;
 
 function ensureHealthyDb() {
   try {
     const stat = fs.statSync(dbPath);
     if (currentInode && stat.ino !== currentInode) {
       console.warn('⚠️ [FinanceSQLite Auto-Heal] Phát hiện file dev.db được thay mới (inode thay đổi), đang kết nối lại...');
-      try { rawDb.close(); } catch {}
+      const oldDb = rawDb;
       currentInode = stat.ino;
       rawDb = createSafeSqliteDb(dbPath);
+      setTimeout(() => {
+        try { oldDb.close(); } catch {}
+      }, 5000);
     }
   } catch {}
   return rawDb;
 }
 
 function reconnectRawDb() {
+  const now = Date.now();
+  if (now - lastReconnectTime < 5000) {
+    return rawDb;
+  }
+  lastReconnectTime = now;
   console.warn('⚠️ [FinanceSQLite Auto-Heal] Đang khởi tạo lại kết nối SQLite cho FinanceAccountingRouter...');
-  try { rawDb.close(); } catch {}
+  const oldDb = rawDb;
   try {
     currentInode = fs.statSync(dbPath).ino;
   } catch {}
   rawDb = createSafeSqliteDb(dbPath);
+  setTimeout(() => {
+    try { oldDb.close(); } catch {}
+  }, 5000);
   return rawDb;
 }
 
@@ -64,7 +75,7 @@ export const db = new Proxy({}, {
         if (typeof lastArg === 'function') {
           const origCb = lastArg;
           const wrappedArgs = [...args.slice(0, -1), function (err, ...rest) {
-            if (err && (String(err.message || '').includes('malformed') || String(err.message || '').includes('SQLITE_CORRUPT') || String(err.message || '').includes('closed'))) {
+            if (err && String(err.message || '').includes('Database is closed')) {
               const freshDb = reconnectRawDb();
               return freshDb[prop](...args);
             }
@@ -85,14 +96,8 @@ export const db = new Proxy({}, {
 
 console.log('✓ FinanceAccountingRouter đã kết nối SQLite (Auto-Heal):', dbPath);
 syncPrismaFinanceToAccountingTables(db)
-  .then(async (res) => {
+  .then((res) => {
     console.log('✓ Đã đồng bộ dữ liệu Tài chính - Kế toán từ DB thực tế:', res);
-    try {
-      await syncAllSubledgersToJournal(db);
-      console.log('✓ Đã đồng bộ toàn bộ phân hệ Chi phí, Tạm ứng & Công nợ vào Sổ nhật ký chung.');
-    } catch (e) {
-      console.warn('Cảnh báo đồng bộ Sổ nhật ký chung:', e.message);
-    }
   })
   .catch((e) => console.warn('Cảnh báo đồng bộ Finance:', e.message));
 
