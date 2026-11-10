@@ -6,6 +6,6 @@
   "retentionDays": 30,
   "maxBackups": 30,
   "cleanupScope": "all",
-  "lastAutoBackupSlot": null,
-  "updatedAt": "2026-10-31T04:35:33.020Z"
+  "lastAutoBackupSlot": "2026-11-09_weekly_02:00",
+  "updatedAt": "2026-11-10T09:13:09.259Z"
 }

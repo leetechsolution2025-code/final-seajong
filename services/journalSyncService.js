@@ -51,6 +51,7 @@ export async function syncAllSubledgersToJournal(db) {
             if (faErr) console.warn('Lỗi lấy fixed_assets để đồng bộ khấu hao:', faErr.message);
 
             db.serialize(() => {
+              db.run('PRAGMA foreign_keys = OFF');
               // Xóa các bút toán đã được đồng bộ tự động trước đó để ghi đè cập nhật mới nhất
               db.run(`
                 DELETE FROM accounting_journal_lines 
@@ -69,6 +70,9 @@ export async function syncAllSubledgersToJournal(db) {
                 status, status_label, created_by, created_at, updated_at
               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'posted', 'Đã ghi sổ', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             `);
+            insertEntryStmt.on('error', (stmtErr) => {
+              console.warn('⚠️ [journalSyncService] insertEntryStmt error:', stmtErr.message);
+            });
 
             const insertLineStmt = db.prepare(`
               INSERT OR REPLACE INTO accounting_journal_lines (
@@ -76,6 +80,9 @@ export async function syncAllSubledgersToJournal(db) {
                 account_name, type, amount, description, partner, created_at
               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             `);
+            insertLineStmt.on('error', (stmtErr) => {
+              console.warn('⚠️ [journalSyncService] insertLineStmt error:', stmtErr.message);
+            });
 
             let syncedCount = 0;
 

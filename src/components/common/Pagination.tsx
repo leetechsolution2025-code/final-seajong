@@ -24,6 +24,8 @@ export interface PaginationProps {
   style?: React.CSSProperties;
   totalPages?: number;
   compact?: boolean;
+  /** Ẩn dòng chữ "Hiển thị X - Y trong tổng số Z ..." bên trái */
+  hideSummaryText?: boolean;
   /** Key lưu số dòng vào localStorage (mặc định: 'seajong_table_page_size') */
   storageKey?: string;
   /** Bật/tắt tính năng ghi nhớ số dòng (mặc định: true) */
@@ -61,6 +63,7 @@ export const Pagination: React.FC<PaginationProps> = ({
   style,
   totalPages: propTotalPages,
   compact = false,
+  hideSummaryText = false,
   storageKey,
   rememberPageSize = true,
 }) => {
@@ -153,19 +156,21 @@ export const Pagination: React.FC<PaginationProps> = ({
     <div className={`table-pagination ${compact ? 'is-compact' : ''} ${className}`.trim()} style={style}>
       {/* Left: Summary và Page Size */}
       <div className="pagination-left">
-        <span>
-          {compact ? (
-            <>
-              Hiển thị <strong>{startItem}</strong> - <strong>{endItem}</strong> /{' '}
-              <strong>{safeTotalItems}</strong> {itemName}
-            </>
-          ) : (
-            <>
-              Hiển thị <strong>{startItem}</strong> - <strong>{endItem}</strong> trong tổng số{' '}
-              <strong>{safeTotalItems}</strong> {itemName}
-            </>
-          )}
-        </span>
+        {!hideSummaryText && (
+          <span>
+            {compact ? (
+              <>
+                Hiển thị <strong>{startItem}</strong> - <strong>{endItem}</strong> /{' '}
+                <strong>{safeTotalItems}</strong> {itemName}
+              </>
+            ) : (
+              <>
+                Hiển thị <strong>{startItem}</strong> - <strong>{endItem}</strong> trong tổng số{' '}
+                <strong>{safeTotalItems}</strong> {itemName}
+              </>
+            )}
+          </span>
+        )}
 
         {onPageSizeChange && (
           <div className="pagination-size-selector">

@@ -130,6 +130,7 @@ export interface PartnerItem {
   plTimeline3?: string;
   plTimeline4?: string;
   plTimeline5?: string;
+  plTimeline6?: string;
   plPhase1Date?: string;
   plPhase1Rate?: string;
   plPhase1Amount?: string;
@@ -407,6 +408,9 @@ export const SalesPartnersPage: React.FC = () => {
           ? pStep >= 2 || hasQuote
           : currentStep === 3
           ? pStep >= 3
+          : currentStep === 4
+          ? (pStep >= 4 || Boolean(p.contractNo || p.hdCode || p.plNo || p.plPdf)) &&
+            p.quoteType !== 'Không có quầy kệ'
           : pStep === currentStep;
       const matchSearch =
         !searchTerm ||
@@ -759,6 +763,12 @@ export const SalesPartnersPage: React.FC = () => {
       plCptcText: '',
       plRevenueCommit: '',
       plRevenueCommitText: '',
+      plTimeline1: '',
+      plTimeline2: '',
+      plTimeline3: '',
+      plTimeline4: '',
+      plTimeline5: '',
+      plTimeline6: '',
       plPdf: '',
     };
 
@@ -823,7 +833,8 @@ export const SalesPartnersPage: React.FC = () => {
           <TaskManagementView
             hideTitle={true}
             department="all"
-            showCategoryTabs={true}
+            scope="showroom_construction"
+            showCategoryTabs={false}
             allowAdd={true}
           />
         </div>

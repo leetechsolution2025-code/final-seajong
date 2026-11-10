@@ -62,7 +62,7 @@ function computeAppendixTimelines(baseDateStr: string, durationDaysStr: string) 
     baseDate = new Date();
   }
 
-  const totalDays = Math.max(5, parseInt(String(durationDaysStr || '15'), 10) || 15);
+  const totalDays = Math.max(6, parseInt(String(durationDaysStr || '15'), 10) || 15);
   const addDays = (d: Date, days: number) => {
     const next = new Date(d);
     next.setDate(next.getDate() + days);
@@ -71,18 +71,20 @@ function computeAppendixTimelines(baseDateStr: string, durationDaysStr: string) 
   const fmt = (d: Date) =>
     `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 
-  const d1End = Math.max(1, Math.round(totalDays * 0.2) - 1);
-  const d2End = Math.max(d1End + 1, Math.round(totalDays * 0.35) - 1);
-  const d3End = Math.max(d2End + 1, Math.round(totalDays * 0.8) - 1);
-  const d4End = Math.max(d3End + 1, totalDays - 2);
-  const d5End = Math.max(d4End, totalDays - 1);
+  const d1End = Math.max(1, Math.round(totalDays * 0.13) - 1);
+  const d2End = Math.max(d1End + 1, Math.round(totalDays * 0.33) - 1);
+  const d3End = Math.max(d2End + 1, Math.round(totalDays * 0.45) - 1);
+  const d4End = Math.max(d3End + 1, Math.round(totalDays * 0.75) - 1);
+  const d5End = Math.max(d4End + 1, totalDays - 2);
+  const d6End = Math.max(d5End, totalDays - 1);
 
   return {
     t1: `${fmt(baseDate)} - ${fmt(addDays(baseDate, d1End))}`,
     t2: `${fmt(addDays(baseDate, d1End))} - ${fmt(addDays(baseDate, d2End))}`,
     t3: `${fmt(addDays(baseDate, d2End))} - ${fmt(addDays(baseDate, d3End))}`,
     t4: `${fmt(addDays(baseDate, d3End))} - ${fmt(addDays(baseDate, d4End))}`,
-    t5: `${fmt(addDays(baseDate, d5End))}`,
+    t5: `${fmt(addDays(baseDate, d4End))} - ${fmt(addDays(baseDate, d5End))}`,
+    t6: `${fmt(addDays(baseDate, d5End))} - ${fmt(addDays(baseDate, d6End))}`,
   };
 }
 
@@ -188,6 +190,7 @@ export const PhuLucModal: React.FC<PhuLucModalProps> = ({
   const [plTimeline3, setPlTimeline3] = useState('');
   const [plTimeline4, setPlTimeline4] = useState('');
   const [plTimeline5, setPlTimeline5] = useState('');
+  const [plTimeline6, setPlTimeline6] = useState('');
 
   const [plPhase1Date, setPlPhase1Date] = useState('');
   const [plPhase1Rate, setPlPhase1Rate] = useState('50%');
@@ -266,6 +269,7 @@ export const PhuLucModal: React.FC<PhuLucModalProps> = ({
     setPlTimeline3(partner.plTimeline3 || defaultTimelines.t3);
     setPlTimeline4(partner.plTimeline4 || defaultTimelines.t4);
     setPlTimeline5(partner.plTimeline5 || defaultTimelines.t5);
+    setPlTimeline6(partner.plTimeline6 || defaultTimelines.t6);
 
     setPlPhase1Date(partner.plPhase1Date || '');
     setPlPhase1Rate(partner.plPhase1Rate || '50%');
@@ -349,6 +353,7 @@ export const PhuLucModal: React.FC<PhuLucModalProps> = ({
       plTimeline3,
       plTimeline4,
       plTimeline5,
+      plTimeline6,
       plPhase1Date,
       plPhase1Rate,
       plPhase1Amount,
@@ -373,6 +378,7 @@ export const PhuLucModal: React.FC<PhuLucModalProps> = ({
       hdB_ChucVu,
       hdB_DienThoai,
       hdB_Email,
+      step: Math.max(4, Number(partner.step) || 4),
     };
 
     try {
@@ -381,6 +387,8 @@ export const PhuLucModal: React.FC<PhuLucModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedFields),
       });
+      window.dispatchEvent(new CustomEvent('seajong_contracts_updated'));
+      window.dispatchEvent(new CustomEvent('seajong_user_tasks_updated'));
       onSaved(updatedFields);
       onClose();
     } catch (err) {
@@ -880,37 +888,43 @@ export const PhuLucModal: React.FC<PhuLucModalProps> = ({
               <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
                 <span>-</span>
                 <span>
-                  <strong>{plTimeline1 || '.......................................'}</strong>: Hoàn
-                  thiện đo đạc tính toán, lên danh sách sản phẩm trưng bày, thiết kế bản vẽ kỹ thuật
-                  và hình ảnh 3D từng khu vực.
+                  <strong>{plTimeline1 || '.......................................'}</strong>: Khảo sát
+                  mặt bằng thực tế tại Showroom, đo đạc kích thước không gian trưng bày.
                 </span>
               </div>
               <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
                 <span>-</span>
                 <span>
-                  <strong>{plTimeline2 || '.......................................'}</strong>: Chuẩn
-                  bị hoàn tất nguyên vật liệu phục vụ thi công.
+                  <strong>{plTimeline2 || '.......................................'}</strong>: Thiết kế
+                  chi tiết bản vẽ kỹ thuật 2D và phối cảnh 3D hệ thống quầy kệ từng khu vực.
                 </span>
               </div>
               <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
                 <span>-</span>
                 <span>
-                  <strong>{plTimeline3 || '.......................................'}</strong>: Thực
-                  hiện thi công, lắp đặt quầy, kệ, bảng biển.
+                  <strong>{plTimeline3 || '.......................................'}</strong>: Chốt hồ
+                  sơ thiết kế kỹ thuật, bảng chủng loại vật tư và danh mục sản phẩm trưng bày.
                 </span>
               </div>
               <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
                 <span>-</span>
                 <span>
-                  <strong>{plTimeline4 || '.......................................'}</strong>: Lắp
-                  đặt sản phẩm trưng bày.
+                  <strong>{plTimeline4 || '.......................................'}</strong>: Sản xuất
+                  tại xưởng các hạng mục quầy kệ, tủ trưng bày, bảng biển thương hiệu Seajong.
                 </span>
               </div>
               <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
                 <span>-</span>
                 <span>
-                  <strong>{plTimeline5 || '.......................................'}</strong>: Thực
-                  hiện bàn giao khu vực thi công và trưng bày cho Đại lý.
+                  <strong>{plTimeline5 || '.......................................'}</strong>: Thi công
+                  lắp đặt hệ thống quầy kệ, bảng biển và thiết bị trưng bày tại Showroom.
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                <span>-</span>
+                <span>
+                  <strong>{plTimeline6 || '.......................................'}</strong>: Nghiệm
+                  thu và bàn giao hoàn thiện khu vực thi công trưng bày cho Đại lý.
                 </span>
               </div>
               <div style={{ marginTop: '4px', fontSize: '11px', lineHeight: '1.4' }}>
@@ -1439,13 +1453,14 @@ export const PhuLucModal: React.FC<PhuLucModalProps> = ({
                     setPlDurationDays(nextDur);
                     const val = parseInt(nextDur, 10) || 0;
                     setPlMaxDelayDays(String(val + 4));
-                    if (val >= 5) {
+                    if (val >= 6) {
                       const nextTimelines = computeAppendixTimelines(plDate, nextDur);
                       setPlTimeline1(nextTimelines.t1);
                       setPlTimeline2(nextTimelines.t2);
                       setPlTimeline3(nextTimelines.t3);
                       setPlTimeline4(nextTimelines.t4);
                       setPlTimeline5(nextTimelines.t5);
+                      setPlTimeline6(nextTimelines.t6);
                     }
                   }}
                 />
@@ -1457,34 +1472,40 @@ export const PhuLucModal: React.FC<PhuLucModalProps> = ({
                 />
               </div>
               <Input
-                label="Đo đạc & Thiết kế 3D"
-                placeholder="VD: 01/11/2026 - 03/11/2026"
+                label="1. Khảo sát mặt bằng"
+                placeholder="VD: 01/11/2026 - 02/11/2026"
                 value={plTimeline1}
                 onChange={(e) => setPlTimeline1(e.target.value)}
               />
               <Input
-                label="Chuẩn bị nguyên vật liệu"
-                placeholder="VD: 03/11/2026 - 05/11/2026"
+                label="2. Thiết kế chi tiết"
+                placeholder="VD: 02/11/2026 - 05/11/2026"
                 value={plTimeline2}
                 onChange={(e) => setPlTimeline2(e.target.value)}
               />
               <Input
-                label="Thi công, lắp đặt quầy kệ"
-                placeholder="VD: 05/11/2026 - 12/11/2026"
+                label="3. Chốt hồ sơ"
+                placeholder="VD: 05/11/2026 - 07/11/2026"
                 value={plTimeline3}
                 onChange={(e) => setPlTimeline3(e.target.value)}
               />
               <Input
-                label="Lắp sản phẩm trưng bày"
-                placeholder="VD: 12/11/2026 - 15/11/2026"
+                label="4. Sản xuất tại xưởng"
+                placeholder="VD: 07/11/2026 - 11/11/2026"
                 value={plTimeline4}
                 onChange={(e) => setPlTimeline4(e.target.value)}
               />
               <Input
-                label="Bàn giao, nghiệm thu"
-                placeholder="VD: 16/11/2026"
+                label="5. Thi công lắp đặt"
+                placeholder="VD: 11/11/2026 - 14/11/2026"
                 value={plTimeline5}
                 onChange={(e) => setPlTimeline5(e.target.value)}
+              />
+              <Input
+                label="6. Nghiệm thu và bàn giao"
+                placeholder="VD: 14/11/2026 - 15/11/2026"
+                value={plTimeline6}
+                onChange={(e) => setPlTimeline6(e.target.value)}
               />
             </div>
 

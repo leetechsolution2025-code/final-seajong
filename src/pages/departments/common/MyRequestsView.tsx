@@ -27,6 +27,7 @@ import { useAuth } from '../../../context/AuthContext';
 export type RequestType =
   | 'late_early'
   | 'leave'
+  | 'overtime'
   | 'advance'
   | 'refund'
   | 'business_trip'
@@ -84,6 +85,11 @@ export interface MyRequestItem {
   tripToDate?: string;
   tripTransport?: string;
   tripEstimatedCost?: number;
+
+  // Đăng ký làm thêm giờ (Tăng ca / Chủ nhật)
+  overtimeDate?: string;
+  otSession?: 'all_day' | 'morning' | 'afternoon';
+  otHours?: number;
 
   // Thông tin xét duyệt
   approver: string;
@@ -505,6 +511,11 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
   const [tripTransport, setTripTransport] = useState('Máy bay khứ hồi và taxi nội đô');
   const [tripEstimatedCost, setTripEstimatedCost] = useState('10000000');
 
+  // Form Đăng ký làm thêm giờ (Tăng ca / Chủ nhật)
+  const [overtimeDate, setOvertimeDate] = useState(defaultTodayDmy);
+  const [otSession, setOtSession] = useState<'all_day' | 'morning' | 'afternoon'>('all_day');
+  const [otHours, setOtHours] = useState('8');
+
   // Modal Chi tiết
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [viewingRequest, setViewingRequest] = useState<MyRequestItem | null>(null);
@@ -630,6 +641,7 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
           { value: 'all', label: 'Tất cả loại yêu cầu' },
           { value: 'late_early', label: 'Đi muộn về sớm' },
           { value: 'leave', label: 'Nghỉ phép' },
+          { value: 'overtime', label: 'Đăng ký làm thêm giờ' },
           { value: 'advance', label: 'Tạm ứng chi phí' },
           { value: 'refund', label: 'Hoàn tạm ứng' },
           { value: 'business_trip', label: 'Đi công tác' },
@@ -757,6 +769,26 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
           >
             <Airplane size={12} />
             Đi công tác
+          </span>
+        );
+      case 'overtime':
+        return (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '3px 8px',
+              borderRadius: '6px',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              backgroundColor: '#dcfce7',
+              color: '#15803d',
+              border: '1px solid #bbf7d0',
+            }}
+          >
+            <Clock size={12} />
+            Làm thêm giờ
           </span>
         );
       default:
@@ -956,6 +988,10 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
       if (item.tripToDate) setTripToDate(item.tripToDate);
       if (item.tripTransport) setTripTransport(item.tripTransport);
       if (item.tripEstimatedCost) setTripEstimatedCost(String(item.tripEstimatedCost));
+    } else if (item.type === 'overtime') {
+      if (item.overtimeDate) setOvertimeDate(item.overtimeDate);
+      if (item.otSession) setOtSession(item.otSession);
+      if (item.otHours) setOtHours(String(item.otHours));
     }
 
     setCreateModalOpen(true);
@@ -1031,6 +1067,14 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
       if (!computedContent) {
         computedContent = `Thời gian: ${tripFromDate} đến ${tripToDate}. Phương tiện: ${tripTransport}`;
       }
+    } else if (selectedCreateType === 'overtime') {
+      const sesLbl = otSession === 'morning' ? 'Buổi sáng' : otSession === 'afternoon' ? 'Buổi chiều' : 'Cả ngày';
+      if (!computedTitle) {
+        computedTitle = `Đăng ký làm thêm giờ (${sesLbl} • ${otHours}h) ngày ${overtimeDate}`;
+      }
+      if (!computedContent) {
+        computedContent = formNote.trim() || `Đăng ký làm thêm giờ (${sesLbl}) ngày ${overtimeDate}`;
+      }
     }
 
     // Nếu đang ở chế độ chỉnh sửa (Edit mode)
@@ -1078,6 +1122,9 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
         tripToDate,
         tripTransport,
         tripEstimatedCost: parseFloat(tripEstimatedCost.replace(/[^0-9]/g, '')) || 0,
+        overtimeDate,
+        otSession,
+        otHours: parseFloat(otHours) || 8,
         priority: formPriority,
         priorityLabel:
           formPriority === 'urgent'
@@ -1199,6 +1246,9 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
       tripToDate,
       tripTransport,
       tripEstimatedCost: parseFloat(tripEstimatedCost.replace(/[^0-9]/g, '')) || 0,
+      overtimeDate,
+      otSession,
+      otHours: parseFloat(otHours) || 8,
       priority: formPriority,
       priorityLabel:
         formPriority === 'urgent'
@@ -1714,6 +1764,7 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
           >
             <option value="late_early">Đi muộn về sớm</option>
             <option value="leave">Nghỉ phép</option>
+            <option value="overtime">Đăng ký làm thêm giờ</option>
             <option value="advance">Tạm ứng (Tài chính)</option>
             <option value="refund">Hoàn tạm ứng (Tài chính)</option>
             <option value="business_trip">Đi công tác</option>
@@ -2219,6 +2270,45 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                     onChange={(e) => setTripEstimatedCost(e.target.value.replace(/[^0-9]/g, ''))}
                     style={{ fontWeight: 700 }}
                   />
+                </div>
+              )}
+
+              {/* 6. Form Đăng ký làm thêm giờ (Tăng ca / Chủ nhật) */}
+              {selectedCreateType === 'overtime' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <Input
+                    label="Ngày đăng ký làm thêm giờ"
+                    required
+                    type="text"
+                    value={overtimeDate}
+                    onChange={(e) => setOvertimeDate(e.target.value)}
+                    placeholder="DD/MM/YYYY"
+                  />
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.35fr 1fr', gap: '10px' }}>
+                    <Select
+                      label="Ca làm thêm giờ"
+                      value={otSession}
+                      onChange={(e) => {
+                        const val = e.target.value as 'all_day' | 'morning' | 'afternoon';
+                        setOtSession(val);
+                        setOtHours(val === 'all_day' ? '8' : '4');
+                      }}
+                    >
+                      <option value="all_day">Cả ngày (Sáng + Chiều)</option>
+                      <option value="morning">Buổi sáng (Ca sáng)</option>
+                      <option value="afternoon">Buổi chiều (Ca chiều)</option>
+                    </Select>
+
+                    <Input
+                      label="Số giờ dự kiến"
+                      required
+                      type="number"
+                      value={otHours}
+                      onChange={(e) => setOtHours(e.target.value)}
+                      placeholder="8"
+                    />
+                  </div>
                 </div>
               )}
 

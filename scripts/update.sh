@@ -135,6 +135,8 @@ npx prisma generate
 
 # Nếu có file SQL đồng bộ các bảng được chọn từ Local thì nạp vào DB trên VPS
 if [ -f "scripts/sync_selected_tables.sql" ]; then
+    echo "-> Tạm dừng PM2 để tránh khoá SQLite (database is locked) khi nạp dữ liệu..."
+    pm2 stop "${APP_NAME}" >/dev/null 2>&1 || true
     echo "-> Đang đồng bộ dữ liệu các bảng được chọn từ Local vào prisma/dev.db trên VPS..."
     node scripts/sync_custom_tables.cjs import
     rm -f scripts/sync_selected_tables.sql

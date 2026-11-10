@@ -75,6 +75,14 @@ export interface TimekeepingRecord {
     reason?: string;
     approver?: string;
   } | null;
+  overtimeInfo?: {
+    requestId?: string;
+    status: 'approved' | 'pending' | 'rejected';
+    otSession?: 'all_day' | 'morning' | 'afternoon';
+    hours?: number;
+    reason?: string;
+    approver?: string;
+  } | null;
 }
 
 export interface MyTimekeepingViewProps {
@@ -397,8 +405,8 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
   const dinnerDeadlineStr = laborRulesData?.lunchRule?.dinnerDeadlineAfternoon || '15:30';
   const lunchDeadlineMinutes = parseTimeToMinutes(lunchDeadlineStr, 9 * 60);
   const dinnerDeadlineMinutes = parseTimeToMinutes(dinnerDeadlineStr, 15 * 60 + 30);
-  const isLunchLocked = currentTotalMinutes >= lunchDeadlineMinutes;
-  const isDinnerLocked = currentTotalMinutes >= dinnerDeadlineMinutes;
+  const isLunchDeadlinePassed = currentTotalMinutes >= lunchDeadlineMinutes;
+  const isDinnerDeadlinePassed = currentTotalMinutes >= dinnerDeadlineMinutes;
 
   // Kiểm tra trạng thái đã bấm giờ vào hay chưa
   const hasMorningIn = Boolean(todayMorningIn && todayMorningIn !== '--:--');
@@ -517,6 +525,37 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       todayLeaveInfo.leaveSession === 'all_day'
   );
 
+  // Kiểm tra ngày Chủ nhật & trạng thái đăng ký làm thêm giờ (Tăng ca Chủ nhật)
+  // QUY TẮC BẮT BUỘC: Ngày Chủ nhật khoá các nút chấm công lại, chỉ mở cho các tài khoản đăng ký làm thêm giờ được phê duyệt
+  const isTodaySunday = nowForShift.getDay() === 0;
+  const todayOvertimeInfo = useMemo(() => {
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const found = records.find((r) => r.dateStr === todayStr);
+    return found?.overtimeInfo || null;
+  }, [records]);
+
+  const isTodayMorningOtApproved = Boolean(
+    todayOvertimeInfo &&
+      todayOvertimeInfo.status === 'approved' &&
+      (!todayOvertimeInfo.otSession ||
+        todayOvertimeInfo.otSession === 'all_day' ||
+        todayOvertimeInfo.otSession === 'morning')
+  );
+  const isTodayAfternoonOtApproved = Boolean(
+    todayOvertimeInfo &&
+      todayOvertimeInfo.status === 'approved' &&
+      (!todayOvertimeInfo.otSession ||
+        todayOvertimeInfo.otSession === 'all_day' ||
+        todayOvertimeInfo.otSession === 'afternoon')
+  );
+  const isTodayAnyOtApproved = isTodayMorningOtApproved || isTodayAfternoonOtApproved;
+  const isSundayMorningLocked = isTodaySunday && !isTodayMorningOtApproved;
+  const isSundayAfternoonLocked = isTodaySunday && !isTodayAfternoonOtApproved;
+  const isSundayMealLocked = isTodaySunday && !isTodayAnyOtApproved;
+  const isLunchLocked = isLunchDeadlinePassed || isSundayMealLocked;
+  const isDinnerLocked = isDinnerDeadlinePassed || isSundayMealLocked;
+
   // Trạng thái nhân sự tự động của nhân viên: 'working' (Đang làm việc) | 'temporary_leave' (Tạm nghỉ) | 'resigned' (Đã nghỉ)
   const isHrResigned = Boolean(
     dbUser?.status === 'Đã nghỉ việc' ||
@@ -541,11 +580,11 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
 
   const isEmployeeInactive = isHrResigned || isHrTempLeave;
 
-  // Khoá nút bấm chấm công khi đã quẹt xong ca, hoặc đang nghỉ phép ca đó, hoặc chưa đáp ứng kết nối mạng, hoặc chưa đến giờ / hết giờ ca
-  const isMorningInLocked = isEmployeeInactive || hasMorningIn || isMorningEnded || !isNetworkReadyForCheckIn || isTodayMorningLeave;
-  const isMorningCheckOutLocked = isEmployeeInactive || hasMorningOut || isMorningEnded || !hasMorningIn || !isNetworkReadyForCheckIn || isTodayMorningLeave;
-  const isAfternoonInLocked = isEmployeeInactive || hasAfternoonIn || !isAfternoonReady || !isNetworkReadyForCheckIn || isTodayAfternoonLeave;
-  const isAfternoonCheckOutLocked = isEmployeeInactive || hasAfternoonOut || !isAfternoonReady || !hasAfternoonIn || !isNetworkReadyForCheckIn || isTodayAfternoonLeave;
+  // Khoá nút bấm chấm công khi đã quẹt xong ca, hoặc đang nghỉ phép ca đó, hoặc Chủ nhật chưa duyệt làm thêm giờ, hoặc chưa đáp ứng kết nối mạng, hoặc chưa đến giờ / hết giờ ca
+  const isMorningInLocked = isEmployeeInactive || hasMorningIn || isMorningEnded || !isNetworkReadyForCheckIn || isTodayMorningLeave || isSundayMorningLocked;
+  const isMorningCheckOutLocked = isEmployeeInactive || hasMorningOut || isMorningEnded || !hasMorningIn || !isNetworkReadyForCheckIn || isTodayMorningLeave || isSundayMorningLocked;
+  const isAfternoonInLocked = isEmployeeInactive || hasAfternoonIn || !isAfternoonReady || !isNetworkReadyForCheckIn || isTodayAfternoonLeave || isSundayAfternoonLocked;
+  const isAfternoonCheckOutLocked = isEmployeeInactive || hasAfternoonOut || !isAfternoonReady || !hasAfternoonIn || !isNetworkReadyForCheckIn || isTodayAfternoonLeave || isSundayAfternoonLocked;
 
   // Chức năng chấm công ngoài văn phòng hoặc công trình dự án
   const [isOutsideWork, setIsOutsideWork] = useState<boolean>(false);
@@ -588,11 +627,15 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       onShowToast('warning', 'Tài khoản đã khoá', `Nhân viên đang ở trạng thái ${employeeStatus === 'temporary_leave' ? 'Tạm nghỉ' : 'Đã nghỉ việc'}, không thể đăng ký suất ăn.`);
       return;
     }
+    if (isSundayMealLocked) {
+      onShowToast('warning', 'Ngày Chủ nhật khoá đăng ký ăn trưa', 'Ngày Chủ nhật hệ thống khoá đăng ký suất ăn, chỉ mở cho các tài khoản đăng ký làm thêm giờ được phê duyệt.');
+      return;
+    }
     if (isTodayFullDayLeave) {
       onShowToast('warning', 'Đang trong ngày nghỉ phép', `Hôm nay bạn có đơn ${todayLeaveInfo?.leaveCategoryLabel || 'Nghỉ phép'} cả ngày nên hệ thống tự động tắt đăng ký suất ăn trưa.`);
       return;
     }
-    if (isLunchLocked) {
+    if (isLunchDeadlinePassed) {
       onShowToast('warning', 'Đã hết giờ báo cơm trưa', `Theo nội quy, giờ chốt đăng ký / hủy ăn trưa là trước ${lunchDeadlineStr}. Hiện đã quá giờ quy định, nút báo cơm trưa đã khoá để nhà bếp chuẩn bị suất ăn.`);
       return;
     }
@@ -645,11 +688,15 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       onShowToast('warning', 'Tài khoản đã khoá', `Nhân viên đang ở trạng thái ${employeeStatus === 'temporary_leave' ? 'Tạm nghỉ' : 'Đã nghỉ việc'}, không thể đăng ký suất ăn.`);
       return;
     }
+    if (isSundayMealLocked) {
+      onShowToast('warning', 'Ngày Chủ nhật khoá đăng ký ăn tối', 'Ngày Chủ nhật hệ thống khoá đăng ký suất ăn, chỉ mở cho các tài khoản đăng ký làm thêm giờ được phê duyệt.');
+      return;
+    }
     if (isTodayFullDayLeave) {
       onShowToast('warning', 'Đang trong ngày nghỉ phép', `Hôm nay bạn có đơn ${todayLeaveInfo?.leaveCategoryLabel || 'Nghỉ phép'} cả ngày nên hệ thống tự động tắt đăng ký suất ăn tối.`);
       return;
     }
-    if (isDinnerLocked) {
+    if (isDinnerDeadlinePassed) {
       onShowToast('warning', 'Đã hết giờ báo cơm tối', `Theo nội quy, giờ chốt đăng ký / hủy ăn tối tăng ca là trước ${dinnerDeadlineStr}. Hiện đã quá giờ quy định, nút báo cơm tối đã khoá.`);
       return;
     }
@@ -697,12 +744,14 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
     }
   };
 
-  // Modal Giải trình chấm công / Xin nghỉ phép
+  // Modal Giải trình chấm công / Xin nghỉ phép / Đăng ký làm thêm giờ
   const [showExplanationModal, setShowExplanationModal] = useState<boolean>(false);
   const [explanationRecord, setExplanationRecord] = useState<TimekeepingRecord | null>(null);
   const [explanationReasonType, setExplanationReasonType] = useState<string>('forget_morning_in');
   const [modalLeaveCategory, setModalLeaveCategory] = useState<'annual' | 'special' | 'sick' | 'unpaid'>('annual');
   const [modalLeaveSession, setModalLeaveSession] = useState<'all_day' | 'morning' | 'afternoon'>('all_day');
+  const [modalOtSession, setModalOtSession] = useState<'all_day' | 'morning' | 'afternoon'>('all_day');
+  const [modalOtHours, setModalOtHours] = useState<string>('8');
   const [proposedCheckIn, setProposedCheckIn] = useState<string>('08:00');
   const [proposedCheckOut, setProposedCheckOut] = useState<string>('17:30');
   const [explanationContent, setExplanationContent] = useState<string>('');
@@ -1157,6 +1206,7 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
     }
 
     const leaveInfo = raw.leaveInfo || null;
+    const overtimeInfo = raw.overtimeInfo || null;
     // Chỉ tính nghỉ phép vào ca làm việc khi đơn ĐÃ ĐƯỢC PHÊ DUYỆT (status === 'approved')
     const isApprovedLeaveMorning = Boolean(
       leaveInfo &&
@@ -1356,6 +1406,7 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                   : false
             ),
       leaveInfo,
+      overtimeInfo,
     };
   };
 
@@ -1610,6 +1661,16 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       onShowToast('warning', 'Tài khoản đã khoá', `Nhân viên đang ở trạng thái ${employeeStatus === 'temporary_leave' ? 'Tạm nghỉ' : 'Đã nghỉ việc'}, không thể thực hiện chấm công.`);
       return;
     }
+    if (isSundayMorningLocked) {
+      onShowToast(
+        'warning',
+        'Ngày Chủ nhật khoá chấm công',
+        todayOvertimeInfo?.status === 'pending'
+          ? 'Đơn đăng ký làm thêm giờ Chủ nhật của bạn đang chờ phê duyệt. Nút chấm công sẽ mở sau khi được duyệt.'
+          : 'Ngày Chủ nhật hệ thống khoá các nút chấm công, chỉ mở cho các tài khoản đăng ký làm thêm giờ được phê duyệt.'
+      );
+      return;
+    }
     if (isTodayMorningLeave) {
       onShowToast('info', 'Đang nghỉ phép ca sáng', `Bạn đã đăng ký ${todayLeaveInfo?.leaveCategoryLabel || 'Nghỉ phép'} vào ca sáng hôm nay nên không cần chấm công ca sáng.`);
       return;
@@ -1642,6 +1703,14 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
   const handleCheckOutMorning = () => {
     if (isEmployeeInactive) {
       onShowToast('warning', 'Tài khoản đã khoá', `Nhân viên đang ở trạng thái ${employeeStatus === 'temporary_leave' ? 'Tạm nghỉ' : 'Đã nghỉ việc'}, không thể thực hiện chấm công.`);
+      return;
+    }
+    if (isSundayMorningLocked) {
+      onShowToast(
+        'warning',
+        'Ngày Chủ nhật khoá chấm công',
+        'Ngày Chủ nhật hệ thống khoá các nút chấm công, chỉ mở cho các tài khoản đăng ký làm thêm giờ được phê duyệt.'
+      );
       return;
     }
     if (isTodayMorningLeave) {
@@ -1703,6 +1772,16 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       onShowToast('warning', 'Tài khoản đã khoá', `Nhân viên đang ở trạng thái ${employeeStatus === 'temporary_leave' ? 'Tạm nghỉ' : 'Đã nghỉ việc'}, không thể thực hiện chấm công.`);
       return;
     }
+    if (isSundayAfternoonLocked) {
+      onShowToast(
+        'warning',
+        'Ngày Chủ nhật khoá chấm công',
+        todayOvertimeInfo?.status === 'pending'
+          ? 'Đơn đăng ký làm thêm giờ Chủ nhật của bạn đang chờ phê duyệt. Nút chấm công sẽ mở sau khi được duyệt.'
+          : 'Ngày Chủ nhật hệ thống khoá các nút chấm công, chỉ mở cho các tài khoản đăng ký làm thêm giờ được phê duyệt.'
+      );
+      return;
+    }
     if (isTodayAfternoonLeave) {
       onShowToast('info', 'Đang nghỉ phép ca chiều', `Bạn đã đăng ký ${todayLeaveInfo?.leaveCategoryLabel || 'Nghỉ phép'} vào ca chiều hôm nay nên không cần chấm công ca chiều.`);
       return;
@@ -1735,6 +1814,14 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
   const handleCheckOutAfternoon = () => {
     if (isEmployeeInactive) {
       onShowToast('warning', 'Tài khoản đã khoá', `Nhân viên đang ở trạng thái ${employeeStatus === 'temporary_leave' ? 'Tạm nghỉ' : 'Đã nghỉ việc'}, không thể thực hiện chấm công.`);
+      return;
+    }
+    if (isSundayAfternoonLocked) {
+      onShowToast(
+        'warning',
+        'Ngày Chủ nhật khoá chấm công',
+        'Ngày Chủ nhật hệ thống khoá các nút chấm công, chỉ mở cho các tài khoản đăng ký làm thêm giờ được phê duyệt.'
+      );
       return;
     }
     if (isTodayAfternoonLeave) {
@@ -1796,11 +1883,20 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
     }
   };
 
-  // Mở modal gửi giải trình / xin nghỉ phép
+  // Mở modal gửi giải trình / xin nghỉ phép / đăng ký làm thêm giờ
   const handleOpenExplanation = (record?: TimekeepingRecord) => {
     const target = record || records[0];
     setExplanationRecord(target);
-    if (target?.leaveInfo) {
+    const isSundayTarget = Boolean(
+      target?.dayOfWeek?.toLowerCase().includes('chủ') ||
+      (target?.dateStr && new Date(target.dateStr).getDay() === 0)
+    );
+    if (target?.overtimeInfo || isSundayTarget) {
+      setExplanationReasonType('overtime_request');
+      setModalOtSession(target?.overtimeInfo?.otSession || 'all_day');
+      setModalOtHours(String(target?.overtimeInfo?.hours || 8));
+      setExplanationContent(target?.overtimeInfo?.reason || '');
+    } else if (target?.leaveInfo) {
       setExplanationReasonType('leave_request');
       setModalLeaveCategory(target.leaveInfo.leaveCategory || 'annual');
       setModalLeaveSession(target.leaveInfo.leaveSession || 'all_day');
@@ -1809,6 +1905,8 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       setExplanationReasonType('forget_morning_in');
       setModalLeaveCategory('annual');
       setModalLeaveSession('all_day');
+      setModalOtSession('all_day');
+      setModalOtHours('8');
       setExplanationContent('');
     }
     setProposedCheckIn('08:00');
@@ -1816,7 +1914,7 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
     setShowExplanationModal(true);
   };
 
-  // Gửi giải trình chấm công hoặc đơn xin nghỉ phép và lưu vào bảng PersonalRequest thực tế
+  // Gửi giải trình chấm công, đơn xin nghỉ phép hoặc đơn đăng ký làm thêm giờ và lưu vào bảng PersonalRequest thực tế
   const handleSubmitExplanation = async () => {
     if (!explanationContent.trim()) {
       onShowToast('warning', 'Thiếu nội dung', 'Vui lòng nhập lý do chi tiết');
@@ -1825,6 +1923,7 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
 
     if (explanationRecord) {
       const isLeaveReq = explanationReasonType === 'leave_request';
+      const isOtReq = explanationReasonType === 'overtime_request';
       const isPaidLeave = modalLeaveCategory === 'annual' || modalLeaveCategory === 'special';
       const leaveCatLabel =
         modalLeaveCategory === 'annual'
@@ -1835,17 +1934,24 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
               ? 'Nghỉ theo chính sách (Ốm/BHXH)'
               : 'Nghỉ không hưởng lương';
       const leaveDaysNum = modalLeaveSession === 'all_day' ? 1 : 0.5;
+      const otSessionLabel =
+        modalOtSession === 'morning'
+          ? 'Buổi sáng'
+          : modalOtSession === 'afternoon'
+            ? 'Buổi chiều'
+            : 'Cả ngày';
+      const otHoursNum = Number(modalOtHours) || (modalOtSession === 'all_day' ? 8 : 4);
 
-      const payload: Record<string, any> = isLeaveReq
+      const payload: Record<string, any> = isOtReq
         ? {
-            type: 'leave',
-            title: `Xin nghỉ phép (${leaveCatLabel}) ngày ${explanationRecord.dateStr}`,
+            type: 'overtime',
+            requestType: 'Đăng ký làm thêm giờ',
+            title: `Đăng ký làm thêm giờ (${otSessionLabel} • ${otHoursNum}h) ngày ${explanationRecord.dateStr}`,
             content: explanationContent,
-            leaveCategory: modalLeaveCategory,
-            leaveSession: modalLeaveSession,
-            leaveFromDate: explanationRecord.dateStr,
-            leaveToDate: explanationRecord.dateStr,
-            leaveDays: leaveDaysNum,
+            overtimeDate: explanationRecord.dateStr,
+            otSession: modalOtSession,
+            otHours: otHoursNum,
+            totalHours: otHoursNum,
             approver: approverName,
             applicantName: currentEmployee.name,
             applicantRole: currentEmployee.role,
@@ -1854,20 +1960,38 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
             userEmail: currentEmployee.email,
             status: 'pending',
           }
-        : {
-            type: 'late_early',
-            title: `Giải trình chấm công ngày ${explanationRecord.dateStr}`,
-            content: explanationContent,
-            lateEarlyDate: explanationRecord.dateStr,
-            lateEarlyTargetTime: `${proposedCheckIn} - ${proposedCheckOut}`,
-            approver: approverName,
-            applicantName: currentEmployee.name,
-            applicantRole: currentEmployee.role,
-            department: currentEmployee.department,
-            userId: currentEmployee.id,
-            userEmail: currentEmployee.email,
-            status: 'pending',
-          };
+        : isLeaveReq
+          ? {
+              type: 'leave',
+              title: `Xin nghỉ phép (${leaveCatLabel}) ngày ${explanationRecord.dateStr}`,
+              content: explanationContent,
+              leaveCategory: modalLeaveCategory,
+              leaveSession: modalLeaveSession,
+              leaveFromDate: explanationRecord.dateStr,
+              leaveToDate: explanationRecord.dateStr,
+              leaveDays: leaveDaysNum,
+              approver: approverName,
+              applicantName: currentEmployee.name,
+              applicantRole: currentEmployee.role,
+              department: currentEmployee.department,
+              userId: currentEmployee.id,
+              userEmail: currentEmployee.email,
+              status: 'pending',
+            }
+          : {
+              type: 'late_early',
+              title: `Giải trình chấm công ngày ${explanationRecord.dateStr}`,
+              content: explanationContent,
+              lateEarlyDate: explanationRecord.dateStr,
+              lateEarlyTargetTime: `${proposedCheckIn} - ${proposedCheckOut}`,
+              approver: approverName,
+              applicantName: currentEmployee.name,
+              applicantRole: currentEmployee.role,
+              department: currentEmployee.department,
+              userId: currentEmployee.id,
+              userEmail: currentEmployee.email,
+              status: 'pending',
+            };
 
       try {
         await fetch('/api/personal-requests', {
@@ -1876,7 +2000,7 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
           body: JSON.stringify(payload),
         });
 
-        // Tải lại bảng chấm công thực tế từ CSDL để đồng bộ ngay lập tức (đơn ở trạng thái Chờ phê duyệt, không khóa chấm công)
+        // Tải lại bảng chấm công thực tế từ CSDL để đồng bộ ngay lập tức
         const realUid = currentEmployee.id || dbUser?.employeeId || dbUser?.id || activeUser?.id || 'lecongvu@seajong.com';
         const tkRes = await fetch(`/api/timekeeping?userId=${encodeURIComponent(String(realUid))}`);
         if (tkRes.ok) {
@@ -1892,7 +2016,16 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
             return {
               ...r,
               explanationStatus: 'pending' as any,
-              note: `${isLeaveReq ? leaveCatLabel : 'Giải trình'}: ${explanationContent.slice(0, 40)}...`,
+              note: `${isOtReq ? 'Đăng ký làm thêm giờ' : isLeaveReq ? leaveCatLabel : 'Giải trình'}: ${explanationContent.slice(0, 40)}...`,
+              overtimeInfo: isOtReq
+                ? {
+                    status: 'pending' as const,
+                    otSession: modalOtSession,
+                    hours: otHoursNum,
+                    reason: explanationContent,
+                    approver: approverName,
+                  }
+                : r.overtimeInfo,
               leaveInfo: isLeaveReq
                 ? {
                     status: 'pending' as const,
@@ -1915,7 +2048,13 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       window.dispatchEvent(new CustomEvent('decodoor_request_created'));
       setShowExplanationModal(false);
 
-      if (isLeaveReq) {
+      if (isOtReq) {
+        onShowToast(
+          'success',
+          'Đã gửi đăng ký làm thêm giờ (Chờ phê duyệt)',
+          `Đơn đăng ký làm thêm giờ (${otSessionLabel}) ngày ${explanationRecord.dateStr} đã chuyển tới lãnh đạo phê duyệt. Nút chấm công Chủ nhật sẽ tự động mở sau khi đơn được duyệt.`
+        );
+      } else if (isLeaveReq) {
         onShowToast(
           'success',
           'Đã gửi đơn xin nghỉ (Chờ phê duyệt)',
@@ -2280,29 +2419,35 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
               <div
                 style={{
                   backgroundColor: '#ffffff',
-                  border: isMorningEnded ? '1px solid #e2e8f0' : '1px solid #cbd5e1',
+                  border: isMorningEnded || isSundayMorningLocked ? '1px solid #e2e8f0' : '1px solid #cbd5e1',
                   borderRadius: '8px',
                   padding: '8px',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '6px',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
-                  opacity: isMorningEnded ? 0.9 : 1,
+                  opacity: isMorningEnded || isSundayMorningLocked ? 0.9 : 1,
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: isMorningEnded ? '#64748b' : '#16a34a', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: isMorningEnded || isSundayMorningLocked ? '#64748b' : '#16a34a', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <Sun size={13} /> CA SÁNG
                   </span>
                   <span
-                    title={isMorningEnded ? 'Đã hết ca sáng' : (!isNetworkReadyForCheckIn ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công') : '0.5 công')}
+                    title={
+                      isSundayMorningLocked
+                        ? 'Ngày Chủ nhật khoá chấm công - Chỉ mở cho tài khoản có đăng ký làm thêm giờ được phê duyệt'
+                        : isMorningEnded
+                          ? 'Đã hết ca sáng'
+                          : (!isNetworkReadyForCheckIn ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công') : '0.5 công')
+                    }
                     style={{
                       fontSize: '0.6875rem',
                       fontWeight: 700,
-                      color: isMorningEnded ? '#dc2626' : (!isNetworkReadyForCheckIn ? '#b45309' : '#16a34a'),
-                      backgroundColor: isMorningEnded ? '#fef2f2' : (!isNetworkReadyForCheckIn ? '#fef3c7' : '#f0fdf4'),
-                      border: isMorningEnded ? '1px solid #fecaca' : (!isNetworkReadyForCheckIn ? '1px solid #fde68a' : '1px solid #bbf7d0'),
-                      padding: (isMorningEnded || !isNetworkReadyForCheckIn) && isMobileScreen ? '2px 5px' : '1px 6px',
+                      color: isSundayMorningLocked || isMorningEnded ? '#dc2626' : (!isNetworkReadyForCheckIn ? '#b45309' : '#16a34a'),
+                      backgroundColor: isSundayMorningLocked || isMorningEnded ? '#fef2f2' : (!isNetworkReadyForCheckIn ? '#fef3c7' : '#f0fdf4'),
+                      border: isSundayMorningLocked || isMorningEnded ? '1px solid #fecaca' : (!isNetworkReadyForCheckIn ? '1px solid #fde68a' : '1px solid #bbf7d0'),
+                      padding: (isSundayMorningLocked || isMorningEnded || !isNetworkReadyForCheckIn) && isMobileScreen ? '2px 5px' : '1px 6px',
                       borderRadius: '4px',
                       display: 'flex',
                       alignItems: 'center',
@@ -2310,7 +2455,14 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                       gap: '3px',
                     }}
                   >
-                    {isMorningEnded ? (
+                    {isSundayMorningLocked ? (
+                      <>
+                        <LockFill size={10} />
+                        <span className="timekeeping-lock-text" style={{ display: isMobileScreen ? 'none' : 'inline' }}>
+                          {todayOvertimeInfo?.status === 'pending' ? 'Chờ duyệt tăng ca' : 'Nghỉ Chủ nhật'}
+                        </span>
+                      </>
+                    ) : isMorningEnded ? (
                       <>
                         <LockFill size={10} />
                         <span className="timekeeping-lock-text" style={{ display: isMobileScreen ? 'none' : 'inline' }}>
@@ -2324,6 +2476,8 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                           {authMode === 'gps' && locationRangeCheck && !locationRangeCheck.isInside ? 'Ngoài bán kính' : 'Chưa đủ mạng'}
                         </span>
                       </>
+                    ) : isTodaySunday && isTodayMorningOtApproved ? (
+                      'Tăng ca CN (0.5)'
                     ) : (
                       '0.5 công'
                     )}
@@ -2338,11 +2492,13 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                   title={
                     hasMorningIn
                       ? `Đã chấm công vào ca sáng (${todayMorningIn}) - Nút đã khoá tránh bấm trùng lặp`
-                      : (isMorningEnded
-                        ? 'Đã hết ca sáng - Nút chấm công đã khoá'
-                        : (!isNetworkReadyForCheckIn
-                          ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công - Nút đã khoá')
-                          : (isOutside ? 'Bắt đầu làm việc' : 'Chấm công vào ca sáng')))
+                      : isSundayMorningLocked
+                        ? 'Ngày Chủ nhật khoá chấm công - Chỉ mở cho tài khoản có đăng ký làm thêm giờ được phê duyệt'
+                        : (isMorningEnded
+                          ? 'Đã hết ca sáng - Nút chấm công đã khoá'
+                          : (!isNetworkReadyForCheckIn
+                            ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công - Nút đã khoá')
+                            : (isOutside ? 'Bắt đầu làm việc' : 'Chấm công vào ca sáng')))
                   }
                   style={{
                     width: '100%',
@@ -2368,11 +2524,13 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                   <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: hasMorningIn ? '#15803d' : undefined }}>
                     {hasMorningIn
                       ? `Giờ vào: ${todayMorningIn}`
-                      : (isMorningEnded
-                        ? 'Đã hết ca sáng'
-                        : (!isNetworkReadyForCheckIn
-                          ? networkLockSubtext
-                          : (isOutside ? 'Bấm bắt đầu' : 'Bấm vào ca')))}
+                      : isSundayMorningLocked
+                        ? (todayOvertimeInfo?.status === 'pending' ? 'Chờ duyệt tăng ca CN' : 'Chưa duyệt tăng ca')
+                        : (isMorningEnded
+                          ? 'Đã hết ca sáng'
+                          : (!isNetworkReadyForCheckIn
+                            ? networkLockSubtext
+                            : (isOutside ? 'Bấm bắt đầu' : 'Bấm vào ca')))}
                   </span>
                 </button>
 
@@ -2384,13 +2542,15 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                   title={
                     hasMorningOut
                       ? `Đã chấm công ra ca sáng (${todayMorningOut}) - Nút đã khoá tránh bấm trùng lặp`
-                      : (!hasMorningIn
-                        ? (isOutside ? 'Chưa bấm bắt đầu - Khoá nút kết thúc' : 'Chưa bấm giờ vào ca sáng - Khoá nút bấm giờ ra')
-                        : (isMorningEnded
-                          ? 'Đã hết ca sáng - Nút chấm công đã khoá'
-                          : (!isNetworkReadyForCheckIn
-                            ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công - Nút đã khoá')
-                            : (isOutside ? 'Kết thúc ca sáng' : 'Chấm công ra ca sáng'))))
+                      : isSundayMorningLocked
+                        ? 'Ngày Chủ nhật khoá chấm công - Chỉ mở cho tài khoản có đăng ký làm thêm giờ được phê duyệt'
+                        : (!hasMorningIn
+                          ? (isOutside ? 'Chưa bấm bắt đầu - Khoá nút kết thúc' : 'Chưa bấm giờ vào ca sáng - Khoá nút bấm giờ ra')
+                          : (isMorningEnded
+                            ? 'Đã hết ca sáng - Nút chấm công đã khoá'
+                            : (!isNetworkReadyForCheckIn
+                              ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công - Nút đã khoá')
+                              : (isOutside ? 'Kết thúc ca sáng' : 'Chấm công ra ca sáng'))))
                   }
                   style={{
                     width: '100%',
@@ -2422,13 +2582,15 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                   <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: hasMorningOut ? (todayMorningEarlyMinutes > 0 ? '#c2410c' : '#15803d') : undefined }}>
                     {hasMorningOut
                       ? (todayMorningEarlyMinutes > 0 ? `Giờ ra: ${todayMorningOut} (Sớm ${todayMorningEarlyMinutes}p)` : `Giờ ra: ${todayMorningOut}`)
-                      : (!hasMorningIn
-                        ? (isOutside ? 'Chưa bấm bắt đầu' : 'Chưa bấm giờ vào')
-                        : (isMorningEnded
-                          ? 'Đã hết ca sáng'
-                          : (!isNetworkReadyForCheckIn
-                            ? networkLockSubtext
-                            : (isOutside ? 'Bấm kết thúc' : 'Bấm ra ca nửa công'))))}
+                      : isSundayMorningLocked
+                        ? (todayOvertimeInfo?.status === 'pending' ? 'Chờ duyệt tăng ca CN' : 'Nghỉ Chủ nhật')
+                        : (!hasMorningIn
+                          ? (isOutside ? 'Chưa bấm bắt đầu' : 'Chưa bấm giờ vào')
+                          : (isMorningEnded
+                            ? 'Đã hết ca sáng'
+                            : (!isNetworkReadyForCheckIn
+                              ? networkLockSubtext
+                              : (isOutside ? 'Bấm kết thúc' : 'Bấm ra ca nửa công'))))}
                   </span>
                 </button>
               </div>
@@ -2437,29 +2599,35 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
               <div
                 style={{
                   backgroundColor: '#ffffff',
-                  border: !isAfternoonReady ? '1px solid #e2e8f0' : '1px solid #cbd5e1',
+                  border: !isAfternoonReady || isSundayAfternoonLocked ? '1px solid #e2e8f0' : '1px solid #cbd5e1',
                   borderRadius: '8px',
                   padding: '8px',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '6px',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
-                  opacity: !isAfternoonReady ? 0.9 : 1,
+                  opacity: !isAfternoonReady || isSundayAfternoonLocked ? 0.9 : 1,
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: !isAfternoonReady ? '#64748b' : '#2563eb', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: !isAfternoonReady || isSundayAfternoonLocked ? '#64748b' : '#2563eb', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <MoonStars size={13} /> CA CHIỀU
                   </span>
                   <span
-                    title={!isAfternoonReady ? 'Đang khoá' : (!isNetworkReadyForCheckIn ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công') : '0.5 công')}
+                    title={
+                      isSundayAfternoonLocked
+                        ? 'Ngày Chủ nhật khoá chấm công - Chỉ mở cho tài khoản có đăng ký làm thêm giờ được phê duyệt'
+                        : !isAfternoonReady
+                          ? 'Đang khoá'
+                          : (!isNetworkReadyForCheckIn ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công') : '0.5 công')
+                    }
                     style={{
                       fontSize: '0.6875rem',
                       fontWeight: 700,
-                      color: !isAfternoonReady ? '#d97706' : (!isNetworkReadyForCheckIn ? '#b45309' : '#2563eb'),
-                      backgroundColor: !isAfternoonReady ? '#fffbeb' : (!isNetworkReadyForCheckIn ? '#fef3c7' : '#eff6ff'),
-                      border: !isAfternoonReady ? '1px solid #fde68a' : (!isNetworkReadyForCheckIn ? '1px solid #fde68a' : '1px solid #bfdbfe'),
-                      padding: (!isAfternoonReady || !isNetworkReadyForCheckIn) && isMobileScreen ? '2px 5px' : '1px 6px',
+                      color: isSundayAfternoonLocked ? '#dc2626' : (!isAfternoonReady ? '#d97706' : (!isNetworkReadyForCheckIn ? '#b45309' : '#2563eb')),
+                      backgroundColor: isSundayAfternoonLocked ? '#fef2f2' : (!isAfternoonReady ? '#fffbeb' : (!isNetworkReadyForCheckIn ? '#fef3c7' : '#eff6ff')),
+                      border: isSundayAfternoonLocked ? '1px solid #fecaca' : (!isAfternoonReady ? '1px solid #fde68a' : (!isNetworkReadyForCheckIn ? '1px solid #fde68a' : '1px solid #bfdbfe')),
+                      padding: (isSundayAfternoonLocked || !isAfternoonReady || !isNetworkReadyForCheckIn) && isMobileScreen ? '2px 5px' : '1px 6px',
                       borderRadius: '4px',
                       display: 'flex',
                       alignItems: 'center',
@@ -2467,7 +2635,14 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                       gap: '3px',
                     }}
                   >
-                    {!isAfternoonReady ? (
+                    {isSundayAfternoonLocked ? (
+                      <>
+                        <LockFill size={10} />
+                        <span className="timekeeping-lock-text" style={{ display: isMobileScreen ? 'none' : 'inline' }}>
+                          {todayOvertimeInfo?.status === 'pending' ? 'Chờ duyệt tăng ca' : 'Nghỉ Chủ nhật'}
+                        </span>
+                      </>
+                    ) : !isAfternoonReady ? (
                       <>
                         <LockFill size={10} />
                         <span className="timekeeping-lock-text" style={{ display: isMobileScreen ? 'none' : 'inline' }}>
@@ -2481,6 +2656,8 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                           {authMode === 'gps' && locationRangeCheck && !locationRangeCheck.isInside ? 'Ngoài bán kính' : 'Chưa đủ mạng'}
                         </span>
                       </>
+                    ) : isTodaySunday && isTodayAfternoonOtApproved ? (
+                      'Tăng ca CN (0.5)'
                     ) : (
                       '0.5 công'
                     )}
@@ -2495,11 +2672,13 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                   title={
                     hasAfternoonIn
                       ? `Đã chấm công vào ca chiều (${todayAfternoonIn}) - Nút đã khoá tránh bấm trùng lặp`
-                      : (!isAfternoonReady
-                        ? 'Đang khoá - Nút chấm công tạm khoá'
-                        : (!isNetworkReadyForCheckIn
-                          ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công - Nút đã khoá')
-                          : (isOutside ? 'Bắt đầu làm việc ca chiều' : 'Chấm công vào ca chiều')))
+                      : isSundayAfternoonLocked
+                        ? 'Ngày Chủ nhật khoá chấm công - Chỉ mở cho tài khoản có đăng ký làm thêm giờ được phê duyệt'
+                        : (!isAfternoonReady
+                          ? 'Đang khoá - Nút chấm công tạm khoá'
+                          : (!isNetworkReadyForCheckIn
+                            ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công - Nút đã khoá')
+                            : (isOutside ? 'Bắt đầu làm việc ca chiều' : 'Chấm công vào ca chiều')))
                   }
                   style={{
                     width: '100%',
@@ -2525,11 +2704,13 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                   <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: hasAfternoonIn ? '#1d4ed8' : undefined }}>
                     {hasAfternoonIn
                       ? `Giờ vào: ${todayAfternoonIn}`
-                      : (!isAfternoonReady
-                        ? 'Đang khoá'
-                        : (!isNetworkReadyForCheckIn
-                          ? networkLockSubtext
-                          : (isOutside ? 'Bấm bắt đầu' : 'Bấm vào ca')))}
+                      : isSundayAfternoonLocked
+                        ? (todayOvertimeInfo?.status === 'pending' ? 'Chờ duyệt tăng ca CN' : 'Chưa duyệt tăng ca')
+                        : (!isAfternoonReady
+                          ? 'Đang khoá'
+                          : (!isNetworkReadyForCheckIn
+                            ? networkLockSubtext
+                            : (isOutside ? 'Bấm bắt đầu' : 'Bấm vào ca')))}
                   </span>
                 </button>
 
@@ -2541,13 +2722,15 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                   title={
                     hasAfternoonOut
                       ? `Đã chấm công ra ca chiều (${todayAfternoonOut}) - Nút đã khoá tránh bấm trùng lặp`
-                      : (!isAfternoonReady
-                        ? 'Đang khoá - Nút chấm công tạm khoá'
-                        : (!hasAfternoonIn
-                          ? (isOutside ? 'Chưa bấm bắt đầu - Khoá nút kết thúc' : 'Chưa bấm giờ vào ca chiều - Khoá nút bấm giờ ra')
-                          : (!isNetworkReadyForCheckIn
-                            ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công - Nút đã khoá')
-                            : (isOutside ? 'Kết thúc ca chiều' : 'Chấm công ra ca chiều'))))
+                      : isSundayAfternoonLocked
+                        ? 'Ngày Chủ nhật khoá chấm công - Chỉ mở cho tài khoản có đăng ký làm thêm giờ được phê duyệt'
+                        : (!isAfternoonReady
+                          ? 'Đang khoá - Nút chấm công tạm khoá'
+                          : (!hasAfternoonIn
+                            ? (isOutside ? 'Chưa bấm bắt đầu - Khoá nút kết thúc' : 'Chưa bấm giờ vào ca chiều - Khoá nút bấm giờ ra')
+                            : (!isNetworkReadyForCheckIn
+                              ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công - Nút đã khoá')
+                              : (isOutside ? 'Kết thúc ca chiều' : 'Chấm công ra ca chiều'))))
                   }
                   style={{
                     width: '100%',
@@ -2579,13 +2762,15 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                   <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: hasAfternoonOut ? (todayAfternoonEarlyMinutes > 0 ? '#c2410c' : '#1d4ed8') : (isAfternoonCheckOutLocked ? '#94a3b8' : '#1e293b') }}>
                     {hasAfternoonOut
                       ? (todayAfternoonEarlyMinutes > 0 ? `Giờ ra: ${todayAfternoonOut} (Sớm ${todayAfternoonEarlyMinutes}p)` : `Giờ ra: ${todayAfternoonOut}`)
-                      : (!isAfternoonReady
-                        ? 'Đang khoá'
-                        : (!hasAfternoonIn
-                          ? (isOutside ? 'Chưa bấm bắt đầu' : 'Chưa bấm giờ vào')
-                          : (!isNetworkReadyForCheckIn
-                            ? networkLockSubtext
-                            : (isOutside ? 'Bấm kết thúc' : 'Bấm ra ca tan làm'))))}
+                      : isSundayAfternoonLocked
+                        ? (todayOvertimeInfo?.status === 'pending' ? 'Chờ duyệt tăng ca CN' : 'Nghỉ Chủ nhật')
+                        : (!isAfternoonReady
+                          ? 'Đang khoá'
+                          : (!hasAfternoonIn
+                            ? (isOutside ? 'Chưa bấm bắt đầu' : 'Chưa bấm giờ vào')
+                            : (!isNetworkReadyForCheckIn
+                              ? networkLockSubtext
+                              : (isOutside ? 'Bấm kết thúc' : 'Bấm ra ca tan làm'))))}
                   </span>
                 </button>
               </div>
@@ -2676,9 +2861,11 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                         marginTop: '1px',
                       }}
                     >
-                      {isLunchLocked
-                        ? (registerLunch ? `Đã chốt (${lunchDeadlineStr})` : `Hết giờ chốt (${lunchDeadlineStr})`)
-                        : (registerLunch ? `Đã đăng ký (chốt ${lunchDeadlineStr})` : `Chưa đăng ký (trước ${lunchDeadlineStr})`)}
+                      {isSundayMealLocked
+                        ? 'Nghỉ Chủ nhật (Khoá)'
+                        : isLunchLocked
+                          ? (registerLunch ? `Đã chốt (${lunchDeadlineStr})` : `Hết giờ chốt (${lunchDeadlineStr})`)
+                          : (registerLunch ? `Đã đăng ký (chốt ${lunchDeadlineStr})` : `Chưa đăng ký (trước ${lunchDeadlineStr})`)}
                     </div>
                   </div>
                 </div>
@@ -2788,9 +2975,11 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                         marginTop: '1px',
                       }}
                     >
-                      {isDinnerLocked
-                        ? (registerDinner ? `Đã chốt (${dinnerDeadlineStr})` : `Hết giờ chốt (${dinnerDeadlineStr})`)
-                        : (registerDinner ? `Đã đăng ký (chốt ${dinnerDeadlineStr})` : `Chưa đăng ký (trước ${dinnerDeadlineStr})`)}
+                      {isSundayMealLocked
+                        ? 'Nghỉ Chủ nhật (Khoá)'
+                        : isDinnerLocked
+                          ? (registerDinner ? `Đã chốt (${dinnerDeadlineStr})` : `Hết giờ chốt (${dinnerDeadlineStr})`)
+                          : (registerDinner ? `Đã đăng ký (chốt ${dinnerDeadlineStr})` : `Chưa đăng ký (trước ${dinnerDeadlineStr})`)}
                     </div>
                   </div>
                 </div>
@@ -4750,9 +4939,11 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
             >
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.0625rem', fontWeight: 800, color: '#0f172a' }}>
-                  {explanationReasonType === 'leave_request'
-                    ? 'Đăng ký nghỉ phép'
-                    : 'Gửi giải trình chấm công'}
+                  {explanationReasonType === 'overtime_request'
+                    ? 'Đăng ký làm thêm giờ'
+                    : explanationReasonType === 'leave_request'
+                      ? 'Đăng ký nghỉ phép'
+                      : 'Gửi giải trình chấm công'}
                 </h3>
                 <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
                   Ngày làm việc: {explanationRecord.dateStr} • {explanationRecord.dayOfWeek}
@@ -4791,6 +4982,7 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                     fontFamily: "'Roboto Condensed', sans-serif",
                   }}
                 >
+                  <option value="overtime_request">⚡ Đăng ký làm thêm giờ (Tăng ca Chủ nhật / Ngoài giờ)</option>
                   <option value="leave_request">📅 Xin nghỉ phép ngày này (Phép năm / Việc riêng / Nghỉ ốm)</option>
                   <option value="forget_morning_in">Quên chấm công vào ca sáng</option>
                   <option value="forget_morning_out">Quên chấm công ra ca sáng</option>
@@ -4801,7 +4993,57 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                 </select>
               </div>
 
-              {explanationReasonType === 'leave_request' ? (
+              {explanationReasonType === 'overtime_request' ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                      Ca đăng ký làm thêm giờ
+                    </label>
+                    <select
+                      value={modalOtSession}
+                      onChange={(e) => {
+                        const val = e.target.value as 'all_day' | 'morning' | 'afternoon';
+                        setModalOtSession(val);
+                        setModalOtHours(val === 'all_day' ? '8' : '4');
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        fontSize: '0.875rem',
+                        fontFamily: "'Roboto Condensed', sans-serif",
+                      }}
+                    >
+                      <option value="all_day">Cả ngày (Ca sáng + Ca chiều)</option>
+                      <option value="morning">Buổi sáng (Ca sáng)</option>
+                      <option value="afternoon">Buổi chiều (Ca chiều)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                      Số giờ đăng ký làm thêm
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={16}
+                      step={0.5}
+                      value={modalOtHours}
+                      onChange={(e) => setModalOtHours(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        fontSize: '0.875rem',
+                        fontFamily: "'Roboto Condensed', sans-serif",
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : explanationReasonType === 'leave_request' ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     <div>
@@ -5017,18 +5259,22 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                  {explanationReasonType === 'leave_request'
-                    ? 'Lý do xin nghỉ phép & bàn giao công việc'
-                    : 'Lý do chi tiết giải trình'}
+                  {explanationReasonType === 'overtime_request'
+                    ? 'Nội dung công việc làm thêm giờ'
+                    : explanationReasonType === 'leave_request'
+                      ? 'Lý do xin nghỉ phép & bàn giao công việc'
+                      : 'Lý do chi tiết giải trình'}
                 </label>
                 <textarea
                   rows={3}
                   value={explanationContent}
                   onChange={(e) => setExplanationContent(e.target.value)}
                   placeholder={
-                    explanationReasonType === 'leave_request'
-                      ? 'Nhập lý do xin nghỉ phép và người nhận bàn giao công việc...'
-                      : 'Nhập chi tiết hoàn cảnh hoặc lý do quên chấm công...'
+                    explanationReasonType === 'overtime_request'
+                      ? 'Nhập nội dung công việc cần xử lý làm thêm giờ...'
+                      : explanationReasonType === 'leave_request'
+                        ? 'Nhập lý do xin nghỉ phép và người nhận bàn giao công việc...'
+                        : 'Nhập chi tiết hoàn cảnh hoặc lý do quên chấm công...'
                   }
                   style={{
                     width: '100%',
@@ -5116,7 +5362,11 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                       cursor: isModalAnnualQuotaExceeded ? 'not-allowed' : 'pointer',
                     }}
                   >
-                    {explanationReasonType === 'leave_request' ? 'Gửi đơn nghỉ phép' : 'Gửi giải trình'}
+                    {explanationReasonType === 'overtime_request'
+                      ? 'Gửi đăng ký làm thêm giờ'
+                      : explanationReasonType === 'leave_request'
+                        ? 'Gửi đơn nghỉ phép'
+                        : 'Gửi giải trình'}
                   </Button>
                 );
               })()}
@@ -5342,6 +5592,9 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                   </div>
                   <div>
                     • <strong>Nhân viên công tác ngoài:</strong> Tích chọn Công tác ngoài văn phòng và ghi rõ địa điểm công trình phụ trách.
+                  </div>
+                  <div>
+                    • <strong>Chấm công ngày Chủ nhật:</strong> Hệ thống mặc định khoá các nút chấm công vào ngày Chủ nhật, chỉ mở cho các tài khoản có đăng ký làm thêm giờ được phê duyệt.
                   </div>
                 </div>
               </div>

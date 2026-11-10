@@ -197,6 +197,8 @@ export const HopDongModal: React.FC<HopDongModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedFields),
       });
+      window.dispatchEvent(new CustomEvent('seajong_contracts_updated'));
+      window.dispatchEvent(new CustomEvent('seajong_user_tasks_updated'));
       onSaved(updatedFields);
       onClose();
     } catch (err) {

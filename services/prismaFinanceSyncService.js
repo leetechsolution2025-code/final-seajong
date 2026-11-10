@@ -63,6 +63,7 @@ function dbRun(db, sql, params = []) {
 
 export async function syncPrismaFinanceToAccountingTables(db) {
   try {
+    await dbRun(db, 'PRAGMA foreign_keys = OFF');
     // 1. Kiểm tra xem bảng Prisma có dữ liệu thực tế không
     const [
       prismaAccounts,
@@ -245,9 +246,9 @@ export async function syncPrismaFinanceToAccountingTables(db) {
       };
 
       await dbRun(db, 'BEGIN TRANSACTION');
-      // Làm sạch các bút toán đồng bộ từ Prisma JournalEntry (giữ nguyên các bút toán phân hệ chi phí, công nợ, khấu hao JE-%)
-      await dbRun(db, "DELETE FROM accounting_journal_lines WHERE entry_id NOT LIKE 'JE-%'");
-      await dbRun(db, "DELETE FROM accounting_journal_entries WHERE id NOT LIKE 'JE-%'");
+      // Làm sạch toàn bộ bút toán cũ trước khi đồng bộ lại từ Prisma & Subledgers
+      await dbRun(db, 'DELETE FROM accounting_journal_lines');
+      await dbRun(db, 'DELETE FROM accounting_journal_entries');
 
       let seq = 1;
       for (const je of prismaJournalEntries) {
@@ -416,11 +417,11 @@ export async function syncPrismaFinanceToAccountingTables(db) {
     // ============================================================================
     // D. ĐỒNG BỘ CÔNG NỢ PHẢI THU (debt_receivables) & CÔNG NỢ PHẢI TRẢ (debt_payables)
     // ============================================================================
+    await dbRun(db, 'DELETE FROM debt_receivables');
+    await dbRun(db, 'DELETE FROM debt_payables');
+    await dbRun(db, "DELETE FROM financial_vouchers WHERE voucher_type = 'receipt'");
     if (prismaDebts.length > 0) {
       await dbRun(db, 'BEGIN TRANSACTION');
-      // Dọn dẹp các dòng công nợ mẫu cũ
-      await dbRun(db, "DELETE FROM debt_receivables WHERE id LIKE 'REC-SJ-%' OR id LIKE 'SYNC-REC-%'");
-      await dbRun(db, "DELETE FROM debt_payables WHERE id LIKE 'PAY-SJ-%' OR id LIKE 'SYNC-PAY-%'");
 
       // 1. Nhóm Công nợ Phải thu theo Khách hàng
       const recGroups = new Map();
@@ -719,6 +720,9 @@ export async function syncPrismaFinanceToAccountingTables(db) {
     // ============================================================================
     // E. ĐỒNG BỘ CHI PHÍ (financial_expenses) & LỆNH CHI TIỀN (payment_orders)
     // ============================================================================
+    await dbRun(db, 'DELETE FROM financial_expenses');
+    await dbRun(db, 'DELETE FROM payment_orders');
+    await dbRun(db, "DELETE FROM financial_vouchers WHERE voucher_type = 'payment'");
     if (prismaExpenses.length > 0) {
       await dbRun(db, 'BEGIN TRANSACTION');
       let expIdx = 1;
@@ -858,6 +862,8 @@ export async function syncPrismaFinanceToAccountingTables(db) {
     // ============================================================================
     // F. ĐỒNG BỘ TẠM ỨNG NHÂN VIÊN (advance_payments) TỪ PersonalRequest
     // ============================================================================
+    await dbRun(db, 'DELETE FROM advance_payments');
+    await dbRun(db, 'DELETE FROM advance_settlements');
     if (prismaPersonalRequests.length > 0) {
       for (const req of prismaPersonalRequests) {
         if (req.type !== 'salary-advance' && req.type !== 'advance') continue;
@@ -904,6 +910,9 @@ export async function syncPrismaFinanceToAccountingTables(db) {
     // ============================================================================
     // G. ĐỒNG BỘ NỢ VAY NGÂN HÀNG (bank_loans & bank_loan_drawdowns)
     // ============================================================================
+    await dbRun(db, 'DELETE FROM bank_loan_repayments');
+    await dbRun(db, 'DELETE FROM bank_loan_drawdowns');
+    await dbRun(db, 'DELETE FROM bank_loans');
     if (prismaBankLoans.length > 0) {
       for (const bl of prismaBankLoans) {
         const limit = Number(bl.creditLimit) || 0;
@@ -976,6 +985,9 @@ export async function syncPrismaFinanceToAccountingTables(db) {
     // ============================================================================
     // H. ĐỒNG BỘ TÀI SẢN CỐ ĐỊNH (fixed_assets) TỪ Asset
     // ============================================================================
+    await dbRun(db, 'DELETE FROM fixed_asset_depreciations');
+    await dbRun(db, 'DELETE FROM fixed_asset_maintenances');
+    await dbRun(db, 'DELETE FROM fixed_assets');
     if (prismaAssets.length > 0) {
       let assetIdx = 1;
       for (const a of prismaAssets) {
@@ -1017,6 +1029,7 @@ export async function syncPrismaFinanceToAccountingTables(db) {
     // ============================================================================
     // I. ĐỒNG BỘ DOANH THU HỢP ĐỒNG / ĐƠN HÀNG BÁN (contracts) TỪ SaleOrder
     // ============================================================================
+    await dbRun(db, 'DELETE FROM contracts');
     if (prismaSaleOrders.length > 0) {
       await dbRun(db, 'BEGIN TRANSACTION');
       for (const so of prismaSaleOrders) {

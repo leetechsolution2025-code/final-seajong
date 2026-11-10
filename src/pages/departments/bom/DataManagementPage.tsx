@@ -258,39 +258,52 @@ export const DataManagementPage: React.FC = () => {
     onConfirm: () => {},
   });
 
-  const fetchBackups = useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await fetch('/api/board/data');
-      if (res.ok) {
-        const data = await res.json();
-        setBackups(Array.isArray(data.backups) ? data.backups : []);
-        if (data.currentDb) {
-          setCurrentDb(data.currentDb);
+  const fetchBackups = useCallback(
+    async (silent = false) => {
+      try {
+        if (!silent) {
+          setLoading(true);
         }
-        if (data.config) {
-          setConfigForm({
-            autoBackupEnabled: Boolean(data.config.autoBackupEnabled ?? true),
-            scheduleFrequency: String(data.config.scheduleFrequency || 'daily'),
-            backupTime: String(data.config.backupTime || '02:00'),
-            autoCleanupEnabled: Boolean(data.config.autoCleanupEnabled ?? true),
-            retentionDays: Number(data.config.retentionDays) || 30,
-            maxBackups: Number(data.config.maxBackups) || 30,
-            cleanupScope: String(data.config.cleanupScope || 'auto_only'),
-          });
+        const res = await fetch('/api/board/data');
+        if (res.ok) {
+          const data = await res.json();
+          setBackups(Array.isArray(data.backups) ? data.backups : []);
+          if (data.currentDb) {
+            setCurrentDb(data.currentDb);
+          }
+          if (!silent && data.config) {
+            setConfigForm({
+              autoBackupEnabled: Boolean(data.config.autoBackupEnabled ?? true),
+              scheduleFrequency: String(data.config.scheduleFrequency || 'daily'),
+              backupTime: String(data.config.backupTime || '02:00'),
+              autoCleanupEnabled: Boolean(data.config.autoCleanupEnabled ?? true),
+              retentionDays: Number(data.config.retentionDays) || 30,
+              maxBackups: Number(data.config.maxBackups) || 30,
+              cleanupScope: String(data.config.cleanupScope || 'auto_only'),
+            });
+          }
+        } else if (!silent) {
+          error('Lỗi', 'Không thể lấy danh sách bản sao lưu dữ liệu');
         }
-      } else {
-        error('Lỗi', 'Không thể lấy danh sách bản sao lưu dữ liệu');
+      } catch {
+        if (!silent) {
+          error('Lỗi', 'Không thể kết nối máy chủ quản trị dữ liệu');
+        }
+      } finally {
+        if (!silent) {
+          setLoading(false);
+        }
       }
-    } catch {
-      error('Lỗi', 'Không thể kết nối máy chủ quản trị dữ liệu');
-    } finally {
-      setLoading(false);
-    }
-  }, [error]);
+    },
+    [error]
+  );
 
   useEffect(() => {
-    fetchBackups();
+    fetchBackups(false);
+    const timer = setInterval(() => {
+      fetchBackups(true);
+    }, 15000);
+    return () => clearInterval(timer);
   }, [fetchBackups]);
 
   const handleSaveConfig = async () => {
@@ -526,6 +539,22 @@ export const DataManagementPage: React.FC = () => {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        [
+          'seajong_cached_cash_balance',
+          'decodoor_cached_cash_balance',
+          'seajong_cached_receivables_total',
+          'decodoor_cached_receivables_total',
+          'seajong_cached_expenses_total',
+          'decodoor_cached_expenses_total',
+          'seajong_cached_revenue_total',
+          'decodoor_cached_revenue_total',
+          'seajong_finance_assets',
+          'decodoor_finance_assets',
+        ].forEach((k) => {
+          try {
+            localStorage.removeItem(k);
+          } catch {}
+        });
         setRestoreDrawerOpen(false);
         setRestoreTarget(null);
         success(
@@ -711,11 +740,29 @@ export const DataManagementPage: React.FC = () => {
       />
 
       {/* Bảng danh sách bản sao lưu chuẩn FullWidthTable */}
+      <style>{`
+        .data-mgmt-backup-table {
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+          table-layout: fixed !important;
+        }
+        .data-mgmt-col-actions {
+          width: 116px !important;
+        }
+        @media (min-width: 640px) {
+          .data-mgmt-col-actions {
+            width: 244px !important;
+          }
+        }
+      `}</style>
       <FullWidthTable loading={loading}>
         <table
-          className="custom-table"
+          className="custom-table data-mgmt-backup-table"
           style={{
             width: '100%',
+            maxWidth: '100%',
+            tableLayout: 'fixed',
             borderCollapse: 'collapse',
             textAlign: 'left',
             fontSize: '0.8125rem',
@@ -738,12 +785,12 @@ export const DataManagementPage: React.FC = () => {
                 fontWeight: 700,
               }}
             >
-              <th className="hidden sm:table-cell" style={{ padding: '10px 12px', width: '56px', textAlign: 'center' }}>STT</th>
-              <th style={{ padding: '10px 14px' }}>TÊN FILE SAO LƯU (.DB)</th>
-              <th className="hidden sm:table-cell" style={{ padding: '10px 12px', width: '190px' }}>PHÂN LOẠI</th>
-              <th className="hidden sm:table-cell" style={{ padding: '10px 12px', width: '130px', textAlign: 'right' }}>DUNG LƯỢNG</th>
-              <th className="hidden sm:table-cell" style={{ padding: '10px 12px', width: '180px', textAlign: 'center' }}>THỜI GIAN TẠO</th>
-              <th className="w-[125px] sm:w-[230px]" style={{ padding: '10px 14px', textAlign: 'right' }}>THAO TÁC</th>
+              <th className="hidden sm:table-cell" style={{ padding: '10px 8px', width: '48px', textAlign: 'center' }}>STT</th>
+              <th style={{ padding: '10px 12px' }}>TÊN FILE SAO LƯU (.DB)</th>
+              <th className="hidden sm:table-cell" style={{ padding: '10px 10px', width: '160px' }}>PHÂN LOẠI</th>
+              <th className="hidden sm:table-cell" style={{ padding: '10px 10px', width: '110px', textAlign: 'right' }}>DUNG LƯỢNG</th>
+              <th className="hidden sm:table-cell" style={{ padding: '10px 10px', width: '155px', textAlign: 'center' }}>THỜI GIAN TẠO</th>
+              <th className="data-mgmt-col-actions" style={{ padding: '10px 14px', textAlign: 'right' }}>THAO TÁC</th>
             </tr>
           </thead>
           <tbody>
@@ -777,44 +824,69 @@ export const DataManagementPage: React.FC = () => {
                     }`}
                     title="Nhấn vào dòng để xem chi tiết hoặc phục hồi bản sao lưu"
                   >
-                    <td className="hidden sm:table-cell px-3 py-2.5 text-center text-xs font-mono text-slate-400">{stt}</td>
-                    <td className="px-2.5 sm:px-3.5 py-2.5">
+                    <td
+                      className="hidden sm:table-cell text-center text-xs font-mono text-slate-400"
+                      style={{ padding: '10px 8px' }}
+                    >
+                      {stt}
+                    </td>
+                    <td
+                      className="max-w-0 overflow-hidden"
+                      style={{ padding: '10px 12px' }}
+                    >
                       <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
                         <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
                           <i className="bi bi-database-fill-check text-xs sm:text-sm" />
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-xs font-bold text-slate-800 font-mono truncate">
+                        <div className="min-w-0 flex-1 overflow-hidden">
+                          <div
+                            className="text-xs font-bold text-slate-800 font-mono truncate"
+                            title={item.name}
+                          >
                             {item.name}
                           </div>
                           <div className="text-[11px] text-slate-400 truncate">{meta.desc}</div>
                           <div className="flex sm:hidden items-center gap-1.5 mt-0.5 text-[10px] text-slate-500 font-mono">
-                            <span className="font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.2 rounded">{item.size}</span>
+                            <span className="font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.2 rounded whitespace-nowrap">{item.size}</span>
                             <span>•</span>
                             <span className="truncate">{new Date(item.createdAt).toLocaleDateString('vi-VN')}</span>
                           </div>
                         </div>
                       </div>
                     </td>
-                    <td className="hidden sm:table-cell px-3 py-2.5">
+                    <td
+                      className="hidden sm:table-cell whitespace-nowrap"
+                      style={{ padding: '10px 10px' }}
+                    >
                       <Badge variant={meta.variant}>
                         <i className={`bi ${meta.icon} mr-1`} />
                         {meta.label}
                       </Badge>
                     </td>
-                    <td className="hidden sm:table-cell px-3 py-2.5 text-right">
-                      <span className="text-xs font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                    <td
+                      className="hidden sm:table-cell text-right whitespace-nowrap"
+                      style={{ padding: '10px 10px' }}
+                    >
+                      <span className="inline-block text-xs font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 whitespace-nowrap">
                         {item.size}
                       </span>
                     </td>
-                    <td className="hidden sm:table-cell px-3 py-2.5 text-center text-xs font-mono text-slate-600">
+                    <td
+                      className="hidden sm:table-cell text-center text-xs font-mono text-slate-600 whitespace-nowrap"
+                      style={{ padding: '10px 10px' }}
+                    >
                       {new Date(item.createdAt).toLocaleString('vi-VN')}
                     </td>
-                    <td className="px-2 sm:px-3.5 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="inline-flex items-center justify-end gap-1 sm:gap-1.5">
+                    <td
+                      className="text-right whitespace-nowrap"
+                      style={{ padding: '10px 14px' }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center justify-end gap-1.5 w-full">
                         <Button
                           variant="outline"
                           size="sm"
+                          style={{ padding: '0 10px', height: '30px', gap: '4px', fontSize: '0.78rem' }}
                           leftIcon={<i className="bi bi-download" />}
                           onClick={(e) => handleDownloadFile(item.name, e)}
                           title="Tải file .db về máy"
@@ -824,6 +896,7 @@ export const DataManagementPage: React.FC = () => {
                         <Button
                           variant="primary"
                           size="sm"
+                          style={{ padding: '0 10px', height: '30px', gap: '4px', fontSize: '0.78rem' }}
                           leftIcon={<i className="bi bi-arrow-counterclockwise" />}
                           onClick={() => handleRestoreClick(item.name)}
                           disabled={busy || inspectingTables}
@@ -835,7 +908,8 @@ export const DataManagementPage: React.FC = () => {
                           type="button"
                           onClick={(e) => handleDeleteClick(item.name, e)}
                           disabled={busy}
-                          className="w-7 h-7 rounded-lg border border-rose-200 bg-rose-50/70 text-rose-600 hover:bg-rose-100 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                          style={{ width: '30px', height: '30px' }}
+                          className="rounded-lg border border-rose-200 bg-rose-50/70 text-rose-600 hover:bg-rose-100 flex items-center justify-center transition-colors cursor-pointer shrink-0"
                           title="Xóa bản sao lưu"
                         >
                           <i className="bi bi-trash text-xs" />

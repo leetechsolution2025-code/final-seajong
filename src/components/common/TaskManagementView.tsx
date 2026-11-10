@@ -46,6 +46,7 @@ export interface TaskManagementViewProps {
   searchValue?: string;
   onSearchChange?: (value: string) => void;
   hideStatusLegend?: boolean;
+  scope?: 'all' | 'showroom_construction';
 }
 
 export interface UserTaskItem {
@@ -114,6 +115,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
   searchValue: propSearchValue,
   onSearchChange: propOnSearchChange,
   hideStatusLegend = false,
+  scope = 'all',
 }) => {
   // Chế độ hiển thị trạng thái tiến độ thay cho người/phòng ban phụ trách
   const isScheduleStatusMode = Boolean(showScheduleStatusInsteadOfAssignee || hideCategoryBadge);
@@ -193,8 +195,8 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'bidding' | 'production' | 'other'>(initialCategory);
 
   // Điều hướng tháng và năm
-  const [currentYear, setCurrentYear] = useState<number>(2026);
-  const [currentMonth, setCurrentMonth] = useState<number>(10);
+  const [currentYear, setCurrentYear] = useState<number>(() => new Date().getFullYear());
+  const [currentMonth, setCurrentMonth] = useState<number>(() => new Date().getMonth() + 1);
 
   // Bộ lọc trạng thái, người thực hiện và tìm kiếm
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -525,6 +527,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
     setLoading(true);
     let url = `/api/user-tasks`;
     const params: string[] = [];
+    if (scope === 'showroom_construction') params.push(`scope=showroom_construction`);
     if (department && department !== 'all') params.push(`department=${encodeURIComponent(department)}`);
     if (assignee && assignee !== 'all') params.push(`assignee=${encodeURIComponent(assignee)}`);
     if (userId) params.push(`userId=${encodeURIComponent(userId)}`);
@@ -567,7 +570,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
       window.removeEventListener('seajong_production_tasks_updated', handleUpdate);
       window.removeEventListener('decodoor_production_tasks_updated', handleUpdate);
     };
-  }, [propTasks, department, assignee, userId]);
+  }, [propTasks, department, assignee, userId, scope]);
 
   // Danh sách công việc cơ sở: Nếu ở chế độ "Công việc của tôi", lấy các công việc được giao cho hoặc giao bởi cá nhân người dùng
   const myTasksBase = useMemo(() => {
@@ -673,6 +676,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
 
     filteredTasks.forEach((task) => {
       const hasContract = Boolean(task.contractCode && task.contractCode.trim());
+      if (scope === 'showroom_construction' && !hasContract) return;
       const cCode = hasContract
         ? task.contractCode!.trim()
         : task.project && task.project.trim()
@@ -729,7 +733,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
         displayCode,
       };
     });
-  }, [filteredTasks]);
+  }, [filteredTasks, scope]);
 
   // Phân trang cho danh mục hợp đồng dạng bảng
   const paginatedContractGroups = useMemo(() => {
@@ -1292,8 +1296,8 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
         progress: 0,
         status: 'not_started',
         statusLabel: 'Chưa thực hiện',
-        category: newTaskCategory,
-        categoryLabel: taskCatLabel,
+        category: scope === 'showroom_construction' ? 'showroom_construction' : newTaskCategory,
+        categoryLabel: scope === 'showroom_construction' ? 'Thi công Showroom' : taskCatLabel,
         contractCode: newTaskContractCode.trim() || '',
         customerName: newTaskCustomerName.trim() || '',
         description: newTaskDesc.trim(),
@@ -2214,10 +2218,14 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                 <div style={{ padding: '60px 20px', textAlign: 'center', color: '#64748b' }}>
                   <ListTask size={48} style={{ color: '#cbd5e1', margin: '0 auto 14px auto', display: 'block' }} />
                   <div style={{ fontSize: '1rem', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>
-                    Chưa có công việc nào trong cơ sở dữ liệu
+                    {scope === 'showroom_construction'
+                      ? 'Chưa có hợp đồng thiết kế quầy kệ nào đang triển khai thi công'
+                      : 'Chưa có công việc nào trong cơ sở dữ liệu'}
                   </div>
-                  <div style={{ fontSize: '0.825rem', color: '#64748b', maxWidth: '420px', margin: '0 auto 16px auto', lineHeight: 1.5 }}>
-                    Dữ liệu công việc thực tế sẽ được lưu trữ và hiển thị tại đây. Bấm nút bên dưới để khởi tạo công việc đầu tiên.
+                  <div style={{ fontSize: '0.825rem', color: '#64748b', maxWidth: '480px', margin: '0 auto 16px auto', lineHeight: 1.5 }}>
+                    {scope === 'showroom_construction'
+                      ? 'Khi ký kết hợp đồng đại lý có thiết kế quầy kệ ở Bước 3, danh sách hợp đồng cùng 6 công việc con (Khảo sát mặt bằng, Thiết kế chi tiết, Chốt hồ sơ, Sản xuất tại xưởng, Thi công lắp đặt, Nghiệm thu và bàn giao) sẽ tự động hiển thị tại đây.'
+                      : 'Dữ liệu công việc thực tế sẽ được lưu trữ và hiển thị tại đây. Bấm nút bên dưới để khởi tạo công việc đầu tiên.'}
                   </div>
                   {allowAdd && !readOnly && (
                     <button
@@ -2887,10 +2895,14 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                     <td colSpan={isMobileView ? 1 : 7} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748b' }}>
                       <ListTask size={48} style={{ color: '#cbd5e1', margin: '0 auto 14px auto', display: 'block' }} />
                       <div style={{ fontSize: '1rem', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>
-                        Chưa có công việc nào trong cơ sở dữ liệu
+                        {scope === 'showroom_construction'
+                          ? 'Chưa có hợp đồng thiết kế quầy kệ nào đang triển khai thi công'
+                          : 'Chưa có công việc nào trong cơ sở dữ liệu'}
                       </div>
-                      <div style={{ fontSize: '0.825rem', color: '#64748b', maxWidth: '420px', margin: '0 auto 16px auto', lineHeight: 1.5, whiteSpace: 'normal' }}>
-                        Dữ liệu công việc thực tế sẽ được lưu trữ và hiển thị tại đây. Bấm nút bên dưới để khởi tạo công việc đầu tiên.
+                      <div style={{ fontSize: '0.825rem', color: '#64748b', maxWidth: '480px', margin: '0 auto 16px auto', lineHeight: 1.5, whiteSpace: 'normal' }}>
+                        {scope === 'showroom_construction'
+                          ? 'Khi ký kết hợp đồng đại lý có thiết kế quầy kệ ở Bước 3, danh sách hợp đồng cùng 6 công việc con (Khảo sát mặt bằng, Thiết kế chi tiết, Chốt hồ sơ, Sản xuất tại xưởng, Thi công lắp đặt, Nghiệm thu và bàn giao) sẽ tự động hiển thị tại đây.'
+                          : 'Dữ liệu công việc thực tế sẽ được lưu trữ và hiển thị tại đây. Bấm nút bên dưới để khởi tạo công việc đầu tiên.'}
                       </div>
                       {allowAdd && !readOnly && (
                         <button

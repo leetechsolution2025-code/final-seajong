@@ -5232,6 +5232,7 @@ app.get('/api/sales/partners', async (req, res) => {
         plTimeline3: formValues.plTimeline3 || '',
         plTimeline4: formValues.plTimeline4 || '',
         plTimeline5: formValues.plTimeline5 || '',
+        plTimeline6: formValues.plTimeline6 || '',
         plPhase1Date: formValues.plPhase1Date || '',
         plPhase1Rate: formValues.plPhase1Rate || '',
         plPhase1Amount: formValues.plPhase1Amount || '',
@@ -5470,7 +5471,7 @@ function computeDefaultAppendixTimelines(baseDateStr, durationDaysStr) {
   }
   if (isNaN(baseDate.getTime())) baseDate = new Date();
 
-  const totalDays = Math.max(5, parseInt(String(durationDaysStr || '15'), 10) || 15);
+  const totalDays = Math.max(6, parseInt(String(durationDaysStr || '15'), 10) || 15);
   const addDays = (d, days) => {
     const next = new Date(d);
     next.setDate(next.getDate() + days);
@@ -5481,11 +5482,12 @@ function computeDefaultAppendixTimelines(baseDateStr, durationDaysStr) {
   const fmtISO = (d) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-  const d1End = Math.max(1, Math.round(totalDays * 0.2) - 1);
-  const d2End = Math.max(d1End + 1, Math.round(totalDays * 0.35) - 1);
-  const d3End = Math.max(d2End + 1, Math.round(totalDays * 0.8) - 1);
-  const d4End = Math.max(d3End + 1, totalDays - 2);
-  const d5End = Math.max(d4End, totalDays - 1);
+  const d1End = Math.max(1, Math.round(totalDays * 0.14) - 1);
+  const d2End = Math.max(d1End + 1, Math.round(totalDays * 0.34) - 1);
+  const d3End = Math.max(d2End + 1, Math.round(totalDays * 0.45) - 1);
+  const d4End = Math.max(d3End + 1, Math.round(totalDays * 0.74) - 1);
+  const d5End = Math.max(d4End + 1, totalDays - 2);
+  const d6End = Math.max(d5End, totalDays - 1);
 
   return [
     {
@@ -5514,9 +5516,15 @@ function computeDefaultAppendixTimelines(baseDateStr, durationDaysStr) {
     },
     {
       idx: 5,
-      label: `${fmtDMY(addDays(baseDate, d5End))}`,
-      startIso: fmtISO(addDays(baseDate, d5End)),
+      label: `${fmtDMY(addDays(baseDate, d4End))} - ${fmtDMY(addDays(baseDate, d5End))}`,
+      startIso: fmtISO(addDays(baseDate, d4End)),
       endIso: fmtISO(addDays(baseDate, d5End)),
+    },
+    {
+      idx: 6,
+      label: `${fmtDMY(addDays(baseDate, d5End))} - ${fmtDMY(addDays(baseDate, d6End))}`,
+      startIso: fmtISO(addDays(baseDate, d5End)),
+      endIso: fmtISO(addDays(baseDate, d6End)),
     },
   ];
 }
@@ -5557,47 +5565,57 @@ function parseTimelineToIsoRange(rawStr, fallbackStart, fallbackEnd) {
 }
 
 function buildAppendixConstructionTasks(recordId, contractCode, customerName, customerAddress, executor, fv = {}) {
+  const todayIso = new Date().toISOString().slice(0, 10);
   const computedRanges = computeDefaultAppendixTimelines(
-    fv.plDate || fv.signDate || '2026-10-29',
+    fv.plDate || fv.signDate || fv.hdDate || todayIso,
     fv.plDurationDays || '15'
   );
 
   const appendixStages = [
     {
       idx: 1,
-      title: 'Đo đạc & Thiết kế 3D',
+      title: 'Khảo sát mặt bằng',
       department: 'Phòng Kỹ thuật - Thiết kế',
       priority: 'Cao',
       description:
-        'Hoàn thiện đo đạc tính toán, lên danh sách sản phẩm trưng bày, thiết kế bản vẽ kỹ thuật và hình ảnh 3D từng khu vực.',
+        'Khảo sát thực tế mặt bằng, đo đạc kích thước chi tiết khu vực trưng bày Showroom.',
     },
     {
       idx: 2,
-      title: 'Chuẩn bị nguyên vật liệu',
-      department: 'Phòng Cung ứng - Kho vận',
-      priority: 'Trung bình',
-      description: 'Chuẩn bị hoàn tất nguyên vật liệu phục vụ thi công.',
+      title: 'Thiết kế chi tiết',
+      department: 'Phòng Kỹ thuật - Thiết kế',
+      priority: 'Cao',
+      description:
+        'Thiết kế bản vẽ kỹ thuật 2D, phối cảnh 3D quầy kệ và bố trí sản phẩm trưng bày từng khu vực.',
     },
     {
       idx: 3,
-      title: 'Thi công, lắp đặt quầy kệ',
-      department: 'Đội Thi công Showroom',
+      title: 'Chốt hồ sơ',
+      department: 'Phòng Kinh doanh',
       priority: 'Cao',
-      description: 'Thực hiện thi công, lắp đặt quầy, kệ, bảng biển.',
+      description:
+        'Thống nhất phương án thiết kế, danh mục vật tư, sản phẩm trưng bày và ký duyệt hồ sơ thi công với Đại lý.',
     },
     {
       idx: 4,
-      title: 'Lắp sản phẩm trưng bày',
-      department: 'Đội Thi công Showroom',
-      priority: 'Trung bình',
-      description: 'Lắp đặt sản phẩm trưng bày.',
+      title: 'Sản xuất tại xưởng',
+      department: 'Xưởng Sản xuất Quầy kệ',
+      priority: 'Cao',
+      description: 'Gia công, sản xuất hệ thống quầy kệ, bảng biển trưng bày tại xưởng theo bản vẽ đã chốt.',
     },
     {
       idx: 5,
-      title: 'Bàn giao, nghiệm thu',
+      title: 'Thi công lắp đặt',
+      department: 'Đội Thi công Showroom',
+      priority: 'Cao',
+      description: 'Vận chuyển, thi công lắp đặt quầy kệ, bảng biển và thiết bị trưng bày tại Showroom.',
+    },
+    {
+      idx: 6,
+      title: 'Nghiệm thu và bàn giao',
       department: 'Phòng Kinh doanh',
       priority: 'Cao',
-      description: 'Thực hiện bàn giao khu vực thi công và trưng bày cho Đại lý.',
+      description: 'Kiểm tra chất lượng hoàn thiện, nghiệm thu và bàn giao khu vực trưng bày cho Đại lý.',
     },
   ];
 
@@ -5652,7 +5670,7 @@ function buildAppendixConstructionTasks(recordId, contractCode, customerName, cu
       status,
       statusLabel,
       description: existingTask?.description || stage.description,
-      category: 'production',
+      category: 'showroom_construction',
     };
   });
 }
@@ -5661,8 +5679,9 @@ app.get('/api/user-tasks', async (req, res) => {
   try {
     const allTasks = [];
     const seenIds = new Set();
+    const isShowroomScope = req.query.scope === 'showroom_construction';
 
-    // 1. Lấy các công việc khởi tạo trực tiếp trong bảng Task
+    // 1. Lấy các công việc khởi tạo trực tiếp trong bảng Task (chỉ lấy khi không ở chế độ Kế hoạch thi công Showroom, hoặc công việc thuộc hợp đồng thi công Showroom)
     try {
       const dbTasks = await prisma.task.findMany({
         orderBy: { createdAt: 'desc' },
@@ -5676,6 +5695,12 @@ app.get('/api/user-tasks', async (req, res) => {
               parsed = obj;
             }
           } catch (_e) { }
+        }
+        if (isShowroomScope) {
+          // Ở chế độ Kế hoạch thi công Showroom, chỉ lấy các công việc con được thêm trực tiếp vào một hợp đồng Showroom cụ thể
+          if (!parsed || !parsed.contractCode || !String(parsed.contractCode).trim() || parsed.category !== 'showroom_construction') {
+            continue;
+          }
         }
         const taskItem = parsed
           ? {
@@ -5722,7 +5747,7 @@ app.get('/api/user-tasks', async (req, res) => {
       }
     } catch (_dbErr) { }
 
-    // 2. Lấy các hồ sơ đại lý trong quy trình Phát triển đại lý (MarketingLead)
+    // 2. Lấy các hồ sơ đại lý có hợp đồng thiết kế quầy kệ trong quy trình Phát triển đại lý (MarketingLead)
     const leads = await prisma.marketingLead.findMany({
       orderBy: { updatedAt: 'desc' },
     });
@@ -5737,57 +5762,41 @@ app.get('/api/user-tasks', async (req, res) => {
 
       if (fv.constructionTasksDeleted) continue;
 
-      const contractCode = (fv.contractNo || fv.hdCode || '').trim();
-      const customerName = fv.companyName || lead.fullName || 'Đại lý Seajong';
-      const customerAddress = fv.address || fv.area || 'Chưa cập nhật địa chỉ';
-      const executor = fv.executor || 'Nguyên Văn Thành';
+      // Chỉ lấy các hợp đồng có thiết kế quầy kệ (loại bỏ các hợp đồng 'Không có quầy kệ')
+      const hasShelfDesign = fv.quoteType !== 'Không có quầy kệ';
+      if (!hasShelfDesign) continue;
 
       const hasAppendix = Boolean(
         (fv.plNo && String(fv.plNo).trim() !== '') ||
         (fv.plPdf && String(fv.plPdf).trim() !== '')
       );
+      const rawContractCode = (fv.contractNo || fv.hdCode || '').trim();
+      const isSignedOrStep4 = Boolean(
+        rawContractCode ||
+        hasAppendix ||
+        Number(fv.step) >= 4 ||
+        lead.status === 'construction' ||
+        lead.status === 'completed'
+      );
 
-      if (!contractCode || !hasAppendix) {
-        if (Array.isArray(fv.constructionTasks)) {
-          for (const ct of fv.constructionTasks) {
-            if (ct && !ct.isContractOnly && !seenIds.has(String(ct.id))) {
-              seenIds.add(String(ct.id));
-              allTasks.push({
-                ...ct,
-                code: ct.code || `CV-2026-${String(ct.id).slice(-3)}`,
-              });
-            }
-          }
-        }
-        if (!contractCode) continue;
-        allTasks.push({
-          id: `contract-only-${lead.id}`,
-          code: '',
-          title: '',
-          project: customerName,
-          contractCode,
-          customerName,
-          customerAddress,
-          assignee: executor,
-          department: 'Phòng Kinh doanh',
-          startDate: '',
-          endDate: '',
-          progress: 0,
-          priority: 'Trung bình',
-          priorityLabel: 'Trung bình',
-          status: 'not_started',
-          statusLabel: 'Chưa thực hiện',
-          isContractOnly: true,
-        });
-        continue;
-      }
+      if (!isSignedOrStep4) continue;
 
+      const contractCode =
+        rawContractCode ||
+        (fv.quoteCode
+          ? `${fv.quoteCode}/HDDL-SEAJONG`
+          : `HDDL-2026-${String(fv.code || lead.id.slice(-4)).toUpperCase()}`);
+      const customerName = fv.companyName || fv.hdB_Ten || lead.fullName || 'Đại lý Seajong';
+      const customerAddress = fv.hdShowroomAddress || fv.address || fv.area || 'Chưa cập nhật địa chỉ';
+      const executor = fv.executor || 'Nguyên Văn Thành';
+
+      const todayIso = new Date().toISOString().slice(0, 10);
       const defaultTimelines = computeDefaultAppendixTimelines(
-        fv.plDate || fv.signDate || '2026-10-29',
+        fv.plDate || fv.signDate || fv.hdDate || todayIso,
         fv.plDurationDays || '15'
       );
       let needsSave = false;
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 6; i++) {
         const key = `plTimeline${i + 1}`;
         if (!fv[key] || !String(fv[key]).trim()) {
           fv[key] = defaultTimelines[i].label;
@@ -5806,7 +5815,12 @@ app.get('/api/user-tasks', async (req, res) => {
       const standardIds = new Set(standardTasks.map((t) => t.id));
       const customTasks = Array.isArray(fv.constructionTasks)
         ? fv.constructionTasks
-          .filter((t) => !standardIds.has(String(t.id)) && !t.isContractOnly)
+          .filter(
+            (t) =>
+              !standardIds.has(String(t.id)) &&
+              !String(t.id || '').startsWith(`utask-${lead.id}-`) &&
+              !t.isContractOnly
+          )
           .map((t) => ({
             ...t,
             code: t.code || `CV-2026-${String(t.id).slice(-3)}`,
@@ -21082,8 +21096,103 @@ const getLeaveCategoryLabel = (cat) => {
 // ── Bộ máy phân tích lịch nghỉ phép, kiểm soát định mức 12 ngày/năm (tối đa 1 ngày phép có lương/tháng) ──
 const buildEmployeeLeaveSchedule = (leaveRequests = []) => {
   const leaveMapByDate = new Map();
+  const overtimeMapByDate = new Map();
   const paidAnnualUsedByMonth = new Map(); // 'YYYY-MM' -> số ngày phép năm có lương đã dùng (max 1.0/tháng)
   const paidAnnualUsedByYear = new Map(); // 'YYYY' -> số ngày phép năm có lương đã dùng trong năm (max 12.0/năm)
+
+  const statusPriority = { approved: 3, pending: 2, rejected: 1 };
+
+  // 0. Phân tích danh sách đơn đăng ký làm thêm giờ (Overtime / Tăng ca Chủ nhật)
+  const sortedOvertime = [...(leaveRequests || [])]
+    .filter((reqItem) => {
+      let details = {};
+      try {
+        details =
+          typeof reqItem.details === 'string'
+            ? JSON.parse(reqItem.details)
+            : reqItem.details || {};
+      } catch { }
+      const reqType = String(details.category || details.type || reqItem.type || '').toLowerCase();
+      const textHint = String(details.requestType || details.title || reqItem.reason || '').toLowerCase();
+      return (
+        reqType === 'overtime' ||
+        reqType === 'ot' ||
+        /làm thêm giờ|tăng ca|overtime|làm chủ nhật/.test(textHint)
+      );
+    })
+    .sort((a, b) => {
+      const da = parseFlexibleDate(a.startDate) || new Date(a.createdAt || 0);
+      const db = parseFlexibleDate(b.startDate) || new Date(b.createdAt || 0);
+      return da.getTime() - db.getTime();
+    });
+
+  for (const reqItem of sortedOvertime) {
+    let details = {};
+    try {
+      details =
+        typeof reqItem.details === 'string'
+          ? JSON.parse(reqItem.details)
+          : reqItem.details || {};
+    } catch { }
+
+    const rawStatus = String(reqItem.status || details.status || 'PENDING').toLowerCase();
+    const statusNorm =
+      rawStatus === 'approved' || rawStatus === 'completed'
+        ? 'approved'
+        : rawStatus === 'rejected'
+          ? 'rejected'
+          : 'pending';
+
+    const fromDt =
+      parseFlexibleDate(
+        details.overtimeDate ||
+        details.otDate ||
+        details.date ||
+        details.leaveFromDate ||
+        details.lateEarlyDate
+      ) || parseFlexibleDate(reqItem.startDate);
+    const toDt =
+      parseFlexibleDate(
+        details.overtimeToDate || details.otToDate || details.leaveToDate
+      ) ||
+      parseFlexibleDate(reqItem.endDate) ||
+      fromDt;
+    if (!fromDt || !toDt) continue;
+
+    const otSession = details.otSession || details.leaveSession || 'all_day';
+    const hours = Number(
+      details.otHours ||
+      details.totalHours ||
+      reqItem.totalHours ||
+      (otSession === 'all_day' ? 8 : 4)
+    );
+
+    const cur = new Date(fromDt.getFullYear(), fromDt.getMonth(), fromDt.getDate());
+    const end = new Date(toDt.getFullYear(), toDt.getMonth(), toDt.getDate());
+    let guard = 0;
+
+    while (cur <= end && guard < 60) {
+      guard++;
+      const dStr = formatDateYmd(cur);
+      const existingOnDate = overtimeMapByDate.get(dStr);
+      const shouldReplace =
+        !existingOnDate ||
+        (statusPriority[statusNorm] || 0) >=
+        (statusPriority[existingOnDate.status] || 0);
+
+      if (shouldReplace) {
+        overtimeMapByDate.set(dStr, {
+          requestId: reqItem.id,
+          status: statusNorm,
+          otSession,
+          hours,
+          reason: reqItem.reason || details.content || details.title || '',
+          approver: details.approver || 'Lê Công Vụ - Ban Giám đốc',
+        });
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+  }
 
   // Sắp xếp đơn từ cũ đến mới theo ngày bắt đầu nghỉ để tính định mức 1 ngày phép/tháng chính xác theo trình tự thời gian
   const sortedLeaves = [...(leaveRequests || [])]
@@ -21103,8 +21212,6 @@ const buildEmployeeLeaveSchedule = (leaveRequests = []) => {
       const db = parseFlexibleDate(b.startDate) || new Date(b.createdAt || 0);
       return da.getTime() - db.getTime();
     });
-
-  const statusPriority = { approved: 3, pending: 2, rejected: 1 };
 
   for (const reqItem of sortedLeaves) {
     let details = {};
@@ -21276,6 +21383,7 @@ const buildEmployeeLeaveSchedule = (leaveRequests = []) => {
 
   return {
     leaveMapByDate,
+    overtimeMapByDate,
     paidAnnualUsedByMonth,
     paidAnnualUsedByYear,
   };
@@ -21548,8 +21656,8 @@ app.get('/api/timekeeping', async (req, res) => {
       return days[d.getDay()] || '';
     };
 
-    // Xây dựng bản đồ ngày nghỉ phép (áp dụng định mức 12 ngày/năm = 1 ngày phép có lương/tháng)
-    const { leaveMapByDate } = buildEmployeeLeaveSchedule(leaveRequests);
+    // Xây dựng bản đồ ngày nghỉ phép và đăng ký làm thêm giờ (OT / Chủ nhật)
+    const { leaveMapByDate, overtimeMapByDate } = buildEmployeeLeaveSchedule(leaveRequests);
 
     const recordsByDate = new Map();
 
@@ -21574,6 +21682,7 @@ app.get('/api/timekeeping', async (req, res) => {
       }
 
       const leaveInfo = leaveMapByDate.get(dateStr) || null;
+      const overtimeInfo = overtimeMapByDate.get(dateStr) || null;
       const isApprovedFullDayLeave =
         Boolean(leaveInfo && leaveInfo.status === 'approved' && leaveInfo.leaveSession === 'all_day');
 
@@ -21621,6 +21730,7 @@ app.get('/api/timekeeping', async (req, res) => {
         registeredDinner:
           isApprovedFullDayLeave && !hasAnyPunch ? false : Boolean(a.registeredDinner),
         leaveInfo,
+        overtimeInfo,
       });
     }
 
@@ -21629,6 +21739,7 @@ app.get('/api/timekeeping', async (req, res) => {
       if (!recordsByDate.has(dateStr)) {
         const d = parseFlexibleDate(dateStr) || new Date();
         const isRejected = leaveInfo.status === 'rejected';
+        const overtimeInfo = overtimeMapByDate.get(dateStr) || null;
         recordsByDate.set(dateStr, {
           id: `TK-LEAVE-${dateStr.replace(/-/g, '')}`,
           dateStr,
@@ -21656,6 +21767,37 @@ app.get('/api/timekeeping', async (req, res) => {
           registeredLunch: false,
           registeredDinner: false,
           leaveInfo,
+          overtimeInfo,
+        });
+      }
+    }
+
+    // Bổ sung các ngày có đơn đăng ký làm thêm giờ (OT / Chủ nhật) nhưng chưa có dòng trong bảng Attendance
+    for (const [dateStr, overtimeInfo] of overtimeMapByDate.entries()) {
+      if (!recordsByDate.has(dateStr)) {
+        const d = parseFlexibleDate(dateStr) || new Date();
+        recordsByDate.set(dateStr, {
+          id: `TK-OT-${dateStr.replace(/-/g, '')}`,
+          dateStr,
+          dayOfWeek: getDayOfWeekLabel(d),
+          morningCheckIn: '--:--',
+          morningCheckOut: '--:--',
+          afternoonCheckIn: '--:--',
+          afternoonCheckOut: '--:--',
+          locationName:
+            overtimeInfo.status === 'approved'
+              ? `Làm thêm giờ đã duyệt (${overtimeInfo.hours || 8}h)`
+              : overtimeInfo.status === 'rejected'
+                ? 'Đơn làm thêm giờ bị từ chối'
+                : 'Đơn làm thêm giờ chờ phê duyệt',
+          locationCoords: defaultAddress,
+          method: 'Đăng ký làm thêm giờ',
+          status: overtimeInfo.status === 'approved' ? 'ot_approved' : 'ot_pending',
+          note: overtimeInfo.reason || 'Đăng ký làm thêm giờ',
+          registeredLunch: false,
+          registeredDinner: false,
+          leaveInfo: null,
+          overtimeInfo,
         });
       }
     }
@@ -21886,6 +22028,14 @@ const mapPersonalRequestRow = (r, posMap = null) => {
     normalizedType = 'advance';
   } else if (rawType === 'business_trip' || rawType === 'business-trip' || rawType === 'trip') {
     normalizedType = 'business_trip';
+  } else if (
+    rawType === 'overtime' ||
+    rawType === 'ot' ||
+    /làm thêm giờ|tăng ca|overtime|làm chủ nhật/i.test(
+      String(details.requestType || details.title || r.reason || '')
+    )
+  ) {
+    normalizedType = 'overtime';
   } else {
     normalizedType = 'other';
   }
@@ -21899,6 +22049,10 @@ const mapPersonalRequestRow = (r, posMap = null) => {
       if (rawType === 'overtime' && (r.totalHours || details.totalHours)) {
         computedTitle = `${computedTitle} (${r.totalHours || details.totalHours} giờ)`;
       }
+    } else if (normalizedType === 'overtime') {
+      const otHrs = Number(details.otHours || details.totalHours || r.totalHours || 8);
+      const otDt = details.overtimeDate || details.otDate || (r.startDate ? formatDateYmd(r.startDate) : '');
+      computedTitle = `Đăng ký làm thêm giờ${otDt ? ` ngày ${otDt}` : ''} (${otHrs} giờ)`;
     } else if (normalizedType === 'leave') {
       const lType = details.sickType || details.leaveType || 'Nghỉ phép năm';
       computedTitle = `Xin nghỉ phép: ${lType} (${leaveDaysVal} ngày)`;
@@ -22107,8 +22261,18 @@ app.post('/api/personal-requests', async (req, res) => {
       return res.status(404).json({ error: 'Không tìm thấy hồ sơ nhân sự' });
     }
 
-    const rawStart = body.leaveFromDate || body.lateEarlyDate || body.tripFromDate;
-    const rawEnd = body.leaveToDate || body.tripToDate || rawStart;
+    const rawStart =
+      body.overtimeDate ||
+      body.otDate ||
+      body.leaveFromDate ||
+      body.lateEarlyDate ||
+      body.tripFromDate;
+    const rawEnd =
+      body.overtimeToDate ||
+      body.otToDate ||
+      body.leaveToDate ||
+      body.tripToDate ||
+      rawStart;
     const startDate = parseFlexibleDate(rawStart) || new Date();
     const endDate = parseFlexibleDate(rawEnd) || startDate;
 
@@ -26084,59 +26248,104 @@ function runBackupRetentionCleanup(customConfig = null) {
   return deletedCount;
 }
 
-// Bộ lập lịch chạy ngầm kiểm tra tự động sao lưu và tự động dọn dẹp mỗi 60 giây
-setInterval(() => {
+function checkAndRunAutoBackup(customConfig = null) {
   try {
-    const cfg = readBackupConfig();
+    const cfg = customConfig || readBackupConfig();
     if (cfg.autoCleanupEnabled) {
       runBackupRetentionCleanup(cfg);
     }
-    if (!cfg.autoBackupEnabled || !fs.existsSync(ACTIVE_DB_FILE)) return;
+    if (!cfg.autoBackupEnabled || !fs.existsSync(ACTIVE_DB_FILE)) return null;
+    if (!fs.existsSync(BACKUP_DIR)) {
+      fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    }
 
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');
-    const currentHm = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const formatYmd = (d) =>
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const todayStr = formatYmd(now);
+
+    const [rawH, rawM] = String(cfg.backupTime || '02:00').split(':');
+    const targetH = Math.min(23, Math.max(0, Number(rawH) || 0));
+    const targetM = Math.min(59, Math.max(0, Number(rawM) || 0));
+    const normalizedHm = `${pad(targetH)}:${pad(targetM)}`;
 
     let shouldTrigger = false;
     let slotKey = '';
 
     if (cfg.scheduleFrequency === '6h') {
       const slotHour = Math.floor(now.getHours() / 6) * 6;
-      slotKey = `${todayStr}_6h_${slotHour}`;
-      if (now.getHours() % 6 === 0 && now.getMinutes() === 0 && cfg.lastAutoBackupSlot !== slotKey) {
+      slotKey = `${todayStr}_6h_${pad(slotHour)}:00`;
+      if (cfg.lastAutoBackupSlot !== slotKey) {
         shouldTrigger = true;
       }
     } else if (cfg.scheduleFrequency === '12h') {
       const slotHour = Math.floor(now.getHours() / 12) * 12;
-      slotKey = `${todayStr}_12h_${slotHour}`;
-      if (now.getHours() % 12 === 0 && now.getMinutes() === 0 && cfg.lastAutoBackupSlot !== slotKey) {
+      slotKey = `${todayStr}_12h_${pad(slotHour)}:00`;
+      if (cfg.lastAutoBackupSlot !== slotKey) {
         shouldTrigger = true;
       }
     } else if (cfg.scheduleFrequency === 'weekly') {
-      slotKey = `${todayStr}_weekly_${cfg.backupTime || '02:00'}`;
-      if (now.getDay() === 1 && currentHm === (cfg.backupTime || '02:00') && cfg.lastAutoBackupSlot !== slotKey) {
-        shouldTrigger = true;
+      const dayOfWeek = now.getDay();
+      const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const thisMonday = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - diffToMonday,
+        targetH,
+        targetM,
+        0,
+        0
+      );
+      if (now.getTime() >= thisMonday.getTime()) {
+        slotKey = `${formatYmd(thisMonday)}_weekly_${normalizedHm}`;
+        if (cfg.lastAutoBackupSlot !== slotKey) {
+          shouldTrigger = true;
+        }
       }
     } else {
-      slotKey = `${todayStr}_daily_${cfg.backupTime || '02:00'}`;
-      if (currentHm === (cfg.backupTime || '02:00') && cfg.lastAutoBackupSlot !== slotKey) {
-        shouldTrigger = true;
+      const todayTarget = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        targetH,
+        targetM,
+        0,
+        0
+      );
+      if (now.getTime() >= todayTarget.getTime()) {
+        slotKey = `${todayStr}_daily_${normalizedHm}`;
+        if (cfg.lastAutoBackupSlot !== slotKey) {
+          shouldTrigger = true;
+        }
       }
     }
 
-    if (shouldTrigger) {
+    if (shouldTrigger && slotKey) {
       const timestamp = getBackupTimestamp();
       const autoFileName = `auto_backup_${timestamp}.db`;
       const autoPath = path.join(BACKUP_DIR, autoFileName);
       fs.copyFileSync(ACTIVE_DB_FILE, autoPath);
       saveBackupConfig({ lastAutoBackupSlot: slotKey });
       runBackupRetentionCleanup();
+      return autoFileName;
     }
   } catch (err) {
     console.warn('[AutoBackup Scheduler Error]', err.message);
   }
-}, 60 * 1000);
+  return null;
+}
+
+// Chạy kiểm tra ngay khi khởi động server và lặp lại mỗi 15 giây
+if (globalThis.__seajongAutoBackupTimer) {
+  clearInterval(globalThis.__seajongAutoBackupTimer);
+}
+setTimeout(() => {
+  checkAndRunAutoBackup();
+}, 500);
+globalThis.__seajongAutoBackupTimer = setInterval(() => {
+  checkAndRunAutoBackup();
+}, 15 * 1000);
 
 function formatFileSizeBytes(bytes, decimals = 2) {
   if (!bytes || bytes === 0) return '0 Bytes';
@@ -26474,13 +26683,53 @@ async function restoreSqliteDatabaseFromBackup(sourceDbPath, selectedTables = nu
       }
     }
 
+    // Dọn sạch các bảng kế toán / phụ trợ trong main nếu file sao lưu nguồn không chứa các bảng đó để tránh sót dữ liệu cũ
+    const srcTableNameSet = new Set(srcTables.map((t) => String(t.name)));
+    const DERIVED_TABLES_TO_CLEAR_IF_MISSING = [
+      'accounting_journal_entries',
+      'accounting_journal_lines',
+      'accounting_opening_balances',
+      'admin_hr_items',
+      'advance_payments',
+      'advance_settlements',
+      'bank_loan_drawdowns',
+      'bank_loan_repayments',
+      'bank_loans',
+      'calendar_events',
+      'cash_and_bank_assets',
+      'contracts',
+      'debt_payables',
+      'debt_receivables',
+      'financial_expenses',
+      'financial_initial_declarations',
+      'financial_vouchers',
+      'fixed_asset_depreciations',
+      'fixed_asset_maintenances',
+      'fixed_assets',
+      'goods',
+      'monthly_payrolls',
+      'payment_orders',
+      'quotations',
+      'recruitment_candidates',
+      'recruitment_interviews',
+      'recruitment_requests',
+      'training_courses',
+      'warehouse_movements',
+    ];
+    for (const derivedTbl of DERIVED_TABLES_TO_CLEAR_IF_MISSING) {
+      if (mainTableSet.has(derivedTbl) && !srcTableNameSet.has(derivedTbl)) {
+        const safeDerived = derivedTbl.replace(/"/g, '""');
+        await runSql(`DELETE FROM main."${safeDerived}";`).catch(() => {});
+      }
+    }
+
     await runSql('COMMIT;');
     transactionStarted = false;
 
     await runSql('DETACH DATABASE restore_src;');
     attached = false;
-    await runSql('PRAGMA foreign_keys = ON;');
     await syncPrismaFinanceToAccountingTables(conn);
+    await runSql('PRAGMA foreign_keys = ON;');
   } catch (err) {
     if (transactionStarted) {
       await runSql('ROLLBACK;').catch(() => { });
@@ -26523,6 +26772,9 @@ app.get('/api/board/data', async (req, res) => {
       }
       return res.download(filePath, safeFilename);
     }
+
+    // Kiểm tra và thực thi sao lưu tự động nếu đã đến hoặc qua giờ hẹn của chu kỳ hiện tại
+    checkAndRunAutoBackup();
 
     const files = fs.readdirSync(BACKUP_DIR).filter((f) => f.endsWith('.db'));
     const backups = files
@@ -26577,22 +26829,36 @@ app.get('/api/board/data', async (req, res) => {
 app.post('/api/board/data/config', async (req, res) => {
   try {
     const body = req.body || {};
+    const prevConfig = readBackupConfig();
+    const nextFreq = String(body.scheduleFrequency || 'daily');
+    const nextTime = String(body.backupTime || '02:00');
+    const hasExistingAutoBackup =
+      fs.existsSync(BACKUP_DIR) &&
+      fs.readdirSync(BACKUP_DIR).some((f) => f.startsWith('auto_') && f.endsWith('.db'));
+    const scheduleChanged =
+      prevConfig.scheduleFrequency !== nextFreq || prevConfig.backupTime !== nextTime;
+
     const saved = saveBackupConfig({
       autoBackupEnabled: Boolean(body.autoBackupEnabled),
-      scheduleFrequency: String(body.scheduleFrequency || 'daily'),
-      backupTime: String(body.backupTime || '02:00'),
+      scheduleFrequency: nextFreq,
+      backupTime: nextTime,
       autoCleanupEnabled: Boolean(body.autoCleanupEnabled),
       retentionDays: Number(body.retentionDays) || 30,
       maxBackups: Number(body.maxBackups) || 30,
       cleanupScope: String(body.cleanupScope || 'auto_only'),
+      ...(scheduleChanged || !hasExistingAutoBackup ? { lastAutoBackupSlot: null } : {}),
     });
     const deletedCount = runBackupRetentionCleanup(saved);
+    const createdAutoFile = checkAndRunAutoBackup();
+    const finalConfig = readBackupConfig();
     res.json({
       success: true,
-      config: saved,
+      config: finalConfig,
       deletedCount,
-      message:
-        deletedCount > 0
+      createdAutoFile,
+      message: createdAutoFile
+        ? `Đã lưu thiết lập và tạo ngay bản sao lưu tự động (${createdAutoFile}).`
+        : deletedCount > 0
           ? `Đã lưu thiết lập sao lưu tự động và dọn dẹp ${deletedCount} bản sao lưu quá hạn.`
           : 'Đã lưu thiết lập tự động sao lưu và thời hạn lưu trữ.',
     });

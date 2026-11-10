@@ -63,6 +63,7 @@ async function exportTables() {
     `-- AUTO-GENERATED SQL SYNC FILE (${new Date().toISOString()})`,
     `-- Tables: ${tables.join(', ')}`,
     '-- ============================================================================',
+    'PRAGMA busy_timeout = 30000;',
     'PRAGMA foreign_keys = OFF;',
     'BEGIN TRANSACTION;',
     '',
@@ -113,7 +114,7 @@ async function importTables() {
 
   console.log(`🔄 Đang nạp dữ liệu các bảng tùy chọn vào Database trên VPS (${DB_PATH})...`);
   try {
-    execFileSync('sqlite3', [DB_PATH, `.read ${SQL_OUTPUT_PATH}`], {
+    execFileSync('sqlite3', ['-cmd', '.timeout 30000', DB_PATH, `.read ${SQL_OUTPUT_PATH}`], {
       stdio: 'inherit',
     });
     console.log('✅ Đã đồng bộ các bảng được chọn vào Database trên VPS thành công!');
