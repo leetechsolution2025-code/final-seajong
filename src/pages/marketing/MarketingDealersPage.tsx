@@ -496,13 +496,14 @@ export const MarketingDealersPage: React.FC = () => {
   const totalActual6M = sixMonthsStats.reduce((acc, cur) => acc + cur.actual, 0); // 99
   const completionRate6M = ((totalActual6M / (totalTarget6M || 1)) * 100).toFixed(1); // 152.3%
 
-  // Nguồn phát triển đại lý từ DB categories
+  // Nguồn phát triển đại lý lấy đúng tên nguồn khách hàng trong DB, không thêm tiếng Anh
   const resolvedSourceStats = React.useMemo(() => {
-    const baseGroups = [
+    // 5 danh mục nguồn chuẩn từ danh mục hệ thống (Customer Source)
+    const dbSourceConfigs = [
       {
-        id: 'ngn-4kfq',
+        id: 'cmrywewjt0033grq115ils7ra',
         code: 'ngn-4kfq',
-        name: 'Kinh doanh tự khai thác',
+        name: 'Tự khai thác',
         aliases: ['ngn-4kfq', 'tự khai thác', 'tu_khai_thac', 'kinh doanh tự khai thác', 'crm'],
         color: 'bg-indigo-600',
         textColor: 'text-indigo-600',
@@ -511,7 +512,7 @@ export const MarketingDealersPage: React.FC = () => {
       {
         id: 'cmnfvbg1r00bn8okb54dz70mn',
         code: 'ngn-20260401-0982-uyhc',
-        name: 'Khách hàng tự nhiên (Walk-in)',
+        name: 'Tự nhiên',
         aliases: ['tu-nhien', 'tự nhiên', 'ngn-20260401-0982-uyhc', 'walk-in', 'trực tiếp'],
         color: 'bg-emerald-600',
         textColor: 'text-emerald-600',
@@ -520,7 +521,7 @@ export const MarketingDealersPage: React.FC = () => {
       {
         id: 'cmnfvbonx00bp8okbt146f0vk',
         code: 'ngn-20260401-0200-zrhw',
-        name: 'Quảng cáo & Website',
+        name: 'Quảng cáo',
         aliases: ['quảng cáo', 'quang-cao', 'website', 'facebook', 'google', 'ngn-20260401-0200-zrhw'],
         color: 'bg-blue-600',
         textColor: 'text-blue-600',
@@ -529,7 +530,7 @@ export const MarketingDealersPage: React.FC = () => {
       {
         id: 'cmnfvbtiz00br8okb4q10kxo5',
         code: 'ngn-20260401-1267-rquf',
-        name: 'Giới thiệu từ đối tác / Thầu thợ',
+        name: 'Giới thiệu',
         aliases: ['giới thiệu', 'gioi-thieu', 'referral', 'ngn-20260401-1267-rquf'],
         color: 'bg-amber-600',
         textColor: 'text-amber-600',
@@ -538,7 +539,7 @@ export const MarketingDealersPage: React.FC = () => {
       {
         id: 'cmnfvc6j000bt8okbz0veh2o0',
         code: 'ngn-20260401-0133-kgrh',
-        name: 'Nguồn khác',
+        name: 'Loại khác',
         aliases: ['loại khác', 'loai-khac', 'khac', 'ngn-20260401-0133-kgrh'],
         color: 'bg-slate-500',
         textColor: 'text-slate-600',
@@ -546,10 +547,27 @@ export const MarketingDealersPage: React.FC = () => {
       },
     ];
 
+    const sourceList = sources && sources.length > 0
+      ? sources.map((s) => {
+          const cfg = dbSourceConfigs.find(
+            (c) => c.code === s.code || c.id === s.id || c.name.toLowerCase().trim() === s.name.toLowerCase().trim()
+          );
+          return {
+            id: s.id,
+            code: s.code,
+            name: s.name.trim(), // Lấy chính xác tên nguồn trong DB
+            aliases: cfg?.aliases || [s.code, s.name.toLowerCase().trim()],
+            color: cfg?.color || 'bg-indigo-600',
+            textColor: cfg?.textColor || 'text-indigo-600',
+            bgLight: cfg?.bgLight || 'bg-indigo-50',
+          };
+        })
+      : dbSourceConfigs;
+
     const dealersList = allDealers.length > 0 ? allDealers : dealers;
     const totalCount = dealersList.length || 99;
 
-    return baseGroups.map((grp) => {
+    return sourceList.map((grp) => {
       const matchedDealers = dealersList.filter((d) => {
         const raw = (d.nguon || d.sourceLabel || '').toLowerCase().trim();
         return grp.aliases.some((a) => raw.includes(a.toLowerCase()));
@@ -562,7 +580,7 @@ export const MarketingDealersPage: React.FC = () => {
         pct,
       };
     });
-  }, [allDealers, dealers]);
+  }, [sources, allDealers, dealers]);
 
   return (
     <StepPage
@@ -661,7 +679,7 @@ export const MarketingDealersPage: React.FC = () => {
                       <span>Biểu đồ phát triển đại lý 6 tháng gần nhất</span>
                     </h4>
                     <p className="text-[11px] text-slate-500 mt-0.5 m-0">
-                      Mục tiêu kế hoạch (Area) & thực tế phát triển từ DB (T6/2026 - T11/2026)
+                      Mục tiêu kế hoạch và thực tế mở rộng mạng lưới (Tháng 6 - Tháng 11/2026)
                     </p>
                   </div>
                   <div className="flex items-center gap-3 text-xs">
@@ -831,7 +849,7 @@ export const MarketingDealersPage: React.FC = () => {
                       <span>Nguồn phát triển đại lý</span>
                     </h4>
                     <p className="text-[11px] text-slate-500 mt-0.5 m-0">
-                      Phân bổ thực tế {realTotalDealers} đại lý theo danh mục nguồn trong hệ thống DB
+                      Phân bổ thực tế {realTotalDealers} đại lý theo danh mục nguồn khách hàng trong hệ thống
                     </p>
                   </div>
                   <button
