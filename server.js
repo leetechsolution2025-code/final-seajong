@@ -27565,7 +27565,7 @@ app.get('/api/hr/stationery/stats', async (req, res) => {
       await Promise.all([
         prisma.hrSupplyItem.findMany({
           where: { isActive: true },
-          select: { stockQty: true, minStock: true },
+          select: { currentStock: true, minStock: true },
         }),
         prisma.hrSupplyRequest.count({
           where: { status: { in: ['PENDING', 'OVER_NORM'] } },
@@ -27576,14 +27576,14 @@ app.get('/api/hr/stationery/stats', async (req, res) => {
         }),
         prisma.hrSupplyTransaction.count({
           where: {
-            date: {
+            createdAt: {
               gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
             },
           },
         }),
       ]);
 
-    const lowStockCount = allItems.filter((item) => item.stockQty <= item.minStock).length;
+    const lowStockCount = allItems.filter((item) => (item.currentStock ?? 0) <= (item.minStock ?? 0)).length;
 
     res.json({
       lowStockCount,
@@ -27734,7 +27734,13 @@ app.get('/api/hr/stationery/items', async (req, res) => {
       include: { category: true },
       orderBy: { name: 'asc' },
     });
-    res.json({ items });
+    // Map currentStock -> stockQty, price -> unitPrice for client compatibility
+    const mapped = items.map((i) => ({
+      ...i,
+      stockQty: i.currentStock ?? 0,
+      unitPrice: i.price ?? 0,
+    }));
+    res.json({ items: mapped });
   } catch (error) {
     console.error('[GET /api/hr/stationery/items]', error);
     res.status(500).json({ error: error.message });
@@ -27744,24 +27750,30 @@ app.get('/api/hr/stationery/items', async (req, res) => {
 app.post('/api/hr/stationery/items', async (req, res) => {
   try {
     const { code, name, unit, categoryId, stockQty, minStock, unitPrice, isAsset, note } = req.body || {};
-    if (!code || !name || !unit) {
-      return res.status(400).json({ error: 'Code, Name and Unit are required' });
+    if (!name) {
+      return res.status(400).json({ error: 'Name is required' });
     }
     const item = await prisma.hrSupplyItem.create({
       data: {
-        code: String(code).trim(),
+        code: code ? String(code).trim() : null,
         name: String(name).trim(),
-        unit: String(unit).trim(),
-        categoryId: categoryId || null,
-        stockQty: Number(stockQty) || 0,
+        unit: unit ? String(unit).trim() : 'cái',
+        categoryId: categoryId || '',
+        currentStock: Number(stockQty) || 0,
         minStock: Number(minStock) || 0,
-        unitPrice: Number(unitPrice) || 0,
+        price: Number(unitPrice) || 0,
         isAsset: Boolean(isAsset),
         note: note || null,
       },
       include: { category: true },
     });
-    res.status(201).json({ item });
+    res.status(201).json({
+      item: {
+        ...item,
+        stockQty: item.currentStock,
+        unitPrice: item.price,
+      },
+    });
   } catch (error) {
     console.error('[POST /api/hr/stationery/items]', error);
     res.status(500).json({ error: error.message });
@@ -27775,23 +27787,30 @@ app.put('/api/hr/stationery/items', async (req, res) => {
     if (!id) {
       return res.status(400).json({ error: 'Item ID is required' });
     }
+    const updateData = {};
+    if (code !== undefined) updateData.code = code;
+    if (name !== undefined) updateData.name = name;
+    if (unit !== undefined) updateData.unit = unit;
+    if (categoryId !== undefined) updateData.categoryId = categoryId;
+    if (stockQty !== undefined) updateData.currentStock = Number(stockQty);
+    if (minStock !== undefined) updateData.minStock = Number(minStock);
+    if (unitPrice !== undefined) updateData.price = Number(unitPrice);
+    if (isAsset !== undefined) updateData.isAsset = Boolean(isAsset);
+    if (note !== undefined) updateData.note = note;
+    if (isActive !== undefined) updateData.isActive = Boolean(isActive);
+
     const item = await prisma.hrSupplyItem.update({
       where: { id },
-      data: {
-        code,
-        name,
-        unit,
-        categoryId: categoryId || null,
-        stockQty: stockQty !== undefined ? Number(stockQty) : undefined,
-        minStock: minStock !== undefined ? Number(minStock) : undefined,
-        unitPrice: unitPrice !== undefined ? Number(unitPrice) : undefined,
-        isAsset: isAsset !== undefined ? Boolean(isAsset) : undefined,
-        note,
-        isActive: isActive !== undefined ? Boolean(isActive) : undefined,
-      },
+      data: updateData,
       include: { category: true },
     });
-    res.json({ item });
+    res.json({
+      item: {
+        ...item,
+        stockQty: item.currentStock,
+        unitPrice: item.price,
+      },
+    });
   } catch (error) {
     console.error('[PUT /api/hr/stationery/items]', error);
     res.status(500).json({ error: error.message });
@@ -27958,8 +27977,8 @@ app.post('/api/hr/stationery/norms', async (req, res) => {
 app.get('/api/hr/stationery/assets/available', async (req, res) => {
   try {
     const supplyAssets = await prisma.hrSupplyItem.findMany({
-      where: { isAsset: true, isActive: true, stockQty: { gt: 0 } },
-      select: { id: true, code: true, name: true, stockQty: true },
+      where: { isAsset: true, isActive: true, currentStock: { gt: 0 } },
+      select: { id: true, code: true, name: true, currentStock: true },
     });
 
     const formatted = supplyAssets.map((item) => ({
@@ -27967,7 +27986,7 @@ app.get('/api/hr/stationery/assets/available', async (req, res) => {
       rawId: item.id,
       type: 'SUPPLY',
       code: item.code,
-      name: `${item.name} (Tồn: ${item.stockQty})`,
+      name: `${item.name} (Tồn: ${item.currentStock})`,
       sourceLabel: 'Kho VPP / Dụng cụ',
     }));
 
@@ -28043,17 +28062,17 @@ app.post('/api/hr/stationery/handovers', async (req, res) => {
           ? String(itemId).replace('SUPPLY_', '')
           : String(itemId);
         const sItem = await tx.hrSupplyItem.findUnique({ where: { id: supplyItemId } });
-        if (!sItem || sItem.stockQty < 1) {
+        if (!sItem || (sItem.currentStock ?? 0) < 1) {
           throw new Error('Dụng cụ trong kho VPP đã hết tồn kho');
         }
         await tx.hrSupplyItem.update({
           where: { id: supplyItemId },
-          data: { stockQty: { decrement: 1 } },
+          data: { currentStock: { decrement: 1 } },
         });
         await tx.hrSupplyTransaction.create({
           data: {
             itemId: supplyItemId,
-            type: 'OUT',
+            type: 'EXPORT',
             quantity: 1,
             note: `Bàn giao dụng cụ cho nhân viên (ID: ${employeeId})`,
           },
@@ -28116,15 +28135,16 @@ app.put('/api/hr/stationery/handovers', async (req, res) => {
       });
 
       if (existing.status === 'USING' && status === 'RETURNED') {
-        if (existing.itemId) {
+        if (existing.supplyItemId || existing.itemId) {
+          const sId = existing.supplyItemId || existing.itemId;
           await tx.hrSupplyItem.update({
-            where: { id: existing.itemId },
-            data: { stockQty: { increment: 1 } },
+            where: { id: sId },
+            data: { currentStock: { increment: 1 } },
           });
           await tx.hrSupplyTransaction.create({
             data: {
-              itemId: existing.itemId,
-              type: 'IN',
+              itemId: sId,
+              type: 'IMPORT',
               quantity: 1,
               note: `Thu hồi dụng cụ từ nhân viên ${updated.employee?.fullName || ''}`,
             },
@@ -28157,35 +28177,6 @@ app.put('/api/hr/stationery/handovers', async (req, res) => {
 
 app.get('/api/hr/stationery/transactions', async (req, res) => {
   try {
-    // Auto-seed sample transactions if table is empty so history tab is populated
-    const existingCount = await prisma.hrSupplyTransaction.count();
-    if (existingCount === 0) {
-      const sampleItems = await prisma.hrSupplyItem.findMany({
-        where: { isActive: true },
-        take: 4,
-      });
-      if (sampleItems.length > 0) {
-        const now = new Date();
-        for (let i = 0; i < sampleItems.length; i++) {
-          const it = sampleItems[i];
-          await prisma.hrSupplyTransaction.create({
-            data: {
-              itemId: it.id,
-              type: i % 2 === 0 ? 'IN' : 'OUT',
-              quantity: i % 2 === 0 ? 20 : 5,
-              unitPrice: it.unitPrice || 25000,
-              date: new Date(now.getTime() - i * 86400000 * 2),
-              performedBy: 'Phòng Hành chính Nhân sự',
-              note:
-                i % 2 === 0
-                  ? `Nhập kho định kỳ vật tư ${it.name}`
-                  : `Xuất kho cấp phát cho các bộ phận (${it.name})`,
-            },
-          });
-        }
-      }
-    }
-
     const itemId = req.query.itemId ? String(req.query.itemId) : '';
     const type = req.query.type ? String(req.query.type) : '';
     const where = {};
@@ -28195,10 +28186,25 @@ app.get('/api/hr/stationery/transactions', async (req, res) => {
     const transactions = await prisma.hrSupplyTransaction.findMany({
       where,
       include: { item: true },
-      orderBy: { date: 'desc' },
+      orderBy: { createdAt: 'desc' },
       take: 100,
     });
-    res.json({ transactions });
+    // Map fields for client compatibility
+    const mapped = transactions.map((t) => ({
+      ...t,
+      date: t.createdAt,
+      unitPrice: t.price ?? 0,
+      performedBy: t.executorName || 'HCNS',
+      type: t.type === 'EXPORT' ? 'OUT' : t.type === 'IMPORT' ? 'IN' : t.type,
+      item: t.item
+        ? {
+            ...t.item,
+            stockQty: t.item.currentStock ?? 0,
+            unitPrice: t.item.price ?? 0,
+          }
+        : null,
+    }));
+    res.json({ transactions: mapped });
   } catch (error) {
     console.error('[GET /api/hr/stationery/transactions]', error);
     res.status(500).json({ error: error.message });
@@ -28207,35 +28213,45 @@ app.get('/api/hr/stationery/transactions', async (req, res) => {
 
 app.post('/api/hr/stationery/transactions', async (req, res) => {
   try {
-    const { itemId, type, quantity, unitPrice, performedBy, note, date } = req.body || {};
+    const { itemId, type, quantity, unitPrice, performedBy, note } = req.body || {};
     if (!itemId || !type || !quantity) {
       return res.status(400).json({ error: 'Item, Type and Quantity are required' });
     }
+
+    const txType = type === 'OUT' ? 'EXPORT' : type === 'IN' ? 'IMPORT' : type;
 
     const result = await prisma.$transaction(async (tx) => {
       const transaction = await tx.hrSupplyTransaction.create({
         data: {
           itemId,
-          type,
+          type: txType,
           quantity: Number(quantity),
-          unitPrice: unitPrice ? Number(unitPrice) : null,
-          performedBy: performedBy || null,
+          price: unitPrice ? Number(unitPrice) : 0,
+          executorName: performedBy || 'HCNS',
           note: note || null,
-          date: date ? new Date(date) : new Date(),
         },
         include: { item: true },
       });
 
-      const adjustment = type === 'IN' ? Number(quantity) : -Number(quantity);
+      const adjustment = txType === 'IMPORT' ? Number(quantity) : -Number(quantity);
       const updatedItem = await tx.hrSupplyItem.update({
         where: { id: itemId },
         data: {
-          stockQty: { increment: adjustment },
-          unitPrice: unitPrice && type === 'IN' ? Number(unitPrice) : undefined,
+          currentStock: { increment: adjustment },
+          price: unitPrice && txType === 'IMPORT' ? Number(unitPrice) : undefined,
         },
       });
 
-      return { transaction, updatedItem };
+      return {
+        transaction: {
+          ...transaction,
+          date: transaction.createdAt,
+          unitPrice: transaction.price,
+          performedBy: transaction.executorName,
+          type: transaction.type === 'EXPORT' ? 'OUT' : 'IN',
+        },
+        updatedItem,
+      };
     });
 
     res.status(201).json(result);
@@ -28279,6 +28295,8 @@ app.get('/api/hr/stationery/requests', async (req, res) => {
           items: {
             include: { item: true },
           },
+          requester: true,
+          department: true,
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -28286,7 +28304,7 @@ app.get('/api/hr/stationery/requests', async (req, res) => {
         select: { id: true, userId: true, fullName: true, departmentName: true },
       }),
       prisma.user.findMany({
-        select: { id: true, name: true, department: true },
+        select: { id: true, name: true, role: true },
       }),
       prisma.departmentCategory.findMany({
         select: { id: true, nameVi: true, code: true },
@@ -28301,11 +28319,11 @@ app.get('/api/hr/stationery/requests', async (req, res) => {
     const enrichedRequests = requests.map((reqItem) => {
       const emp = employees.find(
         (e) => e.id === reqItem.requesterId || e.userId === reqItem.requesterId
-      );
+      ) || reqItem.requester;
       const usr = users.find((u) => u.id === reqItem.requesterId);
       const dept = departments.find(
         (d) => d.id === reqItem.departmentId || d.code === reqItem.departmentId
-      );
+      ) || reqItem.department;
       const supp = reqItem.supplierId
         ? suppliers.find((s) => s.id === reqItem.supplierId)
         : null;
@@ -28313,9 +28331,21 @@ app.get('/api/hr/stationery/requests', async (req, res) => {
       return {
         ...reqItem,
         requesterName: emp?.fullName || usr?.name || 'Nhân sự HCNS',
-        departmentName: dept?.nameVi || emp?.departmentName || usr?.department || 'Hành chính - Nhân sự',
+        departmentName: dept?.nameVi || emp?.departmentName || 'Hành chính - Nhân sự',
         supplierName: supp?.name || null,
         supplierCode: supp?.code || null,
+        items: (reqItem.items || []).map((it) => ({
+          ...it,
+          requestQty: it.quantity,
+          unitPrice: it.unitPrice,
+          item: it.item
+            ? {
+                ...it.item,
+                stockQty: it.item.currentStock ?? 0,
+                unitPrice: it.item.price ?? 0,
+              }
+            : null,
+        })),
       };
     });
 
@@ -28333,7 +28363,10 @@ app.post('/api/hr/stationery/requests', async (req, res) => {
       return res.status(400).json({ error: 'Danh sách mặt hàng không được để trống' });
     }
 
-    let finalRequesterId = requesterId || 'system';
+    const requesterEmployee = await prisma.employee.findFirst();
+    if (requesterEmployee && (!requesterId || requesterId === 'system')) {
+      finalRequesterId = requesterEmployee.id;
+    }
     let finalDeptId = departmentId || '';
 
     if (!finalDeptId) {
@@ -28369,7 +28402,7 @@ app.post('/api/hr/stationery/requests', async (req, res) => {
       items.map(async (it) => {
         const dbItem = await prisma.hrSupplyItem.findUnique({ where: { id: it.itemId } });
         const price =
-          it.unitPrice !== undefined ? Number(it.unitPrice) : dbItem?.unitPrice || 0;
+          it.unitPrice !== undefined ? Number(it.unitPrice) : dbItem?.price || 0;
         const qty = Number(it.requestQty) || 0;
         totalAmount += price * qty;
 
@@ -28377,7 +28410,7 @@ app.post('/api/hr/stationery/requests', async (req, res) => {
         if (norm && norm.limitQty > 0) {
           const usedQty = prevRequests.reduce((acc, r) => {
             const match = r.items.find((ri) => ri.itemId === it.itemId);
-            return acc + (match ? match.requestQty : 0);
+            return acc + (match ? match.quantity : 0);
           }, 0);
           if (usedQty + qty > norm.limitQty) {
             isOverNorm = true;
@@ -28386,9 +28419,10 @@ app.post('/api/hr/stationery/requests', async (req, res) => {
 
         return {
           itemId: it.itemId,
-          requestQty: qty,
+          quantity: qty,
           unitPrice: price,
-          note: it.note || null,
+          totalPrice: price * qty,
+          isOverNorm: norm ? usedQty + qty > norm.limitQty : false,
         };
       })
     );
@@ -28497,26 +28531,25 @@ app.put('/api/hr/stationery/requests/:id', async (req, res) => {
           const qtyToDeliver = reqItem.approvedQty ?? reqItem.requestQty;
           if (qtyToDeliver <= 0) continue;
 
-          if (reqItem.item.stockQty < qtyToDeliver) {
+          if (reqItem.item.currentStock < qtyToDeliver) {
             throw new Error(
-              `Mặt hàng ${reqItem.item.name} không đủ tồn kho (Tồn: ${reqItem.item.stockQty}, Cần: ${qtyToDeliver})`
+              `Mặt hàng ${reqItem.item.name} không đủ tồn kho (Tồn: ${reqItem.item.currentStock}, Cần: ${qtyToDeliver})`
             );
           }
 
           await tx.hrSupplyItem.update({
             where: { id: reqItem.itemId },
-            data: { stockQty: { decrement: qtyToDeliver } },
+            data: { currentStock: { decrement: qtyToDeliver } },
           });
 
           await tx.hrSupplyTransaction.create({
             data: {
               itemId: reqItem.itemId,
-              type: 'OUT',
+              type: 'EXPORT',
               quantity: qtyToDeliver,
-              unitPrice: reqItem.unitPrice,
-              performedBy: performedBy || 'HCNS',
+              price: reqItem.unitPrice,
+              executorName: performedBy || 'HCNS',
               note: `Cấp phát theo phiếu ${reqWithItems.code}`,
-              date: new Date(),
             },
           });
         }
@@ -28580,26 +28613,25 @@ app.put('/api/hr/stationery/requests/:id', async (req, res) => {
 
           await tx.hrSupplyRequestItem.update({
             where: { id: reqItem.id },
-            data: { approvedQty: qtyReceived, unitPrice: actualPrice },
+            data: { quantity: qtyReceived, unitPrice: actualPrice, totalPrice: qtyReceived * actualPrice },
           });
 
           await tx.hrSupplyItem.update({
             where: { id: reqItem.itemId },
             data: {
-              stockQty: { increment: qtyReceived },
-              unitPrice: actualPrice > 0 ? actualPrice : undefined,
+              currentStock: { increment: qtyReceived },
+              price: actualPrice > 0 ? actualPrice : undefined,
             },
           });
 
           await tx.hrSupplyTransaction.create({
             data: {
               itemId: reqItem.itemId,
-              type: 'IN',
+              type: 'IMPORT',
               quantity: qtyReceived,
-              unitPrice: actualPrice,
-              performedBy: performedBy || 'HCNS',
+              price: actualPrice,
+              executorName: performedBy || 'HCNS',
               note: `Nhập kho từ đơn hàng ${reqWithItems.code}${invoiceNo ? ` (HĐ: ${invoiceNo})` : ''}`,
-              date: new Date(),
             },
           });
         }

@@ -630,28 +630,27 @@ const RequestsTab: React.FC<{
     {
       key: 'code',
       header: 'MÃ YÊU CẦU',
-      width: '130px',
-      render: (r) => <span className="font-bold text-gray-800 text-xs">{r.code}</span>,
+      width: '160px',
+      render: (r) => (
+        <div>
+          <div className="font-bold text-gray-900 text-xs">{r.code}</div>
+          <div className="mt-1">
+            <Badge variant={r.type === 'PURCHASE' ? 'warning' : 'neutral'}>
+              {r.type === 'PURCHASE' ? 'Mua sắm VPP' : 'Cấp phát VPP'}
+            </Badge>
+          </div>
+        </div>
+      ),
     },
     {
       key: 'requester',
       header: 'NGƯỜI YÊU CẦU',
-      width: '180px',
+      width: '200px',
       render: (r) => (
         <div>
           <div className="font-semibold text-gray-900 text-xs">{r.requesterName}</div>
           <div className="text-[11px] text-gray-500">{r.departmentName}</div>
         </div>
-      ),
-    },
-    {
-      key: 'type',
-      header: 'PHÂN LOẠI',
-      width: '130px',
-      render: (r) => (
-        <Badge variant={r.type === 'PURCHASE' ? 'warning' : 'neutral'}>
-          {r.type === 'PURCHASE' ? 'Mua sắm VPP' : 'Cấp phát VPP'}
-        </Badge>
       ),
     },
     {
@@ -667,9 +666,8 @@ const RequestsTab: React.FC<{
           {r.items.map((it) => (
             <div key={it.id} className="text-xs text-gray-700 flex items-center justify-between gap-2">
               <span className="truncate font-medium">• {it.item?.name}</span>
-              <span className="font-semibold text-gray-900 shrink-0 bg-gray-100 px-1.5 py-0.5 rounded text-[11px]">
-                {it.approvedQty !== null ? `${it.approvedQty}/` : ''}
-                {it.requestQty} {it.item?.unit}
+              <span className="font-semibold text-gray-900 shrink-0 bg-gray-100 px-2 py-0.5 rounded text-[11px]">
+                {it.requestQty} {it.item?.unit || 'cái'}
               </span>
             </div>
           ))}
@@ -683,13 +681,6 @@ const RequestsTab: React.FC<{
       ),
     },
     {
-      key: 'total',
-      header: 'TỔNG TIỀN',
-      align: 'right',
-      width: '120px',
-      render: (r) => <span className="font-bold text-gray-900 text-xs">{formatVND(r.totalAmount)}</span>,
-    },
-    {
       key: 'date',
       header: 'NGÀY TẠO',
       width: '100px',
@@ -700,62 +691,6 @@ const RequestsTab: React.FC<{
       header: 'TRẠNG THÁI',
       width: '170px',
       render: (r) => <StatusBadge status={r.status} />,
-    },
-    {
-      key: 'actions',
-      header: 'THAO TÁC',
-      align: 'right',
-      width: '210px',
-      render: (r) => (
-        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-          {(r.status === 'PENDING' || r.status === 'OVER_NORM') && (
-            <>
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => handleAction(r.id, 'APPROVE')}
-                disabled={actionLoading}
-                title={r.status === 'OVER_NORM' ? 'Giám đốc phê duyệt vượt định mức' : 'Phê duyệt yêu cầu'}
-              >
-                <CheckLg size={13} className="mr-1" /> Duyệt
-              </Button>
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={() => setRejectModal({ open: true, reqId: r.id })}
-                disabled={actionLoading}
-              >
-                <XLg size={13} />
-              </Button>
-            </>
-          )}
-          {r.status === 'APPROVED' && r.type !== 'PURCHASE' && (
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => handleAction(r.id, 'DELIVER')}
-              disabled={actionLoading}
-            >
-              <Truck size={13} className="mr-1" /> Cấp phát
-            </Button>
-          )}
-          {r.status === 'PURCHASING' && (
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={() => {
-                fetchSuppliers();
-                setPurchaseTab('RECEIVE');
-                handleSelectPoToReceive(r.id);
-                setShowPurchaseModal(true);
-              }}
-              disabled={actionLoading}
-            >
-              <BoxArrowInDown size={13} className="mr-1" /> Nhập kho
-            </Button>
-          )}
-        </div>
-      ),
     },
   ];
 
@@ -791,33 +726,12 @@ const RequestsTab: React.FC<{
                   <option value="REJECTED">Từ chối</option>
                 </Select>
               </div>
-              <div className="w-36">
-                <Input
-                  type="month"
-                  value={monthFilter}
-                  onChange={(e) => setMonthFilter(e.target.value)}
-                />
-              </div>
             </div>
           }
           actions={
             <div className="flex items-center gap-2">
-              <div className="hidden xl:flex items-center gap-1.5 mr-1">
-                <span className="px-2 py-1 rounded-md bg-amber-50 text-amber-700 text-xs font-bold border border-amber-200/60">
-                  {reqStats.pending} chờ
-                </span>
-                <span className="px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs font-bold border border-blue-200/60">
-                  {reqStats.approved} duyệt
-                </span>
-                <span className="px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200/60">
-                  {reqStats.delivered} cấp
-                </span>
-                <span className="px-2 py-1 rounded-md bg-rose-50 text-rose-700 text-xs font-bold border border-rose-200/60">
-                  {reqStats.rejected} lỗi
-                </span>
-              </div>
               <Button
-                variant="outline"
+                variant="primary"
                 size="sm"
                 leftIcon={<PlusLg size={13} />}
                 onClick={() => {
@@ -834,14 +748,6 @@ const RequestsTab: React.FC<{
                 }}
               >
                 Tạo đề xuất
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                leftIcon={<CartPlus size={14} />}
-                onClick={handleOpenPurchaseModal}
-              >
-                Mua hàng
               </Button>
             </div>
           }
@@ -3251,8 +3157,6 @@ export const StationeryToolsPage: React.FC = () => {
       title: 'Yêu cầu & Cấp phát',
       desc: 'Phê duyệt và bàn giao',
       icon: <ClipboardCheck size={18} />,
-      badge: stats.pendingRequestsCount > 0 ? `${stats.pendingRequestsCount} chờ` : undefined,
-      badgeVariant: 'warning',
     },
     {
       num: 2,
@@ -3260,9 +3164,6 @@ export const StationeryToolsPage: React.FC = () => {
       title: 'Quản lý tồn kho',
       desc: 'Theo dõi số lượng hàng',
       icon: <BoxSeam size={18} />,
-      badge:
-        stats.lowStockCount > 0 ? `${stats.lowStockCount} sắp hết` : `${items.length} SP`,
-      badgeVariant: stats.lowStockCount > 0 ? 'danger' : 'neutral',
     },
     {
       num: 3,
@@ -3270,8 +3171,6 @@ export const StationeryToolsPage: React.FC = () => {
       title: 'Định mức phòng ban',
       desc: 'Quản lý hạn mức sử dụng',
       icon: <Sliders size={18} />,
-      badge: stats.totalNormsCount > 0 ? `${stats.totalNormsCount} định mức` : undefined,
-      badgeVariant: 'brand',
     },
     {
       num: 4,
@@ -3279,8 +3178,6 @@ export const StationeryToolsPage: React.FC = () => {
       title: 'Theo dõi dụng cụ',
       desc: 'Quản lý tài sản cá nhân',
       icon: <Tools size={18} />,
-      badge: stats.activeAssetsCount > 0 ? `${stats.activeAssetsCount} đang cấp` : undefined,
-      badgeVariant: 'brand',
     },
     {
       num: 5,
@@ -3297,6 +3194,7 @@ export const StationeryToolsPage: React.FC = () => {
       description="Quản lý định mức, phê duyệt và cấp phát vật tư doanh nghiệp"
       icon="bi-archive"
       color="rose"
+      hideTicker={true}
       steps={steps}
       currentStep={currentStep}
       onStepChange={setCurrentStep}
