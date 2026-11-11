@@ -32,6 +32,10 @@ import {
 import { StepPage } from '../../components/common/StepPage';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
+import { Input } from '../../components/common/Input';
+import { Select } from '../../components/common/Select';
+import { NumberInput } from '../../components/common/NumberInput';
+import { Toggle } from '../../components/common/Toggle';
 import type { ModernStepItem } from '../../types';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 import { Table, type TableColumn } from '../../components/ui/Table';
@@ -753,30 +757,26 @@ export const MarketingPlanPage: React.FC = () => {
           const keyMap: any = { dt_1: 'agent', dt_2: 'agentDev', dt_3: 'traditional', dt_4: 'ecommerce' };
           const k = keyMap[row.id];
           return (
-            <input
-              type="text"
-              className="form-control form-control-sm text-end bg-white border px-1.5 py-0.5 fw-semibold"
-              value={row.value ? row.value.toLocaleString('vi-VN') : ''}
-              onChange={(e) => {
-                const val = Number(e.target.value.replace(/\D/g, '')) || 0;
+            <NumberInput
+              value={row.value || 0}
+              suffix="đ"
+              onValueChange={(val) => {
                 setEditedRevenue((prev) => ({ ...prev, [k]: val }));
               }}
-              style={{ width: '100%', maxWidth: 130, height: 26, fontSize: 12, outline: 'none' }}
+              style={{ width: '100%', maxWidth: 140, height: 26, fontSize: 12, textAlign: 'right' }}
             />
           );
         }
         if (isEditing && (row.id === 'cp_1' || row.id === 'cp_3')) {
           return (
-            <input
-              type="text"
-              className="form-control form-control-sm text-end bg-white border px-1.5 py-0.5 fw-semibold"
-              value={row.value ? row.value.toLocaleString('vi-VN') : ''}
-              onChange={(e) => {
-                const val = Number(e.target.value.replace(/\D/g, '')) || 0;
+            <NumberInput
+              value={row.value || 0}
+              suffix="đ"
+              onValueChange={(val) => {
                 if (row.id === 'cp_1') setBrandingCost(val);
                 if (row.id === 'cp_3') setTravelCost(val);
               }}
-              style={{ width: '100%', maxWidth: 130, height: 26, fontSize: 12, outline: 'none' }}
+              style={{ width: '100%', maxWidth: 140, height: 26, fontSize: 12, textAlign: 'right' }}
             />
           );
         }
@@ -838,9 +838,7 @@ export const MarketingPlanPage: React.FC = () => {
       render: (row) => {
         if (isEditing && !row.isTotal) {
           return (
-            <input
-              type="text"
-              className="form-control form-control-sm bg-white border px-1.5 py-0.5 text-start"
+            <Input
               value={row.name || ''}
               onChange={(e) => updateStaffField(row.id, 'name', e.target.value)}
               style={{ width: '100%', height: 26, fontSize: 12, outline: 'none' }}
@@ -852,18 +850,16 @@ export const MarketingPlanPage: React.FC = () => {
     },
     {
       header: 'CƠ BẢN',
-      width: 86,
+      width: 92,
       align: 'center',
       render: (row) => {
         if (row.isTotal) return '';
         if (isEditing) {
           return (
-            <input
-              type="text"
-              className="form-control form-control-sm bg-white border px-1 text-center"
-              value={row.basic ? row.basic.toLocaleString('vi-VN') : ''}
-              onChange={(e) => updateStaffField(row.id, 'basic', Number(e.target.value.replace(/\D/g, '')) || 0)}
-              style={{ width: '100%', height: 26, fontSize: 12, outline: 'none' }}
+            <NumberInput
+              value={row.basic || 0}
+              onValueChange={(val) => updateStaffField(row.id, 'basic', val)}
+              style={{ width: '100%', height: 26, fontSize: 12, textAlign: 'center', outline: 'none' }}
             />
           );
         }
@@ -872,18 +868,16 @@ export const MarketingPlanPage: React.FC = () => {
     },
     {
       header: 'HIỆU SUẤT',
-      width: 78,
+      width: 82,
       align: 'center',
       render: (row) => {
         if (row.isTotal) return '';
         if (isEditing) {
           return (
-            <input
-              type="text"
-              className="form-control form-control-sm bg-white border px-1 text-center"
-              value={row.perf ? row.perf.toLocaleString('vi-VN') : ''}
-              onChange={(e) => updateStaffField(row.id, 'perf', Number(e.target.value.replace(/\D/g, '')) || 0)}
-              style={{ width: '100%', height: 26, fontSize: 12, outline: 'none' }}
+            <NumberInput
+              value={row.perf || 0}
+              onValueChange={(val) => updateStaffField(row.id, 'perf', val)}
+              style={{ width: '100%', height: 26, fontSize: 12, textAlign: 'center', outline: 'none' }}
             />
           );
         }
@@ -892,18 +886,16 @@ export const MarketingPlanPage: React.FC = () => {
     },
     {
       header: 'PHỤ CẤP',
-      width: 70,
+      width: 78,
       align: 'center',
       render: (row) => {
         if (row.isTotal) return '';
         if (isEditing) {
           return (
-            <input
-              type="text"
-              className="form-control form-control-sm bg-white border px-1 text-center"
-              value={row.allowance ? row.allowance.toLocaleString('vi-VN') : ''}
-              onChange={(e) => updateStaffField(row.id, 'allowance', Number(e.target.value.replace(/\D/g, '')) || 0)}
-              style={{ width: '100%', height: 26, fontSize: 12, outline: 'none' }}
+            <NumberInput
+              value={row.allowance || 0}
+              onValueChange={(val) => updateStaffField(row.id, 'allowance', val)}
+              style={{ width: '100%', height: 26, fontSize: 12, textAlign: 'center', outline: 'none' }}
             />
           );
         }
@@ -912,17 +904,16 @@ export const MarketingPlanPage: React.FC = () => {
     },
     {
       header: 'SL',
-      width: 40,
+      width: 48,
       align: 'center',
       render: (row) => {
         if (isEditing && !row.isTotal) {
           return (
-            <input
-              type="text"
-              className="form-control form-control-sm bg-white border px-1 text-center"
-              value={row.qty ? row.qty.toLocaleString('vi-VN') : ''}
-              onChange={(e) => updateStaffField(row.id, 'qty', Number(e.target.value.replace(/\D/g, '')) || 0)}
-              style={{ width: '100%', height: 26, fontSize: 12, outline: 'none' }}
+            <NumberInput
+              value={row.qty || 0}
+              min={0}
+              onValueChange={(val) => updateStaffField(row.id, 'qty', val)}
+              style={{ width: '100%', height: 26, fontSize: 12, textAlign: 'center', outline: 'none' }}
             />
           );
         }
@@ -1762,195 +1753,181 @@ export const MarketingPlanPage: React.FC = () => {
             BƯỚC 1: MỤC TIÊU NĂM (STEP 1)
            ══════════════════════════════════════════════════════════════════ */}
         {currentStep === 1 && (
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-3 min-h-0">
-            <div className="mkt-step1-grid">
-              {/* Left Column (5/12) */}
-              <div className="mkt-step1-left">
-                {/* Year, Date, Approval, Report */}
-                <div className="flex items-end gap-2.5 flex-wrap p-2.5 bg-slate-50/80 rounded-xl border border-slate-200/70">
-                  <div style={{ flex: 1, minWidth: 80 }}>
-                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      NĂM KẾ HOẠCH
-                    </label>
-                    <select
-                      className="form-select form-select-sm text-xs font-semibold h-8 rounded-lg border-slate-200 bg-white"
+          <div className="mkt-step1-grid">
+            {/* Left Column (Fixed / Cố định) */}
+            <div className="mkt-step1-left custom-scrollbar">
+              {/* Year, Date, Approval, Report */}
+              <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-xs flex flex-col gap-2.5">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Select
+                      label="NĂM KẾ HOẠCH"
                       value={selectedYear}
                       onChange={(e) => setSelectedYear(e.target.value)}
-                    >
-                      <option value="2025">2025</option>
-                      <option value="2026">2026</option>
-                      <option value="2027">2027</option>
-                    </select>
+                      options={[
+                        { value: '2025', label: '2025' },
+                        { value: '2026', label: '2026' },
+                        { value: '2027', label: '2027' },
+                      ]}
+                    />
                   </div>
-                  <div style={{ flex: 1.2, minWidth: 100 }}>
-                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      NGÀY LẬP
-                    </label>
-                    <input
+                  <div>
+                    <Input
                       type="date"
-                      className="form-control form-control-sm text-xs font-semibold h-8 rounded-lg border-slate-200 bg-white"
+                      label="NGÀY LẬP"
                       value={planDate}
                       onChange={(e) => setPlanDate(e.target.value)}
                     />
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      icon={isSubmittingPlan ? undefined : <SendFill size={11} />}
-                      isLoading={isSubmittingPlan}
-                      onClick={handleSubmitPlan}
-                      disabled={isSubmittingPlan || planStatus === 'pending_approval'}
-                      className="h-8 shadow-xs"
-                    >
-                      Trình duyệt
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      icon={<FileEarmarkBarGraph size={12} />}
-                      onClick={() => setShowPlanPrintModal(true)}
-                      className="h-8 bg-white shadow-xs"
-                    >
-                      Báo cáo
-                    </Button>
-                  </div>
                 </div>
-
-                {/* Status Badges & Approval Actions */}
-                {planStatus === 'pending_approval' && (
-                  <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between">
-                    <Badge variant="warning" hasDot pulseDot>Đang chờ duyệt</Badge>
-                    <div className="flex gap-1.5">
-                      <Button variant="success" size="sm" icon={<Check size={14} />} onClick={handleApprovePlan} className="h-7 text-xs">
-                        Phê duyệt
-                      </Button>
-                      <Button variant="danger" size="sm" icon={<X size={14} />} onClick={handleRejectPlan} className="h-7 text-xs">
-                        Từ chối
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                {planStatus === 'approved' && (
-                  <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-2">
-                    <Badge variant="success" hasDot>Kế hoạch đã phê duyệt</Badge>
-                    <span className="text-xs text-emerald-800 font-medium">Bản kế hoạch năm {selectedYear} có hiệu lực thực thi.</span>
-                  </div>
-                )}
-                {planStatus === 'rejected' && (
-                  <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2">
-                    <Badge variant="danger" hasDot>Kế hoạch bị từ chối</Badge>
-                    <span className="text-xs text-rose-800 font-medium">Vui lòng điều chỉnh lại ngân sách hoặc chỉ tiêu.</span>
-                  </div>
-                )}
-
-                {/* Cost/Revenue Progress Card */}
-                {(() => {
-                  const costRatio = getRatio(totalCostMarketing);
-                  const isOver = totalCostMarketing > valMarketingCost;
-                  return (
-                    <div className="rounded-xl border border-slate-200/80 p-4 bg-white shadow-xs flex flex-col gap-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                          TỶ LỆ CHI PHÍ / DOANH THU
-                        </span>
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                            isOver
-                              ? 'bg-rose-50 text-rose-600 border-rose-200'
-                              : 'bg-emerald-50 text-emerald-600 border-emerald-200'
-                          }`}
-                        >
-                          {isOver ? 'Vượt định mức' : 'Trong định mức'}
-                        </span>
-                      </div>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
-                          {costRatio.toFixed(1)}%
-                        </span>
-                        <span className="text-xs text-slate-500 font-medium">
-                          trên tổng doanh thu
-                        </span>
-                      </div>
-                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-500 ${
-                            isOver
-                              ? 'bg-gradient-to-r from-rose-500 to-rose-600'
-                              : 'bg-gradient-to-r from-blue-500 to-emerald-500'
-                          }`}
-                          style={{ width: `${Math.min(costRatio, 100)}%` }}
-                        />
-                      </div>
-                      <div className="flex justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
-                        <div>
-                          Chi phí: <strong className="text-slate-800">{totalCostMarketing.toLocaleString('vi-VN')} đ</strong>
-                        </div>
-                        <div>
-                          Định mức: <strong className="text-slate-800">{valMarketingCost.toLocaleString('vi-VN')} đ</strong>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Revenue Donut Chart Card */}
-                <div className="rounded-xl border border-slate-200/80 p-4 bg-white shadow-xs flex flex-col gap-3">
-                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                    Cơ cấu doanh thu năm {selectedYear}
-                  </span>
-                  <RevenueDonutChart
-                    totalRevenue={totalRevenue}
-                    data={[
-                      { label: 'Đại lý', value: valAgent, color: '#3b82f6' },
-                      { label: 'Phát triển đại lý', value: valAgentDev, color: '#10b981' },
-                      { label: 'Truyền thống', value: valTraditional, color: '#f59e0b' },
-                      { label: 'Thương mại điện tử', value: valEcommerce, color: '#ec4899' },
-                    ]}
-                  />
+                <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon={isSubmittingPlan ? undefined : <SendFill size={11} />}
+                    isLoading={isSubmittingPlan}
+                    onClick={handleSubmitPlan}
+                    disabled={isSubmittingPlan || planStatus === 'pending_approval'}
+                    className="flex-1 h-8 shadow-xs"
+                  >
+                    Trình duyệt
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    icon={<FileEarmarkBarGraph size={12} />}
+                    onClick={() => setShowPlanPrintModal(true)}
+                    className="flex-1 h-8 bg-white shadow-xs"
+                  >
+                    Báo cáo
+                  </Button>
                 </div>
               </div>
 
-              {/* Right Column (7/12) */}
-              <div className="mkt-step1-right">
-                <div className="flex items-center justify-between pb-1 border-b border-slate-100">
-                  <SectionTitle
-                    title={`Bảng chỉ số kế hoạch marketing năm ${selectedYear}`}
-                    className="mb-0"
-                  />
-                  <div className="flex items-center gap-3">
-                    <div className="form-check form-switch mb-0 flex items-center gap-2">
-                      <input
-                        className="form-check-input"
-                        type="checkbox"
-                        role="switch"
-                        id="editModeSwitch"
-                        checked={isEditing}
-                        onChange={(e) => {
-                          setIsEditing(e.target.checked);
-                          if (!e.target.checked) setSelectedStaffIds([]);
-                        }}
-                        style={{ cursor: 'pointer', width: 32, height: 16 }}
-                      />
-                      <label
-                        className="form-check-label text-uppercase fw-bold text-[11px] text-slate-500 cursor-pointer select-none"
-                        htmlFor="editModeSwitch"
-                      >
-                        Chỉnh sửa
-                      </label>
-                    </div>
-                    <Button
-                      variant="success"
-                      size="sm"
-                      icon={<Floppy size={12} />}
-                      disabled={!isEditing}
-                      onClick={() => handleSaveToDB()}
-                      className="h-7 text-xs shadow-xs"
-                    >
-                      Lưu vào DB
+              {/* Status Badges & Approval Actions */}
+              {planStatus === 'pending_approval' && (
+                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between">
+                  <Badge variant="warning" hasDot pulseDot>Đang chờ duyệt</Badge>
+                  <div className="flex gap-1.5">
+                    <Button variant="success" size="sm" icon={<Check size={14} />} onClick={handleApprovePlan} className="h-7 text-xs">
+                      Phê duyệt
+                    </Button>
+                    <Button variant="danger" size="sm" icon={<X size={14} />} onClick={handleRejectPlan} className="h-7 text-xs">
+                      Từ chối
                     </Button>
                   </div>
                 </div>
+              )}
+              {planStatus === 'approved' && (
+                <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-2">
+                  <Badge variant="success" hasDot>Kế hoạch đã phê duyệt</Badge>
+                  <span className="text-xs text-emerald-800 font-medium">Bản kế hoạch năm {selectedYear} có hiệu lực thực thi.</span>
+                </div>
+              )}
+              {planStatus === 'rejected' && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2">
+                  <Badge variant="danger" hasDot>Kế hoạch bị từ chối</Badge>
+                  <span className="text-xs text-rose-800 font-medium">Vui lòng điều chỉnh lại ngân sách hoặc chỉ tiêu.</span>
+                </div>
+              )}
+
+              {/* Cost/Revenue Progress Card */}
+              {(() => {
+                const costRatio = getRatio(totalCostMarketing);
+                const isOver = totalCostMarketing > valMarketingCost;
+                return (
+                  <div className="rounded-xl border border-slate-200/80 p-4 bg-white shadow-xs flex flex-col gap-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        TỶ LỆ CHI PHÍ / DOANH THU
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          isOver
+                            ? 'bg-rose-50 text-rose-600 border-rose-200'
+                            : 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                        }`}
+                      >
+                        {isOver ? 'Vượt định mức' : 'Trong định mức'}
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
+                        {costRatio.toFixed(1)}%
+                      </span>
+                      <span className="text-xs text-slate-500 font-medium">
+                        trên tổng doanh thu
+                      </span>
+                    </div>
+                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          isOver
+                            ? 'bg-gradient-to-r from-rose-500 to-rose-600'
+                            : 'bg-gradient-to-r from-blue-500 to-emerald-500'
+                        }`}
+                        style={{ width: `${Math.min(costRatio, 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
+                      <div>
+                        Chi phí: <strong className="text-slate-800">{totalCostMarketing.toLocaleString('vi-VN')} đ</strong>
+                      </div>
+                      <div>
+                        Định mức: <strong className="text-slate-800">{valMarketingCost.toLocaleString('vi-VN')} đ</strong>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Revenue Donut Chart Card */}
+              <div className="rounded-xl border border-slate-200/80 p-4 bg-white shadow-xs flex flex-col gap-3">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  Cơ cấu doanh thu năm {selectedYear}
+                </span>
+                <RevenueDonutChart
+                  totalRevenue={totalRevenue}
+                  data={[
+                    { label: 'Đại lý', value: valAgent, color: '#3b82f6' },
+                    { label: 'Phát triển đại lý', value: valAgentDev, color: '#10b981' },
+                    { label: 'Truyền thống', value: valTraditional, color: '#f59e0b' },
+                    { label: 'Thương mại điện tử', value: valEcommerce, color: '#ec4899' },
+                  ]}
+                />
+              </div>
+            </div>
+
+            {/* Right Column (Scrollable / Cuộn độc lập) */}
+            <div className="mkt-step1-right custom-scrollbar">
+              <div className="flex items-center justify-between pb-1 border-b border-slate-100 shrink-0">
+                <SectionTitle
+                  title={`Bảng chỉ số kế hoạch marketing năm ${selectedYear}`}
+                  className="mb-0"
+                />
+                <div className="flex items-center gap-3">
+                  <div style={{ width: 'auto' }}>
+                    <Toggle
+                      checked={isEditing}
+                      onChange={(val) => {
+                        setIsEditing(val);
+                        if (!val) setSelectedStaffIds([]);
+                      }}
+                      label={<span className="text-xs font-bold uppercase text-slate-600">Chỉnh sửa</span>}
+                    />
+                  </div>
+                  <Button
+                    variant="success"
+                    size="sm"
+                    icon={<Floppy size={12} />}
+                    disabled={!isEditing}
+                    onClick={() => handleSaveToDB()}
+                    className="h-8 text-xs shadow-xs"
+                  >
+                    Lưu vào DB
+                  </Button>
+                </div>
+              </div>
 
                 {/* Table: Budget & Targets */}
                 <Table
@@ -2038,7 +2015,6 @@ export const MarketingPlanPage: React.FC = () => {
                 />
               </div>
             </div>
-          </div>
         )}
 
         {/* ══════════════════════════════════════════════════════════════════
@@ -3093,26 +3069,40 @@ export const MarketingPlanPage: React.FC = () => {
       {/* Embedded CSS matching client-seajong */}
       <style>{`
         .mkt-step1-grid {
-          display: grid;
-          grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-          gap: 20px;
-          min-height: 400px;
-          padding: 0 8px 8px 8px;
+          display: flex;
+          flex: 1 1 0%;
+          height: 100%;
+          min-height: 0;
+          width: 100%;
           min-width: 0;
+          overflow: hidden;
         }
         .mkt-step1-left {
+          width: 390px;
+          min-width: 360px;
+          max-width: 420px;
+          flex-shrink: 0;
           border-right: 1px solid var(--border, #e2e8f0);
-          padding-right: 20px;
+          padding: 12px 14px;
           display: flex;
           flex-direction: column;
-          gap: 16px;
-          min-width: 0;
+          gap: 12px;
+          overflow-y: auto;
+          min-height: 0;
+          height: 100%;
+          background: #f8fafc;
         }
         .mkt-step1-right {
+          flex: 1 1 0%;
           display: flex;
           flex-direction: column;
-          gap: 16px;
+          gap: 12px;
           min-width: 0;
+          min-height: 0;
+          height: 100%;
+          overflow-y: auto;
+          padding: 12px 16px;
+          background: #ffffff;
         }
         .mkt-step4-grid {
           display: grid;
@@ -3195,10 +3185,27 @@ export const MarketingPlanPage: React.FC = () => {
           box-shadow: 0 2px 6px rgba(30, 58, 138, 0.2);
         }
         @media (max-width: 1024px) {
-          .mkt-step1-grid, .mkt-step4-grid {
+          .mkt-step1-grid {
+            flex-direction: column;
+            overflow-y: auto;
+          }
+          .mkt-step1-left {
+            width: 100%;
+            max-width: 100%;
+            height: auto;
+            border-right: none;
+            border-bottom: 1px solid var(--border, #e2e8f0);
+            overflow: visible;
+          }
+          .mkt-step1-right {
+            width: 100%;
+            height: auto;
+            overflow: visible;
+          }
+          .mkt-step4-grid {
             grid-template-columns: minmax(0, 1fr);
           }
-          .mkt-step1-left, .mkt-step4-left {
+          .mkt-step4-left {
             border-right: none;
             padding-right: 0;
             border-bottom: 1px solid var(--border, #e2e8f0);
