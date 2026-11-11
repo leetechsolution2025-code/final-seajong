@@ -29304,6 +29304,256 @@ app.put('/api/hr/stationery/requests/:id', async (req, res) => {
   }
 });
 
+// ── MARKETING: COMPETITORS & MARKET ANALYSIS ─────────────────────────────
+app.get(['/api/competitors', '/api/marketing/competitors'], async (req, res) => {
+  try {
+    const rows = await prisma.competitor.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+    if (req.path === '/api/competitors') {
+      return res.json({ success: true, data: rows });
+    }
+    res.json(rows);
+  } catch (err) {
+    console.error('[GET /api/competitors]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post(['/api/competitors', '/api/marketing/competitors'], async (req, res) => {
+  try {
+    const body = req.body;
+    const row = await prisma.competitor.create({
+      data: {
+        name: body.name || 'Đối thủ mới',
+        website: body.website || '',
+        facebookUrl: body.facebookUrl || '',
+        tiktokUrl: body.tiktokUrl || '',
+        youtubeUrl: body.youtubeUrl || '',
+        instagramUrl: body.instagramUrl || '',
+        shopeeUrl: body.shopeeUrl || '',
+        lazadaUrl: body.lazadaUrl || '',
+        color: body.color || '#6366f1',
+        threat: body.threat || 'Normal',
+        status: body.status || 'Đang theo dõi',
+        automationStatus: 'IDLE',
+        webhookToken: 'wh-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8),
+        swot: typeof body.swot === 'string' ? body.swot : JSON.stringify(body.swot || {}),
+        metrics: typeof body.metrics === 'string' ? body.metrics : JSON.stringify(body.metrics || {}),
+        scores: typeof body.scores === 'string' ? body.scores : JSON.stringify(body.scores || {}),
+        strategySuggestions: typeof body.strategySuggestions === 'string' ? body.strategySuggestions : JSON.stringify(body.strategySuggestions || {}),
+        aiSummary: body.aiSummary || 'Đang chờ phân tích dữ liệu AI...',
+        lastScan: new Date(),
+      },
+    });
+    res.json(row);
+  } catch (err) {
+    console.error('[POST /api/competitors]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/marketing/competitors/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const body = req.body;
+    const updated = await prisma.competitor.update({
+      where: { id },
+      data: {
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.website !== undefined ? { website: body.website } : {}),
+        ...(body.facebookUrl !== undefined ? { facebookUrl: body.facebookUrl } : {}),
+        ...(body.tiktokUrl !== undefined ? { tiktokUrl: body.tiktokUrl } : {}),
+        ...(body.youtubeUrl !== undefined ? { youtubeUrl: body.youtubeUrl } : {}),
+        ...(body.instagramUrl !== undefined ? { instagramUrl: body.instagramUrl } : {}),
+        ...(body.shopeeUrl !== undefined ? { shopeeUrl: body.shopeeUrl } : {}),
+        ...(body.lazadaUrl !== undefined ? { lazadaUrl: body.lazadaUrl } : {}),
+        ...(body.status !== undefined ? { status: body.status } : {}),
+        ...(body.threat !== undefined ? { threat: body.threat } : {}),
+        ...(body.aiSummary !== undefined ? { aiSummary: body.aiSummary } : {}),
+        ...(body.swot !== undefined ? { swot: typeof body.swot === 'string' ? body.swot : JSON.stringify(body.swot) } : {}),
+        ...(body.strategySuggestions !== undefined ? { strategySuggestions: typeof body.strategySuggestions === 'string' ? body.strategySuggestions : JSON.stringify(body.strategySuggestions) } : {}),
+        updatedAt: new Date(),
+      },
+    });
+    res.json(updated);
+  } catch (err) {
+    console.error('[PATCH /api/marketing/competitors/:id]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete(['/api/marketing/competitors/:id', '/api/competitors/:id'], async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.competitor.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[DELETE /api/competitors/:id]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/marketing/competitors/:id/analyze', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const comp = await prisma.competitor.findUnique({ where: { id } });
+    if (!comp) return res.status(404).json({ error: 'Competitor not found' });
+
+    const updated = await prisma.competitor.update({
+      where: { id },
+      data: {
+        lastScan: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    res.json(updated);
+  } catch (err) {
+    console.error('[POST /api/marketing/competitors/:id/analyze]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Market Analysis USD Rate
+app.get('/api/market-analysis/usd-rate', (req, res) => {
+  res.json({ success: true, rate: 25460 });
+});
+
+// Market Analysis Report
+app.post('/api/market-analysis', async (req, res) => {
+  try {
+    const body = req.body;
+    const { campaignName, campaignDesc, products, targetSegment, channels, timeline, budget } = body;
+
+    const report = {
+      executiveSummary: `Chiến dịch "${campaignName || 'Chiến dịch sản phẩm Seajong'}" nhắm đến phân khúc ${targetSegment || 'Cao cấp'} có triển vọng thành công rất lớn trong giai đoạn 2026. Với định vị chất lượng chuẩn Hàn Quốc, công nghệ đồng thau 59-1 mạ PVD và thiết kế phím đàn LED thông minh, Seajong hoàn toàn có khả năng tạo bước ngoặt chiếm lĩnh thị phần trước các đối thủ cạnh tranh truyền thống.`,
+      opportunityScore: 86,
+      riskLevel: "Trung bình",
+      marketFit: {
+        assessment: "Thị trường bất động sản và hoàn thiện nội thất 2026 đang hồi phục mạnh mẽ với nhu cầu nâng cấp không gian phòng tắm sang trọng, tiện nghi và chăm sóc sức khỏe.",
+        gapOpportunity: "Khoảng trống giữa các thương hiệu siêu sang (TOTO, Kohler với giá rất cao) và phân khúc phổ thông (Inax, Viglacera với mẫu mã cơ khí cũ). Seajong đóng vai trò 'Luxury trong tầm tay' (Affordable Luxury).",
+        targetSegmentAnalysis: `Phân khúc ${targetSegment || 'Cao cấp'}: Ước tính đạt quy mô hơn 12.000 tỷ đồng tại các đô thị lớn, tăng trưởng 12-15%/năm. Khách hàng sẵn sàng chi trả cho yếu tố thẩm mỹ, an toàn và công nghệ điều nhiệt.`,
+        seasonality: "Điểm rơi bàn giao nhà và hoàn thiện công trình tập trung cao điểm từ Tháng 8 đến Tháng 12 hàng năm."
+      },
+      productInsights: {
+        trendAlignment: "Đón đầu xu hướng Smart & Wellness 2026-2028: Sen cây hiển thị LED nhiệt độ, củ sen phím đàn độc lập và lớp mạ Titan Gray chống bám vân tay.",
+        uniqueSellingPoints: [
+          "Phôi đồng thau 59-1 chuẩn quốc tế, hàm lượng chì < 0.25% bảo vệ sức khỏe",
+          "Van lõi gốm Ceramic kiểm định 500.000 lần đóng mở không rò rỉ",
+          "Mạ chân không PVD đa lớp chống oxy hóa và muối mặn bền đẹp trên 10 năm"
+        ],
+        pricingStrategy: "Định giá theo phương pháp Giá trị gia tăng (Value-based Pricing). Mức giá niêm yết cạnh tranh thấp hơn TOTO 30-40% nhưng vượt trội về tính năng thông minh.",
+        productRisks: [
+          "Áp lực nguồn nước yếu tại một số chung cư cũ cần tư vấn bơm tăng áp",
+          "Yêu cầu thợ lắp đặt nắm vững kỹ thuật đấu nối đường nước nóng/lạnh chuẩn"
+        ]
+      },
+      competitorIntel: {
+        keyThreats: [
+          { brand: "TOTO Việt Nam", threat: "Độ nhận diện thương hiệu hàng đầu ở công trình 5 sao", level: "Cao" },
+          { brand: "ENIC", threat: "Chiến dịch quảng cáo số phủ rộng và chính sách miễn phí lắp đặt toàn quốc", level: "Cao" },
+          { brand: "INAX", threat: "Mạng lưới đại lý truyền thống dày đặc tại các tỉnh thành", level: "Trung bình" }
+        ],
+        competitiveAdvantage: "Thiết kế hiện đại chuẩn Hàn Quốc, công nghệ phím đàn LED nhiệt độ và chính sách chiết khấu đại lý vượt trội (35-45%).",
+        discountBenchmark: "Chiết khấu đại lý tham chiếu ngành: 25-35% cho đại lý cấp 2, 38-45% cho nhà phân phối độc quyền.",
+        counterStrategy: "Tập trung truyền thông hình ảnh thực tế tại showroom, hợp tác chặt chẽ với Kiến trúc sư và gói tài trợ kệ trưng bày POSM 100%."
+      },
+      channelStrategy: {
+        primaryChannel: {
+          name: "Kênh Đại lý & Showroom chuyên biệt",
+          reason: "Thiết bị vệ sinh cao cấp cần trải nghiệm cảm ứng trực tiếp trước khi quyết định mua",
+          tactics: ["Tài trợ 100% kệ mẫu trưng bày", "Đào tạo kỹ năng bán hàng cho nhân viên đại lý"],
+          icon: "bi-shop"
+        },
+        secondaryChannels: [
+          { name: "Kênh KTS & Nhà thầu", role: "Đưa sản phẩm vào bản vẽ thiết kế ngay từ giai đoạn ý tưởng", icon: "bi-building" },
+          { name: "Kênh Digital & Video Marketing", role: "Tạo nhận diện thương hiệu, kéo khách hàng tìm đến đại lý", icon: "bi-camera-video" }
+        ],
+        ktsInfluenceStrategy: "Tổ chức Workshop chuyên đề thiết kế phòng tắm hiện đại và chiết khấu hoa hồng tư vấn hấp dẫn cho KTS.",
+        contentRecommendations: [
+          "Video 3D phỏng diễn tính năng dòng nước và ổn định nhiệt độ",
+          "Bộ ảnh phối cảnh phòng tắm sang trọng chuẩn phong cách Seajong",
+          "Feedback và hình ảnh thực tế từ các gia chủ căn hộ cao cấp"
+        ]
+      },
+      customerJourney: {
+        targetBuyer: "Gia chủ độ tuổi 28 - 45, thu nhập khá trở lên, đang xây nhà hoặc cải tạo căn hộ, coi trọng tiện nghi gia đình và thẩm mỹ hiện đại.",
+        decisionTriggers: ["An toàn nhiệt độ cho trẻ nhỏ và người lớn tuổi", "Màu sắc Titan Gray sang trọng nâng tầm không gian", "Chế độ bảo hành 5 năm tận nhà"],
+        objections: ["Lo ngại về linh kiện thay thế sau bảo hành", "So sánh với các thương hiệu Nhật Bản lâu năm"],
+        conversionTactics: ["Cam kết cung cấp linh kiện sẵn có trọn đời", "Trải nghiệm xả nước thực tế tại showroom"]
+      },
+      supplyChainAlert: {
+        overallRisk: "Trung bình",
+        alerts: [
+          { factor: "Giá phôi đồng LME biến động", impact: "Có thể ảnh hưởng biên lợi nhuận sản xuất", action: "Chốt hợp đồng nguyên liệu dài hạn 6 tháng", urgency: "Trong 1 tháng" },
+          { factor: "Thời gian vận chuyển cao điểm cuối năm", impact: "Nguy cơ trễ hàng 5-10 ngày", action: "Chủ động tăng mức tồn kho an toàn thêm 20%", urgency: "Ngay" }
+        ],
+        procurementAdvice: "Tiến hành nhập khẩu và gia công xi mạ đợt 1 ngay từ đầu Quý 3 để kịp ra mắt thị trường đúng tiến độ."
+      },
+      earlyWarningSignals: [
+        { signal: "Tồn kho đại lý chậm luân chuyển vượt quá 45 ngày", threshold: "> 45 ngày", action: "Kích hoạt chương trình khuyến mãi quà tặng thúc đẩy bán lẻ", frequency: "Theo dõi hàng tuần" },
+        { signal: "Tỷ lệ đơn hàng lỗi linh kiện", threshold: "> 0.5%", action: "Tạm dừng xuất xưởng lô hàng để QC kiểm định lại 100%", frequency: "Theo dõi theo lô" }
+      ],
+      trendForecast: [
+        { trend: "Sen tắm âm tường tối giản (Minimalism)", relevance: "Rất cao", opportunity: "Tung dòng sen âm tường Seajong thế hệ mới", timeline: "Đạt đỉnh 2026-2027" },
+        { trend: "Tích hợp công nghệ cảm ứng và điều khiển số", relevance: "Cao", opportunity: "Phát triển Smart Shower hiển thị độ C và lưu lượng", timeline: "2026-2028" }
+      ],
+      actionPlan: {
+        immediate: [
+          "Hoàn thiện bộ Catalogue, POSM và mẫu sản phẩm thử nghiệm",
+          "Ký kết cam kết hợp tác với 30 đại lý trọng điểm đợt 1",
+          "Lên kế hoạch sản xuất 500 bộ sản phẩm phục vụ ra mắt"
+        ],
+        shortTerm: [
+          "Tổ chức sự kiện ra mắt bộ sưu tập mới và tri ân đại lý",
+          "Đẩy mạnh chiến dịch Digital Ads định hướng khách hàng đến showroom",
+          "Triển khai chương trình thưởng doanh số quý cho đại lý"
+        ],
+        longTerm: [
+          "Mở rộng độ phủ thêm 50 đại lý tại khu vực Miền Trung và Miền Nam",
+          "Đánh giá hiệu quả chiến dịch và cập nhật phiên bản sản phẩm cải tiến"
+        ],
+        budget: "Phân bổ ngân sách tối ưu theo tỷ lệ 45% Hỗ trợ đại lý/Showroom, 35% Truyền thông Digital, 20% Dự phòng & Sự kiện.",
+        budgetAllocation: [
+          { channel: "Kệ mẫu & Nhận diện Showroom", percentage: 45 },
+          { channel: "Quảng cáo số & Truyền thông", percentage: 35 },
+          { channel: "Sự kiện ra mắt & Hội thảo KTS", percentage: 20 }
+        ]
+      },
+      finalVerdict: "Chiến dịch hoàn toàn khả thi và có tiềm năng sinh lời cao nếu Seajong kiểm soát tốt chất lượng sản phẩm ban đầu và hỗ trợ đại lý tối đa trong khâu trưng bày."
+    };
+
+    res.json({ success: true, data: report });
+  } catch (err) {
+    console.error('[POST /api/market-analysis]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Market Analysis Chatbot
+app.post('/api/market-analysis/chat', async (req, res) => {
+  try {
+    const { messages } = req.body;
+    const lastMsg = (messages && messages[messages.length - 1]?.content) || '';
+    const lower = lastMsg.toLowerCase();
+
+    let reply = "Tôi là Trợ lý AI Phân tích thị trường Seajong. Tôi có thể hỗ trợ bạn phân tích đối thủ cạnh tranh (TOTO, Inax, ENIC...), xu hướng tiêu dùng thiết bị vệ sinh cao cấp 2026, chiến lược giá và chuỗi cung ứng.";
+
+    if (lower.includes('toto') || lower.includes('bồn cầu thông minh')) {
+      reply = `**Phân tích so sánh Seajong vs TOTO:**\n\n1. **Về định vị & Giá:** TOTO định vị ở đỉnh phân khúc với mức giá bồn cầu thông minh Neorest từ 65 - 160 triệu đồng. Seajong định vị phân khúc 'Affordable Luxury' với mức giá dễ tiếp cận hơn 40-50% trong khi giữ nguyên các tính năng cốt lõi (xả xoáy men nano tuyết, nắp rửa tự động, sấy khí ấm, khử mùi xúc tác sinh học).\n\n2. **Về thiết kế:** Seajong hướng tới phong cách tối giản thanh lịch Hàn Quốc, đường nét mảnh và hiện đại hơn so với kiểu dáng khá bảo thủ của TOTO.\n\n3. **Khuyến nghị:** Tập trung vào các gia đình trẻ thu nhập cao sống tại căn hộ cao cấp - nhóm khách hàng muốn công nghệ thông minh đỉnh cao nhưng không muốn trả chi phí thương hiệu quá mức.`;
+    } else if (lower.includes('sen tắm') || lower.includes('âm tường') || lower.includes('xu hướng')) {
+      reply = `**Xu hướng thiết kế Sen tắm 2026:**\n\n1. **Màu sắc PVD:** Tông màu Titan Gray (xám xước titan) và Matte Black đang chiếm hơn 65% lượt tìm kiếm của các Kiến trúc sư, thay thế dần màu crom bóng truyền thống.\n\n2. **Công nghệ an toàn:** Sen cây phím đàn tích hợp củ khóa nhiệt độ an toàn 38°C và màn hình LED tự phát điện thủy lực đang là xu hướng bán chạy nhất.\n\n3. **Lợi thế Seajong:** Thân vòi đúc từ phôi đồng 59-1 nguyên chất, van khóa Ceramic đạt 500.000 lần đóng mở, bảo hành 5 năm tận nhà.`;
+    } else if (lower.includes('kts') || lower.includes('kiến trúc sư') || lower.includes('tiếp cận')) {
+      reply = `**Chiến lược tiếp cận Kiến trúc sư & Nhà thầu Seajong:**\n\n1. **Cung cấp File 3D Sketchup/Revit:** KTS rất cần thư viện model chuẩn để đưa thẳng vào bản vẽ render phối cảnh cho khách hàng.\n\n2. **Chính sách chiết khấu minh bạch:** Mức hoa hồng tư vấn từ 10-15% kết hợp hỗ trợ kỹ thuật tận chân công trình.\n\n3. **Trải nghiệm thực tế:** Mời KTS tham gia các buổi Workshop hoặc trải nghiệm trực tiếp tại Showroom để cảm nhận độ đầm tay của phôi đồng 59-1 và lớp mạ PVD cao cấp.`;
+    }
+
+    res.json({ success: true, reply });
+  } catch (err) {
+    console.error('[POST /api/market-analysis/chat]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Phục vụ thông tin phiên bản build
 app.get('/api/system/version', (req, res) => {
   try {

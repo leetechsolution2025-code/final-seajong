@@ -18,6 +18,8 @@ import { MarketingProductsPage } from '../../pages/marketing/MarketingProductsPa
 import { BrandIdentityPage } from '../../pages/marketing/BrandIdentityPage';
 import { MarketingPlanPage } from '../../pages/marketing/MarketingPlanPage';
 import { MarketingDealersPage } from '../../pages/marketing/MarketingDealersPage';
+import { MarketingCompetitorsPage } from '../../pages/marketing/MarketingCompetitorsPage';
+import { MarketingMarketAnalysisPage } from '../../pages/marketing/MarketingMarketAnalysisPage';
 import { NotebookView } from '../common/NotebookView';
 import { SalesPartnersPage } from '../../pages/sales/SalesPartnersPage';
 import { SalesCustomersPage } from '../../pages/sales/SalesCustomersPage';
@@ -401,6 +403,16 @@ export const DashboardView: React.FC = () => {
   // Khi người dùng chọn chức năng Nhận diện thương hiệu (chuẩn client-seajong)
   if (activeMenuKey === 'brand' || activeMenuKey === 'brand-identity') {
     return <BrandIdentityPage />;
+  }
+
+  // Khi người dùng chọn chức năng Theo dõi đối thủ (chuẩn client-seajong)
+  if (activeMenuKey === 'competitors' || activeMenuKey === 'competitor' || activeMenuKey === 'market_competitors') {
+    return <MarketingCompetitorsPage />;
+  }
+
+  // Khi người dùng chọn chức năng Phân tích thị trường (chuẩn client-seajong)
+  if (activeMenuKey === 'market-analysis' || activeMenuKey === 'market_analysis' || activeMenuKey === 'marketAnalysis') {
+    return <MarketingMarketAnalysisPage />;
   }
 
   // Khi người dùng chọn chức năng Lập kế hoạch Marketing (chuẩn client-seajong)
