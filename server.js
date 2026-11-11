@@ -27986,7 +27986,9 @@ app.get('/api/hr/stationery/assets/available', async (req, res) => {
       rawId: item.id,
       type: 'SUPPLY',
       code: item.code,
-      name: `${item.name} (Tồn: ${item.currentStock})`,
+      name: item.name,
+      stockQty: item.currentStock,
+      currentStock: item.currentStock,
       sourceLabel: 'Kho văn phòng phẩm / Dụng cụ',
     }));
 
@@ -28026,6 +28028,8 @@ app.get('/api/hr/stationery/handovers', async (req, res) => {
 
     const formatted = handovers.map((h) => ({
       ...h,
+      conditionOnHandover: h.condition || 'Mới / Tốt',
+      conditionOnReturn: h.condition || '',
       item: h.asset
         ? { id: h.asset.id, code: h.asset.code, name: h.asset.name, source: 'FINANCE' }
         : h.supplyItem
@@ -28042,7 +28046,7 @@ app.get('/api/hr/stationery/handovers', async (req, res) => {
 
 app.post('/api/hr/stationery/handovers', async (req, res) => {
   try {
-    const { employeeId, itemId, handoverDate, conditionOnHandover, note } = req.body || {};
+    const { employeeId, itemId, handoverDate, conditionOnHandover, condition, note } = req.body || {};
     if (!employeeId || !itemId) {
       return res.status(400).json({ error: 'Employee and Item are required' });
     }
@@ -28074,6 +28078,8 @@ app.post('/api/hr/stationery/handovers', async (req, res) => {
             itemId: supplyItemId,
             type: 'EXPORT',
             quantity: 1,
+            price: sItem.price || 0,
+            executorName: 'Phòng Hành chính Nhân sự',
             note: `Bàn giao dụng cụ cho nhân viên (ID: ${employeeId})`,
           },
         });
@@ -28082,10 +28088,10 @@ app.post('/api/hr/stationery/handovers', async (req, res) => {
       return await tx.hrAssetHandover.create({
         data: {
           employeeId,
-          itemId: supplyItemId,
+          supplyItemId,
           assetId,
           handoverDate: handoverDate ? new Date(handoverDate) : new Date(),
-          conditionOnHandover: conditionOnHandover || 'Mới / Tốt',
+          condition: conditionOnHandover || condition || 'Đang sử dụng (Tốt)',
           status: 'USING',
           note: note || null,
         },
@@ -28106,7 +28112,7 @@ app.post('/api/hr/stationery/handovers', async (req, res) => {
 
 app.put('/api/hr/stationery/handovers', async (req, res) => {
   try {
-    const { id, returnDate, conditionOnReturn, status, note } = req.body || {};
+    const { id, returnDate, conditionOnReturn, condition, status, note } = req.body || {};
     if (!id) {
       return res.status(400).json({ error: 'Handover ID is required' });
     }
@@ -28123,9 +28129,9 @@ app.put('/api/hr/stationery/handovers', async (req, res) => {
             : status === 'RETURNED'
               ? new Date()
               : undefined,
-          conditionOnReturn,
+          condition: conditionOnReturn || condition || existing.condition,
           status: status || 'RETURNED',
-          note,
+          note: note !== undefined ? note : existing.note,
         },
         include: {
           employee: true,
@@ -28135,8 +28141,9 @@ app.put('/api/hr/stationery/handovers', async (req, res) => {
       });
 
       if (existing.status === 'USING' && status === 'RETURNED') {
-        if (existing.supplyItemId || existing.itemId) {
-          const sId = existing.supplyItemId || existing.itemId;
+        if (existing.supplyItemId) {
+          const sId = existing.supplyItemId;
+          const sItem = await tx.hrSupplyItem.findUnique({ where: { id: sId } });
           await tx.hrSupplyItem.update({
             where: { id: sId },
             data: { currentStock: { increment: 1 } },
@@ -28146,6 +28153,8 @@ app.put('/api/hr/stationery/handovers', async (req, res) => {
               itemId: sId,
               type: 'IMPORT',
               quantity: 1,
+              price: sItem?.price || 0,
+              executorName: 'Phòng Hành chính Nhân sự',
               note: `Thu hồi dụng cụ từ nhân viên ${updated.employee?.fullName || ''}`,
             },
           });

@@ -5,6 +5,7 @@ import {
   Sliders,
   Tools,
   ArrowLeftRight,
+  ArrowLeft,
   PlusLg,
   CheckLg,
   XLg,
@@ -24,7 +25,7 @@ import { FullWidthTable } from '../../components/common/FullWidthTable';
 import { Pagination } from '../../components/common/Pagination';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
-import { Select } from '../../components/common/Select';
+import { Select, type SelectOption } from '../../components/common/Select';
 import { Input } from '../../components/common/Input';
 import { Toggle } from '../../components/common/Toggle';
 import { Modal } from '../../components/common/Modal';
@@ -210,6 +211,7 @@ interface AssetHandover {
   returnDate: string | null;
   conditionOnHandover: string;
   conditionOnReturn: string | null;
+  condition?: string;
   status: string;
   note: string | null;
 }
@@ -2312,6 +2314,8 @@ interface AvailableAssetOption {
   type: 'SUPPLY' | 'FINANCE';
   code: string;
   name: string;
+  stockQty?: number;
+  currentStock?: number;
   sourceLabel: string;
 }
 
@@ -2338,6 +2342,7 @@ const AssetsTab: React.FC<{
   const [pageSize, setPageSize] = useState(20);
 
   const [showHandoverPanel, setShowHandoverPanel] = useState(false);
+  const [panelSlide, setPanelSlide] = useState<'LIST' | 'CREATE'>('LIST');
   const [selectedEmpGroup, setSelectedEmpGroup] = useState<EmployeeAssetGroup | null>(null);
   const [selectedHandoverIds, setSelectedHandoverIds] = useState<string[]>([]);
 
@@ -2350,6 +2355,17 @@ const AssetsTab: React.FC<{
     note: '',
   });
   const [saving, setSaving] = useState(false);
+
+  const assetOptions = useMemo<SelectOption[]>(() => {
+    return [
+      { value: '', label: '-- Chọn thiết bị bàn giao --' },
+      ...availableAssets.map((a) => ({
+        value: a.id,
+        label: a.name,
+        rightLabel: `Tồn: ${a.stockQty ?? a.currentStock ?? 0}`,
+      })),
+    ];
+  }, [availableAssets]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -2471,6 +2487,7 @@ const AssetsTab: React.FC<{
   const openEmployeeHandoverPanel = (group: EmployeeAssetGroup) => {
     setSelectedEmpGroup(group);
     setSelectedHandoverIds([]);
+    setPanelSlide('LIST');
     setFormData({
       employeeId: group.employeeId,
       itemId: availableAssets[0]?.id || '',
@@ -2495,6 +2512,12 @@ const AssetsTab: React.FC<{
       if (res.ok) {
         await fetchData();
         onRefresh();
+        setPanelSlide('LIST');
+        setFormData((prev) => ({
+          ...prev,
+          itemId: availableAssets[0]?.id || '',
+          note: '',
+        }));
       }
     } finally {
       setSaving(false);
@@ -2670,57 +2693,98 @@ const AssetsTab: React.FC<{
         isOpen={showHandoverPanel}
         onClose={() => setShowHandoverPanel(false)}
         title={
-          selectedEmpGroup
-            ? `Dụng cụ: ${selectedEmpGroup.fullName}`
-            : 'Chi tiết dụng cụ bàn giao'
+          panelSlide === 'CREATE' ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPanelSlide('LIST')}
+                className="p-1 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-800 transition-colors cursor-pointer border-0 bg-transparent flex items-center justify-center"
+                title="Quay lại danh sách"
+              >
+                <ArrowLeft size={16} />
+              </button>
+              <span>Bàn giao thiết bị mới</span>
+            </div>
+          ) : selectedEmpGroup ? (
+            `Dụng cụ: ${selectedEmpGroup.fullName}`
+          ) : (
+            'Chi tiết dụng cụ bàn giao'
+          )
         }
         icon={<Tools size={20} />}
         width="400px"
+        bodyClassName="flex flex-col h-full !p-3.5"
         footer={
-          <div className="flex items-center justify-between gap-2 w-full">
-            <Button variant="secondary" onClick={() => setShowHandoverPanel(false)}>
-              Đóng
-            </Button>
-            <div className="flex items-center gap-2">
-              {selectedHandoverIds.length > 0 && (
-                <Button
-                  variant="danger"
-                  onClick={handleBatchReturn}
-                  disabled={saving}
-                >
-                  Thu hồi ({selectedHandoverIds.length})
-                </Button>
-              )}
+          panelSlide === 'CREATE' ? (
+            <div className="flex items-center justify-between gap-2 w-full">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setPanelSlide('LIST')}
+                disabled={saving}
+              >
+                Quay lại
+              </Button>
               <Button
                 variant="primary"
+                size="sm"
                 onClick={handleCreateHandover}
                 disabled={saving || !formData.itemId}
               >
-                Bàn giao
+                {saving ? 'Đang lưu...' : 'Xác nhận bàn giao'}
               </Button>
             </div>
-          </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2 w-full">
+              <Button variant="secondary" size="sm" onClick={() => setShowHandoverPanel(false)}>
+                Đóng
+              </Button>
+              <div className="flex items-center gap-2">
+                {selectedHandoverIds.length > 0 && (
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={handleBatchReturn}
+                    disabled={saving}
+                  >
+                    Thu hồi ({selectedHandoverIds.length})
+                  </Button>
+                )}
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setPanelSlide('CREATE')}
+                >
+                  <PlusLg size={13} className="mr-1 inline" />
+                  Bàn giao mới
+                </Button>
+              </div>
+            </div>
+          )
         }
       >
-        <div className="space-y-4">
-          {selectedEmpGroup && (
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
-              <div>
-                <div className="font-bold text-slate-900 text-sm">
-                  {selectedEmpGroup.fullName}
+        {panelSlide === 'LIST' ? (
+          <div className="flex flex-col flex-1 min-h-0 h-full">
+            {selectedEmpGroup && (
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between shrink-0 mb-3">
+                <div className="min-w-0 pr-2">
+                  <div className="font-bold text-slate-900 text-sm truncate">
+                    {selectedEmpGroup.fullName}
+                  </div>
+                  <div className="text-xs text-slate-500 truncate">
+                    {selectedEmpGroup.code} • {selectedEmpGroup.departmentName}
+                  </div>
                 </div>
-                <div className="text-xs text-slate-500">
-                  {selectedEmpGroup.code} • {selectedEmpGroup.departmentName}
-                </div>
+                <Badge
+                  variant={selectedEmpGroup.activeAssets.length > 0 ? 'info' : 'neutral'}
+                  className="shrink-0"
+                >
+                  Đang giữ: {selectedEmpGroup.activeAssets.length}
+                </Badge>
               </div>
-              <Badge variant="info">
-                Đang giữ: {selectedEmpGroup.activeAssets.length}
-              </Badge>
-            </div>
-          )}
+            )}
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-2 shrink-0">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
                 Dụng cụ đang giữ ({selectedEmpGroup?.activeAssets.length || 0})
               </span>
@@ -2738,107 +2802,174 @@ const AssetsTab: React.FC<{
                   className="text-[11px] text-rose-600 hover:text-rose-700 font-semibold cursor-pointer border-0 bg-transparent"
                 >
                   {selectedHandoverIds.length === selectedEmpGroup.activeAssets.length
-                    ? 'Bỏ chọn'
+                    ? 'Bỏ chọn tất cả'
                     : 'Chọn tất cả'}
                 </button>
               )}
             </div>
 
-            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+            <div className="flex-1 min-h-0 border border-slate-200 rounded-xl overflow-hidden flex flex-col bg-white">
               {!selectedEmpGroup || selectedEmpGroup.activeAssets.length === 0 ? (
-                <div className="py-8 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">
-                  Nhân viên hiện không giữ dụng cụ nào.
+                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-400">
+                  <Tools size={28} className="text-slate-300 mb-2" />
+                  <p className="text-xs font-medium">Nhân viên hiện không giữ dụng cụ nào.</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPanelSlide('CREATE')}
+                    className="mt-3 text-xs"
+                  >
+                    <PlusLg size={13} className="mr-1 inline" /> Bàn giao dụng cụ ngay
+                  </Button>
                 </div>
               ) : (
-                selectedEmpGroup.activeAssets.map((a) => {
-                  const isChecked = selectedHandoverIds.includes(a.id);
-                  return (
-                    <div
-                      key={a.id}
-                      className={`p-3 rounded-xl border transition-colors flex items-center justify-between gap-2.5 ${
-                        isChecked
-                          ? 'bg-rose-50/60 border-rose-200'
-                          : 'bg-white border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        <input
-                          type="checkbox"
-                          className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 w-4 h-4 cursor-pointer shrink-0"
-                          checked={isChecked}
-                          onChange={() =>
-                            setSelectedHandoverIds((prev) =>
-                              prev.includes(a.id)
-                                ? prev.filter((x) => x !== a.id)
-                                : [...prev, a.id]
-                            )
-                          }
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="font-semibold text-slate-900 text-xs truncate">
-                            {a.item?.name}
-                          </div>
-                          <div className="text-[11px] text-slate-500 mt-0.5">
-                            Giao: {formatDate(a.handoverDate)} • {a.conditionOnHandover}
-                          </div>
-                        </div>
-                      </div>
-
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleSingleReturn(a.id)}
-                        disabled={saving}
-                        className="shrink-0 text-rose-600 border-rose-200 hover:bg-rose-50"
-                      >
-                        Thu hồi
-                      </Button>
-                    </div>
-                  );
-                })
+                <div className="flex-1 min-h-0 overflow-y-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200">
+                      <tr>
+                        <th className="py-2 px-2.5 w-8 text-center">
+                          <input
+                            type="checkbox"
+                            className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 w-3.5 h-3.5 cursor-pointer"
+                            checked={
+                              selectedEmpGroup.activeAssets.length > 0 &&
+                              selectedHandoverIds.length === selectedEmpGroup.activeAssets.length
+                            }
+                            onChange={() => {
+                              const allIds = selectedEmpGroup.activeAssets.map((a) => a.id);
+                              if (selectedHandoverIds.length === allIds.length) {
+                                setSelectedHandoverIds([]);
+                              } else {
+                                setSelectedHandoverIds(allIds);
+                              }
+                            }}
+                          />
+                        </th>
+                        <th className="py-2 px-2.5 font-semibold text-slate-700">DỤNG CỤ</th>
+                        <th className="py-2 px-2.5 font-semibold text-slate-700 text-center w-24">NGÀY GIAO</th>
+                        <th className="py-2 px-2 font-semibold text-slate-700 text-center w-16">THAO TÁC</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {selectedEmpGroup.activeAssets.map((a) => {
+                        const isChecked = selectedHandoverIds.includes(a.id);
+                        return (
+                          <tr
+                            key={a.id}
+                            className={`transition-colors ${
+                              isChecked ? 'bg-rose-50/50' : 'hover:bg-slate-50/70'
+                            }`}
+                          >
+                            <td className="py-2 px-2.5 text-center">
+                              <input
+                                type="checkbox"
+                                className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 w-3.5 h-3.5 cursor-pointer"
+                                checked={isChecked}
+                                onChange={() =>
+                                  setSelectedHandoverIds((prev) =>
+                                    prev.includes(a.id)
+                                      ? prev.filter((x) => x !== a.id)
+                                      : [...prev, a.id]
+                                  )
+                                }
+                              />
+                            </td>
+                            <td className="py-2 px-2.5">
+                              <div className="font-semibold text-slate-900 leading-tight">
+                                {a.item?.name}
+                              </div>
+                              <div className="text-[10px] text-slate-400 mt-0.5">
+                                {a.conditionOnHandover || a.condition || 'Tốt'}
+                              </div>
+                            </td>
+                            <td className="py-2 px-2.5 text-center text-slate-600 text-[11px] whitespace-nowrap">
+                              {formatDate(a.handoverDate)}
+                            </td>
+                            <td className="py-2 px-2 text-center">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleSingleReturn(a.id)}
+                                disabled={saving}
+                                className="text-rose-600 border-rose-200 hover:bg-rose-50 !py-0.5 !px-1.5 text-[11px]"
+                              >
+                                Thu hồi
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           </div>
+        ) : (
+          <div className="flex flex-col flex-1 min-h-0 h-full">
+            {selectedEmpGroup && (
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between shrink-0 mb-3.5">
+                <div className="min-w-0 pr-2">
+                  <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                    Nhân viên tiếp nhận
+                  </div>
+                  <div className="font-bold text-slate-900 text-sm mt-0.5 truncate">
+                    {selectedEmpGroup.fullName}
+                  </div>
+                  <div className="text-xs text-slate-500 truncate">
+                    {selectedEmpGroup.code} • {selectedEmpGroup.departmentName}
+                  </div>
+                </div>
+                <Badge variant="info" className="shrink-0">
+                  Bàn giao mới
+                </Badge>
+              </div>
+            )}
 
-          <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200 space-y-3">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
-              Bàn giao thêm dụng cụ mới
-            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-3.5 pr-0.5">
+              <div>
+                <Select
+                  label="Thiết bị bàn giao"
+                  value={formData.itemId}
+                  onChange={(e) => setFormData({ ...formData, itemId: e.target.value })}
+                  options={assetOptions}
+                />
+              </div>
 
-            <Select
-              label="Thiết bị bàn giao"
-              value={formData.itemId}
-              onChange={(e) => setFormData({ ...formData, itemId: e.target.value })}
-            >
-              <option value="">-- Chọn dụng cụ khả dụng --</option>
-              {availableAssets.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </Select>
+              <div>
+                <Input
+                  label="Ngày bàn giao"
+                  type="date"
+                  value={formData.handoverDate}
+                  onChange={(e) => setFormData({ ...formData, handoverDate: e.target.value })}
+                />
+              </div>
 
-            <div className="grid grid-cols-2 gap-2.5">
-              <Input
-                label="Ngày bàn giao"
-                type="date"
-                value={formData.handoverDate}
-                onChange={(e) => setFormData({ ...formData, handoverDate: e.target.value })}
-              />
-              <Select
-                label="Tình trạng"
-                value={formData.conditionOnHandover}
-                onChange={(e) =>
-                  setFormData({ ...formData, conditionOnHandover: e.target.value })
-                }
-              >
-                <option value="Đang sử dụng (Tốt)">Tốt (Đang dùng)</option>
-                <option value="Đang sử dụng (Mới 100%)">Mới 100%</option>
-                <option value="Hư hỏng nhẹ">Hư hỏng nhẹ</option>
-              </Select>
+              <div>
+                <Select
+                  label="Tình trạng thiết bị"
+                  value={formData.conditionOnHandover}
+                  onChange={(e) =>
+                    setFormData({ ...formData, conditionOnHandover: e.target.value })
+                  }
+                >
+                  <option value="Đang sử dụng (Tốt)">Tốt (Đang dùng)</option>
+                  <option value="Đang sử dụng (Mới 100%)">Mới 100%</option>
+                  <option value="Hư hỏng nhẹ">Hư hỏng nhẹ</option>
+                </Select>
+              </div>
+
+              <div>
+                <Input
+                  label="Ghi chú bàn giao"
+                  placeholder="Nhập ghi chú hoặc thông số thiết bị..."
+                  value={formData.note}
+                  onChange={(e) => setFormData({ ...formData, note: e.target.value })}
+                />
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </Offcanvas>
     </div>
   );
