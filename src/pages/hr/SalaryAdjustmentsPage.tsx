@@ -1105,6 +1105,73 @@ const ProposalSupportOffcanvas: React.FC<ProposalProps> = ({
 
 // ─── OFFCANVAS TẠO ĐỀ XUẤT ĐIỀU CHỈNH (width="400px") ────────────────────────
 
+interface MoneyInputProps {
+  label?: string;
+  value: number;
+  onChange: (val: number) => void;
+  unit?: string;
+  required?: boolean;
+  disabled?: boolean;
+  placeholder?: string;
+  className?: string;
+}
+
+const MoneyInput: React.FC<MoneyInputProps> = ({
+  label,
+  value,
+  onChange,
+  unit = '₫',
+  required = false,
+  disabled = false,
+  placeholder = '0',
+  className = '',
+}) => {
+  const [text, setText] = useState<string>(value ? value.toLocaleString('vi-VN') : '');
+
+  useEffect(() => {
+    setText(value ? value.toLocaleString('vi-VN') : (value === 0 ? '0' : ''));
+  }, [value]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/\D/g, '');
+    if (!raw) {
+      setText('');
+      onChange(0);
+      return;
+    }
+    const num = parseInt(raw, 10);
+    setText(num.toLocaleString('vi-VN'));
+    onChange(num);
+  };
+
+  return (
+    <div className={className}>
+      {label && (
+        <label className="block text-xs font-semibold text-slate-700 mb-1">
+          {label} {required && <span className="text-rose-500">*</span>}
+        </label>
+      )}
+      <div className="relative flex items-center">
+        <input
+          type="text"
+          value={text}
+          onChange={handleChange}
+          disabled={disabled}
+          placeholder={placeholder}
+          className={`w-full pl-3 pr-8 py-2 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 font-medium text-slate-900 ${
+            disabled ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+          }`}
+        />
+        {unit && (
+          <span className="absolute right-3 text-xs font-semibold text-slate-400 pointer-events-none select-none">
+            {unit}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
 interface CreateProps {
   isOpen: boolean;
   onClose: () => void;
@@ -1119,6 +1186,7 @@ const CreateAdjustmentOffcanvas: React.FC<CreateProps> = ({
   onSuccess,
 }) => {
   const [selectedEmpId, setSelectedEmpId] = useState<string>('');
+  const [selectedEmpName, setSelectedEmpName] = useState<string>('');
   const [adjustmentType, setAdjustmentType] = useState<string>('INCREASE');
   const [currentBaseSalary, setCurrentBaseSalary] = useState<number>(0);
   const [proposedBaseSalary, setProposedBaseSalary] = useState<number>(0);
@@ -1134,25 +1202,23 @@ const CreateAdjustmentOffcanvas: React.FC<CreateProps> = ({
   const [phoneAllowance, setPhoneAllowance] = useState<number>(300000);
   const [seniorityAllowance, setSeniorityAllowance] = useState<number>(0);
 
-  const employeeOptions: SelectOption[] = useMemo(() => {
-    return [
-      { value: '', label: '-- Chọn nhân sự --' },
-      ...employees.map((e) => ({
-        value: e.id,
-        label: `${e.fullName} (${e.departmentName || 'Chung'})`,
-      })),
-    ];
+  const employeeSuggestions: SuggestionItem[] = useMemo(() => {
+    return employees.map((e) => ({
+      id: e.id,
+      value: e.fullName,
+      label: e.fullName,
+      subText: e.departmentName || 'Chung',
+      category: e.departmentName || 'Phòng ban chung',
+    }));
   }, [employees]);
 
   // When selecting employee, auto-fill base salary
-  const handleSelectEmployee = (empId: string) => {
-    setSelectedEmpId(empId);
-    const emp = employees.find((e) => e.id === empId);
-    if (emp) {
-      const curSalary = Number(emp.baseSalary || 10000000);
-      setCurrentBaseSalary(curSalary);
-      setProposedBaseSalary(Math.round(curSalary * 1.15)); // default suggest +15%
-    }
+  const handleSelectEmployee = (emp: EmployeeItem) => {
+    setSelectedEmpId(emp.id);
+    setSelectedEmpName(emp.fullName);
+    const curSalary = Number(emp.baseSalary || 10000000);
+    setCurrentBaseSalary(curSalary);
+    setProposedBaseSalary(Math.round(curSalary * 1.15)); // default suggest +15%
   };
 
   const handleSubmit = async () => {
@@ -1202,6 +1268,7 @@ const CreateAdjustmentOffcanvas: React.FC<CreateProps> = ({
       await onSuccess();
       // Reset form
       setSelectedEmpId('');
+      setSelectedEmpName('');
       setReason('');
     } catch (err: any) {
       alert(err.message || 'Lỗi khi gửi đề xuất');
@@ -1235,21 +1302,41 @@ const CreateAdjustmentOffcanvas: React.FC<CreateProps> = ({
       description="Lập tờ trình tăng/giảm lương và phụ cấp nhân sự"
       icon={<PlusLg size={18} />}
       footer={footer}
+      bodyClassName="h-full flex flex-col"
+      bodyStyle={{ height: '100%', display: 'flex', flexDirection: 'column' }}
     >
-      <div className="flex flex-col gap-3.5 text-xs">
+      <div className="flex flex-col h-full gap-3 text-sm" style={{ flex: '1 1 0%', minHeight: 0 }}>
+        {/* Nhân viên */}
         <div>
-          <label className="block font-medium text-slate-700 mb-1">
-            Nhân viên <span className="text-rose-500">*</span>
-          </label>
-          <Select
-            options={employeeOptions}
-            value={selectedEmpId}
-            onChange={(e) => handleSelectEmployee(e.target.value)}
+          <SuggestionInput
+            label="Nhân viên"
+            required={true}
+            placeholder="Tìm theo tên nhân sự hoặc phòng ban..."
+            value={selectedEmpName}
+            suggestions={employeeSuggestions}
+            onChange={(val) => {
+              setSelectedEmpName(val);
+              const matched = employees.find(
+                (e) => e.fullName.toLowerCase() === val.toLowerCase()
+              );
+              if (matched) {
+                handleSelectEmployee(matched);
+              } else {
+                setSelectedEmpId('');
+              }
+            }}
+            onSelectSuggestion={(item) => {
+              const matched = employees.find((e) => e.id === item.id);
+              if (matched) {
+                handleSelectEmployee(matched);
+              }
+            }}
           />
         </div>
 
+        {/* Loại điều chỉnh */}
         <div>
-          <label className="block font-medium text-slate-700 mb-1">
+          <label className="block text-xs font-semibold text-slate-700 mb-1">
             Loại điều chỉnh <span className="text-rose-500">*</span>
           </label>
           <Select
@@ -1263,96 +1350,79 @@ const CreateAdjustmentOffcanvas: React.FC<CreateProps> = ({
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="block font-medium text-slate-700 mb-1">
-              Lương hiện tại (₫)
-            </label>
-            <input
-              type="number"
-              value={currentBaseSalary}
-              onChange={(e) => setCurrentBaseSalary(Number(e.target.value))}
-              className="w-full px-2.5 py-1.5 text-xs rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-primary-500"
-            />
-          </div>
-          <div>
-            <label className="block font-medium text-slate-700 mb-1">
-              Lương đề xuất (₫) <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="number"
-              value={proposedBaseSalary}
-              onChange={(e) => setProposedBaseSalary(Number(e.target.value))}
-              className="w-full px-2.5 py-1.5 text-xs rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-primary-500 font-semibold text-slate-900"
-            />
-          </div>
+        {/* Lương hiện tại vs đề xuất */}
+        <div className="grid grid-cols-2 gap-2.5">
+          <MoneyInput
+            label="Lương hiện tại"
+            value={currentBaseSalary}
+            onChange={setCurrentBaseSalary}
+            unit="₫"
+          />
+          <MoneyInput
+            label="Lương đề xuất"
+            value={proposedBaseSalary}
+            onChange={setProposedBaseSalary}
+            required={true}
+            unit="₫"
+          />
         </div>
 
-        {/* Allowances */}
-        <div className="border border-slate-200 rounded p-2.5 bg-slate-50/50">
-          <div className="font-semibold text-slate-700 mb-2">Phụ cấp đề xuất (₫/tháng)</div>
+        {/* Phụ cấp đề xuất */}
+        <div className="border border-slate-200 rounded-lg p-2.5 bg-slate-50/60">
+          <div className="text-xs font-bold text-slate-700 mb-2 uppercase tracking-wide">
+            Phụ cấp đề xuất (₫/tháng)
+          </div>
           <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[11px] text-slate-500 mb-0.5">Ăn trưa</label>
-              <input
-                type="number"
-                value={mealAllowance}
-                onChange={(e) => setMealAllowance(Number(e.target.value))}
-                className="w-full px-2 py-1 text-xs rounded border border-slate-300"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] text-slate-500 mb-0.5">Xăng xe</label>
-              <input
-                type="number"
-                value={fuelAllowance}
-                onChange={(e) => setFuelAllowance(Number(e.target.value))}
-                className="w-full px-2 py-1 text-xs rounded border border-slate-300"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] text-slate-500 mb-0.5">Điện thoại</label>
-              <input
-                type="number"
-                value={phoneAllowance}
-                onChange={(e) => setPhoneAllowance(Number(e.target.value))}
-                className="w-full px-2 py-1 text-xs rounded border border-slate-300"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] text-slate-500 mb-0.5">Thâm niên</label>
-              <input
-                type="number"
-                value={seniorityAllowance}
-                onChange={(e) => setSeniorityAllowance(Number(e.target.value))}
-                className="w-full px-2 py-1 text-xs rounded border border-slate-300"
-              />
-            </div>
+            <MoneyInput
+              label="Ăn trưa"
+              value={mealAllowance}
+              onChange={setMealAllowance}
+              unit="₫"
+            />
+            <MoneyInput
+              label="Xăng xe"
+              value={fuelAllowance}
+              onChange={setFuelAllowance}
+              unit="₫"
+            />
+            <MoneyInput
+              label="Điện thoại"
+              value={phoneAllowance}
+              onChange={setPhoneAllowance}
+              unit="₫"
+            />
+            <MoneyInput
+              label="Thâm niên"
+              value={seniorityAllowance}
+              onChange={setSeniorityAllowance}
+              unit="₫"
+            />
           </div>
         </div>
 
+        {/* Ngày hiệu lực */}
         <div>
-          <label className="block font-medium text-slate-700 mb-1">
+          <label className="block text-xs font-semibold text-slate-700 mb-1">
             Ngày hiệu lực
           </label>
           <input
             type="date"
             value={effectiveDate}
             onChange={(e) => setEffectiveDate(e.target.value)}
-            className="w-full px-2.5 py-1.5 text-xs rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
           />
         </div>
 
-        <div>
-          <label className="block font-medium text-slate-700 mb-1">
+        {/* Lý do điều chỉnh: tự động chiếm hết chiều cao khả dụng */}
+        <div className="flex-1 flex flex-col min-h-0" style={{ flex: '1 1 0%' }}>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">
             Lý do điều chỉnh <span className="text-rose-500">*</span>
           </label>
           <textarea
-            rows={3}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Nêu rõ lý do tăng lương, thành tích KPI, thời gian niên hạn..."
-            className="w-full px-2.5 py-1.5 text-xs rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            className="flex-1 w-full p-2.5 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 resize-none"
           />
         </div>
       </div>
