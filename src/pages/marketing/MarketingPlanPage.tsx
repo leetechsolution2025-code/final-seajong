@@ -1069,24 +1069,27 @@ export const MarketingPlanPage: React.FC = () => {
     {
       header: 'Tuyến nội dung',
       align: 'left',
-      render: (row) => (
-        <div style={{ paddingLeft: row.isChildRow ? 20 : 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-          {!row.isTotal && !row.isChildRow && (
-            <button
-              type="button"
-              className="btn btn-sm btn-link p-0 text-secondary"
-              onClick={() => {
-                setExpandedParentIds((prev) => (prev.includes(row.id) ? prev.filter((id) => id !== row.id) : [...prev, row.id]));
-              }}
-            >
-              <i className={`bi ${expandedParentIds.includes(row.id) ? 'bi-chevron-down' : 'bi-chevron-right'}`} style={{ fontSize: 10 }} />
-            </button>
-          )}
-          <span style={{ fontWeight: row.isTotal || !row.isChildRow ? 700 : 400, color: row.isChildRow ? 'var(--muted-foreground)' : 'inherit' }}>
-            {row.pillar}
-          </span>
-        </div>
-      ),
+      render: (row) => {
+        const hasChildren = !row.isTotal && !row.isChildRow && (parseParentDetails(row.details || '').children || []).length > 0;
+        return (
+          <div style={{ paddingLeft: row.isChildRow ? 20 : 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+            {hasChildren && (
+              <button
+                type="button"
+                className="btn btn-sm btn-link p-0 text-secondary"
+                onClick={() => {
+                  setExpandedParentIds((prev) => (prev.includes(row.id) ? prev.filter((id) => id !== row.id) : [...prev, row.id]));
+                }}
+              >
+                <i className={`bi ${expandedParentIds.includes(row.id) ? 'bi-chevron-down' : 'bi-chevron-right'}`} style={{ fontSize: 10 }} />
+              </button>
+            )}
+            <span style={{ fontWeight: row.isTotal || !row.isChildRow ? 700 : 400, color: row.isChildRow ? 'var(--muted-foreground)' : 'inherit' }}>
+              {row.pillar}
+            </span>
+          </div>
+        );
+      },
     },
     {
       header: 'Mục tiêu & Vai trò',
@@ -1258,13 +1261,121 @@ export const MarketingPlanPage: React.FC = () => {
   ], [adPlanList, totalAdBudget]);
 
   const adPlanColumns: TableColumn<AdPlanItem>[] = [
-    { header: 'STT', width: 42, align: 'center', render: (row) => (row.isTotal ? '' : <span style={{ color: 'var(--muted-foreground)' }}>{row.stt}</span>) },
-    { header: 'Mục tiêu quảng cáo', align: 'left', render: (row) => <span style={{ fontWeight: row.isTotal ? 700 : 600 }}>{row.objective}</span> },
-    { header: 'Chủ đề', align: 'left', render: (row) => <span>{row.topic}</span> },
-    { header: 'Kênh chạy', width: 120, align: 'left', render: (row) => <span className="badge bg-light text-dark border">{row.channel}</span> },
-    { header: 'Nội dung thông điệp', align: 'left', render: (row) => <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{row.content}</span> },
-    { header: 'Ngân sách (đ)', width: 110, align: 'right', render: (row) => <span style={{ fontWeight: 700 }}>{row.budget.toLocaleString('vi-VN')} đ</span> },
-    { header: 'Người phụ trách', width: 120, align: 'left', render: (row) => <span>{row.assignee}</span> },
+    {
+      header: 'STT',
+      width: 44,
+      align: 'center',
+      render: (row) => (row.isTotal ? '' : <span className="text-muted-foreground font-medium text-xs">{row.stt}</span>),
+    },
+    {
+      header: 'Mục tiêu quảng cáo',
+      align: 'left',
+      width: 220,
+      render: (row) => {
+        if (row.isTotal) return <span className="font-bold text-slate-900 dark:text-white">{row.objective}</span>;
+        return (
+          <div className="space-y-1">
+            <div className="font-bold text-slate-800 dark:text-slate-100 text-xs tracking-tight uppercase leading-snug">
+              {row.objective}
+            </div>
+            {row.region && (
+              <div className="inline-flex items-center gap-1 text-[11px] text-muted-foreground bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                <i className="bi bi-geo-alt text-[10px]" />
+                <span>{row.region}</span>
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      header: 'Chủ đề',
+      align: 'left',
+      width: 170,
+      render: (row) => (row.isTotal ? null : <span className="text-xs text-slate-700 dark:text-slate-200 leading-snug">{row.topic || '—'}</span>),
+    },
+    {
+      header: 'Kênh chạy',
+      align: 'left',
+      width: 200,
+      render: (row) => {
+        if (row.isTotal) return null;
+        const channels = (row.channel || '')
+          .split(',')
+          .map((c) => c.trim())
+          .filter(Boolean);
+        if (channels.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
+        return (
+          <div className="flex flex-wrap gap-1">
+            {channels.map((ch, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200/70 dark:border-blue-800/60"
+              >
+                {ch}
+              </span>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
+      header: 'Nội dung thông điệp',
+      align: 'left',
+      render: (row) => {
+        if (row.isTotal) return null;
+        if (!row.content && !row.landingPage) return <span className="text-xs text-muted-foreground">—</span>;
+        const lines = (row.content || '')
+          .split(/\n|(?<=[^-\s])\s*-\s+/)
+          .map((l) => l.replace(/^-\s*/, '').trim())
+          .filter(Boolean);
+
+        return (
+          <div className="space-y-1.5 py-0.5 text-xs text-muted-foreground">
+            {lines.map((line, i) => (
+              <div key={i} className="flex items-start gap-1.5 leading-relaxed">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 mt-1.5" />
+                <span className="flex-1">{line}</span>
+              </div>
+            ))}
+            {row.landingPage && (
+              <div className="pt-1 mt-1 border-t border-slate-100 dark:border-slate-800 text-[11px] text-blue-600 truncate flex items-center gap-1">
+                <i className="bi bi-link-45deg text-xs" />
+                <span className="truncate">{row.landingPage.split('\n')[0]}</span>
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      header: 'Ngân sách (đ)',
+      width: 120,
+      align: 'right',
+      render: (row) => (
+        <span className={`text-xs ${row.isTotal ? 'font-black text-slate-900 dark:text-white' : 'font-bold text-slate-800 dark:text-slate-100'}`}>
+          {row.budget.toLocaleString('vi-VN')} đ
+        </span>
+      ),
+    },
+    {
+      header: 'Người phụ trách',
+      width: 130,
+      align: 'left',
+      render: (row) => {
+        if (row.isTotal) return null;
+        const name = row.assignee || 'Nguyễn Thu Huyền';
+        const initial = name.charAt(0);
+        return (
+          <div className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200">
+            <div className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-[10px] flex items-center justify-center shrink-0 border border-slate-200/80 dark:border-slate-700">
+              {initial}
+            </div>
+            <span className="truncate">{name}</span>
+          </div>
+        );
+      },
+    },
     {
       header: 'Thao tác',
       width: 70,
@@ -1272,24 +1383,25 @@ export const MarketingPlanPage: React.FC = () => {
       render: (row) => {
         if (row.isTotal) return null;
         return (
-          <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
             <button
+              type="button"
               className="btn btn-sm btn-link p-0 text-primary"
               title="Chỉnh sửa"
               onClick={() => {
                 setEditingAdPlanId(row.id);
                 setAdOffcanvasData({
-                  objective: row.objective,
-                  topic: row.topic,
-                  channel: row.channel,
-                  content: row.content,
+                  objective: row.objective || '',
+                  topic: row.topic || '',
+                  channel: row.channel || 'Facebook Ads',
+                  content: row.content || '',
                   landingPage: row.landingPage || '',
-                  budget: row.budget,
-                  region: row.region,
-                  assignee: row.assignee,
-                  startDate: row.startDate,
-                  endDate: row.endDate,
-                  audience: row.audience,
+                  budget: row.budget || 0,
+                  region: row.region || 'Toàn quốc',
+                  assignee: row.assignee || 'Nguyễn Thu Huyền',
+                  startDate: row.startDate || '2026-01-01',
+                  endDate: row.endDate || '2026-12-31',
+                  audience: row.audience || '',
                 });
                 setShowAdOffcanvas(true);
               }}
@@ -1297,6 +1409,7 @@ export const MarketingPlanPage: React.FC = () => {
               <PencilSquare size={13} />
             </button>
             <button
+              type="button"
               className="btn btn-sm btn-link p-0 text-danger"
               title="Xóa"
               onClick={() => {
@@ -2067,7 +2180,7 @@ export const MarketingPlanPage: React.FC = () => {
                       fontWeight: row.isTotal ? 700 : 400,
                       background: '#fff',
                     })}
-                    cellStyle={() => ({ background: '#fff', padding: '6px 8px' })}
+                    cellStyle={() => ({ background: '#fff', padding: '8px 10px', verticalAlign: 'top' })}
                     wrapperStyle={{ background: '#fff', border: 'none', overflowX: 'auto' }}
                     wrapperClassName="mkt-plan-table-no-min"
                     minWidth={320}
@@ -2088,7 +2201,7 @@ export const MarketingPlanPage: React.FC = () => {
                       fontWeight: row.isTotal ? 700 : 400,
                       background: '#fff',
                     })}
-                    cellStyle={() => ({ background: '#fff', padding: '6px 8px' })}
+                    cellStyle={() => ({ background: '#fff', padding: '8px 10px', verticalAlign: 'top' })}
                     wrapperStyle={{ background: '#fff', border: 'none', overflowX: 'auto' }}
                     wrapperClassName="mkt-plan-table-no-min"
                     minWidth={480}
@@ -2214,7 +2327,7 @@ export const MarketingPlanPage: React.FC = () => {
                     fontWeight: row.isTotal ? 700 : 400,
                     background: '#fff',
                   })}
-                  cellStyle={() => ({ background: '#fff', padding: '6px 8px' })}
+                  cellStyle={() => ({ background: '#fff', padding: '8px 10px', verticalAlign: 'top' })}
                   wrapperClassName="mkt-plan-table-no-min"
                   wrapperStyle={{ background: '#fff', border: 'none' }}
                 />
@@ -2232,7 +2345,7 @@ export const MarketingPlanPage: React.FC = () => {
                     fontWeight: row.isTotal ? 700 : 400,
                     background: '#fff',
                   })}
-                  cellStyle={() => ({ background: '#fff', padding: '6px 8px' })}
+                  cellStyle={() => ({ background: '#fff', padding: '8px 10px', verticalAlign: 'top' })}
                   wrapperClassName="mkt-plan-table-no-min"
                   wrapperStyle={{ background: '#fff', border: 'none' }}
                 />
@@ -2315,7 +2428,7 @@ export const MarketingPlanPage: React.FC = () => {
                   fontWeight: row.type === 'section_header' || row.type === 'theme_header' ? 700 : 400,
                   background: row.type === 'section_header' || row.type === 'theme_header' ? '#f8fafc' : '#fff',
                 })}
-                cellStyle={() => ({ background: '#fff', padding: '6px 8px' })}
+                cellStyle={() => ({ background: '#fff', padding: '8px 10px', verticalAlign: 'top' })}
                 wrapperClassName="mkt-plan-table-no-min"
                 wrapperStyle={{ background: '#fff', border: 'none' }}
               />
@@ -2578,14 +2691,25 @@ export const MarketingPlanPage: React.FC = () => {
         width="400px"
         footer={
           <div className="w-full flex justify-end gap-2">
-            <button className="btn btn-sm btn-outline-secondary text-xs" onClick={() => setShowAddOffcanvas(false)}>
+            <Button variant="outline" size="sm" onClick={() => setShowAddOffcanvas(false)}>
               Hủy
-            </button>
-            <button
-              className="btn btn-sm btn-primary text-xs"
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
               onClick={() => {
+                if (!offcanvasData.pillar.trim()) {
+                  toast.error('Lỗi', 'Vui lòng nhập tên tuyến nội dung.');
+                  return;
+                }
                 if (editingContentPlanId) {
-                  setEditedContentPlan((prev) => ({ ...prev, [editingContentPlanId]: offcanvasData }));
+                  setEditedContentPlan((prev) => ({
+                    ...prev,
+                    [editingContentPlanId]: {
+                      ...(prev[editingContentPlanId] || {}),
+                      ...offcanvasData,
+                    },
+                  }));
                 } else {
                   const newId = `cp_custom_${Date.now()}`;
                   setCustomContentPlanIds((prev) => [...prev, newId]);
@@ -2596,70 +2720,54 @@ export const MarketingPlanPage: React.FC = () => {
               }}
             >
               Lưu tuyến nội dung
-            </button>
+            </Button>
           </div>
         }
       >
-        <div className="flex flex-col gap-3.5 text-[13px]">
+        <div className="flex flex-col gap-3.5 text-xs">
+          <Input
+            label="Tuyến nội dung (Pillar) *"
+            placeholder="VD: Nhận diện thương hiệu, Tuyển đại lý..."
+            value={offcanvasData.pillar}
+            onChange={(e) => setOffcanvasData({ ...offcanvasData, pillar: e.target.value })}
+          />
+          <Input
+            label="Mục tiêu (Purpose)"
+            placeholder="VD: Tạo khách hàng đại lý tiềm năng chất lượng..."
+            value={offcanvasData.purpose}
+            onChange={(e) => setOffcanvasData({ ...offcanvasData, purpose: e.target.value })}
+          />
+          <Input
+            label="Vai trò (Role)"
+            placeholder="VD: Thu hút, sàng lọc và nuôi dưỡng đối tác..."
+            value={offcanvasData.role}
+            onChange={(e) => setOffcanvasData({ ...offcanvasData, role: e.target.value })}
+          />
           <div>
-            <label className="font-semibold text-slate-700 block mb-1">Tuyến nội dung (Pillar)</label>
-            <input
-              type="text"
-              className="form-control form-control-sm text-[13px]"
-              value={offcanvasData.pillar}
-              placeholder="VD: Nhận diện thương hiệu..."
-              onChange={(e) => setOffcanvasData({ ...offcanvasData, pillar: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className="font-semibold text-slate-700 block mb-1">Mục tiêu (Purpose)</label>
-            <input
-              type="text"
-              className="form-control form-control-sm text-[13px]"
-              value={offcanvasData.purpose}
-              placeholder="VD: Tăng mức độ tin cậy..."
-              onChange={(e) => setOffcanvasData({ ...offcanvasData, purpose: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className="font-semibold text-slate-700 block mb-1">Vai trò (Role)</label>
-            <input
-              type="text"
-              className="form-control form-control-sm text-[13px]"
-              value={offcanvasData.role}
-              placeholder="VD: Định vị thương hiệu..."
-              onChange={(e) => setOffcanvasData({ ...offcanvasData, role: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className="font-semibold text-slate-700 block mb-1">Nội dung chi tiết</label>
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+              Nội dung chi tiết
+            </label>
             <textarea
-              rows={3}
-              className="form-control form-control-sm text-[13px]"
+              rows={4}
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all resize-y"
               value={offcanvasData.details}
-              placeholder="Mô tả các tuyến bài..."
+              placeholder="VD: Triển khai các nhóm: 1. Vấn đề đại lý: ... 2. Giải pháp Seajong: ..."
               onChange={(e) => setOffcanvasData({ ...offcanvasData, details: e.target.value })}
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="font-semibold text-slate-700 block mb-1">Ngân sách (VNĐ)</label>
-              <input
-                type="text"
-                className="form-control form-control-sm text-[13px] font-semibold"
-                value={offcanvasData.budget ? offcanvasData.budget.toLocaleString('vi-VN') : ''}
-                onChange={(e) => setOffcanvasData({ ...offcanvasData, budget: Number(e.target.value.replace(/\D/g, '')) || 0 })}
-              />
-            </div>
-            <div>
-              <label className="font-semibold text-slate-700 block mb-1">Số lượng bài</label>
-              <input
-                type="number"
-                className="form-control form-control-sm text-[13px]"
-                value={offcanvasData.postsCount}
-                onChange={(e) => setOffcanvasData({ ...offcanvasData, postsCount: Number(e.target.value) || 0 })}
-              />
-            </div>
+            <NumberInput
+              label="Ngân sách (đ)"
+              suffix="đ"
+              value={offcanvasData.budget}
+              onValueChange={(val) => setOffcanvasData({ ...offcanvasData, budget: val })}
+            />
+            <NumberInput
+              label="Số lượng bài"
+              suffix="bài"
+              value={offcanvasData.postsCount}
+              onValueChange={(val) => setOffcanvasData({ ...offcanvasData, postsCount: val })}
+            />
           </div>
         </div>
       </Offcanvas>
@@ -2672,14 +2780,25 @@ export const MarketingPlanPage: React.FC = () => {
         width="400px"
         footer={
           <div className="w-full flex justify-end gap-2">
-            <button className="btn btn-sm btn-outline-secondary text-xs" onClick={() => setShowAdOffcanvas(false)}>
+            <Button variant="outline" size="sm" onClick={() => setShowAdOffcanvas(false)}>
               Hủy
-            </button>
-            <button
-              className="btn btn-sm btn-primary text-xs"
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
               onClick={() => {
+                if (!adOffcanvasData.objective.trim()) {
+                  toast.error('Lỗi', 'Vui lòng nhập mục tiêu chiến dịch.');
+                  return;
+                }
                 if (editingAdPlanId) {
-                  setEditedAdPlan((prev) => ({ ...prev, [editingAdPlanId]: adOffcanvasData }));
+                  setEditedAdPlan((prev) => ({
+                    ...prev,
+                    [editingAdPlanId]: {
+                      ...(prev[editingAdPlanId] || {}),
+                      ...adOffcanvasData,
+                    },
+                  }));
                 } else {
                   const newId = `ad_custom_${Date.now()}`;
                   setCustomAdPlanIds((prev) => [...prev, newId]);
@@ -2690,36 +2809,30 @@ export const MarketingPlanPage: React.FC = () => {
               }}
             >
               Lưu mục tiêu
-            </button>
+            </Button>
           </div>
         }
       >
-        <div className="flex flex-col gap-3.5 text-[13px]">
-          <div>
-            <label className="font-semibold text-slate-700 block mb-1">Mục tiêu chiến dịch</label>
-            <input
-              type="text"
-              className="form-control form-control-sm text-[13px]"
-              value={adOffcanvasData.objective}
-              placeholder="VD: Tìm kiếm đại lý, mở rộng thị trường..."
-              onChange={(e) => setAdOffcanvasData({ ...adOffcanvasData, objective: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className="font-semibold text-slate-700 block mb-1">Chủ đề quảng cáo</label>
-            <input
-              type="text"
-              className="form-control form-control-sm text-[13px]"
-              value={adOffcanvasData.topic}
-              placeholder="Chính sách chiết khấu 2026..."
-              onChange={(e) => setAdOffcanvasData({ ...adOffcanvasData, topic: e.target.value })}
-            />
-          </div>
+        <div className="flex flex-col gap-3.5 text-xs">
+          <Input
+            label="Mục tiêu chiến dịch *"
+            placeholder="VD: Tìm kiếm đại lý, Nhận diện thương hiệu..."
+            value={adOffcanvasData.objective}
+            onChange={(e) => setAdOffcanvasData({ ...adOffcanvasData, objective: e.target.value })}
+          />
+          <Input
+            label="Chủ đề quảng cáo"
+            placeholder="VD: Chính sách chiết khấu 2026, Bộ sưu tập Sen phím đàn..."
+            value={adOffcanvasData.topic}
+            onChange={(e) => setAdOffcanvasData({ ...adOffcanvasData, topic: e.target.value })}
+          />
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="font-semibold text-slate-700 block mb-1">Kênh triển khai</label>
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                Kênh triển khai
+              </label>
               <select
-                className="form-select form-select-sm text-[13px]"
+                className="w-full h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 value={adOffcanvasData.channel}
                 onChange={(e) => setAdOffcanvasData({ ...adOffcanvasData, channel: e.target.value })}
               >
@@ -2727,37 +2840,48 @@ export const MarketingPlanPage: React.FC = () => {
                 <option value="Google Ads">Google Ads</option>
                 <option value="TikTok Ads">TikTok Ads</option>
                 <option value="Youtube Ads">Youtube Ads</option>
-                <option value="Đa kênh">Đa kênh</option>
+                <option value="Quảng cáo Facebook, Quảng cáo Tiktok, Quảng cáo Youtube, Quảng cáo Google Ads">Đa kênh (FB, TikTok, YT, Google)</option>
               </select>
             </div>
-            <div>
-              <label className="font-semibold text-slate-700 block mb-1">Ngân sách (VNĐ)</label>
-              <input
-                type="text"
-                className="form-control form-control-sm text-[13px] font-semibold"
-                value={adOffcanvasData.budget ? adOffcanvasData.budget.toLocaleString('vi-VN') : ''}
-                onChange={(e) => setAdOffcanvasData({ ...adOffcanvasData, budget: Number(e.target.value.replace(/\D/g, '')) || 0 })}
-              />
-            </div>
+            <NumberInput
+              label="Ngân sách (đ)"
+              suffix="đ"
+              value={adOffcanvasData.budget}
+              onValueChange={(val) => setAdOffcanvasData({ ...adOffcanvasData, budget: val })}
+            />
           </div>
           <div>
-            <label className="font-semibold text-slate-700 block mb-1">Thông điệp nội dung</label>
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+              Thông điệp nội dung
+            </label>
             <textarea
-              rows={2}
-              className="form-control form-control-sm text-[13px]"
+              rows={3}
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all resize-y"
               value={adOffcanvasData.content}
-              placeholder="Nội dung truyền thông chính..."
+              placeholder="VD: - Video về thương hiệu Seajong&#10;- Bài viết về chính sách hỗ trợ đại lý..."
               onChange={(e) => setAdOffcanvasData({ ...adOffcanvasData, content: e.target.value })}
             />
           </div>
+          <Input
+            label="Trang đích (Landing page)"
+            placeholder="VD: https://seajong.com/dai-ly-seajong/"
+            value={adOffcanvasData.landingPage}
+            onChange={(e) => setAdOffcanvasData({ ...adOffcanvasData, landingPage: e.target.value })}
+          />
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="font-semibold text-slate-700 block mb-1">Khu vực</label>
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                Khu vực
+              </label>
               <select
-                className="form-select form-select-sm text-[13px]"
+                className="w-full h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 value={adOffcanvasData.region}
                 onChange={(e) => setAdOffcanvasData({ ...adOffcanvasData, region: e.target.value })}
               >
+                <option value="Toàn quốc">Toàn quốc</option>
+                <option value="Miền Bắc">Miền Bắc</option>
+                <option value="Miền Trung">Miền Trung</option>
+                <option value="Miền Nam">Miền Nam</option>
                 {VIETNAM_PROVINCES.slice(0, 15).map((p) => (
                   <option key={p} value={p}>
                     {p}
@@ -2765,23 +2889,22 @@ export const MarketingPlanPage: React.FC = () => {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="font-semibold text-slate-700 block mb-1">Người phụ trách</label>
-              <input
-                type="text"
-                className="form-control form-control-sm text-[13px]"
-                value={adOffcanvasData.assignee}
-                onChange={(e) => setAdOffcanvasData({ ...adOffcanvasData, assignee: e.target.value })}
-              />
-            </div>
+            <Input
+              label="Người phụ trách"
+              placeholder="VD: Nguyễn Thu Huyền"
+              value={adOffcanvasData.assignee}
+              onChange={(e) => setAdOffcanvasData({ ...adOffcanvasData, assignee: e.target.value })}
+            />
           </div>
           <div>
-            <label className="font-semibold text-slate-700 block mb-1">Đối tượng mục tiêu</label>
-            <input
-              type="text"
-              className="form-control form-control-sm text-[13px]"
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+              Đối tượng mục tiêu
+            </label>
+            <textarea
+              rows={2}
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all resize-y"
               value={adOffcanvasData.audience}
-              placeholder="Khách hàng, độ tuổi, hành vi..."
+              placeholder="VD: Chủ cửa hàng VLXD, thầu thợ, đại lý điện nước..."
               onChange={(e) => setAdOffcanvasData({ ...adOffcanvasData, audience: e.target.value })}
             />
           </div>
