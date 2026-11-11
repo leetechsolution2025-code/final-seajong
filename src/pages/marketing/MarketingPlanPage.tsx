@@ -122,23 +122,16 @@ const BudgetInputRow: React.FC<BudgetInputRowProps> = ({ label, value, onChange,
   };
 
   return (
-    <div className="d-flex align-items-center justify-content-between gap-3" style={{ height: 28 }}>
-      <span style={{ fontSize: 12, color: 'var(--muted-foreground)', flex: 1, textAlign: 'left' }}>
+    <div className="flex items-center justify-between gap-2.5 py-1 px-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+      <span className="text-xs text-slate-700 dark:text-slate-300 flex-1 truncate text-left font-medium">
         {label}
       </span>
       <div
-        className="d-flex align-items-center"
-        style={{
-          border: isFocused ? '1px solid #86b7fe' : '1px solid #ced4da',
-          boxShadow: isFocused ? '0 0 0 0.25rem rgba(13, 110, 253, 0.25)' : 'none',
-          borderRadius: 4,
-          height: 28,
-          width: 160,
-          background: '#fff',
-          padding: '0 6px',
-          transition: 'border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out',
-          userSelect: 'none',
-        }}
+        className={`flex items-center rounded-md bg-white dark:bg-slate-900 px-2 h-7 w-44 transition-all ${
+          isFocused
+            ? 'border border-indigo-500 ring-1 ring-indigo-500/20'
+            : 'border border-slate-200 dark:border-slate-700'
+        }`}
       >
         <input
           type="text"
@@ -147,20 +140,9 @@ const BudgetInputRow: React.FC<BudgetInputRowProps> = ({ label, value, onChange,
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           placeholder="0"
-          style={{
-            border: 'none',
-            outline: 'none',
-            width: '35px',
-            height: '100%',
-            textAlign: 'right',
-            fontSize: 12,
-            fontWeight: 600,
-            background: 'transparent',
-            padding: '0 2px 0 0',
-            color: 'var(--foreground)',
-          }}
+          className="w-8 h-full text-right text-xs font-semibold bg-transparent border-none outline-none text-slate-800 dark:text-slate-200 p-0"
         />
-        <span style={{ fontSize: 11, color: 'var(--muted-foreground)', paddingRight: 6, borderRight: '1px solid #dee2e6', height: '60%', display: 'flex', alignItems: 'center' }}>
+        <span className="text-[11px] text-muted-foreground px-1.5 border-r border-slate-200 dark:border-slate-700 h-4 flex items-center">
           %
         </span>
         <input
@@ -170,22 +152,9 @@ const BudgetInputRow: React.FC<BudgetInputRowProps> = ({ label, value, onChange,
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           placeholder="0"
-          style={{
-            border: 'none',
-            outline: 'none',
-            flex: 1,
-            minWidth: 0,
-            width: 0,
-            height: '100%',
-            textAlign: 'right',
-            fontSize: 12,
-            fontWeight: 600,
-            background: 'transparent',
-            padding: '0 2px 0 6px',
-            color: 'var(--foreground)',
-          }}
+          className="flex-1 min-w-0 w-0 h-full text-right text-xs font-bold bg-transparent border-none outline-none text-slate-900 dark:text-slate-100 pl-1.5 pr-0.5"
         />
-        <span style={{ fontSize: 11, color: 'var(--muted-foreground)', paddingLeft: 2 }}>
+        <span className="text-[11px] text-muted-foreground pl-0.5">
           đ
         </span>
       </div>
@@ -1491,24 +1460,26 @@ export const MarketingPlanPage: React.FC = () => {
   const monthlyWorkColumns: TableColumn<any>[] = [
     {
       header: 'STT',
-      width: 42,
+      width: 44,
       align: 'center',
       render: (row) => {
         if (row.id === 'section_theme' || row.type === 'section_header') {
           const isTheme = row.id === 'section_theme';
           const isCollapsed = isTheme ? isThemeCollapsed : collapsedSections.includes(row.id);
           return (
-            <div
-              className="d-flex align-items-center justify-content-center gap-1"
-              style={{ fontWeight: 700, cursor: 'pointer', color: row.colorTheme === 'red' ? '#dc2626' : '#2563eb' }}
+            <button
+              type="button"
+              className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-slate-200/80 font-bold text-xs transition-colors gap-0.5 cursor-pointer"
+              style={{ color: row.colorTheme === 'red' ? '#dc2626' : '#2563eb' }}
               onClick={() => {
                 if (isTheme) setIsThemeCollapsed(!isThemeCollapsed);
                 else setCollapsedSections((prev) => (prev.includes(row.id) ? prev.filter((id) => id !== row.id) : [...prev, row.id]));
               }}
+              title={isCollapsed ? 'Mở rộng' : 'Thu gọn'}
             >
               <span>{row.stt}</span>
-              <i className={`bi ${isCollapsed ? 'bi-chevron-right' : 'bi-chevron-down'}`} style={{ fontSize: 9 }} />
-            </div>
+              <i className={`bi ${isCollapsed ? 'bi-chevron-right' : 'bi-chevron-down'} text-[9px]`} />
+            </button>
           );
         }
         return null;
@@ -1516,20 +1487,35 @@ export const MarketingPlanPage: React.FC = () => {
     },
     {
       header: 'Danh mục',
-      width: 110,
+      width: 120,
       align: 'left',
       render: (row) => {
         if (row.type === 'theme_header' || row.type === 'section_header') {
+          const isRed = row.colorTheme === 'red';
           return (
-            <span style={{ fontWeight: 800, color: row.colorTheme === 'red' ? '#dc2626' : '#1e3a8a', letterSpacing: '0.04em' }}>
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-extrabold tracking-wider ${
+                isRed
+                  ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
+                  : 'bg-indigo-50 text-indigo-700 border border-indigo-200/60'
+              }`}
+            >
               {row.name}
             </span>
           );
         }
         if (row.type === 'theme') {
-          return <span style={{ fontWeight: 700, fontSize: 11, color: 'var(--muted-foreground)' }}>{row.name}</span>;
+          return (
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+              {row.name}
+            </span>
+          );
         }
-        return <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>{row.item?.pillar || ''}</span>;
+        return (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200/50">
+            {row.item?.pillar || ''}
+          </span>
+        );
       },
     },
     {
@@ -1540,37 +1526,48 @@ export const MarketingPlanPage: React.FC = () => {
         if (row.id === 'theme_holiday') {
           const allHolidays = [...(HOLIDAYS_LIST_BY_MONTH[selectedMonth] || []), ...(customHolidays.filter((h) => h.month === selectedMonth) || [])];
           return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              {allHolidays.map((h, i) => (
-                <span key={i} className="badge bg-danger/10 text-danger border border-danger/20" style={{ fontSize: 11 }}>
-                  {h.dateStr}: {h.name}
-                </span>
-              ))}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {allHolidays.length === 0 ? (
+                <span className="text-xs text-slate-400 italic">Không có ngày lễ trong tháng</span>
+              ) : (
+                allHolidays.map((h, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200/60"
+                  >
+                    <i className="bi bi-calendar-event text-[10px]" />
+                    <span className="font-bold">{h.dateStr}:</span> {h.name}
+                  </span>
+                ))
+              )}
               <button
                 type="button"
-                className="btn btn-sm btn-link p-0 text-primary"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 transition-colors border border-dashed border-indigo-300 cursor-pointer"
                 onClick={() => setShowHolidayModal(true)}
                 title="Thêm ngày lễ"
               >
-                <PlusLg size={12} />
+                <PlusLg size={10} />
+                <span>Thêm</span>
               </button>
             </div>
           );
         }
         if (row.id === 'theme_content') {
           const currentTheme = monthlyThemes.find((t) => t.month === selectedMonth);
+          const topicText = currentTheme ? currentTheme.topic : (monthlyThemeTopic || 'Chưa thiết lập chủ đề tháng');
           return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontWeight: 600, color: '#1e3a8a', fontSize: 12 }}>
-                {currentTheme ? currentTheme.topic : (monthlyThemeTopic || 'Chưa thiết lập chủ đề tháng')}
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-50/70 text-indigo-900 border border-indigo-200/60">
+                <i className="bi bi-lightbulb-fill text-amber-500 text-xs" />
+                <span>{topicText}</span>
               </span>
               <button
                 type="button"
-                className="btn btn-sm btn-link p-0 text-primary"
+                className="text-slate-400 hover:text-indigo-600 transition-colors p-1 cursor-pointer"
                 onClick={() => setShowThemeModal(true)}
                 title="Sửa chủ đề"
               >
-                <PencilSquare size={12} />
+                <PencilSquare size={13} />
               </button>
             </div>
           );
@@ -1578,33 +1575,39 @@ export const MarketingPlanPage: React.FC = () => {
         if (row.id === 'theme_product') {
           const monthProducts = monthlyProducts[selectedMonth] || {};
           return (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div className="flex gap-2 items-center flex-wrap">
               {[1, 2, 3, 4].map((w) => {
                 const list = monthProducts[w] || [];
                 return (
                   <span
                     key={w}
-                    className="badge bg-light text-dark border cursor-pointer hover:bg-slate-200"
-                    style={{ fontSize: 11 }}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer transition-all border ${
+                      list.length > 0
+                        ? 'bg-blue-50 text-blue-700 border-blue-200/80 hover:bg-blue-100'
+                        : 'bg-slate-50 text-slate-500 border-slate-200/80 hover:bg-slate-100 hover:text-slate-800'
+                    }`}
                     onClick={() => {
                       setActiveProductWeek(w);
                       setTempSelectedProducts(list);
                       setShowProductModal(true);
                     }}
+                    title="Bấm để chọn danh mục sản phẩm trọng tâm tuần"
                   >
-                    T{w}: {list.length > 0 ? `${list.length} SP` : '+ Chọn SP'}
+                    <i className="bi bi-box-seam text-[11px]" />
+                    <span className="font-bold">T{w}:</span>
+                    <span>{list.length > 0 ? `${list.length} SP` : '+ Chọn SP'}</span>
                   </span>
                 );
               })}
             </div>
           );
         }
-        return <span style={{ fontWeight: 600, fontSize: 12.5 }}>{row.name}</span>;
+        return <span className="font-medium text-slate-800 text-[12.5px] leading-snug">{row.name}</span>;
       },
     },
     {
       header: `T1 (01-07/${monthStr})`,
-      width: 78,
+      width: 82,
       align: 'center',
       render: (row) => {
         if (row.type !== 'section_item') return null;
@@ -1612,9 +1615,13 @@ export const MarketingPlanPage: React.FC = () => {
         return (
           <button
             type="button"
-            className={`btn btn-sm ${active ? 'btn-primary' : 'btn-outline-secondary'}`}
-            style={{ width: 28, height: 24, padding: 0, fontSize: 11, fontWeight: 700 }}
+            className={`inline-flex items-center justify-center w-8 h-6 rounded-md font-bold text-[11px] transition-all cursor-pointer ${
+              active
+                ? 'bg-indigo-600 text-white shadow-xs hover:bg-indigo-700'
+                : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 border border-slate-200/60'
+            }`}
             onClick={() => toggleTaskWeek(row.parentId, row.item.id, 1)}
+            title={`Tuần 1: ${active ? 'Đang kích hoạt' : 'Chưa kích hoạt'}`}
           >
             T1
           </button>
@@ -1623,7 +1630,7 @@ export const MarketingPlanPage: React.FC = () => {
     },
     {
       header: `T2 (08-14/${monthStr})`,
-      width: 78,
+      width: 82,
       align: 'center',
       render: (row) => {
         if (row.type !== 'section_item') return null;
@@ -1631,9 +1638,13 @@ export const MarketingPlanPage: React.FC = () => {
         return (
           <button
             type="button"
-            className={`btn btn-sm ${active ? 'btn-primary' : 'btn-outline-secondary'}`}
-            style={{ width: 28, height: 24, padding: 0, fontSize: 11, fontWeight: 700 }}
+            className={`inline-flex items-center justify-center w-8 h-6 rounded-md font-bold text-[11px] transition-all cursor-pointer ${
+              active
+                ? 'bg-indigo-600 text-white shadow-xs hover:bg-indigo-700'
+                : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 border border-slate-200/60'
+            }`}
             onClick={() => toggleTaskWeek(row.parentId, row.item.id, 2)}
+            title={`Tuần 2: ${active ? 'Đang kích hoạt' : 'Chưa kích hoạt'}`}
           >
             T2
           </button>
@@ -1642,7 +1653,7 @@ export const MarketingPlanPage: React.FC = () => {
     },
     {
       header: `T3 (15-21/${monthStr})`,
-      width: 78,
+      width: 82,
       align: 'center',
       render: (row) => {
         if (row.type !== 'section_item') return null;
@@ -1650,9 +1661,13 @@ export const MarketingPlanPage: React.FC = () => {
         return (
           <button
             type="button"
-            className={`btn btn-sm ${active ? 'btn-primary' : 'btn-outline-secondary'}`}
-            style={{ width: 28, height: 24, padding: 0, fontSize: 11, fontWeight: 700 }}
+            className={`inline-flex items-center justify-center w-8 h-6 rounded-md font-bold text-[11px] transition-all cursor-pointer ${
+              active
+                ? 'bg-indigo-600 text-white shadow-xs hover:bg-indigo-700'
+                : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 border border-slate-200/60'
+            }`}
             onClick={() => toggleTaskWeek(row.parentId, row.item.id, 3)}
+            title={`Tuần 3: ${active ? 'Đang kích hoạt' : 'Chưa kích hoạt'}`}
           >
             T3
           </button>
@@ -1661,7 +1676,7 @@ export const MarketingPlanPage: React.FC = () => {
     },
     {
       header: `T4 (22-${lastDayStr}/${monthStr})`,
-      width: 78,
+      width: 82,
       align: 'center',
       render: (row) => {
         if (row.type !== 'section_item') return null;
@@ -1669,9 +1684,13 @@ export const MarketingPlanPage: React.FC = () => {
         return (
           <button
             type="button"
-            className={`btn btn-sm ${active ? 'btn-primary' : 'btn-outline-secondary'}`}
-            style={{ width: 28, height: 24, padding: 0, fontSize: 11, fontWeight: 700 }}
+            className={`inline-flex items-center justify-center w-8 h-6 rounded-md font-bold text-[11px] transition-all cursor-pointer ${
+              active
+                ? 'bg-indigo-600 text-white shadow-xs hover:bg-indigo-700'
+                : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 border border-slate-200/60'
+            }`}
             onClick={() => toggleTaskWeek(row.parentId, row.item.id, 4)}
+            title={`Tuần 4: ${active ? 'Đang kích hoạt' : 'Chưa kích hoạt'}`}
           >
             T4
           </button>
@@ -1680,20 +1699,32 @@ export const MarketingPlanPage: React.FC = () => {
     },
     {
       header: 'Người phụ trách',
-      width: 120,
+      width: 140,
       align: 'left',
-      render: (row) => (row.type === 'section_item' ? <span style={{ fontSize: 11.5 }}>{row.item.assignee || 'Chu Thị Hằng'}</span> : null),
+      render: (row) => {
+        if (row.type !== 'section_item') return null;
+        const name = row.item.assignee || 'Chu Thị Hằng';
+        const initial = name.trim().charAt(0).toUpperCase();
+        return (
+          <div className="flex items-center gap-1.5">
+            <span className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-700 font-bold text-[10px] flex items-center justify-center border border-indigo-200/60 shrink-0">
+              {initial}
+            </span>
+            <span className="text-xs text-slate-700 font-medium truncate">{name}</span>
+          </div>
+        );
+      },
     },
     {
       header: 'Thao tác',
-      width: 60,
+      width: 70,
       align: 'center',
       render: (row) => {
         if (row.type === 'section_header') {
           return (
             <button
               type="button"
-              className="btn btn-sm btn-link p-0 text-primary"
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-semibold text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
               title="Thêm nhiệm vụ mới"
               onClick={() => {
                 setTaskOffcanvasSection(row.id);
@@ -1705,15 +1736,18 @@ export const MarketingPlanPage: React.FC = () => {
                 setShowTaskOffcanvas(true);
               }}
             >
-              <PlusLg size={13} />
+              <PlusLg size={11} />
+              <span>Thêm</span>
             </button>
           );
         }
         if (row.type === 'section_item') {
           return (
-            <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+            <div className="flex items-center justify-center gap-1">
               <button
-                className="btn btn-sm btn-link p-0 text-primary"
+                type="button"
+                className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
+                title="Chỉnh sửa"
                 onClick={() => {
                   setTaskOffcanvasSection(row.parentId);
                   setEditingTaskItemId(row.item.id);
@@ -1724,10 +1758,12 @@ export const MarketingPlanPage: React.FC = () => {
                   setShowTaskOffcanvas(true);
                 }}
               >
-                <PencilSquare size={12} />
+                <PencilSquare size={13} />
               </button>
               <button
-                className="btn btn-sm btn-link p-0 text-danger"
+                type="button"
+                className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                title="Xóa hoạt động"
                 onClick={() => {
                   const key = `${row.parentId}_${selectedMonth}`;
                   setSectionContentItems((prev) => ({
@@ -1737,7 +1773,7 @@ export const MarketingPlanPage: React.FC = () => {
                   toast.info('Đã xóa', 'Đã xóa hoạt động.');
                 }}
               >
-                <Trash size={12} />
+                <Trash size={13} />
               </button>
             </div>
           );
@@ -2360,31 +2396,43 @@ export const MarketingPlanPage: React.FC = () => {
         {currentStep === 3 && (
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden w-full h-full">
             {/* Header with 12 Month Selector */}
-            <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200/80 bg-slate-50/50 shrink-0 flex-wrap gap-2">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200/80 bg-slate-50/60 shrink-0 flex-wrap gap-2">
+              <div className="flex items-center gap-2.5">
                 <SectionTitle
                   title={`Kế hoạch hoạt động tháng ${selectedMonth} - Năm ${selectedYear}`}
                   className="mb-0"
                   style={{ color: 'var(--primary)', fontSize: 13, letterSpacing: '0.02em' }}
                 />
+                {(() => {
+                  const currentTheme = monthlyThemes.find((t) => t.month === selectedMonth);
+                  const topic = currentTheme ? currentTheme.topic : monthlyThemeTopic;
+                  if (!topic) return null;
+                  return (
+                    <span className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200/60 max-w-xs truncate">
+                      <i className="bi bi-lightbulb-fill text-amber-500 text-[10px]" />
+                      <span className="truncate">Chủ đề: {topic}</span>
+                    </span>
+                  );
+                })()}
               </div>
 
               {/* 12-Month Selector Timeline */}
-              <div className="flex items-center bg-slate-200/80 p-0.5 rounded-xl gap-1">
+              <div className="flex items-center bg-slate-100 p-0.5 rounded-xl gap-0.5 border border-slate-200/60 shadow-2xs">
                 {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
                   const isActive = m === selectedMonth;
                   return (
                     <button
                       key={m}
                       type="button"
-                      className={`w-7 h-7 rounded-lg text-xs font-bold transition-all flex items-center justify-center ${
+                      className={`w-7 h-7 rounded-lg text-xs font-bold transition-all flex items-center justify-center cursor-pointer ${
                         isActive
                           ? 'bg-indigo-600 text-white shadow-xs'
                           : 'text-slate-600 hover:bg-white hover:text-slate-900'
                       }`}
                       onClick={() => setSelectedMonth(m)}
+                      title={`Tháng ${m}`}
                     >
-                      {m}
+                      T{m}
                     </button>
                   );
                 })}
@@ -2396,7 +2444,7 @@ export const MarketingPlanPage: React.FC = () => {
                   size="sm"
                   icon={<PencilSquare size={12} />}
                   onClick={() => setShowThemeModal(true)}
-                  className="h-8 bg-white shadow-xs text-xs"
+                  className="h-8 bg-white shadow-xs text-xs font-medium"
                 >
                   Chủ đề tháng
                 </Button>
@@ -2405,7 +2453,7 @@ export const MarketingPlanPage: React.FC = () => {
                   size="sm"
                   icon={<Floppy size={12} />}
                   onClick={() => handleSaveToDB()}
-                  className="h-8 px-2.5 shadow-xs"
+                  className="h-8 px-3 shadow-xs text-xs font-semibold"
                   title="Lưu lại"
                 >
                   Lưu
@@ -2445,29 +2493,56 @@ export const MarketingPlanPage: React.FC = () => {
               {/* Left Column: Stats & Annual Category Settings */}
               <div className="mkt-step4-left">
                 {/* Summary Card */}
-                <div
-                  className="rounded-xl border border-slate-200/80 p-3.5 bg-gradient-to-br from-slate-50 to-slate-100/60 shadow-xs"
-                >
-                  <h6 className="font-bold text-slate-500 uppercase text-[11px] tracking-wider mb-2">
-                    TÓM TẮT NGÂN SÁCH
-                  </h6>
-                  <div className="mb-2.5">
+                <div className="rounded-xl border border-slate-200/80 p-3.5 bg-gradient-to-br from-slate-50 via-indigo-50/20 to-slate-100/60 shadow-xs">
+                  <div className="flex items-center justify-between mb-2">
+                    <h6 className="font-bold text-slate-600 uppercase text-[11px] tracking-wider mb-0 flex items-center gap-1.5">
+                      <CashCoin className="text-indigo-600" size={13} />
+                      TÓM TẮT NGÂN SÁCH NĂM {selectedYear}
+                    </h6>
+                    <Badge variant={valBranding - totalAllocatedBudgets < 0 ? 'danger' : 'success'}>
+                      {valBranding - totalAllocatedBudgets < 0 ? 'Vượt hạn mức' : 'Cân đối'}
+                    </Badge>
+                  </div>
+
+                  <div className="mb-2">
                     <div className="text-[11px] text-slate-500 mb-0.5">Tổng ngân sách năm {selectedYear}</div>
-                    <div className="text-xl font-bold text-indigo-700 leading-tight">
+                    <div className="text-xl font-extrabold text-indigo-700 leading-tight">
                       {valBranding.toLocaleString('vi-VN')} đ
                     </div>
                   </div>
-                  <div className="flex gap-3 pt-2 border-t border-slate-200/60">
-                    <div className="flex-1">
-                      <div className="text-[11px] text-slate-500 mb-0.5">Đã phân bổ</div>
-                      <div className="text-sm font-bold text-slate-800">
+
+                  {/* Progress bar */}
+                  {(() => {
+                    const allocPct = valBranding > 0 ? (totalAllocatedBudgets / valBranding) * 100 : 0;
+                    return (
+                      <div className="my-2.5">
+                        <div className="flex justify-between text-[11px] font-medium text-slate-500 mb-1">
+                          <span>Tiến độ phân bổ</span>
+                          <span className="font-bold text-slate-700">{allocPct.toFixed(1)}%</span>
+                        </div>
+                        <div className="w-full bg-slate-200/80 rounded-full h-2 overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-300 ${
+                              allocPct > 100 ? 'bg-rose-500' : allocPct >= 95 ? 'bg-emerald-500' : 'bg-indigo-600'
+                            }`}
+                            style={{ width: `${Math.min(100, allocPct)}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/70">
+                    <div className="p-2 rounded-lg bg-white/70 border border-slate-200/60">
+                      <div className="text-[10.5px] text-slate-500 mb-0.5 font-medium">Đã phân bổ</div>
+                      <div className="text-xs font-bold text-slate-800">
                         {totalAllocatedBudgets.toLocaleString('vi-VN')} đ
                       </div>
                     </div>
-                    <div className="flex-1">
-                      <div className="text-[11px] text-slate-500 mb-0.5">Còn lại chưa phân bổ</div>
+                    <div className="p-2 rounded-lg bg-white/70 border border-slate-200/60">
+                      <div className="text-[10.5px] text-slate-500 mb-0.5 font-medium">Còn lại</div>
                       <div
-                        className={`text-sm font-bold ${
+                        className={`text-xs font-bold ${
                           valBranding - totalAllocatedBudgets < 0 ? 'text-rose-600' : 'text-emerald-600'
                         }`}
                       >
@@ -2478,61 +2553,67 @@ export const MarketingPlanPage: React.FC = () => {
                 </div>
 
                 {/* Section: Ngân sách cho đại lý */}
-                <SectionTitle title="Ngân sách cho đại lý" className="mb-0 mt-1" style={{ color: 'var(--primary)', fontSize: 12, letterSpacing: '0.02em' }} />
-                <div className="flex flex-col gap-1 pl-3 bg-white p-2 rounded-lg border border-slate-100">
-                  <BudgetInputRow label="Marketing tại điểm bán" value={agencyPOSBudget} onChange={setAgencyPOSBudget} valBranding={valBranding} />
-                  <BudgetInputRow label="Quảng cáo bảng hiệu" value={agencyAdsBudget} onChange={setAgencyAdsBudget} valBranding={valBranding} />
-                  <BudgetInputRow label="Quà tặng khai trương & sự kiện" value={agencyGiftBudget} onChange={setAgencyGiftBudget} valBranding={valBranding} />
+                <div>
+                  <div className="flex items-center justify-between mb-1.5 px-1">
+                    <span className="text-xs font-bold text-indigo-900 uppercase tracking-wide flex items-center gap-1.5">
+                      <Shop size={13} className="text-blue-600" />
+                      1. Ngân sách cho đại lý
+                    </span>
+                    <Badge variant="neutral">3 hạng mục</Badge>
+                  </div>
+                  <div className="flex flex-col gap-1 bg-white p-2 rounded-xl border border-slate-200/70 shadow-2xs">
+                    <BudgetInputRow label="Marketing tại điểm bán" value={agencyPOSBudget} onChange={setAgencyPOSBudget} valBranding={valBranding} />
+                    <BudgetInputRow label="Quảng cáo bảng hiệu" value={agencyAdsBudget} onChange={setAgencyAdsBudget} valBranding={valBranding} />
+                    <BudgetInputRow label="Quà tặng khai trương & sự kiện" value={agencyGiftBudget} onChange={setAgencyGiftBudget} valBranding={valBranding} />
+                  </div>
                 </div>
 
                 {/* Section: Ngân sách cho quảng cáo */}
-                <SectionTitle title="Ngân sách cho quảng cáo" className="mb-0 mt-1" style={{ color: 'var(--primary)', fontSize: 12, letterSpacing: '0.02em' }} />
-                <div className="flex flex-col gap-1 pl-3 bg-white p-2 rounded-lg border border-slate-100">
-                  <BudgetInputRow label="Facebook Ads" value={advFbAds} onChange={setAdvFbAds} valBranding={valBranding} />
-                  <BudgetInputRow label="Google Ads" value={advGoogleAds} onChange={setAdvGoogleAds} valBranding={valBranding} />
-                  <BudgetInputRow label="Youtube Ads" value={advYoutubeAds} onChange={setAdvYoutubeAds} valBranding={valBranding} />
-                  <BudgetInputRow label="TikTok Ads" value={advTiktokAds} onChange={setAdvTiktokAds} valBranding={valBranding} />
-                  <BudgetInputRow label="SEO + PR báo chí" value={advSeoPr} onChange={setAdvSeoPr} valBranding={valBranding} />
-                  <BudgetInputRow label="In ấn & Thiết kế ngoài" value={advPrintOutsource} onChange={setAdvPrintOutsource} valBranding={valBranding} />
-                  <BudgetInputRow label="Media, Mẫu, Decor" value={advMediaModelDecor} onChange={setAdvMediaModelDecor} valBranding={valBranding} />
-                  <BudgetInputRow label="Website & Công nghệ" value={advWebDesign} onChange={setAdvWebDesign} valBranding={valBranding} />
-                  <BudgetInputRow label="Chi phí khác" value={advOther} onChange={setAdvOther} valBranding={valBranding} />
-                  <BudgetInputRow label="Dự phòng ngân sách" value={advReserve} onChange={setAdvReserve} valBranding={valBranding} />
+                <div>
+                  <div className="flex items-center justify-between mb-1.5 px-1">
+                    <span className="text-xs font-bold text-indigo-900 uppercase tracking-wide flex items-center gap-1.5">
+                      <Broadcast size={13} className="text-indigo-600" />
+                      2. Ngân sách cho quảng cáo
+                    </span>
+                    <Badge variant="neutral">10 hạng mục</Badge>
+                  </div>
+                  <div className="flex flex-col gap-1 bg-white p-2 rounded-xl border border-slate-200/70 shadow-2xs">
+                    <BudgetInputRow label="Facebook Ads" value={advFbAds} onChange={setAdvFbAds} valBranding={valBranding} />
+                    <BudgetInputRow label="Google Ads" value={advGoogleAds} onChange={setAdvGoogleAds} valBranding={valBranding} />
+                    <BudgetInputRow label="Youtube Ads" value={advYoutubeAds} onChange={setAdvYoutubeAds} valBranding={valBranding} />
+                    <BudgetInputRow label="TikTok Ads" value={advTiktokAds} onChange={setAdvTiktokAds} valBranding={valBranding} />
+                    <BudgetInputRow label="SEO + PR báo chí" value={advSeoPr} onChange={setAdvSeoPr} valBranding={valBranding} />
+                    <BudgetInputRow label="In ấn & Thiết kế ngoài" value={advPrintOutsource} onChange={setAdvPrintOutsource} valBranding={valBranding} />
+                    <BudgetInputRow label="Media, Mẫu, Decor" value={advMediaModelDecor} onChange={setAdvMediaModelDecor} valBranding={valBranding} />
+                    <BudgetInputRow label="Website & Công nghệ" value={advWebDesign} onChange={setAdvWebDesign} valBranding={valBranding} />
+                    <BudgetInputRow label="Chi phí khác" value={advOther} onChange={setAdvOther} valBranding={valBranding} />
+                    <BudgetInputRow label="Dự phòng ngân sách" value={advReserve} onChange={setAdvReserve} valBranding={valBranding} />
+                  </div>
                 </div>
               </div>
 
               {/* Right Column: Month Allocations Table */}
               <div className="mkt-step4-right">
-                <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200/80">
                   <SectionTitle
                     title={`Phân bổ ngân sách theo tháng - Năm ${selectedYear}`}
                     className="mb-0"
-                    style={{ color: 'var(--primary)', fontSize: 12, letterSpacing: '0.02em' }}
+                    style={{ color: 'var(--primary)', fontSize: 13, letterSpacing: '0.02em' }}
                   />
                   <div className="flex items-center gap-3">
-                    <div className="form-check form-switch mb-0 flex items-center gap-2">
-                      <input
-                        className="form-check-input"
-                        type="checkbox"
-                        role="switch"
-                        id="editMonthlySwitch"
+                    <div style={{ width: 'auto' }}>
+                      <Toggle
                         checked={isEditing}
-                        onChange={(e) => setIsEditing(e.target.checked)}
-                        style={{ cursor: 'pointer', width: 32, height: 16 }}
+                        onChange={setIsEditing}
+                        label={<span className="text-[11px] font-bold uppercase text-slate-600">Chỉnh sửa</span>}
                       />
-                      <label
-                        className="form-check-label text-uppercase fw-bold text-[11px] text-slate-500 cursor-pointer select-none"
-                        htmlFor="editMonthlySwitch"
-                      >
-                        CHỈNH SỬA
-                      </label>
                     </div>
                     <Button
                       variant="success"
                       size="sm"
                       icon={<Floppy size={12} />}
                       onClick={() => handleSaveToDB()}
-                      className="h-7 text-xs shadow-xs"
+                      className="h-8 text-xs font-semibold px-3 shadow-xs"
                     >
                       Lưu lại
                     </Button>
@@ -2540,7 +2621,7 @@ export const MarketingPlanPage: React.FC = () => {
                 </div>
 
                 {/* 12-Month Selector Timeline */}
-                <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-1 my-2">
+                <div className="flex items-center bg-slate-100 p-0.5 rounded-xl gap-0.5 border border-slate-200/60 shadow-2xs">
                   {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
                     const isActive = m === selectedMonth;
                     return (
@@ -2548,24 +2629,30 @@ export const MarketingPlanPage: React.FC = () => {
                         key={m}
                         type="button"
                         onClick={() => setSelectedMonth(m)}
-                        className={`w-7 h-7 rounded-lg text-xs font-bold transition-all flex items-center justify-center ${
+                        title={`Tháng ${m}`}
+                        className={`flex-1 h-7 rounded-lg text-xs font-bold transition-all flex items-center justify-center cursor-pointer ${
                           isActive
                             ? 'bg-indigo-600 text-white shadow-xs'
                             : 'text-slate-600 hover:bg-white hover:text-slate-900'
                         }`}
                       >
-                        {m}
+                        T{m}
                       </button>
                     );
                   })}
                 </div>
 
-                {/* Monthly Budget Summary */}
-                <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/60 mb-2 flex items-center justify-between">
-                  <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-                    Tổng ngân sách dự kiến chi cho tháng {selectedMonth}
+                {/* Monthly Budget Summary Banner */}
+                <div className="p-3 bg-gradient-to-r from-indigo-50/80 via-blue-50/40 to-slate-50 rounded-xl border border-indigo-100/80 flex items-center justify-between shadow-2xs">
+                  <div>
+                    <div className="text-[11px] font-bold text-indigo-900 uppercase tracking-wider">
+                      Tổng ngân sách dự kiến chi cho Tháng {selectedMonth}
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">
+                      Chiếm {valBranding > 0 ? (((monthlyBudgets[selectedMonth] || 0) / valBranding) * 100).toFixed(1) : 0}% tổng ngân sách cả năm
+                    </div>
                   </div>
-                  <div className="text-base font-bold text-indigo-700">
+                  <div className="text-lg font-black text-indigo-700">
                     {(monthlyBudgets[selectedMonth] || 0).toLocaleString('vi-VN')} đ
                   </div>
                 </div>
@@ -2574,50 +2661,57 @@ export const MarketingPlanPage: React.FC = () => {
                 <div className="border border-slate-200/80 rounded-xl bg-white overflow-hidden shadow-2xs">
                   <table className="w-100" style={{ fontSize: 12, borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr className="bg-slate-50 border-b text-slate-500 font-bold uppercase text-[10.5px]">
-                        <th className="py-2 px-3 text-start">Khoản mục chi phí</th>
-                        <th className="py-2 px-3 text-end" style={{ width: 140 }}>Ngân sách tháng {selectedMonth}</th>
-                        <th className="py-2 px-3 text-start">Ghi chú phân bổ</th>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10.5px]">
+                        <th className="py-2.5 px-3.5 text-start">Khoản mục chi phí</th>
+                        <th className="py-2.5 px-3.5 text-end" style={{ width: 170 }}>Ngân sách Tháng {selectedMonth}</th>
+                        <th className="py-2.5 px-3.5 text-start">Ghi chú phân bổ</th>
                       </tr>
                     </thead>
                     <tbody>
                       {/* Section: Agency */}
-                      <tr className="bg-blue-50/60 font-bold text-blue-900 border-b">
-                        <td colSpan={3} className="py-1.5 px-3">
+                      <tr className="bg-blue-50/70 font-extrabold text-blue-900 border-b border-blue-100">
+                        <td colSpan={3} className="py-2 px-3.5 text-[11.5px] uppercase tracking-wide">
                           1. Chi phí cho đại lý
                         </td>
                       </tr>
                       {BUDGET_CATEGORIES.slice(0, 3).map((cat) => {
                         const alloc = (monthlyAllocations[selectedMonth] || {})[cat.id] || { budget: 0, note: '' };
                         return (
-                          <tr key={cat.id} className="border-b hover:bg-slate-50">
-                            <td className="py-1.5 px-3 font-medium text-slate-800">{cat.label}</td>
-                            <td className="py-1.5 px-3 text-end">
+                          <tr key={cat.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                            <td className="py-2 px-3.5 font-medium text-slate-800">
+                              <div className="flex items-center gap-2">
+                                <i className={`bi ${cat.icon} text-xs`} style={{ color: cat.color }} />
+                                <span>{cat.label}</span>
+                              </div>
+                            </td>
+                            <td className="py-2 px-3.5 text-end">
                               {isEditing ? (
                                 <input
                                   type="text"
-                                  className="form-control form-control-sm text-end bg-white border px-1 py-0.5"
+                                  className="w-full text-end bg-white border border-slate-300 focus:border-indigo-500 rounded px-2 py-1 text-xs font-bold outline-none transition-colors"
                                   value={alloc.budget ? alloc.budget.toLocaleString('vi-VN') : ''}
                                   placeholder="0"
                                   onChange={(e) => {
                                     const raw = Number(e.target.value.replace(/\D/g, '')) || 0;
                                     handleMonthlyCategoryBudgetChange(cat.id, raw);
                                   }}
-                                  style={{ height: 26, fontSize: 12 }}
+                                  style={{ height: 28 }}
                                 />
                               ) : (
-                                <span className="font-semibold text-slate-900">{alloc.budget ? `${alloc.budget.toLocaleString('vi-VN')} đ` : '0 đ'}</span>
+                                <span className="font-bold text-slate-900 text-xs">
+                                  {alloc.budget ? `${alloc.budget.toLocaleString('vi-VN')} đ` : '0 đ'}
+                                </span>
                               )}
                             </td>
-                            <td className="py-1.5 px-3">
+                            <td className="py-2 px-3.5">
                               {isEditing ? (
                                 <input
                                   type="text"
-                                  className="form-control form-control-sm bg-white border px-1.5 py-0.5"
+                                  className="w-full bg-white border border-slate-300 focus:border-indigo-500 rounded px-2 py-1 text-xs outline-none transition-colors"
                                   value={alloc.note || ''}
                                   placeholder="Ghi chú chi tiết..."
                                   onChange={(e) => handleMonthlyCategoryNoteChange(cat.id, e.target.value)}
-                                  style={{ height: 26, fontSize: 12 }}
+                                  style={{ height: 28 }}
                                 />
                               ) : (
                                 <span className="text-slate-500 text-xs">{alloc.note || '-'}</span>
@@ -2628,42 +2722,49 @@ export const MarketingPlanPage: React.FC = () => {
                       })}
 
                       {/* Section: Advertising */}
-                      <tr className="bg-blue-50/60 font-bold text-blue-900 border-b">
-                        <td colSpan={3} className="py-1.5 px-3">
+                      <tr className="bg-blue-50/70 font-extrabold text-blue-900 border-b border-blue-100">
+                        <td colSpan={3} className="py-2 px-3.5 text-[11.5px] uppercase tracking-wide">
                           2. Chi phí cho quảng cáo & tiếp thị
                         </td>
                       </tr>
                       {BUDGET_CATEGORIES.slice(3).map((cat) => {
                         const alloc = (monthlyAllocations[selectedMonth] || {})[cat.id] || { budget: 0, note: '' };
                         return (
-                          <tr key={cat.id} className="border-b hover:bg-slate-50">
-                            <td className="py-1.5 px-3 font-medium text-slate-800">{cat.label}</td>
-                            <td className="py-1.5 px-3 text-end">
+                          <tr key={cat.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                            <td className="py-2 px-3.5 font-medium text-slate-800">
+                              <div className="flex items-center gap-2">
+                                <i className={`bi ${cat.icon} text-xs`} style={{ color: cat.color }} />
+                                <span>{cat.label}</span>
+                              </div>
+                            </td>
+                            <td className="py-2 px-3.5 text-end">
                               {isEditing ? (
                                 <input
                                   type="text"
-                                  className="form-control form-control-sm text-end bg-white border px-1 py-0.5"
+                                  className="w-full text-end bg-white border border-slate-300 focus:border-indigo-500 rounded px-2 py-1 text-xs font-bold outline-none transition-colors"
                                   value={alloc.budget ? alloc.budget.toLocaleString('vi-VN') : ''}
                                   placeholder="0"
                                   onChange={(e) => {
                                     const raw = Number(e.target.value.replace(/\D/g, '')) || 0;
                                     handleMonthlyCategoryBudgetChange(cat.id, raw);
                                   }}
-                                  style={{ height: 26, fontSize: 12 }}
+                                  style={{ height: 28 }}
                                 />
                               ) : (
-                                <span className="font-semibold text-slate-900">{alloc.budget ? `${alloc.budget.toLocaleString('vi-VN')} đ` : '0 đ'}</span>
+                                <span className="font-bold text-slate-900 text-xs">
+                                  {alloc.budget ? `${alloc.budget.toLocaleString('vi-VN')} đ` : '0 đ'}
+                                </span>
                               )}
                             </td>
-                            <td className="py-1.5 px-3">
+                            <td className="py-2 px-3.5">
                               {isEditing ? (
                                 <input
                                   type="text"
-                                  className="form-control form-control-sm bg-white border px-1.5 py-0.5"
+                                  className="w-full bg-white border border-slate-300 focus:border-indigo-500 rounded px-2 py-1 text-xs outline-none transition-colors"
                                   value={alloc.note || ''}
                                   placeholder="Ghi chú chi tiết..."
                                   onChange={(e) => handleMonthlyCategoryNoteChange(cat.id, e.target.value)}
-                                  style={{ height: 26, fontSize: 12 }}
+                                  style={{ height: 28 }}
                                 />
                               ) : (
                                 <span className="text-slate-500 text-xs">{alloc.note || '-'}</span>
@@ -2913,13 +3014,16 @@ export const MarketingPlanPage: React.FC = () => {
         onClose={() => setShowTaskOffcanvas(false)}
         title={editingTaskItemId ? 'Hiệu chỉnh nhiệm vụ' : 'Thêm hoạt động marketing'}
         width="400px"
+        bodyStyle={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+        bodyClassName="h-full flex flex-col p-4"
         footer={
           <div className="w-full flex justify-end gap-2">
-            <button className="btn btn-sm btn-outline-secondary text-xs" onClick={() => setShowTaskOffcanvas(false)}>
+            <Button variant="outline" size="sm" onClick={() => setShowTaskOffcanvas(false)}>
               Hủy
-            </button>
-            <button
-              className="btn btn-sm btn-primary text-xs"
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
               onClick={() => {
                 const key = `${taskOffcanvasSection}_${selectedMonth}`;
                 setSectionContentItems((prev) => {
@@ -2945,32 +3049,38 @@ export const MarketingPlanPage: React.FC = () => {
               }}
             >
               Lưu hoạt động
-            </button>
+            </Button>
           </div>
         }
       >
-        <div className="flex flex-col gap-3.5 text-[13px]">
+        <div className="flex-1 flex flex-col gap-3 text-xs">
           <div>
-            <label className="font-semibold text-slate-700 block mb-1">Hạng mục</label>
-            <select className="form-select form-select-sm text-[13px]" value={taskPillar} onChange={(e) => setTaskPillar(e.target.value)}>
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+              Hạng mục
+            </label>
+            <select
+              className="w-full h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              value={taskPillar}
+              onChange={(e) => setTaskPillar(e.target.value)}
+            >
               <option value="Sản phẩm">Sản phẩm</option>
               <option value="Bán hàng">Bán hàng</option>
               <option value="Nhận diện thương hiệu">Nhận diện thương hiệu</option>
               <option value="Chiến dịch mùa vụ">Chiến dịch mùa vụ</option>
             </select>
           </div>
+
+          <Input
+            label="Người phụ trách"
+            placeholder="VD: Chu Thị Hằng, Nguyễn Thu Huyền..."
+            value={taskAssignee}
+            onChange={(e) => setTaskAssignee(e.target.value)}
+          />
+
           <div>
-            <label className="font-semibold text-slate-700 block mb-1">Chủ đề / Tên nội dung</label>
-            <textarea
-              rows={2}
-              className="form-control form-control-sm text-[13px]"
-              value={taskTopic}
-              placeholder="Tiêu đề bài viết hoặc video..."
-              onChange={(e) => setTaskTopic(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="font-semibold text-slate-700 block mb-1">Tuần triển khai trong tháng</label>
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
+              Tuần triển khai trong tháng
+            </label>
             <div className="flex gap-2">
               {[1, 2, 3, 4].map((w) => {
                 const isSelected = taskWeeks.includes(w);
@@ -2978,7 +3088,11 @@ export const MarketingPlanPage: React.FC = () => {
                   <button
                     key={w}
                     type="button"
-                    className={`btn btn-sm ${isSelected ? 'btn-primary' : 'btn-outline-secondary'} text-xs font-bold py-1 px-3`}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center cursor-pointer border ${
+                      isSelected
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
                     onClick={() => {
                       setTaskWeeks((prev) => (prev.includes(w) ? prev.filter((item) => item !== w) : [...prev, w].sort()));
                     }}
@@ -2989,13 +3103,16 @@ export const MarketingPlanPage: React.FC = () => {
               })}
             </div>
           </div>
-          <div>
-            <label className="font-semibold text-slate-700 block mb-1">Người phụ trách</label>
-            <input
-              type="text"
-              className="form-control form-control-sm text-[13px]"
-              value={taskAssignee}
-              onChange={(e) => setTaskAssignee(e.target.value)}
+
+          <div className="flex-1 flex flex-col min-h-[140px]">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+              Chủ đề / Tên nội dung
+            </label>
+            <textarea
+              className="w-full flex-1 min-h-[130px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all resize-none"
+              value={taskTopic}
+              placeholder="Mô tả tiêu đề bài viết, kịch bản video hoặc hoạt động triển khai..."
+              onChange={(e) => setTaskTopic(e.target.value)}
             />
           </div>
         </div>
@@ -3003,20 +3120,18 @@ export const MarketingPlanPage: React.FC = () => {
 
       {/* 4. Product Modal (Step 3) */}
       {showProductModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] border border-slate-200">
             <div className="p-3 border-b flex justify-between items-center bg-slate-50">
-              <h5 className="font-bold text-sm text-slate-800 uppercase">
+              <h5 className="font-bold text-sm text-slate-800 uppercase mb-0">
                 Chọn sản phẩm trọng tâm - Tuần {activeProductWeek} (Tháng {selectedMonth})
               </h5>
-              <button className="text-slate-400 hover:text-slate-700" onClick={() => setShowProductModal(false)}>
+              <button className="text-slate-400 hover:text-slate-700 cursor-pointer" onClick={() => setShowProductModal(false)}>
                 <X size={20} />
               </button>
             </div>
-            <div className="p-3 border-b">
-              <input
-                type="text"
-                className="form-control form-control-sm text-xs"
+            <div className="p-3 border-b bg-white">
+              <Input
                 placeholder="Tìm kiếm sản phẩm hoặc danh mục..."
                 value={productSearchQuery}
                 onChange={(e) => setProductSearchQuery(e.target.value)}
@@ -3034,7 +3149,7 @@ export const MarketingPlanPage: React.FC = () => {
                   return (
                     <label
                       key={i}
-                      className="flex items-center gap-2 p-2 rounded hover:bg-slate-50 border border-slate-100 cursor-pointer"
+                      className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 border border-slate-100 cursor-pointer transition-colors"
                     >
                       <input
                         type="checkbox"
@@ -3043,6 +3158,7 @@ export const MarketingPlanPage: React.FC = () => {
                           if (e.target.checked) setTempSelectedProducts([...tempSelectedProducts, name]);
                           else setTempSelectedProducts(tempSelectedProducts.filter((n) => n !== name));
                         }}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                       />
                       <span className="font-medium text-slate-800">{name}</span>
                     </label>
@@ -3050,11 +3166,12 @@ export const MarketingPlanPage: React.FC = () => {
                 })}
             </div>
             <div className="p-3 border-t bg-slate-50 flex justify-end gap-2">
-              <button className="btn btn-sm btn-outline-secondary text-xs" onClick={() => setShowProductModal(false)}>
+              <Button variant="outline" size="sm" onClick={() => setShowProductModal(false)}>
                 Đóng
-              </button>
-              <button
-                className="btn btn-sm btn-primary text-xs"
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={() => {
                   if (activeProductWeek !== null) {
                     setMonthlyProducts((prev) => {
@@ -3067,7 +3184,7 @@ export const MarketingPlanPage: React.FC = () => {
                 }}
               >
                 Xác nhận ({tempSelectedProducts.length})
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -3075,32 +3192,30 @@ export const MarketingPlanPage: React.FC = () => {
 
       {/* 5. Monthly Theme Modal (Step 3) */}
       {showThemeModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col border border-slate-200">
             <div className="p-3 border-b flex justify-between items-center bg-slate-50">
-              <h5 className="font-bold text-sm text-slate-800 uppercase">
+              <h5 className="font-bold text-sm text-slate-800 uppercase mb-0">
                 Chủ đề & Thông điệp tháng {selectedMonth}
               </h5>
-              <button className="text-slate-400 hover:text-slate-700" onClick={() => setShowThemeModal(false)}>
+              <button className="text-slate-400 hover:text-slate-700 cursor-pointer" onClick={() => setShowThemeModal(false)}>
                 <X size={20} />
               </button>
             </div>
-            <div className="p-3 flex flex-col gap-3 text-xs">
+            <div className="p-3.5 flex flex-col gap-3 text-xs">
+              <Input
+                label="Chủ đề chính trong tháng"
+                placeholder="VD: SEAJONG – CÔNG NGHỆ HÀN QUỐC CHO KHÔNG GIAN SỐNG..."
+                value={monthlyThemeTopic}
+                onChange={(e) => setMonthlyThemeTopic(e.target.value)}
+              />
               <div>
-                <label className="font-semibold text-slate-600 block mb-1">Chủ đề chính trong tháng</label>
-                <input
-                  type="text"
-                  className="form-control form-control-sm text-xs font-semibold"
-                  value={monthlyThemeTopic}
-                  placeholder="VD: SEAJONG – CÔNG NGHỆ HÀN QUỐC CHO KHÔNG GIAN SỐNG..."
-                  onChange={(e) => setMonthlyThemeTopic(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="font-semibold text-slate-600 block mb-1">Mục tiêu truyền thông trọng tâm</label>
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                  Mục tiêu truyền thông trọng tâm
+                </label>
                 <textarea
                   rows={3}
-                  className="form-control form-control-sm text-xs"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all resize-none"
                   value={monthlyThemeContent}
                   placeholder="Mô tả thông điệp truyền thông cốt lõi..."
                   onChange={(e) => setMonthlyThemeContent(e.target.value)}
@@ -3108,11 +3223,12 @@ export const MarketingPlanPage: React.FC = () => {
               </div>
             </div>
             <div className="p-3 border-t bg-slate-50 flex justify-end gap-2">
-              <button className="btn btn-sm btn-outline-secondary text-xs" onClick={() => setShowThemeModal(false)}>
+              <Button variant="outline" size="sm" onClick={() => setShowThemeModal(false)}>
                 Hủy
-              </button>
-              <button
-                className="btn btn-sm btn-primary text-xs"
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={() => {
                   setMonthlyThemes((prev) => {
                     const filtered = prev.filter((t) => t.month !== selectedMonth);
@@ -3123,7 +3239,7 @@ export const MarketingPlanPage: React.FC = () => {
                 }}
               >
                 Lưu chủ đề
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -3131,44 +3247,37 @@ export const MarketingPlanPage: React.FC = () => {
 
       {/* 6. Holiday Modal (Step 3) */}
       {showHolidayModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col border border-slate-200">
             <div className="p-3 border-b flex justify-between items-center bg-slate-50">
-              <h5 className="font-bold text-sm text-slate-800 uppercase">
+              <h5 className="font-bold text-sm text-slate-800 uppercase mb-0">
                 Thêm ngày lễ trong tháng {selectedMonth}
               </h5>
-              <button className="text-slate-400 hover:text-slate-700" onClick={() => setShowHolidayModal(false)}>
+              <button className="text-slate-400 hover:text-slate-700 cursor-pointer" onClick={() => setShowHolidayModal(false)}>
                 <X size={20} />
               </button>
             </div>
-            <div className="p-3 flex flex-col gap-3 text-xs">
-              <div>
-                <label className="font-semibold text-slate-600 block mb-1">Ngày (dd/MM)</label>
-                <input
-                  type="text"
-                  className="form-control form-control-sm text-xs"
-                  placeholder="VD: 15/08"
-                  value={newHolidayDate}
-                  onChange={(e) => setNewHolidayDate(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="font-semibold text-slate-600 block mb-1">Tên ngày lễ / sự kiện</label>
-                <input
-                  type="text"
-                  className="form-control form-control-sm text-xs"
-                  placeholder="VD: Lễ Vu Lan báo hiếu..."
-                  value={newHolidayName}
-                  onChange={(e) => setNewHolidayName(e.target.value)}
-                />
-              </div>
+            <div className="p-3.5 flex flex-col gap-3 text-xs">
+              <Input
+                label="Ngày (dd/MM)"
+                placeholder="VD: 15/08"
+                value={newHolidayDate}
+                onChange={(e) => setNewHolidayDate(e.target.value)}
+              />
+              <Input
+                label="Tên ngày lễ / sự kiện"
+                placeholder="VD: Lễ Vu Lan báo hiếu..."
+                value={newHolidayName}
+                onChange={(e) => setNewHolidayName(e.target.value)}
+              />
             </div>
             <div className="p-3 border-t bg-slate-50 flex justify-end gap-2">
-              <button className="btn btn-sm btn-outline-secondary text-xs" onClick={() => setShowHolidayModal(false)}>
+              <Button variant="outline" size="sm" onClick={() => setShowHolidayModal(false)}>
                 Hủy
-              </button>
-              <button
-                className="btn btn-sm btn-primary text-xs"
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={() => {
                   if (newHolidayDate && newHolidayName) {
                     setCustomHolidays((prev) => [
@@ -3183,7 +3292,7 @@ export const MarketingPlanPage: React.FC = () => {
                 }}
               >
                 Thêm ngày lễ
-              </button>
+              </Button>
             </div>
           </div>
         </div>
