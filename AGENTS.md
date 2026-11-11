@@ -24,4 +24,5 @@
    - Dùng **`Pagination`** (phân trang chuẩn enterprise).
 
 4. **Quy tắc thiết kế Form / Offcanvas / Modal**:
+   - **Kích thước Offcanvas chuẩn toàn dự án**: Tất cả các component `Offcanvas` bắt buộc phải có chiều rộng cố định là **`400px`** (`width="400px"`). Không được tùy tiện dùng các kích thước khác.
    - **KHÔNG hiển thị các đoạn ghi chú / giải thích dài dòng** (ví dụ: các hộp văn bản `⛔ Đã khóa nút...`, `✅ Hợp lệ trong định mức...`, `Lưu ý: ...`) bên trong Form, Offcanvas hoặc Modal. Chỉ hiển thị các trường dữ liệu và chỉ số kiểm soát ngắn gọn, trực quan.

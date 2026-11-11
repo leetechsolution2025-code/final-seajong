@@ -800,7 +800,7 @@ const RequestsTab: React.FC<{
         onClose={() => setShowCreateReqPanel(false)}
         title="Tạo đề xuất cấp phát văn phòng phẩm"
         icon={<ClipboardCheck size={20} />}
-        width="540px"
+        width="400px"
         bodyClassName="flex flex-col h-full !p-4"
         footer={
           <div className="flex items-center justify-between gap-2 w-full">
@@ -1758,7 +1758,7 @@ const InventoryTab: React.FC<{
         onClose={() => setShowItemPanel(false)}
         title={editingItem ? 'Cập nhật vật tư' : 'Thêm vật tư mới'}
         icon={editingItem ? <PencilSquare size={20} /> : <BoxSeam size={20} />}
-        width="440px"
+        width="400px"
         confirmText={editingItem ? 'Lưu cập nhật' : 'Tạo vật tư'}
         cancelText="Hủy bỏ"
         onConfirm={handleSaveItem}
@@ -2286,7 +2286,7 @@ const NormsTab: React.FC<{
             : 'Định mức vật tư chi tiết'
         }
         icon={<Sliders size={20} />}
-        width="520px"
+        width="400px"
         footer={
           <div className="flex justify-end w-full">
             <Button variant="secondary" onClick={() => setShowNormPanel(false)}>
