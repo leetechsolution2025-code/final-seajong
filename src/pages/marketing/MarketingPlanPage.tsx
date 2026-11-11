@@ -2707,8 +2707,8 @@ export const MarketingPlanPage: React.FC = () => {
               <div className="flex items-center gap-2.5">
                 <SectionTitle
                   title={`Kế hoạch hoạt động tháng ${selectedMonth} - Năm ${selectedYear}`}
-                  className="mb-0"
-                  style={{ color: 'var(--primary)', fontSize: 13, letterSpacing: '0.02em' }}
+                  className="mb-0 uppercase"
+                  style={{ color: 'var(--primary)', fontSize: 13, letterSpacing: '0.02em', textTransform: 'uppercase' }}
                 />
                 {(() => {
                   const currentTheme = monthlyThemes.find((t) => t.month === selectedMonth);
@@ -2949,8 +2949,8 @@ export const MarketingPlanPage: React.FC = () => {
                 <div className="flex items-center justify-between pb-2 border-b border-slate-200/80 shrink-0">
                   <SectionTitle
                     title={`Phân bổ ngân sách theo tháng - Năm ${selectedYear}`}
-                    className="mb-0"
-                    style={{ color: 'var(--primary)', fontSize: 13, letterSpacing: '0.02em' }}
+                    className="mb-0 uppercase"
+                    style={{ color: 'var(--primary)', fontSize: 13, letterSpacing: '0.02em', textTransform: 'uppercase' }}
                   />
                   <div className="flex items-center gap-3">
                     <div style={{ width: 'auto' }}>

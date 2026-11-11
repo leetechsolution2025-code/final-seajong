@@ -98,7 +98,11 @@ export const HOLIDAYS_LIST_BY_MONTH: Record<number, { dateStr: string; name: str
     { dateStr: '20/10', name: 'Ngày Phụ nữ Việt Nam 20/10', weekNum: 3 },
     { dateStr: '31/10', name: 'Lễ hội Halloween', weekNum: 4 },
   ],
-  11: [{ dateStr: '20/11', name: 'Ngày Nhà giáo Việt Nam 20/11', weekNum: 3 }],
+  11: [
+    { dateStr: '18/11', name: 'Ngày hội Đại đoàn kết toàn dân tộc', weekNum: 3 },
+    { dateStr: '20/11', name: 'Ngày Nhà giáo Việt Nam 20/11', weekNum: 3 },
+    { dateStr: '23/11', name: 'Ngày Di sản Văn hóa Việt Nam', weekNum: 4 },
+  ],
   12: [
     { dateStr: '22/12', name: 'Thành lập Quân đội Nhân dân VN', weekNum: 4 },
     { dateStr: '25/12', name: 'Lễ Giáng sinh (Noel)', weekNum: 4 },
