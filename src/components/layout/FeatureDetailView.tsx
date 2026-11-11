@@ -9,6 +9,7 @@ import { Input } from '../common/Input';
 import { Select } from '../common/Select';
 import { EmployeesPage } from '../../pages/hr/EmployeesPage';
 import { StationeryToolsPage } from '../../pages/hr/StationeryToolsPage';
+import { SalaryAdjustmentsPage } from '../../pages/hr/SalaryAdjustmentsPage';
 import { DocumentApprovalPage } from '../../pages/departments/bom/DocumentApprovalPage';
 
 interface FeatureDetailViewProps {
@@ -42,6 +43,10 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
 
   if (menuKey === 'stationery') {
     return <StationeryToolsPage />;
+  }
+
+  if (menuKey === 'salary-adjustments' || menuKey === 'salary_adjustments' || menuKey === 'dieu-chinh-thu-nhap') {
+    return <SalaryAdjustmentsPage />;
   }
 
   if (menuKey === 'approvals' || menuKey === 'requests_approvals' || menuKey === 'hr_requests_approvals') {

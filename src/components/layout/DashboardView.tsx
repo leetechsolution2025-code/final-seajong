@@ -11,6 +11,7 @@ import { TrainingPage } from '../../pages/hr/TrainingPage';
 import { AttendancePayrollPage } from '../../pages/hr/AttendancePayrollPage';
 import { InsurancePage } from '../../pages/hr/InsurancePage';
 import { StationeryToolsPage } from '../../pages/hr/StationeryToolsPage';
+import { SalaryAdjustmentsPage } from '../../pages/hr/SalaryAdjustmentsPage';
 import { MarketingProductsPage } from '../../pages/marketing/MarketingProductsPage';
 import { BrandIdentityPage } from '../../pages/marketing/BrandIdentityPage';
 import { MarketingPlanPage } from '../../pages/marketing/MarketingPlanPage';
@@ -451,6 +452,15 @@ export const DashboardView: React.FC = () => {
     activeMenuKey === 'van-phong-pham'
   ) {
     return <StationeryToolsPage />;
+  }
+
+  // Khi người dùng chọn Điều chỉnh thu nhập & Thưởng KPI
+  if (
+    activeMenuKey === 'salary-adjustments' ||
+    activeMenuKey === 'salary_adjustments' ||
+    activeMenuKey === 'dieu-chinh-thu-nhap'
+  ) {
+    return <SalaryAdjustmentsPage />;
   }
 
   // Khi người dùng chọn Chấm công cá nhân

@@ -3366,6 +3366,343 @@ app.delete('/api/hr/employees/:id', async (req, res) => {
   }
 });
 
+// ============================================================================
+// HR SALARY ADJUSTMENT & KPI BONUS APIS
+// ============================================================================
+
+app.get('/api/hr/salary-adjustment', async (req, res) => {
+  try {
+    let requests = await prisma.salaryAdjustmentRequest.findMany({
+      include: {
+        employee: {
+          select: {
+            id: true,
+            fullName: true,
+            code: true,
+            avatarUrl: true,
+            departmentName: true,
+            departmentCode: true,
+            position: true,
+            baseSalary: true,
+          }
+        },
+        requester: {
+          select: {
+            id: true,
+            fullName: true,
+            code: true,
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    // Auto-seed initial realistic data if database is empty
+    if (requests.length === 0) {
+      const emps = await prisma.employee.findMany({
+        take: 8,
+        select: { id: true, fullName: true, code: true, departmentName: true, position: true, baseSalary: true }
+      });
+
+      if (emps.length > 0) {
+        const sampleConfigs = [
+          {
+            empIdx: 0,
+            status: 'PENDING',
+            type: 'INCREASE',
+            cur: 12000000,
+            prop: 14000000,
+            curAllowances: { meal: 730000, fuel: 500000 },
+            propAllowances: { meal: 730000, fuel: 800000, phone: 300000 },
+            reason: 'Hoàn thành xuất sắc nhiệm vụ và đạt 120% chỉ tiêu KPI Quý 3/2026',
+            daysAgo: 2,
+          },
+          {
+            empIdx: 1 % emps.length,
+            status: 'REVIEWING',
+            type: 'INCREASE',
+            cur: 15000000,
+            prop: 17500000,
+            curAllowances: { meal: 730000, phone: 500000 },
+            propAllowances: { meal: 730000, fuel: 1000000, phone: 500000 },
+            reason: 'Tăng lương niên hạn định kỳ 12 tháng theo quy chế công ty',
+            daysAgo: 5,
+          },
+          {
+            empIdx: 2 % emps.length,
+            status: 'SUBMITTED',
+            type: 'INCREASE',
+            cur: 10500000,
+            prop: 13000000,
+            curAllowances: { meal: 730000 },
+            propAllowances: { meal: 730000, seniority: 1000000, fuel: 500000 },
+            reason: 'Bổ nhiệm vị trí phụ trách nhóm và tiếp nhận phụ cấp trách nhiệm mới',
+            daysAgo: 8,
+          },
+          {
+            empIdx: 3 % emps.length,
+            status: 'WAITING_APPROVAL',
+            type: 'RESTRUCTURE',
+            cur: 18000000,
+            prop: 21500000,
+            curAllowances: { meal: 730000, fuel: 1000000 },
+            propAllowances: { meal: 730000, fuel: 1200000, phone: 1000000, seniority: 800000 },
+            reason: 'Tái cơ cấu dải lương và phụ cấp theo khung chuẩn hóa doanh nghiệp 2026',
+            daysAgo: 10,
+          },
+          {
+            empIdx: 4 % emps.length,
+            status: 'APPROVED',
+            type: 'INCREASE',
+            cur: 11000000,
+            prop: 13500000,
+            curAllowances: { meal: 730000 },
+            propAllowances: { meal: 730000, fuel: 500000 },
+            reason: 'Ban Giám đốc đã phê duyệt mức tăng lương niên hạn và thưởng kết quả dự án',
+            daysAgo: 14,
+          },
+          {
+            empIdx: 5 % emps.length,
+            status: 'COMPLETED',
+            type: 'INCREASE',
+            cur: 9500000,
+            prop: 11000000,
+            curAllowances: { meal: 730000 },
+            propAllowances: { meal: 730000, fuel: 500000 },
+            reason: 'Hoàn tất thời gian thử thách năng lực, ký hợp đồng nâng bậc lương chính thức',
+            daysAgo: 20,
+          }
+        ];
+
+        for (const cfg of sampleConfigs) {
+          const targetEmp = emps[cfg.empIdx];
+          const createdDate = new Date(Date.now() - cfg.daysAgo * 86400000);
+          await prisma.salaryAdjustmentRequest.create({
+            data: {
+              employeeId: targetEmp.id,
+              adjustmentType: cfg.type,
+              currentBaseSalary: cfg.cur,
+              proposedBaseSalary: cfg.prop,
+              currentAllowances: JSON.stringify(cfg.curAllowances),
+              proposedAllowances: JSON.stringify(cfg.propAllowances),
+              reason: cfg.reason,
+              effectiveDate: new Date(Date.now() + 15 * 86400000),
+              status: cfg.status,
+              createdAt: createdDate,
+            }
+          });
+        }
+
+        // Re-query after seed
+        requests = await prisma.salaryAdjustmentRequest.findMany({
+          include: {
+            employee: {
+              select: {
+                id: true,
+                fullName: true,
+                code: true,
+                avatarUrl: true,
+                departmentName: true,
+                departmentCode: true,
+                position: true,
+                baseSalary: true,
+              }
+            },
+            requester: {
+              select: {
+                id: true,
+                fullName: true,
+                code: true,
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' }
+        });
+      }
+    }
+
+    const [departments, positions] = await Promise.all([
+      prisma.departmentCategory.findMany({ select: { code: true, nameVi: true } }),
+      prisma.category.findMany({ where: { type: 'position' }, select: { code: true, name: true } })
+    ]);
+
+    const deptMap = Object.fromEntries(departments.map(d => [d.code, d.nameVi]));
+    const posMap = Object.fromEntries(positions.map(p => [p.code, p.name]));
+
+    const result = requests.map(item => ({
+      ...item,
+      employee: item.employee ? {
+        ...item.employee,
+        departmentName: deptMap[item.employee.departmentCode] || item.employee.departmentName || 'Chưa phân bổ',
+        positionName: posMap[item.employee.position] || item.employee.position || 'Nhân viên'
+      } : null
+    }));
+
+    res.json(result);
+  } catch (error) {
+    console.error('Lỗi GET /api/hr/salary-adjustment:', error);
+    res.status(500).json({ error: 'Lỗi khi tải dữ liệu điều chỉnh thu nhập' });
+  }
+});
+
+app.post('/api/hr/salary-adjustment', async (req, res) => {
+  try {
+    const {
+      employeeId,
+      adjustmentType = 'INCREASE',
+      currentBaseSalary,
+      proposedBaseSalary,
+      currentAllowances,
+      proposedAllowances,
+      reason,
+      effectiveDate,
+      requesterId
+    } = req.body;
+
+    if (!employeeId) {
+      return res.status(400).json({ error: 'Vui lòng chọn nhân viên' });
+    }
+
+    const created = await prisma.salaryAdjustmentRequest.create({
+      data: {
+        employeeId,
+        adjustmentType,
+        currentBaseSalary: currentBaseSalary ? Number(currentBaseSalary) : null,
+        proposedBaseSalary: proposedBaseSalary ? Number(proposedBaseSalary) : null,
+        currentAllowances: currentAllowances ? (typeof currentAllowances === 'string' ? currentAllowances : JSON.stringify(currentAllowances)) : null,
+        proposedAllowances: proposedAllowances ? (typeof proposedAllowances === 'string' ? proposedAllowances : JSON.stringify(proposedAllowances)) : null,
+        reason: reason || 'Đề xuất điều chỉnh thu nhập',
+        effectiveDate: effectiveDate ? new Date(effectiveDate) : null,
+        requesterId: requesterId || null,
+        status: 'PENDING'
+      }
+    });
+
+    res.status(201).json(created);
+  } catch (error) {
+    console.error('Lỗi POST /api/hr/salary-adjustment:', error);
+    res.status(500).json({ error: error.message || 'Lỗi khi tạo yêu cầu điều chỉnh' });
+  }
+});
+
+app.patch('/api/hr/salary-adjustment/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = { ...req.body };
+
+    if (updateData.effectiveDate) updateData.effectiveDate = new Date(updateData.effectiveDate);
+    if (updateData.currentBaseSalary !== undefined) updateData.currentBaseSalary = Number(updateData.currentBaseSalary);
+    if (updateData.proposedBaseSalary !== undefined) updateData.proposedBaseSalary = Number(updateData.proposedBaseSalary);
+    if (updateData.currentAllowances && typeof updateData.currentAllowances === 'object') {
+      updateData.currentAllowances = JSON.stringify(updateData.currentAllowances);
+    }
+    if (updateData.proposedAllowances && typeof updateData.proposedAllowances === 'object') {
+      updateData.proposedAllowances = JSON.stringify(updateData.proposedAllowances);
+    }
+
+    const updated = await prisma.salaryAdjustmentRequest.update({
+      where: { id },
+      data: updateData
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Lỗi PATCH /api/hr/salary-adjustment/:id:', error);
+    res.status(500).json({ error: error.message || 'Lỗi khi cập nhật yêu cầu' });
+  }
+});
+
+app.post('/api/hr/salary-adjustment/:id/finalize', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const request = await prisma.salaryAdjustmentRequest.findUnique({
+      where: { id },
+      include: { employee: true }
+    });
+
+    if (!request) {
+      return res.status(404).json({ error: 'Không tìm thấy hồ sơ điều chỉnh' });
+    }
+
+    const proposedAllowances = request.proposedAllowances ? JSON.parse(request.proposedAllowances) : {};
+
+    await prisma.$transaction(async (tx) => {
+      if (request.proposedBaseSalary) {
+        await tx.employee.update({
+          where: { id: request.employeeId },
+          data: {
+            baseSalary: request.proposedBaseSalary,
+          }
+        });
+      }
+
+      await tx.employmentHistory.create({
+        data: {
+          employeeId: request.employeeId,
+          type: 'ADJUSTMENT',
+          effectiveDate: request.effectiveDate || new Date(),
+          notes: `Điều chỉnh thu nhập: ${request.adjustmentType === 'INCREASE' ? 'Tăng lương' : request.adjustmentType === 'DECREASE' ? 'Giảm lương' : 'Tái cơ cấu'}. Lý do: ${request.reason || 'N/A'}. Lương mới: ${request.proposedBaseSalary ? Number(request.proposedBaseSalary).toLocaleString('vi-VN') + ' đ' : 'N/A'}`,
+        }
+      });
+
+      await tx.salaryAdjustmentRequest.update({
+        where: { id },
+        data: { status: 'COMPLETED' }
+      });
+    });
+
+    res.json({ success: true, message: 'Đã cập nhật lương vào hồ sơ nhân sự thành công' });
+  } catch (error) {
+    console.error('Lỗi finalize salary adjustment:', error);
+    res.status(500).json({ error: error.message || 'Lỗi khi cập nhật dữ liệu vào hồ sơ nhân sự' });
+  }
+});
+
+app.post('/api/hr/salary-adjustment/:id/recall', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updated = await prisma.salaryAdjustmentRequest.update({
+      where: { id },
+      data: { status: 'SUBMITTED' }
+    });
+    res.json({ success: true, updated });
+  } catch (error) {
+    console.error('Lỗi recall salary adjustment:', error);
+    res.status(500).json({ error: error.message || 'Lỗi khi thu hồi tờ trình' });
+  }
+});
+
+app.post('/api/hr/salary-adjustment/submit-to-director', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Không có hồ sơ nào được chọn' });
+    }
+
+    await prisma.salaryAdjustmentRequest.updateMany({
+      where: { id: { in: ids } },
+      data: { status: 'WAITING_APPROVAL' }
+    });
+
+    res.json({ success: true, count: ids.length, message: `Đã trình phê duyệt ${ids.length} hồ sơ đến Ban Giám đốc.` });
+  } catch (error) {
+    console.error('Lỗi submit-to-director:', error);
+    res.status(500).json({ error: error.message || 'Lỗi khi trình phê duyệt' });
+  }
+});
+
+app.delete('/api/hr/salary-adjustment/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.salaryAdjustmentRequest.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Lỗi DELETE salary-adjustment:', error);
+    res.status(500).json({ error: error.message || 'Lỗi khi xóa hồ sơ' });
+  }
+});
+
+
 
 
 app.get('/api/departments', async (req, res) => {
