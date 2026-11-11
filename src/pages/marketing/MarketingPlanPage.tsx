@@ -1001,57 +1001,34 @@ export const MarketingPlanPage: React.FC = () => {
     },
   ];
 
-  // ── STEP 2: CONTENT PILLARS & AD PLANS DATA ──────────────────────────────
-  const baseContentPlans: ContentPlanItem[] = [
-    {
-      id: 'cp_1',
-      pillar: 'Nhận diện thương hiệu (Branding)',
-      purpose: 'Tăng mức độ tin cậy và nhận diện thương hiệu sen vòi Seajong Hàn Quốc',
-      role: 'Định vị thương hiệu cao cấp tiêu chuẩn Hàn Quốc',
-      details: 'Video giới thiệu nhà máy đúc đồng 59-1, hình ảnh catalogue showroom',
-      budget: 15000000,
-      postsCount: 12,
-    },
-    {
-      id: 'cp_2',
-      pillar: 'Sản phẩm & Tính năng (Product USP)',
-      purpose: 'Thúc đẩy mua sắm bộ sen phím đàn SJ-SH và vòi chậu Titan Gray',
-      role: 'Chuyển đổi khách hàng tiềm năng thành đơn hàng',
-      details: 'Bài viết so sánh chất lượng mạ PVD, video thử áp lực nước 16 bar',
-      budget: 10000000,
-      postsCount: 16,
-    },
-  ];
+  // ── STEP 2: CONTENT PILLARS & AD PLANS DATA (FROM DB / USER) ──────────────
+  const contentPlanIds = useMemo(() => {
+    return Array.from(
+      new Set([
+        ...customContentPlanIds,
+        ...Object.keys(editedContentPlan).filter((k) => k !== 'cp_1' && k !== 'cp_2'),
+      ])
+    );
+  }, [customContentPlanIds, editedContentPlan]);
 
-  const contentPlanList = [
-    ...baseContentPlans.map((item) => {
-      const ed = editedContentPlan[item.id];
-      return {
-        id: item.id,
-        pillar: ed ? ed.pillar : item.pillar,
-        purpose: ed ? ed.purpose : item.purpose,
-        role: ed ? ed.role : item.role,
-        details: ed ? ed.details : item.details,
-        budget: ed ? ed.budget : item.budget,
-        postsCount: ed ? ed.postsCount : item.postsCount,
-      };
-    }),
-    ...customContentPlanIds.map((id) => {
+  const contentPlanList = useMemo(() => {
+    return contentPlanIds.map((id) => {
       const ed = editedContentPlan[id] || {};
       return {
         id,
         pillar: ed.pillar || 'Tuyến nội dung mới',
         purpose: ed.purpose || '',
         role: ed.role || '',
-        details: ed.details || 'Nội dung chi tiết...',
-        budget: ed.budget || 10000000,
-        postsCount: ed.postsCount || 5,
+        details: ed.details || '',
+        budget: Number(ed.budget) || 0,
+        postsCount: Number(ed.postsCount) || 0,
+        ratioStr: ed.ratioStr || '0',
       };
-    }),
-  ];
+    });
+  }, [contentPlanIds, editedContentPlan]);
 
-  const totalContentBudget = contentPlanList.reduce((s, i) => s + (i.budget || 0), 0);
-  const totalContentPosts = contentPlanList.reduce((s, i) => s + (i.postsCount || 0), 0);
+  const totalContentBudget = useMemo(() => contentPlanList.reduce((s, i) => s + (i.budget || 0), 0), [contentPlanList]);
+  const totalContentPosts = useMemo(() => contentPlanList.reduce((s, i) => s + (i.postsCount || 0), 0), [contentPlanList]);
 
   const contentPlanRows = useMemo(() => {
     const list: ContentPlanItem[] = [
@@ -1068,6 +1045,8 @@ export const MarketingPlanPage: React.FC = () => {
             parentId: parent.id,
             childId: child.id,
             pillar: child.pillar,
+            purpose: '',
+            role: '',
             details: child.details,
             budget: child.budget || 0,
             postsCount: 1,
@@ -1078,7 +1057,7 @@ export const MarketingPlanPage: React.FC = () => {
       }
     });
     return list;
-  }, [contentPlanList, expandedParentIds]);
+  }, [contentPlanList, expandedParentIds, totalContentBudget, totalContentPosts]);
 
   const contentPlanColumns: TableColumn<ContentPlanItem>[] = [
     {
@@ -1112,7 +1091,26 @@ export const MarketingPlanPage: React.FC = () => {
     {
       header: 'Mục tiêu & Vai trò',
       align: 'left',
-      render: (row) => (row.isTotal || row.isChildRow ? null : <span style={{ fontSize: 12 }}>{row.purpose}</span>),
+      render: (row) => {
+        if (row.isTotal || row.isChildRow) return null;
+        if (!row.purpose && !row.role) return <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>—</span>;
+        return (
+          <div className="space-y-1.5 py-0.5 text-xs leading-relaxed">
+            {row.purpose && (
+              <div>
+                <span className="font-semibold text-slate-800 dark:text-slate-100">Mục tiêu: </span>
+                <span className="text-muted-foreground">{row.purpose}</span>
+              </div>
+            )}
+            {row.role && (
+              <div>
+                <span className="font-semibold text-slate-800 dark:text-slate-100">Vai trò: </span>
+                <span className="text-muted-foreground">{row.role}</span>
+              </div>
+            )}
+          </div>
+        );
+      },
     },
     {
       header: 'Nội dung chi tiết',
@@ -1183,78 +1181,65 @@ export const MarketingPlanPage: React.FC = () => {
     },
   ];
 
-  // Ad Plans data
-  const baseAdPlans: AdPlanItem[] = [
-    {
-      id: 'ad_1',
-      objective: 'Tìm kiếm Đại lý & Nhà phân phối',
-      topic: 'Chính sách chiết khấu mở đại lý thiết bị vệ sinh Seajong 2026',
-      channel: 'Facebook Ads + Google Ads',
-      content: 'Chính sách hỗ trợ 100% biển bảng kệ mẫu, chiết khấu lên đến 38%',
-      landingPage: 'https://seajong.com/dai-ly',
-      budget: 15000000,
-      region: 'Toàn quốc (Ưu tiên Miền Bắc & Miền Trung)',
-      assignee: 'Nguyễn Thu Huyền',
-      startDate: '2026-07-01',
-      endDate: '2026-12-31',
-      audience: 'Chủ cửa hàng VLXD, thầu thợ, đại lý điện nước',
-    },
-    {
-      id: 'ad_2',
-      objective: 'Quảng bá Bộ sưu tập Sen phím đàn SJ-SH',
-      topic: 'Bộ sưu tập sen tắm phím đàn hiển thị nhiệt độ thông minh',
-      channel: 'TikTok Ads + Facebook Video',
-      content: 'Video viral trải nghiệm thực tế phím đàn chịu áp 16 bar tại chung cư cao cấp',
-      landingPage: 'https://seajong.com/sen-tam',
-      budget: 10000000,
-      region: 'Hà Nội, TP.HCM, Đà Nẵng',
-      assignee: 'Chu Thị Hằng',
-      startDate: '2026-08-01',
-      endDate: '2026-10-31',
-      audience: 'Gia đình trẻ 25-45 tuổi, chuẩn bị hoàn thiện nhà mới',
-    },
-  ];
+  // Ad Plans data (from DB / User)
+  const allAdPlanIds = useMemo(() => {
+    return Array.from(
+      new Set([
+        ...customAdPlanIds,
+        ...Object.keys(editedAdPlan).filter((k) => k !== 'ad_1' && k !== 'ad_2'),
+      ])
+    );
+  }, [customAdPlanIds, editedAdPlan]);
 
-  const adPlanList = [
-    ...baseAdPlans.map((item) => {
-      const ed = editedAdPlan[item.id];
-      return {
-        id: item.id,
-        objective: ed ? ed.objective : item.objective,
-        topic: ed ? ed.topic : item.topic,
-        channel: ed ? ed.channel : item.channel,
-        content: ed ? ed.content : item.content,
-        landingPage: ed ? ed.landingPage : item.landingPage,
-        budget: ed ? ed.budget : item.budget,
-        region: ed ? ed.region : item.region,
-        assignee: ed ? ed.assignee : item.assignee,
-        startDate: ed ? ed.startDate : item.startDate,
-        endDate: ed ? ed.endDate : item.endDate,
-        audience: ed ? ed.audience : item.audience,
-      };
-    }),
-    ...customAdPlanIds.map((id) => {
+  const adPlanList = useMemo(() => {
+    return allAdPlanIds.map((id) => {
       const ed = editedAdPlan[id] || {};
+      let childrenBudget = 0;
+      const childrenChannels: string[] = [];
+      const childrenContent: string[] = [];
+      const childrenLandingPages: string[] = [];
+
+      if (ed.details) {
+        try {
+          const parsed = JSON.parse(ed.details);
+          if (Array.isArray(parsed.children)) {
+            parsed.children.forEach((c: any) => {
+              if (c.budget) childrenBudget += Number(c.budget) || 0;
+              if (c.pillar) childrenChannels.push(c.pillar);
+              else if (c.channel) childrenChannels.push(c.channel);
+              if (c.details) childrenContent.push(c.details);
+              if (c.landingPage) childrenLandingPages.push(c.landingPage);
+            });
+          }
+        } catch {}
+      }
+
+      const finalBudget = ed.budget > 0 ? Number(ed.budget) : childrenBudget;
+      const finalChannel = ed.channel || (childrenChannels.length ? Array.from(new Set(childrenChannels)).join(', ') : 'Đa kênh');
+      const finalContent = ed.content || (childrenContent.length ? childrenContent.join('\n') : '');
+      const finalLandingPage = ed.landingPage || (childrenLandingPages.length ? childrenLandingPages.join('\n') : '');
+
       return {
         id,
         objective: ed.objective || 'Mục tiêu mới',
         topic: ed.topic || '',
-        channel: ed.channel || 'Facebook Ads',
-        content: ed.content || '',
-        landingPage: ed.landingPage || '',
-        budget: ed.budget || 10000000,
+        channel: finalChannel,
+        content: finalContent,
+        landingPage: finalLandingPage,
+        budget: finalBudget,
         region: ed.region || 'Toàn quốc',
         assignee: ed.assignee || 'Nguyễn Thu Huyền',
-        startDate: ed.startDate || '2026-07-01',
+        startDate: ed.startDate || '2026-01-01',
         endDate: ed.endDate || '2026-12-31',
         audience: ed.audience || '',
+        details: ed.details || '',
       };
-    }),
-  ];
+    });
+  }, [allAdPlanIds, editedAdPlan]);
 
-  const totalAdBudget = adPlanList.reduce((s, i) => s + (i.budget || 0), 0);
+  const totalAdBudget = useMemo(() => adPlanList.reduce((s, i) => s + (i.budget || 0), 0), [adPlanList]);
 
-  const adPlanRows: AdPlanItem[] = [
+  const adPlanRows: AdPlanItem[] = useMemo(() => [
     {
       id: 'ad_sum',
       objective: 'Tổng cộng',
@@ -1270,7 +1255,7 @@ export const MarketingPlanPage: React.FC = () => {
       isTotal: true,
     },
     ...adPlanList.map((item, idx) => ({ ...item, stt: String(idx + 1) })),
-  ];
+  ], [adPlanList, totalAdBudget]);
 
   const adPlanColumns: TableColumn<AdPlanItem>[] = [
     { header: 'STT', width: 42, align: 'center', render: (row) => (row.isTotal ? '' : <span style={{ color: 'var(--muted-foreground)' }}>{row.stt}</span>) },
@@ -2131,7 +2116,7 @@ export const MarketingPlanPage: React.FC = () => {
                     }`}
                     onClick={() => setSubStep('pillar')}
                   >
-                    Tuyến nội dung ({contentPlanRows.length})
+                    Tuyến nội dung ({contentPlanList.length})
                   </button>
                   <button
                     type="button"
@@ -2142,7 +2127,7 @@ export const MarketingPlanPage: React.FC = () => {
                     }`}
                     onClick={() => setSubStep('ads')}
                   >
-                    Kế hoạch quảng cáo ({adPlanRows.length})
+                    Kế hoạch quảng cáo ({adPlanList.length})
                   </button>
                 </div>
                 <Badge variant="brand" className="text-xs">
