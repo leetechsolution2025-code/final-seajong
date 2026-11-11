@@ -652,3 +652,4 @@ export const MarketingCompetitorsPage: React.FC = () => {
 };
 
 export default MarketingCompetitorsPage;
+

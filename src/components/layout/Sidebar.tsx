@@ -206,6 +206,7 @@ const DEPT_SIDEBAR_CONFIGS: Record<string, { deptName: string; sections: NavSect
           { id: 'brand', name: 'Nhận diện thương hiệu' },
         ],
       },
+      /* Tạm thời ẩn chức năng Thị trường và đối thủ theo yêu cầu
       {
         id: 'market_competitors',
         label: 'Thị trường và đối thủ',
@@ -215,6 +216,7 @@ const DEPT_SIDEBAR_CONFIGS: Record<string, { deptName: string; sections: NavSect
           { id: 'market-analysis', name: 'Phân tích thị trường' },
         ],
       },
+      */
       { id: 'mkt_plan', label: 'Lập kế hoạch', icon: 'bi-calendar-check', flat: true },
       {
         id: 'events_dealers',

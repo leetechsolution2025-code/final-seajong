@@ -4,13 +4,13 @@ import { BrandButton } from "../../components/ui/BrandButton";
 
 export const MarketingMarketAnalysisPage: React.FC = () => {
   const [formData, setFormData] = useState({
-    campaignName: "Tung dòng sen vòi thông minh Seajong Wellness",
-    campaignDesc: "Chiến dịch định vị dòng sen vòi âm tường thế hệ mới, tích hợp công nghệ ổn nhiệt tự động 38°C và phím đàn hiển thị LED nhiệt độ cho phân khúc căn hộ chung cư cao cấp và biệt thự.",
-    products: ["Sen vòi PVD", "Smart Shower"] as string[],
+    campaignName: "",
+    campaignDesc: "",
+    products: [] as string[],
     targetSegment: "Cao cấp",
-    channels: ["Nhà thầu/KTS", "Showroom", "Digital Marketing"],
-    timeline: "Quý 4/2026",
-    budget: "500.000.000",
+    channels: [] as string[],
+    timeline: "",
+    budget: "",
   });
 
   const [loading, setLoading] = useState(false);
@@ -395,7 +395,35 @@ export const MarketingMarketAnalysisPage: React.FC = () => {
 
             {/* Tab contents */}
             <div className="p-5 flex-1 overflow-y-auto space-y-4 text-xs">
-              {activeTab === "strategy" && (
+              {activeTab !== "chat" && !result && !loading && (
+                <div className="flex flex-col items-center justify-center py-16 px-4 text-center text-slate-400">
+                  <div className="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-500 mb-3 shadow-xs">
+                    <i className="bi bi-clipboard2-data text-2xl" />
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-800 m-0 mb-1">
+                    Chưa có kết quả phân tích chiến dịch
+                  </h4>
+                  <p className="text-xs text-slate-500 max-w-sm leading-relaxed m-0">
+                    Vui lòng nhập tên chiến dịch, mô tả và chọn các thông số ở cột <b>Cấu hình chiến dịch</b> bên trái, sau đó nhấn <b>&quot;Phân tích chiến lược AI&quot;</b> để hệ thống tiến hành đối chiếu và tổng hợp báo cáo.
+                  </p>
+                </div>
+              )}
+
+              {activeTab !== "chat" && loading && (
+                <div className="flex flex-col items-center justify-center py-16 px-4 text-center text-slate-400">
+                  <div className="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 mb-3 shadow-xs">
+                    <span className="spinner-border text-indigo-600" role="status" style={{ width: 28, height: 28 }} />
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-800 m-0 mb-1">
+                    Đang phân tích dữ liệu chiến dịch...
+                  </h4>
+                  <p className="text-xs text-slate-500 max-w-sm leading-relaxed m-0">
+                    Hệ thống AI đang đối chiếu mục tiêu chiến dịch với xu hướng ngành thiết bị vệ sinh và dữ liệu đối thủ. Vui lòng đợi trong giây lát.
+                  </p>
+                </div>
+              )}
+
+              {activeTab === "strategy" && result && (
                 <div className="space-y-4">
                   {/* Executive Summary */}
                   <div className="p-4 rounded-xl bg-indigo-50/60 border border-indigo-100">
@@ -404,127 +432,137 @@ export const MarketingMarketAnalysisPage: React.FC = () => {
                         <i className="bi bi-stars text-indigo-600" />
                         <span>Tóm tắt chiến lược điều hành</span>
                       </span>
-                      <span className="text-[11px] font-black px-2 py-0.5 rounded bg-indigo-600 text-white">
-                        Điểm cơ hội: 86/100
-                      </span>
+                      {result?.opportunityScore && (
+                        <span className="text-[11px] font-black px-2 py-0.5 rounded bg-indigo-600 text-white">
+                          Điểm cơ hội: {result.opportunityScore}/100
+                        </span>
+                      )}
                     </div>
                     <p className="m-0 text-xs leading-relaxed text-indigo-950 font-normal">
-                      {result?.executiveSummary || (
-                        "Chiến dịch ra mắt dòng sen tắm nhiệt độ thông minh Seajong Wellness nhắm đúng điểm rơi hồi phục của thị trường bất động sản phân khúc cao cấp 2026. Với ưu thế phôi đồng 59-1 đúc nguyên khối mạ PVD Titan Gray và tính năng hiển thị LED nhiệt độ thủy lực, Seajong hoàn toàn có thể định vị ở phân khúc 'Affordable Luxury' để kéo thị phần từ các thương hiệu truyền thống."
-                      )}
+                      {result?.executiveSummary}
                     </p>
                   </div>
 
                   {/* Market Gap & Opportunity */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                    <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/60">
-                      <span className="font-bold text-slate-800 block mb-1 text-xs">
-                        Khoảng trống đại dương xanh (Market Gap)
-                      </span>
-                      <p className="text-slate-600 leading-relaxed m-0 text-xs">
-                        {result?.marketFit?.gapOpportunity || (
-                          "Khoảng trống thị trường giữa các thương hiệu siêu sang (TOTO, Kohler với giá rất cao) và phân khúc phổ thông (Inax, Viglacera với mẫu mã cơ khí cũ). Seajong đóng vai trò 'Luxury trong tầm tay' với thiết kế phím đàn hiện đại chuẩn phong cách sống trẻ."
-                        )}
-                      </p>
-                    </div>
+                    {result?.marketFit?.gapOpportunity && (
+                      <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/60">
+                        <span className="font-bold text-slate-800 block mb-1 text-xs">
+                          Khoảng trống đại dương xanh (Market Gap)
+                        </span>
+                        <p className="text-slate-600 leading-relaxed m-0 text-xs">
+                          {result.marketFit.gapOpportunity}
+                        </p>
+                      </div>
+                    )}
 
-                    <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/60">
-                      <span className="font-bold text-slate-800 block mb-1 text-xs">
-                        Đặc điểm phân khúc mục tiêu
-                      </span>
-                      <p className="text-slate-600 leading-relaxed m-0 text-xs">
-                        {result?.marketFit?.targetSegmentAnalysis || (
-                          "Phân khúc căn hộ cao cấp và nhà phố hiện đại tại Hà Nội, Đà Nẵng, TP.HCM: Gia chủ độ tuổi 28 - 45, sẵn sàng chi trả thêm 15-20% cho yếu tố tiện nghi thông minh, an toàn cho trẻ nhỏ và bảo hành tận nơi."
-                        )}
-                      </p>
-                    </div>
+                    {result?.marketFit?.targetSegmentAnalysis && (
+                      <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/60">
+                        <span className="font-bold text-slate-800 block mb-1 text-xs">
+                          Đặc điểm phân khúc mục tiêu
+                        </span>
+                        <p className="text-slate-600 leading-relaxed m-0 text-xs">
+                          {result.marketFit.targetSegmentAnalysis}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Action Plan */}
-                  <div className="border border-slate-200/80 rounded-xl p-4 space-y-2.5">
-                    <h5 className="m-0 text-xs font-bold text-slate-900 uppercase tracking-wide">
-                      Kế hoạch triển khai 3 giai đoạn
-                    </h5>
-                    <div className="space-y-2 text-xs">
-                      <div className="flex gap-2 items-start">
-                        <span className="font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded text-[11px] shrink-0">GĐ 1</span>
-                        <span className="text-slate-700">Hoàn thiện 50 kệ mẫu POSM trưng bày tại các showroom đại lý trọng điểm và tài liệu kỹ thuật cho KTS.</span>
-                      </div>
-                      <div className="flex gap-2 items-start">
-                        <span className="font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded text-[11px] shrink-0">GĐ 2</span>
-                        <span className="text-slate-700">Tổ chức sự kiện ra mắt bộ sưu tập Seajong Wellness 2026, chạy quảng cáo phủ sóng trên Facebook, TikTok và hội chợ Vietbuild.</span>
-                      </div>
-                      <div className="flex gap-2 items-start">
-                        <span className="font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded text-[11px] shrink-0">GĐ 3</span>
-                        <span className="text-slate-700">Đánh giá doanh số bán lẻ, áp dụng chính sách thưởng quý và mở rộng thêm 50 điểm bán trên toàn quốc.</span>
+                  {result?.actionPlan && (
+                    <div className="border border-slate-200/80 rounded-xl p-4 space-y-2.5">
+                      <h5 className="m-0 text-xs font-bold text-slate-900 uppercase tracking-wide">
+                        Kế hoạch triển khai gợi ý
+                      </h5>
+                      <div className="space-y-2 text-xs">
+                        {Array.isArray(result.actionPlan.immediate) && result.actionPlan.immediate.map((item: string, i: number) => (
+                          <div key={i} className="flex gap-2 items-start">
+                            <span className="font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded text-[11px] shrink-0">Ngay</span>
+                            <span className="text-slate-700">{item}</span>
+                          </div>
+                        ))}
+                        {Array.isArray(result.actionPlan.shortTerm) && result.actionPlan.shortTerm.map((item: string, i: number) => (
+                          <div key={i} className="flex gap-2 items-start">
+                            <span className="font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded text-[11px] shrink-0">Ngắn hạn</span>
+                            <span className="text-slate-700">{item}</span>
+                          </div>
+                        ))}
+                        {Array.isArray(result.actionPlan.longTerm) && result.actionPlan.longTerm.map((item: string, i: number) => (
+                          <div key={i} className="flex gap-2 items-start">
+                            <span className="font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded text-[11px] shrink-0">Dài hạn</span>
+                            <span className="text-slate-700">{item}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
 
-              {activeTab === "competitor" && (
+              {activeTab === "competitor" && result && (
                 <div className="space-y-3.5">
-                  <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200">
-                    <h5 className="m-0 mb-1.5 text-xs font-bold text-blue-900 flex items-center gap-1.5">
-                      <i className="bi bi-shield-shaded" />
-                      <span>Lợi thế cạnh tranh độc quyền của Seajong</span>
-                    </h5>
-                    <p className="m-0 text-xs text-blue-950 leading-relaxed">
-                      Thiết kế phím đàn cảm ứng cơ học êm ái, màn hình LED hiển thị nhiệt độ tự sinh điện không cần cắm điện, chất liệu đồng thau 59-1 chống thôi nhiễm chì và công nghệ mạ PVD đa lớp chống ăn mòn muối mặn.
-                    </p>
-                  </div>
+                  {result?.competitorIntel?.competitiveAdvantage && (
+                    <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200">
+                      <h5 className="m-0 mb-1.5 text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                        <i className="bi bi-shield-shaded" />
+                        <span>Lợi thế cạnh tranh Seajong</span>
+                      </h5>
+                      <p className="m-0 text-xs text-blue-950 leading-relaxed">
+                        {result.competitorIntel.competitiveAdvantage}
+                      </p>
+                    </div>
+                  )}
 
-                  <div className="space-y-2">
-                    <h5 className="m-0 text-xs font-bold text-slate-800 uppercase tracking-wide">
-                      Đối chiếu mức độ cạnh tranh
-                    </h5>
+                  {Array.isArray(result?.competitorIntel?.keyThreats) && (
                     <div className="space-y-2">
-                      {[
-                        { brand: "TOTO Việt Nam", threat: "Cao", note: "Thương hiệu số 1 công trình hạng sang nhưng giá rất cao, mẫu mã truyền thống" },
-                        { brand: "ENIC", threat: "Cao", note: "Chiến dịch quảng cáo online bùng nổ, miễn phí lắp đặt toàn quốc, giá tương đương" },
-                        { brand: "INAX", threat: "Trung bình", note: "Độ phủ đại lý 63 tỉnh thành nhưng ít đổi mới về thiết kế phong cách Hàn Quốc" },
-                        { brand: "Viglacera", threat: "Thấp", note: "Mạnh ở mảng công trình bình dân và nhà ở xã hội, không trực tiếp cạnh tranh phân khúc cao cấp" },
-                      ].map((c) => (
-                        <div key={c.brand} className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 flex justify-between items-center text-xs">
-                          <div>
-                            <span className="font-bold text-slate-900">{c.brand}</span>
-                            <span className="text-slate-500 block text-[11px] mt-0.5">{c.note}</span>
+                      <h5 className="m-0 text-xs font-bold text-slate-800 uppercase tracking-wide">
+                        Đối chiếu các đối thủ trọng tâm
+                      </h5>
+                      <div className="space-y-2">
+                        {result.competitorIntel.keyThreats.map((c: any, idx: number) => (
+                          <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 flex justify-between items-center text-xs">
+                            <div>
+                              <span className="font-bold text-slate-900">{c.brand}</span>
+                              <span className="text-slate-500 block text-[11px] mt-0.5">{c.threat}</span>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                              c.level === 'Cao' ? 'bg-rose-100 text-rose-700' : c.level === 'Trung bình' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'
+                            }`}>
+                              Mức đe dọa: {c.level || 'Theo dõi'}
+                            </span>
                           </div>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
-                            c.threat === 'Cao' ? 'bg-rose-100 text-rose-700' : c.threat === 'Trung bình' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'
-                          }`}>
-                            Mức đe dọa: {c.threat}
-                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === "supply" && result && (
+                <div className="space-y-3.5">
+                  {result?.supplyChainAlert && (
+                    <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl">
+                      <h5 className="m-0 mb-1.5 text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                        <i className="bi bi-exclamation-triangle-fill text-amber-600" />
+                        <span>Cảnh báo biến động chuỗi cung ứng & giá vật tư</span>
+                      </h5>
+                      <p className="m-0 text-xs text-amber-950 leading-relaxed">
+                        {result.supplyChainAlert.procurementAdvice || "Đảm bảo mức tồn kho an toàn và chốt hợp đồng cung ứng dài hạn để giữ giá thành sản xuất ổn định."}
+                      </p>
+                    </div>
+                  )}
+
+                  {Array.isArray(result?.supplyChainAlert?.alerts) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {result.supplyChainAlert.alerts.map((al: any, idx: number) => (
+                        <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 space-y-1">
+                          <span className="font-bold text-slate-800 block text-xs">{al.factor}</span>
+                          <span className="text-[11px] text-slate-500 block">{al.impact}</span>
+                          <span className="text-[10.5px] text-indigo-600 font-semibold block">Hành động: {al.action}</span>
                         </div>
                       ))}
                     </div>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === "supply" && (
-                <div className="space-y-3.5">
-                  <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl">
-                    <h5 className="m-0 mb-1.5 text-xs font-bold text-amber-900 flex items-center gap-1.5">
-                      <i className="bi bi-exclamation-triangle-fill text-amber-600" />
-                      <span>Cảnh báo biến động chuỗi cung ứng & giá vật tư</span>
-                    </h5>
-                    <p className="m-0 text-xs text-amber-950 leading-relaxed">
-                      Giá phôi đồng thau 59-1 trên sàn giao dịch kim loại London (LME) và chi phí vận tải container dự kiến biến động nhẹ 3-5% vào cao điểm cuối năm. Cần chủ động chốt đơn đặt hàng và giữ mức tồn kho an toàn gối đầu 45 ngày.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 space-y-1">
-                      <span className="font-bold text-slate-800 block text-xs">Phôi đồng thau 59-1 đúc</span>
-                      <span className="text-[11px] text-slate-500 block">Ổn định giá cung ứng nhờ hợp đồng dài hạn với nhà máy phôi</span>
-                    </div>
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 space-y-1">
-                      <span className="font-bold text-slate-800 block text-xs">Van lõi Ceramic Sedal / Wanhai</span>
-                      <span className="text-[11px] text-slate-500 block">Duy trì tồn kho sẵn 2.000 chiếc phục vụ bảo hành 5 năm</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -610,3 +648,4 @@ export const MarketingMarketAnalysisPage: React.FC = () => {
 };
 
 export default MarketingMarketAnalysisPage;
+
