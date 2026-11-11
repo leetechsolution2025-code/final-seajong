@@ -1776,28 +1776,29 @@ export const MarketingPlanPage: React.FC = () => {
     {
       header: 'Hạng mục / Nội dung',
       align: 'left',
+      colSpan: (row) => (row.id === 'theme_holiday' || row.id === 'theme_content' ? 7 : 1),
       render: (row) => {
         if (row.type === 'theme_header' || row.type === 'section_header') return null;
         if (row.id === 'theme_holiday') {
           const allHolidays = [...(HOLIDAYS_LIST_BY_MONTH[selectedMonth] || []), ...(customHolidays.filter((h) => h.month === selectedMonth) || [])];
           return (
-            <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
               {allHolidays.length === 0 ? (
                 <span className="text-xs text-slate-400 italic">Không có ngày lễ trong tháng</span>
               ) : (
                 allHolidays.map((h, i) => (
                   <span
                     key={i}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200/60"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200/60 whitespace-nowrap shadow-2xs"
                   >
-                    <i className="bi bi-calendar-event text-[10px]" />
+                    <i className="bi bi-calendar-event text-[11px] text-rose-500" />
                     <span className="font-bold">{h.dateStr}:</span> {h.name}
                   </span>
                 ))
               )}
               <button
                 type="button"
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 transition-colors border border-dashed border-indigo-300 cursor-pointer"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 transition-colors border border-dashed border-indigo-300 cursor-pointer whitespace-nowrap"
                 onClick={() => setShowHolidayModal(true)}
                 title="Thêm ngày lễ"
               >
