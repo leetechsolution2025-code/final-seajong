@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CalendarCheck,
   Calendar3,
@@ -158,6 +159,256 @@ const BudgetInputRow: React.FC<BudgetInputRowProps> = ({ label, value, onChange,
           đ
         </span>
       </div>
+    </div>
+  );
+};
+
+// ── DROPDOWN CHỌN THIẾT BỊ / SẢN PHẨM TRỌNG TÂM THEO TUẦN ────────────────────
+const DEFAULT_SEAJONG_CATEGORIES = [
+  'Thiết bị vệ sinh',
+  'Phụ kiện nhà tắm',
+  'Sen cây',
+  'Thiết bị nhà bếp',
+  'Vòi lavabo',
+  'Combo phòng tắm',
+  'Bồn cầu',
+  'Hút mùi',
+  'Bồn rửa chén',
+  'Sen cây âm trần',
+  'Vòi bếp',
+  'Ga thoát sàn',
+  'Chậu Lavabo',
+];
+
+interface WeekProductSelectDropdownProps {
+  weekNum: number;
+  month: number;
+  selectedList: string[];
+  allCategories: any[];
+  onChange: (newList: string[]) => void;
+}
+
+const WeekProductSelectDropdown: React.FC<WeekProductSelectDropdownProps> = ({
+  weekNum,
+  month,
+  selectedList,
+  allCategories,
+  onChange,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+
+  const categories = useMemo(() => {
+    const list: string[] = [];
+    if (Array.isArray(allCategories) && allCategories.length > 0) {
+      allCategories.forEach((cat) => {
+        const name = typeof cat === 'string' ? cat : cat?.name;
+        if (name && !list.includes(name)) list.push(name);
+      });
+    }
+    DEFAULT_SEAJONG_CATEGORIES.forEach((name) => {
+      if (!list.includes(name)) list.push(name);
+    });
+    return list;
+  }, [allCategories]);
+
+  const filteredCategories = useMemo(() => {
+    if (!search.trim()) return categories;
+    const q = search.toLowerCase();
+    return categories.filter((c) => c.toLowerCase().includes(q));
+  }, [categories, search]);
+
+  const updatePosition = useCallback(() => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const dropdownWidth = 260;
+    const left = Math.max(10, Math.min(window.innerWidth - dropdownWidth - 10, rect.left));
+    const top = rect.bottom + 6;
+    setCoords({ top, left });
+  }, []);
+
+  const toggleOpen = () => {
+    if (!isOpen) {
+      updatePosition();
+      setIsOpen(true);
+    } else {
+      setIsOpen(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEvents = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        triggerRef.current &&
+        !triggerRef.current.contains(target) &&
+        dropdownRef.current &&
+        !dropdownRef.current.contains(target)
+      ) {
+        setIsOpen(false);
+      }
+    };
+    const handleScroll = (e: Event) => {
+      if (dropdownRef.current && dropdownRef.current.contains(e.target as Node)) return;
+      updatePosition();
+    };
+
+    document.addEventListener('mousedown', handleEvents);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      document.removeEventListener('mousedown', handleEvents);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isOpen, updatePosition]);
+
+  const toggleItem = (name: string) => {
+    if (selectedList.includes(name)) {
+      onChange(selectedList.filter((n) => n !== name));
+    } else {
+      onChange([...selectedList, name]);
+    }
+  };
+
+  const hasSelected = selectedList.length > 0;
+
+  return (
+    <div className="relative inline-flex items-center justify-center">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={toggleOpen}
+        className={`inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer whitespace-nowrap ${
+          hasSelected
+            ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 shadow-2xs'
+            : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200/80'
+        }`}
+        title={hasSelected ? `Tuần ${weekNum}: ${selectedList.join(', ')}` : `Chọn thiết bị trọng tâm Tuần ${weekNum}`}
+      >
+        {hasSelected ? (
+          <>
+            <i className="bi bi-box-seam text-[10px]" />
+            <span>{selectedList.length} SP</span>
+            <i className={`bi bi-chevron-${isOpen ? 'up' : 'down'} text-[8px]`} />
+          </>
+        ) : (
+          <>
+            <PlusLg size={10} />
+            <span>Chọn SP</span>
+          </>
+        )}
+      </button>
+
+      {isOpen && coords && createPortal(
+        <div
+          ref={dropdownRef}
+          style={{
+            position: 'fixed',
+            top: coords.top,
+            left: coords.left,
+            width: 260,
+            zIndex: 99999,
+          }}
+          className="bg-white rounded-xl shadow-2xl border border-slate-200/90 overflow-hidden flex flex-col text-slate-800 animate-in fade-in-50 zoom-in-95 duration-100"
+        >
+          {/* Header */}
+          <div className="px-3 py-2 bg-slate-50/80 border-b border-slate-200/70 flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-xs text-indigo-900">Thiết bị Tuần {weekNum}</span>
+              <span className="text-[10px] text-slate-500">(Tháng {month})</span>
+            </div>
+            {hasSelected && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700">
+                {selectedList.length}
+              </span>
+            )}
+          </div>
+
+          {/* Search box */}
+          <div className="p-2 border-b border-slate-100">
+            <div className="flex items-center rounded-lg border border-slate-200 px-2 py-1 bg-slate-50 focus-within:border-indigo-500 focus-within:bg-white transition-colors">
+              <Search size={11} className="text-slate-400 mr-1.5 shrink-0" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Tìm tên thiết bị..."
+                className="w-full text-xs bg-transparent border-none outline-none text-slate-800 placeholder-slate-400 p-0"
+                autoFocus
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Device list with checkboxes */}
+          <div className="max-h-52 overflow-y-auto custom-scrollbar p-1.5 flex flex-col gap-0.5">
+            {filteredCategories.length === 0 ? (
+              <div className="py-4 text-center text-xs text-slate-400 italic">
+                Không tìm thấy thiết bị nào
+              </div>
+            ) : (
+              filteredCategories.map((name) => {
+                const isChecked = selectedList.includes(name);
+                return (
+                  <label
+                    key={name}
+                    className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${
+                      isChecked
+                        ? 'bg-indigo-50/80 text-indigo-950 font-semibold'
+                        : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleItem(name)}
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                    />
+                    <span className="flex-1 truncate">{name}</span>
+                  </label>
+                );
+              })
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-2.5 py-1.5 bg-slate-50/90 border-t border-slate-200/70 flex items-center justify-between text-[11px]">
+            {hasSelected ? (
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                className="text-rose-600 hover:text-rose-700 font-medium hover:underline cursor-pointer"
+              >
+                Bỏ chọn hết
+              </button>
+            ) : (
+              <span className="text-slate-400 text-[10px]">Chọn 1 hoặc nhiều TB</span>
+            )}
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setIsOpen(false)}
+              className="h-6 px-2.5 text-[11px]"
+            >
+              Xong
+            </Button>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
@@ -361,9 +612,12 @@ interface BudgetTargetItem {
 export const MarketingPlanPage: React.FC = () => {
   const toast = useToast();
   const [currentStep, setCurrentStep] = useState<number>(1);
-  const [selectedYear, setSelectedYear] = useState<string>('2026');
-  const [planDate, setPlanDate] = useState<string>('2026-06-23');
-  const [selectedMonth, setSelectedMonth] = useState<number>(8); // Mặc định tháng 8
+  const [selectedYear, setSelectedYear] = useState<string>(() => String(new Date().getFullYear()));
+  const [planDate, setPlanDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [selectedMonth, setSelectedMonth] = useState<number>(() => {
+    const currentM = new Date().getMonth() + 1;
+    return currentM >= 1 && currentM <= 12 ? currentM : 1;
+  }); // Tự động lấy theo tháng hiện hành
   const [step1Tab, setStep1Tab] = useState<'kpi' | 'salary'>('kpi');
 
   // Global loading & editing states
@@ -1573,32 +1827,12 @@ export const MarketingPlanPage: React.FC = () => {
           );
         }
         if (row.id === 'theme_product') {
-          const monthProducts = monthlyProducts[selectedMonth] || {};
           return (
-            <div className="flex gap-2 items-center flex-wrap">
-              {[1, 2, 3, 4].map((w) => {
-                const list = monthProducts[w] || [];
-                return (
-                  <span
-                    key={w}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer transition-all border ${
-                      list.length > 0
-                        ? 'bg-blue-50 text-blue-700 border-blue-200/80 hover:bg-blue-100'
-                        : 'bg-slate-50 text-slate-500 border-slate-200/80 hover:bg-slate-100 hover:text-slate-800'
-                    }`}
-                    onClick={() => {
-                      setActiveProductWeek(w);
-                      setTempSelectedProducts(list);
-                      setShowProductModal(true);
-                    }}
-                    title="Bấm để chọn danh mục sản phẩm trọng tâm tuần"
-                  >
-                    <i className="bi bi-box-seam text-[11px]" />
-                    <span className="font-bold">T{w}:</span>
-                    <span>{list.length > 0 ? `${list.length} SP` : '+ Chọn SP'}</span>
-                  </span>
-                );
-              })}
+            <div className="flex items-center gap-2 py-0.5">
+              <i className="bi bi-box-seam text-indigo-600 text-xs shrink-0" />
+              <span className="font-semibold text-slate-700 text-xs">
+                Sản phẩm & thiết bị trọng tâm đẩy mạnh theo tuần
+              </span>
             </div>
           );
         }
@@ -1607,9 +1841,27 @@ export const MarketingPlanPage: React.FC = () => {
     },
     {
       header: `T1 (01-07/${monthStr})`,
-      width: 82,
+      width: 95,
       align: 'center',
       render: (row) => {
+        if (row.id === 'theme_product') {
+          const monthProducts = monthlyProducts[selectedMonth] || {};
+          const weekList = monthProducts[1] || [];
+          return (
+            <WeekProductSelectDropdown
+              weekNum={1}
+              month={selectedMonth}
+              selectedList={weekList}
+              allCategories={productCategories}
+              onChange={(newList) => {
+                setMonthlyProducts((prev) => {
+                  const mData = prev[selectedMonth] || {};
+                  return { ...prev, [selectedMonth]: { ...mData, 1: newList } };
+                });
+              }}
+            />
+          );
+        }
         if (row.type !== 'section_item') return null;
         const active = (row.item.weeks || []).includes(1);
         return (
@@ -1630,9 +1882,27 @@ export const MarketingPlanPage: React.FC = () => {
     },
     {
       header: `T2 (08-14/${monthStr})`,
-      width: 82,
+      width: 95,
       align: 'center',
       render: (row) => {
+        if (row.id === 'theme_product') {
+          const monthProducts = monthlyProducts[selectedMonth] || {};
+          const weekList = monthProducts[2] || [];
+          return (
+            <WeekProductSelectDropdown
+              weekNum={2}
+              month={selectedMonth}
+              selectedList={weekList}
+              allCategories={productCategories}
+              onChange={(newList) => {
+                setMonthlyProducts((prev) => {
+                  const mData = prev[selectedMonth] || {};
+                  return { ...prev, [selectedMonth]: { ...mData, 2: newList } };
+                });
+              }}
+            />
+          );
+        }
         if (row.type !== 'section_item') return null;
         const active = (row.item.weeks || []).includes(2);
         return (
@@ -1653,9 +1923,27 @@ export const MarketingPlanPage: React.FC = () => {
     },
     {
       header: `T3 (15-21/${monthStr})`,
-      width: 82,
+      width: 95,
       align: 'center',
       render: (row) => {
+        if (row.id === 'theme_product') {
+          const monthProducts = monthlyProducts[selectedMonth] || {};
+          const weekList = monthProducts[3] || [];
+          return (
+            <WeekProductSelectDropdown
+              weekNum={3}
+              month={selectedMonth}
+              selectedList={weekList}
+              allCategories={productCategories}
+              onChange={(newList) => {
+                setMonthlyProducts((prev) => {
+                  const mData = prev[selectedMonth] || {};
+                  return { ...prev, [selectedMonth]: { ...mData, 3: newList } };
+                });
+              }}
+            />
+          );
+        }
         if (row.type !== 'section_item') return null;
         const active = (row.item.weeks || []).includes(3);
         return (
@@ -1676,9 +1964,27 @@ export const MarketingPlanPage: React.FC = () => {
     },
     {
       header: `T4 (22-${lastDayStr}/${monthStr})`,
-      width: 82,
+      width: 95,
       align: 'center',
       render: (row) => {
+        if (row.id === 'theme_product') {
+          const monthProducts = monthlyProducts[selectedMonth] || {};
+          const weekList = monthProducts[4] || [];
+          return (
+            <WeekProductSelectDropdown
+              weekNum={4}
+              month={selectedMonth}
+              selectedList={weekList}
+              allCategories={productCategories}
+              onChange={(newList) => {
+                setMonthlyProducts((prev) => {
+                  const mData = prev[selectedMonth] || {};
+                  return { ...prev, [selectedMonth]: { ...mData, 4: newList } };
+                });
+              }}
+            />
+          );
+        }
         if (row.type !== 'section_item') return null;
         const active = (row.item.weeks || []).includes(4);
         return (
@@ -3117,78 +3423,6 @@ export const MarketingPlanPage: React.FC = () => {
           </div>
         </div>
       </Offcanvas>
-
-      {/* 4. Product Modal (Step 3) */}
-      {showProductModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] border border-slate-200">
-            <div className="p-3 border-b flex justify-between items-center bg-slate-50">
-              <h5 className="font-bold text-sm text-slate-800 uppercase mb-0">
-                Chọn sản phẩm trọng tâm - Tuần {activeProductWeek} (Tháng {selectedMonth})
-              </h5>
-              <button className="text-slate-400 hover:text-slate-700 cursor-pointer" onClick={() => setShowProductModal(false)}>
-                <X size={20} />
-              </button>
-            </div>
-            <div className="p-3 border-b bg-white">
-              <Input
-                placeholder="Tìm kiếm sản phẩm hoặc danh mục..."
-                value={productSearchQuery}
-                onChange={(e) => setProductSearchQuery(e.target.value)}
-              />
-            </div>
-            <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-1.5 text-xs">
-              {productCategories
-                .filter((cat: any) => {
-                  const name = typeof cat === 'string' ? cat : cat.name || '';
-                  return name.toLowerCase().includes(productSearchQuery.toLowerCase());
-                })
-                .map((cat: any, i) => {
-                  const name = typeof cat === 'string' ? cat : cat.name || `Sản phẩm ${i + 1}`;
-                  const isChecked = tempSelectedProducts.includes(name);
-                  return (
-                    <label
-                      key={i}
-                      className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 border border-slate-100 cursor-pointer transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={(e) => {
-                          if (e.target.checked) setTempSelectedProducts([...tempSelectedProducts, name]);
-                          else setTempSelectedProducts(tempSelectedProducts.filter((n) => n !== name));
-                        }}
-                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                      />
-                      <span className="font-medium text-slate-800">{name}</span>
-                    </label>
-                  );
-                })}
-            </div>
-            <div className="p-3 border-t bg-slate-50 flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => setShowProductModal(false)}>
-                Đóng
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => {
-                  if (activeProductWeek !== null) {
-                    setMonthlyProducts((prev) => {
-                      const mData = prev[selectedMonth] || {};
-                      return { ...prev, [selectedMonth]: { ...mData, [activeProductWeek]: tempSelectedProducts } };
-                    });
-                  }
-                  setShowProductModal(false);
-                  toast.success('Thành công', 'Đã lưu danh sách sản phẩm trọng tâm.');
-                }}
-              >
-                Xác nhận ({tempSelectedProducts.length})
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 5. Monthly Theme Modal (Step 3) */}
       {showThemeModal && (
