@@ -2513,8 +2513,8 @@ const AssetsTab: React.FC<{
             body: JSON.stringify({
               id,
               status: 'RETURNED',
-              returnDate: formData.returnDate || new Date().toISOString().split('T')[0],
-              conditionOnReturn: formData.conditionOnHandover || 'Thu hồi bình thường',
+              returnDate: new Date().toISOString().split('T')[0],
+              conditionOnReturn: 'Thu hồi bình thường',
             }),
           })
         )
@@ -2522,6 +2522,29 @@ const AssetsTab: React.FC<{
       setSelectedHandoverIds([]);
       await fetchData();
       onRefresh();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSingleReturn = async (id: string) => {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/hr/stationery/handovers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          status: 'RETURNED',
+          returnDate: new Date().toISOString().split('T')[0],
+          conditionOnReturn: 'Thu hồi bình thường',
+        }),
+      });
+      if (res.ok) {
+        setSelectedHandoverIds((prev) => prev.filter((x) => x !== id));
+        await fetchData();
+        onRefresh();
+      }
     } finally {
       setSaving(false);
     }
@@ -2566,18 +2589,10 @@ const AssetsTab: React.FC<{
             <span className="text-xs text-gray-400 italic">Chưa bàn giao dụng cụ</span>
           );
         }
+        const assetNames = g.activeAssets.map((a) => a.item?.name || 'Dụng cụ').join(' | ');
         return (
-          <div className="flex flex-wrap gap-1.5 py-1">
-            {g.activeAssets.map((a) => (
-              <span
-                key={a.id}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-800 border border-blue-200/80"
-              >
-                <Tools size={11} className="text-blue-600 shrink-0" />
-                <span>{a.item?.name}</span>
-                <span className="text-[10px] text-blue-500 font-mono">({a.item?.code})</span>
-              </span>
-            ))}
+          <div className="text-xs text-gray-700 font-medium truncate max-w-xl" title={assetNames}>
+            {assetNames}
           </div>
         );
       },
@@ -2660,20 +2675,22 @@ const AssetsTab: React.FC<{
             : 'Chi tiết dụng cụ bàn giao'
         }
         icon={<Tools size={20} />}
-        width="520px"
+        width="400px"
         footer={
           <div className="flex items-center justify-between gap-2 w-full">
             <Button variant="secondary" onClick={() => setShowHandoverPanel(false)}>
               Đóng
             </Button>
             <div className="flex items-center gap-2">
-              <Button
-                variant="danger"
-                onClick={handleBatchReturn}
-                disabled={saving || selectedHandoverIds.length === 0}
-              >
-                Thu hồi ({selectedHandoverIds.length})
-              </Button>
+              {selectedHandoverIds.length > 0 && (
+                <Button
+                  variant="danger"
+                  onClick={handleBatchReturn}
+                  disabled={saving}
+                >
+                  Thu hồi ({selectedHandoverIds.length})
+                </Button>
+              )}
               <Button
                 variant="primary"
                 onClick={handleCreateHandover}
@@ -2687,12 +2704,12 @@ const AssetsTab: React.FC<{
       >
         <div className="space-y-4">
           {selectedEmpGroup && (
-            <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
               <div>
-                <div className="font-bold text-gray-900 text-sm">
+                <div className="font-bold text-slate-900 text-sm">
                   {selectedEmpGroup.fullName}
                 </div>
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-slate-500">
                   {selectedEmpGroup.code} • {selectedEmpGroup.departmentName}
                 </div>
               </div>
@@ -2702,153 +2719,123 @@ const AssetsTab: React.FC<{
             </div>
           )}
 
-          <div className="p-3.5 bg-gray-50/70 rounded-xl border border-gray-200 space-y-3">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
-              Thông tin bàn giao / thu hồi
-            </div>
-
-            <Select
-              label="Thiết bị bàn giao *"
-              value={formData.itemId}
-              onChange={(e) => setFormData({ ...formData, itemId: e.target.value })}
-            >
-              <option value="">-- Chọn dụng cụ khả dụng --</option>
-              {availableAssets.map((a) => (
-                <option key={a.id} value={a.id}>
-                  [{a.code}] {a.name}
-                </option>
-              ))}
-            </Select>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                label="Ngày bàn giao"
-                type="date"
-                value={formData.handoverDate}
-                onChange={(e) => setFormData({ ...formData, handoverDate: e.target.value })}
-              />
-              <Input
-                label="Ngày thu hồi"
-                type="date"
-                value={formData.returnDate}
-                onChange={(e) => setFormData({ ...formData, returnDate: e.target.value })}
-              />
-            </div>
-
-            <Select
-              label="Trạng thái & Tình trạng"
-              value={formData.conditionOnHandover}
-              onChange={(e) =>
-                setFormData({ ...formData, conditionOnHandover: e.target.value })
-              }
-            >
-              <option value="Đang sử dụng (Mới 100%)">Đang sử dụng (Mới 100%)</option>
-              <option value="Đang sử dụng (Tốt)">Đang sử dụng (Tốt)</option>
-              <option value="Thu hồi bình thường">Thu hồi bình thường</option>
-              <option value="Hư hỏng cần sửa chữa">Hư hỏng cần sửa chữa</option>
-              <option value="Mất tài sản">Mất tài sản</option>
-            </Select>
-          </div>
-
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
-                Tài sản đang nắm giữ ({selectedEmpGroup?.activeAssets.length || 0})
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                Dụng cụ đang giữ ({selectedEmpGroup?.activeAssets.length || 0})
               </span>
-              {selectedEmpGroup && selectedEmpGroup.activeAssets.length > 0 && (
-                <span className="text-[11px] text-gray-400">Tích chọn để thu hồi</span>
+              {selectedEmpGroup && selectedEmpGroup.activeAssets.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const allIds = selectedEmpGroup.activeAssets.map((a) => a.id);
+                    if (selectedHandoverIds.length === allIds.length) {
+                      setSelectedHandoverIds([]);
+                    } else {
+                      setSelectedHandoverIds(allIds);
+                    }
+                  }}
+                  className="text-[11px] text-rose-600 hover:text-rose-700 font-semibold cursor-pointer border-0 bg-transparent"
+                >
+                  {selectedHandoverIds.length === selectedEmpGroup.activeAssets.length
+                    ? 'Bỏ chọn'
+                    : 'Chọn tất cả'}
+                </button>
               )}
             </div>
 
-            <div className="border border-gray-200 rounded-xl overflow-hidden">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200 text-[11px] font-bold text-gray-500 uppercase">
-                    <th className="py-2.5 px-3 w-9 text-center">
-                      <input
-                        type="checkbox"
-                        className="rounded border-gray-300 text-rose-600 focus:ring-rose-500 w-3.5 h-3.5 cursor-pointer"
-                        checked={
-                          (selectedEmpGroup?.activeAssets.length || 0) > 0 &&
-                          selectedEmpGroup?.activeAssets.every((a) =>
-                            selectedHandoverIds.includes(a.id)
-                          )
-                        }
-                        onChange={() => {
-                          const allIds =
-                            selectedEmpGroup?.activeAssets.map((a) => a.id) || [];
-                          if (selectedHandoverIds.length === allIds.length) {
-                            setSelectedHandoverIds([]);
-                          } else {
-                            setSelectedHandoverIds(allIds);
-                          }
-                        }}
-                      />
-                    </th>
-                    <th className="py-2.5 px-2">Thiết bị</th>
-                    <th className="py-2.5 px-2 text-center w-24">Ngày giao</th>
-                    <th className="py-2.5 px-3 text-right w-28">Tình trạng</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {!selectedEmpGroup || selectedEmpGroup.activeAssets.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="py-6 text-center text-gray-400">
-                        Nhân viên hiện không giữ dụng cụ nào.
-                      </td>
-                    </tr>
-                  ) : (
-                    selectedEmpGroup.activeAssets.map((a) => {
-                      const checked = selectedHandoverIds.includes(a.id);
-                      return (
-                        <tr
-                          key={a.id}
-                          className={`cursor-pointer hover:bg-gray-50 ${
-                            checked ? 'bg-rose-50/40' : ''
-                          }`}
-                          onClick={() =>
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {!selectedEmpGroup || selectedEmpGroup.activeAssets.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">
+                  Nhân viên hiện không giữ dụng cụ nào.
+                </div>
+              ) : (
+                selectedEmpGroup.activeAssets.map((a) => {
+                  const isChecked = selectedHandoverIds.includes(a.id);
+                  return (
+                    <div
+                      key={a.id}
+                      className={`p-3 rounded-xl border transition-colors flex items-center justify-between gap-2.5 ${
+                        isChecked
+                          ? 'bg-rose-50/60 border-rose-200'
+                          : 'bg-white border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <input
+                          type="checkbox"
+                          className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 w-4 h-4 cursor-pointer shrink-0"
+                          checked={isChecked}
+                          onChange={() =>
                             setSelectedHandoverIds((prev) =>
                               prev.includes(a.id)
                                 ? prev.filter((x) => x !== a.id)
                                 : [...prev, a.id]
                             )
                           }
-                        >
-                          <td
-                            className="py-2.5 px-3 text-center"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <input
-                              type="checkbox"
-                              className="rounded border-gray-300 text-rose-600 focus:ring-rose-500 w-3.5 h-3.5 cursor-pointer"
-                              checked={checked}
-                              onChange={() =>
-                                setSelectedHandoverIds((prev) =>
-                                  prev.includes(a.id)
-                                    ? prev.filter((x) => x !== a.id)
-                                    : [...prev, a.id]
-                                )
-                              }
-                            />
-                          </td>
-                          <td className="py-2.5 px-2">
-                            <div className="font-semibold text-gray-800">{a.item?.name}</div>
-                            <div className="text-[10px] text-gray-400 font-mono">
-                              {a.item?.code}
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-2 text-center text-gray-600">
-                            {formatDate(a.handoverDate)}
-                          </td>
-                          <td className="py-2.5 px-3 text-right text-gray-600">
-                            {a.conditionOnHandover}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-slate-900 text-xs truncate">
+                            {a.item?.name}
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+                            Giao: {formatDate(a.handoverDate)} • {a.conditionOnHandover}
+                          </div>
+                        </div>
+                      </div>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleSingleReturn(a.id)}
+                        disabled={saving}
+                        className="shrink-0 text-rose-600 border-rose-200 hover:bg-rose-50"
+                      >
+                        Thu hồi
+                      </Button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200 space-y-3">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+              Bàn giao thêm dụng cụ mới
+            </div>
+
+            <Select
+              label="Thiết bị bàn giao"
+              value={formData.itemId}
+              onChange={(e) => setFormData({ ...formData, itemId: e.target.value })}
+            >
+              <option value="">-- Chọn dụng cụ khả dụng --</option>
+              {availableAssets.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </Select>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <Input
+                label="Ngày bàn giao"
+                type="date"
+                value={formData.handoverDate}
+                onChange={(e) => setFormData({ ...formData, handoverDate: e.target.value })}
+              />
+              <Select
+                label="Tình trạng"
+                value={formData.conditionOnHandover}
+                onChange={(e) =>
+                  setFormData({ ...formData, conditionOnHandover: e.target.value })
+                }
+              >
+                <option value="Đang sử dụng (Tốt)">Tốt (Đang dùng)</option>
+                <option value="Đang sử dụng (Mới 100%)">Mới 100%</option>
+                <option value="Hư hỏng nhẹ">Hư hỏng nhẹ</option>
+              </Select>
             </div>
           </div>
         </div>
