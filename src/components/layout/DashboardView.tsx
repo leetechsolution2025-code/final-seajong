@@ -17,6 +17,7 @@ import { TerminationsPage } from '../../pages/hr/TerminationsPage';
 import { MarketingProductsPage } from '../../pages/marketing/MarketingProductsPage';
 import { BrandIdentityPage } from '../../pages/marketing/BrandIdentityPage';
 import { MarketingPlanPage } from '../../pages/marketing/MarketingPlanPage';
+import { MarketingDealersPage } from '../../pages/marketing/MarketingDealersPage';
 import { NotebookView } from '../common/NotebookView';
 import { SalesPartnersPage } from '../../pages/sales/SalesPartnersPage';
 import { SalesCustomersPage } from '../../pages/sales/SalesCustomersPage';
@@ -314,8 +315,36 @@ export const DashboardView: React.FC = () => {
   if (activeMenuKey === 'partners') {
     return <SalesPartnersPage />;
   }
-  if (activeMenuKey === 'customers' || activeMenuKey === 'dealers') {
+  if (activeMenuKey === 'customers') {
     return <SalesCustomersPage />;
+  }
+  if (activeMenuKey === 'dealers') {
+    return <MarketingDealersPage />;
+  }
+  if (activeMenuKey === 'events') {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-50/50 h-full">
+        <div className="max-w-md bg-white rounded-2xl border border-slate-200 p-8 shadow-sm flex flex-col items-center gap-3">
+          <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
+            <i className="bi bi-lock-fill text-2xl" />
+          </div>
+          <h3 className="text-base font-extrabold text-slate-900 m-0">
+            Chức năng Sự kiện tạm khóa
+          </h3>
+          <p className="text-xs text-slate-500 leading-relaxed m-0">
+            Phân hệ Quản lý Sự kiện hiện tại chưa đưa vào sử dụng trong quy trình vận hành. Vui lòng chuyển sang phân hệ <b>Đại lý</b> hoặc <b>Lập kế hoạch</b>.
+          </p>
+          <button
+            type="button"
+            onClick={() => setActiveMenuKey('dealers')}
+            className="mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all cursor-pointer border-0"
+          >
+            <i className="bi bi-shop" />
+            <span>Chuyển sang Quản trị Đại lý</span>
+          </button>
+        </div>
+      </div>
+    );
   }
   if (activeMenuKey === 'pricing') {
     return <SalesPricingPage />;

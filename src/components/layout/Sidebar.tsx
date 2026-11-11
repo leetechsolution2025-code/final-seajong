@@ -221,7 +221,7 @@ const DEPT_SIDEBAR_CONFIGS: Record<string, { deptName: string; sections: NavSect
         label: 'Sự kiện và đại lý',
         icon: 'bi-calendar-event',
         items: [
-          { id: 'events', name: 'Sự kiện' },
+          { id: 'events', name: 'Sự kiện', isLocked: true },
           { id: 'dealers', name: 'Đại lý' },
         ],
       },

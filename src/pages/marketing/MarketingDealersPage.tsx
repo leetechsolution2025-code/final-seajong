@@ -1,0 +1,1096 @@
+import React, { useState, useEffect } from 'react';
+import { StepPage } from '../../components/common/StepPage';
+import { TableToolbar } from '../../components/common/TableToolbar';
+import { FullWidthTable, SwipeableTableRow } from '../../components/common/FullWidthTable';
+import { Pagination } from '../../components/common/Pagination';
+import { Button } from '../../components/common/Button';
+import { Offcanvas } from '../../components/common/Offcanvas';
+import { EmployeeSelect } from '../../components/common/EmployeeSelect';
+import { Input } from '../../components/common/Input';
+import { Select } from '../../components/common/Select';
+import type { ModernStepItem } from '../../types';
+import {
+  Shop,
+  GeoAlt,
+  Plus,
+  Telephone,
+  Award,
+  BoxSeam,
+  Headset,
+  Tools,
+  Grid1x2,
+} from 'react-bootstrap-icons';
+
+export interface DealerItem {
+  id: string;
+  code?: string;
+  name: string;
+  address?: string;
+  nguon?: string;
+  sourceLabel?: string;
+  nhom?: string;
+  groupLabel?: string;
+  loai?: string;
+  daiDien?: string;
+  xungHo?: string;
+  chucVu?: string;
+  dienThoai?: string;
+  email?: string;
+  ghiChu?: string;
+  doanhSoCamKet?: number;
+  hanMucCongNo?: number;
+  thuongThanhToan?: string;
+  thuongDoanhSoNam?: string;
+  thuongVuotDoanhSo?: string;
+  formValues?: string;
+  nguoiChamSoc?: {
+    id: string;
+    fullName: string;
+    phone?: string | null;
+    workEmail?: string | null;
+    personalEmail?: string | null;
+  };
+}
+
+export interface SupportTicketItem {
+  id: string;
+  code: string;
+  dealerName: string;
+  category: 'posm' | 'catalog' | 'training' | 'discount' | 'other';
+  categoryLabel: string;
+  title: string;
+  content: string;
+  assignee: string;
+  createdAt: string;
+  status: 'pending' | 'processing' | 'completed';
+  statusLabel: string;
+}
+
+const DEFAULT_SUPPORT_TICKETS: SupportTicketItem[] = [
+  {
+    id: 'st-01',
+    code: 'YCHT-2026-001',
+    dealerName: 'Showroom Ánh Dương',
+    category: 'posm',
+    categoryLabel: 'Kệ trưng bày & POSM',
+    title: 'Đề xuất lắp đặt kệ mẫu sen cây titan và biển hiệu nhận diện',
+    content: 'Showroom mới mở rộng thêm 25m2 tại Hà Đông, cần bổ sung kệ trưng bày sen tắm đứng và vòi chậu.',
+    assignee: 'Chu Thị Hằng',
+    createdAt: '08/11/2026',
+    status: 'processing',
+    statusLabel: 'Đang triển khai',
+  },
+  {
+    id: 'st-02',
+    code: 'YCHT-2026-002',
+    dealerName: 'Đại lý Hùng Cường Hải Phòng',
+    category: 'catalog',
+    categoryLabel: 'Ấn phẩm & Catalogue',
+    title: 'Gửi bổ sung 50 cuốn Catalogue sen vòi Seajong 2026 và bảng báo giá',
+    content: 'Đại lý cần cung cấp gấp tài liệu giới thiệu phục vụ sự kiện mở bán cuối năm.',
+    assignee: 'Nguyễn Quốc Việt',
+    createdAt: '09/11/2026',
+    status: 'completed',
+    statusLabel: 'Đã hoàn thành',
+  },
+  {
+    id: 'st-03',
+    code: 'YCHT-2026-003',
+    dealerName: 'Đại lý Minh Phát Nam Định',
+    category: 'training',
+    categoryLabel: 'Đào tạo sản phẩm',
+    title: 'Tổ chức buổi đào tạo tính năng sen nhiệt độ cho nhân viên bán hàng',
+    content: 'Hỗ trợ đào tạo trực tuyến qua Zoom cho 6 nhân viên tư vấn bán hàng của đại lý.',
+    assignee: 'Nguyễn Thu Huyền',
+    createdAt: '10/11/2026',
+    status: 'pending',
+    statusLabel: 'Chờ duyệt',
+  },
+  {
+    id: 'st-04',
+    code: 'YCHT-2026-004',
+    dealerName: 'Showroom Thành Đạt Quảng Ninh',
+    category: 'discount',
+    categoryLabel: 'Chính sách chiết khấu',
+    title: 'Đăng ký chương trình thưởng vượt doanh số Quý 4/2026',
+    content: 'Đại lý cam kết đạt mốc 1,2 tỷ đồng trong Quý 4 để nhận thưởng chuyến du lịch Hàn Quốc.',
+    assignee: 'Chu Thị Hằng',
+    createdAt: '11/11/2026',
+    status: 'processing',
+    statusLabel: 'Đang triển khai',
+  },
+];
+
+export const MarketingDealersPage: React.FC = () => {
+  const [currentStep, setCurrentStep] = useState<number>(2);
+
+  // Data states
+  const [dealers, setDealers] = useState<DealerItem[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [total, setTotal] = useState<number>(0);
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(20);
+
+  // Filter states
+  const [search, setSearch] = useState<string>('');
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [employeeFilter, setEmployeeFilter] = useState<string>('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Categories
+  const [sources, setSources] = useState<{ id: string; code: string; name: string }[]>([]);
+
+  // Detail / Form Offcanvas
+  const [selectedDealer, setSelectedDealer] = useState<DealerItem | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState<boolean>(false);
+  const [isFormOpen, setIsFormOpen] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // Form values
+  const [formName, setFormName] = useState<string>('');
+  const [formAddress, setFormAddress] = useState<string>('');
+  const [formDaiDien, setFormDaiDien] = useState<string>('');
+  const [formDienThoai, setFormDienThoai] = useState<string>('');
+  const [formEmail, setFormEmail] = useState<string>('');
+  const [formNguon, setFormNguon] = useState<string>('tu-nhien');
+  const [formDoanhSo, setFormDoanhSo] = useState<string>('0');
+  const [formHanMucNo, setFormHanMucNo] = useState<string>('0');
+  const [formNguoiChamSocId, setFormNguoiChamSocId] = useState<string>('');
+  const [formGhiChu, setFormGhiChu] = useState<string>('');
+
+  // Support Tickets State
+  const [supportTickets, setSupportTickets] = useState<SupportTicketItem[]>(DEFAULT_SUPPORT_TICKETS);
+  const [isTicketFormOpen, setIsTicketFormOpen] = useState<boolean>(false);
+  const [ticketDealerName, setTicketDealerName] = useState<string>('');
+  const [ticketCategory, setTicketCategory] = useState<string>('posm');
+  const [ticketTitle, setTicketTitle] = useState<string>('');
+  const [ticketContent, setTicketContent] = useState<string>('');
+  const [ticketAssignee, setTicketAssignee] = useState<string>('Chu Thị Hằng');
+
+  // Load customer sources
+  useEffect(() => {
+    fetch('/api/categories/items?typeId=customer_source')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.items && Array.isArray(data.items)) {
+          setSources(data.items);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Fetch dealers (CHỈ LỌC LOẠI KHÁCH HÀNG LÀ ĐẠI LÝ)
+  const fetchDealers = () => {
+    setLoading(true);
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+      nhom: 'dai-ly',
+      onlyDealers: 'true',
+      ...(search ? { search } : {}),
+      ...(sourceFilter && sourceFilter !== 'all' ? { source: sourceFilter } : {}),
+      ...(employeeFilter ? { employee: employeeFilter } : {}),
+    });
+
+    fetch(`/api/plan-finance/customers?${params.toString()}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.customers) {
+          // Lọc chính xác chỉ lấy đại lý, loại bỏ khách hàng cá nhân
+          const filteredDealers = (data.customers as DealerItem[]).filter(
+            (c) =>
+              c.nhom === 'dai-ly' ||
+              c.groupLabel === 'Đại lý' ||
+              !c.nhom ||
+              c.loai?.toLowerCase().includes('đại lý')
+          ).filter((c) => c.nhom !== 'ca-nhan' && c.groupLabel !== 'Cá nhân');
+
+          setDealers(filteredDealers);
+          setTotal(data.total || filteredDealers.length);
+        }
+      })
+      .catch((err) => console.error('Lỗi tải danh sách đại lý:', err))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchDealers();
+  }, [page, pageSize, sourceFilter, employeeFilter]);
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setPage(1);
+      fetchDealers();
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const totalPages = Math.ceil(total / pageSize) || 1;
+
+  const formatVND = (num?: number) => {
+    if (!num) return '0 đ';
+    return num.toLocaleString('vi-VN') + ' đ';
+  };
+
+  const steps: ModernStepItem[] = [
+    {
+      num: 1,
+      id: 'step_overview',
+      title: 'Tổng quan',
+      desc: 'Chỉ số & KPI đại lý',
+      icon: <Grid1x2 size={14} />,
+    },
+    {
+      num: 2,
+      id: 'step_dealers',
+      title: 'Danh sách đại lý',
+      desc: 'Mạng lưới phân phối',
+      icon: <Shop size={14} />,
+    },
+    {
+      num: 3,
+      id: 'step_support',
+      title: 'Hỗ trợ đại lý',
+      desc: 'POSM & chính sách',
+      icon: <Headset size={14} />,
+    },
+  ];
+
+  // Open Edit Form
+  const handleOpenEdit = (dealer: DealerItem) => {
+    setSelectedDealer(dealer);
+    setFormName(dealer.name || '');
+    setFormAddress(dealer.address || '');
+    setFormDaiDien(dealer.daiDien || '');
+    setFormDienThoai(dealer.dienThoai || '');
+    setFormEmail(dealer.email || '');
+    setFormNguon(dealer.nguon || 'tu-nhien');
+    setFormDoanhSo(String(dealer.doanhSoCamKet || 0));
+    setFormHanMucNo(String(dealer.hanMucCongNo || 0));
+    setFormNguoiChamSocId(dealer.nguoiChamSoc?.id || '');
+    setFormGhiChu(dealer.ghiChu || '');
+    setIsFormOpen(true);
+  };
+
+  // Open Create Form
+  const handleOpenCreate = () => {
+    setSelectedDealer(null);
+    setFormName('');
+    setFormAddress('');
+    setFormDaiDien('');
+    setFormDienThoai('');
+    setFormEmail('');
+    setFormNguon('tu-nhien');
+    setFormDoanhSo('0');
+    setFormHanMucNo('0');
+    setFormNguoiChamSocId('');
+    setFormGhiChu('');
+    setIsFormOpen(true);
+  };
+
+  // Save Dealer
+  const handleSaveDealer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formName.trim()) return;
+
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        name: formName.trim(),
+        address: formAddress.trim(),
+        daiDien: formDaiDien.trim(),
+        dienThoai: formDienThoai.trim(),
+        email: formEmail.trim(),
+        nguon: formNguon,
+        nhom: 'dai-ly',
+        loai: 'Đại lý',
+        doanhSoCamKet: Number(formDoanhSo) || 0,
+        hanMucCongNo: Number(formHanMucNo) || 0,
+        nguoiChamSocId: formNguoiChamSocId || undefined,
+        ghiChu: formGhiChu.trim(),
+      };
+
+      const url = selectedDealer
+        ? `/api/plan-finance/customers/${selectedDealer.id}`
+        : '/api/plan-finance/customers';
+      const method = selectedDealer ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        setIsFormOpen(false);
+        fetchDealers();
+      }
+    } catch (err) {
+      console.error('Lỗi lưu thông tin đại lý:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Delete Dealer
+  const handleDeleteDealer = async (id: string) => {
+    try {
+      const res = await fetch('/api/plan-finance/customers/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [id] }),
+      });
+      if (res.ok) {
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        fetchDealers();
+      }
+    } catch (err) {
+      console.error('Lỗi xóa đại lý:', err);
+    }
+  };
+
+  // Add Support Ticket
+  const handleCreateTicket = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ticketTitle.trim() || !ticketDealerName.trim()) return;
+
+    const catLabels: Record<string, string> = {
+      posm: 'Kệ trưng bày & POSM',
+      catalog: 'Ấn phẩm & Catalogue',
+      training: 'Đào tạo sản phẩm',
+      discount: 'Chính sách chiết khấu',
+      other: 'Hỗ trợ khác',
+    };
+
+    const newTicket: SupportTicketItem = {
+      id: `st-${Date.now()}`,
+      code: `YCHT-2026-${String(supportTickets.length + 1).padStart(3, '0')}`,
+      dealerName: ticketDealerName.trim(),
+      category: ticketCategory as any,
+      categoryLabel: catLabels[ticketCategory] || 'Hỗ trợ',
+      title: ticketTitle.trim(),
+      content: ticketContent.trim(),
+      assignee: ticketAssignee,
+      createdAt: new Date().toLocaleDateString('vi-VN'),
+      status: 'pending',
+      statusLabel: 'Chờ duyệt',
+    };
+
+    setSupportTickets([newTicket, ...supportTickets]);
+    setIsTicketFormOpen(false);
+    setTicketTitle('');
+    setTicketContent('');
+    setTicketDealerName('');
+  };
+
+  return (
+    <StepPage
+      title="Đại lý"
+      description="Quản trị mạng lưới đại lý phân phối, theo dõi cam kết doanh số và các chương trình hỗ trợ đại lý"
+      icon="bi-shop"
+      color="indigo"
+      badge="MARKETING SEAJONG"
+      steps={steps}
+      currentStep={currentStep}
+      onStepChange={setCurrentStep}
+      background="#F8FAFC"
+    >
+      {/* ── BƯỚC 1: TỔNG QUAN ĐẠI LÝ ── */}
+      {currentStep === 1 && (
+        <div className="space-y-4 p-1">
+          {/* KPI Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11.5px] font-bold text-slate-500 uppercase tracking-wide">
+                  Tổng số đại lý
+                </span>
+                <span className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <Shop size={16} />
+                </span>
+              </div>
+              <div className="mt-2 text-2xl font-black text-slate-900">{total || 98}</div>
+              <div className="mt-1 text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+                <i className="bi bi-arrow-up-right" />
+                <span>+12 đại lý mới trong Quý 4</span>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11.5px] font-bold text-slate-500 uppercase tracking-wide">
+                  Có cam kết doanh số
+                </span>
+                <span className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <Award size={16} />
+                </span>
+              </div>
+              <div className="mt-2 text-2xl font-black text-slate-900">42 <span className="text-xs text-slate-400 font-medium">/ 98</span></div>
+              <div className="mt-1 text-[11px] text-slate-500 font-medium">
+                Tỷ lệ cam kết: <b>42.8%</b> mạng lưới
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11.5px] font-bold text-slate-500 uppercase tracking-wide">
+                  Hỗ trợ POSM / Showroom
+                </span>
+                <span className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <BoxSeam size={16} />
+                </span>
+              </div>
+              <div className="mt-2 text-2xl font-black text-slate-900">35 <span className="text-xs text-slate-400 font-medium">điểm bán</span></div>
+              <div className="mt-1 text-[11px] text-indigo-600 font-semibold">
+                Đã trang bị kệ mẫu & biển hiệu
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11.5px] font-bold text-slate-500 uppercase tracking-wide">
+                  Yêu cầu hỗ trợ
+                </span>
+                <span className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                  <Headset size={16} />
+                </span>
+              </div>
+              <div className="mt-2 text-2xl font-black text-slate-900">{supportTickets.length} <span className="text-xs text-slate-400 font-medium">phiếu</span></div>
+              <div className="mt-1 text-[11px] text-amber-600 font-semibold">
+                2 phiếu đang cần triển khai
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Sections */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Phân bổ theo nguồn tiếp cận */}
+            <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1.5 m-0">
+                  <i className="bi bi-pie-chart text-indigo-600" />
+                  <span>Nguồn phát triển đại lý</span>
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(2)}
+                  className="text-xs text-indigo-600 hover:text-indigo-700 font-semibold cursor-pointer"
+                >
+                  Xem danh sách <i className="bi bi-chevron-right text-[10px]" />
+                </button>
+              </div>
+              <div className="mt-3.5 space-y-2.5">
+                {[
+                  { name: 'Khách hàng tự nhiên (Walk-in)', count: 68, pct: 69.4, color: 'bg-indigo-600' },
+                  { name: 'Quảng cáo đa kênh (Digital Ads)', count: 18, pct: 18.4, color: 'bg-blue-500' },
+                  { name: 'Giới thiệu từ đối tác / Thầu thợ', count: 8, pct: 8.2, color: 'bg-emerald-500' },
+                  { name: 'Kinh doanh tự khai thác', count: 4, pct: 4.0, color: 'bg-amber-500' },
+                ].map((item, idx) => (
+                  <div key={idx} className="space-y-1">
+                    <div className="flex justify-between text-xs font-medium text-slate-700">
+                      <span>{item.name}</span>
+                      <span className="font-bold text-slate-900">{item.count} đại lý ({item.pct}%)</span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+                      <div className={`h-full ${item.color} rounded-full`} style={{ width: `${item.pct}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Chương trình Marketing hỗ trợ đại lý */}
+            <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1.5 m-0">
+                  <i className="bi bi-megaphone text-indigo-600" />
+                  <span>Chương trình đồng hành đại lý</span>
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(3)}
+                  className="text-xs text-indigo-600 hover:text-indigo-700 font-semibold cursor-pointer"
+                >
+                  Gửi yêu cầu <i className="bi bi-chevron-right text-[10px]" />
+                </button>
+              </div>
+              <div className="mt-3 space-y-2.5">
+                <div className="p-3 rounded-lg bg-indigo-50/60 border border-indigo-100 flex items-start gap-2.5">
+                  <span className="p-1.5 rounded-md bg-indigo-600 text-white shrink-0">
+                    <Tools size={13} />
+                  </span>
+                  <div>
+                    <div className="font-bold text-xs text-indigo-950">Tài trợ 100% Kệ trưng bày & Biển hiệu</div>
+                    <div className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                      Áp dụng cho các đại lý ký hợp đồng cam kết doanh số tối thiểu 300 triệu đồng/năm.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg bg-emerald-50/60 border border-emerald-100 flex items-start gap-2.5">
+                  <span className="p-1.5 rounded-md bg-emerald-600 text-white shrink-0">
+                    <Award size={13} />
+                  </span>
+                  <div>
+                    <div className="font-bold text-xs text-emerald-950">Thưởng vượt doanh số Quý 4/2026</div>
+                    <div className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                      Chiết khấu lũy tiến từ 2% - 5% trên tổng doanh số nhập hàng thanh toán đúng hạn.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── BƯỚC 2: DANH SÁCH ĐẠI LÝ (CHỈ LỌC LOẠI ĐẠI LÝ) ── */}
+      {currentStep === 2 && (
+        <div className="bg-white rounded-xl border border-slate-200/90 shadow-xs overflow-hidden flex flex-col">
+          {/* TableToolbar */}
+          <TableToolbar
+            searchPlaceholder="Tìm mã ĐL, tên đại lý, người đại diện, số điện thoại, địa chỉ..."
+            searchValue={search}
+            onSearchChange={setSearch}
+            actions={
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Lọc nguồn */}
+                <div className="w-40">
+                  <Select
+                    value={sourceFilter}
+                    onChange={(e) => {
+                      setSourceFilter(e.target.value);
+                      setPage(1);
+                    }}
+                    options={[
+                      { value: 'all', label: 'Tất cả nguồn tiếp cận' },
+                      ...sources.map((s) => ({ value: s.code, label: s.name })),
+                    ]}
+                  />
+                </div>
+
+                {/* Lọc người phụ trách */}
+                <div className="w-44">
+                  <EmployeeSelect
+                    value={employeeFilter}
+                    onChange={(val) => {
+                      setEmployeeFilter(val);
+                      setPage(1);
+                    }}
+                    placeholder="Chọn nhân viên phụ trách..."
+                  />
+                </div>
+              </div>
+            }
+            rightActions={
+              <Button
+                variant="primary"
+                size="sm"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs py-1.5 px-3 rounded-lg"
+                onClick={handleOpenCreate}
+              >
+                <Plus className="w-4 h-4 mr-1" /> Thêm đại lý mới
+              </Button>
+            }
+          />
+
+          {/* FullWidthTable */}
+          <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+            <FullWidthTable
+              loading={loading}
+              emptyText="Không tìm thấy đại lý nào phù hợp với điều kiện lọc"
+            >
+              <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+                <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
+                  <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
+                    <th className="py-2.5 px-3.5 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={dealers.length > 0 && dealers.every((d) => selectedIds.has(d.id))}
+                        onChange={(e) => {
+                          const next = new Set(selectedIds);
+                          if (e.target.checked) dealers.forEach((d) => next.add(d.id));
+                          else next.clear();
+                          setSelectedIds(next);
+                        }}
+                        className="rounded border-slate-300 text-indigo-600 cursor-pointer"
+                      />
+                    </th>
+                    <th className="py-2.5 px-3.5">Mã, Tên đại lý & Địa chỉ</th>
+                    <th className="py-2.5 px-3.5">Người đại diện</th>
+                    <th className="py-2.5 px-3.5 text-right">Cam kết doanh số</th>
+                    <th className="py-2.5 px-3.5 text-right">Hạn mức nợ</th>
+                    <th className="py-2.5 px-3.5 w-[200px]">Người phụ trách</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {dealers.map((d) => (
+                    <SwipeableTableRow
+                      key={d.id}
+                      rowId={`dealer-${d.id}`}
+                      onClick={() => {
+                        setSelectedDealer(d);
+                        setIsDetailOpen(true);
+                      }}
+                      className="hover:bg-indigo-50/40 transition-colors cursor-pointer"
+                      onEdit={() => handleOpenEdit(d)}
+                      onDelete={() => handleDeleteDealer(d.id)}
+                      deleteConfirmTitle="Xác nhận xoá đại lý"
+                      deleteConfirmMessage={`Bạn có chắc chắn muốn xoá đại lý "${d.name}" không? Hành động này không thể hoàn tác.`}
+                    >
+                      <td
+                        className="py-2.5 px-3.5 text-center align-middle"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(d.id)}
+                          onChange={(e) => {
+                            const next = new Set(selectedIds);
+                            if (e.target.checked) next.add(d.id);
+                            else next.delete(d.id);
+                            setSelectedIds(next);
+                          }}
+                          className="rounded border-slate-300 text-indigo-600 cursor-pointer"
+                        />
+                      </td>
+                      <td className="py-2.5 px-3.5 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-mono font-bold text-xs text-indigo-600 hover:underline">
+                            {d.code || `DL-${d.id.slice(-4).toUpperCase()}`}
+                          </span>
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[10.5px] font-bold bg-blue-50 text-blue-700 border border-blue-100">
+                            Đại lý
+                          </span>
+                          {d.sourceLabel && (
+                            <span className="inline-block px-1.5 py-0.5 rounded text-[10.5px] bg-slate-100 text-slate-600 font-medium">
+                              {d.sourceLabel}
+                            </span>
+                          )}
+                        </div>
+                        <div className="font-bold text-slate-800 text-[13px] mt-0.5">
+                          {d.name}
+                        </div>
+                        {d.address ? (
+                          <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5 truncate max-w-[360px]" title={d.address}>
+                            <GeoAlt className="w-3 h-3 text-rose-500 shrink-0" />
+                            <span className="truncate">{d.address}</span>
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                            <GeoAlt className="w-3 h-3 text-slate-300 shrink-0" />
+                            <span>Chưa cập nhật địa chỉ</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3.5 text-xs text-slate-700">
+                        <div className="font-semibold text-slate-800">
+                          {d.daiDien || 'Chưa cập nhật'}
+                        </div>
+                        {d.dienThoai && (
+                          <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                            <Telephone className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span>{d.dienThoai}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3.5 text-right">
+                        <div className="font-bold text-slate-900 text-xs">
+                          {d.doanhSoCamKet && d.doanhSoCamKet > 0 ? formatVND(d.doanhSoCamKet) : 'Không cam kết'}
+                        </div>
+                        {d.doanhSoCamKet && d.doanhSoCamKet > 0 ? (
+                          <div className="text-[10px] text-emerald-600 font-semibold">Hợp đồng năm</div>
+                        ) : null}
+                      </td>
+                      <td className="py-2.5 px-3.5 text-right font-medium text-slate-700 text-xs">
+                        {formatVND(d.hanMucCongNo)}
+                      </td>
+                      <td className="py-2.5 px-3.5">
+                        {d.nguoiChamSoc ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-700 font-bold text-[10px] flex items-center justify-center border border-indigo-100 shrink-0">
+                              {d.nguoiChamSoc.fullName.charAt(0).toUpperCase()}
+                            </span>
+                            <span className="text-xs font-medium text-slate-800 truncate">
+                              {d.nguoiChamSoc.fullName}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400 italic">Chưa phân công</span>
+                        )}
+                      </td>
+                    </SwipeableTableRow>
+                  ))}
+                </tbody>
+              </table>
+            </FullWidthTable>
+          </div>
+
+          {/* Pagination */}
+          <div className="border-t border-slate-200/80">
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              totalItems={total}
+              onPageChange={setPage}
+              onPageSizeChange={(newSize) => {
+                setPageSize(newSize);
+                setPage(1);
+              }}
+              itemName="đại lý"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── BƯỚC 3: HỖ TRỢ ĐẠI LÝ ── */}
+      {currentStep === 3 && (
+        <div className="space-y-4 p-1">
+          {/* Support Actions Toolbar */}
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-xs flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 m-0">Phiếu yêu cầu & Hỗ trợ kỹ thuật Đại lý</h3>
+              <p className="text-xs text-slate-500 m-0 mt-0.5">Tiếp nhận và xử lý yêu cầu quầy kệ POSM, ấn phẩm truyền thông, chính sách chiết khấu</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsTicketFormOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors cursor-pointer border-0 shadow-2xs"
+            >
+              <Plus size={14} />
+              <span>Tạo yêu cầu hỗ trợ</span>
+            </button>
+          </div>
+
+          {/* Support Tickets Table */}
+          <div className="bg-white rounded-xl border border-slate-200/90 shadow-xs overflow-hidden">
+            <table className="w-full text-left border-collapse" style={{ fontSize: '13px' }}>
+              <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
+                <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
+                  <th className="py-2.5 px-3.5 w-28">Mã phiếu</th>
+                  <th className="py-2.5 px-3.5 w-44">Đại lý yêu cầu</th>
+                  <th className="py-2.5 px-3.5">Nội dung yêu cầu hỗ trợ</th>
+                  <th className="py-2.5 px-3.5 w-36">Người xử lý</th>
+                  <th className="py-2.5 px-3.5 w-24 text-center">Ngày gửi</th>
+                  <th className="py-2.5 px-3.5 w-32 text-center">Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {supportTickets.map((t) => {
+                  const isDone = t.status === 'completed';
+                  const isProc = t.status === 'processing';
+                  return (
+                    <tr key={t.id} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="py-2.5 px-3.5 font-mono font-bold text-xs text-indigo-600">
+                        {t.code}
+                      </td>
+                      <td className="py-2.5 px-3.5 font-bold text-xs text-slate-800">
+                        {t.dealerName}
+                      </td>
+                      <td className="py-2.5 px-3.5">
+                        <div className="font-semibold text-slate-900 text-xs">{t.title}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">{t.content}</div>
+                        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 mt-1 border border-slate-200/60">
+                          {t.categoryLabel}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3.5 text-xs font-medium text-slate-800">
+                        {t.assignee}
+                      </td>
+                      <td className="py-2.5 px-3.5 text-xs text-slate-500 font-mono text-center">
+                        {t.createdAt}
+                      </td>
+                      <td className="py-2.5 px-3.5 text-center">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                            isDone
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : isProc
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${isDone ? 'bg-emerald-500' : isProc ? 'bg-blue-500' : 'bg-amber-500'}`} />
+                          {t.statusLabel}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── OFFCANVAS: CHI TIẾT ĐẠI LÝ (400px CHUẨN) ── */}
+      <Offcanvas
+        isOpen={isDetailOpen}
+        onClose={() => setIsDetailOpen(false)}
+        title={selectedDealer?.name || 'Chi tiết đại lý'}
+        width="400px"
+      >
+        {selectedDealer && (
+          <div className="space-y-4 text-xs text-slate-700 p-1">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Mã đại lý:</span>
+                <span className="font-mono font-bold text-indigo-600">{selectedDealer.code || 'DL-Chưa cấp'}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Phân loại:</span>
+                <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">Đại lý</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Nguồn tiếp cận:</span>
+                <span className="font-semibold text-slate-800">{selectedDealer.sourceLabel || 'Tự nhiên'}</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="font-bold text-slate-900 border-b pb-1">Thông tin liên hệ</div>
+              <div><b>Người đại diện:</b> {selectedDealer.daiDien || 'Chưa cập nhật'}</div>
+              <div><b>Điện thoại:</b> {selectedDealer.dienThoai || 'Chưa cập nhật'}</div>
+              <div><b>Email:</b> {selectedDealer.email || 'Chưa cập nhật'}</div>
+              <div><b>Địa chỉ:</b> {selectedDealer.address || 'Chưa cập nhật'}</div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="font-bold text-slate-900 border-b pb-1">Chính sách & Hạn mức</div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Cam kết doanh số:</span>
+                <span className="font-bold text-slate-900">{formatVND(selectedDealer.doanhSoCamKet)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Hạn mức công nợ:</span>
+                <span className="font-bold text-slate-900">{formatVND(selectedDealer.hanMucCongNo)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Nhân viên phụ trách:</span>
+                <span className="font-semibold text-slate-800">{selectedDealer.nguoiChamSoc?.fullName || 'Chưa phân công'}</span>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <Button variant="secondary" size="sm" onClick={() => setIsDetailOpen(false)}>
+                Đóng
+              </Button>
+              <Button variant="primary" size="sm" onClick={() => { setIsDetailOpen(false); handleOpenEdit(selectedDealer); }}>
+                Chỉnh sửa
+              </Button>
+            </div>
+          </div>
+        )}
+      </Offcanvas>
+
+      {/* ── OFFCANVAS: THÊM MỚI / CHỈNH SỬA ĐẠI LÝ (400px CHUẨN) ── */}
+      <Offcanvas
+        isOpen={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+        title={selectedDealer ? 'Cập nhật đại lý' : 'Thêm mới đại lý'}
+        width="400px"
+      >
+        <form onSubmit={handleSaveDealer} className="space-y-3.5 text-xs p-1">
+          <div>
+            <label className="block font-bold text-slate-800 mb-1">Tên đại lý / Cửa hàng *</label>
+            <Input
+              value={formName}
+              onChange={(e) => setFormName(e.target.value)}
+              placeholder="VD: Showroom Ánh Dương..."
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Địa chỉ showroom</label>
+            <Input
+              value={formAddress}
+              onChange={(e) => setFormAddress(e.target.value)}
+              placeholder="VD: 120 Quang Trung, Hà Đông, Hà Nội"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Người đại diện</label>
+              <Input
+                value={formDaiDien}
+                onChange={(e) => setFormDaiDien(e.target.value)}
+                placeholder="Họ và tên..."
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Số điện thoại</label>
+              <Input
+                value={formDienThoai}
+                onChange={(e) => setFormDienThoai(e.target.value)}
+                placeholder="098..."
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Email</label>
+            <Input
+              type="email"
+              value={formEmail}
+              onChange={(e) => setFormEmail(e.target.value)}
+              placeholder="daily@example.com"
+            />
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Nguồn tiếp cận</label>
+            <Select
+              value={formNguon}
+              onChange={(e) => setFormNguon(e.target.value)}
+              options={[
+                { value: 'tu-nhien', label: 'Tự nhiên (Walk-in)' },
+                { value: 'facebook', label: 'Quảng cáo Facebook' },
+                { value: 'google', label: 'Quảng cáo Google' },
+                { value: 'referral', label: 'Giới thiệu' },
+                { value: 'tu_khai_thac', label: 'Tự khai thác' },
+              ]}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Cam kết doanh số (VNĐ)</label>
+              <Input
+                type="number"
+                value={formDoanhSo}
+                onChange={(e) => setFormDoanhSo(e.target.value)}
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Hạn mức nợ (VNĐ)</label>
+              <Input
+                type="number"
+                value={formHanMucNo}
+                onChange={(e) => setFormHanMucNo(e.target.value)}
+                placeholder="0"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Nhân viên phụ trách</label>
+            <EmployeeSelect
+              value={formNguoiChamSocId}
+              onChange={setFormNguoiChamSocId}
+              placeholder="Chọn nhân viên phụ trách..."
+            />
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Ghi chú</label>
+            <textarea
+              value={formGhiChu}
+              onChange={(e) => setFormGhiChu(e.target.value)}
+              rows={2}
+              className="w-full text-xs rounded-lg border border-slate-300 p-2 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              placeholder="Ghi chú thêm về đại lý..."
+            />
+          </div>
+
+          <div className="pt-2 flex justify-end gap-2 border-t">
+            <Button variant="secondary" size="sm" type="button" onClick={() => setIsFormOpen(false)}>
+              Hủy
+            </Button>
+            <Button variant="primary" size="sm" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Đang lưu...' : selectedDealer ? 'Cập nhật' : 'Thêm mới'}
+            </Button>
+          </div>
+        </form>
+      </Offcanvas>
+
+      {/* ── OFFCANVAS: TẠO PHIẾU HỖ TRỢ ĐẠI LÝ (400px CHUẨN) ── */}
+      <Offcanvas
+        isOpen={isTicketFormOpen}
+        onClose={() => setIsTicketFormOpen(false)}
+        title="Tạo yêu cầu hỗ trợ đại lý"
+        width="400px"
+      >
+        <form onSubmit={handleCreateTicket} className="space-y-3.5 text-xs p-1">
+          <div>
+            <label className="block font-bold text-slate-800 mb-1">Tên đại lý *</label>
+            <Input
+              value={ticketDealerName}
+              onChange={(e) => setTicketDealerName(e.target.value)}
+              placeholder="VD: Showroom Ánh Dương..."
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Hạng mục hỗ trợ *</label>
+            <Select
+              value={ticketCategory}
+              onChange={(e) => setTicketCategory(e.target.value)}
+              options={[
+                { value: 'posm', label: 'Kệ trưng bày & Showroom (POSM)' },
+                { value: 'catalog', label: 'Ấn phẩm & Catalogue' },
+                { value: 'training', label: 'Đào tạo sản phẩm & Bán hàng' },
+                { value: 'discount', label: 'Chính sách chiết khấu & Thưởng' },
+                { value: 'other', label: 'Yêu cầu hỗ trợ khác' },
+              ]}
+            />
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-800 mb-1">Tiêu đề yêu cầu *</label>
+            <Input
+              value={ticketTitle}
+              onChange={(e) => setTicketTitle(e.target.value)}
+              placeholder="Tóm tắt yêu cầu cần xử lý..."
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Nội dung chi tiết</label>
+            <textarea
+              value={ticketContent}
+              onChange={(e) => setTicketContent(e.target.value)}
+              rows={4}
+              className="w-full text-xs rounded-lg border border-slate-300 p-2 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              placeholder="Mô tả cụ thể kích thước kệ, số lượng ấn phẩm, thời gian mong muốn..."
+            />
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Nhân sự Marketing phụ trách</label>
+            <Select
+              value={ticketAssignee}
+              onChange={(e) => setTicketAssignee(e.target.value)}
+              options={[
+                { value: 'Chu Thị Hằng', label: 'Chu Thị Hằng (Trưởng nhóm Marketing)' },
+                { value: 'Nguyễn Quốc Việt', label: 'Nguyễn Quốc Việt (Chuyên viên Marketing)' },
+                { value: 'Nguyễn Thu Huyền', label: 'Nguyễn Thu Huyền (Chăm sóc đại lý)' },
+              ]}
+            />
+          </div>
+
+          <div className="pt-2 flex justify-end gap-2 border-t">
+            <Button variant="secondary" size="sm" type="button" onClick={() => setIsTicketFormOpen(false)}>
+              Hủy
+            </Button>
+            <Button variant="primary" size="sm" type="submit">
+              Gửi yêu cầu
+            </Button>
+          </div>
+        </form>
+      </Offcanvas>
+    </StepPage>
+  );
+};
+
+export default MarketingDealersPage;
