@@ -31,6 +31,7 @@ import { Input } from '../../components/common/Input';
 import { Toggle } from '../../components/common/Toggle';
 import { Modal } from '../../components/common/Modal';
 import { Offcanvas } from '../../components/common/Offcanvas';
+import { SuggestionInput, type SuggestionItem } from '../../components/common/SuggestionInput';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useAuth } from '../../context/AuthContext';
 import type { ModernStepItem } from '../../types';
@@ -343,8 +344,19 @@ const RequestsTab: React.FC<{
   const [newReqDeptId, setNewReqDeptId] = useState('');
   const [newReqNote, setNewReqNote] = useState('');
   const [newReqLines, setNewReqLines] = useState<
-    Array<{ itemId: string; requestQty: number; unitPrice: number }>
-  >([{ itemId: '', requestQty: 1, unitPrice: 0 }]);
+    Array<{ itemId: string; itemName?: string; requestQty: number; unitPrice: number; unit?: string }>
+  >([{ itemId: '', itemName: '', requestQty: 1, unitPrice: 0, unit: 'cái' }]);
+
+  const itemSuggestions = useMemo<SuggestionItem[]>(() => {
+    return items.map((it) => ({
+      id: it.id,
+      value: it.name,
+      label: it.name,
+      subText: `Tồn kho: ${it.stockQty} ${it.unit}`,
+      category: it.category?.name || (it.isAsset ? 'Dụng cụ' : 'Văn phòng phẩm'),
+      badge: `Tồn: ${it.stockQty} ${it.unit}`,
+    }));
+  }, [items]);
 
   // Purchase & Receive Modal
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
@@ -519,7 +531,7 @@ const RequestsTab: React.FC<{
       if (res.ok) {
         setShowCreateReqPanel(false);
         setNewReqNote('');
-        setNewReqLines([{ itemId: '', requestQty: 1, unitPrice: 0 }]);
+        setNewReqLines([{ itemId: '', itemName: '', requestQty: 1, unitPrice: 0, unit: 'cái' }]);
         fetchRequests();
         onDataChange();
       }
@@ -742,9 +754,11 @@ const RequestsTab: React.FC<{
                   setNewReqNote('');
                   setNewReqLines([
                     {
-                      itemId: items[0]?.id || '',
+                      itemId: '',
+                      itemName: '',
                       requestQty: 1,
-                      unitPrice: items[0]?.unitPrice || 0,
+                      unitPrice: 0,
+                      unit: 'cái',
                     },
                   ]);
                   setShowCreateReqPanel(true);
@@ -786,37 +800,59 @@ const RequestsTab: React.FC<{
         onClose={() => setShowCreateReqPanel(false)}
         title="Tạo đề xuất cấp phát văn phòng phẩm"
         icon={<ClipboardCheck size={20} />}
-        width="520px"
-        confirmText="Gửi đề xuất"
-        cancelText="Hủy bỏ"
-        onConfirm={handleCreateSupplyRequest}
-        onCancel={() => setShowCreateReqPanel(false)}
-        isSubmitting={actionLoading}
+        width="540px"
+        bodyClassName="flex flex-col h-full !p-4"
+        footer={
+          <div className="flex items-center justify-between gap-2 w-full">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowCreateReqPanel(false)}
+              disabled={actionLoading}
+            >
+              Hủy bỏ
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleCreateSupplyRequest}
+              disabled={
+                actionLoading ||
+                newReqLines.length === 0 ||
+                newReqLines.every((l) => !l.itemId || l.requestQty <= 0)
+              }
+            >
+              {actionLoading ? 'Đang gửi...' : 'Gửi đề xuất'}
+            </Button>
+          </div>
+        }
       >
-        <div className="space-y-4">
-          <Select
-            label="Phòng ban yêu cầu *"
-            value={newReqDeptId}
-            onChange={(e) => setNewReqDeptId(e.target.value)}
-          >
-            {departments.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.nameVi}
-              </option>
-            ))}
-          </Select>
+        <div className="flex flex-col flex-1 min-h-0 h-full space-y-3.5">
+          <div className="space-y-3 shrink-0">
+            <Select
+              label="Phòng ban yêu cầu *"
+              value={newReqDeptId}
+              onChange={(e) => setNewReqDeptId(e.target.value)}
+            >
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.nameVi}
+                </option>
+              ))}
+            </Select>
 
-          <Input
-            label="Nội dung / Lý do đề xuất"
-            placeholder="VD: Cấp phát văn phòng phẩm định kỳ tháng..."
-            value={newReqNote}
-            onChange={(e) => setNewReqNote(e.target.value)}
-          />
+            <Input
+              label="Nội dung / Lý do đề xuất"
+              placeholder="VD: Cấp phát văn phòng phẩm định kỳ tháng..."
+              value={newReqNote}
+              onChange={(e) => setNewReqNote(e.target.value)}
+            />
+          </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700 uppercase">
-                Danh sách vật tư đề xuất
+          <div className="flex-1 min-h-0 flex flex-col space-y-2">
+            <div className="flex items-center justify-between shrink-0">
+              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Danh sách vật tư đề xuất ({newReqLines.length})
               </span>
               <Button
                 size="sm"
@@ -825,7 +861,7 @@ const RequestsTab: React.FC<{
                 onClick={() =>
                   setNewReqLines((prev) => [
                     ...prev,
-                    { itemId: items[0]?.id || '', requestQty: 1, unitPrice: items[0]?.unitPrice || 0 },
+                    { itemId: '', itemName: '', requestQty: 1, unitPrice: 0, unit: 'cái' },
                   ])
                 }
               >
@@ -833,69 +869,126 @@ const RequestsTab: React.FC<{
               </Button>
             </div>
 
-            <div className="border border-slate-200 rounded-xl overflow-hidden">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
-                  <tr>
-                    <th className="text-left p-2 font-semibold">Vật tư</th>
-                    <th className="text-right p-2 font-semibold w-24">Số lượng</th>
-                    <th className="w-10"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {newReqLines.map((line, idx) => (
-                    <tr key={idx}>
-                      <td className="p-2">
-                        <Select
-                          value={line.itemId}
-                          onChange={(e) => {
-                            const selected = items.find((i) => i.id === e.target.value);
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-2.5 pr-0.5">
+              {newReqLines.map((line, idx) => {
+                const selectedItem = items.find(
+                  (it) =>
+                    it.id === line.itemId ||
+                    it.name.toLowerCase() === (line.itemName || '').toLowerCase()
+                );
+                return (
+                  <div
+                    key={idx}
+                    className="p-3 bg-slate-50/70 hover:bg-slate-50 rounded-xl border border-slate-200/80 transition-colors flex items-start gap-2.5"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        Vật tư / Dụng cụ #{idx + 1}
+                      </label>
+                      <SuggestionInput
+                        placeholder="Nhập tên vật tư / dụng cụ..."
+                        value={line.itemName || ''}
+                        onChange={(val) => {
+                          const matched = items.find(
+                            (it) => it.name.toLowerCase() === val.toLowerCase()
+                          );
+                          const next = [...newReqLines];
+                          next[idx] = {
+                            ...next[idx],
+                            itemName: val,
+                            itemId: matched ? matched.id : '',
+                            unitPrice: matched ? matched.unitPrice : 0,
+                            unit: matched ? matched.unit : 'cái',
+                          };
+                          setNewReqLines(next);
+                        }}
+                        onSelectSuggestion={(sug) => {
+                          const matched = items.find(
+                            (it) =>
+                              it.id === sug.id ||
+                              it.name.toLowerCase() === (sug.value || '').toLowerCase()
+                          );
+                          if (matched) {
                             const next = [...newReqLines];
                             next[idx] = {
                               ...next[idx],
-                              itemId: e.target.value,
-                              unitPrice: selected?.unitPrice || 0,
+                              itemId: matched.id,
+                              itemName: matched.name,
+                              unitPrice: matched.unitPrice,
+                              unit: matched.unit,
                             };
                             setNewReqLines(next);
-                          }}
-                        >
-                          <option value="">-- Chọn vật tư --</option>
-                          {items.map((it) => (
-                            <option key={it.id} value={it.id}>
-                              {it.code} - {it.name} (Tồn: {it.stockQty} {it.unit})
-                            </option>
-                          ))}
-                        </Select>
-                      </td>
-                      <td className="p-2">
-                        <Input
-                          type="number"
-                          min={1}
-                          value={line.requestQty}
-                          onChange={(e) => {
-                            const next = [...newReqLines];
-                            next[idx].requestQty = Math.max(1, Number(e.target.value));
-                            setNewReqLines(next);
-                          }}
-                        />
-                      </td>
-                      <td className="p-2 text-center">
-                        {newReqLines.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setNewReqLines(newReqLines.filter((_, i) => i !== idx))
-                            }
-                            className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer border-0 bg-transparent"
-                          >
-                            <Trash size={14} />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                          }
+                        }}
+                        suggestions={itemSuggestions}
+                        showClearButton={true}
+                      />
+                      {selectedItem && (
+                        <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-500">
+                          <span className="font-semibold text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200">
+                            Tồn kho: {selectedItem.stockQty} {selectedItem.unit}
+                          </span>
+                          {selectedItem.category?.name && (
+                            <span className="text-slate-400">
+                              {selectedItem.category.name}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="w-24 shrink-0">
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1 text-right">
+                        Số lượng
+                      </label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={line.requestQty}
+                        onChange={(e) => {
+                          const next = [...newReqLines];
+                          next[idx].requestQty = Math.max(1, Number(e.target.value));
+                          setNewReqLines(next);
+                        }}
+                        className="text-right"
+                      />
+                    </div>
+
+                    <div className="pt-6 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNewReqLines(newReqLines.filter((_, i) => i !== idx))
+                        }
+                        disabled={newReqLines.length <= 1}
+                        className={`p-2 rounded-lg cursor-pointer border-0 transition-colors ${
+                          newReqLines.length > 1
+                            ? 'text-rose-500 hover:text-rose-700 hover:bg-rose-50'
+                            : 'text-slate-300 cursor-not-allowed bg-transparent'
+                        }`}
+                        title={newReqLines.length > 1 ? 'Xóa dòng này' : 'Cần ít nhất 1 dòng'}
+                      >
+                        <Trash size={15} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 shrink-0">
+              <span>
+                Tổng số loại:{' '}
+                <strong className="text-slate-800">
+                  {newReqLines.filter((l) => l.itemId).length}
+                </strong>
+              </span>
+              <span>
+                Tổng số lượng:{' '}
+                <strong className="text-slate-800">
+                  {newReqLines.reduce((acc, l) => acc + (l.itemId ? l.requestQty : 0), 0)}
+                </strong>
+              </span>
             </div>
           </div>
         </div>
