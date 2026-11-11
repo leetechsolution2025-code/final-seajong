@@ -1915,7 +1915,7 @@ export const MarketingPlanPage: React.FC = () => {
                     }`}
                     onClick={() => setStep1Tab('kpi')}
                   >
-                    BẢNG CHỈ SỐ KẾ HOẠCH MARKETING NĂM {selectedYear}
+                    Bảng chỉ số kế hoạch
                   </button>
                   <button
                     type="button"
@@ -1926,7 +1926,7 @@ export const MarketingPlanPage: React.FC = () => {
                     }`}
                     onClick={() => setStep1Tab('salary')}
                   >
-                    CHI TIẾT CHI PHÍ LƯƠNG THƯỞNG NHÂN SỰ
+                    Chi tiết chi phí
                   </button>
                 </div>
 
