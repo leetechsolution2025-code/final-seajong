@@ -2689,6 +2689,8 @@ export const MarketingPlanPage: React.FC = () => {
         onClose={() => setShowAddOffcanvas(false)}
         title={editingContentPlanId ? 'Hiệu chỉnh tuyến nội dung' : 'Thêm tuyến nội dung mới'}
         width="400px"
+        bodyStyle={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+        bodyClassName="h-full flex flex-col p-4"
         footer={
           <div className="w-full flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowAddOffcanvas(false)}>
@@ -2724,37 +2726,25 @@ export const MarketingPlanPage: React.FC = () => {
           </div>
         }
       >
-        <div className="flex flex-col gap-3.5 text-xs">
+        <div className="flex flex-col flex-1 h-full gap-3 text-xs">
           <Input
-            label="Tuyến nội dung (Pillar) *"
+            label="Tuyến nội dung *"
             placeholder="VD: Nhận diện thương hiệu, Tuyển đại lý..."
             value={offcanvasData.pillar}
             onChange={(e) => setOffcanvasData({ ...offcanvasData, pillar: e.target.value })}
           />
           <Input
-            label="Mục tiêu (Purpose)"
+            label="Mục tiêu"
             placeholder="VD: Tạo khách hàng đại lý tiềm năng chất lượng..."
             value={offcanvasData.purpose}
             onChange={(e) => setOffcanvasData({ ...offcanvasData, purpose: e.target.value })}
           />
           <Input
-            label="Vai trò (Role)"
+            label="Vai trò"
             placeholder="VD: Thu hút, sàng lọc và nuôi dưỡng đối tác..."
             value={offcanvasData.role}
             onChange={(e) => setOffcanvasData({ ...offcanvasData, role: e.target.value })}
           />
-          <div>
-            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-              Nội dung chi tiết
-            </label>
-            <textarea
-              rows={4}
-              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all resize-y"
-              value={offcanvasData.details}
-              placeholder="VD: Triển khai các nhóm: 1. Vấn đề đại lý: ... 2. Giải pháp Seajong: ..."
-              onChange={(e) => setOffcanvasData({ ...offcanvasData, details: e.target.value })}
-            />
-          </div>
           <div className="grid grid-cols-2 gap-3">
             <NumberInput
               label="Ngân sách (đ)"
@@ -2769,6 +2759,17 @@ export const MarketingPlanPage: React.FC = () => {
               onValueChange={(val) => setOffcanvasData({ ...offcanvasData, postsCount: val })}
             />
           </div>
+          <div className="flex-1 flex flex-col min-h-[140px]">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+              Nội dung chi tiết
+            </label>
+            <textarea
+              className="w-full flex-1 min-h-[130px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all resize-none"
+              value={offcanvasData.details}
+              placeholder="VD: Triển khai các nhóm: 1. Vấn đề đại lý: ... 2. Giải pháp Seajong: ..."
+              onChange={(e) => setOffcanvasData({ ...offcanvasData, details: e.target.value })}
+            />
+          </div>
         </div>
       </Offcanvas>
 
@@ -2778,6 +2779,8 @@ export const MarketingPlanPage: React.FC = () => {
         onClose={() => setShowAdOffcanvas(false)}
         title={editingAdPlanId ? 'Hiệu chỉnh mục tiêu quảng cáo' : 'Thêm mục tiêu quảng cáo mới'}
         width="400px"
+        bodyStyle={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+        bodyClassName="h-full flex flex-col p-4"
         footer={
           <div className="w-full flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowAdOffcanvas(false)}>
@@ -2813,7 +2816,7 @@ export const MarketingPlanPage: React.FC = () => {
           </div>
         }
       >
-        <div className="flex flex-col gap-3.5 text-xs">
+        <div className="flex flex-col flex-1 h-full gap-3 text-xs">
           <Input
             label="Mục tiêu chiến dịch *"
             placeholder="VD: Tìm kiếm đại lý, Nhận diện thương hiệu..."
@@ -2850,24 +2853,6 @@ export const MarketingPlanPage: React.FC = () => {
               onValueChange={(val) => setAdOffcanvasData({ ...adOffcanvasData, budget: val })}
             />
           </div>
-          <div>
-            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-              Thông điệp nội dung
-            </label>
-            <textarea
-              rows={3}
-              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all resize-y"
-              value={adOffcanvasData.content}
-              placeholder="VD: - Video về thương hiệu Seajong&#10;- Bài viết về chính sách hỗ trợ đại lý..."
-              onChange={(e) => setAdOffcanvasData({ ...adOffcanvasData, content: e.target.value })}
-            />
-          </div>
-          <Input
-            label="Trang đích (Landing page)"
-            placeholder="VD: https://seajong.com/dai-ly-seajong/"
-            value={adOffcanvasData.landingPage}
-            onChange={(e) => setAdOffcanvasData({ ...adOffcanvasData, landingPage: e.target.value })}
-          />
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
@@ -2896,16 +2881,27 @@ export const MarketingPlanPage: React.FC = () => {
               onChange={(e) => setAdOffcanvasData({ ...adOffcanvasData, assignee: e.target.value })}
             />
           </div>
-          <div>
+          <Input
+            label="Trang đích"
+            placeholder="VD: https://seajong.com/dai-ly-seajong/"
+            value={adOffcanvasData.landingPage}
+            onChange={(e) => setAdOffcanvasData({ ...adOffcanvasData, landingPage: e.target.value })}
+          />
+          <Input
+            label="Đối tượng mục tiêu"
+            placeholder="VD: Chủ cửa hàng VLXD, thầu thợ, đại lý điện nước..."
+            value={adOffcanvasData.audience}
+            onChange={(e) => setAdOffcanvasData({ ...adOffcanvasData, audience: e.target.value })}
+          />
+          <div className="flex-1 flex flex-col min-h-[120px]">
             <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-              Đối tượng mục tiêu
+              Thông điệp nội dung
             </label>
             <textarea
-              rows={2}
-              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all resize-y"
-              value={adOffcanvasData.audience}
-              placeholder="VD: Chủ cửa hàng VLXD, thầu thợ, đại lý điện nước..."
-              onChange={(e) => setAdOffcanvasData({ ...adOffcanvasData, audience: e.target.value })}
+              className="w-full flex-1 min-h-[110px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all resize-none"
+              value={adOffcanvasData.content}
+              placeholder="VD: - Video về thương hiệu Seajong&#10;- Bài viết về chính sách hỗ trợ đại lý..."
+              onChange={(e) => setAdOffcanvasData({ ...adOffcanvasData, content: e.target.value })}
             />
           </div>
         </div>
@@ -2955,7 +2951,7 @@ export const MarketingPlanPage: React.FC = () => {
       >
         <div className="flex flex-col gap-3.5 text-[13px]">
           <div>
-            <label className="font-semibold text-slate-700 block mb-1">Hạng mục (Pillar)</label>
+            <label className="font-semibold text-slate-700 block mb-1">Hạng mục</label>
             <select className="form-select form-select-sm text-[13px]" value={taskPillar} onChange={(e) => setTaskPillar(e.target.value)}>
               <option value="Sản phẩm">Sản phẩm</option>
               <option value="Bán hàng">Bán hàng</option>
