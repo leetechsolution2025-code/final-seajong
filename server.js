@@ -6164,6 +6164,94 @@ function buildAppendixConstructionTasks(recordId, contractCode, customerName, cu
   });
 }
 
+function getMarketingCategoryName(sectionKey) {
+  if (sectionKey.startsWith('section_content')) return 'Content Marketing';
+  if (sectionKey.startsWith('section_media')) return 'Media & Video';
+  if (sectionKey.startsWith('section_design')) return 'Thiết kế đồ họa & Visual';
+  if (sectionKey.startsWith('section_seo')) return 'SEO & Bài viết Blog';
+  if (sectionKey.startsWith('section_adv')) return 'Quảng cáo đa kênh (Paid Ads)';
+  if (sectionKey.startsWith('section_pos')) return 'Điểm bán & Hỗ trợ đại lý (POSM)';
+  return 'Công việc Marketing';
+}
+
+function parseMarketingPlanTasks(planDataStr, targetYear = 2026) {
+  const mktTasks = [];
+  if (!planDataStr) return mktTasks;
+  let data = {};
+  try {
+    data = typeof planDataStr === 'string' ? JSON.parse(planDataStr) : planDataStr;
+  } catch (_e) {
+    return mktTasks;
+  }
+
+  const sectionContentItems = data.mkt_sectionContentItems || {};
+  const entries = Object.entries(sectionContentItems);
+
+  for (const [key, items] of entries) {
+    if (!Array.isArray(items) || items.length === 0) continue;
+
+    const match = key.match(/_(\d+)$/);
+    const month = match ? parseInt(match[1], 10) : 11;
+    const monthStr = String(month).padStart(2, '0');
+    const groupName = getMarketingCategoryName(key);
+    const lastDayOfMonth = new Date(targetYear, month, 0).getDate();
+
+    items.forEach((item, idx) => {
+      const weeks = Array.isArray(item.weeks) && item.weeks.length > 0 ? item.weeks : [1];
+      const minWeek = Math.min(...weeks);
+      const maxWeek = Math.max(...weeks);
+
+      const startDay = minWeek === 1 ? 1 : minWeek === 2 ? 8 : minWeek === 3 ? 15 : 22;
+      const endDay = maxWeek === 1 ? 7 : maxWeek === 2 ? 14 : maxWeek === 3 ? 21 : lastDayOfMonth;
+
+      const startDate = `${targetYear}-${monthStr}-${String(startDay).padStart(2, '0')}`;
+      const endDate = `${targetYear}-${monthStr}-${String(endDay).padStart(2, '0')}`;
+
+      const title = item.topic || item.name || item.pillar || `Nhiệm vụ Marketing ${idx + 1}`;
+      const status = item.status === 'completed'
+        ? 'completed'
+        : item.status === 'in_progress'
+          ? 'in_progress'
+          : 'not_started';
+      const statusLabel = status === 'completed'
+        ? 'Đã hoàn thành'
+        : status === 'in_progress'
+          ? 'Đang thực hiện'
+          : 'Chưa thực hiện';
+      const progress = item.progress !== undefined
+        ? Number(item.progress)
+        : status === 'completed' ? 100 : status === 'in_progress' ? 50 : 0;
+
+      const code = `MKT-${monthStr}-${String(idx + 1).padStart(3, '0')}`;
+
+      mktTasks.push({
+        id: `mkt-item-${item.id || `${key}-${idx}`}`,
+        code,
+        title,
+        project: `HẠNG MỤC: ${groupName.toUpperCase()} (T${monthStr}/${targetYear})`,
+        contractCode: `HẠNG MỤC: ${groupName.toUpperCase()} (T${monthStr}/${targetYear})`,
+        customerName: `Kế hoạch Marketing Tháng ${monthStr}/${targetYear}`,
+        customerAddress: `Phòng Marketing Seajong`,
+        assignee: item.assignee || 'Chu Thị Hằng',
+        assigner: 'Trưởng phòng Marketing',
+        department: 'Phòng Marketing',
+        priority: item.isAds ? 'high' : 'medium',
+        priorityLabel: item.isAds ? 'Ưu tiên cao' : 'Trung bình',
+        startDate,
+        endDate,
+        progress,
+        status,
+        statusLabel,
+        description: item.details || item.pillar || (item.format ? `Hình thức: ${item.format} | Kênh: ${item.channel || ''}` : ''),
+        category: 'production',
+        isContractOnly: false,
+      });
+    });
+  }
+
+  return mktTasks;
+}
+
 app.get('/api/user-tasks', async (req, res) => {
   try {
     const allTasks = [];
@@ -6341,8 +6429,56 @@ app.get('/api/user-tasks', async (req, res) => {
       }
     }
 
+    // 3. Nạp các công việc từ Kế hoạch tháng của phòng Marketing (MasterYearlyPlan)
+    let marketingTasks = [];
+    try {
+      const targetYear = parseInt(req.query.year || '2026', 10);
+      const mPlan = await prisma.masterYearlyPlan.findUnique({
+        where: { year: targetYear },
+      });
+      if (mPlan && mPlan.planData) {
+        marketingTasks = parseMarketingPlanTasks(mPlan.planData, targetYear);
+      }
+    } catch (_planErr) {
+      console.error('Lỗi nạp Kế hoạch tháng Marketing vào Tasks:', _planErr);
+    }
+
     // Bộ lọc query tùy chọn
     const { department, assignee } = req.query;
+    const reqDept = (department || '').toLowerCase();
+    const isMarketing = reqDept === 'marketing' || reqDept === 'mkt';
+
+    if (isMarketing) {
+      // Khi yêu cầu công việc phòng Marketing: CHỈ hiển thị các công việc của phòng Marketing căn cứ theo kế hoạch tháng
+      const mktTasksMap = new Map();
+      marketingTasks.forEach((t) => mktTasksMap.set(String(t.id), t));
+
+      // Thêm các tasks trực tiếp trong dbTasks được gán riêng cho phòng Marketing
+      allTasks.forEach((t) => {
+        const tDept = (t.department || '').toLowerCase();
+        if (tDept.includes('marketing') && !t.isContractOnly) {
+          mktTasksMap.set(String(t.id), t);
+        }
+      });
+
+      let mktResult = Array.from(mktTasksMap.values());
+      if (assignee) {
+        const assigneeLower = String(assignee).toLowerCase();
+        mktResult = mktResult.filter((t) =>
+          (t.assignee || '').toLowerCase().includes(assigneeLower)
+        );
+      }
+      return res.json(mktResult);
+    }
+
+    // Nếu không phải chế độ riêng của Marketing, tích hợp thêm marketingTasks vào allTasks để các phòng ban cấp cao theo dõi
+    for (const mt of marketingTasks) {
+      if (!seenIds.has(String(mt.id))) {
+        seenIds.add(String(mt.id));
+        allTasks.push(mt);
+      }
+    }
+
     let filtered = allTasks;
     if (department) {
       const deptLower = String(department).toLowerCase();

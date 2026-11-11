@@ -418,7 +418,7 @@ export const DashboardView: React.FC = () => {
     activeMenuKey === 'work-management' ||
     activeMenuKey === 'task'
   ) {
-    return <TaskManagementPage />;
+    return <TaskManagementPage department={activeDeptCode} />;
   }
 
   // Khi người dùng chọn Danh sách công việc cá nhân (chuẩn client-skydoor với MyTasksView)

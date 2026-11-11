@@ -593,9 +593,47 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
     };
   }, [myTasksBase]);
 
+  // Phân tích chuỗi ngày tháng an toàn ở cả định dạng YYYY-MM-DD và DD/MM/YYYY
+  const parseDateParts = (dateStr?: string) => {
+    if (!dateStr) return { year: currentYear, month: currentMonth, day: 1 };
+    const cleanStr = dateStr.trim();
+    if (cleanStr.includes('/')) {
+      const p = cleanStr.split('/');
+      if (p.length === 3) {
+        return {
+          year: parseInt(p[2], 10) || currentYear,
+          month: parseInt(p[1], 10) || currentMonth,
+          day: parseInt(p[0], 10) || 1,
+        };
+      }
+    }
+    const p = cleanStr.split('-');
+    if (p.length === 3) {
+      return {
+        year: parseInt(p[0], 10) || currentYear,
+        month: parseInt(p[1], 10) || currentMonth,
+        day: parseInt(p[2], 10) || 1,
+      };
+    }
+    return { year: currentYear, month: currentMonth, day: 1 };
+  };
+
   // Bộ lọc dữ liệu tìm kiếm và phân loại
   const filteredTasks = useMemo(() => {
     return myTasksBase.filter((t) => {
+      // 0. Đối với phòng Marketing: lọc theo Kế hoạch tháng (Tháng/Năm hiện đang chọn)
+      if (department === 'marketing' || department === 'mkt') {
+        if (t.startDate || t.endDate) {
+          const s = parseDateParts(t.startDate);
+          const e = parseDateParts(t.endDate);
+          const sMonthNum = s.year * 100 + s.month;
+          const eMonthNum = e.year * 100 + e.month;
+          const curMonthNum = currentYear * 100 + currentMonth;
+          if (curMonthNum < sMonthNum || curMonthNum > eMonthNum) {
+            return false;
+          }
+        }
+      }
       if (t.isContractOnly) {
         if (statusFilter !== 'all' || executionStatusFilter !== 'all') return false;
         if (searchQuery.trim()) {
@@ -651,7 +689,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
       }
       return true;
     });
-  }, [myTasksBase, statusFilter, isOnlyMyTasks, assigneeSearch, executionStatusFilter, searchQuery]);
+  }, [myTasksBase, statusFilter, isOnlyMyTasks, assigneeSearch, executionStatusFilter, searchQuery, department, currentYear, currentMonth]);
 
 
   // Trạng thái thu gọn/mở rộng từng hợp đồng
@@ -811,31 +849,6 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
     dept = dept.replace(/[()]/g, '').trim();
 
     return { name, dept };
-  };
-
-  // Phân tích chuỗi ngày tháng an toàn ở cả định dạng YYYY-MM-DD và DD/MM/YYYY
-  const parseDateParts = (dateStr?: string) => {
-    if (!dateStr) return { year: currentYear, month: currentMonth, day: 1 };
-    const cleanStr = dateStr.trim();
-    if (cleanStr.includes('/')) {
-      const p = cleanStr.split('/');
-      if (p.length === 3) {
-        return {
-          year: parseInt(p[2], 10) || currentYear,
-          month: parseInt(p[1], 10) || currentMonth,
-          day: parseInt(p[0], 10) || 1,
-        };
-      }
-    }
-    const p = cleanStr.split('-');
-    if (p.length === 3) {
-      return {
-        year: parseInt(p[0], 10) || currentYear,
-        month: parseInt(p[1], 10) || currentMonth,
-        day: parseInt(p[2], 10) || 1,
-      };
-    }
-    return { year: currentYear, month: currentMonth, day: 1 };
   };
 
   // Tính toán hạn chót và số ngày còn lại hoặc trễ hạn
@@ -1899,13 +1912,27 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
           }}
         >
           <div className="task-mgmt-legend-summary" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: '#475569', flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700, color: '#0f172a' }}>
-              Tổng hợp đồng triển khai: <span style={{ color: '#2563eb' }}>{contractGroups.length}</span> hợp đồng
-            </span>
-            <span style={{ color: '#cbd5e1' }}>•</span>
-            <span>
-              Tổng đầu việc: <strong style={{ color: '#0f172a' }}>{contractGroups.reduce((sum, g) => sum + g.tasks.length, 0)}</strong> hạng mục
-            </span>
+            {department === 'marketing' || department === 'mkt' ? (
+              <>
+                <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                  Hạng mục kế hoạch: <span style={{ color: '#2563eb' }}>{contractGroups.length}</span> nhóm
+                </span>
+                <span style={{ color: '#cbd5e1' }}>•</span>
+                <span>
+                  Tổng đầu việc: <strong style={{ color: '#0f172a' }}>{contractGroups.reduce((sum, g) => sum + g.tasks.length, 0)}</strong> nhiệm vụ
+                </span>
+              </>
+            ) : (
+              <>
+                <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                  Tổng hợp đồng triển khai: <span style={{ color: '#2563eb' }}>{contractGroups.length}</span> hợp đồng
+                </span>
+                <span style={{ color: '#cbd5e1' }}>•</span>
+                <span>
+                  Tổng đầu việc: <strong style={{ color: '#0f172a' }}>{contractGroups.reduce((sum, g) => sum + g.tasks.length, 0)}</strong> hạng mục
+                </span>
+              </>
+            )}
           </div>
           <div className="task-mgmt-legend-items" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
             {executionStatusItems.map((item) => {

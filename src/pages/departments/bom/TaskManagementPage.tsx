@@ -5,18 +5,26 @@ import { TaskManagementView } from '../../../components/common/TaskManagementVie
 export interface TaskManagementPageProps {
   onShowToast?: (type: 'success' | 'error' | 'warning' | 'info', title: string, message: string) => void;
   onNavigate?: (navId: string) => void;
+  department?: string;
 }
 
 export const TaskManagementPage: React.FC<TaskManagementPageProps> = ({
   onShowToast,
+  department = 'all',
 }) => {
+  const isMarketing = department === 'marketing' || department === 'mkt';
+
   return (
     <StandardPage
       title="Quản trị công việc"
-      description="Theo dõi tiến độ giao việc trọng yếu các xưởng sản xuất và phòng ban nghiệp vụ"
+      description={
+        isMarketing
+          ? 'Theo dõi và quản trị tiến độ thực thi các công việc, chiến dịch phòng Marketing theo kế hoạch tháng'
+          : 'Theo dõi tiến độ giao việc trọng yếu các xưởng sản xuất và phòng ban nghiệp vụ'
+      }
       icon="bi-kanban"
       color="indigo"
-      badge="TIẾN ĐỘ THỰC THI"
+      badge={isMarketing ? 'MARKETING SEAJONG' : 'TIẾN ĐỘ THỰC THI'}
       tickerContext="tasks"
       cardPadding="p-0"
       useCard={true}
@@ -24,8 +32,8 @@ export const TaskManagementPage: React.FC<TaskManagementPageProps> = ({
     >
       <TaskManagementView
         hideTitle={true}
-        department="all"
-        showCategoryTabs={true}
+        department={department}
+        showCategoryTabs={!isMarketing}
         allowAdd={true}
         onShowToast={onShowToast}
       />
