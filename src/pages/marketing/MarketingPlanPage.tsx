@@ -619,6 +619,7 @@ export const MarketingPlanPage: React.FC = () => {
     return currentM >= 1 && currentM <= 12 ? currentM : 1;
   }); // Tự động lấy theo tháng hiện hành
   const [step1Tab, setStep1Tab] = useState<'kpi' | 'salary'>('kpi');
+  const [step4BudgetTab, setStep4BudgetTab] = useState<'agency' | 'adv'>('agency');
 
   // Global loading & editing states
   const [loadingMasterPlan, setLoadingMasterPlan] = useState<boolean>(true);
@@ -2794,12 +2795,12 @@ export const MarketingPlanPage: React.FC = () => {
             BƯỚC 4: NGÂN SÁCH THÁNG (STEP 4: MONTHLY BUDGET ALLOCATIONS)
            ══════════════════════════════════════════════════════════════════ */}
         {currentStep === 4 && (
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-3 min-h-0">
+          <div className="flex-1 flex overflow-hidden min-h-0 h-full w-full">
             <div className="mkt-step4-grid">
               {/* Left Column: Stats & Annual Category Settings */}
               <div className="mkt-step4-left">
                 {/* Summary Card */}
-                <div className="rounded-xl border border-slate-200/80 p-3.5 bg-gradient-to-br from-slate-50 via-indigo-50/20 to-slate-100/60 shadow-xs">
+                <div className="rounded-xl border border-slate-200/80 p-3 bg-gradient-to-br from-slate-50 via-indigo-50/20 to-slate-100/60 shadow-xs shrink-0">
                   <div className="flex items-center justify-between mb-2">
                     <h6 className="font-bold text-slate-600 uppercase text-[11px] tracking-wider mb-0 flex items-center gap-1.5">
                       <CashCoin className="text-indigo-600" size={13} />
@@ -2821,7 +2822,7 @@ export const MarketingPlanPage: React.FC = () => {
                   {(() => {
                     const allocPct = valBranding > 0 ? (totalAllocatedBudgets / valBranding) * 100 : 0;
                     return (
-                      <div className="my-2.5">
+                      <div className="my-2">
                         <div className="flex justify-between text-[11px] font-medium text-slate-500 mb-1">
                           <span>Tiến độ phân bổ</span>
                           <span className="font-bold text-slate-700">{allocPct.toFixed(1)}%</span>
@@ -2858,49 +2859,94 @@ export const MarketingPlanPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Section: Ngân sách cho đại lý */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5 px-1">
-                    <span className="text-xs font-bold text-indigo-900 uppercase tracking-wide flex items-center gap-1.5">
-                      <Shop size={13} className="text-blue-600" />
-                      1. Ngân sách cho đại lý
-                    </span>
-                    <Badge variant="neutral">3 hạng mục</Badge>
-                  </div>
-                  <div className="flex flex-col gap-1 bg-white p-2 rounded-xl border border-slate-200/70 shadow-2xs">
-                    <BudgetInputRow label="Marketing tại điểm bán" value={agencyPOSBudget} onChange={setAgencyPOSBudget} valBranding={valBranding} />
-                    <BudgetInputRow label="Quảng cáo bảng hiệu" value={agencyAdsBudget} onChange={setAgencyAdsBudget} valBranding={valBranding} />
-                    <BudgetInputRow label="Quà tặng khai trương & sự kiện" value={agencyGiftBudget} onChange={setAgencyGiftBudget} valBranding={valBranding} />
-                  </div>
+                {/* 2 Tabs: Ngân sách đại lý vs Ngân sách quảng cáo */}
+                <div className="flex items-center gap-1 p-1 bg-slate-200/70 rounded-lg shrink-0">
+                  <button
+                    type="button"
+                    className={`flex-1 py-1 px-2 rounded-md text-[11px] font-bold uppercase transition-all cursor-pointer ${
+                      step4BudgetTab === 'agency'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    onClick={() => setStep4BudgetTab('agency')}
+                  >
+                    Đại lý (3)
+                  </button>
+                  <button
+                    type="button"
+                    className={`flex-1 py-1 px-2 rounded-md text-[11px] font-bold uppercase transition-all cursor-pointer ${
+                      step4BudgetTab === 'adv'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    onClick={() => setStep4BudgetTab('adv')}
+                  >
+                    Quảng cáo (10)
+                  </button>
                 </div>
 
-                {/* Section: Ngân sách cho quảng cáo */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5 px-1">
-                    <span className="text-xs font-bold text-indigo-900 uppercase tracking-wide flex items-center gap-1.5">
-                      <Broadcast size={13} className="text-indigo-600" />
-                      2. Ngân sách cho quảng cáo
-                    </span>
-                    <Badge variant="neutral">10 hạng mục</Badge>
+                {/* Tab 1: Ngân sách cho đại lý */}
+                {step4BudgetTab === 'agency' && (
+                  <div className="flex-1 flex flex-col gap-1.5 min-h-0">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-xs font-bold text-indigo-900 uppercase tracking-wide flex items-center gap-1.5">
+                        <Shop size={13} className="text-blue-600" />
+                        Ngân sách cho đại lý
+                      </span>
+                      <span className="text-[11px] font-bold text-indigo-700">
+                        {(agencyPOSBudget + agencyAdsBudget + agencyGiftBudget).toLocaleString('vi-VN')} đ
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-1 bg-white p-2 rounded-xl border border-slate-200/70 shadow-2xs overflow-y-auto custom-scrollbar">
+                      <BudgetInputRow label="Marketing tại điểm bán" value={agencyPOSBudget} onChange={setAgencyPOSBudget} valBranding={valBranding} />
+                      <BudgetInputRow label="Quảng cáo bảng hiệu" value={agencyAdsBudget} onChange={setAgencyAdsBudget} valBranding={valBranding} />
+                      <BudgetInputRow label="Quà tặng khai trương & sự kiện" value={agencyGiftBudget} onChange={setAgencyGiftBudget} valBranding={valBranding} />
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-1 bg-white p-2 rounded-xl border border-slate-200/70 shadow-2xs">
-                    <BudgetInputRow label="Facebook Ads" value={advFbAds} onChange={setAdvFbAds} valBranding={valBranding} />
-                    <BudgetInputRow label="Google Ads" value={advGoogleAds} onChange={setAdvGoogleAds} valBranding={valBranding} />
-                    <BudgetInputRow label="Youtube Ads" value={advYoutubeAds} onChange={setAdvYoutubeAds} valBranding={valBranding} />
-                    <BudgetInputRow label="TikTok Ads" value={advTiktokAds} onChange={setAdvTiktokAds} valBranding={valBranding} />
-                    <BudgetInputRow label="SEO + PR báo chí" value={advSeoPr} onChange={setAdvSeoPr} valBranding={valBranding} />
-                    <BudgetInputRow label="In ấn & Thiết kế ngoài" value={advPrintOutsource} onChange={setAdvPrintOutsource} valBranding={valBranding} />
-                    <BudgetInputRow label="Media, Mẫu, Decor" value={advMediaModelDecor} onChange={setAdvMediaModelDecor} valBranding={valBranding} />
-                    <BudgetInputRow label="Website & Công nghệ" value={advWebDesign} onChange={setAdvWebDesign} valBranding={valBranding} />
-                    <BudgetInputRow label="Chi phí khác" value={advOther} onChange={setAdvOther} valBranding={valBranding} />
-                    <BudgetInputRow label="Dự phòng ngân sách" value={advReserve} onChange={setAdvReserve} valBranding={valBranding} />
+                )}
+
+                {/* Tab 2: Ngân sách cho quảng cáo */}
+                {step4BudgetTab === 'adv' && (
+                  <div className="flex-1 flex flex-col gap-1.5 min-h-0">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-xs font-bold text-indigo-900 uppercase tracking-wide flex items-center gap-1.5">
+                        <Broadcast size={13} className="text-indigo-600" />
+                        Ngân sách cho quảng cáo
+                      </span>
+                      <span className="text-[11px] font-bold text-indigo-700">
+                        {(
+                          advFbAds +
+                          advGoogleAds +
+                          advYoutubeAds +
+                          advTiktokAds +
+                          advSeoPr +
+                          advPrintOutsource +
+                          advMediaModelDecor +
+                          advWebDesign +
+                          advOther +
+                          advReserve
+                        ).toLocaleString('vi-VN')} đ
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-1 bg-white p-2 rounded-xl border border-slate-200/70 shadow-2xs overflow-y-auto custom-scrollbar flex-1 min-h-0">
+                      <BudgetInputRow label="Facebook Ads" value={advFbAds} onChange={setAdvFbAds} valBranding={valBranding} />
+                      <BudgetInputRow label="Google Ads" value={advGoogleAds} onChange={setAdvGoogleAds} valBranding={valBranding} />
+                      <BudgetInputRow label="Youtube Ads" value={advYoutubeAds} onChange={setAdvYoutubeAds} valBranding={valBranding} />
+                      <BudgetInputRow label="TikTok Ads" value={advTiktokAds} onChange={setAdvTiktokAds} valBranding={valBranding} />
+                      <BudgetInputRow label="SEO + PR báo chí" value={advSeoPr} onChange={setAdvSeoPr} valBranding={valBranding} />
+                      <BudgetInputRow label="In ấn & Thiết kế ngoài" value={advPrintOutsource} onChange={setAdvPrintOutsource} valBranding={valBranding} />
+                      <BudgetInputRow label="Media, Mẫu, Decor" value={advMediaModelDecor} onChange={setAdvMediaModelDecor} valBranding={valBranding} />
+                      <BudgetInputRow label="Website & Công nghệ" value={advWebDesign} onChange={setAdvWebDesign} valBranding={valBranding} />
+                      <BudgetInputRow label="Chi phí khác" value={advOther} onChange={setAdvOther} valBranding={valBranding} />
+                      <BudgetInputRow label="Dự phòng ngân sách" value={advReserve} onChange={setAdvReserve} valBranding={valBranding} />
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Right Column: Month Allocations Table */}
               <div className="mkt-step4-right">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-200/80">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200/80 shrink-0">
                   <SectionTitle
                     title={`Phân bổ ngân sách theo tháng - Năm ${selectedYear}`}
                     className="mb-0"
@@ -2927,7 +2973,7 @@ export const MarketingPlanPage: React.FC = () => {
                 </div>
 
                 {/* 12-Month Selector Timeline */}
-                <div className="flex items-center bg-slate-100 p-0.5 rounded-xl gap-0.5 border border-slate-200/60 shadow-2xs">
+                <div className="flex items-center bg-slate-100 p-0.5 rounded-xl gap-0.5 border border-slate-200/60 shadow-2xs shrink-0">
                   {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
                     const isActive = m === selectedMonth;
                     return (
@@ -2949,7 +2995,7 @@ export const MarketingPlanPage: React.FC = () => {
                 </div>
 
                 {/* Monthly Budget Summary Banner */}
-                <div className="p-3 bg-gradient-to-r from-indigo-50/80 via-blue-50/40 to-slate-50 rounded-xl border border-indigo-100/80 flex items-center justify-between shadow-2xs">
+                <div className="p-3 bg-gradient-to-r from-indigo-50/80 via-blue-50/40 to-slate-50 rounded-xl border border-indigo-100/80 flex items-center justify-between shadow-2xs shrink-0">
                   <div>
                     <div className="text-[11px] font-bold text-indigo-900 uppercase tracking-wider">
                       Tổng ngân sách dự kiến chi cho Tháng {selectedMonth}
@@ -2964,13 +3010,13 @@ export const MarketingPlanPage: React.FC = () => {
                 </div>
 
                 {/* 13 Categories Monthly Table */}
-                <div className="border border-slate-200/80 rounded-xl bg-white overflow-hidden shadow-2xs">
-                  <table className="w-100" style={{ fontSize: 12, borderCollapse: 'collapse' }}>
+                <div className="border border-slate-200/80 rounded-xl bg-white overflow-hidden shadow-2xs flex-1">
+                  <table className="w-full" style={{ fontSize: 12, borderCollapse: 'collapse', tableLayout: 'auto' }}>
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10.5px]">
-                        <th className="py-2.5 px-3.5 text-start">Khoản mục chi phí</th>
-                        <th className="py-2.5 px-3.5 text-end" style={{ width: 170 }}>Ngân sách Tháng {selectedMonth}</th>
-                        <th className="py-2.5 px-3.5 text-start">Ghi chú phân bổ</th>
+                        <th className="py-2.5 px-3.5 text-start" style={{ width: '42%' }}>Khoản mục chi phí</th>
+                        <th className="py-2.5 px-3.5 text-end" style={{ width: '22%', minWidth: 160 }}>Ngân sách Tháng {selectedMonth}</th>
+                        <th className="py-2.5 px-3.5 text-start" style={{ width: '36%' }}>Ghi chú phân bổ</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3649,26 +3695,40 @@ export const MarketingPlanPage: React.FC = () => {
           background: #ffffff;
         }
         .mkt-step4-grid {
-          display: grid;
-          grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-          gap: 20px;
-          min-height: 400px;
-          padding: 0 8px 8px 8px;
+          display: flex;
+          flex: 1 1 0%;
+          min-height: 0;
+          height: 100%;
+          width: 100%;
           min-width: 0;
+          overflow: hidden;
         }
         .mkt-step4-left {
+          width: 380px;
+          min-width: 350px;
+          max-width: 400px;
+          flex-shrink: 0;
           border-right: 1px solid var(--border, #e2e8f0);
-          padding-right: 20px;
+          padding: 10px 12px;
           display: flex;
           flex-direction: column;
-          gap: 16px;
-          min-width: 0;
+          gap: 10px;
+          overflow-y: auto;
+          min-height: 0;
+          height: 100%;
+          background: #f8fafc;
         }
         .mkt-step4-right {
+          flex: 1 1 0%;
           display: flex;
           flex-direction: column;
-          gap: 16px;
+          gap: 10px;
           min-width: 0;
+          min-height: 0;
+          height: 100%;
+          overflow-y: auto;
+          padding: 10px 14px;
+          background: #ffffff;
         }
         .mkt-step3-header {
           display: flex;
@@ -3747,13 +3807,21 @@ export const MarketingPlanPage: React.FC = () => {
             overflow: visible;
           }
           .mkt-step4-grid {
-            grid-template-columns: minmax(0, 1fr);
+            flex-direction: column;
+            overflow-y: auto;
           }
           .mkt-step4-left {
+            width: 100%;
+            max-width: 100%;
+            height: auto;
             border-right: none;
-            padding-right: 0;
             border-bottom: 1px solid var(--border, #e2e8f0);
-            padding-bottom: 16px;
+            overflow: visible;
+          }
+          .mkt-step4-right {
+            width: 100%;
+            height: auto;
+            overflow: visible;
           }
           .mkt-step3-header {
             height: auto;
