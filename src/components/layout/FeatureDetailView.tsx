@@ -10,6 +10,8 @@ import { Select } from '../common/Select';
 import { EmployeesPage } from '../../pages/hr/EmployeesPage';
 import { StationeryToolsPage } from '../../pages/hr/StationeryToolsPage';
 import { SalaryAdjustmentsPage } from '../../pages/hr/SalaryAdjustmentsPage';
+import { PromotionsPage } from '../../pages/hr/PromotionsPage';
+import { TerminationsPage } from '../../pages/hr/TerminationsPage';
 import { DocumentApprovalPage } from '../../pages/departments/bom/DocumentApprovalPage';
 
 interface FeatureDetailViewProps {
@@ -47,6 +49,14 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
 
   if (menuKey === 'salary-adjustments' || menuKey === 'salary_adjustments' || menuKey === 'dieu-chinh-thu-nhap') {
     return <SalaryAdjustmentsPage />;
+  }
+
+  if (menuKey === 'promotions' || menuKey === 'transfers' || menuKey === 'dieu-chuyen-de-bat') {
+    return <PromotionsPage />;
+  }
+
+  if (menuKey === 'terminations' || menuKey === 'resignations' || menuKey === 'sa-thai-thoi-viec') {
+    return <TerminationsPage />;
   }
 
   if (menuKey === 'approvals' || menuKey === 'requests_approvals' || menuKey === 'hr_requests_approvals') {

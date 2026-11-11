@@ -3578,6 +3578,283 @@ app.delete('/api/hr/salary-adjustment/:id', async (req, res) => {
   }
 });
 
+// ============================================================================
+// HR PROMOTIONS & TRANSFERS APIS
+// ============================================================================
+
+app.get('/api/hr/promotions', async (req, res) => {
+  try {
+    const data = await prisma.promotionRequest.findMany({
+      include: {
+        employee: {
+          select: {
+            id: true,
+            fullName: true,
+            code: true,
+            avatarUrl: true,
+            position: true,
+            departmentName: true,
+            departmentCode: true,
+          }
+        },
+        requester: {
+          select: {
+            id: true,
+            fullName: true,
+            position: true,
+          }
+        },
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const [positions, departments] = await Promise.all([
+      prisma.category.findMany({ where: { type: 'position' }, select: { code: true, name: true } }),
+      prisma.departmentCategory.findMany({ select: { code: true, nameVi: true } }),
+    ]);
+
+    const posMap = Object.fromEntries(positions.map(p => [p.code, p.name]));
+    const deptMap = Object.fromEntries(departments.map(d => [d.code, d.nameVi]));
+
+    const mapped = await Promise.all(data.map(async (item) => {
+      let interviewerName = '';
+      if (item.interviewerId) {
+        try {
+          const intv = await prisma.employee.findUnique({
+            where: { id: item.interviewerId },
+            select: { fullName: true }
+          });
+          interviewerName = intv?.fullName || '';
+        } catch (e) {}
+      }
+
+      return {
+        ...item,
+        employeeName: item.employee?.fullName || 'N/A',
+        employeeCode: item.employee?.code || 'N/A',
+        avatar: item.employee?.avatarUrl || null,
+        requesterName: item.requester?.fullName || 'Hệ thống',
+        requesterPos: posMap[item.requester?.position] || item.requester?.position || 'Quản lý',
+        interviewerName,
+        currentPosName: posMap[item.currentPos] || item.currentPos || '—',
+        targetPosName: posMap[item.targetPos] || item.targetPos || '—',
+        currentDeptName: deptMap[item.currentDept] || item.currentDept || '—',
+        targetDeptName: deptMap[item.targetDept] || item.targetDept || '—',
+      };
+    }));
+
+    res.json(mapped);
+  } catch (error) {
+    console.error('Lỗi GET /api/hr/promotions:', error);
+    res.status(500).json({ error: error.message || 'Lỗi khi tải danh sách điều chuyển' });
+  }
+});
+
+app.post('/api/hr/promotions', async (req, res) => {
+  try {
+    const { employeeId, type = 'PROMOTION', currentDept, currentPos, targetDept, targetPos, reason, requesterId } = req.body;
+    if (!employeeId) {
+      return res.status(400).json({ error: 'Vui lòng chọn nhân sự' });
+    }
+
+    const created = await prisma.promotionRequest.create({
+      data: {
+        employeeId,
+        type,
+        currentDept: currentDept || 'Chung',
+        currentPos: currentPos || 'Nhân viên',
+        targetDept: targetDept || currentDept || 'Chung',
+        targetPos: targetPos || 'Vị trí mới',
+        reason: reason || '',
+        status: 'RECEIVING',
+        requesterId: requesterId || null,
+      }
+    });
+
+    res.status(201).json(created);
+  } catch (error) {
+    console.error('Lỗi POST /api/hr/promotions:', error);
+    res.status(500).json({ error: error.message || 'Lỗi khi tạo yêu cầu điều chuyển' });
+  }
+});
+
+app.patch('/api/hr/promotions/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const body = { ...req.body };
+
+    if (body.competencyScore !== undefined) body.competencyScore = Number(body.competencyScore);
+    if (body.suitabilityScore !== undefined) body.suitabilityScore = Number(body.suitabilityScore);
+    if (body.effectiveDate) body.effectiveDate = new Date(body.effectiveDate);
+    if (body.interviewDate) body.interviewDate = new Date(body.interviewDate);
+
+    const updated = await prisma.promotionRequest.update({
+      where: { id },
+      data: body
+    });
+
+    // Nếu đã phê duyệt và có ngày hiệu lực ở bước CONCLUSION, tự động cập nhật vào Employee
+    if (body.status === 'CONCLUSION' && body.directorApproved === true) {
+      const promo = await prisma.promotionRequest.findUnique({ where: { id } });
+      if (promo) {
+        await prisma.employee.update({
+          where: { id: promo.employeeId },
+          data: {
+            departmentCode: promo.targetDept,
+            position: promo.targetPos,
+          }
+        });
+
+        await prisma.employmentHistory.create({
+          data: {
+            employeeId: promo.employeeId,
+            type: promo.type,
+            oldPosition: promo.currentPos,
+            newPosition: promo.targetPos,
+            oldDept: promo.currentDept,
+            newDept: promo.targetDept,
+            effectiveDate: promo.effectiveDate || new Date(),
+            decisionNumber: promo.decisionNumber || null,
+            notes: promo.reason || 'Quyết định điều chuyển / đề bạt',
+          }
+        });
+      }
+    }
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Lỗi PATCH /api/hr/promotions/:id:', error);
+    res.status(500).json({ error: error.message || 'Lỗi khi cập nhật yêu cầu điều chuyển' });
+  }
+});
+
+app.delete('/api/hr/promotions/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.promotionRequest.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Lỗi DELETE /api/hr/promotions/:id:', error);
+    res.status(500).json({ error: error.message || 'Lỗi khi xóa yêu cầu điều chuyển' });
+  }
+});
+
+// ============================================================================
+// HR TERMINATIONS & RESIGNATIONS APIS
+// ============================================================================
+
+app.get('/api/hr/terminations', async (req, res) => {
+  try {
+    const requests = await prisma.terminationRequest.findMany({
+      include: {
+        employee: {
+          select: {
+            id: true,
+            fullName: true,
+            code: true,
+            avatarUrl: true,
+            position: true,
+            departmentName: true,
+            departmentCode: true,
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const [positions, departments] = await Promise.all([
+      prisma.category.findMany({ where: { type: 'position' }, select: { code: true, name: true } }),
+      prisma.departmentCategory.findMany({ select: { code: true, nameVi: true } }),
+    ]);
+
+    const posMap = Object.fromEntries(positions.map(p => [p.code, p.name]));
+    const deptMap = Object.fromEntries(departments.map(d => [d.code, d.nameVi]));
+
+    const result = requests.map((item) => ({
+      ...item,
+      employee: item.employee ? {
+        ...item.employee,
+        positionName: posMap[item.employee.position] || item.employee.position || 'Nhân viên',
+        departmentName: deptMap[item.employee.departmentCode] || item.employee.departmentName || 'Chung',
+      } : null,
+    }));
+
+    res.json(result);
+  } catch (error) {
+    console.error('Lỗi GET /api/hr/terminations:', error);
+    res.status(500).json({ error: error.message || 'Lỗi khi tải danh sách thôi việc' });
+  }
+});
+
+app.post('/api/hr/terminations', async (req, res) => {
+  try {
+    const { employeeId, type = 'RESIGNATION', reason, requestDate, lastWorkingDay } = req.body;
+    if (!employeeId) {
+      return res.status(400).json({ error: 'Vui lòng chọn nhân sự' });
+    }
+
+    const created = await prisma.terminationRequest.create({
+      data: {
+        employeeId,
+        type,
+        reason: reason || 'Chấm dứt hợp đồng lao động',
+        requestDate: requestDate ? new Date(requestDate) : new Date(),
+        lastWorkingDay: lastWorkingDay ? new Date(lastWorkingDay) : null,
+        status: 'Draft',
+        step: 1,
+      }
+    });
+
+    res.status(201).json(created);
+  } catch (error) {
+    console.error('Lỗi POST /api/hr/terminations:', error);
+    res.status(500).json({ error: error.message || 'Lỗi khi tạo yêu cầu thôi việc' });
+  }
+});
+
+app.patch('/api/hr/terminations/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const body = { ...req.body };
+
+    if (body.requestDate) body.requestDate = new Date(body.requestDate);
+    if (body.lastWorkingDay) body.lastWorkingDay = new Date(body.lastWorkingDay);
+    if (body.step !== undefined) body.step = Number(body.step);
+
+    const updated = await prisma.terminationRequest.update({
+      where: { id },
+      data: body
+    });
+
+    if (updated.status === 'Completed') {
+      await prisma.employee.update({
+        where: { id: updated.employeeId },
+        data: {
+          status: updated.type === 'RESIGNATION' ? 'Resigned' : 'Terminated',
+          notes: `Chấm dứt hợp đồng ngày ${new Date().toLocaleDateString('vi-VN')}. Lý do: ${updated.reason || 'N/A'}`
+        }
+      });
+    }
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Lỗi PATCH /api/hr/terminations/:id:', error);
+    res.status(500).json({ error: error.message || 'Lỗi khi cập nhật yêu cầu thôi việc' });
+  }
+});
+
+app.delete('/api/hr/terminations/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.terminationRequest.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Lỗi DELETE /api/hr/terminations/:id:', error);
+    res.status(500).json({ error: error.message || 'Lỗi khi xóa yêu cầu thôi việc' });
+  }
+});
+
+
 
 
 

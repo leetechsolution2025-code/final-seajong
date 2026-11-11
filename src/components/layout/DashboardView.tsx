@@ -12,6 +12,8 @@ import { AttendancePayrollPage } from '../../pages/hr/AttendancePayrollPage';
 import { InsurancePage } from '../../pages/hr/InsurancePage';
 import { StationeryToolsPage } from '../../pages/hr/StationeryToolsPage';
 import { SalaryAdjustmentsPage } from '../../pages/hr/SalaryAdjustmentsPage';
+import { PromotionsPage } from '../../pages/hr/PromotionsPage';
+import { TerminationsPage } from '../../pages/hr/TerminationsPage';
 import { MarketingProductsPage } from '../../pages/marketing/MarketingProductsPage';
 import { BrandIdentityPage } from '../../pages/marketing/BrandIdentityPage';
 import { MarketingPlanPage } from '../../pages/marketing/MarketingPlanPage';
@@ -461,6 +463,24 @@ export const DashboardView: React.FC = () => {
     activeMenuKey === 'dieu-chinh-thu-nhap'
   ) {
     return <SalaryAdjustmentsPage />;
+  }
+
+  // Khi người dùng chọn Điều chuyển và đề bạt
+  if (
+    activeMenuKey === 'promotions' ||
+    activeMenuKey === 'transfers' ||
+    activeMenuKey === 'dieu-chuyen-de-bat'
+  ) {
+    return <PromotionsPage />;
+  }
+
+  // Khi người dùng chọn Sa thải và thôi việc
+  if (
+    activeMenuKey === 'terminations' ||
+    activeMenuKey === 'resignations' ||
+    activeMenuKey === 'sa-thai-thoi-viec'
+  ) {
+    return <TerminationsPage />;
   }
 
   // Khi người dùng chọn Chấm công cá nhân
