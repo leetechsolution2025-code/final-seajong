@@ -557,6 +557,78 @@ export const MarketingPlanPage: React.FC = () => {
     return { description, children };
   };
 
+  // Helper: Render content details with round badges for numbered items (1, 2, 3...)
+  const renderContentDetails = (detailsRaw: string) => {
+    if (!detailsRaw) return null;
+
+    const regex = /(?:^|\s+)(\d+)\.\s+/g;
+    const matches: { num: string; start: number; end: number }[] = [];
+    let m: RegExpExecArray | null;
+
+    while ((m = regex.exec(detailsRaw)) !== null) {
+      const fullMatch = m[0];
+      const num = m[1];
+      const leadingSpaces = fullMatch.length - (num.length + 2);
+      const actualStart = m.index + leadingSpaces;
+      const actualEnd = actualStart + num.length + 2;
+      matches.push({ num, start: actualStart, end: actualEnd });
+    }
+
+    if (matches.length === 0) {
+      return <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{detailsRaw}</span>;
+    }
+
+    const intro = detailsRaw.slice(0, matches[0].start).trim();
+    const items: { num: string; text: string }[] = [];
+
+    for (let i = 0; i < matches.length; i++) {
+      const curr = matches[i];
+      const nextStart = i + 1 < matches.length ? matches[i + 1].start : detailsRaw.length;
+      const itemText = detailsRaw.slice(curr.end, nextStart).trim();
+      items.push({ num: curr.num, text: itemText });
+    }
+
+    return (
+      <div className="space-y-1.5 py-0.5 text-xs text-muted-foreground">
+        {intro && (
+          <div className="font-medium text-foreground/80 leading-relaxed mb-0.5">
+            {intro}
+          </div>
+        )}
+        <div className="space-y-1">
+          {items.map((item, idx) => {
+            const colonIdx = item.text.indexOf(':');
+            let titlePart = '';
+            let restPart = item.text;
+
+            if (colonIdx > 0 && colonIdx <= 60) {
+              titlePart = item.text.slice(0, colonIdx + 1);
+              restPart = item.text.slice(colonIdx + 1);
+            }
+
+            return (
+              <div key={idx} className="flex items-start gap-1.5 leading-relaxed">
+                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 border border-blue-200/60 dark:border-blue-700/50 text-[10px] font-bold shrink-0 mt-0.5">
+                  {item.num}
+                </span>
+                <span className="flex-1">
+                  {titlePart ? (
+                    <>
+                      <span className="font-semibold text-foreground/90">{titlePart}</span>
+                      {restPart}
+                    </>
+                  ) : (
+                    item.text
+                  )}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   // ── LOAD MASTER PLAN DATA FROM DATABASE ──────────────────────────────────
   useEffect(() => {
     const fetchMasterPlan = async () => {
@@ -1045,7 +1117,11 @@ export const MarketingPlanPage: React.FC = () => {
     {
       header: 'Nội dung chi tiết',
       align: 'left',
-      render: (row) => <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{parseParentDetails(row.details || '').description || row.details}</span>,
+      render: (row) => {
+        if (row.isTotal) return null;
+        const rawDesc = parseParentDetails(row.details || '').description || row.details || '';
+        return renderContentDetails(rawDesc);
+      },
     },
     {
       header: 'Ngân sách (đ)',
