@@ -432,7 +432,7 @@ const RequestsTab: React.FC<{
           departmentId: departments[0]?.id || '',
           type: 'PURCHASE',
           supplierId: selectedSupplierId || null,
-          note: poNote || 'Đơn đặt mua hàng VPP bổ sung tồn kho',
+          note: poNote || 'Đơn đặt mua hàng văn phòng phẩm bổ sung tồn kho',
           items: validItems,
         }),
       });
@@ -636,7 +636,7 @@ const RequestsTab: React.FC<{
           <div className="font-bold text-gray-900 text-xs">{r.code}</div>
           <div className="mt-1">
             <Badge variant={r.type === 'PURCHASE' ? 'warning' : 'neutral'}>
-              {r.type === 'PURCHASE' ? 'Mua sắm VPP' : 'Cấp phát VPP'}
+              {r.type === 'PURCHASE' ? 'Mua sắm văn phòng phẩm' : 'Cấp phát văn phòng phẩm'}
             </Badge>
           </div>
         </div>
@@ -781,7 +781,7 @@ const RequestsTab: React.FC<{
       <Offcanvas
         isOpen={showCreateReqPanel}
         onClose={() => setShowCreateReqPanel(false)}
-        title="Tạo đề xuất cấp phát VPP"
+        title="Tạo đề xuất cấp phát văn phòng phẩm"
         icon={<ClipboardCheck size={20} />}
         width="520px"
         confirmText="Gửi đề xuất"
@@ -935,7 +935,7 @@ const RequestsTab: React.FC<{
       <Modal
         isOpen={showPurchaseModal}
         onClose={() => setShowPurchaseModal(false)}
-        title="Quản lý Mua sắm & Nhập kho VPP"
+        title="Quản lý Mua sắm & Nhập kho văn phòng phẩm"
         maxWidth="760px"
         footer={
           <div className="flex justify-between items-center w-full">
@@ -2952,7 +2952,7 @@ const TransactionsTab: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `xuat-nhap-kho-vpp-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `xuat-nhap-kho-van-phong-pham-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };

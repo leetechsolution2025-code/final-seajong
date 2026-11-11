@@ -27987,7 +27987,7 @@ app.get('/api/hr/stationery/assets/available', async (req, res) => {
       type: 'SUPPLY',
       code: item.code,
       name: `${item.name} (Tồn: ${item.currentStock})`,
-      sourceLabel: 'Kho VPP / Dụng cụ',
+      sourceLabel: 'Kho văn phòng phẩm / Dụng cụ',
     }));
 
     res.json({ assets: formatted });
@@ -28063,7 +28063,7 @@ app.post('/api/hr/stationery/handovers', async (req, res) => {
           : String(itemId);
         const sItem = await tx.hrSupplyItem.findUnique({ where: { id: supplyItemId } });
         if (!sItem || (sItem.currentStock ?? 0) < 1) {
-          throw new Error('Dụng cụ trong kho VPP đã hết tồn kho');
+          throw new Error('Dụng cụ trong kho văn phòng phẩm đã hết tồn kho');
         }
         await tx.hrSupplyItem.update({
           where: { id: supplyItemId },
