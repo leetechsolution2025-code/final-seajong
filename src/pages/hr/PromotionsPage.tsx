@@ -1266,3 +1266,4 @@ const PromotionApprovalOffcanvas: React.FC<ApprovalProps> = ({
 };
 
 export default PromotionsPage;
+

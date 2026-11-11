@@ -29,11 +29,10 @@ import {
   FileEarmarkBarGraph,
   ClockHistory,
 } from 'react-bootstrap-icons';
-import { PageTitle } from '../../components/ui/PageTitle';
-import { DynamicTicker } from '../../components/layout/DynamicTicker';
-import { ModernStepper } from '../../components/ui/ModernStepper';
+import { StepPage } from '../../components/common/StepPage';
+import { Button } from '../../components/common/Button';
+import { Badge } from '../../components/common/Badge';
 import type { ModernStepItem } from '../../types';
-import { WorkflowCard } from '../../components/ui/WorkflowCard';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 import { Table, type TableColumn } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
@@ -1734,92 +1733,49 @@ export const MarketingPlanPage: React.FC = () => {
     { num: 4, id: 'step4', title: 'Ngân sách tháng', desc: 'Phân bổ ngân sách theo tháng', icon: <Shop size={14} /> },
   ];
 
+  const stepperExtraRight = (
+    <div className="flex items-center gap-2">
+      <Badge
+        variant={planStatus === 'approved' ? 'success' : planStatus === 'pending_approval' ? 'warning' : 'neutral'}
+        hasDot
+      >
+        {planStatus === 'approved' ? 'Đã phê duyệt' : planStatus === 'pending_approval' ? 'Chờ duyệt' : 'Bản thảo'}
+      </Badge>
+    </div>
+  );
+
   return (
-    <div className="flex flex-col h-full bg-slate-50 min-h-0">
-      {/* ── TOP HEADER (TUÂN THỦ AGENTS.MD: KHÔNG NÚT BẤM TRONG PAGETITLE) ── */}
-      <PageTitle
+    <div className="h-full w-full flex flex-col min-h-0" style={{ height: '100%' }}>
+      <StepPage
         title="Lập kế hoạch"
-        badge="MARKETING"
         description="Quy trình lập kế hoạch tiếp thị và phát triển thị trường"
-      />
-
-      {/* Dynamic Ticker */}
-      <DynamicTicker
-        pageTitle="Lập kế hoạch Marketing"
-        customNews={[
-          {
-            badge: 'TIẾN ĐỘ QUY TRÌNH',
-            badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
-            text: `Đang thực hiện Bước ${currentStep}/4: ${steps[currentStep - 1]?.title} (${steps[currentStep - 1]?.desc})`,
-          },
-          {
-            badge: totalCostMarketing > valMarketingCost ? 'VƯỢT ĐỊNH MỨC' : 'TRONG ĐỊNH MỨC',
-            badgeColor: totalCostMarketing > valMarketingCost ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200',
-            text: `Marketing: ${valMarketingCost.toLocaleString('vi-VN')} đ • Chi phí đã lập: ${totalCostMarketing.toLocaleString('vi-VN')} đ (${getRatio(totalCostMarketing).toFixed(1)}%) - ${(valMarketingCost / (totalRevenue || 1) * 100).toFixed(1)}% định mức`,
-          },
-        ]}
-      />
-
-      {/* ── WORKFLOW CARD (CHỨA STEPPER VÀ CÁC BƯỚC NỘI DUNG) ─────────────── */}
-      <div className="p-2 px-3 flex-1 flex flex-col min-h-0">
-        <WorkflowCard
-          stepper={
-            <ModernStepper
-              steps={steps}
-              currentStep={currentStep}
-              onStepChange={setCurrentStep}
-              paddingX={0}
-              paddingY={8}
-            />
-          }
-          contentPadding="px-3 pt-2 pb-3"
-          bottomToolbar={
-            currentStep === 2 ? (
-              <div className="d-flex justify-content-between align-items-center w-100" style={{ padding: '2px 0' }}>
-                <div>
-                  {subStep === 'ads' ? (
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 font-semibold text-xs rounded-md"
-                      onClick={() => setSubStep('pillar')}
-                    >
-                      <ArrowLeft size={13} /> Tuyến nội dung
-                    </button>
-                  ) : <div />}
-                </div>
-                <div>
-                  {subStep === 'pillar' && (
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-primary d-flex align-items-center gap-1 font-semibold text-xs rounded-md"
-                      onClick={() => setSubStep('ads')}
-                    >
-                      Kế hoạch quảng cáo <ArrowRight size={13} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : undefined
-          }
-        >
-          {/* ══════════════════════════════════════════════════════════════════
-              BƯỚC 1: MỤC TIÊU NĂM (STEP 1)
-             ══════════════════════════════════════════════════════════════════ */}
-          {currentStep === 1 && (
+        badge="MARKETING"
+        icon="bi-calendar-range"
+        color="indigo"
+        hideTicker={true}
+        steps={steps}
+        currentStep={currentStep}
+        onStepChange={setCurrentStep}
+        stepperExtraRight={stepperExtraRight}
+      >
+        {/* ══════════════════════════════════════════════════════════════════
+            BƯỚC 1: MỤC TIÊU NĂM (STEP 1)
+           ══════════════════════════════════════════════════════════════════ */}
+        {currentStep === 1 && (
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-3 min-h-0">
             <div className="mkt-step1-grid">
               {/* Left Column (5/12) */}
               <div className="mkt-step1-left">
                 {/* Year, Date, Approval, Report */}
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+                <div className="flex items-end gap-2.5 flex-wrap p-2.5 bg-slate-50/80 rounded-xl border border-slate-200/70">
                   <div style={{ flex: 1, minWidth: 80 }}>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--muted-foreground)', marginBottom: 4 }}>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                       NĂM KẾ HOẠCH
                     </label>
                     <select
-                      className="form-select form-select-sm"
+                      className="form-select form-select-sm text-xs font-semibold h-8 rounded-lg border-slate-200 bg-white"
                       value={selectedYear}
                       onChange={(e) => setSelectedYear(e.target.value)}
-                      style={{ fontSize: 12, height: 32 }}
                     >
                       <option value="2025">2025</option>
                       <option value="2026">2026</option>
@@ -1827,65 +1783,64 @@ export const MarketingPlanPage: React.FC = () => {
                     </select>
                   </div>
                   <div style={{ flex: 1.2, minWidth: 100 }}>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--muted-foreground)', marginBottom: 4 }}>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                       NGÀY LẬP
                     </label>
                     <input
                       type="date"
-                      className="form-control form-control-sm"
+                      className="form-control form-control-sm text-xs font-semibold h-8 rounded-lg border-slate-200 bg-white"
                       value={planDate}
                       onChange={(e) => setPlanDate(e.target.value)}
-                      style={{ fontSize: 12, height: 32 }}
                     />
                   </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button
-                      className="btn btn-sm btn-primary"
-                      title="Trình duyệt kế hoạch"
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      icon={isSubmittingPlan ? undefined : <SendFill size={11} />}
+                      isLoading={isSubmittingPlan}
                       onClick={handleSubmitPlan}
                       disabled={isSubmittingPlan || planStatus === 'pending_approval'}
-                      style={{ height: 32, display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 11, padding: '0 10px' }}
+                      className="h-8 shadow-xs"
                     >
-                      {isSubmittingPlan ? (
-                        <div className="spinner-border spinner-border-sm" role="status" style={{ width: 12, height: 12 }} />
-                      ) : (
-                        <SendFill size={11} />
-                      )}
                       Trình duyệt
-                    </button>
-                    <button
-                      className="btn btn-sm btn-outline-primary"
-                      title="Báo cáo kế hoạch"
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      icon={<FileEarmarkBarGraph size={12} />}
                       onClick={() => setShowPlanPrintModal(true)}
-                      style={{ height: 32, display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 11, padding: '0 10px' }}
+                      className="h-8 bg-white shadow-xs"
                     >
-                      <FileEarmarkBarGraph size={12} /> Báo cáo
-                    </button>
+                      Báo cáo
+                    </Button>
                   </div>
                 </div>
 
                 {/* Status Badges & Approval Actions */}
                 {planStatus === 'pending_approval' && (
-                  <div className="p-2 rounded bg-amber-50 border border-amber-200 d-flex align-items-center justify-content-between">
-                    <span className="badge bg-warning text-dark font-semibold">Đang chờ duyệt</span>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button className="btn btn-sm btn-success text-xs font-semibold py-1 px-2" onClick={handleApprovePlan}>
-                        <Check size={14} /> Phê duyệt
-                      </button>
-                      <button className="btn btn-sm btn-danger text-xs font-semibold py-1 px-2" onClick={handleRejectPlan}>
-                        <X size={14} /> Từ chối
-                      </button>
+                  <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between">
+                    <Badge variant="warning" hasDot pulseDot>Đang chờ duyệt</Badge>
+                    <div className="flex gap-1.5">
+                      <Button variant="success" size="sm" icon={<Check size={14} />} onClick={handleApprovePlan} className="h-7 text-xs">
+                        Phê duyệt
+                      </Button>
+                      <Button variant="danger" size="sm" icon={<X size={14} />} onClick={handleRejectPlan} className="h-7 text-xs">
+                        Từ chối
+                      </Button>
                     </div>
                   </div>
                 )}
                 {planStatus === 'approved' && (
-                  <div>
-                    <span className="badge bg-success font-semibold px-2 py-1">Kế hoạch đã phê duyệt</span>
+                  <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-2">
+                    <Badge variant="success" hasDot>Kế hoạch đã phê duyệt</Badge>
+                    <span className="text-xs text-emerald-800 font-medium">Bản kế hoạch năm {selectedYear} có hiệu lực thực thi.</span>
                   </div>
                 )}
                 {planStatus === 'rejected' && (
-                  <div>
-                    <span className="badge bg-danger font-semibold px-2 py-1">Kế hoạch bị từ chối</span>
+                  <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2">
+                    <Badge variant="danger" hasDot>Kế hoạch bị từ chối</Badge>
+                    <span className="text-xs text-rose-800 font-medium">Vui lòng điều chỉnh lại ngân sách hoặc chỉ tiêu.</span>
                   </div>
                 )}
 
@@ -1894,63 +1849,45 @@ export const MarketingPlanPage: React.FC = () => {
                   const costRatio = getRatio(totalCostMarketing);
                   const isOver = totalCostMarketing > valMarketingCost;
                   return (
-                    <div
-                      style={{
-                        background: '#fff',
-                        border: '1px solid var(--border)',
-                        borderRadius: 12,
-                        padding: '16px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 12,
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>
+                    <div className="rounded-xl border border-slate-200/80 p-4 bg-white shadow-xs flex flex-col gap-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                           TỶ LỆ CHI PHÍ / DOANH THU
                         </span>
                         <span
-                          style={{
-                            fontSize: 10,
-                            fontWeight: 700,
-                            padding: '2px 8px',
-                            borderRadius: 20,
-                            background: isOver ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-                            color: isOver ? '#ef4444' : '#10b981',
-                            border: `1px solid ${isOver ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)'}`,
-                          }}
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            isOver
+                              ? 'bg-rose-50 text-rose-600 border-rose-200'
+                              : 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                          }`}
                         >
                           {isOver ? 'Vượt định mức' : 'Trong định mức'}
                         </span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                        <span style={{ fontSize: 28, fontWeight: 800, color: 'var(--foreground)' }}>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
                           {costRatio.toFixed(1)}%
                         </span>
-                        <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
+                        <span className="text-xs text-slate-500 font-medium">
                           trên tổng doanh thu
                         </span>
                       </div>
-                      <div style={{ height: 8, background: 'rgba(100, 116, 139, 0.1)', borderRadius: 4, overflow: 'hidden' }}>
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                         <div
-                          style={{
-                            height: '100%',
-                            width: `${Math.min(costRatio, 100)}%`,
-                            background: isOver
-                              ? 'linear-gradient(90deg, #ef4444 0%, #f43f5e 100%)'
-                              : 'linear-gradient(90deg, #3b82f6 0%, #10b981 100%)',
-                            borderRadius: 4,
-                            transition: 'width 0.4s ease-in-out',
-                          }}
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            isOver
+                              ? 'bg-gradient-to-r from-rose-500 to-rose-600'
+                              : 'bg-gradient-to-r from-blue-500 to-emerald-500'
+                          }`}
+                          style={{ width: `${Math.min(costRatio, 100)}%` }}
                         />
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--muted-foreground)' }}>
+                      <div className="flex justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
                         <div>
-                          Chi phí: <strong style={{ color: 'var(--foreground)' }}>{totalCostMarketing.toLocaleString('vi-VN')} đ</strong>
+                          Chi phí: <strong className="text-slate-800">{totalCostMarketing.toLocaleString('vi-VN')} đ</strong>
                         </div>
                         <div>
-                          Định mức: <strong style={{ color: 'var(--foreground)' }}>{valMarketingCost.toLocaleString('vi-VN')} đ</strong>
+                          Định mức: <strong className="text-slate-800">{valMarketingCost.toLocaleString('vi-VN')} đ</strong>
                         </div>
                       </div>
                     </div>
@@ -1958,19 +1895,8 @@ export const MarketingPlanPage: React.FC = () => {
                 })()}
 
                 {/* Revenue Donut Chart Card */}
-                <div
-                  style={{
-                    background: '#fff',
-                    border: '1px solid var(--border)',
-                    borderRadius: 12,
-                    padding: '16px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 12,
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                  }}
-                >
-                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>
+                <div className="rounded-xl border border-slate-200/80 p-4 bg-white shadow-xs flex flex-col gap-3">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                     Cơ cấu doanh thu năm {selectedYear}
                   </span>
                   <RevenueDonutChart
@@ -1987,43 +1913,44 @@ export const MarketingPlanPage: React.FC = () => {
 
               {/* Right Column (7/12) */}
               <div className="mkt-step1-right">
-                <SectionTitle
-                  title={`Bảng chỉ số kế hoạch marketing năm ${selectedYear}`}
-                  className="mb-1"
-                  action={
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div className="form-check form-switch mb-0 d-flex align-items-center gap-2">
-                        <input
-                          className="form-check-input"
-                          type="checkbox"
-                          role="switch"
-                          id="editModeSwitch"
-                          checked={isEditing}
-                          onChange={(e) => {
-                            setIsEditing(e.target.checked);
-                            if (!e.target.checked) setSelectedStaffIds([]);
-                          }}
-                          style={{ cursor: 'pointer', width: 32, height: 16 }}
-                        />
-                        <label
-                          className="form-check-label text-uppercase fw-bold"
-                          htmlFor="editModeSwitch"
-                          style={{ fontSize: 11, color: 'var(--muted-foreground)', cursor: 'pointer' }}
-                        >
-                          Chỉnh sửa
-                        </label>
-                      </div>
-                      <button
-                        className="btn btn-sm btn-success d-flex align-items-center gap-1.5 font-semibold text-xs rounded"
-                        disabled={!isEditing}
-                        onClick={() => handleSaveToDB()}
-                        style={{ height: 28, padding: '0 10px' }}
+                <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                  <SectionTitle
+                    title={`Bảng chỉ số kế hoạch marketing năm ${selectedYear}`}
+                    className="mb-0"
+                  />
+                  <div className="flex items-center gap-3">
+                    <div className="form-check form-switch mb-0 flex items-center gap-2">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        role="switch"
+                        id="editModeSwitch"
+                        checked={isEditing}
+                        onChange={(e) => {
+                          setIsEditing(e.target.checked);
+                          if (!e.target.checked) setSelectedStaffIds([]);
+                        }}
+                        style={{ cursor: 'pointer', width: 32, height: 16 }}
+                      />
+                      <label
+                        className="form-check-label text-uppercase fw-bold text-[11px] text-slate-500 cursor-pointer select-none"
+                        htmlFor="editModeSwitch"
                       >
-                        <Floppy size={12} /> Lưu vào DB
-                      </button>
+                        Chỉnh sửa
+                      </label>
                     </div>
-                  }
-                />
+                    <Button
+                      variant="success"
+                      size="sm"
+                      icon={<Floppy size={12} />}
+                      disabled={!isEditing}
+                      onClick={() => handleSaveToDB()}
+                      className="h-7 text-xs shadow-xs"
+                    >
+                      Lưu vào DB
+                    </Button>
+                  </div>
+                </div>
 
                 {/* Table: Budget & Targets */}
                 <Table
@@ -2046,43 +1973,49 @@ export const MarketingPlanPage: React.FC = () => {
                 />
 
                 {/* SectionTitle: Staff Salary */}
-                <SectionTitle
-                  title="Chi tiết chi phí lương thưởng nhân sự"
-                  className="mt-3 mb-1"
-                  style={{ color: 'var(--primary)', fontSize: 12, letterSpacing: '0.02em' }}
-                  action={
-                    isEditing && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {selectedStaffIds.length > 0 && (
-                          <button
-                            className="btn btn-sm btn-outline-danger font-semibold text-xs py-0.5 px-2 rounded"
-                            onClick={() => {
-                              setCustomStaffIds((prev) => prev.filter((id) => !selectedStaffIds.includes(id)));
-                              setDeletedBaseStaffIds((prev) => [...prev, ...selectedStaffIds.filter((id) => id.startsWith('mkt_s'))]);
-                              setSelectedStaffIds([]);
-                              toast.info('Đã xóa', 'Đã xóa các vị trí đã chọn.');
-                            }}
-                          >
-                            <Trash size={11} /> Xóa ({selectedStaffIds.length})
-                          </button>
-                        )}
-                        <button
-                          className="btn btn-sm btn-outline-primary font-semibold text-xs py-0.5 px-2 rounded"
+                <div className="flex items-center justify-between mt-3 pb-1 border-b border-slate-100">
+                  <SectionTitle
+                    title="Chi tiết chi phí lương thưởng nhân sự"
+                    className="mb-0"
+                    style={{ color: 'var(--primary)', fontSize: 12, letterSpacing: '0.02em' }}
+                  />
+                  {isEditing && (
+                    <div className="flex items-center gap-2">
+                      {selectedStaffIds.length > 0 && (
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          icon={<Trash size={11} />}
                           onClick={() => {
-                            const newId = `mkt_custom_${Date.now()}`;
-                            setCustomStaffIds((prev) => [...prev, newId]);
-                            setEditedStaff((prev) => ({
-                              ...prev,
-                              [newId]: { name: 'Vị trí mới', basic: 10000000, perf: 0, allowance: 0, qty: 1 },
-                            }));
+                            setCustomStaffIds((prev) => prev.filter((id) => !selectedStaffIds.includes(id)));
+                            setDeletedBaseStaffIds((prev) => [...prev, ...selectedStaffIds.filter((id) => id.startsWith('mkt_s'))]);
+                            setSelectedStaffIds([]);
+                            toast.info('Đã xóa', 'Đã xóa các vị trí đã chọn.');
                           }}
+                          className="h-7 text-xs"
                         >
-                          <PlusLg size={11} /> Thêm vị trí
-                        </button>
-                      </div>
-                    )
-                  }
-                />
+                          Xóa ({selectedStaffIds.length})
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        icon={<PlusLg size={11} />}
+                        onClick={() => {
+                          const newId = `mkt_custom_${Date.now()}`;
+                          setCustomStaffIds((prev) => [...prev, newId]);
+                          setEditedStaff((prev) => ({
+                            ...prev,
+                            [newId]: { name: 'Vị trí mới', basic: 10000000, perf: 0, allowance: 0, qty: 1 },
+                          }));
+                        }}
+                        className="h-7 text-xs bg-white"
+                      >
+                        Thêm vị trí
+                      </Button>
+                    </div>
+                  )}
+                </div>
 
                 {/* Table: Salary Targets */}
                 <Table
@@ -2105,238 +2038,267 @@ export const MarketingPlanPage: React.FC = () => {
                 />
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* ══════════════════════════════════════════════════════════════════
-              BƯỚC 2: KẾ HOẠCH NĂM (STEP 2: CONTENT PILLARS & ADS)
-             ══════════════════════════════════════════════════════════════════ */}
-          {currentStep === 2 && (
-            <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 240px)', overflow: 'hidden', minWidth: 0, width: '100%' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 16px 12px 16px', flexShrink: 0, borderBottom: '1px solid var(--border)', background: '#fff' }}>
-                <SectionTitle
-                  title={subStep === 'pillar' ? `Chi tiết tuyến nội dung năm ${selectedYear}` : `Kế hoạch chạy quảng cáo năm ${selectedYear}`}
-                  className="mb-0"
-                  style={{ color: 'var(--primary)', fontSize: 12, letterSpacing: '0.02em' }}
-                  action={
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {subStep === 'pillar' && (
-                        <button
-                          className="btn btn-sm btn-outline-primary d-flex align-items-center gap-1 font-semibold text-xs rounded"
-                          style={{ height: 28, padding: '0 10px' }}
-                          onClick={() => {
-                            setEditingContentPlanId(null);
-                            setOffcanvasData({
-                              pillar: '',
-                              purpose: '',
-                              role: '',
-                              details: '',
-                              budget: 10000000,
-                              ratioStr: '0.77',
-                              postsCount: 5,
-                            });
-                            setShowAddOffcanvas(true);
-                          }}
-                        >
-                          <PlusLg size={11} /> Thêm tuyến nội dung
-                        </button>
-                      )}
-                      {subStep === 'ads' && (
-                        <button
-                          className="btn btn-sm btn-outline-primary d-flex align-items-center gap-1 font-semibold text-xs rounded"
-                          style={{ height: 28, padding: '0 10px' }}
-                          onClick={() => {
-                            setEditingAdPlanId(null);
-                            setAdOffcanvasData({
-                              objective: '',
-                              topic: '',
-                              channel: 'Facebook Ads',
-                              content: '',
-                              landingPage: '',
-                              budget: 10000000,
-                              region: 'Toàn quốc',
-                              assignee: 'Nguyễn Thu Huyền',
-                              startDate: '2026-07-01',
-                              endDate: '2026-12-31',
-                              audience: '',
-                            });
-                            setShowAdOffcanvas(true);
-                          }}
-                        >
-                          <PlusLg size={11} /> Thêm mục tiêu quảng cáo
-                        </button>
-                      )}
-                      <button
-                        className="btn btn-sm btn-outline-success rounded"
-                        title="Lưu thay đổi"
-                        onClick={() => handleSaveToDB()}
-                        style={{ height: 28, width: 28, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      >
-                        <Floppy size={12} />
-                      </button>
-                    </div>
-                  }
-                />
-                <div style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
-                  - Ngân sách phân bổ: <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{valBranding.toLocaleString('vi-VN')} đồng</span>
+        {/* ══════════════════════════════════════════════════════════════════
+            BƯỚC 2: KẾ HOẠCH NĂM (STEP 2: CONTENT PILLARS & ADS)
+           ══════════════════════════════════════════════════════════════════ */}
+        {currentStep === 2 && (
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden w-full h-full">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200/80 bg-slate-50/50 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center bg-slate-200/80 p-0.5 rounded-lg">
+                  <button
+                    type="button"
+                    className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
+                      subStep === 'pillar'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    onClick={() => setSubStep('pillar')}
+                  >
+                    Tuyến nội dung ({contentPlanRows.length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
+                      subStep === 'ads'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    onClick={() => setSubStep('ads')}
+                  >
+                    Kế hoạch quảng cáo ({adPlanRows.length})
+                  </button>
                 </div>
+                <Badge variant="brand" className="text-xs">
+                  Ngân sách phân bổ: {valBranding.toLocaleString('vi-VN')} đ
+                </Badge>
               </div>
 
-              <div className="flex-grow-1 custom-scrollbar" style={{ overflowY: 'auto', padding: '12px 16px', minHeight: 0, minWidth: 0, width: '100%' }}>
-                {subStep === 'pillar' ? (
-                  <Table
-                    rows={contentPlanRows}
-                    columns={contentPlanColumns}
-                    loading={loadingMasterPlan}
-                    borderless={false}
-                    striped={false}
-                    compact={true}
-                    fontSize={13}
-                    rowKey={(row) => row.id}
-                    rowStyle={(row) => ({
-                      fontWeight: row.isTotal ? 700 : 400,
-                      background: '#fff',
-                    })}
-                    cellStyle={() => ({ background: '#fff', padding: '6px 8px' })}
-                    wrapperClassName="mkt-plan-table-no-min"
-                    wrapperStyle={{ background: '#fff', border: 'none' }}
-                  />
-                ) : (
-                  <Table
-                    rows={adPlanRows}
-                    columns={adPlanColumns}
-                    loading={loadingMasterPlan}
-                    borderless={false}
-                    striped={false}
-                    compact={true}
-                    fontSize={13}
-                    rowKey={(row) => row.id}
-                    rowStyle={(row) => ({
-                      fontWeight: row.isTotal ? 700 : 400,
-                      background: '#fff',
-                    })}
-                    cellStyle={() => ({ background: '#fff', padding: '6px 8px' })}
-                    wrapperClassName="mkt-plan-table-no-min"
-                    wrapperStyle={{ background: '#fff', border: 'none' }}
-                  />
+              <div className="flex items-center gap-2">
+                {subStep === 'pillar' && (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon={<PlusLg size={11} />}
+                    onClick={() => {
+                      setEditingContentPlanId(null);
+                      setOffcanvasData({
+                        pillar: '',
+                        purpose: '',
+                        role: '',
+                        details: '',
+                        budget: 10000000,
+                        ratioStr: '0.77',
+                        postsCount: 5,
+                      });
+                      setShowAddOffcanvas(true);
+                    }}
+                    className="h-8 shadow-xs"
+                  >
+                    Thêm tuyến nội dung
+                  </Button>
                 )}
+                {subStep === 'ads' && (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon={<PlusLg size={11} />}
+                    onClick={() => {
+                      setEditingAdPlanId(null);
+                      setAdOffcanvasData({
+                        objective: '',
+                        topic: '',
+                        channel: 'Facebook Ads',
+                        content: '',
+                        landingPage: '',
+                        budget: 10000000,
+                        region: 'Toàn quốc',
+                        assignee: 'Nguyễn Thu Huyền',
+                        startDate: '2026-07-01',
+                        endDate: '2026-12-31',
+                        audience: '',
+                      });
+                      setShowAdOffcanvas(true);
+                    }}
+                    className="h-8 shadow-xs"
+                  >
+                    Thêm mục tiêu quảng cáo
+                  </Button>
+                )}
+                <Button
+                  variant="success"
+                  size="sm"
+                  icon={<Floppy size={12} />}
+                  onClick={() => handleSaveToDB()}
+                  className="h-8 px-2.5 shadow-xs"
+                  title="Lưu thay đổi"
+                >
+                  Lưu
+                </Button>
               </div>
             </div>
-          )}
 
-          {/* ══════════════════════════════════════════════════════════════════
-              BƯỚC 3: KẾ HOẠCH THÁNG (STEP 3: MONTHLY WORK MATRIX)
-             ══════════════════════════════════════════════════════════════════ */}
-          {currentStep === 3 && (
-            <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 240px)', overflow: 'hidden', minWidth: 0, width: '100%' }}>
-              {/* Header with 12 Month Selector */}
-              <div className="mkt-step3-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <SectionTitle
-                    title={`Kế hoạch hoạt động marketing tháng ${selectedMonth} - Năm ${selectedYear}`}
-                    className="mb-0"
-                    style={{ color: 'var(--primary)', fontSize: 12, letterSpacing: '0.02em' }}
-                  />
-                </div>
-
-                {/* 12-Month Selector Timeline */}
-                <div className="mkt-month-timeline">
-                  <div className="mkt-month-line" />
-                  <div className="mkt-month-container">
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
-                      const isActive = m === selectedMonth;
-                      return (
-                        <button
-                          key={m}
-                          type="button"
-                          className={`mkt-month-btn ${isActive ? 'active' : ''}`}
-                          onClick={() => setSelectedMonth(m)}
-                        >
-                          {m}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <button
-                    className="btn btn-sm btn-outline-primary d-flex align-items-center gap-1 font-semibold text-xs rounded"
-                    style={{ height: 28, padding: '0 10px' }}
-                    onClick={() => setShowThemeModal(true)}
-                  >
-                    <PencilSquare size={11} /> Chủ đề tháng
-                  </button>
-                  <button
-                    className="btn btn-sm btn-outline-success rounded"
-                    title="Lưu lại"
-                    onClick={() => handleSaveToDB()}
-                    style={{ height: 28, width: 28, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  >
-                    <Floppy size={12} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Table Matrix */}
-              <div className="flex-grow-1 custom-scrollbar" style={{ overflowY: 'auto', padding: '12px 16px', minHeight: 0, minWidth: 0, width: '100%' }}>
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-3 min-h-0">
+              {subStep === 'pillar' ? (
                 <Table
-                  rows={monthlyWorkRows}
-                  columns={monthlyWorkColumns}
+                  rows={contentPlanRows}
+                  columns={contentPlanColumns}
                   loading={loadingMasterPlan}
                   borderless={false}
                   striped={false}
                   compact={true}
-                  fontSize={12}
+                  fontSize={13}
                   rowKey={(row) => row.id}
                   rowStyle={(row) => ({
-                    fontWeight: row.type === 'section_header' || row.type === 'theme_header' ? 700 : 400,
-                    background: row.type === 'section_header' || row.type === 'theme_header' ? '#f8fafc' : '#fff',
+                    fontWeight: row.isTotal ? 700 : 400,
+                    background: '#fff',
                   })}
                   cellStyle={() => ({ background: '#fff', padding: '6px 8px' })}
                   wrapperClassName="mkt-plan-table-no-min"
                   wrapperStyle={{ background: '#fff', border: 'none' }}
                 />
+              ) : (
+                <Table
+                  rows={adPlanRows}
+                  columns={adPlanColumns}
+                  loading={loadingMasterPlan}
+                  borderless={false}
+                  striped={false}
+                  compact={true}
+                  fontSize={13}
+                  rowKey={(row) => row.id}
+                  rowStyle={(row) => ({
+                    fontWeight: row.isTotal ? 700 : 400,
+                    background: '#fff',
+                  })}
+                  cellStyle={() => ({ background: '#fff', padding: '6px 8px' })}
+                  wrapperClassName="mkt-plan-table-no-min"
+                  wrapperStyle={{ background: '#fff', border: 'none' }}
+                />
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════
+            BƯỚC 3: KẾ HOẠCH THÁNG (STEP 3: MONTHLY WORK MATRIX)
+           ══════════════════════════════════════════════════════════════════ */}
+        {currentStep === 3 && (
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden w-full h-full">
+            {/* Header with 12 Month Selector */}
+            <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200/80 bg-slate-50/50 shrink-0 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <SectionTitle
+                  title={`Kế hoạch hoạt động tháng ${selectedMonth} - Năm ${selectedYear}`}
+                  className="mb-0"
+                  style={{ color: 'var(--primary)', fontSize: 13, letterSpacing: '0.02em' }}
+                />
+              </div>
+
+              {/* 12-Month Selector Timeline */}
+              <div className="flex items-center bg-slate-200/80 p-0.5 rounded-xl gap-1">
+                {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
+                  const isActive = m === selectedMonth;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`w-7 h-7 rounded-lg text-xs font-bold transition-all flex items-center justify-center ${
+                        isActive
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:bg-white hover:text-slate-900'
+                      }`}
+                      onClick={() => setSelectedMonth(m)}
+                    >
+                      {m}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={<PencilSquare size={12} />}
+                  onClick={() => setShowThemeModal(true)}
+                  className="h-8 bg-white shadow-xs text-xs"
+                >
+                  Chủ đề tháng
+                </Button>
+                <Button
+                  variant="success"
+                  size="sm"
+                  icon={<Floppy size={12} />}
+                  onClick={() => handleSaveToDB()}
+                  className="h-8 px-2.5 shadow-xs"
+                  title="Lưu lại"
+                >
+                  Lưu
+                </Button>
               </div>
             </div>
-          )}
 
-          {/* ══════════════════════════════════════════════════════════════════
-              BƯỚC 4: NGÂN SÁCH THÁNG (STEP 4: MONTHLY BUDGET ALLOCATIONS)
-             ══════════════════════════════════════════════════════════════════ */}
-          {currentStep === 4 && (
+            {/* Table Matrix */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-3 min-h-0">
+              <Table
+                rows={monthlyWorkRows}
+                columns={monthlyWorkColumns}
+                loading={loadingMasterPlan}
+                borderless={false}
+                striped={false}
+                compact={true}
+                fontSize={12}
+                rowKey={(row) => row.id}
+                rowStyle={(row) => ({
+                  fontWeight: row.type === 'section_header' || row.type === 'theme_header' ? 700 : 400,
+                  background: row.type === 'section_header' || row.type === 'theme_header' ? '#f8fafc' : '#fff',
+                })}
+                cellStyle={() => ({ background: '#fff', padding: '6px 8px' })}
+                wrapperClassName="mkt-plan-table-no-min"
+                wrapperStyle={{ background: '#fff', border: 'none' }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════
+            BƯỚC 4: NGÂN SÁCH THÁNG (STEP 4: MONTHLY BUDGET ALLOCATIONS)
+           ══════════════════════════════════════════════════════════════════ */}
+        {currentStep === 4 && (
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-3 min-h-0">
             <div className="mkt-step4-grid">
               {/* Left Column: Stats & Annual Category Settings */}
               <div className="mkt-step4-left">
                 {/* Summary Card */}
                 <div
-                  className="card m-0 border-0 shadow-sm"
-                  style={{ background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', borderRadius: 8, padding: 12 }}
+                  className="rounded-xl border border-slate-200/80 p-3.5 bg-gradient-to-br from-slate-50 to-slate-100/60 shadow-xs"
                 >
-                  <h6 className="fw-bold text-secondary" style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                  <h6 className="font-bold text-slate-500 uppercase text-[11px] tracking-wider mb-2">
                     TÓM TẮT NGÂN SÁCH
                   </h6>
-                  <div style={{ marginBottom: 10 }}>
-                    <div style={{ fontSize: 11, color: 'var(--muted-foreground)', marginBottom: 2 }}>Tổng ngân sách năm {selectedYear}</div>
-                    <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--primary)', lineHeight: '1.2' }}>
+                  <div className="mb-2.5">
+                    <div className="text-[11px] text-slate-500 mb-0.5">Tổng ngân sách năm {selectedYear}</div>
+                    <div className="text-xl font-bold text-indigo-700 leading-tight">
                       {valBranding.toLocaleString('vi-VN')} đ
                     </div>
                   </div>
-                  <div className="d-flex gap-3">
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 11, color: 'var(--muted-foreground)', marginBottom: 2 }}>Đã phân bổ</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--foreground)', lineHeight: '1.2' }}>
+                  <div className="flex gap-3 pt-2 border-t border-slate-200/60">
+                    <div className="flex-1">
+                      <div className="text-[11px] text-slate-500 mb-0.5">Đã phân bổ</div>
+                      <div className="text-sm font-bold text-slate-800">
                         {totalAllocatedBudgets.toLocaleString('vi-VN')} đ
                       </div>
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 11, color: 'var(--muted-foreground)', marginBottom: 2 }}>Còn lại chưa phân bổ</div>
+                    <div className="flex-1">
+                      <div className="text-[11px] text-slate-500 mb-0.5">Còn lại chưa phân bổ</div>
                       <div
-                        style={{
-                          fontSize: 16,
-                          fontWeight: 700,
-                          color: valBranding - totalAllocatedBudgets < 0 ? '#ef4444' : '#10b981',
-                          lineHeight: '1.2',
-                        }}
+                        className={`text-sm font-bold ${
+                          valBranding - totalAllocatedBudgets < 0 ? 'text-rose-600' : 'text-emerald-600'
+                        }`}
                       >
                         {(valBranding - totalAllocatedBudgets).toLocaleString('vi-VN')} đ
                       </div>
@@ -2345,16 +2307,16 @@ export const MarketingPlanPage: React.FC = () => {
                 </div>
 
                 {/* Section: Ngân sách cho đại lý */}
-                <SectionTitle title="Ngân sách cho đại lý" className="mb-0" style={{ color: 'var(--primary)', fontSize: 12, letterSpacing: '0.02em' }} />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 1, paddingLeft: 12 }}>
+                <SectionTitle title="Ngân sách cho đại lý" className="mb-0 mt-1" style={{ color: 'var(--primary)', fontSize: 12, letterSpacing: '0.02em' }} />
+                <div className="flex flex-col gap-1 pl-3 bg-white p-2 rounded-lg border border-slate-100">
                   <BudgetInputRow label="Marketing tại điểm bán" value={agencyPOSBudget} onChange={setAgencyPOSBudget} valBranding={valBranding} />
                   <BudgetInputRow label="Quảng cáo bảng hiệu" value={agencyAdsBudget} onChange={setAgencyAdsBudget} valBranding={valBranding} />
                   <BudgetInputRow label="Quà tặng khai trương & sự kiện" value={agencyGiftBudget} onChange={setAgencyGiftBudget} valBranding={valBranding} />
                 </div>
 
                 {/* Section: Ngân sách cho quảng cáo */}
-                <SectionTitle title="Ngân sách cho quảng cáo" className="mb-0" style={{ color: 'var(--primary)', fontSize: 12, letterSpacing: '0.02em' }} />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 1, paddingLeft: 12 }}>
+                <SectionTitle title="Ngân sách cho quảng cáo" className="mb-0 mt-1" style={{ color: 'var(--primary)', fontSize: 12, letterSpacing: '0.02em' }} />
+                <div className="flex flex-col gap-1 pl-3 bg-white p-2 rounded-lg border border-slate-100">
                   <BudgetInputRow label="Facebook Ads" value={advFbAds} onChange={setAdvFbAds} valBranding={valBranding} />
                   <BudgetInputRow label="Google Ads" value={advGoogleAds} onChange={setAdvGoogleAds} valBranding={valBranding} />
                   <BudgetInputRow label="Youtube Ads" value={advYoutubeAds} onChange={setAdvYoutubeAds} valBranding={valBranding} />
@@ -2370,100 +2332,75 @@ export const MarketingPlanPage: React.FC = () => {
 
               {/* Right Column: Month Allocations Table */}
               <div className="mkt-step4-right">
-                <SectionTitle
-                  title={`Phân bổ ngân sách theo tháng - Năm ${selectedYear}`}
-                  className="mb-0"
-                  style={{ color: 'var(--primary)', fontSize: 12, letterSpacing: '0.02em' }}
-                  action={
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div className="form-check form-switch mb-0 d-flex align-items-center gap-2">
-                        <input
-                          className="form-check-input"
-                          type="checkbox"
-                          role="switch"
-                          id="editMonthlySwitch"
-                          checked={isEditing}
-                          onChange={(e) => setIsEditing(e.target.checked)}
-                          style={{ cursor: 'pointer', width: 32, height: 16 }}
-                        />
-                        <label
-                          className="form-check-label text-uppercase fw-bold"
-                          htmlFor="editMonthlySwitch"
-                          style={{ fontSize: 11, color: 'var(--muted-foreground)', cursor: 'pointer' }}
-                        >
-                          CHỈNH SỬA
-                        </label>
-                      </div>
-                      <button
-                        className="btn btn-sm btn-outline-success rounded"
-                        title="Lưu lại"
-                        onClick={() => handleSaveToDB()}
-                        style={{ height: 28, width: 28, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      >
-                        <Floppy size={12} />
-                      </button>
-                    </div>
-                  }
-                />
-
-                {/* 12-Month Selector Timeline */}
-                <div style={{ display: 'flex', alignItems: 'center', position: 'relative', width: '100%', maxWidth: 420, margin: '8px 0' }}>
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: 11,
-                      right: 11,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      height: 2,
-                      backgroundColor: 'color-mix(in srgb, var(--primary) 15%, #cbd5e1)',
-                      zIndex: 1,
-                    }}
+                <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                  <SectionTitle
+                    title={`Phân bổ ngân sách theo tháng - Năm ${selectedYear}`}
+                    className="mb-0"
+                    style={{ color: 'var(--primary)', fontSize: 12, letterSpacing: '0.02em' }}
                   />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 4, width: '100%', position: 'relative', zIndex: 2, alignItems: 'center' }}>
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
-                      const isActive = m === selectedMonth;
-                      return (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => setSelectedMonth(m)}
-                          style={{
-                            width: 22,
-                            height: 22,
-                            borderRadius: '50%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: 10.5,
-                            fontWeight: isActive ? 700 : 500,
-                            backgroundColor: isActive ? '#1e3a8a' : '#fff',
-                            color: isActive ? '#fff' : 'color-mix(in srgb, var(--foreground) 75%, #475569)',
-                            border: isActive ? 'none' : '1.5px solid color-mix(in srgb, var(--primary) 20%, #cbd5e1)',
-                            boxShadow: isActive ? '0 2px 6px rgba(30, 58, 138, 0.2)' : 'none',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease-in-out',
-                          }}
-                        >
-                          {m}
-                        </button>
-                      );
-                    })}
+                  <div className="flex items-center gap-3">
+                    <div className="form-check form-switch mb-0 flex items-center gap-2">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        role="switch"
+                        id="editMonthlySwitch"
+                        checked={isEditing}
+                        onChange={(e) => setIsEditing(e.target.checked)}
+                        style={{ cursor: 'pointer', width: 32, height: 16 }}
+                      />
+                      <label
+                        className="form-check-label text-uppercase fw-bold text-[11px] text-slate-500 cursor-pointer select-none"
+                        htmlFor="editMonthlySwitch"
+                      >
+                        CHỈNH SỬA
+                      </label>
+                    </div>
+                    <Button
+                      variant="success"
+                      size="sm"
+                      icon={<Floppy size={12} />}
+                      onClick={() => handleSaveToDB()}
+                      className="h-7 text-xs shadow-xs"
+                    >
+                      Lưu lại
+                    </Button>
                   </div>
                 </div>
 
+                {/* 12-Month Selector Timeline */}
+                <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-1 my-2">
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
+                    const isActive = m === selectedMonth;
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setSelectedMonth(m)}
+                        className={`w-7 h-7 rounded-lg text-xs font-bold transition-all flex items-center justify-center ${
+                          isActive
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:bg-white hover:text-slate-900'
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    );
+                  })}
+                </div>
+
                 {/* Monthly Budget Summary */}
-                <div style={{ margin: '10px 0', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>
+                <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/60 mb-2 flex items-center justify-between">
+                  <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
                     Tổng ngân sách dự kiến chi cho tháng {selectedMonth}
                   </div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--primary)' }}>
+                  <div className="text-base font-bold text-indigo-700">
                     {(monthlyBudgets[selectedMonth] || 0).toLocaleString('vi-VN')} đ
                   </div>
                 </div>
 
                 {/* 13 Categories Monthly Table */}
-                <div className="border rounded bg-white overflow-hidden shadow-2xs">
+                <div className="border border-slate-200/80 rounded-xl bg-white overflow-hidden shadow-2xs">
                   <table className="w-100" style={{ fontSize: 12, borderCollapse: 'collapse' }}>
                     <thead>
                       <tr className="bg-slate-50 border-b text-slate-500 font-bold uppercase text-[10.5px]">
@@ -2569,9 +2506,9 @@ export const MarketingPlanPage: React.FC = () => {
                 </div>
               </div>
             </div>
-          )}
-        </WorkflowCard>
-      </div>
+          </div>
+        )}
+      </StepPage>
 
       {/* ── OFFCANVAS & MODALS ────────────────────────────────────────────── */}
 
