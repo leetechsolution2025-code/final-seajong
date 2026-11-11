@@ -1491,31 +1491,29 @@ const InventoryTab: React.FC<{
       ),
     },
     {
-      key: 'code',
-      header: 'MÃ VẬT TƯ',
-      width: '110px',
-      render: (it) => <span className="font-mono font-bold text-xs text-gray-700">{it.code}</span>,
-    },
-    {
       key: 'name',
       header: 'TÊN VẬT TƯ / DỤNG CỤ',
-      render: (it) => (
-        <div className="flex items-center gap-2">
-          <div>
+      render: (it) => {
+        const metaParts: string[] = [];
+        if (it.isAsset) {
+          metaParts.push('Dụng cụ');
+        }
+        if (it.category?.name) {
+          metaParts.push(it.category.name);
+        }
+
+        return (
+          <div className="py-1">
             <div className="font-semibold text-gray-900 text-xs">{it.name}</div>
-            {it.note && <div className="text-[11px] text-gray-400">{it.note}</div>}
+            {metaParts.length > 0 && (
+              <div className="text-[11px] text-gray-500 font-medium mt-0.5">
+                {metaParts.join(' | ')}
+              </div>
+            )}
+            {it.note && <div className="text-[10px] text-gray-400 italic mt-0.5">{it.note}</div>}
           </div>
-          {it.isAsset && <Badge variant="info">Dụng cụ</Badge>}
-        </div>
-      ),
-    },
-    {
-      key: 'category',
-      header: 'DANH MỤC',
-      width: '150px',
-      render: (it) => (
-        <span className="text-xs text-gray-600">{it.category?.name || 'Chưa phân loại'}</span>
-      ),
+        );
+      },
     },
     {
       key: 'unit',
