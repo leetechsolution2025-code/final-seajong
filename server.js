@@ -3372,7 +3372,7 @@ app.delete('/api/hr/employees/:id', async (req, res) => {
 
 app.get('/api/hr/salary-adjustment', async (req, res) => {
   try {
-    let requests = await prisma.salaryAdjustmentRequest.findMany({
+    const requests = await prisma.salaryAdjustmentRequest.findMany({
       include: {
         employee: {
           select: {
@@ -3396,130 +3396,6 @@ app.get('/api/hr/salary-adjustment', async (req, res) => {
       },
       orderBy: { createdAt: 'desc' }
     });
-
-    // Auto-seed initial realistic data if database is empty
-    if (requests.length === 0) {
-      const emps = await prisma.employee.findMany({
-        take: 8,
-        select: { id: true, fullName: true, code: true, departmentName: true, position: true, baseSalary: true }
-      });
-
-      if (emps.length > 0) {
-        const sampleConfigs = [
-          {
-            empIdx: 0,
-            status: 'PENDING',
-            type: 'INCREASE',
-            cur: 12000000,
-            prop: 14000000,
-            curAllowances: { meal: 730000, fuel: 500000 },
-            propAllowances: { meal: 730000, fuel: 800000, phone: 300000 },
-            reason: 'Hoàn thành xuất sắc nhiệm vụ và đạt 120% chỉ tiêu KPI Quý 3/2026',
-            daysAgo: 2,
-          },
-          {
-            empIdx: 1 % emps.length,
-            status: 'REVIEWING',
-            type: 'INCREASE',
-            cur: 15000000,
-            prop: 17500000,
-            curAllowances: { meal: 730000, phone: 500000 },
-            propAllowances: { meal: 730000, fuel: 1000000, phone: 500000 },
-            reason: 'Tăng lương niên hạn định kỳ 12 tháng theo quy chế công ty',
-            daysAgo: 5,
-          },
-          {
-            empIdx: 2 % emps.length,
-            status: 'SUBMITTED',
-            type: 'INCREASE',
-            cur: 10500000,
-            prop: 13000000,
-            curAllowances: { meal: 730000 },
-            propAllowances: { meal: 730000, seniority: 1000000, fuel: 500000 },
-            reason: 'Bổ nhiệm vị trí phụ trách nhóm và tiếp nhận phụ cấp trách nhiệm mới',
-            daysAgo: 8,
-          },
-          {
-            empIdx: 3 % emps.length,
-            status: 'WAITING_APPROVAL',
-            type: 'RESTRUCTURE',
-            cur: 18000000,
-            prop: 21500000,
-            curAllowances: { meal: 730000, fuel: 1000000 },
-            propAllowances: { meal: 730000, fuel: 1200000, phone: 1000000, seniority: 800000 },
-            reason: 'Tái cơ cấu dải lương và phụ cấp theo khung chuẩn hóa doanh nghiệp 2026',
-            daysAgo: 10,
-          },
-          {
-            empIdx: 4 % emps.length,
-            status: 'APPROVED',
-            type: 'INCREASE',
-            cur: 11000000,
-            prop: 13500000,
-            curAllowances: { meal: 730000 },
-            propAllowances: { meal: 730000, fuel: 500000 },
-            reason: 'Ban Giám đốc đã phê duyệt mức tăng lương niên hạn và thưởng kết quả dự án',
-            daysAgo: 14,
-          },
-          {
-            empIdx: 5 % emps.length,
-            status: 'COMPLETED',
-            type: 'INCREASE',
-            cur: 9500000,
-            prop: 11000000,
-            curAllowances: { meal: 730000 },
-            propAllowances: { meal: 730000, fuel: 500000 },
-            reason: 'Hoàn tất thời gian thử thách năng lực, ký hợp đồng nâng bậc lương chính thức',
-            daysAgo: 20,
-          }
-        ];
-
-        for (const cfg of sampleConfigs) {
-          const targetEmp = emps[cfg.empIdx];
-          const createdDate = new Date(Date.now() - cfg.daysAgo * 86400000);
-          await prisma.salaryAdjustmentRequest.create({
-            data: {
-              employeeId: targetEmp.id,
-              adjustmentType: cfg.type,
-              currentBaseSalary: cfg.cur,
-              proposedBaseSalary: cfg.prop,
-              currentAllowances: JSON.stringify(cfg.curAllowances),
-              proposedAllowances: JSON.stringify(cfg.propAllowances),
-              reason: cfg.reason,
-              effectiveDate: new Date(Date.now() + 15 * 86400000),
-              status: cfg.status,
-              createdAt: createdDate,
-            }
-          });
-        }
-
-        // Re-query after seed
-        requests = await prisma.salaryAdjustmentRequest.findMany({
-          include: {
-            employee: {
-              select: {
-                id: true,
-                fullName: true,
-                code: true,
-                avatarUrl: true,
-                departmentName: true,
-                departmentCode: true,
-                position: true,
-                baseSalary: true,
-              }
-            },
-            requester: {
-              select: {
-                id: true,
-                fullName: true,
-                code: true,
-              }
-            }
-          },
-          orderBy: { createdAt: 'desc' }
-        });
-      }
-    }
 
     const [departments, positions] = await Promise.all([
       prisma.departmentCategory.findMany({ select: { code: true, nameVi: true } }),

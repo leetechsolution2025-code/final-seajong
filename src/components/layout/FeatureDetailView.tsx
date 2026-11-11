@@ -259,7 +259,7 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
         };
       case 'salary-adjustments':
         return {
-          title: 'Điều chỉnh thu nhập & Thưởng KPI',
+          title: 'Điều chỉnh thu nhập',
           groupName: 'PHÚC LỢI',
           icon: 'bi-sliders',
           color: 'rose',

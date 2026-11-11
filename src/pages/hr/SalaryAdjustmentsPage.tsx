@@ -36,7 +36,7 @@ import type { ModernStepItem } from '../../types';
 
 const SALARY_STEPS: ModernStepItem[] = [
   { num: 1, id: 'RECEIVING', title: 'Tiếp nhận', desc: 'Rà soát chỉ tiêu', icon: 'bi-envelope-check' },
-  { num: 2, id: 'APPROVAL', title: 'Xét duyệt', desc: 'Tờ trình & Phê duyệt', icon: 'bi-file-earmark-person' },
+  { num: 2, id: 'APPROVAL', title: 'Đã xét duyệt', desc: 'Tờ trình & Phê duyệt', icon: 'bi-file-earmark-person' },
   { num: 3, id: 'COMPLETION', title: 'Hoàn tất', desc: 'Quyết định & Cập nhật', icon: 'bi-check2-all' },
 ];
 
@@ -454,7 +454,7 @@ export const SalaryAdjustmentsPage: React.FC = () => {
 
   return (
     <StepPage
-      title="Điều chỉnh thu nhập & Thưởng KPI"
+      title="Điều chỉnh thu nhập"
       description="Xét tăng lương niên hạn định kỳ và mức thưởng hoàn thành mục tiêu kinh doanh"
       icon="bi-sliders"
       color="rose"
@@ -515,12 +515,12 @@ export const SalaryAdjustmentsPage: React.FC = () => {
 
         {/* ── TABLE ─────────────────────────────────────────────────────────── */}
         <div className="flex-1 flex flex-col min-h-0" style={{ flex: '1 1 0%' }}>
-          <FullWidthTable loading={loading} loadingText="Đang tải danh sách hồ sơ điều chỉnh...">
+          <FullWidthTable className="salary-adjustments-table" loading={loading} loadingText="Đang tải danh sách hồ sơ điều chỉnh...">
             <table style={{ tableLayout: 'fixed', width: '100%' }}>
               <thead>
                 <tr>
                   {currentStep === 2 && (
-                    <th style={{ width: 36, textAlign: 'center' }}>
+                    <th style={{ width: 36, minWidth: 36, maxWidth: 36, textAlign: 'center', padding: '10px 4px' }}>
                       <input
                         type="checkbox"
                         className="rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
@@ -532,12 +532,12 @@ export const SalaryAdjustmentsPage: React.FC = () => {
                       />
                     </th>
                   )}
-                  <th style={{ width: currentStep === 2 ? '27%' : '28%' }}>Nhân sự</th>
+                  <th style={{ width: currentStep === 2 ? '24%' : '26%' }}>Nhân sự</th>
                   <th style={{ width: currentStep === 2 ? '19%' : '20%', whiteSpace: 'nowrap' }}>Thu nhập (Trước → Sau)</th>
-                  <th style={{ width: currentStep === 2 ? '25%' : '27%' }}>Lý do điều chỉnh</th>
-                  <th style={{ width: currentStep === 2 ? '11%' : '11%', whiteSpace: 'nowrap' }}>Người gửi</th>
-                  <th style={{ width: currentStep === 2 ? '8%' : '8%', whiteSpace: 'nowrap' }}>Ngày gửi</th>
-                  <th style={{ width: currentStep === 2 ? '10%' : '11%', textAlign: 'right', whiteSpace: 'nowrap' }}>Trạng thái</th>
+                  <th style={{ width: currentStep === 2 ? '23%' : '24%' }}>Lý do điều chỉnh</th>
+                  <th style={{ width: currentStep === 2 ? '10%' : '10%', whiteSpace: 'nowrap' }}>Người gửi</th>
+                  <th style={{ width: currentStep === 2 ? '9%' : '9%', whiteSpace: 'nowrap' }}>Ngày gửi</th>
+                  <th style={{ width: currentStep === 2 ? '15%' : '15%', textAlign: 'right', whiteSpace: 'nowrap' }}>Trạng thái</th>
                 </tr>
               </thead>
               <tbody>
@@ -690,6 +690,17 @@ export const SalaryAdjustmentsPage: React.FC = () => {
             setPage(1);
           }}
         />
+
+        <style>{`
+          .salary-adjustments-table th,
+          .salary-adjustments-table td {
+            padding-left: 10px !important;
+            padding-right: 10px !important;
+          }
+          .salary-adjustments-table .table-responsive {
+            overflow-x: hidden !important;
+          }
+        `}</style>
       </div>
 
       {/* ── OFFCANVAS 1: CHI TIẾT ĐIỀU CHỈNH THU NHẬP (width="400px") ───────── */}
