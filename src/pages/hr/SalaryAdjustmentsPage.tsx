@@ -516,7 +516,7 @@ export const SalaryAdjustmentsPage: React.FC = () => {
         {/* ── TABLE ─────────────────────────────────────────────────────────── */}
         <div className="flex-1 flex flex-col min-h-0" style={{ flex: '1 1 0%' }}>
           <FullWidthTable loading={loading} loadingText="Đang tải danh sách hồ sơ điều chỉnh...">
-            <table>
+            <table style={{ tableLayout: 'fixed', width: '100%' }}>
               <thead>
                 <tr>
                   {currentStep === 2 && (
@@ -532,20 +532,19 @@ export const SalaryAdjustmentsPage: React.FC = () => {
                       />
                     </th>
                   )}
-                  <th style={{ minWidth: 220 }}>Nhân sự</th>
-                  <th style={{ minWidth: 120 }}>Phân loại</th>
-                  <th style={{ minWidth: 230 }}>Thu nhập (Trước → Sau)</th>
-                  <th style={{ minWidth: 200 }}>Lý do điều chỉnh</th>
-                  <th style={{ minWidth: 130 }}>Người gửi</th>
-                  <th style={{ minWidth: 110 }}>Ngày gửi</th>
-                  <th style={{ minWidth: 140, textAlign: 'right' }}>Trạng thái</th>
+                  <th style={{ width: currentStep === 2 ? '27%' : '28%' }}>Nhân sự</th>
+                  <th style={{ width: currentStep === 2 ? '19%' : '20%', whiteSpace: 'nowrap' }}>Thu nhập (Trước → Sau)</th>
+                  <th style={{ width: currentStep === 2 ? '25%' : '27%' }}>Lý do điều chỉnh</th>
+                  <th style={{ width: currentStep === 2 ? '11%' : '11%', whiteSpace: 'nowrap' }}>Người gửi</th>
+                  <th style={{ width: currentStep === 2 ? '8%' : '8%', whiteSpace: 'nowrap' }}>Ngày gửi</th>
+                  <th style={{ width: currentStep === 2 ? '10%' : '11%', textAlign: 'right', whiteSpace: 'nowrap' }}>Trạng thái</th>
                 </tr>
               </thead>
               <tbody>
                 {paginatedData.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={currentStep === 2 ? 8 : 7}
+                      colSpan={currentStep === 2 ? 7 : 6}
                       className="text-center py-12 text-slate-400"
                     >
                       <div className="flex flex-col items-center justify-center gap-2">
@@ -590,10 +589,10 @@ export const SalaryAdjustmentsPage: React.FC = () => {
                           </td>
                         )}
 
-                        {/* Nhân sự */}
-                        <td>
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs shrink-0">
+                        {/* Nhân sự: Phân loại cạnh tên, bỏ mã nhân sự */}
+                        <td className="overflow-hidden">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs shrink-0">
                               {item.employee?.fullName
                                 ? item.employee.fullName
                                     .split(' ')
@@ -603,28 +602,22 @@ export const SalaryAdjustmentsPage: React.FC = () => {
                                     .toUpperCase()
                                 : 'NV'}
                             </div>
-                            <div className="min-w-0">
-                              <div className="font-semibold text-slate-800 text-[13px] truncate">
-                                {item.employee?.fullName || 'Chưa cập nhật'}
-                              </div>
-                              <div className="text-[11px] text-slate-500 truncate flex items-center gap-1.5 mt-0.5">
-                                <span className="font-medium text-slate-600">
-                                  {item.employee?.code || 'EMP-N/A'}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-semibold text-slate-800 text-[13px] truncate">
+                                  {item.employee?.fullName || 'Chưa cập nhật'}
                                 </span>
-                                <span>•</span>
-                                <span>{item.employee?.departmentName || 'Chung'}</span>
+                                <AdjustmentTypeBadge type={item.adjustmentType} />
+                              </div>
+                              <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                                {item.employee?.departmentName || 'Chung'}
                               </div>
                             </div>
                           </div>
                         </td>
 
-                        {/* Phân loại */}
-                        <td>
-                          <AdjustmentTypeBadge type={item.adjustmentType} />
-                        </td>
-
                         {/* Thu nhập trước -> sau */}
-                        <td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
                           <div className="flex flex-col gap-0.5">
                             <div className="flex items-center gap-2 text-[12px]">
                               <span className="text-slate-500 font-medium">
@@ -652,28 +645,28 @@ export const SalaryAdjustmentsPage: React.FC = () => {
                         </td>
 
                         {/* Lý do */}
-                        <td>
-                          <div className="text-[12px] text-slate-600 truncate max-w-xs" title={item.reason}>
+                        <td className="overflow-hidden">
+                          <div className="text-[12px] text-slate-600 truncate block w-full" title={item.reason}>
                             {item.reason}
                           </div>
                         </td>
 
                         {/* Người gửi */}
-                        <td>
-                          <span className="text-[12px] text-slate-700 font-medium">
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <span className="text-[12px] text-slate-700 font-medium truncate block">
                             {item.requester?.fullName || 'Hệ thống'}
                           </span>
                         </td>
 
                         {/* Ngày gửi */}
-                        <td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
                           <span className="text-[11px] text-slate-500">
                             {new Date(item.createdAt).toLocaleDateString('vi-VN')}
                           </span>
                         </td>
 
                         {/* Trạng thái */}
-                        <td style={{ textAlign: 'right' }}>
+                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                           <StatusIndicator status={item.status} />
                         </td>
                       </tr>
@@ -901,7 +894,7 @@ const SalaryAdjustmentDetailOffcanvas: React.FC<DetailProps> = ({
       <div className="flex flex-col gap-4 text-xs">
         {/* Nhân sự card */}
         <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-lg flex items-center gap-3">
-          <div className="w-11 h-11 rounded-lg bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-sm shrink-0">
+          <div className="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-sm shrink-0">
             {data.employee?.fullName
               ? data.employee.fullName
                   .split(' ')
@@ -912,14 +905,16 @@ const SalaryAdjustmentDetailOffcanvas: React.FC<DetailProps> = ({
               : 'NV'}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="font-bold text-slate-800 text-sm truncate">
-              {data.employee?.fullName}
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-slate-800 text-sm truncate">
+                {data.employee?.fullName}
+              </span>
+              <AdjustmentTypeBadge type={data.adjustmentType} />
             </div>
-            <div className="text-slate-500 text-[11px] truncate">
-              {data.employee?.code} • {data.employee?.departmentName}
+            <div className="text-slate-500 text-[11px] truncate mt-0.5">
+              {data.employee?.departmentName || 'Chung'}
             </div>
             <div className="mt-1 flex items-center gap-1.5">
-              <AdjustmentTypeBadge type={data.adjustmentType} />
               <StatusIndicator status={data.status} />
             </div>
           </div>
@@ -1072,11 +1067,14 @@ const ProposalSupportOffcanvas: React.FC<ProposalProps> = ({
                   {item.employee?.fullName ? item.employee.fullName.charAt(0) : 'NV'}
                 </div>
                 <div className="min-w-0">
-                  <div className="font-semibold text-slate-800 text-[12px] truncate">
-                    {item.employee?.fullName}
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-slate-800 text-[12px] truncate">
+                      {item.employee?.fullName}
+                    </span>
+                    <AdjustmentTypeBadge type={item.adjustmentType} />
                   </div>
-                  <div className="text-slate-400 text-[11px] truncate">
-                    {item.employee?.code} • {item.adjustmentType === 'INCREASE' ? 'Tăng lương' : 'Điều chỉnh'}
+                  <div className="text-slate-400 text-[11px] truncate mt-0.5">
+                    {item.employee?.departmentName || 'Chung'}
                   </div>
                 </div>
               </div>
@@ -1130,7 +1128,7 @@ const CreateAdjustmentOffcanvas: React.FC<CreateProps> = ({
       { value: '', label: '-- Chọn nhân sự --' },
       ...employees.map((e) => ({
         value: e.id,
-        label: `${e.fullName} (${e.code} - ${e.departmentName || 'Chung'})`,
+        label: `${e.fullName} (${e.departmentName || 'Chung'})`,
       })),
     ];
   }, [employees]);
