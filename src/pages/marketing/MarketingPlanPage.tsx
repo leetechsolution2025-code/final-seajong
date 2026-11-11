@@ -209,8 +209,8 @@ const RevenueDonutChart: React.FC<RevenueDonutProps> = ({ data, totalRevenue }) 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
-      <div style={{ width: 180, height: 180, position: 'relative', margin: '4px 0 12px 0' }}>
-        <svg width="180" height="180" viewBox="0 0 160 160">
+      <div style={{ width: 130, height: 130, position: 'relative', margin: '2px 0 8px 0' }}>
+        <svg width="130" height="130" viewBox="0 0 160 160">
           <circle
             cx="80"
             cy="80"
@@ -265,10 +265,10 @@ const RevenueDonutChart: React.FC<RevenueDonutProps> = ({ data, totalRevenue }) 
             pointerEvents: 'none',
           }}
         >
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)' }}>
-            {hoveredIdx !== null ? data[hoveredIdx].label : 'Tổng doanh thu'}
+          <span style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--muted-foreground)' }}>
+            {hoveredIdx !== null ? data[hoveredIdx].label : 'Tổng DT'}
           </span>
-          <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--foreground)' }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--foreground)' }}>
             {hoveredIdx !== null
               ? `${((data[hoveredIdx].value / (totalRevenue || 1)) * 100).toFixed(1)}%`
               : `${(totalRevenue / 1e9).toFixed(1)} tỷ`}
@@ -277,7 +277,7 @@ const RevenueDonutChart: React.FC<RevenueDonutProps> = ({ data, totalRevenue }) 
       </div>
 
       {/* Legend */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px 12px', width: '100%', padding: '0 8px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px 8px', width: '100%', padding: '0 4px' }}>
         {data.map((item, idx) => {
           const ratio = totalRevenue > 0 ? (item.value / totalRevenue) * 100 : 0;
           return (
@@ -286,8 +286,8 @@ const RevenueDonutChart: React.FC<RevenueDonutProps> = ({ data, totalRevenue }) 
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6,
-                fontSize: 11,
+                gap: 5,
+                fontSize: 10.5,
                 cursor: 'pointer',
                 opacity: hoveredIdx !== null && hoveredIdx !== idx ? 0.5 : 1,
                 transition: 'opacity 0.2s',
@@ -395,6 +395,7 @@ export const MarketingPlanPage: React.FC = () => {
   const [selectedYear, setSelectedYear] = useState<string>('2026');
   const [planDate, setPlanDate] = useState<string>('2026-06-23');
   const [selectedMonth, setSelectedMonth] = useState<number>(8); // Mặc định tháng 8
+  const [step1Tab, setStep1Tab] = useState<'kpi' | 'salary'>('kpi');
 
   // Global loading & editing states
   const [loadingMasterPlan, setLoadingMasterPlan] = useState<boolean>(true);
@@ -1754,10 +1755,10 @@ export const MarketingPlanPage: React.FC = () => {
            ══════════════════════════════════════════════════════════════════ */}
         {currentStep === 1 && (
           <div className="mkt-step1-grid">
-            {/* Left Column (Fixed / Cố định) */}
-            <div className="mkt-step1-left custom-scrollbar">
+            {/* Left Column (Fixed / Cố định, tự động điều chỉnh chiếm hết chiều cao khả dụng) */}
+            <div className="mkt-step1-left">
               {/* Year, Date, Approval, Report */}
-              <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-xs flex flex-col gap-2.5">
+              <div className="p-2.5 bg-white rounded-xl border border-slate-200/80 shadow-xs flex flex-col gap-2 shrink-0">
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <Select
@@ -1806,7 +1807,7 @@ export const MarketingPlanPage: React.FC = () => {
 
               {/* Status Badges & Approval Actions */}
               {planStatus === 'pending_approval' && (
-                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between">
+                <div className="p-2 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between shrink-0">
                   <Badge variant="warning" hasDot pulseDot>Đang chờ duyệt</Badge>
                   <div className="flex gap-1.5">
                     <Button variant="success" size="sm" icon={<Check size={14} />} onClick={handleApprovePlan} className="h-7 text-xs">
@@ -1819,15 +1820,15 @@ export const MarketingPlanPage: React.FC = () => {
                 </div>
               )}
               {planStatus === 'approved' && (
-                <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-2 shrink-0">
                   <Badge variant="success" hasDot>Kế hoạch đã phê duyệt</Badge>
-                  <span className="text-xs text-emerald-800 font-medium">Bản kế hoạch năm {selectedYear} có hiệu lực thực thi.</span>
+                  <span className="text-xs text-emerald-800 font-medium">Hiệu lực năm {selectedYear}.</span>
                 </div>
               )}
               {planStatus === 'rejected' && (
-                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 shrink-0">
                   <Badge variant="danger" hasDot>Kế hoạch bị từ chối</Badge>
-                  <span className="text-xs text-rose-800 font-medium">Vui lòng điều chỉnh lại ngân sách hoặc chỉ tiêu.</span>
+                  <span className="text-xs text-rose-800 font-medium">Vui lòng điều chỉnh lại.</span>
                 </div>
               )}
 
@@ -1836,7 +1837,7 @@ export const MarketingPlanPage: React.FC = () => {
                 const costRatio = getRatio(totalCostMarketing);
                 const isOver = totalCostMarketing > valMarketingCost;
                 return (
-                  <div className="rounded-xl border border-slate-200/80 p-4 bg-white shadow-xs flex flex-col gap-3">
+                  <div className="rounded-xl border border-slate-200/80 p-3 bg-white shadow-xs flex flex-col gap-2 shrink-0">
                     <div className="flex justify-between items-center">
                       <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                         TỶ LỆ CHI PHÍ / DOANH THU
@@ -1852,14 +1853,14 @@ export const MarketingPlanPage: React.FC = () => {
                       </span>
                     </div>
                     <div className="flex items-baseline gap-1.5">
-                      <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
+                      <span className="text-2xl font-extrabold text-slate-900 tracking-tight">
                         {costRatio.toFixed(1)}%
                       </span>
                       <span className="text-xs text-slate-500 font-medium">
                         trên tổng doanh thu
                       </span>
                     </div>
-                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${
                           isOver
@@ -1869,7 +1870,7 @@ export const MarketingPlanPage: React.FC = () => {
                         style={{ width: `${Math.min(costRatio, 100)}%` }}
                       />
                     </div>
-                    <div className="flex justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
+                    <div className="flex justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100">
                       <div>
                         Chi phí: <strong className="text-slate-800">{totalCostMarketing.toLocaleString('vi-VN')} đ</strong>
                       </div>
@@ -1881,31 +1882,91 @@ export const MarketingPlanPage: React.FC = () => {
                 );
               })()}
 
-              {/* Revenue Donut Chart Card */}
-              <div className="rounded-xl border border-slate-200/80 p-4 bg-white shadow-xs flex flex-col gap-3">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              {/* Revenue Donut Chart Card (Fills remaining height) */}
+              <div className="rounded-xl border border-slate-200/80 p-2.5 bg-white shadow-xs flex-1 min-h-0 flex flex-col justify-between">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider shrink-0">
                   Cơ cấu doanh thu năm {selectedYear}
                 </span>
-                <RevenueDonutChart
-                  totalRevenue={totalRevenue}
-                  data={[
-                    { label: 'Đại lý', value: valAgent, color: '#3b82f6' },
-                    { label: 'Phát triển đại lý', value: valAgentDev, color: '#10b981' },
-                    { label: 'Truyền thống', value: valTraditional, color: '#f59e0b' },
-                    { label: 'Thương mại điện tử', value: valEcommerce, color: '#ec4899' },
-                  ]}
-                />
+                <div className="flex-1 flex items-center justify-center min-h-0 py-1">
+                  <RevenueDonutChart
+                    totalRevenue={totalRevenue}
+                    data={[
+                      { label: 'Đại lý', value: valAgent, color: '#3b82f6' },
+                      { label: 'Phát triển đại lý', value: valAgentDev, color: '#10b981' },
+                      { label: 'Truyền thống', value: valTraditional, color: '#f59e0b' },
+                      { label: 'Thương mại điện tử', value: valEcommerce, color: '#ec4899' },
+                    ]}
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Right Column (Scrollable / Cuộn độc lập) */}
-            <div className="mkt-step1-right custom-scrollbar">
-              <div className="flex items-center justify-between pb-1 border-b border-slate-100 shrink-0">
-                <SectionTitle
-                  title={`Bảng chỉ số kế hoạch marketing năm ${selectedYear}`}
-                  className="mb-0"
-                />
-                <div className="flex items-center gap-3">
+            {/* Right Column (2 Tabs: BẢNG CHỈ SỐ KẾ HOẠCH MARKETING & CHI TIẾT CHI PHÍ LƯƠNG THƯỞNG NHÂN SỰ) */}
+            <div className="mkt-step1-right">
+              {/* Tab Header Toolbar with uppercase titles */}
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200/80 shrink-0 gap-2 flex-wrap">
+                <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/80">
+                  <button
+                    type="button"
+                    className={`px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${
+                      step1Tab === 'kpi'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    onClick={() => setStep1Tab('kpi')}
+                  >
+                    BẢNG CHỈ SỐ KẾ HOẠCH MARKETING NĂM {selectedYear}
+                  </button>
+                  <button
+                    type="button"
+                    className={`px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${
+                      step1Tab === 'salary'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    onClick={() => setStep1Tab('salary')}
+                  >
+                    CHI TIẾT CHI PHÍ LƯƠNG THƯỞNG NHÂN SỰ
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {step1Tab === 'salary' && isEditing && (
+                    <>
+                      {selectedStaffIds.length > 0 && (
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          icon={<Trash size={11} />}
+                          onClick={() => {
+                            setCustomStaffIds((prev) => prev.filter((id) => !selectedStaffIds.includes(id)));
+                            setDeletedBaseStaffIds((prev) => [...prev, ...selectedStaffIds.filter((id) => id.startsWith('mkt_s'))]);
+                            setSelectedStaffIds([]);
+                            toast.info('Đã xóa', 'Đã xóa các vị trí đã chọn.');
+                          }}
+                          className="h-8 text-xs"
+                        >
+                          Xóa ({selectedStaffIds.length})
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        icon={<PlusLg size={11} />}
+                        onClick={() => {
+                          const newId = `mkt_custom_${Date.now()}`;
+                          setCustomStaffIds((prev) => [...prev, newId]);
+                          setEditedStaff((prev) => ({
+                            ...prev,
+                            [newId]: { name: 'Vị trí mới', basic: 10000000, perf: 0, allowance: 0, qty: 1 },
+                          }));
+                        }}
+                        className="h-8 text-xs bg-white"
+                      >
+                        Thêm vị trí
+                      </Button>
+                    </>
+                  )}
                   <div style={{ width: 'auto' }}>
                     <Toggle
                       checked={isEditing}
@@ -1929,92 +1990,52 @@ export const MarketingPlanPage: React.FC = () => {
                 </div>
               </div>
 
-                {/* Table: Budget & Targets */}
-                <Table
-                  rows={budgetRows}
-                  columns={budgetColumns}
-                  loading={loadingMasterPlan}
-                  borderless={false}
-                  striped={false}
-                  compact={true}
-                  fontSize={12}
-                  rowKey={(row) => row.id}
-                  rowStyle={(row) => ({
-                    fontWeight: row.isTotal ? 700 : 400,
-                    background: '#fff',
-                  })}
-                  cellStyle={() => ({ background: '#fff', padding: '6px 8px' })}
-                  wrapperStyle={{ background: '#fff', border: 'none', overflowX: 'auto' }}
-                  wrapperClassName="mkt-plan-table-no-min"
-                  minWidth={320}
-                />
-
-                {/* SectionTitle: Staff Salary */}
-                <div className="flex items-center justify-between mt-3 pb-1 border-b border-slate-100">
-                  <SectionTitle
-                    title="Chi tiết chi phí lương thưởng nhân sự"
-                    className="mb-0"
-                    style={{ color: 'var(--primary)', fontSize: 12, letterSpacing: '0.02em' }}
+              {/* Tab Contents: Each table takes full vertical height */}
+              <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 pt-1">
+                {step1Tab === 'kpi' && (
+                  <Table
+                    rows={budgetRows}
+                    columns={budgetColumns}
+                    loading={loadingMasterPlan}
+                    borderless={false}
+                    striped={false}
+                    compact={true}
+                    fontSize={12}
+                    rowKey={(row) => row.id}
+                    rowStyle={(row) => ({
+                      fontWeight: row.isTotal ? 700 : 400,
+                      background: '#fff',
+                    })}
+                    cellStyle={() => ({ background: '#fff', padding: '6px 8px' })}
+                    wrapperStyle={{ background: '#fff', border: 'none', overflowX: 'auto' }}
+                    wrapperClassName="mkt-plan-table-no-min"
+                    minWidth={320}
                   />
-                  {isEditing && (
-                    <div className="flex items-center gap-2">
-                      {selectedStaffIds.length > 0 && (
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          icon={<Trash size={11} />}
-                          onClick={() => {
-                            setCustomStaffIds((prev) => prev.filter((id) => !selectedStaffIds.includes(id)));
-                            setDeletedBaseStaffIds((prev) => [...prev, ...selectedStaffIds.filter((id) => id.startsWith('mkt_s'))]);
-                            setSelectedStaffIds([]);
-                            toast.info('Đã xóa', 'Đã xóa các vị trí đã chọn.');
-                          }}
-                          className="h-7 text-xs"
-                        >
-                          Xóa ({selectedStaffIds.length})
-                        </Button>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        icon={<PlusLg size={11} />}
-                        onClick={() => {
-                          const newId = `mkt_custom_${Date.now()}`;
-                          setCustomStaffIds((prev) => [...prev, newId]);
-                          setEditedStaff((prev) => ({
-                            ...prev,
-                            [newId]: { name: 'Vị trí mới', basic: 10000000, perf: 0, allowance: 0, qty: 1 },
-                          }));
-                        }}
-                        className="h-7 text-xs bg-white"
-                      >
-                        Thêm vị trí
-                      </Button>
-                    </div>
-                  )}
-                </div>
+                )}
 
-                {/* Table: Salary Targets */}
-                <Table
-                  rows={salaryRows}
-                  columns={salaryColumns}
-                  loading={loadingMasterPlan}
-                  borderless={false}
-                  striped={false}
-                  compact={true}
-                  fontSize={12}
-                  rowKey={(row) => row.id}
-                  rowStyle={(row) => ({
-                    fontWeight: row.isTotal ? 700 : 400,
-                    background: '#fff',
-                  })}
-                  cellStyle={() => ({ background: '#fff', padding: '6px 8px' })}
-                  wrapperStyle={{ background: '#fff', border: 'none', overflowX: 'auto' }}
-                  wrapperClassName="mkt-plan-table-no-min"
-                  minWidth={480}
-                />
+                {step1Tab === 'salary' && (
+                  <Table
+                    rows={salaryRows}
+                    columns={salaryColumns}
+                    loading={loadingMasterPlan}
+                    borderless={false}
+                    striped={false}
+                    compact={true}
+                    fontSize={12}
+                    rowKey={(row) => row.id}
+                    rowStyle={(row) => ({
+                      fontWeight: row.isTotal ? 700 : 400,
+                      background: '#fff',
+                    })}
+                    cellStyle={() => ({ background: '#fff', padding: '6px 8px' })}
+                    wrapperStyle={{ background: '#fff', border: 'none', overflowX: 'auto' }}
+                    wrapperClassName="mkt-plan-table-no-min"
+                    minWidth={480}
+                  />
+                )}
               </div>
             </div>
+          </div>
         )}
 
         {/* ══════════════════════════════════════════════════════════════════
@@ -3078,16 +3099,16 @@ export const MarketingPlanPage: React.FC = () => {
           overflow: hidden;
         }
         .mkt-step1-left {
-          width: 390px;
-          min-width: 360px;
-          max-width: 420px;
+          width: 380px;
+          min-width: 350px;
+          max-width: 400px;
           flex-shrink: 0;
           border-right: 1px solid var(--border, #e2e8f0);
-          padding: 12px 14px;
+          padding: 10px 12px;
           display: flex;
           flex-direction: column;
-          gap: 12px;
-          overflow-y: auto;
+          gap: 10px;
+          overflow: hidden;
           min-height: 0;
           height: 100%;
           background: #f8fafc;
@@ -3096,12 +3117,12 @@ export const MarketingPlanPage: React.FC = () => {
           flex: 1 1 0%;
           display: flex;
           flex-direction: column;
-          gap: 12px;
+          gap: 8px;
           min-width: 0;
           min-height: 0;
           height: 100%;
-          overflow-y: auto;
-          padding: 12px 16px;
+          overflow: hidden;
+          padding: 10px 14px;
           background: #ffffff;
         }
         .mkt-step4-grid {
