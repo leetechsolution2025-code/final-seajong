@@ -6,6 +6,7 @@ import {
   Tools,
   ArrowLeftRight,
   ArrowLeft,
+  ChevronDown,
   PlusLg,
   CheckLg,
   XLg,
@@ -2345,6 +2346,9 @@ const AssetsTab: React.FC<{
   const [panelSlide, setPanelSlide] = useState<'LIST' | 'CREATE'>('LIST');
   const [selectedEmpGroup, setSelectedEmpGroup] = useState<EmployeeAssetGroup | null>(null);
   const [selectedHandoverIds, setSelectedHandoverIds] = useState<string[]>([]);
+  const [selectedAssetItemIds, setSelectedAssetItemIds] = useState<string[]>([]);
+  const [isAssetDropdownOpen, setIsAssetDropdownOpen] = useState(false);
+  const [assetDropdownSearch, setAssetDropdownSearch] = useState('');
 
   const [formData, setFormData] = useState({
     employeeId: '',
@@ -2356,16 +2360,13 @@ const AssetsTab: React.FC<{
   });
   const [saving, setSaving] = useState(false);
 
-  const assetOptions = useMemo<SelectOption[]>(() => {
-    return [
-      { value: '', label: '-- Chọn thiết bị bàn giao --' },
-      ...availableAssets.map((a) => ({
-        value: a.id,
-        label: a.name,
-        rightLabel: `Tồn: ${a.stockQty ?? a.currentStock ?? 0}`,
-      })),
-    ];
-  }, [availableAssets]);
+  const filteredAvailableAssets = useMemo(() => {
+    if (!assetDropdownSearch) return availableAssets;
+    const q = assetDropdownSearch.toLowerCase();
+    return availableAssets.filter(
+      (a) => a.name.toLowerCase().includes(q) || a.code.toLowerCase().includes(q)
+    );
+  }, [availableAssets, assetDropdownSearch]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -2487,10 +2488,13 @@ const AssetsTab: React.FC<{
   const openEmployeeHandoverPanel = (group: EmployeeAssetGroup) => {
     setSelectedEmpGroup(group);
     setSelectedHandoverIds([]);
+    setSelectedAssetItemIds([]);
+    setIsAssetDropdownOpen(false);
+    setAssetDropdownSearch('');
     setPanelSlide('LIST');
     setFormData({
       employeeId: group.employeeId,
-      itemId: availableAssets[0]?.id || '',
+      itemId: '',
       handoverDate: new Date().toISOString().split('T')[0],
       returnDate: '',
       conditionOnHandover: 'Đang sử dụng (Tốt)',
@@ -2501,21 +2505,26 @@ const AssetsTab: React.FC<{
 
   const handleCreateHandover = async () => {
     const empId = selectedEmpGroup?.employeeId || formData.employeeId;
-    if (!empId || !formData.itemId) return;
+    if (!empId || selectedAssetItemIds.length === 0) return;
     setSaving(true);
     try {
       const res = await fetch('/api/hr/stationery/handovers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, employeeId: empId }),
+        body: JSON.stringify({
+          ...formData,
+          employeeId: empId,
+          itemIds: selectedAssetItemIds,
+        }),
       });
       if (res.ok) {
         await fetchData();
         onRefresh();
         setPanelSlide('LIST');
+        setSelectedAssetItemIds([]);
+        setIsAssetDropdownOpen(false);
         setFormData((prev) => ({
           ...prev,
-          itemId: availableAssets[0]?.id || '',
           note: '',
         }));
       }
@@ -2703,12 +2712,10 @@ const AssetsTab: React.FC<{
               >
                 <ArrowLeft size={16} />
               </button>
-              <span>Bàn giao thiết bị mới</span>
+              <span>Theo dõi dụng cụ</span>
             </div>
-          ) : selectedEmpGroup ? (
-            `Dụng cụ: ${selectedEmpGroup.fullName}`
           ) : (
-            'Chi tiết dụng cụ bàn giao'
+            'Theo dõi dụng cụ'
           )
         }
         icon={<Tools size={20} />}
@@ -2729,9 +2736,13 @@ const AssetsTab: React.FC<{
                 variant="primary"
                 size="sm"
                 onClick={handleCreateHandover}
-                disabled={saving || !formData.itemId}
+                disabled={saving || selectedAssetItemIds.length === 0}
               >
-                {saving ? 'Đang lưu...' : 'Xác nhận bàn giao'}
+                {saving
+                  ? 'Đang lưu...'
+                  : selectedAssetItemIds.length > 1
+                  ? `Bàn giao (${selectedAssetItemIds.length})`
+                  : 'Xác nhận bàn giao'}
               </Button>
             </div>
           ) : (
@@ -2808,7 +2819,7 @@ const AssetsTab: React.FC<{
               )}
             </div>
 
-            <div className="flex-1 min-h-0 border border-slate-200 rounded-xl overflow-hidden flex flex-col bg-white">
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col bg-white">
               {!selectedEmpGroup || selectedEmpGroup.activeAssets.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-400">
                   <Tools size={28} className="text-slate-300 mb-2" />
@@ -2825,7 +2836,7 @@ const AssetsTab: React.FC<{
               ) : (
                 <div className="flex-1 min-h-0 overflow-y-auto">
                   <table className="w-full text-left text-xs border-collapse">
-                    <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200">
+                    <thead className="bg-slate-50 sticky top-0 z-10">
                       <tr>
                         <th className="py-2 px-2.5 w-8 text-center">
                           <input
@@ -2908,7 +2919,7 @@ const AssetsTab: React.FC<{
         ) : (
           <div className="flex flex-col flex-1 min-h-0 h-full">
             {selectedEmpGroup && (
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between shrink-0 mb-3.5">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between shrink-0 mb-3">
                 <div className="min-w-0 pr-2">
                   <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
                     Nhân viên tiếp nhận
@@ -2926,16 +2937,133 @@ const AssetsTab: React.FC<{
               </div>
             )}
 
-            <div className="flex-1 min-h-0 overflow-y-auto space-y-3.5 pr-0.5">
-              <div>
-                <Select
-                  label="Thiết bị bàn giao"
-                  value={formData.itemId}
-                  onChange={(e) => setFormData({ ...formData, itemId: e.target.value })}
-                  options={assetOptions}
-                />
-              </div>
+            {/* Danh sách trong select thiết bị bàn giao có checkbox để bàn giao nhiều dụng cụ */}
+            <div className="shrink-0 relative mb-3">
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Thiết bị bàn giao {selectedAssetItemIds.length > 0 && `(${selectedAssetItemIds.length})`}
+              </label>
+              <button
+                type="button"
+                onClick={() => setIsAssetDropdownOpen((prev) => !prev)}
+                className="w-full min-h-[38px] px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium flex items-center justify-between text-left cursor-pointer hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-colors"
+              >
+                {selectedAssetItemIds.length === 0 ? (
+                  <span className="text-slate-400">-- Chọn các thiết bị bàn giao --</span>
+                ) : (
+                  <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1 pr-1">
+                    <span className="font-semibold text-sky-800 shrink-0">
+                      Đã chọn {selectedAssetItemIds.length} thiết bị:
+                    </span>
+                    <span className="text-slate-600 truncate max-w-[190px]">
+                      {availableAssets
+                        .filter((a) => selectedAssetItemIds.includes(a.id))
+                        .map((a) => a.name)
+                        .join(', ')}
+                    </span>
+                  </div>
+                )}
+                <ChevronDown size={14} className="text-slate-400 ml-2 shrink-0" />
+              </button>
 
+              {isAssetDropdownOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-20"
+                    onClick={() => setIsAssetDropdownOpen(false)}
+                  />
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 p-2 max-h-60 flex flex-col space-y-2">
+                    <div className="px-1">
+                      <input
+                        type="text"
+                        placeholder="Tìm thiết bị bàn giao..."
+                        value={assetDropdownSearch}
+                        onChange={(e) => setAssetDropdownSearch(e.target.value)}
+                        className="w-full text-xs px-2.5 py-1.5 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between px-1 text-[11px] text-slate-500">
+                      <span>{filteredAvailableAssets.length} thiết bị khả dụng</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedAssetItemIds(filteredAvailableAssets.map((a) => a.id));
+                          }}
+                          className="text-sky-600 hover:text-sky-700 font-semibold cursor-pointer border-0 bg-transparent text-[11px]"
+                        >
+                          Chọn tất cả
+                        </button>
+                        <span>•</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedAssetItemIds([]);
+                          }}
+                          className="text-rose-600 hover:text-rose-700 font-semibold cursor-pointer border-0 bg-transparent text-[11px]"
+                        >
+                          Bỏ chọn
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-slate-100 pr-1 max-h-40">
+                      {filteredAvailableAssets.length === 0 ? (
+                        <div className="py-4 text-center text-xs text-slate-400">
+                          Không tìm thấy thiết bị phù hợp
+                        </div>
+                      ) : (
+                        filteredAvailableAssets.map((a) => {
+                          const isChecked = selectedAssetItemIds.includes(a.id);
+                          const stock = a.stockQty ?? a.currentStock ?? 0;
+                          return (
+                            <label
+                              key={a.id}
+                              onClick={(e) => e.stopPropagation()}
+                              className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${
+                                isChecked
+                                  ? 'bg-sky-50/80 text-sky-900 font-medium'
+                                  : 'hover:bg-slate-50 text-slate-700'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => {
+                                    setSelectedAssetItemIds((prev) =>
+                                      prev.includes(a.id)
+                                        ? prev.filter((id) => id !== a.id)
+                                        : [...prev, a.id]
+                                    );
+                                  }}
+                                  className="rounded border-slate-300 text-sky-600 focus:ring-sky-500 w-4 h-4 cursor-pointer shrink-0"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-xs truncate font-medium">{a.name}</div>
+                                  {a.code && (
+                                    <div className="text-[10px] text-slate-400 leading-none mt-0.5">
+                                      {a.code}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <span className="text-[11px] font-semibold text-sky-700 bg-sky-100/70 px-2 py-0.5 rounded-full border border-sky-200 shrink-0 ml-2">
+                                Tồn: {stock}
+                              </span>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Ngày bàn giao và Tình trạng thiết bị cùng 1 dòng */}
+            <div className="grid grid-cols-2 gap-2.5 shrink-0 mb-3">
               <div>
                 <Input
                   label="Ngày bàn giao"
@@ -2944,7 +3072,6 @@ const AssetsTab: React.FC<{
                   onChange={(e) => setFormData({ ...formData, handoverDate: e.target.value })}
                 />
               </div>
-
               <div>
                 <Select
                   label="Tình trạng thiết bị"
@@ -2958,15 +3085,19 @@ const AssetsTab: React.FC<{
                   <option value="Hư hỏng nhẹ">Hư hỏng nhẹ</option>
                 </Select>
               </div>
+            </div>
 
-              <div>
-                <Input
-                  label="Ghi chú bàn giao"
-                  placeholder="Nhập ghi chú hoặc thông số thiết bị..."
-                  value={formData.note}
-                  onChange={(e) => setFormData({ ...formData, note: e.target.value })}
-                />
-              </div>
+            {/* Ô ghi chú tự động chiếm hết chiều cao khả dụng */}
+            <div className="flex-1 min-h-0 flex flex-col">
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5 shrink-0">
+                Ghi chú bàn giao
+              </label>
+              <textarea
+                className="flex-1 w-full min-h-[120px] p-2.5 text-xs text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 resize-none transition-colors"
+                placeholder="Nhập ghi chú hoặc thông số thiết bị bàn giao..."
+                value={formData.note}
+                onChange={(e) => setFormData({ ...formData, note: e.target.value })}
+              />
             </div>
           </div>
         )}

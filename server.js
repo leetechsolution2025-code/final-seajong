@@ -28046,64 +28046,75 @@ app.get('/api/hr/stationery/handovers', async (req, res) => {
 
 app.post('/api/hr/stationery/handovers', async (req, res) => {
   try {
-    const { employeeId, itemId, handoverDate, conditionOnHandover, condition, note } = req.body || {};
-    if (!employeeId || !itemId) {
-      return res.status(400).json({ error: 'Employee and Item are required' });
+    const { employeeId, itemId, itemIds, handoverDate, conditionOnHandover, condition, note } = req.body || {};
+    const rawIds = Array.isArray(itemIds) && itemIds.length > 0
+      ? itemIds
+      : itemId
+        ? [itemId]
+        : [];
+
+    if (!employeeId || rawIds.length === 0) {
+      return res.status(400).json({ error: 'Employee and at least one Item are required' });
     }
 
-    const handover = await prisma.$transaction(async (tx) => {
-      let supplyItemId = null;
-      let assetId = null;
+    const handovers = await prisma.$transaction(async (tx) => {
+      const results = [];
+      for (const curItemId of rawIds) {
+        let supplyItemId = null;
+        let assetId = null;
 
-      if (String(itemId).startsWith('FINANCE_')) {
-        assetId = String(itemId).replace('FINANCE_', '');
-        await tx.fixedAsset.update({
-          where: { id: assetId },
-          data: { status: 'in_use' },
-        });
-      } else {
-        supplyItemId = String(itemId).startsWith('SUPPLY_')
-          ? String(itemId).replace('SUPPLY_', '')
-          : String(itemId);
-        const sItem = await tx.hrSupplyItem.findUnique({ where: { id: supplyItemId } });
-        if (!sItem || (sItem.currentStock ?? 0) < 1) {
-          throw new Error('Dụng cụ trong kho văn phòng phẩm đã hết tồn kho');
+        if (String(curItemId).startsWith('FINANCE_')) {
+          assetId = String(curItemId).replace('FINANCE_', '');
+          await tx.fixedAsset.update({
+            where: { id: assetId },
+            data: { status: 'in_use' },
+          });
+        } else {
+          supplyItemId = String(curItemId).startsWith('SUPPLY_')
+            ? String(curItemId).replace('SUPPLY_', '')
+            : String(curItemId);
+          const sItem = await tx.hrSupplyItem.findUnique({ where: { id: supplyItemId } });
+          if (!sItem || (sItem.currentStock ?? 0) < 1) {
+            throw new Error(`Dụng cụ "${sItem?.name || supplyItemId}" trong kho đã hết tồn kho`);
+          }
+          await tx.hrSupplyItem.update({
+            where: { id: supplyItemId },
+            data: { currentStock: { decrement: 1 } },
+          });
+          await tx.hrSupplyTransaction.create({
+            data: {
+              itemId: supplyItemId,
+              type: 'EXPORT',
+              quantity: 1,
+              price: sItem.price || 0,
+              executorName: 'Phòng Hành chính Nhân sự',
+              note: `Bàn giao dụng cụ cho nhân viên (ID: ${employeeId})`,
+            },
+          });
         }
-        await tx.hrSupplyItem.update({
-          where: { id: supplyItemId },
-          data: { currentStock: { decrement: 1 } },
-        });
-        await tx.hrSupplyTransaction.create({
+
+        const created = await tx.hrAssetHandover.create({
           data: {
-            itemId: supplyItemId,
-            type: 'EXPORT',
-            quantity: 1,
-            price: sItem.price || 0,
-            executorName: 'Phòng Hành chính Nhân sự',
-            note: `Bàn giao dụng cụ cho nhân viên (ID: ${employeeId})`,
+            employeeId,
+            supplyItemId,
+            assetId,
+            handoverDate: handoverDate ? new Date(handoverDate) : new Date(),
+            condition: conditionOnHandover || condition || 'Đang sử dụng (Tốt)',
+            status: 'USING',
+            note: note || null,
+          },
+          include: {
+            employee: true,
+            supplyItem: true,
+            asset: true,
           },
         });
+        results.push(created);
       }
-
-      return await tx.hrAssetHandover.create({
-        data: {
-          employeeId,
-          supplyItemId,
-          assetId,
-          handoverDate: handoverDate ? new Date(handoverDate) : new Date(),
-          condition: conditionOnHandover || condition || 'Đang sử dụng (Tốt)',
-          status: 'USING',
-          note: note || null,
-        },
-        include: {
-          employee: true,
-          supplyItem: true,
-          asset: true,
-        },
-      });
+      return results;
     });
 
-    res.status(201).json({ handover });
+    res.status(201).json({ handovers, handover: handovers[0] });
   } catch (error) {
     console.error('[POST /api/hr/stationery/handovers]', error);
     res.status(500).json({ error: error.message });
