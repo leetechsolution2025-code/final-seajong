@@ -252,7 +252,7 @@ export const SalaryAdjustmentsPage: React.FC = () => {
     try {
       const [resRequests, resEmps] = await Promise.all([
         fetch('/api/hr/salary-adjustment'),
-        fetch('/api/hr/employees'),
+        fetch('/api/hr/employees?pageSize=500'),
       ]);
 
       if (resRequests.ok) {
@@ -264,9 +264,10 @@ export const SalaryAdjustmentsPage: React.FC = () => {
 
       if (resEmps.ok) {
         const empData = await resEmps.json();
-        if (Array.isArray(empData)) {
-          setEmployees(empData);
-        }
+        const empList = Array.isArray(empData)
+          ? empData
+          : empData.employees || empData.data || [];
+        setEmployees(empList);
       }
     } catch (err) {
       console.error('Lỗi khi tải dữ liệu điều chỉnh thu nhập:', err);
@@ -1202,15 +1203,31 @@ const CreateAdjustmentOffcanvas: React.FC<CreateProps> = ({
   const [phoneAllowance, setPhoneAllowance] = useState<number>(300000);
   const [seniorityAllowance, setSeniorityAllowance] = useState<number>(0);
 
+  const [internalEmps, setInternalEmps] = useState<EmployeeItem[]>(employees);
+
+  useEffect(() => {
+    if (employees && employees.length > 0) {
+      setInternalEmps(employees);
+    } else {
+      fetch('/api/hr/employees?pageSize=500')
+        .then((r) => r.json())
+        .then((data) => {
+          const list = Array.isArray(data) ? data : data.employees || data.data || [];
+          setInternalEmps(list);
+        })
+        .catch(() => {});
+    }
+  }, [employees, isOpen]);
+
   const employeeSuggestions: SuggestionItem[] = useMemo(() => {
-    return employees.map((e) => ({
+    return internalEmps.map((e) => ({
       id: e.id,
       value: e.fullName,
       label: e.fullName,
       subText: e.departmentName || 'Chung',
       category: e.departmentName || 'Phòng ban chung',
     }));
-  }, [employees]);
+  }, [internalEmps]);
 
   // When selecting employee, auto-fill base salary
   const handleSelectEmployee = (emp: EmployeeItem) => {
@@ -1316,7 +1333,7 @@ const CreateAdjustmentOffcanvas: React.FC<CreateProps> = ({
             suggestions={employeeSuggestions}
             onChange={(val) => {
               setSelectedEmpName(val);
-              const matched = employees.find(
+              const matched = internalEmps.find(
                 (e) => e.fullName.toLowerCase() === val.toLowerCase()
               );
               if (matched) {
@@ -1326,7 +1343,7 @@ const CreateAdjustmentOffcanvas: React.FC<CreateProps> = ({
               }
             }}
             onSelectSuggestion={(item) => {
-              const matched = employees.find((e) => e.id === item.id);
+              const matched = internalEmps.find((e) => e.id === item.id);
               if (matched) {
                 handleSelectEmployee(matched);
               }
