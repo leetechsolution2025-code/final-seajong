@@ -18199,11 +18199,19 @@ app.get('/api/notifications', async (req, res) => {
         // ignore
       }
 
-      const senderName =
+      let senderName =
         meta.sender ||
         nr.notification.createdBy?.employee?.fullName ||
         nr.notification.createdBy?.name ||
         'Hệ thống tự động';
+
+      if (
+        senderName.includes('Công ty cổ phần Seajong') ||
+        senderName.includes('Seajong Faucet') ||
+        senderName.toLowerCase().includes('admin')
+      ) {
+        senderName = 'Hệ thống tự động';
+      }
 
       const deptName =
         meta.department ||
@@ -18215,6 +18223,12 @@ app.get('/api/notifications', async (req, res) => {
       if (type === 'error' || nr.notification.priority === 'urgent') {
         type = 'urgent';
       }
+
+      const rawPriority = (nr.notification.priority || (type === 'urgent' ? 'urgent' : 'normal')).toLowerCase();
+      let priorityLabel = 'Bình thường';
+      if (rawPriority === 'urgent') priorityLabel = 'Khẩn cấp';
+      else if (rawPriority === 'high') priorityLabel = 'Cao';
+      else if (rawPriority === 'low') priorityLabel = 'Thấp';
 
       let link = meta.link || meta.url || '';
       if (!link) {
@@ -18243,6 +18257,8 @@ app.get('/api/notifications', async (req, res) => {
         time: formatRelativeTime(nr.createdAt),
         createdAt: nr.createdAt,
         isRead: nr.isRead,
+        priority: priorityLabel,
+        priorityLevel: rawPriority,
         link,
       };
     });
