@@ -463,53 +463,48 @@ export const STANDARDS_TICKER_ITEMS: TickerItem[] = [
 // ── 18. KINH DOANH, ĐẠI LÝ & BÁO GIÁ (SALES / PARTNERS / PRICING) ─────────────
 export const SALES_TICKER_ITEMS: TickerItem[] = [
   {
-    badge: 'TỔNG DOANH SỐ',
+    badge: 'MẠNG LƯỚI ĐẠI LÝ',
     badgeColor: 'bg-blue-50 text-blue-700 border-blue-200 font-bold',
-    text: `${_curMonthFull}: Tổng doanh số đạt <strong>0,15 tỷ đồng</strong> (Seajong: <strong>0,14 tỷ</strong> • OEM: <strong>0,01 tỷ</strong>) — Đạt <strong>9.7%</strong> chỉ tiêu (1,55 tỷ, tăng trưởng <strong>+275%</strong>)`,
+    text: 'Hệ thống quản lý cam kết doanh số và hạn mức công nợ theo thời gian thực cho toàn bộ mạng lưới đại lý phân phối',
   },
   {
-    badge: 'TỔNG DOANH THU',
+    badge: 'CHÍNH SÁCH BÁN HÀNG',
     badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold',
-    text: `${_curMonthFull}: Tổng doanh thu đạt <strong>0,07 tỷ đồng</strong> (Seajong: <strong>0,06 tỷ</strong> • OEM: <strong>0,01 tỷ</strong>) — Đạt <strong>5.3%</strong> kế hoạch (1,32 tỷ)`,
-  },
-  {
-    badge: 'PHÁT TRIỂN ĐẠI LÝ',
-    badgeColor: 'bg-amber-50 text-amber-800 border-amber-200 font-bold',
-    text: `${_curMonthFull}: Phát triển <strong>8/11 đại lý</strong> (Đạt <strong>72.7%</strong> mục tiêu) • Đang theo dõi <strong>4 đối tác tiềm năng</strong> (3 chăm sóc, 1 báo giá/HĐ)`,
+    text: 'Áp dụng chính sách chiết khấu, thưởng doanh số năm và tài trợ kệ trưng bày POSM cho các đại lý đạt chỉ tiêu',
   },
   {
     badge: 'HỖ TRỢ ĐẠI LÝ',
     badgeColor: 'bg-purple-50 text-purple-700 border-purple-200 font-bold',
-    text: 'Hỗ trợ đại lý: Tiếp nhận <strong>2 yêu cầu</strong> (1 đang xử lý, 1 chờ tiếp nhận — Tiếp nhận <strong>50%</strong>) • Mới nhất: <strong>Showroom Thiên Thuận Lạng Sơn (YCDL-202610-0001)</strong>',
+    text: 'Theo dõi và xử lý kịp thời các yêu cầu cấp phát vật tư, catalogue và hỗ trợ kỹ thuật bảo hành từ đại lý',
   },
   {
-    badge: 'DIỄN BIẾN 6 THÁNG',
-    badgeColor: 'bg-teal-50 text-teal-800 border-teal-200 font-bold',
-    text: 'Lũy kế 6 tháng trên biểu đồ (T05–T10/2026): Tổng doanh số đạt <strong>1,29 tỷ đồng</strong> • Tổng doanh thu thực thu đạt <strong>0,30 tỷ đồng</strong>',
+    badge: 'THEO DÕI ĐƠN HÀNG',
+    badgeColor: 'bg-amber-50 text-amber-800 border-amber-200 font-bold',
+    text: 'Đồng bộ tự động tình trạng triển khai hợp đồng, đơn đặt hàng và tiến độ giao hàng giữa phòng Kinh doanh và Kho vận',
   },
 ];
 
 // ── 19. MARKETING & CHIẾN DỊCH QUẢNG CÁO (MARKETING / CAMPAIGNS) ───────────
 export const MARKETING_TICKER_ITEMS: TickerItem[] = [
   {
-    badge: 'CHIẾN DỊCH QUẢNG CÁO',
+    badge: 'CHIẾN DỊCH TRUYỀN THÔNG',
     badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
-    text: 'Chiến dịch "Seajong - Đẳng cấp sen vòi Hàn Quốc" tiếp cận hơn 500.000 lượt khách hàng mục tiêu trên toàn quốc',
+    text: 'Đẩy mạnh các chiến dịch truyền thông đa kênh định vị thương hiệu thiết bị vệ sinh và phòng bếp Seajong',
   },
   {
     badge: 'KHÁCH HÀNG TIỀM NĂNG',
     badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    text: 'Tiếp nhận trung bình 45 leads đăng ký tư vấn mở đại lý và mua sắm thiết bị vệ sinh cao cấp mỗi tuần',
+    text: 'Tiếp nhận và phân bổ dữ liệu khách hàng đăng ký tư vấn mở đại lý cho bộ phận phụ trách',
   },
   {
-    badge: 'SỰ KIỆN HỘI THẢO',
+    badge: 'KẾ HOẠCH NĂM',
     badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
-    text: 'Chuẩn bị chuỗi sự kiện ra mắt Bộ sưu tập Sen vòi thông minh 2026 và Hội nghị khách hàng toàn quốc',
+    text: 'Theo dõi tiến độ thực hiện các chủ đề nội dung, sản phẩm trọng tâm và ngân sách tiếp thị theo từng tháng',
   },
   {
-    badge: 'TÀI LIỆU TRUYỀN THÔNG',
+    badge: 'TÀI LIỆU BÁN HÀNG',
     badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
-    text: 'Phát hành bộ tư liệu bán hàng mới: Catalogue in ấn cao cấp, Video 3D mô phỏng tính năng và Profile công ty',
+    text: 'Cung cấp bộ tư liệu bán hàng chuẩn: Catalogue sản phẩm, bộ nhận diện thương hiệu và tài liệu đào tạo',
   },
 ];
 

@@ -220,11 +220,6 @@ class DocumentChatService {
         }
       }
     }
-
-    // Nếu người dùng vừa gửi tin nhắn: Mô phỏng phản hồi từ người trình duyệt hoặc người yêu cầu sau 3.5s để người dùng kiểm tra luồng
-    if (isCurrentUser) {
-      this.scheduleSimulatedReply(document, trimmed);
-    }
   }
 
   /**
@@ -267,18 +262,6 @@ class DocumentChatService {
 
   private notifyUnreadListeners() {
     this.unreadListeners.forEach((listener) => listener({ ...this.unreadByDoc }));
-  }
-
-  private scheduleSimulatedReply(document: ApprovalDocument, _userPrompt: string) {
-    setTimeout(() => {
-      const replies = [
-        `Dạ vâng thưa Ban Giám đốc, bộ phận đã tiếp nhận ý kiến chỉ đạo và rà soát lại ngay ạ.`,
-        `Em đã liên hệ với nhà máy và đối tác để đối soát theo đúng yêu cầu của anh.`,
-        `Dạ hồ sơ và chứng thư kỹ thuật đính kèm đã được cập nhật bản mới nhất trên hệ thống ạ!`,
-      ];
-      const randomReply = replies[Math.floor(Math.random() * replies.length)];
-      this.sendMessage(document, randomReply, 'submitter', document.submitter, false);
-    }, 3800);
   }
 
   private getInitialSeedMessages(_document: ApprovalDocument): ChatMessage[] {

@@ -91,55 +91,6 @@ export interface DisplayProductSegment {
   color: string;
 }
 
-// Dữ liệu ban đầu mặc định khi tải từ DB
-const DEFAULT_PRODUCT_SEGMENTS: DisplayProductSegment[] = [
-  { id: 110, name: 'Sen tắm cây cao cấp', share: 38, revenue: '380 tr', units: '120 bộ', color: '#0284c7' },
-  { id: 111, name: 'Vòi chậu Lavabo & Bếp', share: 28, revenue: '280 tr', units: '210 bộ', color: '#10b981' },
-  { id: 112, name: 'Bồn cầu & Sứ vệ sinh', share: 22, revenue: '220 tr', units: '85 bộ', color: '#8b5cf6' },
-  { id: 116, name: 'Phụ kiện đồng bộ Seajong', share: 12, revenue: '120 tr', units: '340 bộ', color: '#f59e0b' },
-];
-
-// 12 Chỉ số tài chính & Sức khỏe doanh nghiệp mặc định chuẩn Thông tư 200 (Đồng bộ DB thực tế Seajong)
-const DEFAULT_FINANCIAL_RATIOS = [
-  {
-    title: 'Khả năng thanh toán',
-    iconKey: 'wallet',
-    ratios: [
-      { name: 'Hệ số thanh toán hiện hành (Current Ratio)', value: '2.28 lần', benchmark: '≥ 1.5 lần', status: 'Tốt', desc: 'Tài sản ngắn hạn / Nợ ngắn hạn' },
-      { name: 'Hệ số thanh toán nhanh (Quick Ratio)', value: '0.81 lần', benchmark: '≥ 1.0 lần', status: 'Cần chú ý', desc: '(TSNH - Hàng tồn kho) / Nợ ngắn hạn' },
-      { name: 'Hệ số thanh toán tức thời (Cash Ratio)', value: '0.24 lần', benchmark: '≥ 0.3 lần', status: 'Thấp', desc: 'Tiền và tương đương tiền / Nợ ngắn hạn' },
-    ],
-  },
-  {
-    title: 'Hiệu quả hoạt động',
-    iconKey: 'graph',
-    ratios: [
-      { name: 'Vòng quay hàng tồn kho (Inventory Turnover)', value: '0.06 vòng', benchmark: '2.2 - 3.0 vòng', status: 'Chậm', desc: 'Giá vốn / Hàng tồn kho bình quân' },
-      { name: 'Số ngày luân chuyển tồn kho (DIO)', value: '6083 ngày', benchmark: '≤ 160 ngày', status: 'Chậm', desc: '365 / Vòng quay hàng tồn kho' },
-      { name: 'Kỳ thu tiền bình quân (DSO)', value: '207 ngày', benchmark: '≤ 100 ngày', status: 'Kéo dài', desc: 'Phải thu bình quân × 365 / Doanh thu' },
-    ],
-  },
-  {
-    title: 'Cơ cấu vốn và Đòn bẩy',
-    iconKey: 'pie',
-    ratios: [
-      { name: 'Hệ số Nợ trên Tổng tài sản (Debt / Assets)', value: '42.9%', benchmark: '≤ 50%', status: 'Rất an toàn', desc: 'Tổng nợ phải trả / Tổng tài sản' },
-      { name: 'Hệ số Nợ trên Vốn CSH (Debt / Equity)', value: '75.1%', benchmark: '≤ 100%', status: 'An toàn', desc: 'Tổng nợ phải trả / Vốn chủ sở hữu' },
-      { name: 'Hệ số khả năng trả lãi vay (ICR)', value: '437.1 lần', benchmark: '≥ 3.0 lần', status: 'Xuất sắc', desc: 'EBIT / Chi phí lãi vay' },
-    ],
-  },
-  {
-    title: 'Khả năng sinh lời',
-    iconKey: 'cash',
-    ratios: [
-      { name: 'Biên lợi nhuận gộp (Gross Margin)', value: '91.9%', benchmark: '28% - 32%', status: 'Cao', desc: 'Lợi nhuận gộp / Doanh thu thuần' },
-      { name: 'Biên lợi nhuận ròng (Net Profit Margin)', value: '72.9%', benchmark: '10% - 15%', status: 'Vượt trội', desc: 'Lợi nhuận sau thuế / Doanh thu thuần' },
-      { name: 'Tỷ suất sinh lời trên tài sản (ROA)', value: '27.3%', benchmark: '≥ 7%', status: 'Tốt', desc: 'LNST / Tổng tài sản bình quân' },
-      { name: 'Tỷ suất sinh lời trên vốn CSH (ROE)', value: '47.7%', benchmark: '≥ 12%', status: 'Xuất sắc', desc: 'LNST / Vốn CSH bình quân' },
-    ],
-  },
-];
-
 export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _onNavigate, onShowToast }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<'month' | 'quarter' | 'year'>('month');
   const [chartMetric, setChartMetric] = useState<'revenue' | 'sales'>('revenue');
@@ -153,8 +104,8 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
   const [reportSelectedYear, setReportSelectedYear] = useState<number>(() => new Date().getFullYear());
   const [showEventCalendar, setShowEventCalendar] = useState(false);
 
-  // 12 Chỉ số tài chính & Sức khỏe doanh nghiệp (từ Hình 2)
-  const [financialRatios, setFinancialRatios] = useState<any[]>(DEFAULT_FINANCIAL_RATIOS);
+  // 12 Chỉ số tài chính & Sức khỏe doanh nghiệp (từ CSDL thực tế)
+  const [financialRatios, setFinancialRatios] = useState<any[]>([]);
   const [selectedRatioCategory, setSelectedRatioCategory] = useState<string>('all');
   const [activeRightCardTab, setActiveRightCardTab] = useState<'ratios' | 'segments'>('ratios');
 
@@ -388,7 +339,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
   const [plan2026Months, setPlan2026Months] = useState<MonthlyPlanItem[]>(DEFAULT_2026_PLAN);
 
   // Danh mục sản phẩm lấy trực tiếp từ Database
-  const [productSegments, setProductSegments] = useState<DisplayProductSegment[]>(DEFAULT_PRODUCT_SEGMENTS);
+  const [productSegments, setProductSegments] = useState<DisplayProductSegment[]>([]);
 
   // Bộ dữ liệu biểu đồ 12 tháng (Kế hoạch và Thực tế lấy trực tiếp từ SQLite DB qua API)
   const monthlyChartData = useMemo(() => {
@@ -1977,7 +1928,14 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
                   paddingRight: '4px',
                 }}
               >
-                {displayRatioCategories.map((cat, catIdx) => (
+                {displayRatioCategories.length === 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '160px', color: 'var(--text-muted)' }}>
+                    <i className="bi bi-file-earmark-bar-graph" style={{ fontSize: '1.75rem', marginBottom: '8px', opacity: 0.6 }} />
+                    <span style={{ fontSize: '0.8125rem', fontWeight: 600 }}>Chưa có dữ liệu chỉ số tài chính trong kỳ</span>
+                    <span style={{ fontSize: '0.72rem', marginTop: '2px', opacity: 0.8 }}>Chỉ số sẽ tự động cập nhật khi có phát sinh từ sổ cái kế toán</span>
+                  </div>
+                ) : (
+                  displayRatioCategories.map((cat, catIdx) => (
                   <div key={catIdx} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     {selectedRatioCategory === 'all' && (
                       <div
@@ -2082,7 +2040,8 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
                       })}
                     </div>
                   </div>
-                ))}
+                ))
+              )}
               </div>
             </div>
           ) : (
@@ -2092,14 +2051,21 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
               style={{
                 display: 'flex',
                 flexDirection: 'column',
-                justifyContent: 'space-between',
+                justifyContent: productSegments.length === 0 ? 'center' : 'space-between',
                 flex: 1,
                 minHeight: 0,
                 padding: '6px 0 4px 0',
                 overflowY: 'auto',
               }}
             >
-              {productSegments.map((seg) => (
+              {productSegments.length === 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '160px', color: 'var(--text-muted)' }}>
+                  <i className="bi bi-pie-chart" style={{ fontSize: '1.75rem', marginBottom: '8px', opacity: 0.6 }} />
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 600 }}>Chưa có dữ liệu cơ cấu sản phẩm trong kỳ</span>
+                  <span style={{ fontSize: '0.72rem', marginTop: '2px', opacity: 0.8 }}>Tỷ trọng sản phẩm sẽ hiển thị khi có phát sinh doanh thu bán hàng</span>
+                </div>
+              ) : (
+                productSegments.map((seg) => (
                 <div
                   key={seg.id || seg.name}
                   style={{
@@ -2148,7 +2114,8 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
                     <span>Sản lượng: <strong style={{ color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{seg.units}</strong></span>
                   </div>
                 </div>
-              ))}
+              ))
+            )}
             </div>
           )}
         </div>

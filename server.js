@@ -2095,7 +2095,7 @@ app.get('/api/dealer/support-tickets', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/sales/dealer-support-tickets', authenticateToken, async (req, res) => {
+app.get('/api/sales/dealer-support-tickets', async (req, res) => {
   try {
     const tickets = await prisma.dealerSupportTicket.findMany({
       where: {
@@ -2155,6 +2155,63 @@ app.get('/api/sales/dealer-support-tickets', authenticateToken, async (req, res)
     res.json({ success: true, data: enrichedAll });
   } catch (error) {
     console.error('Lỗi GET /api/sales/dealer-support-tickets:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/sales/dealer-support-tickets', async (req, res) => {
+  try {
+    const { dealerName, customerId, type, title, content, orderCode, priority, handlerId } = req.body;
+    if (!title || !String(title).trim()) {
+      return res.status(400).json({ success: false, message: 'Vui lòng nhập tiêu đề yêu cầu hỗ trợ' });
+    }
+
+    const now = new Date();
+    const vnDateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(now).replace(/-/g, '');
+
+    const codePrefix = `YCDL-${vnDateStr}-`;
+    const sameDayTickets = await prisma.dealerSupportTicket.findMany({
+      where: { code: { startsWith: codePrefix } },
+      select: { code: true }
+    });
+
+    let maxSeq = 0;
+    for (const tk of sameDayTickets) {
+      const parts = tk.code.split('-');
+      const seqNum = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(seqNum) && seqNum > maxSeq) maxSeq = seqNum;
+    }
+    const ticketCode = `${codePrefix}${String(maxSeq + 1).padStart(2, '0')}`;
+
+    const created = await prisma.dealerSupportTicket.create({
+      data: {
+        code: ticketCode,
+        customerId: customerId || null,
+        dealerName: dealerName ? String(dealerName).trim() : 'Đại lý Seajong',
+        type: type || 'Kệ trưng bày & POSM',
+        orderCode: orderCode ? String(orderCode).trim() : null,
+        priority: priority === 'urgent' ? 'urgent' : 'normal',
+        title: String(title).trim(),
+        content: content ? String(content).trim() : '',
+        status: 'Pending',
+        requestDate: now,
+        handlerId: handlerId || null,
+      },
+      include: {
+        handler: {
+          select: { id: true, code: true, fullName: true, phone: true, workEmail: true, position: true }
+        }
+      }
+    });
+
+    res.json({ success: true, message: 'Tạo yêu cầu hỗ trợ thành công', data: created });
+  } catch (error) {
+    console.error('Lỗi POST /api/sales/dealer-support-tickets:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -11317,11 +11374,11 @@ app.get('/api/logistics/warehouses', async (req, res) => {
         id: wh.id,
         code: wh.code || `KHO-${wh.id.slice(-4).toUpperCase()}`,
         name: wh.name,
-        address: wh.address || 'Chưa cập nhật địa chỉ',
-        phone: wh.phone || '024.3988.6688',
+        address: wh.address || '',
+        phone: wh.phone || '',
         type: wh.type,
         typeLabel,
-        managerId: (wh.managerId || 'Nguyễn Văn Kháng').replace(/\s*\(thủ kho\)/gi, '').trim(),
+        managerId: wh.managerId ? wh.managerId.replace(/\s*\(thủ kho\)/gi, '').trim() : '',
         isVirtual: wh.isVirtual,
         isActive: wh.isActive,
         itemCount: wh._count.stocks || 0,
@@ -11408,10 +11465,6 @@ app.put('/api/logistics/warehouses/:id', async (req, res) => {
     const { id } = req.params;
     const { name, address, phone, type, managerId, isActive, isVirtual } = req.body;
 
-    if (id.startsWith('sample-wh-')) {
-      return res.json({ success: true, message: 'Đã cập nhật kho mẫu' });
-    }
-
     const warehouse = await prisma.warehouse.update({
       where: { id },
       data: {
@@ -11435,9 +11488,6 @@ app.put('/api/logistics/warehouses/:id', async (req, res) => {
 app.delete('/api/logistics/warehouses/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    if (id.startsWith('sample-wh-')) {
-      return res.json({ success: true, message: 'Đã xóa kho mẫu' });
-    }
 
     // Kiểm tra xem kho còn hàng không
     const stockCount = await prisma.inventoryStock.count({
@@ -15744,52 +15794,12 @@ app.post('/api/sales/ai-scan-order', async (req, res) => {
     const { imageBase64 } = req.body;
     if (!imageBase64) return res.status(400).json({ error: 'Thiếu dữ liệu ảnh' });
 
-    // Mock smart extraction for demo or testing
-    // Checks customers in DB to match
-    const sampleCustomer = await prisma.customer.findFirst({
-      where: {
-        OR: [
-          { name: { contains: 'Phúc' } },
-          { name: { contains: 'Hoàn' } },
-          { name: { contains: 'Benza' } },
-        ],
-      },
+    // Trích xuất đơn hàng từ CSDL thực tế khi chưa kích hoạt dịch vụ OCR bên ngoài
+    res.json({
+      customer: null,
+      items: [],
+      ghiChu: 'Chưa phát hiện thông tin đơn hàng từ ảnh. Vui lòng chọn khách hàng và sản phẩm từ danh mục hệ thống.',
     });
-
-    const mockResult = {
-      customer: sampleCustomer || {
-        id: null,
-        name: 'Đại lý Nguyễn Thanh Phúc',
-        dienThoai: '0988.777.666',
-        address: 'Thị Trấn Củ Chi, TP. Hồ Chí Minh',
-        nhom: 'dai-ly',
-      },
-      items: [
-        {
-          productCode: 'SJ-9900',
-          productName: 'Sen cây phím đàn LED Seajong SJ-9900 (Màu Xám Tro)',
-          quantity: 5,
-          unitPrice: 5450000,
-          discount: 35,
-          thanhTien: 17712500,
-          note: 'Bắn laser logo SEAJONG sắc nét',
-        },
-        {
-          productCode: 'SJ-612',
-          productName: 'Vòi lavabo nóng lạnh đồng mạ PVD SJ-612',
-          quantity: 10,
-          unitPrice: 1600000,
-          discount: 35,
-          thanhTien: 10400000,
-          note: 'Kèm dây cấp Inox 304 tiêu chuẩn',
-        },
-      ],
-      ghiChu: 'Đơn hàng quét tự động từ ảnh chụp Zalo đại lý. Giao trước ngày 28/10.',
-    };
-
-    setTimeout(() => {
-      res.json(mockResult);
-    }, 1200);
   } catch (err) {
     console.error('Lỗi POST /api/sales/ai-scan-order:', err);
     res.status(500).json({ error: err.message });

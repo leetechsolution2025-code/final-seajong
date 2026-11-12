@@ -72,61 +72,6 @@ export interface SupportTicketItem {
   statusLabel: string;
 }
 
-const DEFAULT_SUPPORT_TICKETS: SupportTicketItem[] = [
-  {
-    id: 'st-01',
-    code: 'YCHT-2026-001',
-    dealerName: 'Showroom Ánh Dương',
-    category: 'posm',
-    categoryLabel: 'Kệ trưng bày & POSM',
-    title: 'Đề xuất lắp đặt kệ mẫu sen cây titan và biển hiệu nhận diện',
-    content: 'Showroom mới mở rộng thêm 25m2 tại Hà Đông, cần bổ sung kệ trưng bày sen tắm đứng và vòi chậu.',
-    assignee: 'Chu Thị Hằng',
-    createdAt: '08/11/2026',
-    status: 'processing',
-    statusLabel: 'Đang triển khai',
-  },
-  {
-    id: 'st-02',
-    code: 'YCHT-2026-002',
-    dealerName: 'Đại lý Hùng Cường Hải Phòng',
-    category: 'catalog',
-    categoryLabel: 'Ấn phẩm & Catalogue',
-    title: 'Gửi bổ sung 50 cuốn Catalogue sen vòi Seajong 2026 và bảng báo giá',
-    content: 'Đại lý cần cung cấp gấp tài liệu giới thiệu phục vụ sự kiện mở bán cuối năm.',
-    assignee: 'Nguyễn Quốc Việt',
-    createdAt: '09/11/2026',
-    status: 'completed',
-    statusLabel: 'Đã hoàn thành',
-  },
-  {
-    id: 'st-03',
-    code: 'YCHT-2026-003',
-    dealerName: 'Đại lý Minh Phát Nam Định',
-    category: 'training',
-    categoryLabel: 'Đào tạo sản phẩm',
-    title: 'Tổ chức buổi đào tạo tính năng sen nhiệt độ cho nhân viên bán hàng',
-    content: 'Hỗ trợ đào tạo trực tuyến qua Zoom cho 6 nhân viên tư vấn bán hàng của đại lý.',
-    assignee: 'Nguyễn Thu Huyền',
-    createdAt: '10/11/2026',
-    status: 'pending',
-    statusLabel: 'Chờ duyệt',
-  },
-  {
-    id: 'st-04',
-    code: 'YCHT-2026-004',
-    dealerName: 'Showroom Thành Đạt Quảng Ninh',
-    category: 'discount',
-    categoryLabel: 'Chính sách chiết khấu',
-    title: 'Đăng ký chương trình thưởng vượt doanh số Quý 4/2026',
-    content: 'Đại lý cam kết đạt mốc 1,2 tỷ đồng trong Quý 4 để nhận thưởng chuyến du lịch Hàn Quốc.',
-    assignee: 'Chu Thị Hằng',
-    createdAt: '11/11/2026',
-    status: 'processing',
-    statusLabel: 'Đang triển khai',
-  },
-];
-
 export const MarketingDealersPage: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<number>(2);
 
@@ -164,8 +109,8 @@ export const MarketingDealersPage: React.FC = () => {
   const [formNguoiChamSocId, setFormNguoiChamSocId] = useState<string>('');
   const [formGhiChu, setFormGhiChu] = useState<string>('');
 
-  // Support Tickets State
-  const [supportTickets, setSupportTickets] = useState<SupportTicketItem[]>(DEFAULT_SUPPORT_TICKETS);
+  // Support Tickets State (Đồng bộ 100% từ bảng DealerSupportTicket trong CSDL)
+  const [supportTickets, setSupportTickets] = useState<SupportTicketItem[]>([]);
   const [isTicketFormOpen, setIsTicketFormOpen] = useState<boolean>(false);
   const [ticketDealerName, setTicketDealerName] = useState<string>('');
   const [ticketCategory, setTicketCategory] = useState<string>('posm');
@@ -207,8 +152,70 @@ export const MarketingDealersPage: React.FC = () => {
       .catch((err) => console.error('Lỗi tải tổng thể đại lý:', err));
   };
 
+  // Tải danh sách yêu cầu hỗ trợ từ CSDL thực tế (bảng DealerSupportTicket)
+  const fetchSupportTickets = async () => {
+    try {
+      const res = await fetch('/api/sales/dealer-support-tickets');
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.data)) {
+          const catLabels: Record<string, string> = {
+            posm: 'Kệ trưng bày & POSM',
+            catalog: 'Ấn phẩm & Catalogue',
+            training: 'Đào tạo sản phẩm',
+            discount: 'Chính sách chiết khấu',
+            other: 'Hỗ trợ khác',
+          };
+          const mapped: SupportTicketItem[] = json.data.map((tk: any) => {
+            const rawCat = (tk.type || 'posm').toLowerCase();
+            let category: 'posm' | 'catalog' | 'training' | 'discount' | 'other' = 'other';
+            if (rawCat.includes('posm') || rawCat.includes('kệ') || rawCat.includes('biển')) category = 'posm';
+            else if (rawCat.includes('catalog') || rawCat.includes('ấn phẩm') || rawCat.includes('tài liệu')) category = 'catalog';
+            else if (rawCat.includes('đào tạo') || rawCat.includes('training')) category = 'training';
+            else if (rawCat.includes('chiết khấu') || rawCat.includes('thưởng') || rawCat.includes('discount')) category = 'discount';
+
+            const st = String(tk.status || '').toLowerCase();
+            const status: 'pending' | 'processing' | 'completed' =
+              st === 'completed' || st === 'resolved'
+                ? 'completed'
+                : st === 'in progress' || st === 'processing'
+                ? 'processing'
+                : 'pending';
+            const statusLabel =
+              status === 'completed' ? 'Đã hoàn thành' : status === 'processing' ? 'Đang triển khai' : 'Chờ duyệt';
+
+            const createdDate = tk.createdAt
+              ? new Date(tk.createdAt).toLocaleDateString('vi-VN')
+              : 'Chưa rõ';
+
+            return {
+              id: tk.id,
+              code: tk.code || `YCHT-${tk.id.slice(-4).toUpperCase()}`,
+              dealerName: tk.dealerName || tk.customer?.name || 'Đại lý Seajong',
+              category,
+              categoryLabel: tk.type || catLabels[category] || 'Hỗ trợ',
+              title: tk.title || 'Yêu cầu hỗ trợ',
+              content: tk.content || '',
+              assignee: tk.handler?.fullName || 'Chưa phân công',
+              createdAt: createdDate,
+              status,
+              statusLabel,
+            };
+          });
+          setSupportTickets(mapped);
+          return;
+        }
+      }
+      setSupportTickets([]);
+    } catch (err) {
+      console.error('Lỗi tải danh sách yêu cầu hỗ trợ:', err);
+      setSupportTickets([]);
+    }
+  };
+
   useEffect(() => {
     fetchAllDealers();
+    fetchSupportTickets();
   }, []);
 
   // Fetch dealers (CHỈ LỌC LOẠI KHÁCH HÀNG LÀ ĐẠI LÝ)
@@ -388,8 +395,8 @@ export const MarketingDealersPage: React.FC = () => {
     }
   };
 
-  // Add Support Ticket
-  const handleCreateTicket = (e: React.FormEvent) => {
+  // Add Support Ticket (Lưu trực tiếp vào CSDL qua /api/sales/dealer-support-tickets)
+  const handleCreateTicket = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!ticketTitle.trim() || !ticketDealerName.trim()) return;
 
@@ -401,36 +408,39 @@ export const MarketingDealersPage: React.FC = () => {
       other: 'Hỗ trợ khác',
     };
 
-    const newTicket: SupportTicketItem = {
-      id: `st-${Date.now()}`,
-      code: `YCHT-2026-${String(supportTickets.length + 1).padStart(3, '0')}`,
-      dealerName: ticketDealerName.trim(),
-      category: ticketCategory as any,
-      categoryLabel: catLabels[ticketCategory] || 'Hỗ trợ',
-      title: ticketTitle.trim(),
-      content: ticketContent.trim(),
-      assignee: ticketAssignee,
-      createdAt: new Date().toLocaleDateString('vi-VN'),
-      status: 'pending',
-      statusLabel: 'Chờ duyệt',
-    };
-
-    setSupportTickets([newTicket, ...supportTickets]);
-    setIsTicketFormOpen(false);
-    setTicketTitle('');
-    setTicketContent('');
-    setTicketDealerName('');
+    try {
+      const res = await fetch('/api/sales/dealer-support-tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dealerName: ticketDealerName.trim(),
+          type: catLabels[ticketCategory] || 'Hỗ trợ khác',
+          title: ticketTitle.trim(),
+          content: ticketContent.trim(),
+          priority: 'normal',
+        }),
+      });
+      if (res.ok) {
+        setIsTicketFormOpen(false);
+        setTicketTitle('');
+        setTicketContent('');
+        setTicketDealerName('');
+        await fetchSupportTickets();
+      }
+    } catch (err) {
+      console.error('Lỗi lưu phiếu hỗ trợ đại lý:', err);
+    }
   };
 
   // Dữ liệu thực tế từ DB cho Bước 1: Tổng quan
-  const realTotalDealers = allDealers.length || total || 99;
+  const realTotalDealers = allDealers.length || total;
 
   // Đại lý mới trong Quý 4 (tháng 10 & 11 năm 2026)
   const q4NewDealers = allDealers.filter((d) => {
     if (!d.createdAt) return false;
     const t = new Date(d.createdAt).getTime();
     return t >= new Date('2026-10-01T00:00:00Z').getTime();
-  }).length || 6;
+  }).length;
 
   // Đại lý có cam kết doanh số
   const committedDealers = allDealers.filter((d) => {
@@ -443,8 +453,8 @@ export const MarketingDealersPage: React.FC = () => {
     }
     return false;
   });
-  const realCommitmentCount = allDealers.length ? committedDealers.length : 10;
-  const commitmentRate = ((realCommitmentCount / (realTotalDealers || 1)) * 100).toFixed(1);
+  const realCommitmentCount = committedDealers.length;
+  const commitmentRate = realTotalDealers > 0 ? ((realCommitmentCount / realTotalDealers) * 100).toFixed(1) : '0.0';
 
   // Đại lý Showroom & POSM
   const posmDealers = allDealers.filter((d) => {
@@ -458,7 +468,7 @@ export const MarketingDealersPage: React.FC = () => {
     }
     return false;
   });
-  const realPosmCount = allDealers.length ? posmDealers.length : 7;
+  const realPosmCount = posmDealers.length;
 
   // Dữ liệu phát triển đại lý 6 tháng gần nhất (Tháng 6 - Tháng 11/2026)
   const sixMonthsConfig = [
@@ -472,19 +482,11 @@ export const MarketingDealersPage: React.FC = () => {
 
   const sixMonthsStats = React.useMemo(() => {
     return sixMonthsConfig.map((item) => {
-      let actual = 0;
-      if (allDealers.length > 0) {
-        actual = allDealers.filter((d) => {
-          if (!d.createdAt) return false;
-          const ym = new Date(d.createdAt).toISOString().slice(0, 7);
-          return ym === item.key;
-        }).length;
-      } else {
-        if (item.key === '2026-08') actual = 90;
-        if (item.key === '2026-09') actual = 3;
-        if (item.key === '2026-10') actual = 5;
-        if (item.key === '2026-11') actual = 1;
-      }
+      const actual = allDealers.filter((d) => {
+        if (!d.createdAt) return false;
+        const ym = new Date(d.createdAt).toISOString().slice(0, 7);
+        return ym === item.key;
+      }).length;
       return {
         ...item,
         actual,
@@ -1146,47 +1148,61 @@ export const MarketingDealersPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {supportTickets.map((t) => {
-                  const isDone = t.status === 'completed';
-                  const isProc = t.status === 'processing';
-                  return (
-                    <tr key={t.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-2.5 px-3.5 font-mono font-bold text-xs text-indigo-600">
-                        {t.code}
-                      </td>
-                      <td className="py-2.5 px-3.5 font-bold text-xs text-slate-800">
-                        {t.dealerName}
-                      </td>
-                      <td className="py-2.5 px-3.5">
-                        <div className="font-semibold text-slate-900 text-xs">{t.title}</div>
-                        <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">{t.content}</div>
-                        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 mt-1 border border-slate-200/60">
-                          {t.categoryLabel}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3.5 text-xs font-medium text-slate-800">
-                        {t.assignee}
-                      </td>
-                      <td className="py-2.5 px-3.5 text-xs text-slate-500 font-mono text-center">
-                        {t.createdAt}
-                      </td>
-                      <td className="py-2.5 px-3.5 text-center">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                            isDone
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : isProc
-                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                              : 'bg-amber-50 text-amber-700 border border-amber-200'
-                          }`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${isDone ? 'bg-emerald-500' : isProc ? 'bg-blue-500' : 'bg-amber-500'}`} />
-                          {t.statusLabel}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {supportTickets.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-slate-400">
+                      <div className="flex flex-col items-center justify-center gap-1.5">
+                        <div className="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 mb-1 border border-slate-100">
+                          <Headset size={22} />
+                        </div>
+                        <span className="text-xs font-semibold text-slate-700">Chưa có yêu cầu hỗ trợ nào từ đại lý</span>
+                        <span className="text-[11px] text-slate-400">Nhấn &quot;Tạo yêu cầu hỗ trợ&quot; để gửi yêu cầu quầy kệ, ấn phẩm hoặc đào tạo</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  supportTickets.map((t) => {
+                    const isDone = t.status === 'completed';
+                    const isProc = t.status === 'processing';
+                    return (
+                      <tr key={t.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="py-2.5 px-3.5 font-mono font-bold text-xs text-indigo-600">
+                          {t.code}
+                        </td>
+                        <td className="py-2.5 px-3.5 font-bold text-xs text-slate-800">
+                          {t.dealerName}
+                        </td>
+                        <td className="py-2.5 px-3.5">
+                          <div className="font-semibold text-slate-900 text-xs">{t.title}</div>
+                          <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">{t.content}</div>
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 mt-1 border border-slate-200/60">
+                            {t.categoryLabel}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3.5 text-xs font-medium text-slate-800">
+                          {t.assignee}
+                        </td>
+                        <td className="py-2.5 px-3.5 text-xs text-slate-500 font-mono text-center">
+                          {t.createdAt}
+                        </td>
+                        <td className="py-2.5 px-3.5 text-center">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                              isDone
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : isProc
+                                ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${isDone ? 'bg-emerald-500' : isProc ? 'bg-blue-500' : 'bg-amber-500'}`} />
+                            {t.statusLabel}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
