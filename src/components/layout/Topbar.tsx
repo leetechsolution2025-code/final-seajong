@@ -60,6 +60,7 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
   const [salesStaffList, setSalesStaffList] = useState<SalesStaffMember[]>([]);
   const [selectedSalesStaff, setSelectedSalesStaff] = useState<SalesStaffMember | null>(null);
   const [unreadMsgCount, setUnreadMsgCount] = useState<number>(0);
+  const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
 
   const switcherRef = useRef<HTMLDivElement>(null);
   const salesPickerRef = useRef<HTMLDivElement>(null);
@@ -198,6 +199,35 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
     const timer = setInterval(fetchUnread, 5000);
     return () => clearInterval(timer);
   }, [isCustomer, user?.id, user?.employee?.id, user?.employee?.code]);
+
+  // Polling số lượng thông báo chưa đọc mỗi 15s
+  useEffect(() => {
+    if (isCustomer) return;
+    const fetchUnreadNotifications = async () => {
+      try {
+        const token = sessionStorage.getItem('seajong_token') || localStorage.getItem('seajong_token');
+        const res = await fetch('/api/notifications', {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(user?.id ? { 'x-chat-user-id': user.id } : {}),
+          },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (typeof data.unreadCount === 'number') {
+            setUnreadNotifCount(data.unreadCount);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    fetchUnreadNotifications();
+    const timer = setInterval(fetchUnreadNotifications, 15000);
+    return () => clearInterval(timer);
+  }, [isCustomer, user?.id]);
 
   // Nạp danh sách nhân viên Phòng Kinh doanh theo mã định danh departmentCode === 'sales'
   useEffect(() => {
@@ -644,7 +674,11 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
             >
               <i className="bi bi-bell text-[18px]" />
               {canUseNotify ? (
-                <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white"></span>
+                unreadNotifCount > 0 ? (
+                  <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white">
+                    {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
+                  </span>
+                ) : null
               ) : (
                 <i className="bi bi-lock-fill text-[9px] text-slate-400 absolute bottom-1.5 right-1.5" />
               )}
@@ -881,7 +915,11 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
       <CasioCalculator isOpen={calcOpen} onClose={() => setCalcOpen(false)} />
 
       {/* Notification Slide Drawer */}
-      <NotificationOffcanvas isOpen={notifOpen} onClose={() => setNotifOpen(false)} />
+      <NotificationOffcanvas 
+        isOpen={notifOpen} 
+        onClose={() => setNotifOpen(false)} 
+        onUnreadChange={setUnreadNotifCount}
+      />
 
       {/* Message Chat Slide Drawer */}
       <MessageOffcanvas

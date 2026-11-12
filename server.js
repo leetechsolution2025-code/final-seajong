@@ -127,6 +127,269 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// Helper: Resolve authenticated user id from header or token
+async function resolveCurrentAuthUserId(req) {
+  const authHeader = req.headers['authorization'];
+  const token = (authHeader && authHeader.split(' ')[1]) || req.cookies?.token;
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      if (decoded?.id) {
+        return decoded.id;
+      }
+      if (decoded?.employee?.id) {
+        const u = await prisma.user.findFirst({
+          where: { employee: { id: decoded.employee.id } },
+          select: { id: true },
+        });
+        if (u) return u.id;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const headerUserId = req.headers['x-chat-user-id'] || req.query?.currentUserId;
+  if (headerUserId) {
+    try {
+      const user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { id: String(headerUserId) },
+            { email: String(headerUserId) },
+            { employee: { id: String(headerUserId) } },
+            { employee: { code: String(headerUserId) } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (user) return user.id;
+    } catch {
+      // ignore
+    }
+  }
+
+  return null;
+}
+
+// Helper: Format relative time in Vietnamese
+function formatRelativeTime(date) {
+  if (!date) return '';
+  const now = new Date();
+  const d = new Date(date);
+  const diffMs = now - d;
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHour = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHour / 24);
+
+  if (diffSec < 60) return 'Vừa xong';
+  if (diffMin < 60) return `${diffMin} phút trước`;
+  if (diffHour < 24) return `${diffHour} giờ trước`;
+  if (diffDay === 1) return 'Hôm qua';
+  if (diffDay < 7) return `${diffDay} ngày trước`;
+  return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+}
+
+// Helper: Tìm danh sách userId của Trưởng bộ phận theo mã phòng ban
+async function getDepartmentHeadUserIds(departmentCode) {
+  if (!departmentCode) return [];
+  const dept = String(departmentCode).toLowerCase().trim();
+
+  const leaderPosTitles = [
+    'trưởng phòng',
+    'trưởng bộ phận',
+    'quản đốc',
+    'giám đốc',
+    'phó giám đốc',
+    'leader',
+    'head',
+    'thủ kho'
+  ];
+
+  try {
+    const [employees, positions] = await Promise.all([
+      prisma.employee.findMany({
+        where: {
+          departmentCode: dept,
+          status: { not: 'resigned' },
+          profileStatus: { not: 'resigned' },
+        },
+        include: { user: true },
+      }),
+      prisma.category.findMany({
+        where: { type: 'position' },
+        select: { code: true, name: true },
+      }),
+    ]);
+
+    const posMap = new Map(positions.map((p) => [p.code, (p.name || '').toLowerCase()]));
+
+    const leaderUserIds = [];
+    const deptUserIds = [];
+
+    for (const emp of employees) {
+      const posName = posMap.get(emp.position) || (emp.position || '').toLowerCase();
+      const isLeader = leaderPosTitles.some((title) => posName.includes(title));
+      const uId = emp.user?.id;
+      if (uId) {
+        deptUserIds.push(uId);
+        if (isLeader) {
+          leaderUserIds.push(uId);
+        }
+      }
+    }
+
+    if (leaderUserIds.length > 0) {
+      return [...new Set(leaderUserIds)];
+    }
+
+    if (deptUserIds.length > 0) {
+      return [...new Set(deptUserIds)];
+    }
+
+    const usersWithDeptAccess = await prisma.user.findMany({
+      where: {
+        OR: [
+          { deptAccess: { contains: dept } },
+          { role: 'ADMIN' },
+        ],
+      },
+      select: { id: true, name: true, role: true, email: true },
+      take: 5,
+    });
+
+    if (usersWithDeptAccess.length > 0) {
+      return [usersWithDeptAccess[0].id];
+    }
+  } catch (err) {
+    console.warn('[getDepartmentHeadUserIds] Error:', err.message);
+  }
+
+  const admin = await prisma.user.findFirst({
+    where: { role: 'ADMIN' },
+    select: { id: true },
+  });
+  return admin ? [admin.id] : [];
+}
+
+// Helper: Gửi thông báo chuyển giao nghiệp vụ giữa các bộ phận
+async function sendCrossDeptNotification({
+  title,
+  content,
+  type = 'info',
+  priority = 'high',
+  sourceDept = 'Hệ thống Seajong',
+  targetDept,
+  recipientUserIds,
+  senderUserId,
+  senderName = 'Hệ thống tự động',
+  link = '',
+  entityType = null,
+  entityId = null,
+}) {
+  try {
+    let finalRecipientIds = [];
+    if (Array.isArray(recipientUserIds)) {
+      finalRecipientIds = recipientUserIds.filter(Boolean);
+    } else if (recipientUserIds) {
+      finalRecipientIds = [recipientUserIds];
+    }
+
+    // Nếu không có người nhận cụ thể, gửi cho Trưởng bộ phận phòng ban đích
+    if (finalRecipientIds.length === 0 && targetDept) {
+      finalRecipientIds = await getDepartmentHeadUserIds(targetDept);
+    }
+
+    // Lọc bỏ chính người tạo thông báo để không thông báo cho chính mình
+    if (senderUserId) {
+      finalRecipientIds = finalRecipientIds.filter((id) => id !== senderUserId);
+    }
+
+    // Nếu vẫn rỗng, fallback gửi cho quản trị viên khác
+    if (finalRecipientIds.length === 0) {
+      const fallbackAdmins = await prisma.user.findMany({
+        where: {
+          role: 'ADMIN',
+          ...(senderUserId ? { id: { not: senderUserId } } : {}),
+        },
+        select: { id: true },
+        take: 1,
+      });
+      if (fallbackAdmins.length > 0) {
+        finalRecipientIds = [fallbackAdmins[0].id];
+      }
+    }
+
+    if (finalRecipientIds.length === 0) {
+      console.warn('[sendCrossDeptNotification] Không có người nhận hợp lệ, bỏ qua thông báo');
+      return null;
+    }
+
+    let validCreatedById = senderUserId;
+    if (validCreatedById) {
+      const userExists = await prisma.user.findUnique({
+        where: { id: validCreatedById },
+        select: { id: true },
+      });
+      if (!userExists) validCreatedById = null;
+    }
+    if (!validCreatedById) {
+      const admin = await prisma.user.findFirst({
+        where: { role: 'ADMIN' },
+        select: { id: true },
+      });
+      validCreatedById = admin?.id || finalRecipientIds[0];
+    }
+
+    const attachments = JSON.stringify({
+      link,
+      department: sourceDept,
+      sender: senderName,
+      entityType,
+      entityId,
+      timestamp: new Date().toISOString(),
+    });
+
+    const notif = await prisma.notification.create({
+      data: {
+        title,
+        content,
+        type: type === 'urgent' ? 'warning' : type,
+        priority: priority || 'high',
+        audienceType: 'individual',
+        audienceValue: targetDept || 'all',
+        attachments,
+        createdById: validCreatedById,
+      },
+    });
+
+    await Promise.all(
+      finalRecipientIds.map((uId) =>
+        prisma.notificationRecipient.upsert({
+          where: {
+            notificationId_userId: {
+              notificationId: notif.id,
+              userId: uId,
+            },
+          },
+          update: {},
+          create: {
+            notificationId: notif.id,
+            userId: uId,
+            isRead: false,
+          },
+        })
+      )
+    );
+
+    return notif;
+  } catch (err) {
+    console.error('[sendCrossDeptNotification] Error:', err);
+    return null;
+  }
+}
+
 // -------------------------------------------------------------
 // 1. HEALTHCHECK & SYSTEM INFO
 // -------------------------------------------------------------
@@ -2209,6 +2472,32 @@ app.post('/api/sales/dealer-support-tickets', async (req, res) => {
       }
     });
 
+    try {
+      let recipientId = null;
+      if (handlerId) {
+        const emp = await prisma.employee.findUnique({
+          where: { id: handlerId },
+          include: { user: true }
+        });
+        recipientId = emp?.user?.id;
+      }
+      await sendCrossDeptNotification({
+        title: `🎫 Yêu cầu hỗ trợ đại lý mới: ${created.code}`,
+        content: `Đại lý "${created.dealerName}" gửi yêu cầu hỗ trợ: "${created.title}" [Loại: ${created.type}]. Vui lòng tiếp nhận và xử lý.`,
+        type: priority === 'urgent' ? 'urgent' : 'info',
+        priority: priority === 'urgent' ? 'urgent' : 'high',
+        sourceDept: 'Bộ phận Đại lý',
+        targetDept: 'sales',
+        recipientUserIds: recipientId ? [recipientId] : undefined,
+        senderName: created.dealerName,
+        link: '/sales/dealer-support',
+        entityType: 'DEALER_TICKET',
+        entityId: created.id,
+      });
+    } catch (ne) {
+      console.warn('[DealerTicket notification error]:', ne.message);
+    }
+
     res.json({ success: true, message: 'Tạo yêu cầu hỗ trợ thành công', data: created });
   } catch (error) {
     console.error('Lỗi POST /api/sales/dealer-support-tickets:', error);
@@ -2308,30 +2597,20 @@ app.post('/api/dealer/support-tickets', authenticateToken, async (req, res) => {
 
     if (!isDraft) {
       try {
-        const salesUsers = await prisma.user.findMany({
-          where: {
-            OR: [
-              ...(customer?.nguoiChamSoc?.userId ? [{ id: customer.nguoiChamSoc.userId }] : []),
-              { role: 'ADMIN' },
-              { deptAccess: { contains: 'sales' } }
-            ]
-          },
-          take: 6
+        await sendCrossDeptNotification({
+          title: `🎧 Yêu cầu hỗ trợ mới từ ${customer?.name || ticketCode}`,
+          content: `[${created.type}] ${created.title} (${ticketCode}). Chuyên viên phụ trách: ${customer?.nguoiChamSoc?.fullName || 'Phòng Kinh doanh'}.`,
+          type: normalizedPriority === 'urgent' ? 'urgent' : 'info',
+          priority: normalizedPriority === 'urgent' ? 'urgent' : 'high',
+          sourceDept: 'Cổng Đại lý',
+          targetDept: 'sales',
+          recipientUserIds: customer?.nguoiChamSoc?.userId ? [customer.nguoiChamSoc.userId] : undefined,
+          senderUserId: user.id,
+          senderName: customer?.name || user.name || 'Đại lý Seajong',
+          link: '/sales/dealer-support',
+          entityType: 'DEALER_TICKET',
+          entityId: created.id,
         });
-
-        for (const su of salesUsers) {
-          await prisma.notification.create({
-            data: {
-              title: `🎧 Yêu cầu hỗ trợ mới từ ${customer?.name || ticketCode}`,
-              content: `[${created.type}] ${created.title} (${ticketCode}). Chuyên viên phụ trách: ${customer?.nguoiChamSoc?.fullName || 'Phòng Kinh doanh'}.`,
-              type: 'info',
-              priority: normalizedPriority === 'urgent' ? 'high' : 'normal',
-              audienceType: 'individual',
-              audienceValue: su.id,
-              createdById: user.id
-            }
-          });
-        }
       } catch (notifErr) {
         console.warn('Không thể gửi thông báo yêu cầu hỗ trợ:', notifErr.message);
       }
@@ -8011,6 +8290,23 @@ app.post('/api/sales/orders', async (req, res) => {
       console.warn('[SaleOrder] Cảnh báo đồng bộ kế toán công nợ:', accErr.message);
     }
 
+    try {
+      await sendCrossDeptNotification({
+        title: `🛒 Đơn bán hàng mới cần duyệt tín dụng: ${order.code}`,
+        content: `Nhân viên ${order.nguoiPhuTrach || 'Kinh doanh'} vừa tạo đơn bán hàng ${order.code} cho khách hàng ${order.customer?.name || 'Khách hàng'} với tổng trị giá ${Number(order.tongTien || 0).toLocaleString('vi-VN')} đ. Đang chờ kế toán kiểm tra và phê duyệt.`,
+        type: 'info',
+        priority: 'high',
+        sourceDept: 'Phòng Kinh doanh',
+        targetDept: 'finance',
+        senderName: order.nguoiPhuTrach || 'Phòng Kinh doanh',
+        link: '/sales/orders',
+        entityType: 'SALE_ORDER',
+        entityId: order.id,
+      });
+    } catch (ne) {
+      console.warn('[SaleOrder notification error]:', ne.message);
+    }
+
     res.json({ success: true, order });
   } catch (err) {
     console.error('Lỗi POST /api/sales/orders:', err);
@@ -13383,6 +13679,30 @@ app.patch('/api/approval-documents/:id/status', async (req, res) => {
         ...(status === 'approved' && { approvedAt: new Date() }),
       },
     });
+
+    if (status === 'approved' || status === 'rejected') {
+      try {
+        const isApproved = status === 'approved';
+        const approverLabel = approverName || 'Ban Giám đốc';
+        const reasonText = note ? `\nGhi chú: ${note}` : '';
+        await sendCrossDeptNotification({
+          title: isApproved ? `✅ Hồ sơ đã được duyệt: ${updated.entityCode || updated.entityTitle}` : `❌ Hồ sơ bị từ chối: ${updated.entityCode || updated.entityTitle}`,
+          content: `Hồ sơ "${updated.entityTitle || updated.entityCode}" của bạn đã được ${isApproved ? 'phê duyệt' : 'từ chối'} bởi **${approverLabel}** lúc ${new Date().toLocaleTimeString('vi-VN')} ngày ${new Date().toLocaleDateString('vi-VN')}.${reasonText}`,
+          type: isApproved ? 'success' : 'urgent',
+          priority: isApproved ? 'normal' : 'high',
+          sourceDept: 'Ban Giám đốc',
+          targetDept: updated.department || 'board',
+          recipientUserIds: updated.requestedById ? [updated.requestedById] : undefined,
+          senderName: approverLabel,
+          link: '/board/approvals',
+          entityType: updated.entityType,
+          entityId: updated.id,
+        });
+      } catch (ne) {
+        console.warn('[Approval notification error]:', ne.message);
+      }
+    }
+
     res.json({ success: true, data: mapApprovalRequestToDoc(updated, 0) });
   } catch (err) {
     console.error('[PATCH /api/approval-documents/:id/status]', err);
@@ -13407,6 +13727,30 @@ app.patch('/api/approval-requests/:id', async (req, res) => {
         comments: { orderBy: { createdAt: 'asc' } },
       },
     });
+
+    if (status === 'approved' || status === 'rejected') {
+      try {
+        const isApproved = status === 'approved';
+        const approverLabel = approvedById || 'Ban Giám đốc';
+        const reasonText = note || rejectedReason ? `\nGhi chú: ${note || rejectedReason}` : '';
+        await sendCrossDeptNotification({
+          title: isApproved ? `✅ Hồ sơ đã được duyệt: ${updated.entityCode || updated.entityTitle}` : `❌ Hồ sơ bị từ chối: ${updated.entityCode || updated.entityTitle}`,
+          content: `Hồ sơ "${updated.entityTitle || updated.entityCode}" của bạn đã được ${isApproved ? 'phê duyệt' : 'từ chối'} bởi **${approverLabel}** lúc ${new Date().toLocaleTimeString('vi-VN')} ngày ${new Date().toLocaleDateString('vi-VN')}.${reasonText}`,
+          type: isApproved ? 'success' : 'urgent',
+          priority: isApproved ? 'normal' : 'high',
+          sourceDept: 'Ban Giám đốc',
+          targetDept: updated.department || 'board',
+          recipientUserIds: updated.requestedById ? [updated.requestedById] : undefined,
+          senderName: approverLabel,
+          link: '/board/approvals',
+          entityType: updated.entityType,
+          entityId: updated.id,
+        });
+      } catch (ne) {
+        console.warn('[Approval notification error]:', ne.message);
+      }
+    }
+
     res.json({ success: true, data: updated });
   } catch (err) {
     console.error('[PATCH /api/approval-requests/:id]', err);
@@ -13573,6 +13917,25 @@ app.post('/api/production/requests', async (req, res) => {
         },
       },
     });
+
+    try {
+      await sendCrossDeptNotification({
+        title: `📋 Trình duyệt yêu cầu sản xuất: ${order.code}`,
+        content: `Nhân viên ${userName} vừa lập yêu cầu sản xuất cho ${items.length} mặt hàng (Tổng SL: ${totalQuantity} SP). Kính trình Ban Giám đốc xem xét và phê duyệt.`,
+        type: 'info',
+        priority: priority === 'urgent' ? 'urgent' : 'high',
+        sourceDept: 'Khối Sản xuất',
+        targetDept: 'board',
+        recipientUserIds: primaryDirector?.userId ? [primaryDirector.userId] : undefined,
+        senderUserId: userId,
+        senderName: userName,
+        link: '/board/approvals',
+        entityType: 'PRODUCTION_REQUEST',
+        entityId: approval.id,
+      });
+    } catch (ne) {
+      console.warn('[POST /api/production/requests] Lỗi gửi thông báo:', ne.message);
+    }
 
     res.json({
       success: true,
@@ -14567,6 +14930,23 @@ app.post('/api/production/defects', async (req, res) => {
           performedBy: defect.reporterName || 'Hệ thống'
         }
       });
+    }
+
+    try {
+      await sendCrossDeptNotification({
+        title: `⚠️ Biên bản sự cố / Hàng bảo hành: ${code}`,
+        content: `Bộ phận ${body.reporterDepartment || 'Sản xuất'} vừa lập biên bản ghi nhận lỗi ${code} cho sản phẩm ${defect.productName} (SL: ${defect.quantity}). Mô tả: ${body.description || 'Chờ kiểm tra thẩm định'}.`,
+        type: 'urgent',
+        priority: 'high',
+        sourceDept: body.reporterDepartment || 'Kiểm soát chất lượng',
+        targetDept: 'qa',
+        senderName: body.reporterName || 'Hệ thống',
+        link: '/production/defects',
+        entityType: 'DEFECT_RECORD',
+        entityId: defect.id,
+      });
+    } catch (ne) {
+      console.warn('[Defect notification error]:', ne.message);
     }
 
     res.status(201).json(defect);
@@ -17749,6 +18129,227 @@ app.get('/api/notifications/recipients', async (req, res) => {
   } catch (err) {
     console.error('[GET /api/notifications/recipients] Error:', err);
     res.status(500).json({ error: err.message || 'Lỗi máy chủ' });
+  }
+});
+
+// ── TRUNG TÂM THÔNG BÁO (NOTIFICATIONS) ──────────────────────────────────────
+app.get('/api/notifications', async (req, res) => {
+  try {
+    const currentUserId = await resolveCurrentAuthUserId(req);
+    if (!currentUserId) {
+      return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+    }
+
+    const recipients = await prisma.notificationRecipient.findMany({
+      where: {
+        userId: currentUserId,
+        notification: {
+          createdById: { not: currentUserId },
+        },
+      },
+      include: {
+        notification: {
+          include: {
+            createdBy: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                employee: {
+                  select: {
+                    fullName: true,
+                    departmentName: true,
+                    departmentCode: true,
+                    position: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+
+    const DEPT_NAMES_MAP = {
+      board: 'Ban Giám đốc',
+      sales: 'Phòng Kinh doanh',
+      marketing: 'Phòng Marketing',
+      qa: 'Đảm bảo chất lượng QA',
+      logistics: 'Kho vận & Logistics',
+      production: 'Khối Sản xuất',
+      purchase: 'Mua hàng & Cung ứng',
+      finance: 'Tài chính - Kế toán',
+      hr: 'Hành chính - Nhân sự',
+    };
+
+    const items = recipients.map((nr) => {
+      let meta = {};
+      try {
+        if (nr.notification.attachments) {
+          const parsed = JSON.parse(nr.notification.attachments);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            meta = { link: parsed[0]?.url, ...parsed[0] };
+          } else if (typeof parsed === 'object' && parsed !== null) {
+            meta = parsed;
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      const senderName =
+        meta.sender ||
+        nr.notification.createdBy?.employee?.fullName ||
+        nr.notification.createdBy?.name ||
+        'Hệ thống tự động';
+
+      const deptName =
+        meta.department ||
+        nr.notification.createdBy?.employee?.departmentName ||
+        DEPT_NAMES_MAP[nr.notification.audienceValue] ||
+        'Hệ thống';
+
+      let type = nr.notification.type || 'info';
+      if (type === 'error' || nr.notification.priority === 'urgent') {
+        type = 'urgent';
+      }
+
+      let link = meta.link || meta.url || '';
+      if (!link) {
+        const titleLower = (nr.notification.title || '').toLowerCase();
+        if (titleLower.includes('phê duyệt') || titleLower.includes('trình duyệt')) {
+          link = '/board/approvals';
+        } else if (titleLower.includes('xuất kho') || titleLower.includes('nhập kho') || titleLower.includes('logistics')) {
+          link = '/logistics';
+        } else if (titleLower.includes('đơn hàng') || titleLower.includes('bán hàng') || titleLower.includes('dbh-')) {
+          link = '/sales/orders';
+        } else if (titleLower.includes('mua hàng') || titleLower.includes('ycmh') || titleLower.includes('dh-')) {
+          link = '/plan-finance/purchase-requests';
+        } else if (titleLower.includes('lỗi') || titleLower.includes('kcs') || titleLower.includes('bảo hành')) {
+          link = '/production/defects';
+        }
+      }
+
+      return {
+        id: nr.id,
+        notificationId: nr.notification.id,
+        title: nr.notification.title,
+        content: nr.notification.content,
+        type,
+        department: deptName,
+        sender: senderName,
+        time: formatRelativeTime(nr.createdAt),
+        createdAt: nr.createdAt,
+        isRead: nr.isRead,
+        link,
+      };
+    });
+
+    const unreadCount = items.filter((i) => !i.isRead).length;
+
+    res.json({
+      success: true,
+      notifications: items,
+      unreadCount,
+    });
+  } catch (err) {
+    console.error('[GET /api/notifications] Error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/notifications/:id/read', async (req, res) => {
+  try {
+    const currentUserId = await resolveCurrentAuthUserId(req);
+    if (!currentUserId) {
+      return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+    }
+
+    const { id } = req.params;
+    await prisma.notificationRecipient.updateMany({
+      where: {
+        userId: currentUserId,
+        OR: [{ id }, { notificationId: id }],
+      },
+      data: {
+        isRead: true,
+        readAt: new Date(),
+      },
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[PUT /api/notifications/:id/read] Error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/notifications/read-all', async (req, res) => {
+  try {
+    const currentUserId = await resolveCurrentAuthUserId(req);
+    if (!currentUserId) {
+      return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+    }
+
+    await prisma.notificationRecipient.updateMany({
+      where: {
+        userId: currentUserId,
+        isRead: false,
+      },
+      data: {
+        isRead: true,
+        readAt: new Date(),
+      },
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[PUT /api/notifications/read-all] Error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/notifications/:id', async (req, res) => {
+  try {
+    const currentUserId = await resolveCurrentAuthUserId(req);
+    if (!currentUserId) {
+      return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+    }
+
+    const { id } = req.params;
+    await prisma.notificationRecipient.deleteMany({
+      where: {
+        userId: currentUserId,
+        OR: [{ id }, { notificationId: id }],
+      },
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[DELETE /api/notifications/:id] Error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/notifications', async (req, res) => {
+  try {
+    const currentUserId = await resolveCurrentAuthUserId(req);
+    if (!currentUserId) {
+      return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+    }
+
+    await prisma.notificationRecipient.deleteMany({
+      where: {
+        userId: currentUserId,
+      },
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[DELETE /api/notifications] Error:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -24080,6 +24681,23 @@ app.post('/api/plan-finance/purchase-requests', async (req, res) => {
       },
       include: { items: true },
     });
+
+    try {
+      await sendCrossDeptNotification({
+        title: `📦 Yêu cầu mua hàng mới: ${code}`,
+        content: `${nguoiYeuCau || 'Nhân viên'} (${donVi || 'Bộ phận'}) vừa lập yêu cầu mua hàng ${code} với ${created.items?.length || 0} mặt hàng. Lý do: ${lyDo || 'Bổ sung vật tư sản xuất'}.`,
+        type: 'info',
+        priority: 'high',
+        sourceDept: donVi || 'Phòng ban đề xuất',
+        targetDept: 'purchase',
+        senderName: nguoiYeuCau || 'Hệ thống',
+        link: '/plan-finance/purchase-requests',
+        entityType: 'PURCHASE_REQUEST',
+        entityId: created.id,
+      });
+    } catch (ne) {
+      console.warn('[PurchaseRequest notification error]:', ne.message);
+    }
 
     res.status(201).json(created);
   } catch (error) {
