@@ -227,7 +227,7 @@ export const SuggestionInput: React.FC<SuggestionInputProps> = ({
             marginBottom: '4px',
           }}
         >
-          <span>{label}</span>
+          {label}
           {required && <span style={{ color: 'var(--color-danger, #ef4444)' }}>*</span>}
         </label>
       )}
