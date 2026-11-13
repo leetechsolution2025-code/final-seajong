@@ -87,6 +87,16 @@ export interface ContractGroupItem {
   displayCode: string;
 }
 
+const stripContractCategoryPrefix = (raw: string): string => {
+  if (!raw) return '';
+  let cleaned = raw.trim();
+  const prefixPattern = /^(?:HỢP\s*ĐỒNG|HẠNG\s*MỤC|DỰ\s*ÁN\s*\/\s*NHIỆM\s*VỤ)\s*:\s*/i;
+  while (prefixPattern.test(cleaned)) {
+    cleaned = cleaned.replace(prefixPattern, '').trim();
+  }
+  return cleaned || raw.trim();
+};
+
 export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
   title = 'Danh sách công việc',
   subtitle,
@@ -755,13 +765,24 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
     return Array.from(map.values()).map((grp) => {
       const totalProg = grp.tasks.reduce((sum, t) => sum + (t.progress || 0), 0);
       const avgProgress = grp.tasks.length > 0 ? Math.round(totalProg / grp.tasks.length) : 0;
+      const isShowroomScope = scope === 'showroom_construction';
       const hasExplicitContract = grp.tasks.some((t) => Boolean(t.contractCode && t.contractCode.trim())) || grp.tasks.length === 0;
       const isOrderGroup =
         grp.contractCode.startsWith('ĐH-') ||
         grp.contractCode.startsWith('DH-') ||
         grp.tasks.some((t) => t.category === 'order');
-      const groupPrefix = !hasExplicitContract ? 'HẠNG MỤC' : isOrderGroup ? 'ĐƠN HÀNG' : 'HỢP ĐỒNG';
-      const displayCode = grp.contractCode;
+      const groupPrefix = isShowroomScope
+        ? !hasExplicitContract
+          ? 'NHÓM VIỆC'
+          : isOrderGroup
+            ? 'ĐƠN HÀNG'
+            : 'HỢP ĐỒNG'
+        : isOrderGroup
+          ? 'ĐƠN HÀNG'
+          : '';
+      const displayCode = isShowroomScope
+        ? grp.contractCode
+        : stripContractCategoryPrefix(grp.contractCode);
 
       return {
         ...grp,
@@ -1118,10 +1139,15 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
       });
   };
 
-  // Xoá hợp đồng / gói thầu và tất cả các công việc con thuộc về nó
+  // Xoá nhóm công việc / hợp đồng và tất cả các công việc con thuộc về nó
   const handleDeleteContract = async () => {
     if (!selectedContractGroup) return;
-    const itemLabel = selectedContractGroup.isBidding ? 'gói thầu' : 'hợp đồng';
+    const itemLabel =
+      scope === 'showroom_construction'
+        ? selectedContractGroup.isBidding
+          ? 'gói thầu'
+          : 'hợp đồng'
+        : 'nhóm công việc';
     const confirmMsg = `Bạn có chắc chắn muốn xoá ${itemLabel} "${selectedContractGroup.displayCode}" cùng toàn bộ ${selectedContractGroup.tasks.length} công việc con không?\nThao tác này không thể hoàn tác!`;
     if (!window.confirm(confirmMsg)) return;
 
@@ -1239,8 +1265,9 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
     const taskCodePrefix = newTaskCategory === 'bidding' ? 'DT' : newTaskCategory === 'production' ? 'SX' : 'KH';
     const generatedCode = `${taskCodePrefix}-2026-${Date.now().toString().slice(-3)}`;
     const defaultProject = newTaskProject.trim() || (
-      newTaskCategory === 'bidding' ? 'Dự án thầu công trình' :
-      newTaskCategory === 'production' ? 'Lệnh sản xuất nhà máy' : 'Công việc nghiệp vụ khác'
+      scope === 'showroom_construction'
+        ? 'Thi công trưng bày Showroom'
+        : 'Công việc nội bộ phòng ban'
     );
 
     const syncTimelineToDate = (dateStr?: string) => {
@@ -1912,10 +1939,10 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
           }}
         >
           <div className="task-mgmt-legend-summary" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: '#475569', flexWrap: 'wrap' }}>
-            {department === 'marketing' || department === 'mkt' ? (
+            {scope === 'showroom_construction' ? (
               <>
                 <span style={{ fontWeight: 700, color: '#0f172a' }}>
-                  Hạng mục kế hoạch: <span style={{ color: '#2563eb' }}>{contractGroups.length}</span> nhóm
+                  Tổng hợp đồng triển khai: <span style={{ color: '#2563eb' }}>{contractGroups.length}</span> hợp đồng
                 </span>
                 <span style={{ color: '#cbd5e1' }}>•</span>
                 <span>
@@ -1925,11 +1952,11 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
             ) : (
               <>
                 <span style={{ fontWeight: 700, color: '#0f172a' }}>
-                  Tổng hợp đồng triển khai: <span style={{ color: '#2563eb' }}>{contractGroups.length}</span> hợp đồng
+                  Nhóm công việc: <span style={{ color: '#2563eb' }}>{contractGroups.length}</span> nhóm
                 </span>
                 <span style={{ color: '#cbd5e1' }}>•</span>
                 <span>
-                  Tổng đầu việc: <strong style={{ color: '#0f172a' }}>{contractGroups.reduce((sum, g) => sum + g.tasks.length, 0)}</strong> hạng mục
+                  Tổng đầu việc: <strong style={{ color: '#0f172a' }}>{contractGroups.reduce((sum, g) => sum + g.tasks.length, 0)}</strong> nhiệm vụ
                 </span>
               </>
             )}
@@ -2380,9 +2407,9 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                               }}
-                              title={`${groupPrefix}: ${displayCode}`}
+                              title={groupPrefix ? `${groupPrefix}: ${displayCode}` : displayCode}
                             >
-                              {groupPrefix}: {displayCode}
+                              {groupPrefix ? `${groupPrefix}: ${displayCode}` : displayCode}
                             </span>
                             <span
                               style={{
@@ -2976,7 +3003,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                             borderBottom: '1px solid #cbd5e1',
                             cursor: 'pointer',
                           }}
-                          title={`Nhấn để xem chi tiết ${groupPrefix.toLowerCase()} ${displayCode}`}
+                          title={`Nhấn để xem chi tiết ${groupPrefix ? `${groupPrefix.toLowerCase()} ` : ''}${displayCode}`}
                         >
                           <td colSpan={isMobileView ? 1 : 7} style={{ padding: '8px 12px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minWidth: 0 }}>
@@ -3016,7 +3043,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                                       wordBreak: 'break-word',
                                     }}
                                   >
-                                    {groupPrefix}: {displayCode}
+                                    {groupPrefix ? `${groupPrefix}: ${displayCode}` : displayCode}
                                   </span>
                                   <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>
                                     ({group.tasks.length} công việc con)
@@ -3498,7 +3525,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
               </div>
             </div>
 
-            {/* Thông tin Hợp đồng và Khách hàng */}
+            {/* Thông tin Nhóm công việc / Hợp đồng và Khách hàng */}
             <div
               style={{
                 padding: '10px 14px',
@@ -3516,7 +3543,11 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                   marginBottom: '2px',
                 }}
               >
-                {selectedTask.category === 'bidding' ? 'Danh mục Gói thầu' : 'Danh mục Hợp đồng'}
+                {scope === 'showroom_construction'
+                  ? selectedTask.category === 'bidding'
+                    ? 'Danh mục Gói thầu'
+                    : 'Danh mục Hợp đồng'
+                  : 'Nhóm công việc / Kế hoạch'}
               </div>
               <div
                 className="text-uppercase"
@@ -3526,16 +3557,20 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                   color: '#0f172a',
                 }}
               >
-                {selectedTask.contractCode ? (
-                  <>
-                    {selectedTask.category === 'bidding' ? 'GÓI THẦU' : 'HỢP ĐỒNG'}: {
-                      selectedTask.category === 'bidding'
-                        ? selectedTask.contractCode.replace(/^HĐ-/i, 'GT-').replace(/^HD-/i, 'GT-')
-                        : selectedTask.contractCode
-                    }
-                  </>
+                {scope === 'showroom_construction' ? (
+                  selectedTask.contractCode ? (
+                    <>
+                      {selectedTask.category === 'bidding' ? 'GÓI THẦU' : 'HỢP ĐỒNG'}: {
+                        selectedTask.category === 'bidding'
+                          ? selectedTask.contractCode.replace(/^HĐ-/i, 'GT-').replace(/^HD-/i, 'GT-')
+                          : selectedTask.contractCode
+                      }
+                    </>
+                  ) : (
+                    <>{selectedTask.project || 'Nội bộ công ty'}</>
+                  )
                 ) : (
-                  <>DỰ ÁN / NHIỆM VỤ: {selectedTask.project || 'Nội bộ công ty'}</>
+                  <>{stripContractCategoryPrefix(selectedTask.project || selectedTask.contractCode || 'Công việc nội bộ')}</>
                 )}
               </div>
               <div
@@ -3762,8 +3797,18 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
       <Offcanvas
         isOpen={isContractDrawerOpen}
         onClose={() => setIsContractDrawerOpen(false)}
-        title={selectedContractGroup?.isBidding ? 'Chi tiết gói thầu' : 'Chi tiết hợp đồng'}
-        description={`Mã: ${selectedContractGroup?.displayCode || ''}`}
+        title={
+          scope === 'showroom_construction'
+            ? selectedContractGroup?.isBidding
+              ? 'Chi tiết gói thầu'
+              : 'Chi tiết hợp đồng'
+            : 'Chi tiết nhóm công việc'
+        }
+        description={
+          scope === 'showroom_construction'
+            ? `Mã: ${selectedContractGroup?.displayCode || ''}`
+            : `Nhóm: ${selectedContractGroup?.displayCode || ''}`
+        }
         width="400px"
         footer={
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
@@ -3847,7 +3892,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                     fontWeight: 700,
                   }}
                 >
-                  {selectedContractGroup.groupPrefix}
+                  {selectedContractGroup.groupPrefix || 'NHÓM CÔNG VIỆC'}
                 </span>
                 <span
                   style={{
@@ -3861,7 +3906,9 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                     border: '1px solid #a7f3d0',
                   }}
                 >
-                  Thi công & Trưng bày
+                  {scope === 'showroom_construction'
+                    ? 'Thi công & Trưng bày'
+                    : `${selectedContractGroup.tasks.length} nhiệm vụ`}
                 </span>
               </div>
               <div
@@ -3919,13 +3966,17 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
               }}
             >
               <div>
-                <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Khách hàng / Đối tác</div>
+                <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>
+                  {scope === 'showroom_construction' ? 'Khách hàng / Đối tác' : 'Kế hoạch / Đối tượng'}
+                </div>
                 <div style={{ fontSize: '0.825rem', fontWeight: 700, color: '#0f172a', marginTop: '2px' }}>
                   {selectedContractGroup.customerName}
                 </div>
               </div>
               <div style={{ borderTop: '1px dashed #e2e8f0', paddingTop: '6px' }}>
-                <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Địa chỉ / Công trình</div>
+                <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>
+                  {scope === 'showroom_construction' ? 'Địa chỉ / Công trình' : 'Phòng ban / Đơn vị'}
+                </div>
                 <div style={{ fontSize: '0.8rem', color: '#334155', marginTop: '2px', lineHeight: 1.35 }}>
                   {selectedContractGroup.customerAddress}
                 </div>
@@ -4087,18 +4138,24 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
           />
 
           <Input
-            label="Dự án hoặc Hạng mục"
-            placeholder="Ví dụ: Thi công quầy kệ & trưng bày showroom Seajong..."
+            label={scope === 'showroom_construction' ? 'Dự án / Công trình' : 'Nhóm công việc / Kế hoạch'}
+            placeholder={
+              scope === 'showroom_construction'
+                ? 'Ví dụ: Thi công quầy kệ & trưng bày showroom Seajong...'
+                : 'Ví dụ: Chăm sóc đại lý, Kế hoạch kinh doanh tháng 11...'
+            }
             value={newTaskProject}
             onChange={(e) => setNewTaskProject(e.target.value)}
           />
 
-          <Input
-            label="Mã Hợp đồng (Tùy chọn)"
-            placeholder="Ví dụ: 0261029-003/HDDL-SEAJONG"
-            value={newTaskContractCode}
-            onChange={(e) => setNewTaskContractCode(e.target.value)}
-          />
+          {scope === 'showroom_construction' && (
+            <Input
+              label="Mã Hợp đồng (Tùy chọn)"
+              placeholder="Ví dụ: 0261029-003/HDDL-SEAJONG"
+              value={newTaskContractCode}
+              onChange={(e) => setNewTaskContractCode(e.target.value)}
+            />
+          )}
 
           <Input
             label="Khách hàng / Đại lý (Tùy chọn)"

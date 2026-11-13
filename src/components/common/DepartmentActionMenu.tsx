@@ -10,6 +10,7 @@ export interface DepartmentActionMenuItem {
   onClick?: () => void;
   menuKey?: string;
   danger?: boolean;
+  isLocked?: boolean;
 }
 
 export interface DepartmentActionMenuProps {
@@ -17,6 +18,8 @@ export interface DepartmentActionMenuProps {
   items?: DepartmentActionMenuItem[];
   /** Bổ sung mục vào cuối danh sách tiện ích chuẩn */
   extraItems?: DepartmentActionMenuItem[];
+  /** Danh sách id của các mục cần khóa tạm thời */
+  lockedItemIds?: string[];
   /** ClassName bổ sung cho container */
   className?: string;
   /** Nút trigger tuỳ biến thay cho nút 3 chấm mặc định */
@@ -38,6 +41,7 @@ export interface DepartmentActionMenuProps {
 export const DepartmentActionMenu: React.FC<DepartmentActionMenuProps> = ({
   items,
   extraItems,
+  lockedItemIds = [],
   className = '',
   trigger,
   title = 'Tùy chọn thao tác',
@@ -47,7 +51,7 @@ export const DepartmentActionMenu: React.FC<DepartmentActionMenuProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { setActiveMenuKey } = useDepartment();
+  const { activeDeptCode, setActiveMenuKey } = useDepartment();
 
   // Đóng dropdown khi click ra ngoài hoặc bấm Escape
   useEffect(() => {
@@ -98,12 +102,19 @@ export const DepartmentActionMenu: React.FC<DepartmentActionMenuProps> = ({
       title: 'Yêu cầu và duyệt yêu cầu',
       description: 'Tờ trình & kiến nghị phòng ban',
       menuKey: 'requests_approvals',
+      isLocked: activeDeptCode === 'marketing',
     },
   ];
 
-  const menuItems = items || (extraItems ? [...defaultItems, ...extraItems] : defaultItems);
+  const menuItems = (items || (extraItems ? [...defaultItems, ...extraItems] : defaultItems)).map(
+    (item) => ({
+      ...item,
+      isLocked: Boolean(item.isLocked || (item.id && lockedItemIds.includes(item.id))),
+    })
+  );
 
   const handleItemClick = (item: DepartmentActionMenuItem) => {
+    if (item.isLocked) return;
     if (item.onClick) {
       item.onClick();
     }
@@ -160,13 +171,18 @@ export const DepartmentActionMenu: React.FC<DepartmentActionMenuProps> = ({
           } top-full mt-2 ${dropdownWidth} bg-white rounded-xl shadow-xl border border-slate-200/90 py-1.5 z-50 text-xs animate-in fade-in zoom-in-95 duration-100 select-none`}
         >
           {menuItems.map((item, index) => {
+            const locked = Boolean(item.isLocked);
             return (
               <button
                 key={item.id || index}
                 type="button"
+                disabled={locked}
+                title={locked ? 'Chức năng đang tạm khóa tại bộ phận này' : undefined}
                 onClick={() => handleItemClick(item)}
-                className={`w-full px-3.5 py-2.5 text-left hover:bg-slate-50 text-slate-700 flex items-center gap-2.5 transition-colors cursor-pointer border-0 bg-transparent font-medium ${
-                  item.danger ? 'hover:bg-rose-50 text-rose-600' : ''
+                className={`w-full px-3.5 py-2.5 text-left text-slate-700 flex items-center gap-2.5 transition-colors border-0 bg-transparent font-medium ${
+                  locked
+                    ? 'opacity-50 cursor-not-allowed'
+                    : `hover:bg-slate-50 cursor-pointer ${item.danger ? 'hover:bg-rose-50 text-rose-600' : ''}`
                 }`}
               >
                 {typeof item.icon === 'string' ? (
@@ -174,10 +190,10 @@ export const DepartmentActionMenu: React.FC<DepartmentActionMenuProps> = ({
                 ) : (
                   item.icon
                 )}
-                <div className="flex flex-col min-w-0">
+                <div className="flex flex-col min-w-0 flex-1">
                   <span
                     className={`font-bold text-xs truncate ${
-                      item.danger ? 'text-rose-600' : 'text-slate-800'
+                      item.danger && !locked ? 'text-rose-600' : 'text-slate-800'
                     }`}
                   >
                     {item.title}
@@ -188,6 +204,9 @@ export const DepartmentActionMenu: React.FC<DepartmentActionMenuProps> = ({
                     </span>
                   )}
                 </div>
+                {locked && (
+                  <i className="bi bi-lock-fill text-slate-400 text-xs shrink-0 ml-1" />
+                )}
               </button>
             );
           })}

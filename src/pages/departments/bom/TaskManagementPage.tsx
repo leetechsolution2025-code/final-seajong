@@ -13,6 +13,7 @@ export const TaskManagementPage: React.FC<TaskManagementPageProps> = ({
   department = 'all',
 }) => {
   const isMarketing = department === 'marketing' || department === 'mkt';
+  const isSales = department === 'sales';
 
   return (
     <StandardPage
@@ -20,11 +21,13 @@ export const TaskManagementPage: React.FC<TaskManagementPageProps> = ({
       description={
         isMarketing
           ? 'Theo dõi và quản trị tiến độ thực thi các công việc, chiến dịch phòng Marketing theo kế hoạch tháng'
-          : 'Theo dõi tiến độ giao việc trọng yếu các xưởng sản xuất và phòng ban nghiệp vụ'
+          : isSales
+            ? 'Theo dõi và quản trị tiến độ thực thi các công việc, kế hoạch phòng Kinh doanh'
+            : 'Theo dõi tiến độ giao việc trọng yếu các xưởng sản xuất và phòng ban nghiệp vụ'
       }
       icon="bi-kanban"
       color="indigo"
-      badge={isMarketing ? 'MARKETING SEAJONG' : 'TIẾN ĐỘ THỰC THI'}
+      badge={isMarketing ? 'MARKETING SEAJONG' : isSales ? 'KINH DOANH SEAJONG' : 'TIẾN ĐỘ THỰC THI'}
       tickerContext="tasks"
       cardPadding="p-0"
       useCard={true}

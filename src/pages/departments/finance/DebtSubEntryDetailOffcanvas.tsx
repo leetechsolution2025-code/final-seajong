@@ -116,6 +116,7 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
     <Offcanvas
       isOpen={isOpen}
       onClose={onClose}
+      closeOnBackdropClick={false}
       title={isReturn ? 'Chi tiết giảm trừ công nợ' : 'Chi tiết khoản nợ'}
       description={`Phiếu phát sinh mã ${entry.code || '---'}`}
       width="400px"
@@ -246,6 +247,35 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
               </div>
             </div>
 
+            {/* Tổng tiền hàng đặt ngay dưới Mã đơn hàng */}
+            {!loadingItems && items.length > 0 && (
+              <div
+                style={{
+                  padding: '10px 14px',
+                  backgroundColor: isReturn ? '#fffbeb' : '#f0fdf4',
+                  border: `1px solid ${isReturn ? '#fde68a' : '#bbf7d0'}`,
+                  borderRadius: '8px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '0.7188rem', fontWeight: 600, color: isReturn ? '#b45309' : '#166534' }}>
+                    {isReturn ? 'Tổng tiền hàng trả về' : 'Tổng tiền hàng'}
+                  </div>
+                  <div style={{ fontSize: '0.6875rem', color: isReturn ? '#d97706' : '#15803d' }}>
+                    ({items.reduce((acc: number, item: any) => acc + (Number(item.soLuong || item.quantity) || 1), 0)} sản phẩm)
+                  </div>
+                </div>
+                <div style={{ fontSize: '1.0625rem', fontWeight: 800, color: isReturn ? '#b45309' : '#15803d' }}>
+                  {formatNumberGroup(
+                    items.reduce((acc: number, item: any) => acc + (Number(item.thanhTien || item.total) || ((Number(item.soLuong || item.quantity) || 1) * (Number(item.donGia || item.price) || 0))), 0)
+                  )} đ
+                </div>
+              </div>
+            )}
+
             {loadingItems ? (
               <div style={{ padding: '36px', textAlign: 'center', color: '#64748b' }}>
                 <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-primary-500 border-t-transparent" />
@@ -269,113 +299,68 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
                 </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {items.map((prod: any, pIdx: number) => {
-                  const qty = Number(prod.soLuong || prod.quantity) || 1;
-                  const price = Number(prod.donGia || prod.price) || 0;
-                  const total = Number(prod.thanhTien || prod.total) || (qty * price);
-                  const unit = prod.donViTinh || prod.donVi || 'Bộ';
-                  let parsedNote: any = {};
-                  if (prod.ghiChu && typeof prod.ghiChu === 'string' && prod.ghiChu.trim().startsWith('{')) {
-                    try {
-                      parsedNote = JSON.parse(prod.ghiChu);
-                    } catch {}
-                  }
-                  const displayCode = prod.inventoryCode || prod.productCode || parsedNote.code || '';
-                  const displayBom = parsedNote.bomCode || (prod.dinhMucId && !String(prod.dinhMucId).startsWith('cm') ? prod.dinhMucId : '');
+              <div
+                style={{
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  overflow: 'hidden',
+                  backgroundColor: '#ffffff',
+                }}
+              >
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b', textTransform: 'uppercase', fontSize: '0.625rem' }}>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>Hàng hoá</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>Thành tiền</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((prod: any, pIdx: number) => {
+                        const qty = Number(prod.soLuong || prod.quantity) || 1;
+                        const price = Number(prod.donGia || prod.price) || 0;
+                        const total = Number(prod.thanhTien || prod.total) || (qty * price);
+                        const unit = prod.donViTinh || prod.donVi || 'Bộ';
+                        let parsedNote: any = {};
+                        if (prod.ghiChu && typeof prod.ghiChu === 'string' && prod.ghiChu.trim().startsWith('{')) {
+                          try {
+                            parsedNote = JSON.parse(prod.ghiChu);
+                          } catch {}
+                        }
+                        const displayCode = prod.inventoryCode || prod.productCode || parsedNote.code || '';
+                        const displayBom = parsedNote.bomCode || (prod.dinhMucId && !String(prod.dinhMucId).startsWith('cm') ? prod.dinhMucId : '');
 
-                  return (
-                    <div
-                      key={prod.id || pIdx}
-                      style={{
-                        backgroundColor: '#ffffff',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '8px',
-                        padding: '12px 14px',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '8px',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                        <div>
-                          <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.875rem', lineHeight: '1.3' }}>
-                            {prod.tenHang || prod.productName}
-                          </div>
-                          {(displayCode || displayBom) && (
-                            <div style={{ fontSize: '0.7188rem', color: '#64748b', marginTop: '3px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                              {displayCode && <span>Mã: <strong>{displayCode}</strong></span>}
-                              {displayBom && <span>{displayCode ? '• ' : ''}Định mức: <strong>{displayBom}</strong></span>}
-                            </div>
-                          )}
-                        </div>
-                        <span
-                          style={{
-                            backgroundColor: isReturn ? '#fef3c7' : '#eff6ff',
-                            color: isReturn ? '#b45309' : '#1d4ed8',
-                            border: `1px solid ${isReturn ? '#fde68a' : '#bfdbfe'}`,
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          SL: {qty} {unit}
-                        </span>
-                      </div>
-
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          paddingTop: '8px',
-                          borderTop: '1px dashed #f1f5f9',
-                          fontSize: '0.7813rem',
-                        }}
-                      >
-                        <div style={{ color: '#64748b' }}>
-                          Đơn giá: <strong style={{ color: '#334155' }}>{formatNumberGroup(price)} đ</strong>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <span style={{ color: '#64748b', marginRight: '6px' }}>Thành tiền:</span>
-                          <strong style={{ color: isReturn ? '#d97706' : '#0369a1', fontSize: '0.875rem' }}>
-                            {formatNumberGroup(total)} đ
-                          </strong>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {/* Tổng kết tiền hàng */}
-                <div
-                  style={{
-                    marginTop: '4px',
-                    padding: '12px 14px',
-                    backgroundColor: isReturn ? '#fffbeb' : '#f0fdf4',
-                    border: `1px solid ${isReturn ? '#fde68a' : '#bbf7d0'}`,
-                    borderRadius: '8px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: '0.7188rem', fontWeight: 600, color: isReturn ? '#b45309' : '#166534' }}>
-                      {isReturn ? 'Tổng tiền hàng trả về' : 'Tổng tiền hàng'}
-                    </div>
-                    <div style={{ fontSize: '0.6875rem', color: isReturn ? '#d97706' : '#15803d' }}>
-                      ({items.reduce((acc: number, item: any) => acc + (Number(item.soLuong || item.quantity) || 1), 0)} sản phẩm)
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '1.125rem', fontWeight: 800, color: isReturn ? '#b45309' : '#15803d' }}>
-                    {formatNumberGroup(
-                      items.reduce((acc: number, item: any) => acc + (Number(item.thanhTien || item.total) || ((Number(item.soLuong || item.quantity) || 1) * (Number(item.donGia || item.price) || 0))), 0)
-                    )} đ
-                  </div>
+                        return (
+                          <tr
+                            key={prod.id || pIdx}
+                            style={{
+                              borderBottom: pIdx === items.length - 1 ? 'none' : '1px solid #f1f5f9',
+                            }}
+                          >
+                            <td style={{ padding: '9px 12px', verticalAlign: 'top' }}>
+                              <div style={{ fontWeight: 600, color: '#0f172a', lineHeight: '1.35' }}>
+                                {prod.tenHang || prod.productName}
+                              </div>
+                              {(displayCode || displayBom) && (
+                                <div style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '2px' }}>
+                                  {displayCode && <span>Mã: {displayCode}</span>}
+                                  {displayBom && <span>{displayCode ? ' • ' : ''}ĐM: {displayBom}</span>}
+                                </div>
+                              )}
+                              <div style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span>SL: <strong style={{ color: '#334155' }}>{qty} {unit}</strong></span>
+                                <span style={{ color: '#cbd5e1' }}>•</span>
+                                <span>Đơn giá: <strong style={{ color: '#334155' }}>{formatNumberGroup(price)} đ</strong></span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '9px 12px', textAlign: 'right', verticalAlign: 'top', whiteSpace: 'nowrap', fontWeight: 700, color: isReturn ? '#d97706' : '#0369a1' }}>
+                              {formatNumberGroup(total)} đ
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}

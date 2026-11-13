@@ -24,11 +24,13 @@ export interface DefectRecord {
   mediaUrls: string[];
   bomCode?: string;
 
-  // Thông tin bảo hành
+  // Thông tin đơn hàng & bảo hành
+  orderNumber?: string | null;
   customerName?: string;
   customerPhone?: string;
   customerAddress?: string;
   purchaseDate?: string;
+  completionDate?: string | null;
 
   // Kỹ thuật
   isRepairable?: boolean;

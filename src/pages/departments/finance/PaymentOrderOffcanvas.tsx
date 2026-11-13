@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Printer,
   CheckCircle,
 } from 'react-bootstrap-icons';
 import { Offcanvas } from '../../../components/common/Offcanvas';
@@ -166,25 +165,14 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
       width="400px"
       position="right"
       footer={
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '8px' }}>
-            <Button
-              variant="outline"
-              size="sm"
-              leftIcon={<Printer size={15} />}
-              onClick={() => window.print()}
-            >
-              In lệnh chi
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={onClose}
-            >
-              Đóng
-            </Button>
-          </div>
-
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', width: '100%' }}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onClose}
+          >
+            Đóng
+          </Button>
           {!isCompleted && (
             <Button
               variant="primary"
@@ -192,7 +180,7 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
               leftIcon={<CheckCircle size={15} />}
               disabled={isExecuting}
               onClick={handleExecutePayment}
-              style={{ width: '100%', justifyContent: 'center' }}
+              style={{ flex: 1, justifyContent: 'center', whiteSpace: 'nowrap' }}
             >
               {isExecuting ? 'Đang hạch toán & xuất quỹ...' : 'Xác nhận đã chi tiền / Lập phiếu chi'}
             </Button>

@@ -136,6 +136,7 @@ export const DebtAgingConfigOffcanvas: React.FC<DebtAgingConfigOffcanvasProps> =
     <Offcanvas
       isOpen={isOpen}
       onClose={onClose}
+      closeOnBackdropClick={false}
       width="400px"
       icon={<GearFill size={20} color="var(--color-primary)" />}
       title={stepTitle}

@@ -2,6 +2,24 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { getAvatarInitials } from '../../utils/avatar';
 import { Offcanvas } from '../common/Offcanvas';
+import {
+  MessageSquare,
+  Search,
+  X,
+  ArrowLeft,
+  CheckCheck,
+  CheckCircle2,
+  ChevronRight,
+  User,
+  Users,
+  Plus,
+  Paperclip,
+  Mic,
+  Send,
+  Loader2,
+  Phone,
+  Sparkles,
+} from 'lucide-react';
 
 export interface SalesStaffMember {
   id: string;
@@ -192,8 +210,8 @@ function VoiceAttachmentPlayer({
         gap: '10px',
         padding: '8px 11px',
         borderRadius: '12px',
-        background: isBubbleSentByMe ? 'rgba(255,255,255,0.16)' : '#f1f5f9',
-        border: isBubbleSentByMe ? '1px solid rgba(255,255,255,0.28)' : '1px solid #e2e8f0',
+        background: isBubbleSentByMe ? 'rgba(0, 104, 255, 0.08)' : '#f8fafc',
+        border: isBubbleSentByMe ? '1px solid rgba(0, 104, 255, 0.2)' : '1px solid #e2e8f0',
         minWidth: '210px',
         maxWidth: '100%',
       }}
@@ -229,16 +247,14 @@ function VoiceAttachmentPlayer({
           height: '34px',
           borderRadius: '50%',
           border: 'none',
-          background: isBubbleSentByMe
-            ? '#ffffff'
-            : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-          color: isBubbleSentByMe ? '#4f46e5' : '#ffffff',
+          background: '#0068ff',
+          color: '#ffffff',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           cursor: 'pointer',
           flexShrink: 0,
-          boxShadow: '0 2px 6px rgba(15,23,42,0.12)',
+          boxShadow: '0 2px 6px rgba(0, 104, 255, 0.25)',
         }}
       >
         <i
@@ -273,10 +289,10 @@ function VoiceAttachmentPlayer({
                   transition: 'height 0.15s ease, background-color 0.15s ease',
                   background: isBubbleSentByMe
                     ? active
-                      ? '#ffffff'
-                      : 'rgba(255,255,255,0.42)'
+                      ? '#0068ff'
+                      : 'rgba(0, 104, 255, 0.25)'
                     : active
-                    ? '#4f46e5'
+                    ? '#0068ff'
                     : '#cbd5e1',
                 }}
               />
@@ -290,12 +306,12 @@ function VoiceAttachmentPlayer({
             alignItems: 'center',
             justifyContent: 'space-between',
             fontSize: '10.5px',
-            color: isBubbleSentByMe ? 'rgba(255,255,255,0.9)' : '#64748b',
+            color: isBubbleSentByMe ? '#081c36' : '#64748b',
             fontWeight: 600,
           }}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-            <i className="bi bi-mic-fill" style={{ fontSize: '10px' }} />
+            <i className="bi bi-mic-fill" style={{ fontSize: '10px', color: '#0068ff' }} />
             Tin nhắn thoại
           </span>
           <span style={{ fontFamily: 'monospace' }}>
@@ -1036,13 +1052,13 @@ function VoiceControlPanel({
             padding: '5px 9px',
             borderRadius: '7px',
             background: 'rgba(255,255,255,0.85)',
-            border: '1px solid #e0e7ff',
+            border: '1px solid #dbeafe',
             fontSize: '11.5px',
-            color: '#1e1b4b',
+            color: '#081c36',
             lineHeight: 1.4,
           }}
         >
-          <i className="bi bi-quote text-indigo-500" style={{ marginRight: '4px' }} />
+          <i className="bi bi-quote text-[#0068ff]" style={{ marginRight: '4px' }} />
           {liveTranscript}
         </div>
       )}
@@ -1079,7 +1095,7 @@ function AttachmentList({
               borderRadius: '10px',
               overflow: 'hidden',
               border: isBubbleSentByMe
-                ? '1px solid rgba(255,255,255,0.25)'
+                ? '1px solid #c7dcfc'
                 : '1px solid #e2e8f0',
               maxWidth: '100%',
             }}
@@ -1106,7 +1122,7 @@ function AttachmentList({
             <div
               style={{
                 padding: '5px 8px',
-                background: isBubbleSentByMe ? 'rgba(0,0,0,0.15)' : '#f8fafc',
+                background: isBubbleSentByMe ? 'rgba(255,255,255,0.9)' : '#f8fafc',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -1116,7 +1132,7 @@ function AttachmentList({
               <span
                 style={{
                   fontSize: '11px',
-                  color: isBubbleSentByMe ? '#fff' : '#475569',
+                  color: '#081c36',
                   fontWeight: 500,
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -1130,7 +1146,7 @@ function AttachmentList({
                 download={att.name}
                 style={{
                   fontSize: '11px',
-                  color: isBubbleSentByMe ? '#e0e7ff' : '#6366f1',
+                  color: '#0068ff',
                   fontWeight: 600,
                   textDecoration: 'none',
                   flexShrink: 0,
@@ -1151,10 +1167,10 @@ function AttachmentList({
               alignItems: 'center',
               gap: '8px',
               padding: '7px 10px',
-              background: isBubbleSentByMe ? 'rgba(255,255,255,0.15)' : '#f8fafc',
+              background: isBubbleSentByMe ? 'rgba(255,255,255,0.85)' : '#f8fafc',
               borderRadius: '8px',
               border: isBubbleSentByMe
-                ? '1px solid rgba(255,255,255,0.25)'
+                ? '1px solid #c7dcfc'
                 : '1px solid #e2e8f0',
               textDecoration: 'none',
             }}
@@ -1164,7 +1180,7 @@ function AttachmentList({
                 width: '28px',
                 height: '28px',
                 borderRadius: '7px',
-                background: isBubbleSentByMe ? 'rgba(255,255,255,0.2)' : '#eef2ff',
+                background: isBubbleSentByMe ? '#e5efff' : '#f1f5f9',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1173,7 +1189,7 @@ function AttachmentList({
             >
               <i
                 className={`bi ${getFileIcon(att.type, att.name)}`}
-                style={{ fontSize: '14px', color: isBubbleSentByMe ? '#fff' : '#6366f1' }}
+                style={{ fontSize: '14px', color: '#0068ff' }}
               />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -1182,7 +1198,7 @@ function AttachmentList({
                   margin: 0,
                   fontSize: '11.5px',
                   fontWeight: 600,
-                  color: isBubbleSentByMe ? '#fff' : '#1e293b',
+                  color: '#081c36',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
@@ -1193,7 +1209,7 @@ function AttachmentList({
               <span
                 style={{
                   fontSize: '10px',
-                  color: isBubbleSentByMe ? 'rgba(255,255,255,0.75)' : '#94a3b8',
+                  color: '#64748b',
                 }}
               >
                 {formatFileSize(att.size)}
@@ -1203,7 +1219,7 @@ function AttachmentList({
               className="bi bi-download"
               style={{
                 fontSize: '13px',
-                color: isBubbleSentByMe ? '#fff' : '#6366f1',
+                color: '#0068ff',
                 flexShrink: 0,
               }}
             />
@@ -1290,6 +1306,7 @@ function SendSheet({
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (sending) return;
     if (!content.trim() && attachments.length === 0) {
       setError('Vui lòng nhập nội dung tin nhắn hoặc đính kèm tệp.');
       return;
@@ -1361,90 +1378,23 @@ function SendSheet({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div
-        style={{
-          padding: '14px 16px',
-          borderBottom: '1px solid #f1f5f9',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          background: 'linear-gradient(135deg,#fafafe,#f4f6fb)',
-          flexShrink: 0,
-        }}
-      >
-        <button
-          type="button"
-          onClick={onBack}
-          style={{
-            width: '30px',
-            height: '30px',
-            borderRadius: '8px',
-            border: '1px solid #e2e8f0',
-            background: '#fff',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#475569',
-            flexShrink: 0,
-          }}
-        >
-          <i className="bi bi-arrow-left" style={{ fontSize: '13px' }} />
-        </button>
-        <div>
-          <p style={{ margin: 0, fontWeight: 700, fontSize: '14px', color: '#0f172a' }}>
-            Soạn tin nhắn mới
-          </p>
-          <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8' }}>
-            Gửi tin nhắn trực tiếp cho nhân sự hoặc khách hàng
-          </p>
-        </div>
-      </div>
-
+    <div className="flex flex-col h-full bg-white">
       <form
         onSubmit={handleSend}
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '14px 16px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '12px',
-        }}
+        className="flex-1 overflow-y-auto p-4 flex flex-col gap-3.5"
       >
         {error && (
-          <div
-            style={{
-              padding: '8px 12px',
-              background: '#fef2f2',
-              border: '1px solid #fecaca',
-              borderRadius: '8px',
-              color: '#dc2626',
-              fontSize: '12px',
-              display: 'flex',
-              gap: '6px',
-              alignItems: 'center',
-            }}
-          >
-            <i className="bi bi-exclamation-circle-fill" style={{ flexShrink: 0 }} />
-            {error}
+          <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-600 text-xs font-medium flex items-center gap-2">
+            <i className="bi bi-exclamation-circle-fill shrink-0" />
+            <span>{error}</span>
           </div>
         )}
 
         <div>
-          <label
-            style={{
-              fontSize: '11.5px',
-              fontWeight: 600,
-              color: '#475569',
-              display: 'block',
-              marginBottom: '6px',
-            }}
-          >
-            Gửi đến <span style={{ color: '#ef4444' }}>*</span>
+          <label className="text-xs font-bold text-slate-700 block mb-1.5">
+            Gửi đến <span className="text-rose-500">*</span>
           </label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+          <div className="grid grid-cols-2 gap-2">
             {audienceOpts.map((opt) => {
               const active = audience === opt.key;
               return (
@@ -1457,22 +1407,14 @@ function SendSheet({
                     setGroupIds([]);
                     setUserSearch('');
                   }}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: '8px',
-                    border: active ? '1.5px solid #6366f1' : '1.5px solid #e2e8f0',
-                    background: active ? '#eef2ff' : '#fff',
-                    color: active ? '#4f46e5' : '#475569',
-                    fontWeight: active ? 600 : 500,
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}
+                  className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    active
+                      ? 'border-[#0068ff] bg-[#0068ff]/10 text-[#0068ff] shadow-xs'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
                 >
-                  <i className={`bi ${opt.icon}`} style={{ fontSize: '13px' }} />
-                  {opt.label}
+                  <i className={`bi ${opt.icon}`} />
+                  <span>{opt.label}</span>
                 </button>
               );
             })}
@@ -1480,67 +1422,32 @@ function SendSheet({
         </div>
 
         {(audience === 'individual' || audience === 'group') && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <label style={{ fontSize: '11.5px', fontWeight: 600, color: '#475569' }}>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-700">
                 {audience === 'individual' ? 'Chọn người nhận' : 'Chọn thành viên nhận tin'}{' '}
-                <span style={{ color: '#ef4444' }}>*</span>
+                <span className="text-rose-500">*</span>
               </label>
               {audience === 'group' && groupIds.length > 0 && (
-                <span
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    color: '#6366f1',
-                    background: '#eef2ff',
-                    padding: '1px 8px',
-                    borderRadius: '99px',
-                  }}
-                >
+                <span className="text-[11px] font-semibold text-[#0068ff] bg-[#0068ff]/10 px-2 py-0.5 rounded-full border border-[#0068ff]/20">
                   Đã chọn {groupIds.length} người
                 </span>
               )}
             </div>
 
-            <div style={{ position: 'relative' }}>
-              <i
-                className="bi bi-search"
-                style={{
-                  position: 'absolute',
-                  left: '10px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: '#94a3b8',
-                  fontSize: '12px',
-                }}
-              />
+            <div className="relative flex items-center">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 pointer-events-none" />
               <input
                 value={userSearch}
                 onChange={(e) => setUserSearch(e.target.value)}
                 placeholder="Tìm theo tên hoặc phòng ban..."
-                style={{ ...inp, paddingLeft: '28px', fontSize: '12px', padding: '6px 10px 6px 28px' }}
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#0068ff] focus:border-[#0068ff] focus:bg-white text-slate-800 placeholder-slate-400"
               />
             </div>
 
-            <div
-              style={{
-                maxHeight: '165px',
-                overflowY: 'auto',
-                border: '1.5px solid #e2e8f0',
-                borderRadius: '8px',
-                background: '#fff',
-              }}
-            >
+            <div className="max-h-[160px] overflow-y-auto border border-slate-200 rounded-xl bg-white divide-y divide-slate-100 shadow-2xs">
               {filteredUsers.length === 0 ? (
-                <p
-                  style={{
-                    margin: 0,
-                    padding: '12px',
-                    textAlign: 'center',
-                    fontSize: '12px',
-                    color: '#94a3b8',
-                  }}
-                >
+                <p className="m-0 p-3 text-center text-xs text-slate-400">
                   Không tìm thấy người nhận phù hợp
                 </p>
               ) : (
@@ -1557,66 +1464,41 @@ function SendSheet({
                           toggleGroupUser(u.id);
                         }
                       }}
-                      style={{
-                        padding: '8px 10px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        cursor: 'pointer',
-                        borderBottom: '1px solid #f8fafc',
-                        background: checked ? '#eef2ff' : 'transparent',
-                      }}
+                      className={`p-2.5 flex items-center gap-2.5 cursor-pointer transition-colors ${
+                        checked ? 'bg-[#0068ff]/8' : 'hover:bg-slate-50'
+                      }`}
                     >
                       {audience === 'individual' ? (
                         <div
-                          style={{
-                            width: '16px',
-                            height: '16px',
-                            borderRadius: '50%',
-                            border: checked ? '5px solid #6366f1' : '1.5px solid #cbd5e1',
-                            background: '#fff',
-                            flexShrink: 0,
-                            boxSizing: 'border-box',
-                          }}
-                        />
+                          className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                            checked
+                              ? 'border-[#0068ff] bg-[#0068ff]'
+                              : 'border-slate-300 bg-white'
+                          }`}
+                        >
+                          {checked && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </div>
                       ) : (
                         <div
-                          style={{
-                            width: '16px',
-                            height: '16px',
-                            borderRadius: '4px',
-                            border: checked ? 'none' : '1.5px solid #cbd5e1',
-                            background: checked ? '#6366f1' : '#fff',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0,
-                          }}
+                          className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${
+                            checked
+                              ? 'border-[#0068ff] bg-[#0068ff] text-white'
+                              : 'border-slate-300 bg-white'
+                          }`}
                         >
-                          {checked && (
-                            <i
-                              className="bi bi-check"
-                              style={{ color: '#fff', fontSize: '12px', lineHeight: 1 }}
-                            />
-                          )}
+                          {checked && <CheckCheck className="w-3 h-3 text-white" />}
                         </div>
                       )}
-                      <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="flex-1 min-w-0">
                         <p
-                          style={{
-                            margin: 0,
-                            fontSize: '12.5px',
-                            fontWeight: checked ? 600 : 500,
-                            color: '#1e293b',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
+                          className={`m-0 text-xs truncate ${
+                            checked ? 'font-bold text-[#0068ff]' : 'font-semibold text-slate-800'
+                          }`}
                         >
                           {u.name}
                         </p>
                         {(u.code || u.position || u.department) && (
-                          <span style={{ fontSize: '10.5px', color: '#94a3b8' }}>
+                          <span className="text-[10.5px] text-slate-500 block truncate">
                             {[u.code, u.position, u.department].filter(Boolean).join(' • ')}
                           </span>
                         )}
@@ -1630,124 +1512,65 @@ function SendSheet({
         )}
 
         <div>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '5px',
-            }}
-          >
-            <label
-              style={{
-                fontSize: '11.5px',
-                fontWeight: 600,
-                color: '#475569',
-              }}
-            >
-              Nội dung tin nhắn <span style={{ color: '#ef4444' }}>*</span>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-xs font-bold text-slate-700">
+              Nội dung tin nhắn <span className="text-rose-500">*</span>
             </label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => sendSheetVoice.startVoice('dictation')}
-                style={{
-                  padding: '3px 8px',
-                  borderRadius: '6px',
-                  border:
-                    sendSheetVoice.isActive && sendSheetVoice.mode === 'dictation'
-                      ? '1px solid #f43f5e'
-                      : '1px solid #c7d2fe',
-                  background:
-                    sendSheetVoice.isActive && sendSheetVoice.mode === 'dictation'
-                      ? '#fff1f2'
-                      : '#eef2ff',
-                  color:
-                    sendSheetVoice.isActive && sendSheetVoice.mode === 'dictation'
-                      ? '#e11d48'
-                      : '#4f46e5',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
+                className={`px-2 py-0.5 rounded-lg border text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
+                  sendSheetVoice.isActive && sendSheetVoice.mode === 'dictation'
+                    ? 'bg-rose-50 border-rose-300 text-rose-600 animate-pulse'
+                    : 'bg-[#0068ff]/10 border-[#0068ff]/20 text-[#0068ff] hover:bg-[#0068ff]/20'
+                }`}
                 title="Nhập nội dung bằng giọng nói"
               >
-                <i className="bi bi-mic-fill" style={{ fontSize: '11px' }} />
+                <Mic className="w-3 h-3" />
                 <span>Nói thành chữ</span>
               </button>
               <button
                 type="button"
                 onClick={() => sendSheetVoice.startVoice('audio')}
-                style={{
-                  padding: '3px 8px',
-                  borderRadius: '6px',
-                  border:
-                    sendSheetVoice.isActive && sendSheetVoice.mode === 'audio'
-                      ? '1px solid #f43f5e'
-                      : '1px solid #e2e8f0',
-                  background:
-                    sendSheetVoice.isActive && sendSheetVoice.mode === 'audio'
-                      ? '#fff1f2'
-                      : '#f8fafc',
-                  color:
-                    sendSheetVoice.isActive && sendSheetVoice.mode === 'audio'
-                      ? '#e11d48'
-                      : '#475569',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
+                className={`px-2 py-0.5 rounded-lg border text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
+                  sendSheetVoice.isActive && sendSheetVoice.mode === 'audio'
+                    ? 'bg-rose-50 border-rose-300 text-rose-600 animate-pulse'
+                    : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+                }`}
                 title="Ghi âm tin nhắn thoại đính kèm"
               >
-                <i className="bi bi-soundwave" style={{ fontSize: '12px' }} />
-                <span>Ghi âm thoại</span>
+                <i className="bi bi-soundwave text-[11px]" />
+                <span>Ghi âm</span>
               </button>
             </div>
           </div>
           {sendSheetVoice.isActive && (
-            <div style={{ marginBottom: '6px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #c7d2fe' }}>
+            <div className="mb-2 rounded-xl overflow-hidden border border-[#0068ff]/20">
               <VoiceControlPanel voice={sendSheetVoice} textValue={content} />
             </div>
           )}
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="Nhập tin nhắn hoặc bấm Micro để nói bằng giọng nói..."
-            rows={4}
-            style={{ ...inp, resize: 'vertical', lineHeight: '1.5' }}
+            placeholder="Nhập tin nhắn hoặc bấm Micro để nói..."
+            rows={3}
+            className="w-full p-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#0068ff] focus:border-[#0068ff] focus:bg-white text-slate-800 placeholder-slate-400 resize-none transition-all leading-relaxed"
           />
         </div>
 
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-            <label style={{ fontSize: '11.5px', fontWeight: 600, color: '#475569' }}>
-              Đính kèm ảnh / tệp tin / ghi âm
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-xs font-bold text-slate-700">
+              Đính kèm tệp / ghi âm
             </label>
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              style={{
-                padding: '4px 10px',
-                borderRadius: '6px',
-                border: '1px solid #c7d2fe',
-                background: '#eef2ff',
-                color: '#4f46e5',
-                fontSize: '11.5px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-              }}
+              className="px-2 py-1 rounded-lg border border-[#0068ff]/20 bg-[#0068ff]/10 hover:bg-[#0068ff]/20 text-[#0068ff] text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
-              <i className="bi bi-paperclip" style={{ fontSize: '13px' }} />
-              Chọn tệp
+              <Paperclip className="w-3.5 h-3.5" />
+              <span>Chọn tệp</span>
             </button>
             <input
               ref={fileInputRef}
@@ -1755,79 +1578,45 @@ function SendSheet({
               multiple
               accept="image/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.zip,.rar,.txt"
               onChange={handleFileChange}
-              style={{ display: 'none' }}
+              className="hidden"
             />
           </div>
 
           {attachments.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <div className="flex flex-col gap-1.5">
               {attachments.map((att, idx) =>
                 isAudioAttachment(att) ? (
-                  <div key={idx} style={{ display: 'flex', alignItems: 'center' }}>
+                  <div key={idx} className="flex items-center">
                     <PendingAudioAttachmentChip att={att} onRemove={() => removeAttachment(idx)} />
                   </div>
                 ) : (
                   <div
                     key={idx}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '6px 9px',
-                      background: '#f8fafc',
-                      borderRadius: '7px',
-                      border: '1px solid #e2e8f0',
-                    }}
+                    className="flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200"
                   >
                     {att.type.startsWith('image/') ? (
                       <img
                         src={att.dataUrl}
                         alt={att.name}
-                        style={{
-                          width: '28px',
-                          height: '28px',
-                          borderRadius: '5px',
-                          objectFit: 'cover',
-                          flexShrink: 0,
-                        }}
+                        className="w-7 h-7 rounded-md object-cover shrink-0"
                       />
                     ) : (
-                      <i
-                        className={`bi ${getFileIcon(att.type, att.name)}`}
-                        style={{ fontSize: '16px', color: '#6366f1', flexShrink: 0 }}
-                      />
+                      <Paperclip className="w-4 h-4 text-[#0068ff] shrink-0" />
                     )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: '11.5px',
-                          fontWeight: 500,
-                          color: '#1e293b',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
+                    <div className="flex-1 min-w-0">
+                      <p className="m-0 text-xs font-semibold text-slate-800 truncate">
                         {att.name}
                       </p>
-                      <span style={{ fontSize: '10px', color: '#94a3b8' }}>
+                      <span className="text-[10px] text-slate-400">
                         {formatFileSize(att.size)}
                       </span>
                     </div>
                     <button
                       type="button"
                       onClick={() => removeAttachment(idx)}
-                      style={{
-                        border: 'none',
-                        background: 'none',
-                        color: '#ef4444',
-                        cursor: 'pointer',
-                        padding: '2px 4px',
-                        fontSize: '13px',
-                      }}
+                      className="p-1 text-slate-400 hover:text-rose-500 cursor-pointer"
                     >
-                      <i className="bi bi-x-lg" />
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 )
@@ -1839,25 +1628,14 @@ function SendSheet({
         <button
           type="submit"
           disabled={sending}
-          style={{
-            marginTop: 'auto',
-            padding: '10px',
-            borderRadius: '9px',
-            border: 'none',
-            background: sending ? '#a5b4fc' : 'linear-gradient(135deg,#6366f1,#8b5cf6)',
-            color: '#fff',
-            fontWeight: 700,
-            fontSize: '13px',
-            cursor: sending ? 'not-allowed' : 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '7px',
-            boxShadow: sending ? 'none' : '0 4px 12px rgba(99,102,241,0.3)',
-          }}
+          className="mt-auto py-2.5 px-4 rounded-xl bg-[#0068ff] hover:bg-[#0058db] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <i className="bi bi-send-fill" />
-          {sending ? 'Đang gửi...' : 'Gửi tin nhắn ngay'}
+          {sending ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Send className="w-4 h-4" />
+          )}
+          <span>{sending ? 'Đang gửi...' : 'Gửi tin nhắn ngay'}</span>
         </button>
       </form>
     </div>
@@ -1955,18 +1733,23 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
     return () => clearInterval(timer);
   }, [isOpen, isCustomer, activeStaff?.id, fetchCustomerThread]);
 
+  const isCustomerSendingRef = useRef(false);
+
   const handleSendCustomerMessage = async (
     rawText?: string,
     directAttachments?: AttachmentItem[]
   ) => {
+    if (isCustomerSendingRef.current || customerSending) return;
     const text = (rawText ?? customerInput).trim();
     const effectiveAttachments = directAttachments ?? customerAttachments;
-    if ((!text && effectiveAttachments.length === 0) || customerSending) return;
+    if (!text && effectiveAttachments.length === 0) return;
 
-    if (rawText === undefined || directAttachments !== undefined) setCustomerInput('');
+    isCustomerSendingRef.current = true;
+    setCustomerSending(true);
+
+    if (rawText === undefined) setCustomerInput('');
     const filesToSend = [...effectiveAttachments];
     if (!directAttachments) setCustomerAttachments([]);
-    setCustomerSending(true);
 
     try {
       const res = await fetch('/api/messages', {
@@ -1992,8 +1775,10 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
         }
       }
     } catch {
-      // ignore
+      if (rawText === undefined) setCustomerInput(text);
+      if (!directAttachments) setCustomerAttachments(filesToSend);
     } finally {
+      isCustomerSendingRef.current = false;
       setCustomerSending(false);
     }
   };
@@ -2046,7 +1831,9 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
   const [replyAttachments, setReplyAttachments] = useState<AttachmentItem[]>([]);
   const [replySending, setReplySending] = useState(false);
   const [replyError, setReplyError] = useState('');
+  const isSendingReplyRef = useRef(false);
   const replyFileInputRef = useRef<HTMLInputElement>(null);
+  const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const fetchMessages = useCallback(
@@ -2070,14 +1857,22 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
     [isCustomer, getChatHeaders, onUnreadChange]
   );
 
-  // Polling danh sách tin nhắn nội bộ mỗi 3s khi mở Offcanvas
+  // Mở offcanvas: khởi tạo lại về Slide 1 danh sách
+  useEffect(() => {
+    if (isOpen && !isCustomer) {
+      setView('list');
+      setSelected(null);
+      setSearchQuery('');
+      fetchMessages(false);
+    }
+  }, [isOpen]);
+
+  // Polling danh sách tin nhắn định kỳ mà KHÔNG reset view của người dùng
   useEffect(() => {
     if (!isOpen || isCustomer) return;
-    setView('list');
-    fetchMessages(false);
     const timer = setInterval(() => {
       fetchMessages(true);
-    }, 3000);
+    }, 3500);
     return () => clearInterval(timer);
   }, [isOpen, isCustomer, fetchMessages]);
 
@@ -2212,7 +2007,7 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
     directAttachments?: AttachmentItem[]
   ) => {
     if (e) e.preventDefault();
-    if (!selected) return;
+    if (!selected || isSendingReplyRef.current) return;
     const textToSend = (directText ?? replyContent).trim();
     const filesToSend = directAttachments ?? replyAttachments;
     if (!textToSend && filesToSend.length === 0) {
@@ -2226,8 +2021,20 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
       return;
     }
 
+    // Atomic synchronous guard to prevent duplicate submission on Enter or fast click
+    isSendingReplyRef.current = true;
     setReplySending(true);
     setReplyError('');
+
+    // Clear input immediately so subsequent events or keystrokes find an empty box
+    if (directText === undefined) {
+      setReplyContent('');
+      if (replyTextareaRef.current) {
+        replyTextareaRef.current.style.height = 'auto';
+      }
+    }
+    if (!directAttachments) setReplyAttachments([]);
+
     try {
       const res = await fetch('/api/messages', {
         method: 'POST',
@@ -2247,16 +2054,22 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
         throw new Error(d.error || 'Lỗi gửi phản hồi');
       }
       const data = await res.json();
-      setReplyContent('');
-      if (!directAttachments) setReplyAttachments([]);
       if (data.message) {
         setThread((prev) => [...prev, data.message]);
         setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 80);
       }
       fetchMessages(true);
     } catch (err: any) {
-      setReplyError(err.message);
+      // Restore input text and attachments on failure
+      if (directText === undefined) {
+        setReplyContent(textToSend);
+      }
+      if (!directAttachments) {
+        setReplyAttachments(filesToSend);
+      }
+      setReplyError(err.message || 'Lỗi gửi tin nhắn');
     } finally {
+      isSendingReplyRef.current = false;
       setReplySending(false);
     }
   };
@@ -2344,7 +2157,7 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
           <div className="px-4 py-3 bg-white border-b border-slate-100 flex items-center justify-between gap-2.5 shrink-0">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="relative shrink-0">
-                <div className="w-10 h-10 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center shadow-sm">
+                <div className="w-10 h-10 rounded-full bg-[#0068ff] text-white text-xs font-bold flex items-center justify-center shadow-xs">
                   {activeStaff.avatarText || getAvatarInitials(activeStaff.name)}
                 </div>
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white absolute -bottom-0.5 -right-0.5" />
@@ -2354,7 +2167,7 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
                   <span className="text-[13px] font-bold text-slate-900 truncate">
                     {activeStaff.name}
                   </span>
-                  <span className="px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/80 text-[10px] font-semibold">
+                  <span className="px-1.5 py-0.5 rounded-md bg-[#0068ff]/10 text-[#0068ff] border border-[#0068ff]/20 text-[10px] font-semibold">
                     {activeStaff.position}
                   </span>
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold">
@@ -2389,17 +2202,17 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
             )}
           </div>
 
-          {/* Danh sách tin nhắn hội thoại thực tế từ CSDL */}
-          <div className="flex-1 overflow-y-auto p-3.5 space-y-3 bg-slate-50/60">
+          {/* Danh sách tin nhắn hội thoại thực tế từ CSDL - Zalo Theme */}
+          <div className="flex-1 overflow-y-auto p-3.5 space-y-3 bg-[#eef3f7]">
             {/* Lời chào mở đầu của nhân viên bán hàng */}
             <div className="flex flex-col items-start">
               <div className="flex items-center gap-1.5 mb-1 px-1">
-                <span className="text-[10.5px] font-semibold text-slate-600">
+                <span className="text-[10.5px] font-semibold text-[#0068ff]">
                   {activeStaff.name}
                 </span>
                 <span className="text-[10px] text-slate-400">Hỗ trợ trực tuyến</span>
               </div>
-              <div className="max-w-[88%] px-3.5 py-2.5 rounded-2xl text-[12.5px] leading-relaxed shadow-xs bg-white text-slate-800 border border-slate-200/90 rounded-tl-md">
+              <div className="max-w-[88%] px-3.5 py-2.5 rounded-2xl text-[12.5px] leading-relaxed shadow-2xs bg-white text-[#081c36] border border-[#e2e8f0] rounded-bl-xs">
                 Xin chào Quý khách! Tôi là <strong>{activeStaff.name}</strong> (
                 {activeStaff.position} - Phòng Kinh doanh Seajong
                 {activeStaff.phone ? `, SĐT: ${activeStaff.phone}` : ''}). Quý khách cần tư vấn sản
@@ -2429,10 +2242,10 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
                       </span>
                     </div>
                     <div
-                      className={`max-w-[88%] px-3.5 py-2.5 rounded-2xl text-[12.5px] leading-relaxed shadow-xs ${
+                      className={`max-w-[88%] px-3.5 py-2.5 rounded-2xl text-[12.5px] leading-relaxed shadow-2xs break-words ${
                         isMe
-                          ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-tr-md'
-                          : 'bg-white text-slate-800 border border-slate-200/90 rounded-tl-md'
+                          ? 'bg-[#e5efff] text-[#081c36] border border-[#c7dcfc] rounded-br-xs'
+                          : 'bg-white text-[#081c36] border border-[#e2e8f0] rounded-bl-xs'
                       }`}
                     >
                       {msg.content && (
@@ -2457,7 +2270,7 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
                 key={q}
                 type="button"
                 onClick={() => handleSendCustomerMessage(q)}
-                className="shrink-0 px-2.5 py-1 rounded-full bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 border border-slate-200/80 hover:border-indigo-200 text-[11px] font-medium transition-colors cursor-pointer"
+                className="shrink-0 px-2.5 py-1 rounded-full bg-slate-50 hover:bg-[#0068ff]/10 text-slate-600 hover:text-[#0068ff] border border-slate-200/80 hover:border-[#0068ff]/30 text-[11px] font-medium transition-colors cursor-pointer"
               >
                 {q}
               </button>
@@ -2484,7 +2297,7 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
                     key={idx}
                     className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white border border-slate-200 text-[11px] text-slate-700"
                   >
-                    <i className={`bi ${getFileIcon(att.type, att.name)} text-indigo-600`} />
+                    <i className={`bi ${getFileIcon(att.type, att.name)} text-[#0068ff]`} />
                     <span className="max-w-[140px] truncate">{att.name}</span>
                     <button
                       type="button"
@@ -2523,7 +2336,7 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
             <button
               type="button"
               onClick={() => customerFileRef.current?.click()}
-              className="w-9 h-9 rounded-xl border border-slate-200 bg-slate-50 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+              className="w-9 h-9 rounded-xl border border-slate-200 bg-slate-50 hover:bg-[#0068ff]/10 text-slate-500 hover:text-[#0068ff] flex items-center justify-center transition-colors cursor-pointer shrink-0"
               title="Đính kèm hình ảnh / tệp tin"
             >
               <i className="bi bi-paperclip text-sm" />
@@ -2542,7 +2355,7 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
               className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all cursor-pointer shrink-0 ${
                 customerVoice.isActive && customerVoice.mode === 'audio'
                   ? 'border-rose-500 bg-rose-500 text-white shadow-xs animate-pulse'
-                  : 'border-indigo-200 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-600'
+                  : 'border-[#0068ff]/30 bg-[#0068ff]/10 hover:bg-[#0068ff]/20 text-[#0068ff]'
               }`}
               title="Ghi âm tin nhắn thoại"
             >
@@ -2557,8 +2370,16 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
                     : customerInput
                 }
                 onChange={(e) => setCustomerInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if ((e.nativeEvent as any)?.isComposing) return;
+                    e.preventDefault();
+                    if (isCustomerSendingRef.current || customerSending) return;
+                    handleSendCustomerMessage();
+                  }
+                }}
                 placeholder={`Nhắn tin hoặc nói cho ${activeStaff.name}...`}
-                className="w-full pl-3 pr-9 py-2 text-[16px] sm:text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-400 bg-slate-50/70 focus:bg-white text-slate-800"
+                className="w-full pl-3 pr-9 py-2 text-[16px] sm:text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-[#0068ff] bg-slate-50/70 focus:bg-white text-slate-800"
               />
               <button
                 type="button"
@@ -2566,7 +2387,7 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
                 className={`absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center border-0 transition-all cursor-pointer ${
                   customerVoice.isActive && customerVoice.mode === 'dictation'
                     ? 'bg-rose-500 text-white shadow-2xs animate-pulse'
-                    : 'bg-transparent hover:bg-indigo-50 text-indigo-600'
+                    : 'bg-transparent hover:bg-[#0068ff]/10 text-[#0068ff]'
                 }`}
                 title="Nhập tin nhắn bằng giọng nói (Tiếng Việt)"
               >
@@ -2580,7 +2401,21 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
               </button>
             </div>
             <button
-              type="submit"
+              type="button"
+              onClick={() => {
+                if (customerVoice.isActive) {
+                  const combinedText = [customerInput.trim(), customerVoice.interimText.trim()]
+                    .filter(Boolean)
+                    .join(' ');
+                  if (customerVoice.mode === 'audio' || !combinedText) {
+                    customerVoice.stopAndSendAudio();
+                  } else {
+                    customerVoice.stopAndSendText();
+                  }
+                  return;
+                }
+                handleSendCustomerMessage();
+              }}
               disabled={
                 (!customerInput.trim() &&
                   customerAttachments.length === 0 &&
@@ -2592,7 +2427,7 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
                   customerAttachments.length > 0 ||
                   customerVoice.isActive) &&
                 !customerSending
-                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs cursor-pointer'
+                  ? 'bg-[#0068ff] hover:bg-[#0058db] text-white shadow-xs cursor-pointer'
                   : 'bg-slate-100 text-slate-400 cursor-not-allowed'
               }`}
             >
@@ -2606,992 +2441,607 @@ export const MessageOffcanvas: React.FC<MessageOffcanvasProps> = ({
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // GIAO DIỆN 2: NHÂN VIÊN NỘI BỘ (CHUẨN CLIENT-SEAJONG: LIST / SEND / DETAIL)
+  // GIAO DIỆN 2: NHÂN VIÊN NỘI BỘ (CHUẨN ENTERPRISE SEAJONG DESIGN SYSTEM)
   // ═══════════════════════════════════════════════════════════════════════════
   if (!isOpen) return null;
 
   return (
-    <>
+    <div className="fixed inset-0 z-[1050] overflow-hidden" role="dialog" aria-modal="true">
+      {/* Backdrop */}
       <div
+        className="fixed inset-0 bg-slate-900/30 backdrop-blur-xs transition-opacity animate-fade-in"
         onClick={onClose}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(15,23,42,0.28)',
-          backdropFilter: 'blur(2px)',
-          zIndex: 1040,
-        }}
+        aria-hidden="true"
       />
 
-      <div
-        className="offcanvas-panel"
-        style={{
-          position: 'fixed',
-          top: 0,
-          right: 0,
-          bottom: 0,
-          width: '400px',
-          maxWidth: '100vw',
-          background: '#fff',
-          zIndex: 1050,
-          boxShadow: '-8px 0 32px rgba(15,23,42,0.12)',
-          display: 'flex',
-          flexDirection: 'column',
-          borderLeft: '1px solid #f1f5f9',
-        }}
-      >
-        {view === 'send' ? (
-          <SendSheet
-            onBack={() => setView('list')}
-            onSent={() => {
-              setView('list');
-              fetchMessages(false);
-            }}
-            chatHeaders={getChatHeaders()}
-          />
-        ) : view === 'detail' && selected ? (
-          // ── Màn hình chi tiết cuộc hội thoại 1-1 ──
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            {/* Header thông tin đối tác hội thoại */}
-            <div
-              style={{
-                padding: '12px 16px',
-                borderBottom: '1px solid #f1f5f9',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                background: '#fff',
-                flexShrink: 0,
-              }}
-            >
+      {/* Drawer Panel - Chuẩn AGENTS.md width 400px */}
+      <div className="fixed inset-0 md:inset-y-0 md:left-auto md:right-0 max-w-full flex pl-0 md:pl-10 pointer-events-none">
+        <div 
+          className="offcanvas-panel pointer-events-auto w-full sm:w-[400px] max-w-[400px] h-full bg-white shadow-2xl flex flex-col border-0 sm:border-l border-slate-200 animate-slide-left overflow-hidden"
+          style={{ width: '400px' }}
+        >
+          {/* HEADER CHUẨN ĐỒNG BỘ TOÀN DỰ ÁN */}
+          <div className="offcanvas-header bg-slate-50/90 border-b border-slate-200 py-3.5 px-4 flex items-center justify-between shrink-0">
+            {view === 'list' ? (
+              <div className="offcanvas-header-content flex items-center gap-3 min-w-0 flex-1">
+                <div 
+                  className="offcanvas-header-icon shrink-0"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(0, 104, 255, 0.12) 0%, rgba(0, 104, 255, 0.22) 100%)',
+                    color: '#0068ff',
+                    borderColor: 'rgba(0, 104, 255, 0.25)',
+                  }}
+                  aria-hidden="true"
+                >
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <div className="offcanvas-header-text min-w-0 flex-1">
+                  <h3 className="offcanvas-title">Tin nhắn nội bộ</h3>
+                  <div className="offcanvas-description">
+                    {unreadCount > 0 ? `${unreadCount} tin nhắn chưa đọc` : 'Tất cả đã đọc'}
+                  </div>
+                </div>
+              </div>
+            ) : view === 'detail' && selected ? (
+              <div className="offcanvas-header-content flex items-center gap-2 min-w-0 flex-1">
+                <button
+                  type="button"
+                  onClick={() => setView('list')}
+                  className="px-2 py-1.5 -ml-1 rounded-lg text-slate-700 hover:text-[#0068ff] hover:bg-slate-200/70 transition-colors flex items-center gap-1.5 text-sm font-semibold cursor-pointer shrink-0"
+                  title="Quay về danh sách tin nhắn"
+                >
+                  <ArrowLeft className="w-4 h-4 text-[#0068ff]" />
+                  <span>Quay lại</span>
+                </button>
+                <div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <div className="w-7 h-7 rounded-full bg-[#0068ff] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                    {(selected.isSentByMe ? selected.recipientName || 'N' : selected.senderName).charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="offcanvas-title text-sm font-bold text-slate-900 truncate">
+                      {selected.isSentByMe ? selected.recipientName || 'Người nhận' : selected.senderName}
+                    </h4>
+                    <div className="text-[11px] text-[#0068ff] font-medium truncate">
+                      {[selected.senderPosition, selected.senderDepartment].filter(Boolean).join(' • ') || 'Trực tuyến'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="offcanvas-header-content flex items-center gap-2 min-w-0 flex-1">
+                <button
+                  type="button"
+                  onClick={() => setView('list')}
+                  className="px-2 py-1.5 -ml-1 rounded-lg text-slate-700 hover:text-[#0068ff] hover:bg-slate-200/70 transition-colors flex items-center gap-1.5 text-sm font-semibold cursor-pointer shrink-0"
+                  title="Quay về danh sách tin nhắn"
+                >
+                  <ArrowLeft className="w-4 h-4 text-[#0068ff]" />
+                  <span>Quay lại</span>
+                </button>
+                <div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
+                <h3 className="offcanvas-title text-sm sm:text-base font-bold text-slate-900">
+                  Soạn tin nhắn mới
+                </h3>
+              </div>
+            )}
+
+            <div className="flex items-center gap-1.5 shrink-0 ml-2">
+              {view === 'list' && unreadCount > 0 && (
+                <button
+                  type="button"
+                  onClick={markAllRead}
+                  className="p-1.5 rounded-lg text-slate-600 hover:text-[#0068ff] hover:bg-slate-200/60 transition-colors text-xs flex items-center gap-1 font-semibold cursor-pointer"
+                  title="Đánh dấu tất cả đã đọc"
+                >
+                  <CheckCheck className="w-4 h-4 text-[#0068ff]" />
+                  <span className="hidden sm:inline">Đọc hết</span>
+                </button>
+              )}
+              {view === 'detail' && (
+                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[11px] font-semibold shrink-0">
+                  {thread.length} tin
+                </span>
+              )}
               <button
                 type="button"
-                onClick={() => setView('list')}
-                style={{
-                  width: '30px',
-                  height: '30px',
-                  borderRadius: '8px',
-                  border: '1px solid #e2e8f0',
-                  background: '#f8fafc',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#475569',
-                }}
+                onClick={onClose}
+                className="offcanvas-close-btn p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                aria-label="Đóng bảng trượt"
               >
-                <i className="bi bi-arrow-left" style={{ fontSize: '13px' }} />
+                <X className="w-5 h-5" />
               </button>
-              <div
-                style={{
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: '10px',
-                  background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <span style={{ color: '#fff', fontWeight: 700, fontSize: '14px' }}>
-                  {(selected.isSentByMe
-                    ? selected.recipientName || 'N'
-                    : selected.senderName
-                  )
-                    .charAt(0)
-                    .toUpperCase()}
-                </span>
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p
-                  style={{
-                    margin: 0,
-                    fontWeight: 700,
-                    fontSize: '13.5px',
-                    color: '#0f172a',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {selected.isSentByMe
-                    ? selected.recipientName || 'Người nhận'
-                    : selected.senderName}
-                </p>
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: '11px',
-                    color: '#6366f1',
-                    fontWeight: 500,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {[selected.senderPosition, selected.senderDepartment]
-                    .filter(Boolean)
-                    .join(' • ') || 'Trực tuyến'}
-                </p>
-              </div>
-              <span
-                style={{
-                  fontSize: '10.5px',
-                  color: '#94a3b8',
-                  background: '#f1f5f9',
-                  padding: '3px 8px',
-                  borderRadius: '99px',
-                  flexShrink: 0,
-                }}
-              >
-                {thread.length} tin
-              </span>
             </div>
+          </div>
 
-            {/* Lịch sử hội thoại */}
-            <div
-              style={{
-                flex: 1,
-                overflowY: 'auto',
-                padding: '14px 14px 8px',
-                background: '#f8fafc',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-              }}
+          {/* VÙNG CHỨA 2 SLIDE CHUYỂN ĐỘNG TRƯỢT NGANG */}
+          <div className="flex-1 overflow-hidden relative w-full h-full">
+            <div 
+              className="flex w-full h-full transition-transform duration-300 ease-in-out"
+              style={{ transform: view === 'list' ? 'translateX(0%)' : 'translateX(-100%)' }}
             >
-              {threadLoading && thread.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
-                  <p style={{ margin: 0, fontSize: '12.5px' }}>Đang tải lịch sử hội thoại...</p>
+              {/* ══════════════ SLIDE 1: DANH SÁCH HỘI THOẠI ══════════════ */}
+              <div className="w-full min-w-full shrink-0 h-full flex flex-col bg-white overflow-hidden">
+                {/* Hộp tìm kiếm tin nhắn */}
+                <div className="px-3.5 pt-2.5 pb-2 bg-slate-50/50 border-b border-slate-100 shrink-0">
+                  <div className="relative flex items-center">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Tìm tin nhắn, đồng nghiệp, phòng ban..."
+                      className="w-full pl-9 pr-8 py-1.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#0068ff] focus:border-[#0068ff] transition-all text-slate-800 placeholder-slate-400"
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery('')}
+                        className="absolute right-2.5 p-1 rounded-full text-slate-400 hover:text-slate-600 cursor-pointer"
+                        title="Xóa tìm kiếm"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-              ) : thread.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
-                  <i
-                    className="bi bi-chat-dots"
-                    style={{ fontSize: '28px', display: 'block', marginBottom: '6px' }}
-                  />
-                  <p style={{ margin: 0, fontSize: '12.5px' }}>Chưa có tin nhắn nào</p>
-                </div>
-              ) : (
-                thread.map((msg, idx) => {
-                  const isMe = msg.isSentByMe;
-                  const msgDate = new Date(msg.createdAt).toLocaleDateString('vi-VN', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                  });
-                  const prevDate =
-                    idx > 0
-                      ? new Date(thread[idx - 1].createdAt).toLocaleDateString('vi-VN', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                        })
-                      : null;
-                  const showDateSep = idx === 0 || msgDate !== prevDate;
-                  const msgTime = formatClock(msg.createdAt);
 
-                  return (
-                    <React.Fragment key={msg.id}>
-                      {showDateSep && (
-                        <div style={{ textAlign: 'center', margin: '4px 0' }}>
-                          <span
-                            style={{
-                              fontSize: '10.5px',
-                              color: '#94a3b8',
-                              background: '#e2e8f0',
-                              padding: '2px 10px',
-                              borderRadius: '99px',
-                              fontWeight: 500,
-                            }}
-                          >
-                            {msgDate ===
-                            new Date().toLocaleDateString('vi-VN', {
-                              day: '2-digit',
-                              month: '2-digit',
-                              year: 'numeric',
-                            })
-                              ? 'Hôm nay'
-                              : msgDate}
-                          </span>
+                {/* Tabs & Nút soạn tin nhắn mới */}
+                <div className="flex items-center justify-between px-4 pt-2 border-b border-slate-100 bg-white shrink-0">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setTab('all')}
+                      className={`pb-2.5 text-sm font-semibold px-2 border-b-2 transition-colors cursor-pointer ${
+                        tab === 'all'
+                          ? 'border-[#0068ff] text-[#0068ff]'
+                          : 'border-transparent text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      Tất cả ({conversationList.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTab('unread')}
+                      className={`pb-2.5 text-sm font-semibold px-2 border-b-2 transition-colors cursor-pointer ${
+                        tab === 'unread'
+                          ? 'border-[#0068ff] text-[#0068ff]'
+                          : 'border-transparent text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      Chưa đọc{unreadCount > 0 ? ` (${unreadCount})` : ''}
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setView('send')}
+                    className="mb-2 px-2.5 py-1.5 rounded-lg bg-[#0068ff] hover:bg-[#0058db] text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Soạn tin</span>
+                  </button>
+                </div>
+
+                {/* Danh sách các cuộc trò chuyện */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
+                  {loading && displayed.length === 0 ? (
+                    <div className="h-64 flex flex-col items-center justify-center text-slate-400">
+                      <Loader2 className="w-8 h-8 text-[#0068ff] animate-spin mb-2" />
+                      <p className="text-sm font-medium">Đang tải tin nhắn...</p>
+                    </div>
+                  ) : displayed.length === 0 ? (
+                    <div className="h-64 flex flex-col items-center justify-center text-slate-400 text-center px-4">
+                      <CheckCircle2 className="w-11 h-11 stroke-[1.5] text-slate-300 mb-2" />
+                      <p className="text-sm font-medium text-slate-700">
+                        {searchQuery
+                          ? 'Không tìm thấy tin nhắn phù hợp'
+                          : tab === 'unread'
+                          ? 'Không có tin nhắn chưa đọc'
+                          : 'Chưa có cuộc trò chuyện nào'}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {tab === 'unread'
+                          ? 'Bạn đã xem hết tất cả tin nhắn.'
+                          : 'Bấm "Soạn tin" để bắt đầu trò chuyện nội bộ.'}
+                      </p>
+                    </div>
+                  ) : (
+                    displayed.map((m) => {
+                      const partnerName = m.isSentByMe
+                        ? m.recipientName || 'Người nhận'
+                        : m.senderName;
+                      const isCustomerPartner =
+                        m.senderId === 'guest-customer' ||
+                        m.recipientUserId === 'guest-customer' ||
+                        m.senderDepartmentCode === 'customer';
+                      const isGroup =
+                        partnerName.startsWith('Nhóm') ||
+                        partnerName.includes('người nhận');
+
+                      return (
+                        <div
+                          key={m.participantId}
+                          onClick={() => markRead(m)}
+                          className={`p-3 rounded-xl border transition-all cursor-pointer relative group flex gap-3 items-start ${
+                            !m.isRead
+                              ? 'bg-[#0068ff]/6 border-[#0068ff]/30 shadow-xs hover:border-[#0068ff]/50 hover:bg-[#0068ff]/10'
+                              : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/70'
+                          }`}
+                        >
+                          {/* Avatar */}
+                          <div className="relative shrink-0 mt-0.5">
+                            <div
+                              className={`w-10 h-10 rounded-full text-white font-bold text-sm flex items-center justify-center shadow-xs ${
+                                isCustomerPartner
+                                  ? 'bg-gradient-to-br from-emerald-500 to-teal-600'
+                                  : isGroup
+                                  ? 'bg-gradient-to-br from-amber-500 to-orange-600'
+                                  : 'bg-[#0068ff]'
+                              }`}
+                            >
+                              {isGroup ? (
+                                <Users className="w-5 h-5 text-white" />
+                              ) : (
+                                partnerName.charAt(0).toUpperCase()
+                              )}
+                            </div>
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white absolute -bottom-0.5 -right-0.5" />
+                          </div>
+
+                          {/* Nội dung tóm tắt */}
+                          <div className="flex-1 min-w-0">
+                            {/* Dòng 1: Tên & Thời gian & Chấm chưa đọc */}
+                            <div className="flex items-center justify-between gap-1 mb-0.5">
+                              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                <h4 className="text-sm font-bold text-slate-900 group-hover:text-[#0068ff] transition-colors truncate">
+                                  {partnerName}
+                                </h4>
+                                {isCustomerPartner && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 shrink-0">
+                                    Khách hàng
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="text-xs text-slate-400 font-medium">
+                                  {timeAgo(m.createdAt)}
+                                </span>
+                                {!m.isRead && (
+                                  <span className="w-2 h-2 rounded-full bg-[#0068ff] ring-2 ring-[#0068ff]/20" />
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Dòng 2: Chức vụ & Bộ phận */}
+                            {!m.isSentByMe && (m.senderPosition || m.senderDepartment) && (
+                              <div className="mb-1">
+                                <span className="inline-block text-[11px] font-semibold text-[#0068ff] bg-[#0068ff]/10 border border-[#0068ff]/20 px-1.5 py-0.5 rounded-md truncate max-w-full">
+                                  {[m.senderPosition, m.senderDepartment].filter(Boolean).join(' • ')}
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Dòng 3: Nội dung tin nhắn cuối */}
+                            <p className="text-xs text-slate-600 line-clamp-1 leading-relaxed">
+                              {m.isSentByMe && (
+                                <span className="font-semibold text-slate-500">Bạn: </span>
+                              )}
+                              {m.content ||
+                                (m.attachments && m.attachments.length > 0
+                                  ? m.attachments.some((a) => isAudioAttachment(a))
+                                    ? '🎤 [Tin nhắn thoại]'
+                                    : `📎 [Đính kèm ${m.attachments.length} tệp]`
+                                  : '')}
+                            </p>
+                          </div>
+
+                          {/* Mũi tên hover */}
+                          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-[#0068ff] group-hover:translate-x-0.5 transition-all shrink-0 mt-3 hidden sm:block" />
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Footer Slide 1 */}
+                <div className="p-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs text-slate-500 shrink-0">
+                  <span>Hệ thống tin nhắn Seajong v2.0</span>
+                  <span className="font-semibold text-[#0068ff]">{displayed.length} cuộc hội thoại</span>
+                </div>
+              </div>
+
+              {/* ══════════════ SLIDE 2: CHI TIẾT HỘI THOẠI HOẶC SOẠN TIN ══════════════ */}
+              <div className="w-full min-w-full shrink-0 h-full flex flex-col bg-white overflow-hidden">
+                {view === 'send' ? (
+                  <SendSheet
+                    onBack={() => setView('list')}
+                    onSent={() => {
+                      setView('list');
+                      fetchMessages(false);
+                    }}
+                    chatHeaders={getChatHeaders()}
+                  />
+                ) : selected ? (
+                  <div className="flex flex-col h-full bg-[#eef3f7]">
+                    {/* Danh sách tin nhắn trong thread - Zalo Look & Feel */}
+                    <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-[#eef3f7]">
+                      {threadLoading && thread.length === 0 ? (
+                        <div className="h-64 flex flex-col items-center justify-center text-slate-400">
+                          <Loader2 className="w-8 h-8 text-[#0068ff] animate-spin mb-2" />
+                          <p className="text-sm font-medium">Đang tải lịch sử hội thoại...</p>
+                        </div>
+                      ) : thread.length === 0 ? (
+                        <div className="h-64 flex flex-col items-center justify-center text-slate-400 text-center px-4">
+                          <MessageSquare className="w-10 h-10 stroke-[1.5] text-slate-300 mb-2" />
+                          <p className="text-sm font-medium text-slate-700">Chưa có tin nhắn nào</p>
+                          <p className="text-xs text-slate-400 mt-1">Gửi tin nhắn đầu tiên để bắt đầu trò chuyện</p>
+                        </div>
+                      ) : (
+                        thread.map((msg, idx) => {
+                          const isMe = msg.isSentByMe;
+                          const msgDate = new Date(msg.createdAt).toLocaleDateString('vi-VN', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                          });
+                          const prevDate =
+                            idx > 0
+                              ? new Date(thread[idx - 1].createdAt).toLocaleDateString('vi-VN', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric',
+                                })
+                              : null;
+                          const showDateSep = idx === 0 || msgDate !== prevDate;
+                          const msgTime = formatClock(msg.createdAt);
+
+                          return (
+                            <React.Fragment key={msg.id}>
+                              {showDateSep && (
+                                <div className="text-center my-1">
+                                  <span className="text-[10.5px] font-semibold text-[#556575] bg-[#dce6ee] px-2.5 py-0.5 rounded-full inline-block">
+                                    {msgDate ===
+                                    new Date().toLocaleDateString('vi-VN', {
+                                      day: '2-digit',
+                                      month: '2-digit',
+                                      year: 'numeric',
+                                    })
+                                      ? 'Hôm nay'
+                                      : msgDate}
+                                  </span>
+                                </div>
+                              )}
+
+                              <div
+                                className={`flex items-end gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}
+                              >
+                                {!isMe && (
+                                  <div className="w-7 h-7 rounded-full bg-[#0068ff] text-white font-bold text-xs flex items-center justify-center shrink-0 mb-1 shadow-2xs">
+                                    {msg.senderName.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+
+                                <div
+                                  className={`max-w-[82%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
+                                >
+                                  {!isMe && thread.some((t) => t.senderId !== msg.senderId && !t.isSentByMe) && (
+                                    <span className="text-[10px] font-bold text-[#0068ff] px-1 mb-0.5">
+                                      {msg.senderName}
+                                    </span>
+                                  )}
+
+                                  <div
+                                    className={`p-3 rounded-2xl break-words transition-all ${
+                                      isMe
+                                        ? 'bg-[#e5efff] text-[#081c36] border border-[#c7dcfc] shadow-2xs rounded-br-xs'
+                                        : 'bg-white text-[#081c36] border border-[#e2e8f0] shadow-2xs rounded-bl-xs'
+                                    }`}
+                                  >
+                                    {msg.content && (
+                                      <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap m-0">
+                                        {msg.content}
+                                      </p>
+                                    )}
+                                    {msg.attachments && msg.attachments.length > 0 && (
+                                      <div className={msg.content ? 'mt-2 pt-2 border-t border-slate-200/60' : ''}>
+                                        <AttachmentList
+                                          items={msg.attachments}
+                                          isBubbleSentByMe={isMe}
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <span className="text-[10px] text-slate-400 mt-1 px-1 font-medium">
+                                    {msgTime}
+                                  </span>
+                                </div>
+                              </div>
+                            </React.Fragment>
+                          );
+                        })
+                      )}
+                      <div ref={messagesEndRef} />
+                    </div>
+
+                    {/* Thanh điều khiển nhắn tin bằng giọng nói */}
+                    <VoiceControlPanel voice={replyVoice} textValue={replyContent} />
+
+                    {/* Khung nhập phản hồi */}
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (replyVoice.isActive) {
+                          const combinedText = [replyContent.trim(), replyVoice.interimText.trim()]
+                            .filter(Boolean)
+                            .join(' ');
+                          if (replyVoice.mode === 'audio' || !combinedText) {
+                            replyVoice.stopAndSendAudio();
+                          } else {
+                            replyVoice.stopAndSendText();
+                          }
+                          return;
+                        }
+                        handleSendReply(e);
+                      }}
+                      className="p-3 border-t border-slate-200 bg-white flex flex-col gap-2 shrink-0"
+                    >
+                      {replyError && (
+                        <div className="p-2 bg-rose-50 border border-rose-200 rounded-lg text-rose-600 text-xs font-medium">
+                          {replyError}
                         </div>
                       )}
 
-                      <div
-                        style={{
-                          display: 'flex',
-                          flexDirection: isMe ? 'row-reverse' : 'row',
-                          alignItems: 'flex-end',
-                          gap: '6px',
-                        }}
-                      >
-                        {!isMe && (
-                          <div
-                            style={{
-                              width: '26px',
-                              height: '26px',
-                              borderRadius: '8px',
-                              background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexShrink: 0,
-                              marginBottom: '2px',
-                            }}
-                          >
-                            <span style={{ color: '#fff', fontWeight: 700, fontSize: '11px' }}>
-                              {msg.senderName.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                        )}
-
-                        <div
-                          style={{
-                            maxWidth: '78%',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: isMe ? 'flex-end' : 'flex-start',
-                          }}
-                        >
-                          <div
-                            style={{
-                              padding: msg.content ? '9px 13px' : '6px',
-                              borderRadius: isMe
-                                ? '14px 14px 3px 14px'
-                                : '14px 14px 14px 3px',
-                              background: isMe
-                                ? 'linear-gradient(135deg,#6366f1,#7c3aed)'
-                                : '#fff',
-                              color: isMe ? '#fff' : '#1e293b',
-                              border: isMe ? 'none' : '1px solid #e8edf2',
-                              boxShadow: isMe
-                                ? '0 2px 8px rgba(99,102,241,0.25)'
-                                : '0 1px 3px rgba(0,0,0,0.05)',
-                              wordBreak: 'break-word',
-                            }}
-                          >
-                            {msg.content && (
-                              <p
-                                style={{
-                                  margin: 0,
-                                  fontSize: '13px',
-                                  lineHeight: '1.55',
-                                  whiteSpace: 'pre-wrap',
-                                }}
+                      {/* Pending attachments */}
+                      {replyAttachments.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {replyAttachments.map((att, idx) =>
+                            isAudioAttachment(att) ? (
+                              <PendingAudioAttachmentChip
+                                key={idx}
+                                att={att}
+                                onRemove={() =>
+                                  setReplyAttachments((prev) => prev.filter((_, i) => i !== idx))
+                                }
+                              />
+                            ) : (
+                              <div
+                                key={idx}
+                                className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 rounded-lg border border-slate-200 text-xs text-slate-700"
                               >
-                                {msg.content}
-                              </p>
-                            )}
-                            {msg.attachments && msg.attachments.length > 0 && (
-                              <div style={{ marginTop: msg.content ? '6px' : 0 }}>
-                                <AttachmentList
-                                  items={msg.attachments}
-                                  isBubbleSentByMe={isMe}
-                                />
+                                <Paperclip className="w-3.5 h-3.5 text-[#0068ff] shrink-0" />
+                                <span className="max-w-[120px] truncate">{att.name}</span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setReplyAttachments((prev) => prev.filter((_, i) => i !== idx))
+                                  }
+                                  className="text-slate-400 hover:text-rose-500 cursor-pointer"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
                               </div>
-                            )}
-                          </div>
-                          <span
-                            style={{
-                              fontSize: '10px',
-                              color: '#94a3b8',
-                              marginTop: '3px',
-                              paddingLeft: '3px',
-                              paddingRight: '3px',
-                            }}
-                          >
-                            {msgTime}
-                          </span>
+                            )
+                          )}
                         </div>
-                      </div>
-                    </React.Fragment>
-                  );
-                })
-              )}
-              <div ref={messagesEndRef} />
-            </div>
+                      )}
 
-            {/* Thanh điều khiển nhắn tin bằng giọng nói */}
-            <VoiceControlPanel voice={replyVoice} textValue={replyContent} />
-
-            {/* Khung nhập phản hồi */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (replyVoice.isActive) {
-                  const combinedText = [replyContent.trim(), replyVoice.interimText.trim()]
-                    .filter(Boolean)
-                    .join(' ');
-                  if (replyVoice.mode === 'audio' || !combinedText) {
-                    replyVoice.stopAndSendAudio();
-                  } else {
-                    replyVoice.stopAndSendText();
-                  }
-                  return;
-                }
-                handleSendReply(e);
-              }}
-              style={{
-                padding: '10px 12px 12px',
-                borderTop: '1px solid #f1f5f9',
-                background: '#fff',
-                flexShrink: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-              }}
-            >
-              {replyError && (
-                <div
-                  style={{
-                    padding: '6px 10px',
-                    background: '#fef2f2',
-                    border: '1px solid #fecaca',
-                    borderRadius: '7px',
-                    color: '#dc2626',
-                    fontSize: '11.5px',
-                  }}
-                >
-                  {replyError}
-                </div>
-              )}
-
-              {replyAttachments.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                  {replyAttachments.map((att, idx) =>
-                    isAudioAttachment(att) ? (
-                      <PendingAudioAttachmentChip
-                        key={idx}
-                        att={att}
-                        onRemove={() =>
-                          setReplyAttachments((prev) => prev.filter((_, i) => i !== idx))
-                        }
-                      />
-                    ) : (
-                      <div
-                        key={idx}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '5px',
-                          padding: '3px 8px',
-                          background: '#f8fafc',
-                          borderRadius: '6px',
-                          border: '1px solid #e2e8f0',
-                          fontSize: '11px',
-                        }}
-                      >
-                        <i
-                          className={`bi ${getFileIcon(att.type, att.name)}`}
-                          style={{ color: '#6366f1' }}
-                        />
-                        <span
-                          style={{
-                            maxWidth: '120px',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            color: '#334155',
-                          }}
-                        >
-                          {att.name}
-                        </span>
+                      {/* Hàng ô nhập + nút hành động */}
+                      <div className="flex items-end gap-1.5">
                         <button
                           type="button"
-                          onClick={() =>
-                            setReplyAttachments((prev) => prev.filter((_, i) => i !== idx))
-                          }
-                          style={{
-                            border: 'none',
-                            background: 'none',
-                            color: '#ef4444',
-                            cursor: 'pointer',
-                            padding: 0,
-                            fontSize: '11px',
-                          }}
+                          onClick={() => replyFileInputRef.current?.click()}
+                          title="Đính kèm ảnh / tệp tin"
+                          className="p-2 rounded-xl text-slate-500 hover:text-[#0068ff] hover:bg-[#0068ff]/10 border border-slate-200 transition-colors shrink-0 cursor-pointer"
                         >
-                          <i className="bi bi-x" />
+                          <Paperclip className="w-4 h-4" />
+                        </button>
+                        <input
+                          ref={replyFileInputRef}
+                          type="file"
+                          multiple
+                          accept="image/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.zip,.rar,.txt"
+                          onChange={handleReplyFileChange}
+                          className="hidden"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => replyVoice.startVoice('audio')}
+                          title="Ghi âm tin nhắn thoại"
+                          className={`p-2 rounded-xl border transition-colors shrink-0 cursor-pointer ${
+                            replyVoice.isActive && replyVoice.mode === 'audio'
+                              ? 'bg-rose-500 text-white border-rose-500 animate-pulse'
+                              : 'bg-[#0068ff]/10 text-[#0068ff] border-[#0068ff]/30 hover:bg-[#0068ff]/20'
+                          }`}
+                        >
+                          <Mic className="w-4 h-4" />
+                        </button>
+
+                        <div className="flex-1 relative flex items-center min-w-0">
+                          <textarea
+                            ref={replyTextareaRef}
+                            value={
+                              replyVoice.interimText
+                                ? `${replyContent}${replyContent && !replyContent.endsWith(' ') ? ' ' : ''}${replyVoice.interimText}`
+                                : replyContent
+                            }
+                            onChange={(e) => {
+                              setReplyContent(e.target.value);
+                              e.target.style.height = 'auto';
+                              e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                if ((e.nativeEvent as any)?.isComposing) return;
+                                e.preventDefault();
+                                if (isSendingReplyRef.current || replySending) return;
+                                handleSendReply();
+                              }
+                            }}
+                            placeholder={`Nhắn tin cho ${
+                              selected.isSentByMe
+                                ? selected.recipientName || 'người nhận'
+                                : selected.senderName
+                            }...`}
+                            rows={1}
+                            className="w-full pl-3 pr-8 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#0068ff] focus:border-[#0068ff] focus:bg-white text-slate-800 placeholder-slate-400 resize-none min-h-[38px] max-h-[120px] transition-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => replyVoice.startVoice('dictation')}
+                            title="Nhập tin nhắn bằng giọng nói (Tiếng Việt)"
+                            className={`absolute right-2 bottom-2 p-1 rounded-lg transition-colors cursor-pointer ${
+                              replyVoice.isActive && replyVoice.mode === 'dictation'
+                                ? 'bg-rose-500 text-white animate-pulse'
+                                : 'text-slate-400 hover:text-[#0068ff]'
+                            }`}
+                          >
+                            <Mic className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (replyVoice.isActive) {
+                              const combinedText = [replyContent.trim(), replyVoice.interimText.trim()]
+                                .filter(Boolean)
+                                .join(' ');
+                              if (replyVoice.mode === 'audio' || !combinedText) {
+                                replyVoice.stopAndSendAudio();
+                              } else {
+                                replyVoice.stopAndSendText();
+                              }
+                              return;
+                            }
+                            handleSendReply();
+                          }}
+                          disabled={
+                            replySending ||
+                            (!replyContent.trim() &&
+                              replyAttachments.length === 0 &&
+                              !replyVoice.isActive)
+                          }
+                          className="p-2 rounded-xl bg-[#0068ff] hover:bg-[#0058db] text-white shadow-xs transition-all shrink-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <Send className="w-4 h-4" />
                         </button>
                       </div>
-                    )
-                  )}
-                </div>
-              )}
-
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px' }}>
-                <button
-                  type="button"
-                  onClick={() => replyFileInputRef.current?.click()}
-                  title="Đính kèm ảnh / tệp tin"
-                  style={{
-                    width: '34px',
-                    height: '34px',
-                    borderRadius: '8px',
-                    border: '1.5px solid #e2e8f0',
-                    background: '#f8fafc',
-                    color: '#6366f1',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                  }}
-                >
-                  <i className="bi bi-paperclip" style={{ fontSize: '15px' }} />
-                </button>
-                <input
-                  ref={replyFileInputRef}
-                  type="file"
-                  multiple
-                  accept="image/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.zip,.rar,.txt"
-                  onChange={handleReplyFileChange}
-                  style={{ display: 'none' }}
-                />
-
-                <button
-                  type="button"
-                  onClick={() => replyVoice.startVoice('audio')}
-                  title="Ghi âm tin nhắn thoại"
-                  style={{
-                    width: '34px',
-                    height: '34px',
-                    borderRadius: '8px',
-                    border:
-                      replyVoice.isActive && replyVoice.mode === 'audio'
-                        ? '1.5px solid #f43f5e'
-                        : '1.5px solid #c7d2fe',
-                    background:
-                      replyVoice.isActive && replyVoice.mode === 'audio' ? '#f43f5e' : '#eef2ff',
-                    color:
-                      replyVoice.isActive && replyVoice.mode === 'audio' ? '#fff' : '#4f46e5',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                  }}
-                >
-                  <i className="bi bi-soundwave" style={{ fontSize: '15px' }} />
-                </button>
-
-                <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', minWidth: 0 }}>
-                  <textarea
-                    value={
-                      replyVoice.interimText
-                        ? `${replyContent}${replyContent && !replyContent.endsWith(' ') ? ' ' : ''}${replyVoice.interimText}`
-                        : replyContent
-                    }
-                    onChange={(e) => {
-                      setReplyContent(e.target.value);
-                      e.target.style.height = 'auto';
-                      e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendReply(e as any);
-                      }
-                    }}
-                    placeholder={`Nhắn tin hoặc nói cho ${
-                      selected.isSentByMe
-                        ? selected.recipientName || 'người nhận'
-                        : selected.senderName
-                    }...`}
-                    rows={1}
-                    style={{
-                      width: '100%',
-                      padding: '7px 32px 7px 11px',
-                      border: '1.5px solid #e2e8f0',
-                      borderRadius: '9px',
-                      fontSize: '12.5px',
-                      color: '#0f172a',
-                      outline: 'none',
-                      resize: 'none',
-                      fontFamily: 'inherit',
-                      lineHeight: '1.45',
-                      minHeight: '34px',
-                      maxHeight: '120px',
-                      overflowY: 'auto',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => replyVoice.startVoice('dictation')}
-                    title="Nhập tin nhắn bằng giọng nói (Tiếng Việt)"
-                    style={{
-                      position: 'absolute',
-                      right: '5px',
-                      bottom: '4px',
-                      width: '26px',
-                      height: '26px',
-                      borderRadius: '6px',
-                      border: 'none',
-                      background:
-                        replyVoice.isActive && replyVoice.mode === 'dictation'
-                          ? '#f43f5e'
-                          : 'transparent',
-                      color:
-                        replyVoice.isActive && replyVoice.mode === 'dictation'
-                          ? '#fff'
-                          : '#4f46e5',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <i
-                      className={`bi ${
-                        replyVoice.isActive && replyVoice.mode === 'dictation'
-                          ? 'bi-mic-fill'
-                          : 'bi-mic'
-                      }`}
-                      style={{ fontSize: '13px' }}
-                    />
-                  </button>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={replySending}
-                  style={{
-                    height: '34px',
-                    padding: '0 13px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: replySending
-                      ? '#a5b4fc'
-                      : 'linear-gradient(135deg,#6366f1,#8b5cf6)',
-                    color: '#fff',
-                    fontWeight: 700,
-                    fontSize: '12px',
-                    cursor: replySending ? 'not-allowed' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    flexShrink: 0,
-                  }}
-                >
-                  <i className="bi bi-send-fill" style={{ fontSize: '12px' }} />
-                  {replySending ? '...' : 'Gửi'}
-                </button>
+                    </form>
+                  </div>
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                    <MessageSquare className="w-10 h-10 stroke-[1.5] text-slate-300 mb-2" />
+                    <p className="text-sm font-medium">Chưa chọn cuộc trò chuyện nào</p>
+                  </div>
+                )}
               </div>
-            </form>
+            </div>
           </div>
-        ) : (
-          // ── Màn hình danh sách cuộc trò chuyện (List view) ──
-          <>
-            <div
-              style={{
-                padding: '15px 18px',
-                borderBottom: '1px solid #f1f5f9',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                background: 'linear-gradient(135deg,#fafafe,#f4f6fb)',
-                flexShrink: 0,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div
-                  style={{
-                    width: '34px',
-                    height: '34px',
-                    borderRadius: '10px',
-                    background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 3px 8px rgba(99,102,241,0.3)',
-                  }}
-                >
-                  <i className="bi bi-chat-dots-fill" style={{ color: '#fff', fontSize: '15px' }} />
-                </div>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                    <span style={{ fontWeight: 700, fontSize: '14.5px', color: '#0f172a' }}>
-                      Tin nhắn nội bộ
-                    </span>
-                    {unreadCount > 0 && (
-                      <span
-                        style={{
-                          background: '#6366f1',
-                          color: '#fff',
-                          fontSize: '10.5px',
-                          fontWeight: 700,
-                          padding: '1px 6px',
-                          borderRadius: '99px',
-                          lineHeight: '16px',
-                        }}
-                      >
-                        {unreadCount}
-                      </span>
-                    )}
-                  </div>
-                  <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8' }}>
-                    Trò chuyện nội bộ & hỗ trợ Khách hàng trực tuyến
-                  </p>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                {unreadCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={markAllRead}
-                    style={{
-                      padding: '5px 9px',
-                      borderRadius: '7px',
-                      border: '1px solid #e2e8f0',
-                      background: '#fff',
-                      fontSize: '11px',
-                      color: '#64748b',
-                      cursor: 'pointer',
-                      fontWeight: 500,
-                    }}
-                  >
-                    <i className="bi bi-check2-all" style={{ marginRight: '3px' }} />
-                    Đọc hết
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={onClose}
-                  style={{
-                    width: '30px',
-                    height: '30px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: '#f1f5f9',
-                    color: '#64748b',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '14px',
-                  }}
-                >
-                  <i className="bi bi-x-lg" />
-                </button>
-              </div>
-            </div>
-
-            <div
-              style={{
-                padding: '10px 14px 6px',
-                borderBottom: '1px solid #f1f5f9',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-                flexShrink: 0,
-              }}
-            >
-              <div style={{ position: 'relative' }}>
-                <i
-                  className="bi bi-search"
-                  style={{
-                    position: 'absolute',
-                    left: '11px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    color: '#94a3b8',
-                    fontSize: '13px',
-                  }}
-                />
-                <input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Tìm kiếm tin nhắn, khách hàng, đồng nghiệp..."
-                  style={{
-                    width: '100%',
-                    padding: '7px 30px 7px 32px',
-                    border: '1.5px solid #e2e8f0',
-                    borderRadius: '8px',
-                    fontSize: '12.5px',
-                    color: '#0f172a',
-                    background: '#f8fafc',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery('')}
-                    style={{
-                      position: 'absolute',
-                      right: '8px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      border: 'none',
-                      background: 'none',
-                      color: '#94a3b8',
-                      cursor: 'pointer',
-                      padding: '2px',
-                    }}
-                  >
-                    <i className="bi bi-x-circle-fill" style={{ fontSize: '13px' }} />
-                  </button>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', gap: '4px' }}>
-                  {(['all', 'unread'] as const).map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setTab(t)}
-                      style={{
-                        padding: '5px 11px',
-                        borderRadius: '7px',
-                        border: 'none',
-                        background: tab === t ? '#eef2ff' : 'transparent',
-                        color: tab === t ? '#4f46e5' : '#64748b',
-                        fontWeight: tab === t ? 600 : 500,
-                        fontSize: '12px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {t === 'unread'
-                        ? `Chưa đọc${unreadCount > 0 ? ` (${unreadCount})` : ''}`
-                        : 'Tất cả'}
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setView('send')}
-                  style={{
-                    padding: '5px 11px',
-                    borderRadius: '7px',
-                    border: 'none',
-                    background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
-                    color: '#fff',
-                    fontWeight: 600,
-                    fontSize: '11.5px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                  }}
-                >
-                  <i className="bi bi-pencil-square" style={{ fontSize: '11px' }} />
-                  Soạn tin nhắn mới
-                </button>
-              </div>
-            </div>
-
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-              {loading && displayed.length === 0 ? (
-                <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94a3b8' }}>
-                  <p style={{ margin: 0, fontSize: '13px' }}>Đang tải tin nhắn...</p>
-                </div>
-              ) : displayed.length === 0 ? (
-                <div style={{ padding: '56px 24px', textAlign: 'center' }}>
-                  <div
-                    style={{
-                      width: '56px',
-                      height: '56px',
-                      borderRadius: '16px',
-                      background: '#f8fafc',
-                      border: '1.5px dashed #e2e8f0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      margin: '0 auto 12px',
-                    }}
-                  >
-                    <i
-                      className="bi bi-chat-square-Text"
-                      style={{ fontSize: '24px', color: '#cbd5e1' }}
-                    />
-                  </div>
-                  <p
-                    style={{
-                      margin: '0 0 4px',
-                      fontWeight: 600,
-                      fontSize: '13.5px',
-                      color: '#475569',
-                    }}
-                  >
-                    {tab === 'unread' ? 'Không có tin nhắn chưa đọc' : 'Chưa có tin nhắn nào'}
-                  </p>
-                  <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>
-                    {tab === 'unread'
-                      ? 'Bạn đã xem hết tất cả tin nhắn.'
-                      : 'Bấm "Soạn tin nhắn mới" để bắt đầu trò chuyện.'}
-                  </p>
-                </div>
-              ) : (
-                displayed.map((m) => {
-                  const partnerName = m.isSentByMe
-                    ? m.recipientName || 'Người nhận'
-                    : m.senderName;
-                  const isCustomerPartner =
-                    m.senderId === 'guest-customer' ||
-                    m.recipientUserId === 'guest-customer' ||
-                    m.senderDepartmentCode === 'customer';
-
-                  return (
-                    <div
-                      key={m.participantId}
-                      onClick={() => markRead(m)}
-                      style={{
-                        padding: '13px 16px',
-                        borderBottom: '1px solid #f8fafc',
-                        display: 'flex',
-                        gap: '11px',
-                        alignItems: 'flex-start',
-                        background: m.isRead ? '#fff' : '#fafafe',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: '38px',
-                          height: '38px',
-                          borderRadius: '11px',
-                          background: isCustomerPartner
-                            ? 'linear-gradient(135deg,#10b981,#059669)'
-                            : m.isRead
-                            ? '#f1f5f9'
-                            : 'linear-gradient(135deg,#eef2ff,#e0e7ff)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                          marginTop: '1px',
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontWeight: 700,
-                            fontSize: '14px',
-                            color: isCustomerPartner
-                              ? '#fff'
-                              : m.isRead
-                              ? '#64748b'
-                              : '#6366f1',
-                          }}
-                        >
-                          {partnerName.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: '6px',
-                            marginBottom: '2px',
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              minWidth: 0,
-                            }}
-                          >
-                            <p
-                              style={{
-                                margin: 0,
-                                fontSize: '13px',
-                                fontWeight: m.isRead ? 600 : 700,
-                                color: m.isRead ? '#334155' : '#0f172a',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              {partnerName}
-                            </p>
-                            {isCustomerPartner && (
-                              <span
-                                style={{
-                                  fontSize: '10px',
-                                  fontWeight: 700,
-                                  color: '#047857',
-                                  background: '#ecfdf5',
-                                  border: '1px solid #a7f3d0',
-                                  padding: '1px 6px',
-                                  borderRadius: '99px',
-                                  flexShrink: 0,
-                                }}
-                              >
-                                Khách hàng
-                              </span>
-                            )}
-                          </div>
-                          {!m.isRead && (
-                            <span
-                              style={{
-                                width: '7px',
-                                height: '7px',
-                                borderRadius: '50%',
-                                background: '#6366f1',
-                                flexShrink: 0,
-                              }}
-                            />
-                          )}
-                        </div>
-
-                        {!m.isSentByMe && (m.senderPosition || m.senderDepartment) && (
-                          <span
-                            style={{
-                              fontSize: '10.5px',
-                              color: '#6366f1',
-                              fontWeight: 500,
-                              display: 'block',
-                              marginBottom: '2px',
-                            }}
-                          >
-                            {[m.senderPosition, m.senderDepartment].filter(Boolean).join(' • ')}
-                          </span>
-                        )}
-
-                        <p
-                          style={{
-                            margin: '0 0 4px',
-                            fontSize: '12px',
-                            color: m.isRead ? '#64748b' : '#334155',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {m.isSentByMe && (
-                            <span style={{ color: '#94a3b8', fontWeight: 500 }}>Bạn: </span>
-                          )}
-                          {m.content ||
-                            (m.attachments && m.attachments.length > 0
-                              ? m.attachments.some((a) => isAudioAttachment(a))
-                                ? '🎤 [Tin nhắn thoại]'
-                                : `[Đính kèm ${m.attachments.length} tệp]`
-                              : '')}
-                        </p>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '11px', color: '#94a3b8' }}>
-                            {timeAgo(m.createdAt)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </>
-        )}
+        </div>
       </div>
-    </>
+    </div>
   );
 };

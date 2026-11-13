@@ -1,6 +1,27 @@
 "use client";
 import React from "react";
+import {
+  CartPlus,
+  CartCheck,
+  Building,
+  Check2All,
+  CheckLg,
+  CheckCircleFill,
+  LockFill,
+  StarFill,
+  XLg,
+  ExclamationCircle,
+  InfoCircle,
+} from "react-bootstrap-icons";
 import XemTruocDonMuaHangModal from "./XemTruocDonMuaHangModal";
+import { Button } from "../../common/Button";
+import { Badge } from "../../common/Badge";
+import { Select } from "../../common/Select";
+import { SuggestionInput, type SuggestionItem } from "../../common/SuggestionInput";
+import { NumberInput } from "../../common/NumberInput";
+import { DatePicker } from "../../common/DatePicker";
+import { TableToolbar } from "../../common/TableToolbar";
+import { FullWidthTable } from "../../common/FullWidthTable";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface ReqItem {
@@ -28,6 +49,7 @@ interface Supplier {
   id: string;
   name: string;
   code: string | null;
+  address: string | null;
   phone: string | null;
   categories: { category: { id: string; name: string } }[];
 }
@@ -100,6 +122,8 @@ export default function TaoDonMuaHangModal({
   // Hiện preview modal
   const [showPreview, setShowPreview]           = React.useState(false);
   const [isEditPreview, setIsEditPreview]       = React.useState(false);
+  const [searchQuery, setSearchQuery]           = React.useState("");
+  const [supplierInputs, setSupplierInputs]     = React.useState<Record<string, string>>({});
 
   // Group items by tenHang for display
   const groupedItems = React.useMemo(() => {
@@ -288,197 +312,190 @@ export default function TaoDonMuaHangModal({
     setStep("confirm");
   };
 
+  const filteredGroupedItems = React.useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return groupedItems;
+    return groupedItems.filter(
+      (g) =>
+        g.tenHang.toLowerCase().includes(q) ||
+        String(g.inventoryItem?.code || "").toLowerCase().includes(q)
+    );
+  }, [groupedItems, searchQuery]);
+
   // ── Render ────────────────────────────────────────────────────────────────────────────────────────────
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 1060, background: "var(--background)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 1060, background: "#f1f5f9", display: "flex", flexDirection: "column", overflow: "hidden", padding: "8px", gap: "8px" }}>
 
-      {/* ── Header ─────────────────────────────────────────────────────────────── */}
-      <div style={{ padding: "12px 28px", borderBottom: "1px solid var(--border)", background: "var(--card)", display: "flex", alignItems: "center", gap: 14, flexShrink: 0, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-        <div style={{ width: 38, height: 38, borderRadius: 10, background: "rgba(99,102,241,0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <i className="bi bi-cart-plus" style={{ fontSize: 18, color: "#6366f1" }} />
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontWeight: 800, fontSize: 14.5 }}>{editOrderId ? "Cập nhật đơn mua hàng" : "Tạo đơn mua hàng"}</p>
-          <p style={{ margin: 0, fontSize: 11.5, color: "var(--muted-foreground)", fontFamily: "monospace" }}>
-            {editOrderId ? `Mã đơn mua: ${reqCode ?? editOrderId}` : `Từ phiếu yêu cầu: ${reqCode ?? reqId}`}
-          </p>
-        </div>
-
-        {/* Select NCC — chọn để tạo đơn từng NCC một */}
-        {step === "assign" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <i className="bi bi-building" style={{ fontSize: 13, color: "var(--muted-foreground)" }} />
-            {editOrderId ? (
-              <select
-                value={activeSupId ?? ""}
-                onChange={e => {
-                  const newSupId = e.target.value || null;
-                  setActiveSupId(newSupId);
-                  setAssignments(prev => prev.map(a => ({ ...a, supplierId: newSupId })));
-                }}
-                style={{
-                  padding: "6px 10px",
-                  border: activeSupId ? "1.5px solid var(--primary)" : "1px solid var(--border)",
-                  borderRadius: 8,
-                  background: "var(--background)",
-                  color: "var(--foreground)",
-                  fontSize: 12.5,
-                  cursor: "pointer",
-                  minWidth: 200,
-                  maxWidth: 300,
-                }}
-              >
-                <option value="">— Chọn nhà cung cấp —</option>
-                {suppliers.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            ) : (
-              <select
-                value={activeSupId ?? ""}
-                onChange={e => setActiveSupId(e.target.value || null)}
-                style={{
-                  padding: "6px 10px",
-                  border: activeSupId ? "1.5px solid var(--primary)" : "1px solid var(--border)",
-                  borderRadius: 8,
-                  background: "var(--background)",
-                  color: "var(--foreground)",
-                  fontSize: 12.5,
-                  cursor: "pointer",
-                  minWidth: 200,
-                  maxWidth: 300,
-                }}
-              >
-                <option value="">— Chọn NCC để tạo đơn —</option>
-                {selectedSuppliers.map(({ supplier, id, items: sItems }) => {
-                  const isDone = processedIds.includes(id);
-                  return (
-                    <option key={id} value={id} disabled={isDone}>
-                      {isDone ? "✓" : "▶"} {supplier?.name ?? id} · {sItems.length} MH{isDone ? " (đã tạo)" : ""}
-                    </option>
-                  );
-                })}
-              </select>
-            )}
-            {/* Progress badge */}
-            {!editOrderId && selectedSuppliers.length > 0 && (
-              <span style={{ fontSize: 11.5, color: "var(--muted-foreground)", whiteSpace: "nowrap" }}>
-                <span style={{ fontWeight: 700, color: "#10b981" }}>{processedIds.length}</span>
-                /{selectedSuppliers.length} NCC
-              </span>
-            )}
+      {/* ── Header gọn chuẩn Enterprise ───────────────────────────────────────── */}
+      <div style={{ padding: "12px 18px", border: "1px solid #e2e8f0", borderRadius: "12px", background: "#ffffff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexShrink: 0, boxShadow: "0 1px 2px rgba(15,23,42,0.04)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: "#eff6ff", border: "1px solid #bfdbfe", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "#1d4ed8" }}>
+            <CartPlus size={19} />
           </div>
-        )}
-
-        {/* Nút hành động + đóng */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          {step === "assign" && !editOrderId && pendingItems > 0 && (
-            <span style={{ fontSize: 11.5, color: "var(--muted-foreground)", fontStyle: "italic", marginRight: 4 }}>
-              <i className="bi bi-exclamation-circle" style={{ marginRight: 3, color: "#f59e0b" }} />
-              {pendingItems} chưa chọn NCC
-            </span>
-          )}
-          {step === "assign" && (
-            <>
-              {/* Nút hoàn thành sớm — khi đã tạo ít nhất 1 đơn */}
-              {!editOrderId && processedIds.length > 0 && pendingSuppliers.length > 0 && (
-                <button
-                  onClick={handleFinish}
-                  style={{ padding: "7px 14px", border: "1px solid var(--border)", background: "var(--muted)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", color: "var(--foreground)" }}>
-                  <i className="bi bi-check2-all" style={{ marginRight: 4 }} />
-                  Kết thúc ({processedIds.length}/{selectedSuppliers.length})
-                </button>
-              )}
-
-              {editOrderId ? (
-                <button
-                  onClick={handleSubmit}
-                  disabled={!activeSupId || submitting}
-                  style={{ padding: "7px 18px", border: "none", background: "#003087", color: "#fff", borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, opacity: submitting ? 0.7 : 1 }}>
-                  {submitting ? (
-                    <i className="bi bi-arrow-repeat" style={{ animation: "spin 1s linear infinite" }} />
-                  ) : (
-                    <i className="bi bi-check-lg" />
-                  )}
-                  Lưu thay đổi
-                </button>
-              ) : (
-                <button
-                  onClick={handleOpenPreview}
-                  disabled={!canConfirm || submitting}
-                  title={!activeSupId ? "Hãy chọn một nhà cung cấp trước" : ""}
-                  style={{ padding: "7px 18px", border: "none", background: canConfirm ? "var(--primary)" : "var(--muted)", color: canConfirm ? "#fff" : "var(--muted-foreground)", borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: canConfirm ? "pointer" : "not-allowed", display: "flex", alignItems: "center", gap: 6, opacity: submitting ? 0.7 : 1 }}>
-                  <i className="bi bi-cart-check" />Tạo đơn mua hàng
-                </button>
-              )}
-            </>
-          )}
-          <button onClick={onClose} disabled={submitting} style={{ width: 34, height: 34, border: "1px solid var(--border)", background: "transparent", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted-foreground)" }}>
-            <i className="bi bi-x" style={{ fontSize: 20 }} />
-          </button>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <h2 style={{ margin: 0, fontWeight: 700, fontSize: "1rem", color: "#0f172a" }}>
+                {editOrderId ? "Cập nhật đơn mua hàng" : "Tạo đơn mua hàng"}
+              </h2>
+              <Badge variant="info">
+                {editOrderId ? `Đơn hàng: ${reqCode ?? editOrderId}` : `Phiếu YC: ${reqCode ?? reqId}`}
+              </Badge>
+            </div>
+            <p style={{ margin: "2px 0 0", fontSize: "0.75rem", color: "#64748b" }}>
+              {editOrderId
+                ? "Điều chỉnh số lượng, đơn giá, ngày giao dự kiến và nhà cung cấp cho đơn mua hàng"
+                : "Phân bổ nhà cung cấp, đơn giá nhập và ngày giao dự kiến theo từng mặt hàng"}
+            </p>
+          </div>
         </div>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          disabled={submitting}
+          aria-label="Đóng"
+          title="Đóng"
+        >
+          <XLg size={16} />
+        </Button>
       </div>
 
 
       {step === "assign" ? (
-        <>
-          {/* ── Stat bar ─────────────────────────────────────────────────────── */}
-          {!editOrderId && (
-            <div style={{ padding: "8px 28px", borderBottom: "1px solid var(--border)", background: "var(--muted)", display: "flex", gap: 24, alignItems: "center", flexShrink: 0 }}>
-              {[
-                { label: "Tổng mặt hàng", value: modalItems.length,  color: "var(--foreground)" },
-                { label: "Đã chọn NCC",   value: assignedItems, color: "#10b981" },
-                { label: "Bỏ qua",        value: skippedItems,  color: "#f59e0b" },
-                { label: "Chưa xử lý",   value: pendingItems,  color: "#ef4444" },
-              ].map(x => (
-                <div key={x.label} style={{ display: "flex", gap: 6, alignItems: "baseline" }}>
-                  <span style={{ fontSize: 18, fontWeight: 800, color: x.color }}>{x.value}</span>
-                  <span style={{ fontSize: 11.5, color: "var(--muted-foreground)" }}>{x.label}</span>
+        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: "#ffffff", borderRadius: "12px", border: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(15,23,42,0.05)", overflow: "hidden" }}>
+          {/* ── TableToolbar chuẩn hệ thống ───────────────────────────────────── */}
+          <TableToolbar
+            searchValue={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder="Tìm theo tên hàng hoá, mã vật tư..."
+            showMenu={false}
+            actionsBeforeSearch={
+              !editOrderId ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", paddingRight: 4 }}>
+                  <Badge variant="neutral">Tổng: {modalItems.length}</Badge>
+                  <Badge variant="success">Đã chọn NCC: {assignedItems}</Badge>
+                  {skippedItems > 0 && <Badge variant="warning">Bỏ qua: {skippedItems}</Badge>}
+                  {pendingItems > 0 && (
+                    <Badge variant="danger">
+                      <ExclamationCircle size={11} style={{ marginRight: 4 }} />
+                      Chưa chọn NCC: {pendingItems}
+                    </Badge>
+                  )}
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* ── 2-column layout: table + supplier panel ───────────────────────── */}
-          <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-
-            {/* Table */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "20px 28px" }}>
-              {suppLoading ? (
-                <div style={{ textAlign: "center", padding: 64, color: "var(--muted-foreground)" }}>
-                  <i className="bi bi-arrow-repeat" style={{ fontSize: 28, display: "block", marginBottom: 10 }} />
-                  Đang tải danh sách nhà cung cấp...
-                </div>
-              ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ background: "var(--muted)", borderBottom: "2px solid var(--border)" }}>
-                      {[
-                        { label: "#",              w: 36,  center: true  },
-                        { label: "Mặt hàng",       w: 0,   center: false },
-                        { label: "Đơn vị",         w: 70,  center: true  },
-                        { label: "SL",             w: editOrderId ? 90 : 60,  center: true  },
-                        { label: "Đơn giá (₫)",   w: 120, center: false },
-                        { label: "Ngày giao",      w: 140, center: false },
-                        { label: "Thành tiền (₫)", w: 120, center: false },
-                        ...(!editOrderId ? [
-                          { label: "Nhà cung cấp",   w: 230, center: false },
-                          { label: "Bỏ qua",         w: 60,  center: true  },
-                        ] : [])
-                      ].map(h => (
-                        <th key={h.label} style={{ padding: "10px 10px", fontWeight: 700, fontSize: 11.5, textAlign: h.center ? "center" : "left", color: "var(--muted-foreground)", whiteSpace: "nowrap", width: h.w || undefined }}>
-                          {h.label}
-                        </th>
+              ) : undefined
+            }
+            rightActions={
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ minWidth: 220, maxWidth: 300 }}>
+                  {editOrderId ? (
+                    <Select
+                      value={activeSupId ?? ""}
+                      onChange={e => {
+                        const newSupId = e.target.value || null;
+                        setActiveSupId(newSupId);
+                        setAssignments(prev => prev.map(a => ({ ...a, supplierId: newSupId })));
+                      }}
+                    >
+                      <option value="">Chọn nhà cung cấp</option>
+                      {suppliers.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
                       ))}
+                    </Select>
+                  ) : (
+                    <Select
+                      value={activeSupId ?? ""}
+                      onChange={e => setActiveSupId(e.target.value || null)}
+                    >
+                      <option value="">Chọn NCC để tạo đơn</option>
+                      {selectedSuppliers.map(({ supplier, id, items: sItems }) => {
+                        const isDone = processedIds.includes(id);
+                        return (
+                          <option key={id} value={id} disabled={isDone}>
+                            {isDone ? "✓" : "▶"} {supplier?.name ?? id} · {sItems.length} MH{isDone ? " (đã tạo)" : ""}
+                          </option>
+                        );
+                      })}
+                    </Select>
+                  )}
+                </div>
+
+                {!editOrderId && selectedSuppliers.length > 0 && (
+                  <Badge variant={processedIds.length === selectedSuppliers.length ? "success" : "brand"}>
+                    {processedIds.length}/{selectedSuppliers.length} NCC
+                  </Badge>
+                )}
+
+                {!editOrderId && processedIds.length > 0 && pendingSuppliers.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    leftIcon={<Check2All size={14} />}
+                    onClick={handleFinish}
+                  >
+                    Kết thúc ({processedIds.length}/{selectedSuppliers.length})
+                  </Button>
+                )}
+
+                {editOrderId ? (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    leftIcon={<CheckLg size={14} />}
+                    isLoading={submitting}
+                    disabled={!activeSupId || submitting}
+                    onClick={handleSubmit}
+                  >
+                    Lưu thay đổi
+                  </Button>
+                ) : (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    leftIcon={<CartCheck size={14} />}
+                    isLoading={submitting}
+                    disabled={!canConfirm || submitting}
+                    title={!activeSupId ? "Hãy chọn một nhà cung cấp trước" : ""}
+                    onClick={handleOpenPreview}
+                  >
+                    Tạo đơn mua hàng
+                  </Button>
+                )}
+              </div>
+            }
+          />
+
+          {/* ── 2-column layout: FullWidthTable + supplier sidebar ───────────── */}
+          <div style={{ flex: 1, minHeight: 0, display: "flex", overflow: "hidden" }}>
+            <FullWidthTable loading={suppLoading} loadingText="Đang tải danh sách nhà cung cấp...">
+              <table className="w-full text-left border-collapse" style={{ fontSize: "0.8125rem" }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: 44, textAlign: "center" }}>#</th>
+                    <th>Mặt hàng</th>
+                    <th style={{ width: 76, textAlign: "center" }}>Đơn vị</th>
+                    <th style={{ width: editOrderId ? 96 : 68, textAlign: "center" }}>SL</th>
+                    <th style={{ width: 145, textAlign: "right" }}>Đơn giá (₫)</th>
+                    <th style={{ width: 155 }}>Ngày giao</th>
+                    <th style={{ width: 135, textAlign: "right" }}>Thành tiền (₫)</th>
+                    {!editOrderId && <th style={{ width: 270 }}>Nhà cung cấp</th>}
+                    {!editOrderId && <th style={{ width: 72, textAlign: "center" }}>Bỏ qua</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredGroupedItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={editOrderId ? 7 : 9} style={{ textAlign: "center", padding: "40px 16px", color: "#64748b" }}>
+                        Không tìm thấy mặt hàng phù hợp với từ khoá "{searchQuery}".
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {groupedItems.map((gItem, idx) => {
+                  ) : (
+                    filteredGroupedItems.map((gItem, idx) => {
                       const representative = gItem.originalItems[0];
                       const a = assignments.find(assign => assign.itemId === representative.id)!;
                       const { matched, others } = suppliersFor(representative);
                       const hasFilter = !!gItem.inventoryItem?.categoryId;
-                      
+
                       const thanhTien = gItem.originalItems.reduce((sum, oi) => {
                         const oiAssign = assignments.find(assign => assign.itemId === oi.id);
                         return sum + oi.soLuong * (oiAssign?.donGia ?? (oi.donGiaDK > 0 ? oi.donGiaDK : (oi.inventoryItem?.giaNhap ?? 0)));
@@ -529,119 +546,138 @@ export default function TaoDonMuaHangModal({
                       };
 
                       return (
-                        <tr key={gItem.tenHang} style={{
-                          borderBottom: "1px solid var(--border)",
-                          opacity:    (a.skip && !isLocked) ? 0.38 : 1,
-                          background: isLocked
-                            ? "rgba(16,185,129,0.06)"
-                            : isHighlighted
-                              ? "color-mix(in srgb, var(--primary) 8%, transparent)"
+                        <tr
+                          key={gItem.tenHang}
+                          style={{
+                            opacity: (a.skip && !isLocked) ? 0.45 : 1,
+                            backgroundColor: isLocked
+                              ? "rgba(16, 185, 129, 0.05)"
+                              : isHighlighted
+                              ? "#eff6ff"
                               : a.supplierId
-                                ? "color-mix(in srgb, #10b981 4%, transparent)"
-                                : undefined,
-                          transition: "background 0.15s",
-                        }}>
-                          {/* # */}
-                          <td style={{ padding: "10px 10px", textAlign: "center", fontWeight: 800, fontSize: 12, color: "var(--muted-foreground)" }}>{idx + 1}</td>
-                          {/* Tên hàng */}
-                          <td style={{ padding: "10px 10px" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              ? "rgba(16, 185, 129, 0.03)"
+                              : undefined,
+                            transition: "background-color 0.15s ease",
+                          }}
+                        >
+                          <td style={{ textAlign: "center", fontWeight: 700, color: "#64748b" }}>{idx + 1}</td>
+                          <td>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                               <div style={{ flex: 1, minWidth: 0 }}>
-                                <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>{gItem.tenHang}</p>
+                                <div style={{ fontWeight: 600, color: "#0f172a" }}>{gItem.tenHang}</div>
                                 {gItem.inventoryItem?.code && (
-                                  <p style={{ margin: 0, fontSize: 10.5, color: "var(--muted-foreground)", fontFamily: "monospace" }}>{gItem.inventoryItem.code}</p>
+                                  <div style={{ fontSize: "0.7188rem", color: "#64748b", fontFamily: "monospace", marginTop: 1 }}>
+                                    {gItem.inventoryItem.code}
+                                  </div>
                                 )}
                               </div>
                               {isLocked && (
-                                <span style={{ fontSize: 10, fontWeight: 700, color: "#10b981", background: "rgba(16,185,129,0.15)", padding: "2px 7px", borderRadius: 10, whiteSpace: "nowrap", flexShrink: 0 }}>
-                                  ✓ Đã đặt hàng
-                                </span>
+                                <Badge variant="success">✓ Đã đặt hàng</Badge>
                               )}
                             </div>
                           </td>
-                          {/* Đơn vị */}
-                          <td style={{ padding: "10px 10px", textAlign: "center", fontSize: 12.5, color: "var(--muted-foreground)" }}>
-                            {gItem.donVi ?? "—"}
-                          </td>
-                          {/* SL */}
-                          <td style={{ padding: "10px 10px", textAlign: "center", fontWeight: 700 }}>
+                          <td style={{ textAlign: "center", color: "#475569" }}>{gItem.donVi ?? "—"}</td>
+                          <td style={{ textAlign: "center", fontWeight: 700, color: "#0f172a" }}>
                             {editOrderId ? (
-                              <input
-                                type="number"
+                              <NumberInput
                                 value={gItem.soLuong}
-                                onChange={e => handleQuantityChange(representative.id, parseFloat(e.target.value) || 0)}
-                                style={{ width: 70, padding: "5px 7px", border: "1px solid var(--border)", borderRadius: 6, background: "var(--background)", color: "var(--foreground)", fontSize: 12.5, textAlign: "center" }}
+                                min={0}
+                                hideZero={false}
+                                onValueChange={(num) => handleQuantityChange(representative.id, num)}
+                                style={{ textAlign: "center", height: 32, padding: "4px 8px" }}
                               />
                             ) : (
                               gItem.soLuong
                             )}
                           </td>
-                          {/* Đơn giá */}
-                          <td style={{ padding: "10px 10px" }}>
-                            <input
-                              type="text"
-                              value={a.donGia ? a.donGia.toLocaleString("vi-VN") : "0"}
+                          <td>
+                            <NumberInput
+                              value={a.donGia}
+                              min={0}
+                              hideZero={false}
                               disabled={a.skip}
-                              onChange={e => {
-                                const raw = e.target.value.replace(/\D/g, "");
-                                handlePriceChange(parseInt(raw, 10) || 0);
-                              }}
-                              style={{ width: 110, padding: "5px 7px", border: "1px solid var(--border)", borderRadius: 6, background: "var(--background)", color: "var(--foreground)", fontSize: 12.5, textAlign: "right" }}
+                              onValueChange={(num) => handlePriceChange(num)}
+                              style={{ textAlign: "right", height: 32, padding: "4px 8px" }}
                             />
                           </td>
-                          {/* Ngày giao */}
-                          <td style={{ padding: "10px 10px" }}>
-                            <input
-                              type="date"
+                          <td>
+                            <DatePicker
                               value={a.ngayGiao}
                               disabled={a.skip}
-                              onChange={e => handleDateChange(e.target.value)}
-                              style={{ width: 130, padding: "5px 7px", border: "1px solid var(--border)", borderRadius: 6, background: "var(--background)", color: "var(--foreground)", fontSize: 12.5 }}
+                              onChange={(val) => handleDateChange(val)}
+                              style={{ height: 32 }}
                             />
                           </td>
-                          {/* Thành tiền */}
-                          <td style={{ padding: "10px 10px", fontWeight: 700, fontSize: 12.5, whiteSpace: "nowrap", color: thanhTien > 0 ? "var(--foreground)" : "var(--muted-foreground)" }}>
+                          <td style={{ textAlign: "right", fontWeight: 700, whiteSpace: "nowrap", color: thanhTien > 0 ? "#0369a1" : "#94a3b8" }}>
                             {a.skip ? "—" : fmtVnd(thanhTien)}
                           </td>
-                          {/* NCC */}
                           {!editOrderId && (
-                            <td style={{ padding: "10px 10px" }}>
-                              <div style={{ position: "relative" }}>
-                                <select
-                                  value={a.supplierId ?? ""}
-                                  disabled={a.skip}
-                                  onChange={e => handleSupplierChange(e.target.value || null)}
-                                  style={{
-                                    width: "100%", padding: "6px 8px",
-                                    border: a.supplierId ? "1.5px solid #10b981" : "1px solid var(--border)",
-                                    borderRadius: 6, background: "var(--background)", color: "var(--foreground)",
-                                    fontSize: 12.5, cursor: a.skip ? "not-allowed" : "pointer",
-                                  }}>
-                                  <option value="">— Chọn NCC —</option>
-                                  {hasFilter && matched.length > 0 && (
-                                    <optgroup label={`✓ Phù hợp danh mục (${matched.length})`}>
-                                      {matched.map(s => <option key={s.id} value={s.id}>★ {s.name}{s.code ? ` (${s.code})` : ""}</option>)}
-                                    </optgroup>
-                                  )}
-                                  {others.length > 0 && (
-                                    <optgroup label={hasFilter && matched.length > 0 ? "Các NCC khác" : "Tất cả NCC"}>
-                                      {others.map(s => <option key={s.id} value={s.id}>{s.name}{s.code ? ` (${s.code})` : ""}</option>)}
-                                    </optgroup>
-                                  )}
-                                </select>
-                                {hasFilter && matched.length > 0 && !a.supplierId && !a.skip && (
-                                  <span style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", fontSize: 10, background: "#10b981", color: "#fff", borderRadius: 10, padding: "1px 5px", fontWeight: 700, pointerEvents: "none" }}>
-                                    {matched.length}
-                                  </span>
-                                )}
-                              </div>
+                            <td>
+                              {(() => {
+                                const selectedSup = a.supplierId ? suppliers.find(s => s.id === a.supplierId) : null;
+                                const inputVal = supplierInputs[representative.id] ?? (selectedSup?.name || "");
+                                const hasMatchedGroup = hasFilter && matched.length > 0;
+                                const buildSupItem = (s: Supplier, isMatched: boolean): SuggestionItem => ({
+                                  id: s.id,
+                                  value: s.name,
+                                  label: s.name,
+                                  subText: s.address || undefined,
+                                  category: hasMatchedGroup
+                                    ? (isMatched ? `Phù hợp danh mục (${matched.length})` : "Các nhà cung cấp khác")
+                                    : undefined,
+                                  rightIcon: isMatched ? (
+                                    <StarFill size={12} style={{ color: "#f59e0b" }} title="NCC phù hợp danh mục hàng hoá" />
+                                  ) : undefined,
+                                });
+                                const supplierSuggestions: SuggestionItem[] = [
+                                  ...matched.map(s => buildSupItem(s, true)),
+                                  ...others.map(s => buildSupItem(s, false)),
+                                ];
+                                return (
+                                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <SuggestionInput
+                                        value={inputVal}
+                                        disabled={a.skip}
+                                        placeholder="Chọn nhà cung cấp"
+                                        emptyMessage="Không tìm thấy nhà cung cấp"
+                                        suggestions={supplierSuggestions}
+                                        inputStyle={{ height: 32, fontSize: "0.8125rem" }}
+                                        onChange={(text) => {
+                                          setSupplierInputs(prev => ({ ...prev, [representative.id]: text }));
+                                          if (!text.trim()) {
+                                            handleSupplierChange(null);
+                                          } else {
+                                            const exact = suppliers.find(s => s.name === text);
+                                            if (exact) {
+                                              handleSupplierChange(exact.id);
+                                            } else if (a.supplierId) {
+                                              handleSupplierChange(null);
+                                            }
+                                          }
+                                        }}
+                                        onSelectSuggestion={(item) => {
+                                          if (item.id) {
+                                            handleSupplierChange(item.id);
+                                            setSupplierInputs(prev => ({ ...prev, [representative.id]: item.value }));
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                    {hasMatchedGroup && !a.supplierId && !a.skip && (
+                                      <span title="Số NCC phù hợp danh mục">
+                                        <Badge variant="success">{matched.length}</Badge>
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </td>
                           )}
-                          {/* Bỏ qua */}
                           {!editOrderId && (
-                            <td style={{ padding: "10px 10px", textAlign: "center" }}>
+                            <td style={{ textAlign: "center" }}>
                               {isLocked ? (
-                                <i className="bi bi-lock-fill" style={{ fontSize: 14, color: "#10b981" }} title="Đã được đặt hàng" />
+                                <LockFill size={14} style={{ color: "#10b981", margin: "0 auto" }} title="Đã được đặt hàng" />
                               ) : (
                                 <input
                                   type="checkbox"
@@ -654,103 +690,96 @@ export default function TaoDonMuaHangModal({
                           )}
                         </tr>
                       );
-                    })}
-                  </tbody>
-
-                  {/* Tổng cộng */}
-                  {(editOrderId || assignedItems > 0) && (
-                    <tfoot>
-                      <tr style={{ background: "var(--muted)", borderTop: "2px solid var(--border)" }}>
-                        <td colSpan={6} style={{ padding: "10px 10px", fontWeight: 700, fontSize: 12.5, textAlign: "right", color: "var(--muted-foreground)" }}>
-                          Tổng cộng
-                        </td>
-                        <td style={{ padding: "10px 10px", fontWeight: 800, fontSize: 13.5, color: "var(--primary)", whiteSpace: "nowrap" }}>
-                          {fmtVnd(assignments
+                    })
+                  )}
+                </tbody>
+                {(editOrderId || assignedItems > 0) && (
+                  <tfoot>
+                    <tr style={{ background: "#f8fafc", borderTop: "2px solid #e2e8f0" }}>
+                      <td colSpan={6} style={{ padding: "10px 12px", fontWeight: 700, fontSize: "0.8125rem", textAlign: "right", color: "#475569" }}>
+                        Tổng cộng giá trị đơn
+                      </td>
+                      <td style={{ padding: "10px 12px", fontWeight: 800, fontSize: "0.9375rem", textAlign: "right", color: "#1d4ed8", whiteSpace: "nowrap" }}>
+                        {fmtVnd(
+                          assignments
                             .filter(a => !a.skip && (editOrderId || a.supplierId))
                             .reduce((s, a) => s + (modalItems.find(i => i.id === a.itemId)?.soLuong ?? 0) * a.donGia, 0)
-                          )}
-                        </td>
-                        {!editOrderId && <td colSpan={2} />}
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              )}
-            </div>
+                        )}
+                      </td>
+                      {!editOrderId && <td colSpan={2} />}
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </FullWidthTable>
 
             {/* Sidebar for Edit Mode */}
             {editOrderId && (
-              <div style={{ width: 280, borderLeft: "1px solid var(--border)", background: "var(--card)", padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
-                <p style={{ margin: 0, fontWeight: 700, fontSize: 13.5 }}>Thông tin đơn hàng</p>
+              <div style={{ width: 280, borderLeft: "1px solid #e2e8f0", background: "#f8fafc", padding: 18, display: "flex", flexDirection: "column", gap: 14, flexShrink: 0 }}>
+                <p style={{ margin: 0, fontWeight: 700, fontSize: "0.875rem", color: "#0f172a" }}>Thông tin đơn hàng</p>
                 <div>
-                  <label style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", marginBottom: 6 }}>Ngày nhận hàng (Áp dụng tất cả)</label>
-                  <input
-                    type="date"
+                  <DatePicker
+                    label="Ngày nhận hàng (Áp dụng tất cả)"
                     value={assignments[0]?.ngayGiao ?? ""}
-                    onChange={e => {
-                      const val = e.target.value;
+                    onChange={(val) => {
                       setAssignments(prev => prev.map(a => ({ ...a, ngayGiao: val })));
                     }}
-                    style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--background)", color: "var(--foreground)", fontSize: 13, boxSizing: "border-box", outline: "none", marginBottom: 10 }}
                   />
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", marginBottom: 6 }}>Ghi chú nội bộ</label>
+                  <label style={{ display: "block", fontSize: "0.7188rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", marginBottom: 6 }}>Ghi chú nội bộ</label>
                   <textarea
                     value={editGhiChuState ?? ""}
                     onChange={e => setEditGhiChuState(e.target.value)}
                     placeholder="Nhập ghi chú cho đơn hàng..."
-                    style={{ width: "100%", height: 120, padding: 10, borderRadius: 8, border: "1px solid var(--border)", background: "var(--background)", color: "var(--foreground)", fontSize: 13, resize: "none", boxSizing: "border-box", outline: "none" }}
+                    style={{ width: "100%", height: 120, padding: 10, borderRadius: 8, border: "1px solid #cbd5e1", background: "#ffffff", color: "#0f172a", fontSize: "0.8125rem", resize: "none", boxSizing: "border-box", outline: "none" }}
                   />
                 </div>
               </div>
             )}
-
           </div>
-
-
-        </>
+        </div>
       ) : (
         /* ── Kết quả ──────────────────────────────────────────────────────────── */
-        <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 24, padding: 48 }}>
-          <div style={{ width: 64, height: 64, borderRadius: "50%", background: "rgba(16,185,129,0.12)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <i className="bi bi-check-circle-fill" style={{ fontSize: 32, color: "#10b981" }} />
+        <div style={{ flex: 1, overflowY: "auto", background: "#ffffff", borderRadius: "12px", border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20, padding: 40 }}>
+          <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#dcfce7", display: "flex", alignItems: "center", justifyContent: "center", color: "#15803d" }}>
+            <CheckCircleFill size={32} />
           </div>
           <div style={{ textAlign: "center" }}>
-            <p style={{ margin: 0, fontWeight: 800, fontSize: 18 }}>Tạo đơn mua thành công!</p>
-            <p style={{ margin: "6px 0 0", fontSize: 14, color: "var(--muted-foreground)" }}>
+            <h3 style={{ margin: 0, fontWeight: 800, fontSize: "1.125rem", color: "#0f172a" }}>Tạo đơn mua thành công!</h3>
+            <p style={{ margin: "6px 0 0", fontSize: "0.875rem", color: "#64748b" }}>
               Đã tạo {result?.createdOrders.length ?? 0} đơn mua từ phiếu yêu cầu {reqCode}
             </p>
           </div>
 
           <div style={{ width: "100%", maxWidth: 560, display: "flex", flexDirection: "column", gap: 10 }}>
             {result?.createdOrders.map((o, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12 }}>
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <i className="bi bi-building" style={{ fontSize: 14, color: "var(--primary)" }} />
+                  <Building size={16} style={{ color: "#1d4ed8" }} />
                   <div>
-                    <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>{o.supplierName}</p>
-                    <p style={{ margin: 0, fontSize: 12, color: "var(--muted-foreground)" }}>{o.soMatHang} mặt hàng</p>
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: "0.875rem", color: "#0f172a" }}>{o.supplierName}</p>
+                    <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b" }}>{o.soMatHang} mặt hàng</p>
                   </div>
                 </div>
-                <span style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 700, color: "var(--primary)", background: "color-mix(in srgb, var(--primary) 10%, transparent)", padding: "4px 14px", borderRadius: 20 }}>
-                  {o.code}
-                </span>
+                <Badge variant="info">{o.code}</Badge>
               </div>
             ))}
           </div>
 
           {(pendingItems > 0 || skippedItems > 0) && (
-            <div style={{ width: "100%", maxWidth: 560, padding: "12px 16px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 10, fontSize: 13 }}>
-              <i className="bi bi-info-circle" style={{ marginRight: 6, color: "#f59e0b" }} />
-              {pendingItems > 0 && <span>{pendingItems} mặt hàng chưa được xử lý. </span>}
-              {skippedItems > 0 && <span>{skippedItems} mặt hàng đã bỏ qua.</span>}
+            <div style={{ width: "100%", maxWidth: 560, padding: "10px 14px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, fontSize: "0.8125rem", color: "#92400e", display: "flex", alignItems: "center", gap: 8 }}>
+              <InfoCircle size={15} style={{ color: "#d97706", flexShrink: 0 }} />
+              <span>
+                {pendingItems > 0 && `${pendingItems} mặt hàng chưa được xử lý. `}
+                {skippedItems > 0 && `${skippedItems} mặt hàng đã bỏ qua.`}
+              </span>
             </div>
           )}
 
-          <button onClick={onClose} style={{ padding: "11px 36px", border: "none", background: "var(--primary)", color: "#fff", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+          <Button variant="primary" size="md" onClick={onClose}>
             Đóng
-          </button>
+          </Button>
         </div>
       )}
 

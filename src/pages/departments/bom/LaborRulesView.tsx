@@ -100,7 +100,7 @@ export interface LaborRulesData {
   updatedBy: string;
 }
 
-const DEFAULT_LABOR_RULES: LaborRulesData = {
+export const DEFAULT_LABOR_RULES: LaborRulesData = {
   selectedShiftId: 'shift-office',
   shifts: [
     {

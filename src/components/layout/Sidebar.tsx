@@ -556,6 +556,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
 
   // Tự động mở accordion khi chuyển phòng ban hoặc khi activeMenuKey thuộc một section
   useEffect(() => {
+    if (
+      activeMenuKey === 'documents' ||
+      activeMenuKey === 'meetings' ||
+      activeMenuKey === 'notebook' ||
+      activeMenuKey === 'journal'
+    ) {
+      setOpenSectionId('luutru');
+      return;
+    }
     const config = DEPT_SIDEBAR_CONFIGS[activeDeptCode] || DEPT_SIDEBAR_CONFIGS.board;
     // Nếu activeMenuKey thuộc về một accordion section, tự động mở section đó
     const matchingSection = config.sections.find(
@@ -566,6 +575,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
       return;
     }
     setOpenSectionId((prev) => {
+      if (prev === 'luutru') return prev;
       const prevExists = config.sections.some((s) => s.id === prev && !s.flat && s.items && s.items.length > 0);
       if (prevExists) return prev;
       const firstExpandable = config.sections.find((s) => !s.flat && s.items && s.items.length > 0);
@@ -593,11 +603,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
   const isSalesDept = activeDeptCode === 'sales' || activeDeptCode === 'kd' || activeDeptCode === 'kinh-doanh';
   const isFinanceDept = activeDeptCode === 'finance' || activeDeptCode === 'tai-chinh' || activeDeptCode === 'ke-toan';
   const isProductionDept = activeDeptCode === 'production' || activeDeptCode === 'san-xuat' || activeDeptCode === 'sx';
+  const isPurchaseDept = activeDeptCode === 'purchase' || activeDeptCode === 'purchasing' || activeDeptCode === 'mua-hang';
+  const isQaDept = activeDeptCode === 'qa' || activeDeptCode === 'qc' || activeDeptCode === 'dam-bao-chat-luong' || activeDeptCode === 'quality';
 
-  // Tự động chuyển về overview nếu đang ở phòng sản xuất mà activeMenuKey là yêu cầu/duyệt yêu cầu
+  // Tự động chuyển về overview nếu đang ở phòng sản xuất / mua hàng / QA mà activeMenuKey là yêu cầu/duyệt yêu cầu
   useEffect(() => {
     if (
-      isProductionDept &&
+      (isProductionDept || isPurchaseDept || isQaDept) &&
       (activeMenuKey === 'recruitment_req' ||
         activeMenuKey === 'approvals' ||
         activeMenuKey === 'requests_approvals' ||
@@ -605,9 +617,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
     ) {
       setActiveMenuKey('overview');
     }
-  }, [activeMenuKey, isProductionDept, setActiveMenuKey]);
+  }, [activeMenuKey, isProductionDept, isPurchaseDept, isQaDept, setActiveMenuKey]);
 
-  // Nhóm Yêu cầu và duyệt yêu cầu (ẩn ở board, hr, marketing, sales, finance, logistics, production và dealer)
+  // Nhóm Yêu cầu và duyệt yêu cầu (ẩn ở board, hr, marketing, sales, finance, logistics, production, purchase, qa và dealer)
   const showApprovalGroup =
     !isDealer &&
     activeDeptCode !== 'board' &&
@@ -616,7 +628,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
     !isSalesDept &&
     !isFinanceDept &&
     !isLogisticsDept &&
-    !isProductionDept;
+    !isProductionDept &&
+    !isPurchaseDept &&
+    !isQaDept;
 
   // Ẩn nhóm "Lưu trữ" ở trang HR (Nhân sự), Marketing, Sales, Finance, Logistics và Dealer
   const isHrDept = activeDeptCode === 'hr' || activeDeptCode === 'nhan-su' || activeDeptCode === 'admin';
@@ -681,7 +695,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                 type="button"
                 onClick={() => toggleSection('luutru')}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[13.5px] font-normal transition-all cursor-pointer border-0 bg-transparent ${
-                  activeMenuKey === 'documents' || activeMenuKey === 'meetings'
+                  activeMenuKey === 'documents' ||
+                  activeMenuKey === 'meetings' ||
+                  activeMenuKey === 'notebook' ||
+                  activeMenuKey === 'journal'
                     ? 'text-slate-900 font-semibold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                 } ${collapsed ? 'justify-center px-2' : ''}`}
@@ -690,7 +707,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                 <div className="flex items-center gap-2.5">
                   <i
                     className={`bi bi-archive text-[16px] shrink-0 ${
-                      activeMenuKey === 'documents' || activeMenuKey === 'meetings'
+                      activeMenuKey === 'documents' ||
+                      activeMenuKey === 'meetings' ||
+                      activeMenuKey === 'notebook' ||
+                      activeMenuKey === 'journal'
                         ? 'text-blue-600'
                         : 'text-slate-400'
                     }`}
@@ -731,14 +751,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                     type="button"
                     onClick={() => setActiveMenuKey('meetings')}
                     className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-[13px] transition-colors cursor-pointer border-0 bg-transparent text-left ${
-                      activeMenuKey === 'meetings'
+                      activeMenuKey === 'meetings' ||
+                      activeMenuKey === 'notebook' ||
+                      activeMenuKey === 'journal'
                         ? 'text-blue-600 font-semibold bg-blue-50/40'
                         : 'text-slate-500 hover:text-blue-600 hover:bg-slate-50'
                     }`}
                   >
                     <span
                       className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                        activeMenuKey === 'meetings'
+                        activeMenuKey === 'meetings' ||
+                        activeMenuKey === 'notebook' ||
+                        activeMenuKey === 'journal'
                           ? 'bg-blue-600 border border-blue-600'
                           : 'border border-slate-400'
                       }`}

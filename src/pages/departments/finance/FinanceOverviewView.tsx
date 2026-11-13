@@ -194,6 +194,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
   });
   const [cashflowChartData, setCashflowChartData] = useState<CashflowMonthData[]>(INITIAL_CASHFLOW_DATA);
   const [cashflowNotices, setCashflowNotices] = useState<CashflowNotice[]>([]);
+  const [hoveredMonthIdx, setHoveredMonthIdx] = useState<number | null>(null);
   const [selectedNotice, setSelectedNotice] = useState<CashflowNotice | null>(null);
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
 
@@ -712,6 +713,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
           {!isMobileView && (
             <DepartmentActionMenu
               noBorder={true}
+              lockedItemIds={['requests_approvals']}
               extraItems={[
                 {
                   id: 'refresh-data',
@@ -1058,9 +1060,10 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
             }}
           >
             <svg
-              viewBox={isMobileView ? '52 10 560 198' : '0 0 650 230'}
+              viewBox={isMobileView ? '52 10 560 198' : '16 0 622 222'}
               preserveAspectRatio="xMidYMid meet"
               style={{ width: '100%', height: isMobileView ? '205px' : '100%', overflow: 'visible' }}
+              onMouseLeave={() => setHoveredMonthIdx(null)}
             >
               <defs>
                 <linearGradient id="fundBalanceAreaGrad" x1="0" y1="0" x2="0" y2="1">
@@ -1072,7 +1075,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                 </filter>
               </defs>
 
-              {/* Lưới ngang tham chiếu và nhãn trục tung */}
+              {/* Lưới ngang tham chiếu (đã bỏ nhãn trục tung theo yêu cầu) */}
               {(() => {
                 const maxDataBillions = Math.max(
                   2,
@@ -1091,22 +1094,10 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                   <>
                     {gridSteps.map((grid, gIdx) => (
                       <g key={`grid-${gIdx}`}>
-                        {!isMobileView && (
-                          <text
-                            x="30"
-                            y={grid.y + 4}
-                            textAnchor="end"
-                            fill="var(--text-muted)"
-                            fontSize="10.5"
-                            fontWeight="500"
-                          >
-                            {grid.val > 0 ? `${grid.val}tỷ` : '0'}
-                          </text>
-                        )}
                         <line
-                          x1={isMobileView ? '55' : '38'}
+                          x1={isMobileView ? '55' : '22'}
                           y1={grid.y}
-                          x2={isMobileView ? '608' : '630'}
+                          x2={isMobileView ? '608' : '632'}
                           y2={grid.y}
                           stroke="var(--border-subtle)"
                           strokeDasharray={grid.val === 0 ? undefined : '3 3'}
@@ -1125,6 +1116,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                         ? Math.max(6, Math.min(150, (bar.outFlow / yMax) * 150))
                         : 0;
                       const outY = 175 - outHeight;
+                      const isHovered = hoveredMonthIdx === bIdx;
 
                       const inLabel = bar.inFlow >= 1
                         ? `${bar.inFlow.toFixed(2)}tỷ`
@@ -1135,6 +1127,17 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
 
                       return (
                         <g key={`bar-${bIdx}`}>
+                          {/* Vùng highlight nhẹ khi hover cột tháng */}
+                          {isHovered && (
+                            <rect
+                              x={bar.cx - 32}
+                              y={20}
+                              width="64"
+                              height="155"
+                              rx="6"
+                              fill="rgba(14, 165, 233, 0.06)"
+                            />
+                          )}
                           {/* Cột Tiền vào (Thu) */}
                           <rect
                             x={bar.cx - 20}
@@ -1144,10 +1147,9 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                             fill="#10b981"
                             rx="3"
                             ry="3"
-                            style={{ cursor: 'pointer' }}
-                          >
-                            <title>{`Thu ${bar.month}: ${formatVND(bar.inFlowRaw || bar.inFlow * 1e9)}`}</title>
-                          </rect>
+                            opacity={hoveredMonthIdx !== null && !isHovered ? 0.55 : 1}
+                            style={{ cursor: 'pointer', transition: 'opacity 0.15s ease' }}
+                          />
                           {/* Giá trị Tiền vào (Thu) hiển thị trên đỉnh cột */}
                           <text
                             x={bar.cx - 11}
@@ -1169,10 +1171,9 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                             fill="#f43f5e"
                             rx="3"
                             ry="3"
-                            style={{ cursor: 'pointer' }}
-                          >
-                            <title>{`Chi ${bar.month}: ${formatVND(bar.outFlowRaw || bar.outFlow * 1e9)}`}</title>
-                          </rect>
+                            opacity={hoveredMonthIdx !== null && !isHovered ? 0.55 : 1}
+                            style={{ cursor: 'pointer', transition: 'opacity 0.15s ease' }}
+                          />
                           {/* Giá trị Tiền ra (Chi) hiển thị trên đỉnh cột */}
                           <text
                             x={bar.cx + 11}
@@ -1237,16 +1238,92 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                   key={`pt-${pIdx}`}
                   cx={pt.cx}
                   cy={pt.cy}
-                  r="5"
+                  r={hoveredMonthIdx === pIdx ? '6.5' : '5'}
                   fill="#0284c7"
                   stroke="#ffffff"
                   strokeWidth="2.5"
+                  style={{ cursor: 'pointer', transition: 'r 0.15s ease' }}
+                />
+              ))}
+
+              {/* Vùng bắt sự kiện hover cho từng tháng để hiển thị Tooltip */}
+              {cashflowChartData.map((pt, pIdx) => (
+                <rect
+                  key={`hover-${pIdx}`}
+                  x={pt.cx - 42}
+                  y={15}
+                  width="84"
+                  height="190"
+                  fill="transparent"
                   style={{ cursor: 'pointer' }}
-                >
-                  <title>{`Số dư tồn quỹ (${pt.month}): ${pt.val}`}</title>
-                </circle>
+                  onMouseEnter={() => setHoveredMonthIdx(pIdx)}
+                />
               ))}
             </svg>
+
+            {/* Tooltip chi tiết khi hover vào từng tháng */}
+            {hoveredMonthIdx !== null && cashflowChartData[hoveredMonthIdx] && (() => {
+              const item = cashflowChartData[hoveredMonthIdx];
+              const inRaw = item.inFlowRaw ?? Math.round((item.inFlow || 0) * 1e9);
+              const outRaw = item.outFlowRaw ?? Math.round((item.outFlow || 0) * 1e9);
+              const diffRaw = inRaw - outRaw;
+              const leftPct = Math.min(82, Math.max(18, ((item.cx - 16) / 622) * 100));
+
+              return (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '8px',
+                    left: `${leftPct}%`,
+                    transform: 'translateX(-50%)',
+                    backgroundColor: 'rgba(255, 255, 255, 0.98)',
+                    backdropFilter: 'blur(8px)',
+                    color: '#0f172a',
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    boxShadow: '0 10px 25px -5px rgba(15, 23, 42, 0.12), 0 4px 10px -2px rgba(15, 23, 42, 0.06)',
+                    border: '1px solid #e2e8f0',
+                    pointerEvents: 'none',
+                    zIndex: 20,
+                    minWidth: '210px',
+                    fontSize: '0.75rem',
+                  }}
+                >
+                  <div style={{ fontWeight: 700, fontSize: '0.7813rem', color: '#0f172a', marginBottom: '6px', paddingBottom: '5px', borderBottom: '1px solid #f1f5f9' }}>
+                    Tháng {item.month}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#475569' }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: '#10b981' }} />
+                        Tiền vào:
+                      </span>
+                      <strong style={{ color: '#059669' }}>{formatVND(inRaw)}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#475569' }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: '#f43f5e' }} />
+                        Tiền ra:
+                      </span>
+                      <strong style={{ color: '#e11d48' }}>{formatVND(outRaw)}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                      <span style={{ color: '#64748b' }}>Chênh lệch:</span>
+                      <strong style={{ color: diffRaw >= 0 ? '#059669' : '#e11d48' }}>
+                        {diffRaw >= 0 ? '+' : ''}{formatVND(diffRaw)}
+                      </strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginTop: '2px', paddingTop: '5px', borderTop: '1px dashed #e2e8f0' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#334155', fontWeight: 500 }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#0284c7' }} />
+                        Số dư quỹ:
+                      </span>
+                      <strong style={{ color: '#0284c7' }}>{item.val}</strong>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Chú giải Legend ở chân thẻ biểu đồ trên Mobile */}

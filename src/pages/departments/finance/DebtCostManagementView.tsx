@@ -7,6 +7,7 @@ import {
   FileEarmarkSpreadsheet,
   FileEarmarkText,
   CashCoin,
+  Wallet2,
   FileEarmarkCheck,
   Send,
   Printer,
@@ -27,6 +28,9 @@ import {
   Building,
   BoxSeam,
   FileText,
+  BagCheck,
+  CreditCard,
+  Gear,
 } from 'react-bootstrap-icons';
 import {
   TableToolbar,
@@ -51,6 +55,7 @@ import { DebtAgingConfigOffcanvas, type DebtAgingConfig, DEFAULT_DEBT_AGING_CONF
 import { DebtCostReportPrintModal } from './DebtCostReportPrintModal';
 import { DebtSubEntryDetailOffcanvas } from './DebtSubEntryDetailOffcanvas';
 import type { TickerItem } from '../../../components/common/Ticker';
+import { useAuth } from '../../../context/AuthContext';
 
 // Hàm tính toán và xác định trạng thái tuổi nợ khách hàng theo cấu hình
 export const calculateReceivableAgingStatus = (
@@ -122,6 +127,14 @@ const formatNumberGroup = (val: number | string | undefined | null): string => {
   if (isNaN(num)) return '0';
   const rounded = Math.round(num / 1000) * 1000;
   return rounded.toLocaleString('vi-VN');
+};
+
+// Định dạng tiền tệ cho ô nhập liệu (Input field): không tự làm tròn hàng nghìn, cho phép xóa trống
+const formatMoneyInput = (val: string | number | undefined | null): string => {
+  if (val === undefined || val === null || val === '') return '';
+  const digits = String(val).replace(/\D/g, '');
+  if (!digits) return '';
+  return Number(digits).toLocaleString('vi-VN');
 };
 
 // Giao dich lich su thu no
@@ -347,6 +360,67 @@ export interface ExpenseItem {
   isAutoDepreciation?: boolean;
   depreciationBreakdown?: { prod: number; sales: number; admin: number };
 }
+
+// 3 nhóm chi phí chuẩn theo yêu cầu quản trị doanh nghiệp:
+// 1. Chi phí mua hàng (Đơn mua hàng, NVL, vật tư, phụ liệu sản xuất)
+// 2. Thanh toán công nợ (Trả nợ NCC, tạm ứng người lao động, BHXH, thuế, nợ vay)
+// 3. Chi phí vận hành (Chi phí QLDN, bán hàng, sản xuất chung, khấu hao TSCĐ & tài chính)
+export type ExpenseGroupType = 'purchase' | 'debt_payment' | 'operating';
+
+export const classifyExpenseItem = (item: ExpenseItem): ExpenseGroupType => {
+  const op = item.operationType || '';
+  const debit = String(item.debitAccount || '').replace(/['"]/g, '').trim();
+  const titleLower = (item.title || '').toLowerCase();
+  const catLabelLower = (item.categoryLabel || '').toLowerCase();
+
+  // 1. Chi phí mua hàng: Đơn mua hàng (PURCHASE_ORDER), mua NVL 621, mua hàng 156/152/153, hoặc liên quan đến đơn hàng mua sắm
+  if (
+    op === 'PURCHASE_ORDER' ||
+    op === 'expense_materials_621' ||
+    op === 'expense_goods_156' ||
+    titleLower.includes('đơn mua hàng') ||
+    titleLower.includes('mua nguyên vật liệu') ||
+    titleLower.includes('mua vật tư') ||
+    titleLower.includes('tiền mua hàng') ||
+    titleLower.includes('dh-20') ||
+    catLabelLower.includes('mua hàng') ||
+    debit === '621' ||
+    debit === '152' ||
+    debit === '156' ||
+    debit === '153'
+  ) {
+    return 'purchase';
+  }
+
+  // 2. Thanh toán công nợ: Trả nợ NCC (331), tạm ứng nhân viên (141), trả lương (334), nộp bảo hiểm (338), nộp thuế (333), trả gốc vay (341)
+  if (
+    op === 'PERSONAL_REQUEST' ||
+    op === 'advance_payment' ||
+    op === 'pay_supplier_bank' ||
+    op === 'pay_supplier_cash' ||
+    op === 'pay_salary_bank' ||
+    op === 'pay_salary_cash' ||
+    op === 'pay_insurance' ||
+    op === 'pay_tax' ||
+    debit === '331' ||
+    debit === '141' ||
+    debit === '334' ||
+    debit === '338' ||
+    debit === '333' ||
+    debit === '341' ||
+    titleLower.includes('tạm ứng') ||
+    titleLower.includes('thanh toán công nợ') ||
+    titleLower.includes('trả nợ') ||
+    titleLower.includes('hoàn ứng') ||
+    catLabelLower.includes('tạm ứng') ||
+    catLabelLower.includes('công nợ')
+  ) {
+    return 'debt_payment';
+  }
+
+  // 3. Chi phí vận hành: Khấu hao TSCĐ, Chi phí bán hàng (641), Chi phí QLDN (642), Chi phí SXC (627), Chi phí tài chính (635), Chi phí khác (811)
+  return 'operating';
+};
 
 // Danh mục loại nghiệp vụ chi chuẩn kế toán doanh nghiệp (Tự động định khoản kép đầy đủ theo TT200 / TT133, phân nhóm trực quan)
 export const EXPENSE_OPERATION_TYPES = [
@@ -767,9 +841,10 @@ const INITIAL_EXPENSES: ExpenseItem[] = [];
 // Hàm lấy tên tài khoản đăng nhập hiện tại từ props hoặc session lưu trữ
 const getLoggedInUserName = (userProp?: any): string => {
   if (userProp?.name) return userProp.name;
+  if (userProp?.employee?.fullName) return userProp.employee.fullName;
   if (userProp?.fullName) return userProp.fullName;
   try {
-    const saved = localStorage.getItem('decodoor_session');
+    const saved = localStorage.getItem('seajong_session') || localStorage.getItem('decodoor_session');
     if (saved) {
       const parsed = JSON.parse(saved);
       if (parsed.user?.name) return parsed.user.name;
@@ -786,6 +861,8 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
   user,
   onUpdateTickerItems,
 }) => {
+  const { user: authUser } = useAuth();
+  const activeUser = user || authUser;
   // Dữ liệu từng bước
   const [receivables, setReceivables] = useState<ReceivableItem[]>(INITIAL_RECEIVABLES);
   const [payables, setPayables] = useState<PayableItem[]>(INITIAL_PAYABLES);
@@ -987,6 +1064,9 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
       return parts.length >= 3 && parseInt(parts[1], 10) === curMonthNum && parts[2] === selectedYear;
     });
     const currentMonthTotal = currentMonthExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const curPurchaseTotal = currentMonthExpenses.filter((e) => classifyExpenseItem(e) === 'purchase').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const curDebtTotal = currentMonthExpenses.filter((e) => classifyExpenseItem(e) === 'debt_payment').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const curOperatingTotal = currentMonthExpenses.filter((e) => classifyExpenseItem(e) === 'operating').reduce((sum, e) => sum + (Number(e.amount) || 0), 0) + fixedAssetDepreciationMonthly.total;
 
     return [
       {
@@ -995,14 +1075,14 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
         text: `Tổng chi phí năm ${selectedYear}: **${formatNumberGroup(totalExpense)} đ** (${expenses.length} khoản mục phát sinh)`,
       },
       {
+        tag: 'CHI PHÍ THÁNG NÀY',
+        tagVariant: 'warning' as const,
+        text: `Chi phí tháng ${curMonthNum < 10 ? `0${curMonthNum}` : curMonthNum}/${selectedYear}: **${formatNumberGroup(currentMonthTotal)} đ** (Mua hàng: **${formatNumberGroup(curPurchaseTotal)} đ** • Công nợ: **${formatNumberGroup(curDebtTotal)} đ** • Vận hành: **${formatNumberGroup(curOperatingTotal)} đ**)`,
+      },
+      {
         tag: 'ĐÃ DUYỆT CHI',
         tagVariant: 'success' as const,
         text: `Chi phí đã được phê duyệt giải ngân: **${formatNumberGroup(approvedExpense)} đ** (${expenses.filter((e) => e.status === 'approved').length} phiếu)`,
-      },
-      {
-        tag: 'CHI PHÍ THÁNG NÀY',
-        tagVariant: 'warning' as const,
-        text: `Chi phí phát sinh trong tháng ${curMonthNum < 10 ? `0${curMonthNum}` : curMonthNum}/${selectedYear}: **${formatNumberGroup(currentMonthTotal)} đ**`,
       },
       {
         tag: 'KHẤU HAO TỰ ĐỘNG',
@@ -1010,9 +1090,9 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
         text: `Trích khấu hao TSCĐ tự động định kỳ: **${formatNumberGroup(fixedAssetDepreciationMonthly.total)} đ/tháng** vào Sổ nhật ký chung`,
       },
       {
-        tag: 'KIỂM SOÁT ĐỊNH MỨC',
+        tag: '3 NHÓM CHI PHÍ',
         tagVariant: 'brand' as const,
-        text: `Kiểm soát chặt chẽ định mức chi phí sản xuất (TK 621, 622, 627) và chi phí bán hàng, QLDN (TK 641, 642)`,
+        text: `Phân định 3 nhóm chi phí độc lập: Chi phí mua hàng, Thanh toán công nợ và Chi phí vận hành`,
       },
     ];
   }, [receivables, payables, loans, expenses, currentStep, selectedYear, fixedAssetDepreciationMonthly]);
@@ -1323,8 +1403,23 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     }
   }, [currentStep]);
 
-  // Dropdown ba cham tren tung dong
+  // Dropdown ba cham tren tung dong va co che tinh toan vi tri thong minh chong che khuat
   const [activeRowMenuId, setActiveRowMenuId] = useState<string | null>(null);
+  const [menuOpenUp, setMenuOpenUp] = useState<boolean>(false);
+
+  const handleToggleRowMenu = (id: string, e: React.MouseEvent<HTMLElement>) => {
+    e.stopPropagation();
+    if (activeRowMenuId === id) {
+      setActiveRowMenuId(null);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      // Dropdown menu cao ~220-260px. Neu khoang trong phia duoi < 280px va phia tren du cho, tu dong mo nguoc len tren
+      const openUp = spaceBelow < 280 && rect.top > 200;
+      setMenuOpenUp(openUp);
+      setActiveRowMenuId(id);
+    }
+  };
 
   // Modal Offcanvas them/sua
   const [isOffcanvasOpen, setIsOffcanvasOpen] = useState(false);
@@ -1361,8 +1456,8 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
   const [formExpenseCategory, setFormExpenseCategory] = useState<'production' | 'sales' | 'administrative' | 'finance'>('production');
   const [formExpenseCategoryLabel, setFormExpenseCategoryLabel] = useState<string>('Chi phí sản xuất');
   const [formExpenseDepartment, setFormExpenseDepartment] = useState<string>('Khối Sản Xuất');
-  const currentLoggedInUserName = useMemo(() => getLoggedInUserName(user), [user]);
-  const [formSpender, setFormSpender] = useState<string>(() => getLoggedInUserName(user));
+  const currentLoggedInUserName = useMemo(() => getLoggedInUserName(activeUser), [activeUser]);
+  const [formSpender, setFormSpender] = useState<string>(() => getLoggedInUserName(activeUser));
   const [formProposer, setFormProposer] = useState<string>('');
   const [formSelectedLoanId, setFormSelectedLoanId] = useState<string>('');
 
@@ -1544,6 +1639,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
 
   // Modal Ghi nhận thanh toán bước 1 và bước 2
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [isSupplierAdvancePayment, setIsSupplierAdvancePayment] = useState(false);
   const [selectedReceivableForPayment, setSelectedReceivableForPayment] = useState<ReceivableItem | null>(null);
   const [selectedPayableForPayment, setSelectedPayableForPayment] = useState<PayableItem | null>(null);
   const [paymentAmountInput, setPaymentAmountInput] = useState('');
@@ -1558,6 +1654,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
 
   // Offcanvas Ghi nhận thanh toán thu nợ khách hàng rộng 480px (chuẩn nghiệp vụ kế toán)
   const [paymentOffcanvasOpen, setPaymentOffcanvasOpen] = useState(false);
+  const [isAdvancePayment, setIsAdvancePayment] = useState(false);
   const [selectedStageForPayment, setSelectedStageForPayment] = useState<DebtEntryItem | null>(null);
   const [receiptCodeInput, setReceiptCodeInput] = useState(() => {
     const now = new Date();
@@ -1574,7 +1671,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
   const [paymentBankRef, setPaymentBankRef] = useState('');
   const [paymentPayerName, setPaymentPayerName] = useState('');
   const [paymentPayerAddress, setPaymentPayerAddress] = useState('');
-  const [paymentAccountantName, setPaymentAccountantName] = useState('Phạm Thu Hằng (Kế toán thanh toán)');
+  const [paymentAccountantName, setPaymentAccountantName] = useState(() => getLoggedInUserName(activeUser) || 'Kế toán thanh toán');
   const [paymentOriginalDocsCount, setPaymentOriginalDocsCount] = useState('01 Giấy báo Có ngân hàng');
 
   // ── CÁC TRƯỜNG NGHIỆP VỤ HẠCH TOÁN KẾ TOÁN CHO OFFCANVAS LẬP PHIẾU CHI NHÀ CUNG CẤP (BƯỚC 2) ──
@@ -1695,6 +1792,18 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
 
   const toggleExpandMonth = (monthNum: number) => {
     setActiveExpandedMonth((prev) => (prev === monthNum ? null : monthNum));
+  };
+
+  // Quản lý trạng thái mở rộng 3 nhóm con trong mỗi tháng: Chi phí mua hàng, Thanh toán công nợ, Chi phí vận hành (Mặc định ẩn chi tiết bên trong)
+  const [expandedExpenseSubGroups, setExpandedExpenseSubGroups] = useState<Record<string, boolean>>({});
+
+  const toggleExpenseSubGroup = (monthNum: number, groupId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const key = `${monthNum}-${groupId}`;
+    setExpandedExpenseSubGroups((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
   };
 
   // Confirm Dialog xoa
@@ -1872,7 +1981,13 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
   const filteredExpenses = useMemo(() => {
     const directExpenses = expenses.filter((item) => {
       if (statusFilter !== 'all' && item.status !== statusFilter) return false;
-      if (categoryFilter !== 'all' && item.category !== categoryFilter) return false;
+      if (categoryFilter !== 'all') {
+        if (categoryFilter === 'purchase' || categoryFilter === 'debt_payment' || categoryFilter === 'operating') {
+          if (classifyExpenseItem(item) !== categoryFilter) return false;
+        } else if (item.category !== categoryFilter) {
+          return false;
+        }
+      }
       if (selectedYear) {
         const parts = item.spendDate.split('/');
         if (parts.length >= 3 && parts[2] !== selectedYear) return false;
@@ -1900,6 +2015,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
         // Kiểm tra bộ lọc khoản mục chi
         const matchesCategory =
           categoryFilter === 'all' ||
+          categoryFilter === 'operating' ||
           categoryFilter === 'depreciation' ||
           categoryFilter === 'production' ||
           categoryFilter === 'sales' ||
@@ -2086,6 +2202,9 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
         },
         options: [
           { value: 'all', label: 'Tất cả khoản mục chi' },
+          { value: 'purchase', label: '1. Chi phí mua hàng' },
+          { value: 'debt_payment', label: '2. Thanh toán công nợ' },
+          { value: 'operating', label: '3. Chi phí vận hành' },
           { value: 'depreciation', label: 'Khấu hao TSCĐ (TK 627, 641, 642)' },
           { value: 'production', label: 'Chi phí sản xuất' },
           { value: 'sales', label: 'Chi phí bán hàng' },
@@ -2260,6 +2379,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
 
   // 1. Mở Offcanvas Ghi nhận thanh toán thu nợ (chỉ lấy các đợt thanh toán còn công nợ)
   const handleOpenPaymentModal = (item: ReceivableItem, stage?: DebtEntryItem) => {
+    setIsAdvancePayment(false);
     setSelectedReceivableForPayment(item);
 
     // Xác định đợt thanh toán đích: chỉ lấy các đợt còn công nợ (> 0)
@@ -2289,11 +2409,38 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     setPaymentBankRef(`FT${dateCode}-${Math.floor(1000 + Math.random() * 9000)}`);
     setPaymentPayerName(item.customerName || '');
     setPaymentPayerAddress(item.customerAddress || 'Hà Nội');
-    setPaymentAccountantName(getLoggedInUserName(user) || 'Phạm Thu Hằng (Kế toán thanh toán)');
+    setPaymentAccountantName(getLoggedInUserName(activeUser) || 'Kế toán thanh toán');
     setPaymentOriginalDocsCount('01 Giấy báo Có ngân hàng');
     setPaymentNote(activeStage ? `Thu tiền khách hàng - ${activeStage.title}` : `Thu nợ khách hàng - ${item.customerName}`);
     setPrintReceiptChecked(true);
     setLinkedOrderInput(activeStage ? `${item.customerName} - ${activeStage.title}` : (item.projectName || 'Dư nợ đầu kỳ'));
+    setPaymentOffcanvasOpen(true);
+  };
+
+  // 1b. Mở Offcanvas Thu tiền ứng trước của khách hàng (chưa có đơn hàng hoặc đặt cọc)
+  const handleOpenAdvancePaymentModal = (item: ReceivableItem) => {
+    setIsAdvancePayment(true);
+    setSelectedReceivableForPayment(item);
+    setSelectedStageForPayment(null);
+    setPaymentAmountInput('');
+    setPaymentMethod('Chuyển khoản');
+    setPaymentDebitAccount('1121');
+    setPaymentCreditAccount('131');
+    setPaymentBankAccount('Vietcombank - 0011004123456 - CN Thăng Long');
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+    const dateCode = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    setPaymentDate(`${timeStr} ${dateStr}`);
+    setReceiptCodeInput(`PT-20261004-${Math.floor(100 + Math.random() * 900)}`);
+    setPaymentBankRef(`FT${dateCode}-${Math.floor(1000 + Math.random() * 9000)}`);
+    setPaymentPayerName(item.customerName || '');
+    setPaymentPayerAddress(item.customerAddress || 'Hà Nội');
+    setPaymentAccountantName(getLoggedInUserName(activeUser) || 'Kế toán thanh toán');
+    setPaymentOriginalDocsCount('01 Giấy báo Có ngân hàng');
+    setPaymentNote(`Thu tiền ứng trước / đặt cọc tiền hàng - ${item.customerName}`);
+    setPrintReceiptChecked(true);
+    setLinkedOrderInput('Khách hàng ứng trước tiền hàng (Dư Có TK 131 - Chưa có đơn hàng)');
     setPaymentOffcanvasOpen(true);
   };
 
@@ -2371,10 +2518,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
         paymentOriginalDocsCount ? `Kèm theo: ${paymentOriginalDocsCount}` : '',
         paymentNote,
       ].filter(Boolean).join(' | '),
-      creator: getLoggedInUserName(user) || 'Phạm Thu Hằng (Kế toán)',
-      accountant: paymentAccountantName || 'Trần Bích Thủy (Kế toán trưởng)',
-      cashier: isBankTransfer ? '' : 'Vũ Thu Trang (Thủ quỹ)',
-      director: 'Hà Hải Lâm',
+      creator: getLoggedInUserName(activeUser) || 'Kế toán thanh toán',
+      accountant: paymentAccountantName || 'Kế toán trưởng',
+      cashier: isBankTransfer ? '' : 'Thủ quỹ',
+      director: 'Lê Công Vụ',
     };
 
     try {
@@ -2407,29 +2554,37 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
         setReceivables((prev) =>
           prev.map((rec) => {
             if (rec.id !== currentItem.id) return rec;
-            const updatedEntries = (rec.entries || []).map((ent) => {
-              if (targetStage && (ent.id === targetStage.id || ent.code === targetStage.code)) {
-                const newPaidAmt = (ent.paidAmount || 0) + paidNum;
-                const newRem = Math.max(0, ent.contractValue - newPaidAmt);
-                return {
-                  ...ent,
-                  paidAmount: newPaidAmt,
-                  remainingAmount: newRem,
-                  status: (newRem <= 0 ? 'completed' : 'ontime') as any,
-                  statusLabel: newRem <= 0 ? 'Đã thu đủ' : 'Thu một phần',
-                  payments: [...(ent.payments || []), newPaymentRecord],
-                };
-              }
-              return ent;
-            });
-            const newPaidTotal = updatedEntries.reduce((sum, s) => sum + (s.paidAmount || 0), 0);
+            let updatedEntries = rec.entries || [];
+            let newPaidTotal = rec.paidAmount || 0;
+
+            if (targetStage) {
+              updatedEntries = updatedEntries.map((ent) => {
+                if (ent.id === targetStage.id || ent.code === targetStage.code) {
+                  const newPaidAmt = (ent.paidAmount || 0) + paidNum;
+                  const newRem = Math.max(0, ent.contractValue - newPaidAmt);
+                  return {
+                    ...ent,
+                    paidAmount: newPaidAmt,
+                    remainingAmount: newRem,
+                    status: (newRem <= 0 ? 'completed' : 'ontime') as any,
+                    statusLabel: newRem <= 0 ? 'Đã thu đủ' : 'Thu một phần',
+                    payments: [...(ent.payments || []), newPaymentRecord],
+                  };
+                }
+                return ent;
+              });
+              newPaidTotal = updatedEntries.reduce((sum, s) => sum + (s.paidAmount || 0), 0);
+            } else {
+              // Ứng trước hoặc thu ngoài đơn: tăng tổng đã thanh toán của đối tác
+              newPaidTotal = (rec.paidAmount || 0) + paidNum;
+            }
             const newRemainTotal = Math.max(0, rec.contractValue - newPaidTotal);
             return {
               ...rec,
               paidAmount: newPaidTotal,
               remainingAmount: newRemainTotal,
-              status: (newRemainTotal <= 0 ? 'completed' : 'ontime') as any,
-              statusLabel: newRemainTotal <= 0 ? 'Đã thu đủ' : 'Đang thu',
+              status: (newRemainTotal <= 0 ? 'completed' : rec.status) as any,
+              statusLabel: newRemainTotal <= 0 ? 'Đã thu đủ' : rec.statusLabel,
               entries: updatedEntries,
             };
           })
@@ -2441,8 +2596,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
 
     setPaymentOffcanvasOpen(false);
     const custName = currentItem.customerName;
+    const isAdvance = isAdvancePayment;
     setSelectedReceivableForPayment(null);
     setSelectedStageForPayment(null);
+    setIsAdvancePayment(false);
 
     // Khi công tắc In phiếu thu được chọn, gọi modal PrintPreview để hỗ trợ in sau khi lưu
     if (printReceiptChecked) {
@@ -2453,10 +2610,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     if (onShowToast) {
       onShowToast(
         'success',
-        'Ghi nhận thanh toán thành công',
+        isAdvance ? 'Thu tiền ứng trước thành công' : 'Ghi nhận thanh toán thành công',
         printReceiptChecked
           ? `Đã tạo phiếu thu ${newHistItem.code} số tiền ${formatNumberGroup(paidNum)} VND và mở xem trước in ấn`
-          : `Đã cập nhật thu số tiền ${formatNumberGroup(paidNum)} VND từ khách hàng ${custName}`
+          : `Đã cập nhật ${isAdvance ? 'thu tiền ứng trước' : 'thu'} số tiền ${formatNumberGroup(paidNum)} VND từ khách hàng ${custName}`
       );
     }
   };
@@ -2479,7 +2636,14 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
   };
 
   // ── CÁC HÀM XỬ LÝ CHỨC NĂNG DROPLIST BƯỚC 2: CÔNG NỢ PHẢI TRẢ ──
+  // 1. Mở Offcanvas Tạo yêu cầu chi tiền thanh toán nhà cung cấp
   const handleOpenPayablePaymentModal = (item: PayableItem, initialEntryId?: string) => {
+    const itemRemaining = Number(item.remainingAmount !== undefined ? item.remainingAmount : (item.totalAmount - (item.paidAmount || 0))) || 0;
+    if (itemRemaining <= 0 && !initialEntryId) {
+      if (onShowToast) onShowToast('info', 'Đã thanh toán đủ', 'Khoản nợ phải trả này đã được tất toán, không còn số dư cần thanh toán.');
+      return;
+    }
+    setIsSupplierAdvancePayment(false);
     setSelectedPayableForPayment(item);
 
     // Tìm PO con còn nợ nếu có
@@ -2503,7 +2667,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     setPayablePaymentDate(dateStr);
     setPayablePaymentTime(timeStr);
-    setPayableVoucherCode(`PC-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${Math.floor(100 + Math.random() * 900)}`);
+    setPayableVoucherCode(`YCCHI-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${Math.floor(100 + Math.random() * 900)}`);
 
     const isTransporter = item.partnerType === 'transporter' || item.code?.startsWith('CNVC');
     setPayableDebitAccount(isTransporter ? '3312' : '331');
@@ -2520,9 +2684,41 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     setPayableReceiverAddress(item.supplierAddress || 'Hà Nội');
 
     const docCode = pendingEntry?.code || item.poCode || item.code;
-    setPaymentNote(`Thanh toán tiền hàng cho ${item.supplierName} theo ${docCode}`);
+    setPaymentNote(`Yêu cầu chi tiền thanh toán cho ${item.supplierName} theo ${docCode}`);
     setPayableOriginalDocsCount('01 Giấy báo Nợ ngân hàng / UNC & 01 Hóa đơn GTGT');
-    setIsPrintPayableVoucherChecked(true);
+    setIsPrintPayableVoucherChecked(false);
+    setPaymentModalOpen(true);
+  };
+
+  // 1b. Mở Offcanvas Tạo yêu cầu ứng trước cho nhà cung cấp (chưa có đơn hàng hoặc đặt cọc)
+  const handleOpenPayableAdvanceModal = (item: PayableItem) => {
+    setIsSupplierAdvancePayment(true);
+    setSelectedPayableForPayment(item);
+    setSelectedPayableEntryId('');
+    setPaymentAmountInput('');
+    setPaymentMethod('Chuyển khoản');
+
+    const now = new Date();
+    const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    setPayablePaymentDate(dateStr);
+    setPayablePaymentTime(timeStr);
+    setPayableVoucherCode(`YCU-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${Math.floor(100 + Math.random() * 900)}`);
+
+    const isTransporter = item.partnerType === 'transporter' || item.code?.startsWith('CNVC');
+    setPayableDebitAccount(isTransporter ? '3312' : '331');
+    setPayableCreditAccount('1121');
+
+    setPayableSourceBank(dbCashAssets.length > 0 ? `${dbCashAssets[0].bankName} - ${dbCashAssets[0].accountNumber}` : 'Vietcombank - 0011004329999 (Seajong VN)');
+    setPayableDestBank(isTransporter ? 'Vietcombank' : 'BIDV');
+    setPayableDestAccount(isTransporter ? '1029384756' : '9988776655');
+    setPayableDestBeneficiary(item.supplierName);
+    setPayableReceiverName(item.supplierName);
+    setPayableReceiverAddress(item.supplierAddress || 'Hà Nội');
+
+    setPaymentNote(`Yêu cầu ứng trước tiền mua hàng cho ${item.supplierName}`);
+    setPayableOriginalDocsCount('01 Giấy báo Nợ ngân hàng / UNC & Giấy đề nghị tạm ứng');
+    setIsPrintPayableVoucherChecked(false);
     setPaymentModalOpen(true);
   };
 
@@ -2530,93 +2726,102 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     if (!selectedPayableForPayment) return;
     const paidNum = Number(paymentAmountInput.replace(/\D/g, '')) || 0;
     if (paidNum <= 0) {
-      if (onShowToast) onShowToast('warning', 'Số tiền không hợp lệ', 'Vui lòng nhập số tiền thanh toán lớn hơn 0');
+      if (onShowToast) onShowToast('warning', 'Số tiền không hợp lệ', 'Vui lòng nhập số tiền lớn hơn 0');
       return;
     }
 
     const currentItem = selectedPayableForPayment;
+    const isAdv = isSupplierAdvancePayment;
+    const reqCode = payableVoucherCode;
+    const suppName = currentItem.supplierName;
+    const isTransporter = currentItem.partnerType === 'transporter' || currentItem.code?.startsWith('CNVC');
+    const deptName = isTransporter ? 'Phòng Kho vận & Logistics' : 'Phòng Mua hàng & Cung ứng';
+    const reqTitle = isAdv
+      ? `Yêu cầu ứng trước tiền mua hàng cho ${suppName}`
+      : `Yêu cầu chi tiền thanh toán nợ cho ${suppName}`;
 
     try {
-      const res = await fetch(`/api/debts/payables/${currentItem.id}/payments`, {
+      // 1. Tạo yêu cầu chi tiền (chưa phát sinh công nợ, gửi trình Giám đốc phê duyệt)
+      await fetch('/api/finance/payment-orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          id: `PO-${Date.now()}`,
+          orderCode: reqCode,
+          refType: isAdv ? 'advance_supplier' : 'payable_payment',
+          refId: currentItem.id,
+          refCode: selectedPayableEntryId ? (currentItem.entries?.find((e) => e.id === selectedPayableEntryId)?.code || currentItem.code) : currentItem.code,
+          title: reqTitle,
+          beneficiaryName: suppName,
+          beneficiaryCode: currentItem.code,
+          department: deptName,
           amount: paidNum,
-          paymentCode: payableVoucherCode,
-          date: `${payablePaymentDate} ${payablePaymentTime}`,
-          method: paymentMethod,
-          note: paymentNote,
-          debitAccount: payableDebitAccount,
-          creditAccount: payableCreditAccount,
-          sourceBankAccount: payableSourceBank,
-          destBankAccount: `${payableDestBank} - ${payableDestAccount} (${payableDestBeneficiary})`,
-          receiverName: payableReceiverName,
-          receiverAddress: payableReceiverAddress,
-          creator: currentLoggedInUserName || 'Phạm Thu Hằng',
-          accountant: 'Mai Thị Ngọc',
-          director: 'Hà Hải Lâm',
-          entryId: selectedPayableEntryId || null,
+          amountInWords: convertNumberToVietnameseWords(paidNum),
+          paymentMethod: paymentMethod === 'Tiền mặt' ? 'cash' : 'bank_transfer',
+          bankName: payableDestBank,
+          bankAccount: payableDestAccount,
+          purpose: paymentNote,
+          dueDate: payablePaymentDate,
+          status: 'submitted_director',
+          statusLabel: 'Chờ Giám đốc duyệt',
+          approvalNote: `Yêu cầu trình Ban Giám đốc phê duyệt ${isAdv ? 'tạm ứng' : 'thanh toán'} cho đối tác ${suppName}`,
         }),
       });
 
-      if (res.ok) {
-        const result = await res.json();
-        if (result.updated) {
-          setPayables((prev) => prev.map((p) => (p.id === result.updated.id ? result.updated : p)));
-        } else {
-          fetchPayables();
-        }
-      } else {
-        setPayables((prev) =>
-          prev.map((p) => {
-            if (p.id !== currentItem.id) return p;
-            const newPaid = p.paidAmount + paidNum;
-            const newRemain = Math.max(0, p.totalAmount - newPaid);
-            const isCompleted = newRemain <= 0;
-            return {
-              ...p,
-              paidAmount: newPaid,
-              remainingAmount: newRemain,
-              status: isCompleted ? 'completed' : p.status,
-              statusLabel: isCompleted ? 'Đã hoàn tất' : p.statusLabel,
-            };
-          })
-        );
-      }
+      // 2. Đồng bộ sang approval_documents để Giám đốc duyệt trực tiếp
+      const docSummary = `Đối tác: ${suppName} • Số tiền: ${formatMoneyInput(paidNum)} đ • Hình thức: ${paymentMethod} • Mục đích: ${paymentNote}`;
+      const docContent = `Kính gửi Ban Giám đốc,\n\nBộ phận Kế toán kính trình Ban Giám đốc xem xét phê duyệt ${isAdv ? 'ứng trước tiền mua hàng' : 'chi tiền thanh toán nợ'} cho đối tác:\n- Đối tác thụ hưởng: ${suppName} (${currentItem.supplierAddress || 'Hà Nội'})\n- Số tiền đề xuất: ${formatMoneyInput(paidNum)} đ (${convertNumberToVietnameseWords(paidNum)})\n- Lý do chi: ${paymentNote}\n- Phương thức: ${paymentMethod} (Nguồn trích: ${payableSourceBank} ➔ Thụ hưởng: ${payableDestBank} - STK: ${payableDestAccount})\n- Hồ sơ đính kèm: ${payableOriginalDocsCount}\n\nKính đề nghị Ban Giám đốc xem xét phê duyệt để chuyển thành Lệnh chi tiền giải ngân.`;
+
+      await fetch('/api/approval-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entityType: isAdv ? 'advance_supplier' : 'payable_payment',
+          entityCode: reqCode,
+          entityTitle: reqTitle,
+          department: 'Phòng Tài chính – Kế toán',
+          requestedByName: currentLoggedInUserName || 'Kế toán thanh toán',
+          amount: paidNum,
+          priority: 'high',
+          reason: paymentNote,
+          metadata: {
+            supplierId: currentItem.id,
+            supplierName: suppName,
+            entryId: selectedPayableEntryId,
+            reqCode: reqCode,
+            amount: paidNum,
+            paymentMethod,
+            destBank: payableDestBank,
+            destAccount: payableDestAccount,
+            summary: docSummary,
+            content: docContent,
+          },
+        }),
+      }).catch(() => {});
     } catch (err) {
-      console.error('Error recording payable payment:', err);
+      console.error('Error submitting payment request:', err);
     }
 
-    // Nếu người dùng chọn in phiếu chi sau khi hoàn tất
-    if (isPrintPayableVoucherChecked) {
-      const isTransporter = currentItem.partnerType === 'transporter' || currentItem.code?.startsWith('CNVC');
-      const generatedExpense: ExpenseItem = {
-        id: `PC-${Date.now()}`,
-        code: payableVoucherCode,
-        title: paymentNote,
-        category: isTransporter ? 'sales' : 'production',
-        categoryLabel: isTransporter ? 'Chi phí vận chuyển, logistics (TK 641)' : 'Chi thanh toán NCC linh kiện sen vòi (TK 331)',
-        amount: paidNum,
-        department: isTransporter ? 'Phòng Kho vận & Logistics' : 'Phòng Mua hàng & Cung ứng',
-        spendDate: payablePaymentDate,
-        spender: payableReceiverName || currentItem.supplierName,
-        status: 'approved',
-        statusLabel: 'Đã hoàn tất thanh toán',
-        notes: `Nguồn trích: ${payableSourceBank} • Thụ hưởng: ${payableDestBank} - ${payableDestAccount} (${payableDestBeneficiary}). Chứng từ gốc: ${payableOriginalDocsCount}`,
-        debitAccount: payableDebitAccount,
-        debitAccountName: isTransporter ? 'Phải trả ĐV vận chuyển' : 'Phải trả cho người bán',
-        creditAccount: payableCreditAccount,
-        creditAccountName: paymentMethod === 'Chuyển khoản' ? 'Tiền gửi ngân hàng (VND)' : 'Tiền mặt tại quỹ (VND)',
-      };
-      setVoucherToPrint(generatedExpense);
-      setIsPrintVoucherModalOpen(true);
-    }
-
+    // Đóng form, thông báo đã gửi trình Giám đốc phê duyệt (CHƯA PHÁT SINH CÔNG NỢ)
     setPaymentModalOpen(false);
     setSelectedPayableForPayment(null);
+    setIsSupplierAdvancePayment(false);
+
     if (onShowToast) {
-      onShowToast('success', 'Lập phiếu chi thành công', `Đã ghi nhận chi ${formatNumberGroup(paidNum)} đ thanh toán cho ${currentItem.supplierName}`);
+      onShowToast(
+        'success',
+        'Đã gửi yêu cầu trình Giám đốc phê duyệt',
+        `Đã tạo ${isAdv ? 'yêu cầu ứng trước' : 'yêu cầu chi tiền'} ${formatMoneyInput(paidNum)} đ cho đối tác ${suppName}. Hồ sơ đang chờ Ban Giám đốc phê duyệt để chuyển thành Lệnh chi tiền.`
+      );
     }
+
+    // Bắn sự kiện thời gian thực cho hệ thống phê duyệt, thông báo & lệnh chi
+    window.dispatchEvent(new CustomEvent('decodoor_approval_documents_updated'));
+    window.dispatchEvent(new CustomEvent('decodoor_payment_orders_updated'));
+    window.dispatchEvent(new CustomEvent('seajong_approval_documents_updated'));
+    window.dispatchEvent(new CustomEvent('decodoor_notifications_updated'));
+    window.dispatchEvent(new CustomEvent('seajong_notifications_updated'));
+    window.dispatchEvent(new CustomEvent('decodoor_notification_created'));
   };
 
   const handleOpenPayableReconciliation = (item: PayableItem) => {
@@ -3095,32 +3300,119 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
             <tbody key={`debt-tbody-step-${currentStep}`}>
               {currentStep === 4 ? (
                 <>
-                  {/* DÒNG TỔNG CỘNG GHIM CHẶT VÀO ĐẦU BẢNG */}
-                  <tr
-                    style={{
-                      position: 'sticky',
-                      top: 0,
-                      zIndex: 10,
-                      backgroundColor: '#f1f5f9',
-                      borderBottom: '2px solid #cbd5e1',
-                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
-                    }}
-                  >
-                    <td style={{ padding: '12px 14px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#0f172a', fontSize: '0.875rem' }}>
-                          Tổng cộng
-                        </span>
-                        <Badge variant="neutral">
-                          {filteredExpenses.length} khoản chi phí
-                        </Badge>
-                      </div>
-                    </td>
-                    <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 800, color: '#b91c1c', fontSize: '1rem', whiteSpace: 'nowrap' }}>
-                      {formatNumberGroup(filteredExpenses.reduce((sum, item) => sum + item.amount, 0))}
-                    </td>
-                    <td style={{ padding: '12px 8px', textAlign: 'center', width: '50px' }}></td>
-                  </tr>
+                  {/* DÒNG TỔNG CỘNG GHIM CHẶT VÀO ĐẦU BẢNG (HIỂN THỊ TỔNG 3 NHÓM CHI PHÍ) */}
+                  {(() => {
+                    const allPurchaseTotal = filteredExpenses
+                      .filter((item) => classifyExpenseItem(item) === 'purchase')
+                      .reduce((sum, item) => sum + item.amount, 0);
+
+                    const allDebtTotal = filteredExpenses
+                      .filter((item) => classifyExpenseItem(item) === 'debt_payment')
+                      .reduce((sum, item) => sum + item.amount, 0);
+
+                    const allOperatingTotal = filteredExpenses
+                      .filter((item) => classifyExpenseItem(item) === 'operating')
+                      .reduce((sum, item) => sum + item.amount, 0);
+
+                    const grandTotal = filteredExpenses.reduce((sum, item) => sum + item.amount, 0);
+
+                    return (
+                      <tr
+                        style={{
+                          position: 'sticky',
+                          top: 0,
+                          zIndex: 10,
+                          backgroundColor: '#f1f5f9',
+                          borderBottom: '2px solid #cbd5e1',
+                          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+                        }}
+                      >
+                        <td style={{ padding: '10px 14px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#0f172a', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                              Tổng cộng
+                            </span>
+
+                            {/* TỔNG 3 NHÓM CHI PHÍ */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              {/* 1. Mua hàng */}
+                              <div
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                  padding: '2px 8px',
+                                  backgroundColor: '#eff6ff',
+                                  border: '1px solid #bfdbfe',
+                                  borderRadius: '6px',
+                                  fontSize: '0.75rem',
+                                }}
+                                title="Tổng chi phí mua hàng, nguyên vật liệu, phụ kiện"
+                              >
+                                <span style={{ color: '#0284c7', display: 'flex', alignItems: 'center' }}>
+                                  <BagCheck size={12} />
+                                </span>
+                                <span style={{ color: '#475569', fontWeight: 600 }}>Mua hàng:</span>
+                                <span style={{ color: '#0369a1', fontWeight: 800 }}>
+                                  {formatNumberGroup(allPurchaseTotal)}
+                                </span>
+                              </div>
+
+                              {/* 2. Thanh toán công nợ */}
+                              <div
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                  padding: '2px 8px',
+                                  backgroundColor: '#fffbeb',
+                                  border: '1px solid #fde68a',
+                                  borderRadius: '6px',
+                                  fontSize: '0.75rem',
+                                }}
+                                title="Tổng thanh toán nợ nhà cung cấp, tạm ứng người lao động"
+                              >
+                                <span style={{ color: '#d97706', display: 'flex', alignItems: 'center' }}>
+                                  <CreditCard size={12} />
+                                </span>
+                                <span style={{ color: '#475569', fontWeight: 600 }}>Công nợ:</span>
+                                <span style={{ color: '#b45309', fontWeight: 800 }}>
+                                  {formatNumberGroup(allDebtTotal)}
+                                </span>
+                              </div>
+
+                              {/* 3. Chi phí vận hành */}
+                              <div
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                  padding: '2px 8px',
+                                  backgroundColor: '#f5f3ff',
+                                  border: '1px solid #ddd6fe',
+                                  borderRadius: '6px',
+                                  fontSize: '0.75rem',
+                                }}
+                                title="Tổng chi phí vận hành: QLDN, bán hàng, sản xuất chung, khấu hao TSCĐ & tài chính"
+                              >
+                                <span style={{ color: '#7c3aed', display: 'flex', alignItems: 'center' }}>
+                                  <Gear size={12} />
+                                </span>
+                                <span style={{ color: '#475569', fontWeight: 600 }}>Vận hành:</span>
+                                <span style={{ color: '#6d28d9', fontWeight: 800 }}>
+                                  {formatNumberGroup(allOperatingTotal)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 800, color: '#b91c1c', fontSize: '1.0625rem', whiteSpace: 'nowrap' }}>
+                          {formatNumberGroup(grandTotal)}
+                        </td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center', width: '50px' }}></td>
+                      </tr>
+                    );
+                  })()}
 
                   {/* CÁC DÒNG THÁNG TRONG NĂM SẮP XẾP NGƯỢC LẠI TỪ THÁNG HIỆN TẠI VỀ THÁNG 1 */}
                   {(() => {
@@ -3174,7 +3466,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                           <td style={{ padding: '12px 8px', textAlign: 'center' }}></td>
                         </tr>
 
-                        {/* CÁC KHOẢN MỤC CHI PHÍ BÊN TRONG THÁNG KHI MỞ RỘNG */}
+                        {/* CÁC KHOẢN MỤC CHI PHÍ BÊN TRONG THÁNG KHI MỞ RỘNG (ĐƯỢC NHÓM THÀNH 3 MỤC: MUA HÀNG, CÔNG NỢ, VẬN HÀNH) */}
                         {isExpanded && monthItems.length === 0 && (
                           <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
                             <td colSpan={3} style={{ padding: '10px 14px 10px 38px', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.75rem' }}>
@@ -3183,211 +3475,324 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                           </tr>
                         )}
 
-                        {isExpanded &&
-                          monthItems.map((item) => (
-                            <tr
-                              key={item.id}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (item.isAutoDepreciation) {
-                                  setSelectedDeprecItem(item);
-                                  setIsDeprecModalOpen(true);
-                                  return;
-                                }
-                                setEditingItem(item);
-                                setIsOffcanvasOpen(true);
-                              }}
-                              style={{
-                                backgroundColor: item.isAutoDepreciation ? '#faf5ff' : '#f8fafc',
-                                borderBottom: '1px solid #f1f5f9',
-                                cursor: 'pointer',
-                                transition: 'background-color 0.15s ease',
-                              }}
-                              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = item.isAutoDepreciation ? '#f3e8ff' : '#f1f5f9')}
-                              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = item.isAutoDepreciation ? '#faf5ff' : '#f8fafc')}
-                              title={item.isAutoDepreciation ? `Nhấn để xem bảng phân bổ chi tiết ${dbFixedAssets.length} tài sản cố định` : "Nhấn để xem hoặc chỉnh sửa chi tiết khoản chi phí"}
-                            >
-                              <td style={{ padding: '8px 14px 8px 38px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <span style={{ fontWeight: 600, color: item.isAutoDepreciation ? '#6b21a8' : '#334155', fontSize: '0.8125rem' }}>
-                                    {item.title}
-                                  </span>
-                                  {item.isAutoDepreciation && (
-                                    <span
-                                      style={{
-                                        fontSize: '0.6875rem',
-                                        fontWeight: 700,
-                                        backgroundColor: '#ede9fe',
-                                        color: '#7c3aed',
-                                        border: '1px solid #ddd6fe',
-                                        borderRadius: '9999px',
-                                        padding: '1px 8px',
-                                        whiteSpace: 'nowrap',
-                                      }}
-                                    >
-                                      Tự động • Khấu hao TSCĐ (Phi tiền mặt)
-                                    </span>
-                                  )}
-                                </div>
-                                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                  <span style={{ fontWeight: 600, color: item.isAutoDepreciation ? '#7c3aed' : '#475569' }}>{item.code}</span>
-                                  <span style={{ color: '#cbd5e1' }}>•</span>
-                                  <span>Ngày {item.spendDate}</span>
-                                  <span style={{ color: '#cbd5e1' }}>•</span>
-                                  <span>{item.categoryLabel}</span>
-                                  {item.isAutoDepreciation ? (
-                                    <>
-                                      <span style={{ color: '#cbd5e1' }}>•</span>
-                                      <span style={{ color: '#7c3aed', fontWeight: 600 }}>
-                                        Nợ {item.debitAccount} / Có {item.creditAccount || '2141'}
-                                      </span>
-                                      <span style={{ color: '#cbd5e1' }}>•</span>
-                                      <span>{item.department}</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      {item.debitAccount && (
-                                        <>
-                                          <span style={{ color: '#cbd5e1' }}>•</span>
-                                          <span style={{ color: '#0284c7', fontWeight: 600 }}>
-                                            Nợ {item.debitAccount} / Có {item.creditAccount || '1111'}
-                                          </span>
-                                        </>
-                                      )}
-                                      <span style={{ color: '#cbd5e1' }}>•</span>
-                                      <span>{item.department}</span>
-                                      <span style={{ color: '#cbd5e1' }}>•</span>
-                                      {(() => {
-                                        const isSupplierPay =
-                                          item.debitAccount === '331' ||
-                                          item.title.toLowerCase().includes('ncc') ||
-                                          item.title.toLowerCase().includes('mua hàng') ||
-                                          item.title.toLowerCase().includes('tiền điện') ||
-                                          item.title.toLowerCase().includes('vận chuyển') ||
-                                          item.title.toLowerCase().includes('kho bãi');
-                                        const isAdvance =
-                                          item.debitAccount === '141' ||
-                                          item.title.toLowerCase().includes('tạm ứng');
+                        {isExpanded && monthItems.length > 0 && (() => {
+                          const purchaseItems = monthItems.filter((item) => classifyExpenseItem(item) === 'purchase');
+                          const debtItems = monthItems.filter((item) => classifyExpenseItem(item) === 'debt_payment');
+                          const operatingItems = monthItems.filter((item) => classifyExpenseItem(item) === 'operating');
 
-                                        if (isSupplierPay) {
-                                          return <span>Đơn vị nhận: <strong className="text-slate-700">{item.spender}</strong></span>;
-                                        }
-                                        if (isAdvance) {
-                                          return <span>Người nhận: <strong className="text-slate-700">{item.spender}</strong> (Tạm ứng)</span>;
-                                        }
-                                        return <span>Người thực hiện: <strong className="text-slate-700">{item.spender}</strong></span>;
-                                      })()}
-                                    </>
-                                  )}
-                                </div>
-                              </td>
-                              <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: item.isAutoDepreciation ? 700 : 400, color: item.isAutoDepreciation ? '#6b21a8' : '#334155', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                {formatNumberGroup(item.amount)}
-                              </td>
-                              <td style={{ padding: '8px 8px', textAlign: 'center', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
-                                <button
-                                  type="button"
-                                  title="Tùy chọn thao tác"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActiveRowMenuId(activeRowMenuId === item.id ? null : item.id);
-                                  }}
+                          const purchaseTotal = purchaseItems.reduce((acc, curr) => acc + curr.amount, 0);
+                          const debtTotal = debtItems.reduce((acc, curr) => acc + curr.amount, 0);
+                          const operatingTotal = operatingItems.reduce((acc, curr) => acc + curr.amount, 0);
+
+                          const expenseSubGroups = [
+                            {
+                              id: 'purchase',
+                              title: 'Chi phí mua hàng',
+                              desc: 'Đơn mua hàng, mua nguyên vật liệu, phụ kiện, vật tư',
+                              items: purchaseItems,
+                              total: purchaseTotal,
+                              icon: <BagCheck size={14} />,
+                              color: '#0284c7',
+                              bgColor: '#f0f9ff',
+                              borderColor: '#bae6fd',
+                            },
+                            {
+                              id: 'debt_payment',
+                              title: 'Thanh toán công nợ',
+                              desc: 'Thanh toán nợ nhà cung cấp, tạm ứng nhân viên, nợ phải trả',
+                              items: debtItems,
+                              total: debtTotal,
+                              icon: <CreditCard size={14} />,
+                              color: '#d97706',
+                              bgColor: '#fffbeb',
+                              borderColor: '#fde68a',
+                            },
+                            {
+                              id: 'operating',
+                              title: 'Chi phí vận hành',
+                              desc: 'Chi phí QLDN, bán hàng, sản xuất chung, khấu hao TSCĐ & tài chính',
+                              items: operatingItems,
+                              total: operatingTotal,
+                              icon: <Gear size={14} />,
+                              color: '#7c3aed',
+                              bgColor: '#f5f3ff',
+                              borderColor: '#ddd6fe',
+                            },
+                          ];
+
+                          return expenseSubGroups.map((group) => {
+                            const subGroupKey = `${monthNum}-${group.id}`;
+                            const isSubExpanded = Boolean(expandedExpenseSubGroups[subGroupKey]);
+
+                            return (
+                              <React.Fragment key={`month-${monthNum}-subgroup-${group.id}`}>
+                                {/* TIÊU ĐỀ PHÂN NHÓM 1 TRONG 3 MỤC: MUA HÀNG, CÔNG NỢ, VẬN HÀNH (MẶC ĐỊNH ẨN CHI TIẾT) */}
+                                <tr
+                                  onClick={(e) => toggleExpenseSubGroup(monthNum, group.id, e)}
                                   style={{
-                                    background: activeRowMenuId === item.id ? '#f1f5f9' : 'transparent',
-                                    border: '1px solid',
-                                    borderColor: activeRowMenuId === item.id ? '#cbd5e1' : 'transparent',
-                                    borderRadius: '6px',
-                                    padding: '4px 6px',
+                                    backgroundColor: group.bgColor,
+                                    borderTop: `1px solid ${group.borderColor}`,
+                                    borderBottom: `1px solid ${group.borderColor}`,
                                     cursor: 'pointer',
-                                    color: '#475569',
+                                    userSelect: 'none',
+                                    transition: 'background-color 0.15s ease',
                                   }}
+                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = group.bgColor)}
+                                  title={`Nhấn để ${isSubExpanded ? 'thu gọn' : 'mở rộng xem'} danh sách ${group.title}`}
                                 >
-                                  <ThreeDotsVertical size={14} />
-                                </button>
-                                {activeRowMenuId === item.id && (
-                                  <div
-                                    style={{
-                                      position: 'absolute',
-                                      right: 0,
-                                      bottom: 'calc(100% + 4px)',
-                                      minWidth: item.isAutoDepreciation ? '220px' : '160px',
-                                      backgroundColor: '#ffffff',
-                                      borderRadius: '8px',
-                                      border: '1px solid #cbd5e1',
-                                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
-                                      zIndex: 999,
-                                      overflow: 'hidden',
-                                      display: 'flex',
-                                      flexDirection: 'column',
-                                      textAlign: 'left',
-                                    }}
-                                  >
-                                    {item.isAutoDepreciation ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setActiveRowMenuId(null);
+                                  <td style={{ padding: '9px 14px 9px 34px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <span style={{ color: group.color, display: 'flex', alignItems: 'center' }}>
+                                        {isSubExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                                      </span>
+                                      <span style={{ color: group.color, display: 'flex', alignItems: 'center' }}>
+                                        {group.icon}
+                                      </span>
+                                      <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8125rem' }}>
+                                        {group.title}
+                                      </span>
+                                      <span
+                                        style={{
+                                          fontSize: '0.6875rem',
+                                          fontWeight: 700,
+                                          color: group.color,
+                                          backgroundColor: '#ffffff',
+                                          border: `1px solid ${group.borderColor}`,
+                                          borderRadius: '9999px',
+                                          padding: '1px 8px',
+                                          whiteSpace: 'nowrap',
+                                        }}
+                                      >
+                                        {group.items.length} khoản
+                                      </span>
+                                      <span className="hidden sm:inline" style={{ fontSize: '0.6875rem', color: '#64748b' }}>
+                                        — {group.desc}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: '9px 14px', textAlign: 'right', fontWeight: 800, color: group.color, fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                    {formatNumberGroup(group.total)}
+                                  </td>
+                                  <td style={{ padding: '9px 8px', textAlign: 'center' }}></td>
+                                </tr>
+
+                                {/* DÒNG KHI NHÓM ĐƯỢC MỞ NHƯNG KHÔNG CÓ KHOẢN CHI NÀO */}
+                                {isSubExpanded && group.items.length === 0 && (
+                                  <tr style={{ backgroundColor: '#ffffff', borderBottom: '1px solid #f1f5f9' }}>
+                                    <td colSpan={3} style={{ padding: '8px 14px 8px 56px', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.75rem' }}>
+                                      Chưa có khoản {group.title.toLowerCase()} phát sinh trong tháng {monthNum}
+                                    </td>
+                                  </tr>
+                                )}
+
+                                {/* DANH SÁCH CÁC KHOẢN CHI THUỘC NHÓM NÀY CHỈ HIỂN THỊ KHI ĐƯỢC BẤM MỞ RỘNG */}
+                                {isSubExpanded &&
+                                  group.items.map((item) => (
+                                    <tr
+                                      key={item.id}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (item.isAutoDepreciation) {
                                           setSelectedDeprecItem(item);
                                           setIsDeprecModalOpen(true);
-                                        }}
-                                        style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#6b21a8', cursor: 'pointer', width: '100%', textAlign: 'left' }}
-                                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#faf5ff')}
-                                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                                      >
-                                        <FileEarmarkSpreadsheet size={13} style={{ color: '#7c3aed' }} />
-                                        <span>Xem bảng phân bổ 12 TSCĐ</span>
-                                      </button>
-                                    ) : (
-                                      <>
+                                          return;
+                                        }
+                                        setEditingItem(item);
+                                        setIsOffcanvasOpen(true);
+                                      }}
+                                      style={{
+                                        backgroundColor: item.isAutoDepreciation ? '#faf5ff' : '#ffffff',
+                                        borderBottom: '1px solid #f1f5f9',
+                                        cursor: 'pointer',
+                                        transition: 'background-color 0.15s ease',
+                                      }}
+                                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = item.isAutoDepreciation ? '#f3e8ff' : '#f8fafc')}
+                                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = item.isAutoDepreciation ? '#faf5ff' : '#ffffff')}
+                                      title={item.isAutoDepreciation ? `Nhấn để xem bảng phân bổ chi tiết ${dbFixedAssets.length} tài sản cố định` : "Nhấn để xem hoặc chỉnh sửa chi tiết khoản chi phí"}
+                                    >
+                                      <td style={{ padding: '8px 14px 8px 56px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                          <span style={{ fontWeight: 600, color: item.isAutoDepreciation ? '#6b21a8' : '#334155', fontSize: '0.8125rem' }}>
+                                            {item.title}
+                                          </span>
+                                          {item.isAutoDepreciation && (
+                                            <span
+                                              style={{
+                                                fontSize: '0.6875rem',
+                                                fontWeight: 700,
+                                                backgroundColor: '#ede9fe',
+                                                color: '#7c3aed',
+                                                border: '1px solid #ddd6fe',
+                                                borderRadius: '9999px',
+                                                padding: '1px 8px',
+                                                whiteSpace: 'nowrap',
+                                              }}
+                                            >
+                                              Tự động • Khấu hao TSCĐ (Phi tiền mặt)
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                          <span style={{ fontWeight: 600, color: item.isAutoDepreciation ? '#7c3aed' : '#475569' }}>{item.code}</span>
+                                          <span style={{ color: '#cbd5e1' }}>•</span>
+                                          <span>Ngày {item.spendDate}</span>
+                                          <span style={{ color: '#cbd5e1' }}>•</span>
+                                          <span>{item.categoryLabel}</span>
+                                          {item.isAutoDepreciation ? (
+                                            <>
+                                              <span style={{ color: '#cbd5e1' }}>•</span>
+                                              <span style={{ color: '#7c3aed', fontWeight: 600 }}>
+                                                Nợ {item.debitAccount} / Có {item.creditAccount || '2141'}
+                                              </span>
+                                              <span style={{ color: '#cbd5e1' }}>•</span>
+                                              <span>{item.department}</span>
+                                            </>
+                                          ) : (
+                                            <>
+                                              {item.debitAccount && (
+                                                <>
+                                                  <span style={{ color: '#cbd5e1' }}>•</span>
+                                                  <span style={{ color: '#0284c7', fontWeight: 600 }}>
+                                                    Nợ {item.debitAccount} / Có {item.creditAccount || '1111'}
+                                                  </span>
+                                                </>
+                                              )}
+                                              <span style={{ color: '#cbd5e1' }}>•</span>
+                                              <span>{item.department}</span>
+                                              <span style={{ color: '#cbd5e1' }}>•</span>
+                                              {(() => {
+                                                const isSupplierPay =
+                                                  item.debitAccount === '331' ||
+                                                  item.title.toLowerCase().includes('ncc') ||
+                                                  item.title.toLowerCase().includes('mua hàng') ||
+                                                  item.title.toLowerCase().includes('tiền điện') ||
+                                                  item.title.toLowerCase().includes('vận chuyển') ||
+                                                  item.title.toLowerCase().includes('kho bãi');
+                                                const isAdvance =
+                                                  item.debitAccount === '141' ||
+                                                  item.title.toLowerCase().includes('tạm ứng');
+
+                                                if (isSupplierPay) {
+                                                  return <span>Đơn vị nhận: <strong className="text-slate-700">{item.spender}</strong></span>;
+                                                }
+                                                if (isAdvance) {
+                                                  return <span>Người nhận: <strong className="text-slate-700">{item.spender}</strong> (Tạm ứng)</span>;
+                                                }
+                                                return <span>Người thực hiện: <strong className="text-slate-700">{item.spender}</strong></span>;
+                                              })()}
+                                            </>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: item.isAutoDepreciation ? 700 : 400, color: item.isAutoDepreciation ? '#6b21a8' : '#334155', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                        {formatNumberGroup(item.amount)}
+                                      </td>
+                                      <td style={{ padding: '8px 8px', textAlign: 'center', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
                                         <button
                                           type="button"
-                                          onClick={() => {
-                                            setActiveRowMenuId(null);
-                                            setVoucherToPrint(item);
-                                            setIsPrintVoucherModalOpen(true);
+                                          title="Tùy chọn thao tác"
+                                          onClick={(e) => handleToggleRowMenu(item.id, e)}
+                                          style={{
+                                            background: activeRowMenuId === item.id ? '#f1f5f9' : 'transparent',
+                                            border: '1px solid',
+                                            borderColor: activeRowMenuId === item.id ? '#cbd5e1' : 'transparent',
+                                            borderRadius: '6px',
+                                            padding: '4px 6px',
+                                            cursor: 'pointer',
+                                            color: '#475569',
                                           }}
-                                          style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#0369a1', cursor: 'pointer', width: '100%', textAlign: 'left' }}
-                                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f0f9ff')}
-                                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                                         >
-                                          <Printer size={13} style={{ color: '#0284c7' }} />
-                                          <span>Xem và in phiếu chi A4</span>
+                                          <ThreeDotsVertical size={14} />
                                         </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setActiveRowMenuId(null);
-                                            setEditingItem(item);
-                                            setIsOffcanvasOpen(true);
-                                          }}
-                                          style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#334155', cursor: 'pointer', width: '100%', textAlign: 'left' }}
-                                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                                        >
-                                          <Pencil size={13} style={{ color: '#64748b' }} />
-                                          <span>Chỉnh sửa thông tin</span>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setActiveRowMenuId(null);
-                                            setItemToDelete(item);
-                                            setConfirmDeleteOpen(true);
-                                          }}
-                                          style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#ef4444', cursor: 'pointer', width: '100%', textAlign: 'left' }}
-                                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#fef2f2')}
-                                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                                        >
-                                          <Trash3 size={13} style={{ color: '#ef4444' }} />
-                                          <span>Xoá phiếu chi</span>
-                                        </button>
-                                      </>
-                                    )}
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
+                                        {activeRowMenuId === item.id && (
+                                          <div
+                                            style={{
+                                              position: 'absolute',
+                                              right: 0,
+                                              ...(menuOpenUp ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }),
+                                              minWidth: item.isAutoDepreciation ? '220px' : '160px',
+                                              backgroundColor: '#ffffff',
+                                              borderRadius: '8px',
+                                              border: '1px solid #cbd5e1',
+                                              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
+                                              zIndex: 999,
+                                              overflow: 'hidden',
+                                              display: 'flex',
+                                              flexDirection: 'column',
+                                              textAlign: 'left',
+                                            }}
+                                          >
+                                            {item.isAutoDepreciation ? (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setActiveRowMenuId(null);
+                                                  setSelectedDeprecItem(item);
+                                                  setIsDeprecModalOpen(true);
+                                                }}
+                                                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#6b21a8', cursor: 'pointer', width: '100%', textAlign: 'left' }}
+                                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#faf5ff')}
+                                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                              >
+                                                <FileEarmarkSpreadsheet size={13} style={{ color: '#7c3aed' }} />
+                                                <span>Xem bảng phân bổ 12 TSCĐ</span>
+                                              </button>
+                                            ) : (
+                                              <>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setActiveRowMenuId(null);
+                                                    setVoucherToPrint(item);
+                                                    setIsPrintVoucherModalOpen(true);
+                                                  }}
+                                                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#0369a1', cursor: 'pointer', width: '100%', textAlign: 'left' }}
+                                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f0f9ff')}
+                                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                                >
+                                                  <Printer size={13} style={{ color: '#0284c7' }} />
+                                                  <span>Xem và in phiếu chi A4</span>
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setActiveRowMenuId(null);
+                                                    setEditingItem(item);
+                                                    setIsOffcanvasOpen(true);
+                                                  }}
+                                                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#334155', cursor: 'pointer', width: '100%', textAlign: 'left' }}
+                                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                                >
+                                                  <Pencil size={13} style={{ color: '#64748b' }} />
+                                                  <span>Chỉnh sửa thông tin</span>
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setActiveRowMenuId(null);
+                                                    setItemToDelete(item);
+                                                    setConfirmDeleteOpen(true);
+                                                  }}
+                                                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#ef4444', cursor: 'pointer', width: '100%', textAlign: 'left' }}
+                                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#fef2f2')}
+                                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                                >
+                                                  <Trash3 size={13} style={{ color: '#ef4444' }} />
+                                                  <span>Xoá phiếu chi</span>
+                                                </button>
+                                              </>
+                                            )}
+                                          </div>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))}
+                              </React.Fragment>
+                            );
+                          });
+                        })()}
                       </React.Fragment>
                     );
                   })}
@@ -3399,8 +3804,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                   </td>
                 </tr>
               ) : (
-                pagedList.map((row: any, index: number) => {
-                  const isNearBottom = index >= pagedList.length - 2 && pagedList.length > 3;
+                pagedList.map((row: any) => {
 
                   // ── DÒNG BƯỚC 1: CÔNG NỢ PHẢI THU (BỎ STT, MỖI THỜI ĐIỂM CHỈ MỞ 1 MỤC LỚN) ──
                   if (currentStep === 1) {
@@ -3499,50 +3903,88 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
 
                           {/* Cột 6: Droplist cuối dòng gồm 5 chức năng */}
                           <td style={{ padding: '12px 8px', textAlign: 'center', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              title="Tùy chọn thao tác"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveRowMenuId(activeRowMenuId === item.id ? null : item.id);
-                              }}
-                              style={{
-                                background: activeRowMenuId === item.id ? '#f1f5f9' : 'transparent',
-                                border: '1px solid',
-                                borderColor: activeRowMenuId === item.id ? '#cbd5e1' : 'transparent',
-                                borderRadius: '6px',
-                                padding: '5px 7px',
-                                cursor: 'pointer',
-                                color: '#475569',
-                              }}
-                            >
-                              <ThreeDotsVertical size={14} />
-                            </button>
+                            {(() => {
+                              const itemRemaining = Number(item.remainingAmount !== undefined ? item.remainingAmount : (item.contractValue - (item.paidAmount || 0))) || 0;
+                              const isReceivableZero = itemRemaining <= 0 || item.status === 'completed';
 
-                            {activeRowMenuId === item.id && (
-                              <div
-                                style={{
-                                  position: 'absolute',
-                                  right: 0,
-                                  ...(isNearBottom ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }),
-                                  minWidth: '190px',
-                                  backgroundColor: '#ffffff',
-                                  borderRadius: '8px',
-                                  border: '1px solid #cbd5e1',
-                                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
-                                  zIndex: 999,
-                                  overflow: 'hidden',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  textAlign: 'left',
-                                }}
-                              >
-                                {/* 1. Ghi nhận thanh toán */}
+                              return (
+                                <>
+                                  <button
+                                    type="button"
+                                    title="Tùy chọn thao tác"
+                                    onClick={(e) => handleToggleRowMenu(item.id, e)}
+                                    style={{
+                                      background: activeRowMenuId === item.id ? '#f1f5f9' : 'transparent',
+                                      border: '1px solid',
+                                      borderColor: activeRowMenuId === item.id ? '#cbd5e1' : 'transparent',
+                                      borderRadius: '6px',
+                                      padding: '5px 7px',
+                                      cursor: 'pointer',
+                                      color: '#475569',
+                                    }}
+                                  >
+                                    <ThreeDotsVertical size={14} />
+                                  </button>
+
+                                  {activeRowMenuId === item.id && (
+                                    <div
+                                      style={{
+                                        position: 'absolute',
+                                        right: 0,
+                                        ...(menuOpenUp ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }),
+                                        minWidth: '190px',
+                                        backgroundColor: '#ffffff',
+                                        borderRadius: '8px',
+                                        border: '1px solid #cbd5e1',
+                                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
+                                        zIndex: 999,
+                                        overflow: 'hidden',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        textAlign: 'left',
+                                      }}
+                                    >
+                                      {/* 1. Ghi nhận thanh toán (Khoá khi khách hàng đã hết nợ) */}
+                                      <button
+                                        type="button"
+                                        disabled={isReceivableZero}
+                                        onClick={() => {
+                                          if (isReceivableZero) return;
+                                          setActiveRowMenuId(null);
+                                          handleOpenPaymentModal(item);
+                                        }}
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '10px',
+                                          padding: '9px 14px',
+                                          background: 'none',
+                                          border: 'none',
+                                          fontSize: '0.8125rem',
+                                          fontWeight: 500,
+                                          color: isReceivableZero ? '#94a3b8' : '#334155',
+                                          cursor: isReceivableZero ? 'not-allowed' : 'pointer',
+                                          width: '100%',
+                                          textAlign: 'left',
+                                          opacity: isReceivableZero ? 0.5 : 1,
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          if (!isReceivableZero) e.currentTarget.style.backgroundColor = '#f1f5f9';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          if (!isReceivableZero) e.currentTarget.style.backgroundColor = 'transparent';
+                                        }}
+                                      >
+                                        <CashCoin size={14} style={{ color: isReceivableZero ? '#cbd5e1' : '#64748b' }} />
+                                        <span>Ghi nhận thanh toán</span>
+                                      </button>
+
+                                {/* 2. Thu tiền ứng trước */}
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setActiveRowMenuId(null);
-                                    handleOpenPaymentModal(item);
+                                    handleOpenAdvancePaymentModal(item);
                                   }}
                                   style={{
                                     display: 'flex',
@@ -3561,11 +4003,11 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                   onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
                                   onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                                 >
-                                  <CashCoin size={14} style={{ color: '#64748b' }} />
-                                  <span>Ghi nhận thanh toán</span>
+                                  <Wallet2 size={14} style={{ color: '#64748b' }} />
+                                  <span>Thu tiền ứng trước</span>
                                 </button>
 
-                                {/* 2. Đối chiếu công nợ */}
+                                {/* 3. Đối chiếu công nợ */}
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -3593,7 +4035,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                   <span>Đối chiếu công nợ</span>
                                 </button>
 
-                                {/* 3. Đề nghị thanh toán */}
+                                {/* 4. Đề nghị thanh toán */}
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -3621,9 +4063,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                   <span>Đề nghị thanh toán</span>
                                 </button>
 
-                                <div style={{ height: '1px', backgroundColor: '#f1f5f9', margin: '2px 0' }} />
+                                {/* Đường phân cách rõ nét phía trên chức năng Chỉnh sửa thông tin */}
+                                <div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: '4px 0' }} />
 
-                                {/* 4. Chỉnh sửa thông tin */}
+                                {/* 5. Chỉnh sửa thông tin */}
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -3682,7 +4125,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                 </button>
                               </div>
                             )}
-                          </td>
+                          </>
+                        );
+                      })()}
+                    </td>
                         </tr>
 
                         {/* Danh sách các đợt phát sinh công nợ con khi mở rộng: Các đơn bán hàng và các phiếu thu đặt cùng cấp */}
@@ -3948,10 +4394,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                                   debitAccount: '5212',
                                                   creditAccount: '131',
                                                   notes: 'Hồ sơ hàng trả lại (ERR)',
-                                                  creator: getLoggedInUserName(user) || 'Nguyễn Thị Tuyết',
-                                                  accountant: 'Mai Thị Ngọc',
+                                                  creator: getLoggedInUserName(activeUser) || 'Kế toán thanh toán',
+                                                  accountant: 'Kế toán trưởng',
                                                   cashier: '',
-                                                  director: 'Hà Hải Lâm',
+                                                  director: 'Lê Công Vụ',
                                                 });
                                                 setIsPrintReceiptModalOpen(true);
                                               }}
@@ -4078,10 +4524,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                               pay.originalDocsCount ? `Kèm theo: ${pay.originalDocsCount}` : '',
                                               pay.note || pay.title,
                                             ].filter(Boolean).join(' | ') || (isBankTransfer ? 'Giấy báo Có ngân hàng' : '01 Chứng từ gốc'),
-                                            creator: getLoggedInUserName(user) || 'Phạm Thu Hằng (Kế toán)',
-                                            accountant: pay.accountant || 'Trần Bích Thủy (Kế toán trưởng)',
-                                            cashier: isBankTransfer ? '' : 'Vũ Thu Trang (Thủ quỹ)',
-                                            director: 'Hà Hải Lâm',
+                                            creator: getLoggedInUserName(activeUser) || 'Kế toán thanh toán',
+                                            accountant: pay.accountant || 'Kế toán trưởng',
+                                            cashier: isBankTransfer ? '' : 'Thủ quỹ',
+                                            director: 'Lê Công Vụ',
                                           });
                                           setIsPrintReceiptModalOpen(true);
                                         }}
@@ -4255,50 +4701,88 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
 
                           {/* Cột 6: Droplist cuối dòng */}
                           <td style={{ padding: '12px 8px', textAlign: 'center', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              title="Tùy chọn thao tác"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveRowMenuId(activeRowMenuId === item.id ? null : item.id);
-                              }}
-                              style={{
-                                background: activeRowMenuId === item.id ? '#f1f5f9' : 'transparent',
-                                border: '1px solid',
-                                borderColor: activeRowMenuId === item.id ? '#cbd5e1' : 'transparent',
-                                borderRadius: '6px',
-                                padding: '5px 7px',
-                                cursor: 'pointer',
-                                color: '#475569',
-                              }}
-                            >
-                              <ThreeDotsVertical size={14} />
-                            </button>
+                            {(() => {
+                              const itemRemaining = Number(item.remainingAmount !== undefined ? item.remainingAmount : (item.totalAmount - (item.paidAmount || 0))) || 0;
+                              const isPayableZero = itemRemaining <= 0 || item.status === 'completed';
 
-                            {activeRowMenuId === item.id && (
-                              <div
-                                style={{
-                                  position: 'absolute',
-                                  right: 0,
-                                  ...(isNearBottom ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }),
-                                  minWidth: '190px',
-                                  backgroundColor: '#ffffff',
-                                  borderRadius: '8px',
-                                  border: '1px solid #cbd5e1',
-                                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
-                                  zIndex: 999,
-                                  overflow: 'hidden',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  textAlign: 'left',
-                                }}
-                              >
-                                {/* 1. Lập phiếu chi thanh toán */}
+                              return (
+                                <>
+                                  <button
+                                    type="button"
+                                    title="Tùy chọn thao tác"
+                                    onClick={(e) => handleToggleRowMenu(item.id, e)}
+                                    style={{
+                                      background: activeRowMenuId === item.id ? '#f1f5f9' : 'transparent',
+                                      border: '1px solid',
+                                      borderColor: activeRowMenuId === item.id ? '#cbd5e1' : 'transparent',
+                                      borderRadius: '6px',
+                                      padding: '5px 7px',
+                                      cursor: 'pointer',
+                                      color: '#475569',
+                                    }}
+                                  >
+                                    <ThreeDotsVertical size={14} />
+                                  </button>
+
+                                  {activeRowMenuId === item.id && (
+                                    <div
+                                      style={{
+                                        position: 'absolute',
+                                        right: 0,
+                                        ...(menuOpenUp ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }),
+                                        minWidth: '190px',
+                                        backgroundColor: '#ffffff',
+                                        borderRadius: '8px',
+                                        border: '1px solid #cbd5e1',
+                                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
+                                        zIndex: 999,
+                                        overflow: 'hidden',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        textAlign: 'left',
+                                      }}
+                                    >
+                                      {/* 1. Tạo yêu cầu chi tiền (Khoá khi đã hết nợ) */}
+                                      <button
+                                        type="button"
+                                        disabled={isPayableZero}
+                                        onClick={() => {
+                                          if (isPayableZero) return;
+                                          setActiveRowMenuId(null);
+                                          handleOpenPayablePaymentModal(item);
+                                        }}
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '10px',
+                                          padding: '9px 14px',
+                                          background: 'none',
+                                          border: 'none',
+                                          fontSize: '0.8125rem',
+                                          fontWeight: 500,
+                                          color: isPayableZero ? '#94a3b8' : '#334155',
+                                          cursor: isPayableZero ? 'not-allowed' : 'pointer',
+                                          width: '100%',
+                                          textAlign: 'left',
+                                          opacity: isPayableZero ? 0.5 : 1,
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          if (!isPayableZero) e.currentTarget.style.backgroundColor = '#f1f5f9';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          if (!isPayableZero) e.currentTarget.style.backgroundColor = 'transparent';
+                                        }}
+                                      >
+                                        <CashCoin size={14} style={{ color: isPayableZero ? '#cbd5e1' : '#64748b' }} />
+                                        <span>Tạo yêu cầu chi tiền</span>
+                                      </button>
+
+                                {/* 2. Chi tiền ứng trước */}
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setActiveRowMenuId(null);
-                                    handleOpenPayablePaymentModal(item);
+                                    handleOpenPayableAdvanceModal(item);
                                   }}
                                   style={{
                                     display: 'flex',
@@ -4317,8 +4801,8 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                   onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
                                   onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                                 >
-                                  <CashCoin size={14} style={{ color: '#64748b' }} />
-                                  <span>Lập phiếu chi thanh toán</span>
+                                  <Wallet2 size={14} style={{ color: '#64748b' }} />
+                                  <span>Tạo yêu cầu ứng trước</span>
                                 </button>
 
                                 {/* 2. Đối chiếu công nợ */}
@@ -4377,7 +4861,8 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                   <span>Đề nghị thanh toán</span>
                                 </button>
 
-                                <div style={{ height: '1px', backgroundColor: '#f1f5f9', margin: '2px 0' }} />
+                                {/* Đường phân cách rõ nét phía trên chức năng Chỉnh sửa thông tin */}
+                                <div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: '4px 0' }} />
 
                                 {/* 4. Chỉnh sửa thông tin */}
                                 <button
@@ -4412,7 +4897,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                 </button>
                               </div>
                             )}
-                          </td>
+                          </>
+                        );
+                      })()}
+                    </td>
                         </tr>
 
                         {/* Danh sách các phiếu phát sinh công nợ con khi mở rộng (Đồng bộ Bước 1) */}
@@ -4435,63 +4923,168 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                               }
                               return entry.status === statusFilter;
                             })
-                            .map((entry) => (
-                            <tr
-                              key={entry.id}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedSubEntry({ entry, parent: item, type: 'payable' });
-                                setSubEntryDetailOpen(true);
-                              }}
-                              title="Nhấn để xem chi tiết khoản nợ"
-                              style={{
-                                backgroundColor: '#f8fafc',
-                                borderBottom: '1px solid #f1f5f9',
-                                cursor: 'pointer',
-                                transition: 'background-color 0.15s ease',
-                              }}
-                              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
-                            >
-                              {/* Cột Nhà cung cấp: Giảm chiều cao, font thường, mã phiếu và giờ ngày tháng trên cùng dòng cách nhau | */}
-                              <td style={{ padding: '6px 14px 6px 36px' }}>
-                                <div style={{ fontWeight: 500, color: '#334155', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <span>{entry.code}</span>
-                                  <span style={{ color: '#cbd5e1' }}>|</span>
-                                  <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 400 }}>
-                                    {entry.time || '09:00'} • {entry.date}
-                                  </span>
-                                </div>
-                                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '1px', fontWeight: 400 }}>
-                                  {entry.title}
-                                </div>
-                              </td>
+                            .map((entry) => {
+                              const isPayment = !entry.code?.startsWith('DH-') && !entry.code?.startsWith('PO-') && (
+                                entry.code?.startsWith('PC-') ||
+                                entry.code?.startsWith('UNC-') ||
+                                entry.statusLabel === 'Đã chi tiền' ||
+                                (entry as any).type === 'payment' ||
+                                (entry as any).voucherType === 'payment' ||
+                                String(entry.title || '').toLowerCase().includes('ứng trước') ||
+                                String(entry.title || '').toLowerCase().includes('chi tiền')
+                              );
+                              const isPurchaseOrder = !isPayment && (
+                                String(entry.code || '').startsWith('DH-') ||
+                                String(entry.code || '').startsWith('PO-') ||
+                                String(entry.title || '').toLowerCase().includes('đơn mua hàng')
+                              );
 
-                              {/* Cột Tổng tiền đơn: font thường không đậm */}
-                              <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 400, color: '#334155', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                {formatNumberGroup(entry.totalAmount)}
-                              </td>
+                              return (
+                                <tr
+                                  key={entry.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedSubEntry({ entry, parent: item, type: 'payable' });
+                                    setSubEntryDetailOpen(true);
+                                  }}
+                                  title={isPayment ? 'Nhấn để xem chi tiết phiếu chi' : 'Nhấn để xem chi tiết khoản nợ'}
+                                  style={{
+                                    backgroundColor: '#f8fafc',
+                                    borderBottom: '1px solid #f1f5f9',
+                                    cursor: 'pointer',
+                                    transition: 'background-color 0.15s ease',
+                                  }}
+                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+                                >
+                                  {/* Cột Nhà cung cấp: Có badge Phiếu chi vào đầu dòng giống như Phiếu thu đối với công nợ phải thu */}
+                                  <td style={{ padding: '6px 14px 6px 36px' }}>
+                                    <div style={{ fontWeight: 500, color: '#334155', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                      {isPayment && (
+                                        <span
+                                          style={{
+                                            backgroundColor: '#dcfce7',
+                                            color: '#15803d',
+                                            border: '1px solid #86efac',
+                                            padding: '1px 6px',
+                                            borderRadius: '4px',
+                                            fontSize: '0.6875rem',
+                                            fontWeight: 700,
+                                          }}
+                                        >
+                                          Phiếu chi
+                                        </span>
+                                      )}
+                                      {isPurchaseOrder && (
+                                        <span
+                                          style={{
+                                            backgroundColor: '#eff6ff',
+                                            color: '#1d4ed8',
+                                            border: '1px solid #bfdbfe',
+                                            padding: '1px 6px',
+                                            borderRadius: '4px',
+                                            fontSize: '0.6875rem',
+                                            fontWeight: 700,
+                                          }}
+                                        >
+                                          Mua hàng
+                                        </span>
+                                      )}
+                                      <span style={{ color: isPayment ? '#0369a1' : '#334155', fontWeight: isPayment ? 700 : 500 }}>{entry.code}</span>
+                                      <span style={{ color: '#cbd5e1' }}>|</span>
+                                      <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 400 }}>
+                                        {entry.time || '09:00'} • {entry.date}
+                                      </span>
+                                      {isPayment && (entry as any).paymentMethod && (
+                                        <span style={{ color: '#64748b', fontSize: '0.75rem', fontStyle: 'italic', fontWeight: 400 }}>
+                                          ({(entry as any).paymentMethod})
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '1px', fontWeight: 400 }}>
+                                      {entry.title}
+                                    </div>
+                                  </td>
 
-                              {/* Cột Đã thanh toán: font thường không đậm */}
-                              <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 400, color: '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                {formatNumberGroup(entry.paidAmount)}
-                              </td>
+                                  {/* Cột Tổng tiền đơn: font thường không đậm */}
+                                  <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 400, color: '#334155', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                    {isPayment ? '—' : formatNumberGroup(entry.totalAmount)}
+                                  </td>
 
-                              {/* Cột Hạn thanh toán: font thường không đậm */}
-                              <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'center', fontWeight: 400, color: '#475569', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                {entry.dueDate}
-                              </td>
+                                  {/* Cột Đã thanh toán: font thường không đậm */}
+                                  <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', fontWeight: isPayment ? 700 : 400, color: '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                    {isPayment ? `+${formatNumberGroup(entry.paidAmount || entry.totalAmount)}` : formatNumberGroup(entry.paidAmount)}
+                                  </td>
 
-                              {/* Cột Còn lại: font thường không đậm */}
-                              <td style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 400, color: entry.remainingAmount > 0 ? '#dc2626' : '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                {formatNumberGroup(entry.remainingAmount)}
-                              </td>
+                                  {/* Cột Hạn thanh toán: font thường không đậm */}
+                                  <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'center', fontWeight: isPayment ? 600 : 400, color: isPayment ? '#059669' : '#475569', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                    {isPayment ? 'Đã chi' : (entry.dueDate || '—')}
+                                  </td>
 
-                              {/* Cột Thao tác: bỏ icon cuối dòng */}
-                              <td style={{ padding: '6px 8px', textAlign: 'center' }}>
-                              </td>
-                            </tr>
-                          ))}
+                                  {/* Cột Còn lại: font thường không đậm */}
+                                  <td style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 400, color: isPayment ? '#94a3b8' : (entry.remainingAmount > 0 ? '#dc2626' : '#059669'), fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                    {isPayment ? '—' : formatNumberGroup(entry.remainingAmount)}
+                                  </td>
+
+                                  {/* Cột Thao tác: Nút in phiếu chi A4 (giống như nút in phiếu thu Bước 1) */}
+                                  <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                                    {isPayment ? (
+                                      <button
+                                        type="button"
+                                        title="Xem và in phiếu chi A4"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const isTransporter = item.partnerType === 'transporter' || item.code?.startsWith('CNVC');
+                                          const generatedExpense: ExpenseItem = {
+                                            id: entry.id || `PC-${Date.now()}`,
+                                            code: entry.code,
+                                            title: entry.title,
+                                            category: isTransporter ? 'sales' : 'production',
+                                            categoryLabel: isTransporter ? 'Chi phí vận chuyển, logistics (TK 641)' : 'Chi thanh toán NCC linh kiện sen vòi (TK 331)',
+                                            amount: entry.paidAmount || entry.totalAmount,
+                                            department: isTransporter ? 'Phòng Kho vận & Logistics' : 'Phòng Mua hàng & Cung ứng',
+                                            spendDate: entry.date,
+                                            spender: (entry as any).receiverName || item.supplierName,
+                                            status: 'approved',
+                                            statusLabel: 'Đã hoàn tất thanh toán',
+                                            notes: `Chứng từ chi tiền đối tác ${item.supplierName}`,
+                                            debitAccount: (entry as any).debitAccount || (isTransporter ? '3312' : '331'),
+                                            debitAccountName: isTransporter ? 'Phải trả ĐV vận chuyển' : 'Phải trả cho người bán',
+                                            creditAccount: (entry as any).creditAccount || ((entry as any).paymentMethod === 'Tiền mặt' ? '1111' : '1121'),
+                                            creditAccountName: (entry as any).paymentMethod === 'Tiền mặt' ? 'Tiền mặt tại quỹ (VND)' : 'Tiền gửi ngân hàng (VND)',
+                                          };
+                                          setVoucherToPrint(generatedExpense);
+                                          setIsPrintVoucherModalOpen(true);
+                                        }}
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          width: '28px',
+                                          height: '28px',
+                                          borderRadius: '6px',
+                                          backgroundColor: '#eff6ff',
+                                          border: '1px solid #bfdbfe',
+                                          color: '#1d4ed8',
+                                          cursor: 'pointer',
+                                          transition: 'all 0.15s ease',
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          e.currentTarget.style.backgroundColor = '#dbeafe';
+                                          e.currentTarget.style.borderColor = '#93c5fd';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          e.currentTarget.style.backgroundColor = '#eff6ff';
+                                          e.currentTarget.style.borderColor = '#bfdbfe';
+                                        }}
+                                      >
+                                        <Printer size={13} />
+                                      </button>
+                                    ) : null}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                       </React.Fragment>
                     );
                   }
@@ -4651,10 +5244,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                             <button
                               type="button"
                               title="Tùy chọn thao tác"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveRowMenuId(activeRowMenuId === item.id ? null : item.id);
-                              }}
+                              onClick={(e) => handleToggleRowMenu(item.id, e)}
                               style={{
                                 background: activeRowMenuId === item.id ? '#f1f5f9' : 'transparent',
                                 border: '1px solid',
@@ -4674,7 +5264,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                               style={{
                                 position: 'absolute',
                                 right: 0,
-                                ...(isNearBottom ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }),
+                                ...(menuOpenUp ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }),
                                 minWidth: '170px',
                                 backgroundColor: '#ffffff',
                                 borderRadius: '8px',
@@ -4769,6 +5359,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
       <Offcanvas
         isOpen={isOffcanvasOpen}
         onClose={() => setIsOffcanvasOpen(false)}
+        closeOnBackdropClick={false}
         icon={
           currentStep === 3 ? (
             <Bank size={22} style={{ color: '#0284c7' }} />
@@ -5529,9 +6120,11 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
           onClose={() => {
             setPaymentOffcanvasOpen(false);
             setSelectedReceivableForPayment(null);
+            setIsAdvancePayment(false);
           }}
-          icon={<CashCoin size={22} style={{ color: '#059669' }} />}
-          title="Ghi nhận thanh toán & Lập phiếu thu"
+          closeOnBackdropClick={false}
+          icon={isAdvancePayment ? <Wallet2 size={22} style={{ color: '#059669' }} /> : <CashCoin size={22} style={{ color: '#059669' }} />}
+          title={isAdvancePayment ? 'Thu tiền ứng trước của khách hàng' : 'Ghi nhận thanh toán & Lập phiếu thu'}
           width="400px"
           position="right"
           bodyStyle={{
@@ -5549,6 +6142,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                 onClick={() => {
                   setPaymentOffcanvasOpen(false);
                   setSelectedReceivableForPayment(null);
+                  setIsAdvancePayment(false);
                 }}
                 style={{ minWidth: '80px' }}
               >
@@ -5565,7 +6159,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                   borderColor: '#0a3a78',
                 }}
               >
-                Xác nhận thanh toán
+                {isAdvancePayment ? 'Xác nhận thu ứng trước' : 'Xác nhận thanh toán'}
               </Button>
             </div>
           }
@@ -5574,7 +6168,11 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
           <div style={{ paddingBottom: '14px', borderBottom: '1px solid #e2e8f0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
               <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Đối tác / Khách hàng</span>
-              <Badge variant="warning">Còn nợ</Badge>
+              {isAdvancePayment ? (
+                <Badge variant="info">Tiền ứng trước / Đặt cọc</Badge>
+              ) : (
+                <Badge variant="warning">Còn nợ</Badge>
+              )}
             </div>
             <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.9375rem', lineHeight: 1.3 }}>
               {selectedReceivableForPayment.customerName}
@@ -5632,68 +6230,90 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <PlusCircleFill size={14} style={{ color: '#059669' }} />
               <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                1. ĐƠN HÀNG / KHOẢN NỢ & SỐ TIỀN THU
+                {isAdvancePayment ? '1. NỘI DUNG ỨNG TRƯỚC & SỐ TIỀN THU' : '1. ĐƠN HÀNG / KHOẢN NỢ & SỐ TIỀN THU'}
               </span>
             </div>
 
             {/* Chọn đơn hàng / khoản nợ thanh toán áp dụng */}
-            {selectedReceivableForPayment.entries && selectedReceivableForPayment.entries.length > 0 && (
+            {isAdvancePayment ? (
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                  Đơn hàng / Khoản nợ áp dụng <span style={{ color: '#dc2626' }}>*</span>
+                  Loại nghiệp vụ
                 </label>
-                <select
-                  className="form-select"
-                  value={selectedStageForPayment?.id || ''}
-                  onChange={(e) => {
-                    const found = selectedReceivableForPayment?.entries.find((s) => s.id === e.target.value);
-                    if (found) {
-                      setSelectedStageForPayment(found);
-                      const remAmt = found.remainingAmount !== undefined ? found.remainingAmount : (found.contractValue - (found.paidAmount || 0));
-                      setPaymentAmountInput(String(remAmt));
-                      setPaymentNote(`Thu tiền khách hàng - ${found.title}`);
-                      setLinkedOrderInput(`${selectedReceivableForPayment.customerName} - ${found.title}`);
-                    }
-                  }}
+                <div
                   style={{
-                    width: '100%',
-                    height: '38px',
-                    fontSize: '0.7813rem',
+                    padding: '8px 10px',
+                    backgroundColor: '#f0fdf4',
                     borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
-                    padding: '0 8px',
+                    border: '1px solid #bbf7d0',
+                    fontSize: '0.7813rem',
                     fontWeight: 600,
-                    color: '#0f172a',
-                    backgroundColor: '#ffffff',
+                    color: '#166534',
                   }}
                 >
-                  {selectedReceivableForPayment.entries
-                    .filter((s) => {
-                      if (s.code?.startsWith('PT-')) return false;
-                      const rem = s.remainingAmount !== undefined ? s.remainingAmount : (s.contractValue - (s.paidAmount || 0));
-                      return rem > 0;
-                    })
-                    .map((s) => {
-                      const cleanTitle = s.title.replace(/\s*\([^)]*\)/g, '').trim();
-                      const rem = s.remainingAmount !== undefined ? s.remainingAmount : (s.contractValue - (s.paidAmount || 0));
-                      return (
-                        <option key={s.id} value={s.id}>
-                          {cleanTitle} (Còn nợ: {formatNumberGroup(rem)}đ)
-                        </option>
-                      );
-                    })}
-                </select>
+                  Khách hàng ứng trước tiền mua hàng (Ghi Có TK 131 - Chưa có đơn hàng)
+                </div>
               </div>
+            ) : (
+              selectedReceivableForPayment.entries && selectedReceivableForPayment.entries.length > 0 && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                    Đơn hàng / Khoản nợ áp dụng <span style={{ color: '#dc2626' }}>*</span>
+                  </label>
+                  <select
+                    className="form-select"
+                    value={selectedStageForPayment?.id || ''}
+                    onChange={(e) => {
+                      const found = selectedReceivableForPayment?.entries.find((s) => s.id === e.target.value);
+                      if (found) {
+                        setSelectedStageForPayment(found);
+                        const remAmt = found.remainingAmount !== undefined ? found.remainingAmount : (found.contractValue - (found.paidAmount || 0));
+                        setPaymentAmountInput(String(remAmt));
+                        setPaymentNote(`Thu tiền khách hàng - ${found.title}`);
+                        setLinkedOrderInput(`${selectedReceivableForPayment.customerName} - ${found.title}`);
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      height: '38px',
+                      fontSize: '0.7813rem',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      padding: '0 8px',
+                      fontWeight: 600,
+                      color: '#0f172a',
+                      backgroundColor: '#ffffff',
+                    }}
+                  >
+                    {selectedReceivableForPayment.entries
+                      .filter((s) => {
+                        if (s.code?.startsWith('PT-')) return false;
+                        const rem = s.remainingAmount !== undefined ? s.remainingAmount : (s.contractValue - (s.paidAmount || 0));
+                        return rem > 0;
+                      })
+                      .map((s) => {
+                        const cleanTitle = s.title.replace(/\s*\([^)]*\)/g, '').trim();
+                        const rem = s.remainingAmount !== undefined ? s.remainingAmount : (s.contractValue - (s.paidAmount || 0));
+                        return (
+                          <option key={s.id} value={s.id}>
+                            {cleanTitle} (Còn nợ: {formatNumberGroup(rem)}đ)
+                          </option>
+                        );
+                      })}
+                  </select>
+                </div>
+              )
             )}
 
             {/* Số tiền thu VND */}
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                Số tiền thu VND <span style={{ color: '#dc2626' }}>*</span>
+                {isAdvancePayment ? 'Số tiền thu ứng trước (VND)' : 'Số tiền thu VND'} <span style={{ color: '#dc2626' }}>*</span>
               </label>
               <Input
                 type="text"
-                value={formatNumberGroup(paymentAmountInput)}
+                placeholder={isAdvancePayment ? 'Nhập số tiền ứng trước (VD: 10.000.000)' : '0'}
+                value={formatMoneyInput(paymentAmountInput)}
                 onChange={(e) => setPaymentAmountInput(e.target.value.replace(/\D/g, ''))}
                 style={{ marginBottom: 0, fontWeight: 700, fontSize: '0.9375rem', color: '#0f172a' }}
               />
@@ -6151,10 +6771,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                     hist.originalDocsCount ? `Kèm theo: ${hist.originalDocsCount}` : '',
                                     hist.note,
                                   ].filter(Boolean).join(' | ') || (isBankTransfer ? 'Giấy báo Có ngân hàng' : '01 Chứng từ gốc'),
-                                  creator: getLoggedInUserName(user) || 'Phạm Thu Hằng (Kế toán)',
-                                  accountant: hist.accountant || 'Trần Bích Thủy (Kế toán trưởng)',
-                                  cashier: isBankTransfer ? '' : 'Vũ Thu Trang (Thủ quỹ)',
-                                  director: 'Hà Hải Lâm',
+                                  creator: getLoggedInUserName(activeUser) || 'Kế toán thanh toán',
+                                  accountant: hist.accountant || 'Kế toán trưởng',
+                                  cashier: isBankTransfer ? '' : 'Thủ quỹ',
+                                  director: 'Lê Công Vụ',
                                 });
                                 setIsPrintReceiptModalOpen(true);
                               }}
@@ -6193,9 +6813,11 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
           onClose={() => {
             setPaymentModalOpen(false);
             setSelectedPayableForPayment(null);
+            setIsSupplierAdvancePayment(false);
           }}
-          icon={<Receipt size={22} style={{ color: '#0284c7' }} />}
-          title="Lập phiếu chi thanh toán nhà cung cấp"
+          closeOnBackdropClick={false}
+          icon={isSupplierAdvancePayment ? <Wallet2 size={22} style={{ color: '#0284c7' }} /> : <Receipt size={22} style={{ color: '#0284c7' }} />}
+          title={isSupplierAdvancePayment ? 'Tạo yêu cầu ứng trước cho nhà cung cấp' : 'Tạo yêu cầu chi tiền thanh toán nợ'}
           width="400px"
           position="right"
           bodyStyle={{
@@ -6213,24 +6835,25 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                 onClick={() => {
                   setPaymentModalOpen(false);
                   setSelectedPayableForPayment(null);
+                  setIsSupplierAdvancePayment(false);
                 }}
                 style={{ minWidth: '80px' }}
               >
-                Đóng
+                Hủy
               </Button>
               <Button
                 type="button"
                 variant="primary"
                 onClick={handleConfirmPayablePayment}
-                leftIcon={<CheckCircle size={15} />}
+                leftIcon={<Send size={15} />}
                 style={{
-                  minWidth: '150px',
+                  minWidth: '160px',
                   fontWeight: 700,
                   backgroundColor: '#0284c7',
                   borderColor: '#0284c7',
                 }}
               >
-                Xác nhận chi tiền
+                {isSupplierAdvancePayment ? 'Gửi yêu cầu ứng trước' : 'Gửi yêu cầu chi tiền'}
               </Button>
             </div>
           }
@@ -6250,14 +6873,14 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                   gap: '4px',
                   padding: '2px 8px',
                   borderRadius: '12px',
-                  backgroundColor: selectedPayableForPayment.remainingAmount > 0 ? '#fff7ed' : '#f0fdf4',
-                  color: selectedPayableForPayment.remainingAmount > 0 ? '#c2410c' : '#15803d',
+                  backgroundColor: isSupplierAdvancePayment ? '#eff6ff' : (selectedPayableForPayment.remainingAmount > 0 ? '#fff7ed' : '#f0fdf4'),
+                  color: isSupplierAdvancePayment ? '#1d4ed8' : (selectedPayableForPayment.remainingAmount > 0 ? '#c2410c' : '#15803d'),
                   fontSize: '0.6875rem',
                   fontWeight: 700,
-                  border: `1px solid ${selectedPayableForPayment.remainingAmount > 0 ? '#fed7aa' : '#bbf7d0'}`,
+                  border: `1px solid ${isSupplierAdvancePayment ? '#bfdbfe' : (selectedPayableForPayment.remainingAmount > 0 ? '#fed7aa' : '#bbf7d0')}`,
                 }}
               >
-                {selectedPayableForPayment.remainingAmount > 0 ? 'Còn phải trả' : 'Đã tất toán'}
+                {isSupplierAdvancePayment ? 'Ứng trước tiền hàng' : (selectedPayableForPayment.remainingAmount > 0 ? 'Còn phải trả' : 'Đã tất toán')}
               </span>
             </div>
             <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.9375rem', lineHeight: 1.3 }}>
@@ -6315,71 +6938,92 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <PlusCircleFill size={14} style={{ color: '#0284c7' }} />
               <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#0284c7', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                1. ĐƠN MUA HÀNG (PO) & SỐ TIỀN CHI
+                {isSupplierAdvancePayment ? '1. NỘI DUNG ỨNG TRƯỚC & SỐ TIỀN CHI' : '1. ĐƠN MUA HÀNG (PO) & SỐ TIỀN CHI'}
               </span>
             </div>
 
             {/* Chọn đơn hàng PO / Vận đơn thanh toán áp dụng */}
-            {selectedPayableForPayment.entries && selectedPayableForPayment.entries.length > 0 && (
+            {isSupplierAdvancePayment ? (
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                  Đơn mua hàng / Vận đơn thanh toán <span style={{ color: '#dc2626' }}>*</span>
+                  Loại nghiệp vụ chi
                 </label>
-                <select
-                  className="form-select"
-                  value={selectedPayableEntryId}
-                  onChange={(e) => {
-                    const eId = e.target.value;
-                    setSelectedPayableEntryId(eId);
-                    if (!eId) {
-                      setPaymentAmountInput(String(selectedPayableForPayment.remainingAmount));
-                      setPaymentNote(`Thanh toán công nợ tổng cho ${selectedPayableForPayment.supplierName}`);
-                    } else {
-                      const found = selectedPayableForPayment.entries?.find((s) => s.id === eId);
-                      if (found) {
-                        const remAmt = found.remainingAmount !== undefined ? found.remainingAmount : (found.totalAmount - (found.paidAmount || 0));
-                        setPaymentAmountInput(String(remAmt));
-                        setPaymentNote(`Thanh toán tiền hàng PO ${found.code} - ${found.title}`);
-                      }
-                    }
-                  }}
+                <div
                   style={{
-                    width: '100%',
-                    height: '38px',
-                    fontSize: '0.7813rem',
+                    padding: '8px 10px',
+                    backgroundColor: '#f0fdf4',
                     borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
-                    padding: '0 8px',
+                    border: '1px solid #bbf7d0',
+                    fontSize: '0.7813rem',
                     fontWeight: 600,
-                    color: '#0f172a',
-                    backgroundColor: '#ffffff',
+                    color: '#166534',
                   }}
                 >
-                  <option value="">-- Toàn bộ công nợ nhà cung cấp (Tổng nợ) --</option>
-                  {selectedPayableForPayment.entries
-                    .filter((s) => {
-                      if (s.code?.startsWith('PC-') || s.code?.startsWith('PT-')) return false;
-                      const rem = s.remainingAmount !== undefined ? s.remainingAmount : (s.totalAmount - (s.paidAmount || 0));
-                      return rem > 0;
-                    })
-                    .map((s) => {
-                      const cleanTitle = s.title.replace(/\s*\([^)]*\)/g, '').trim();
-                      const rem = s.remainingAmount !== undefined ? s.remainingAmount : (s.totalAmount - (s.paidAmount || 0));
-                      return (
-                        <option key={s.id} value={s.id}>
-                          {s.code}: {cleanTitle} (Nợ: {formatNumberGroup(rem)}đ)
-                        </option>
-                      );
-                    })}
-                </select>
+                  Ứng trước tiền mua hàng cho nhà cung cấp (Ghi Nợ TK 331 - Chưa có đơn mua hàng)
+                </div>
               </div>
+            ) : (
+              selectedPayableForPayment.entries && selectedPayableForPayment.entries.length > 0 && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                    Đơn mua hàng / Vận đơn thanh toán <span style={{ color: '#dc2626' }}>*</span>
+                  </label>
+                  <select
+                    className="form-select"
+                    value={selectedPayableEntryId}
+                    onChange={(e) => {
+                      const eId = e.target.value;
+                      setSelectedPayableEntryId(eId);
+                      if (!eId) {
+                        setPaymentAmountInput(String(selectedPayableForPayment.remainingAmount));
+                        setPaymentNote(`Thanh toán công nợ tổng cho ${selectedPayableForPayment.supplierName}`);
+                      } else {
+                        const found = selectedPayableForPayment.entries?.find((s) => s.id === eId);
+                        if (found) {
+                          const remAmt = found.remainingAmount !== undefined ? found.remainingAmount : (found.totalAmount - (found.paidAmount || 0));
+                          setPaymentAmountInput(String(remAmt));
+                          setPaymentNote(`Thanh toán tiền hàng PO ${found.code} - ${found.title}`);
+                        }
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      height: '38px',
+                      fontSize: '0.7813rem',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      padding: '0 8px',
+                      fontWeight: 600,
+                      color: '#0f172a',
+                      backgroundColor: '#ffffff',
+                    }}
+                  >
+                    <option value="">-- Toàn bộ công nợ nhà cung cấp (Tổng nợ) --</option>
+                    {selectedPayableForPayment.entries
+                      .filter((s) => {
+                        if (s.code?.startsWith('PC-') || s.code?.startsWith('PT-')) return false;
+                        const rem = s.remainingAmount !== undefined ? s.remainingAmount : (s.totalAmount - (s.paidAmount || 0));
+                        return rem > 0;
+                      })
+                      .map((s) => {
+                        const cleanTitle = s.title.replace(/\s*\([^)]*\)/g, '').trim();
+                        const rem = s.remainingAmount !== undefined ? s.remainingAmount : (s.totalAmount - (s.paidAmount || 0));
+                        return (
+                          <option key={s.id} value={s.id}>
+                            {s.code}: {cleanTitle} (Nợ: {formatNumberGroup(rem)}đ)
+                          </option>
+                        );
+                      })}
+                  </select>
+                </div>
+              )
             )}
 
             {/* Số tiền chi VND */}
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155' }}>
-                  Số tiền chi trả VND <span style={{ color: '#dc2626' }}>*</span>
+                  {isSupplierAdvancePayment ? 'Số tiền chi ứng trước VND' : 'Số tiền chi trả VND'} <span style={{ color: '#dc2626' }}>*</span>
                 </label>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <button
@@ -6434,7 +7078,8 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
               </div>
               <Input
                 type="text"
-                value={formatNumberGroup(paymentAmountInput)}
+                placeholder="0"
+                value={formatMoneyInput(paymentAmountInput)}
                 onChange={(e) => setPaymentAmountInput(e.target.value.replace(/\D/g, ''))}
                 rightIcon={<span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#64748b' }}>đ</span>}
                 style={{ marginBottom: 0, fontWeight: 700, fontSize: '0.9375rem', color: '#0f172a' }}
@@ -6444,11 +7089,11 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
               </div>
             </div>
 
-            {/* Ngày chi và Số phiếu chi / UNC */}
+            {/* Ngày lập yêu cầu và Mã yêu cầu đề xuất */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                  Ngày hạch toán / chi tiền
+                  Ngày đề xuất yêu cầu
                 </label>
                 <div style={{ position: 'relative' }}>
                   <Input
@@ -6462,7 +7107,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                  Số phiếu chi (Mã chứng từ)
+                  Mã yêu cầu trình duyệt
                 </label>
                 <Input
                   type="text"
@@ -6795,13 +7440,13 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
               }}
             >
               <div>
-                <span style={{ fontWeight: 700, color: '#334155' }}>Người lập phiếu:</span> {currentLoggedInUserName || 'Phạm Thu Hằng'}
+                <span style={{ fontWeight: 700, color: '#334155' }}>Người lập phiếu:</span> {currentLoggedInUserName || 'Kế toán thanh toán'}
               </div>
               <div>
-                <span style={{ fontWeight: 700, color: '#334155' }}>Kế toán trưởng:</span> Mai Thị Ngọc
+                <span style={{ fontWeight: 700, color: '#334155' }}>Kế toán trưởng:</span> Bộ phận Kế toán
               </div>
               <div>
-                <span style={{ fontWeight: 700, color: '#334155' }}>Giám đốc duyệt:</span> Hà Hải Lâm
+                <span style={{ fontWeight: 700, color: '#334155' }}>Giám đốc duyệt:</span> Lê Công Vụ
               </div>
               <div>
                 <span style={{ fontWeight: 700, color: '#334155' }}>Thủ quỹ / Chi tiền:</span> {paymentMethod === 'Tiền mặt' ? 'Vũ Thu Trang' : 'Ngân hàng điện tử'}
@@ -6849,13 +7494,14 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
           setReceiptToPrint(receiptData);
           setIsPrintReceiptModalOpen(true);
         }}
-        userName={getLoggedInUserName(user) || "Lê Công Vụ"}
+        userName={getLoggedInUserName(activeUser) || "Lê Công Vụ"}
       />
 
       {/* ── 7. OFFCANVAS QUẢN LÝ KHẾ ƯỚC NHẬN NỢ (DRAWDOWN / KUNN) RỘNG 400PX ── */}
       <Offcanvas
         isOpen={isDrawdownModalOpen}
         onClose={() => setIsDrawdownModalOpen(false)}
+        closeOnBackdropClick={false}
         icon={<Receipt size={22} style={{ color: '#0284c7' }} />}
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>

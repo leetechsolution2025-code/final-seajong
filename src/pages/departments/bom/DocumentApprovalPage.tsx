@@ -21,9 +21,12 @@ const mapDbApprovalToDocument = (row: any, idx: number): ApprovalDocument => {
   if (entityType.includes('purchase') || entityType.includes('contract')) {
     docType = 'contract';
     docTypeName = 'Đơn mua hàng / Hợp đồng';
+  } else if (entityType.includes('payment') || entityType.includes('payable') || entityType.includes('chi')) {
+    docType = 'proposal';
+    docTypeName = meta?.loaiText || 'Yêu cầu chi tiền';
   } else if (entityType.includes('expense') || entityType.includes('advance') || meta?.type?.includes('advance')) {
     docType = 'advance';
-    docTypeName = meta?.loaiText || 'Đề xuất tạm ứng / Chi phí';
+    docTypeName = meta?.loaiText || 'Đề xuất tạm ứng NCC';
   } else if (entityType.includes('personal')) {
     docType = 'proposal';
     docTypeName = meta?.loaiText || 'Đề xuất nhân sự';
@@ -47,6 +50,8 @@ const mapDbApprovalToDocument = (row: any, idx: number): ApprovalDocument => {
     rawPriority === 'urgent' ? 'urgent' : rawPriority === 'high' ? 'high' : 'normal';
 
   const reasonText =
+    meta?.content ||
+    meta?.summary ||
     meta?.reason ||
     meta?.details?.reason ||
     row.note ||
@@ -60,7 +65,7 @@ const mapDbApprovalToDocument = (row: any, idx: number): ApprovalDocument => {
     title: String(row.entityTitle || 'Tờ trình phê duyệt hồ sơ'),
     docType,
     docTypeName,
-    department: String(row.department || meta?.departmentName || (entityType.includes('purchase') ? 'Phòng Mua hàng' : entityType.includes('expense') ? 'Phòng Kế toán' : 'Phòng ban Seajong')),
+    department: String(row.department || meta?.departmentName || (entityType.includes('purchase') ? 'Phòng Mua hàng' : entityType.includes('expense') || entityType.includes('payment') ? 'Phòng Tài chính – Kế toán' : 'Phòng ban Seajong')),
     submitter: String(row.requestedByName || meta?.employeeName || 'Cán bộ Seajong'),
     submitterRole: String(meta?.position || 'Nhân sự trình duyệt'),
     submitDate: createdDate,
@@ -68,9 +73,12 @@ const mapDbApprovalToDocument = (row: any, idx: number): ApprovalDocument => {
     valueLabel,
     priority,
     status,
-    summary: String(reasonText),
-    content: String(reasonText),
-    attachments: [],
+    summary: String(meta?.summary || reasonText),
+    content: String(meta?.content || reasonText),
+    attachments: Array.isArray(meta?.attachments) ? meta.attachments : [],
+    entityType: row.entityType || '',
+    entityId: row.entityId || '',
+    metadata: meta,
   };
 };
 
@@ -79,14 +87,35 @@ export const DocumentApprovalPage: React.FC<DocumentApprovalPageProps> = ({ onSh
   const [approvalDocuments, setApprovalDocuments] = useState<ApprovalDocument[]>([]);
 
   useEffect(() => {
-    fetch('/api/approval-requests')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((json) => {
-        const rows = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-        const mapped = rows.map((r: any, idx: number) => mapDbApprovalToDocument(r, idx));
-        setApprovalDocuments(mapped);
-      })
-      .catch((err) => console.error('Lỗi tải danh sách phê duyệt từ DB:', err));
+    let isSubscribed = true;
+
+    const loadRequests = () => {
+      fetch('/api/approval-requests')
+        .then((res) => (res.ok ? res.json() : null))
+        .then((json) => {
+          if (!isSubscribed) return;
+          const rows = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+          const mapped = rows.map((r: any, idx: number) => mapDbApprovalToDocument(r, idx));
+          setApprovalDocuments(mapped);
+        })
+        .catch((err) => console.error('Lỗi tải danh sách phê duyệt từ DB:', err));
+    };
+
+    loadRequests();
+    const interval = setInterval(loadRequests, 3500);
+
+    const handleUpdate = () => loadRequests();
+    window.addEventListener('decodoor_approval_documents_updated', handleUpdate);
+    window.addEventListener('seajong_approval_documents_updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+
+    return () => {
+      isSubscribed = false;
+      clearInterval(interval);
+      window.removeEventListener('decodoor_approval_documents_updated', handleUpdate);
+      window.removeEventListener('seajong_approval_documents_updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
   }, []);
 
   const approvalCounts = useMemo(() => {

@@ -9,7 +9,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import * as cheerio from 'cheerio';
-import financeAccountingRouter from './server/financeAccountingRouter.js';
+const { default: financeAccountingRouter, db: sqliteDb } = await import(`./server/financeAccountingRouter.js?t=${Date.now()}`);
 import { syncPrismaFinanceToAccountingTables } from './services/prismaFinanceSyncService.js';
 import {
   computeSalesOverviewStats,
@@ -6564,8 +6564,8 @@ function parseMarketingPlanTasks(planDataStr, targetYear = 2026) {
         id: `mkt-item-${item.id || `${key}-${idx}`}`,
         code,
         title,
-        project: `HẠNG MỤC: ${groupName.toUpperCase()} (T${monthStr}/${targetYear})`,
-        contractCode: `HẠNG MỤC: ${groupName.toUpperCase()} (T${monthStr}/${targetYear})`,
+        project: `${groupName.toUpperCase()} (T${monthStr}/${targetYear})`,
+        contractCode: '',
         customerName: `Kế hoạch Marketing Tháng ${monthStr}/${targetYear}`,
         customerAddress: `Phòng Marketing Seajong`,
         assignee: item.assignee || 'Chu Thị Hằng',
@@ -6854,7 +6854,7 @@ app.post('/api/user-tasks', async (req, res) => {
       id: taskId,
       code: body.code || `CV-2026-${String(Date.now()).slice(-3)}`,
       title: body.title || 'Công việc mới',
-      project: body.project || body.customerName || 'Dự án thi công trưng bày',
+      project: body.project || body.customerName || 'Công việc nội bộ phòng ban',
       contractCode: body.contractCode !== undefined ? String(body.contractCode).trim() : '',
       customerName: body.customerName || body.project || 'Nội bộ công ty',
       customerAddress: body.customerAddress || 'Công ty Cổ phần Seajong Việt Nam',
@@ -9975,6 +9975,7 @@ app.get('/api/logistics/inventory', async (req, res) => {
     const categoryId = (req.query.categoryId || '').trim();
     const warehouseId = (req.query.warehouseId || '').trim();
     const status = (req.query.status || '').trim();
+    const bomStatus = (req.query.bomStatus || '').trim();
     const nolimit = req.query.nolimit === 'true';
     const limit = Math.max(1, parseInt(req.query.limit || req.query.pageSize) || 20);
     const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -10046,7 +10047,16 @@ app.get('/api/logistics/inventory', async (req, res) => {
         const codeNorm = removeAccents(it.code);
         const modelNorm = removeAccents(it.model || '');
         const altNorm = removeAccents(it.maThayThe || '');
-        return nameNorm.includes(sNorm) || codeNorm.includes(sNorm) || modelNorm.includes(sNorm) || altNorm.includes(sNorm);
+        const bomNorm = (it.dinhMucs || [])
+          .map(dm => removeAccents(`${dm.code || ''} ${dm.tenDinhMuc || ''}`))
+          .join(' ');
+        return (
+          nameNorm.includes(sNorm) ||
+          codeNorm.includes(sNorm) ||
+          modelNorm.includes(sNorm) ||
+          altNorm.includes(sNorm) ||
+          bomNorm.includes(sNorm)
+        );
       });
     }
 
@@ -10084,6 +10094,17 @@ app.get('/api/logistics/inventory', async (req, res) => {
         images = [item.imageUrl];
       }
 
+      const primaryBom =
+        (item.dinhMucs || []).find((dm) => dm.code === `DM-${item.code}`) ||
+        (item.dinhMucs || [])[0] ||
+        null;
+      const estimatedBomCost = primaryBom
+        ? (primaryBom.vatTu || []).reduce((sum, vt) => {
+            const unitCost = vt.inventoryItem?.giaNhap || vt.inventoryItem?.price || 0;
+            return sum + (Number(vt.soLuong) || 0) * unitCost;
+          }, 0)
+        : 0;
+
       return {
         ...item,
         images,
@@ -10093,6 +10114,7 @@ app.get('/api/logistics/inventory', async (req, res) => {
         thucTon,
         trangThai,
         giaBanLe: item.giaBan || 0,
+        estimatedBomCost,
         source: item.loai === 'hang-hoa' ? 'inventory' : (item.loai === 'vat-tu' ? 'material' : 'manufactured'),
         categoryName: item.category?.name || item.erpCategory?.name || '',
       };
@@ -10107,6 +10129,17 @@ app.get('/api/logistics/inventory', async (req, res) => {
       }
     }
 
+    const bomCounts = {
+      noBomCount: resultItems.filter(it => !it.dinhMucs || it.dinhMucs.length === 0).length,
+      hasBomCount: resultItems.filter(it => it.dinhMucs && it.dinhMucs.length > 0).length,
+    };
+
+    if (bomStatus === 'no-bom') {
+      resultItems = resultItems.filter(it => !it.dinhMucs || it.dinhMucs.length === 0);
+    } else if (bomStatus === 'has-bom') {
+      resultItems = resultItems.filter(it => it.dinhMucs && it.dinhMucs.length > 0);
+    }
+
     const total = resultItems.length;
     const totalPages = Math.ceil(total / limit) || 1;
     const paginated = nolimit ? resultItems : resultItems.slice(skip, skip + limit);
@@ -10118,6 +10151,7 @@ app.get('/api/logistics/inventory', async (req, res) => {
       page,
       pageSize: limit,
       totalPages,
+      bomCounts,
     });
   } catch (err) {
     console.error('Lỗi GET /api/logistics/inventory:', err);
@@ -12726,6 +12760,43 @@ app.post('/api/production/bom', async (req, res) => {
       },
     });
 
+    if (validInventoryItemId) {
+      const totalCost = (created.vatTu || []).reduce(
+        (sum, dv) => sum + (Number(dv.soLuong) || 0) * (Number(dv.inventoryItem?.giaNhap) || 0),
+        0
+      );
+      const targetItem = await prisma.inventoryItem.findUnique({
+        where: { id: validInventoryItemId },
+      });
+      if (targetItem) {
+        const nextMarginPct =
+          body.marginPct !== undefined ? Number(body.marginPct) : (targetItem.loiNhuanKyVong ?? 30);
+        const nextMarginType =
+          body.marginType !== undefined
+            ? (body.marginType === 'revenue' ? 'revenue' : 'cost')
+            : (targetItem.phuongPhapTinhLoiNhuan || 'cost');
+        const calcGiaBan =
+          nextMarginType === 'revenue' && nextMarginPct < 100
+            ? Math.round((totalCost / (1 - nextMarginPct / 100)) / 1000) * 1000
+            : Math.round((totalCost * (1 + nextMarginPct / 100)) / 1000) * 1000;
+        const explicitGiaBan =
+          body.giaBan !== undefined && Number(body.giaBan) >= 0 ? Number(body.giaBan) : null;
+
+        await prisma.inventoryItem.update({
+          where: { id: validInventoryItemId },
+          data: {
+            giaNhap: totalCost,
+            loiNhuanKyVong: nextMarginPct,
+            phuongPhapTinhLoiNhuan: nextMarginType,
+            giaBan:
+              explicitGiaBan !== null && explicitGiaBan > 0
+                ? explicitGiaBan
+                : calcGiaBan || targetItem.giaBan,
+          },
+        });
+      }
+    }
+
     res.status(201).json(created);
   } catch (err) {
     console.error('Lỗi POST /api/production/bom:', err);
@@ -12799,16 +12870,35 @@ app.put('/api/production/bom/:id', async (req, res) => {
       );
       const targetItem = await prisma.inventoryItem.findUnique({ where: { id: inventoryItemId } });
       if (targetItem) {
-        const marginPct = targetItem.loiNhuanKyVong || 30;
-        const marginType = targetItem.phuongPhapTinhLoiNhuan || 'cost';
+        const bodyMarginPct = req.body?.marginPct;
+        const bodyMarginType = req.body?.marginType;
+        const bodyGiaBan = req.body?.giaBan;
+
+        const marginPct =
+          bodyMarginPct !== undefined ? Number(bodyMarginPct) : (targetItem.loiNhuanKyVong ?? 30);
+        const marginType =
+          bodyMarginType !== undefined
+            ? (bodyMarginType === 'revenue' ? 'revenue' : 'cost')
+            : (targetItem.phuongPhapTinhLoiNhuan || 'cost');
         const calcGiaBan = marginType === 'revenue' && marginPct < 100
           ? Math.round((totalCost / (1 - marginPct / 100)) / 1000) * 1000
           : Math.round((totalCost * (1 + marginPct / 100)) / 1000) * 1000;
+        const nextGiaBan =
+          bodyGiaBan !== undefined && Number(bodyGiaBan) > 0
+            ? Number(bodyGiaBan)
+            : (calcGiaBan || targetItem.giaBan);
+
+        await prisma.dinhMuc.update({
+          where: { id },
+          data: { giaBan: nextGiaBan },
+        });
         await prisma.inventoryItem.update({
           where: { id: inventoryItemId },
           data: {
             giaNhap: totalCost,
-            giaBan: calcGiaBan || targetItem.giaBan,
+            loiNhuanKyVong: marginPct,
+            phuongPhapTinhLoiNhuan: marginType,
+            giaBan: nextGiaBan,
           }
         });
       }
@@ -12921,7 +13011,7 @@ app.get('/api/production/dashboard/recent-orders', async (req, res) => {
         ]
       },
       orderBy: { updatedAt: 'desc' },
-      take: 100,
+      take: 300,
       include: {
         customer: { select: { name: true, address: true } },
         logisticsTickets: { select: { id: true, code: true, type: true, status: true } },
@@ -13499,9 +13589,12 @@ const mapApprovalRequestToDoc = (row, idx = 0) => {
   if (entityType.includes('purchase') || entityType.includes('contract')) {
     docType = 'contract';
     docTypeName = 'Đơn mua hàng / Hợp đồng';
+  } else if (entityType.includes('payment') || entityType.includes('payable') || entityType.includes('chi')) {
+    docType = 'proposal';
+    docTypeName = meta?.loaiText || 'Yêu cầu chi tiền';
   } else if (entityType.includes('expense') || entityType.includes('advance') || meta?.type?.includes('advance')) {
     docType = 'advance';
-    docTypeName = meta?.loaiText || 'Đề xuất tạm ứng / Chi phí';
+    docTypeName = meta?.loaiText || 'Đề xuất tạm ứng NCC';
   } else if (entityType.includes('personal')) {
     docType = 'proposal';
     docTypeName = meta?.loaiText || 'Đề xuất nhân sự';
@@ -13525,6 +13618,8 @@ const mapApprovalRequestToDoc = (row, idx = 0) => {
   const priority = rawPriority === 'urgent' ? 'urgent' : rawPriority === 'high' ? 'high' : 'normal';
 
   const reasonText =
+    meta?.content ||
+    meta?.summary ||
     meta?.reason ||
     meta?.details?.reason ||
     row.note ||
@@ -13543,19 +13638,19 @@ const mapApprovalRequestToDoc = (row, idx = 0) => {
       meta?.departmentName ||
       (entityType.includes('purchase')
         ? 'Phòng Mua hàng'
-        : entityType.includes('expense')
+        : entityType.includes('expense') || entityType.includes('payment')
           ? 'Phòng Tài chính – Kế toán'
           : 'Phòng ban Seajong')
     ),
     submitter: String(row.requestedByName || meta?.employeeName || 'Cán bộ Seajong'),
-    submitterRole: String(meta?.position || 'Nhân sự trình duyệt'),
+    submitterRole: String(meta?.position || 'Kế toán viên'),
     submitDate: createdDate,
     value: rawVal,
     valueLabel,
     priority,
     status,
-    summary: String(reasonText),
-    content: String(reasonText),
+    summary: String(meta?.summary || reasonText),
+    content: String(meta?.content || reasonText),
     approvalDate: status === 'approved' ? approvedDate : undefined,
     approvedBy: status === 'approved' ? (row.approvedById || 'Lê Công Vụ (Giám đốc)') : undefined,
     approvalNote: status === 'approved' ? (row.note || 'Đồng ý phê duyệt') : undefined,
@@ -13563,6 +13658,9 @@ const mapApprovalRequestToDoc = (row, idx = 0) => {
     rejectedBy: status === 'rejected' ? (row.approvedById || 'Lê Công Vụ (Giám đốc)') : undefined,
     rejectionReason: status === 'rejected' ? (row.rejectedReason || row.note || 'Từ chối phê duyệt') : undefined,
     attachments: Array.isArray(meta?.attachments) ? meta.attachments : [],
+    entityType: row.entityType || '',
+    entityId: row.entityId || '',
+    metadata: meta,
   };
 };
 
@@ -13650,6 +13748,118 @@ app.get('/api/approval-requests', async (req, res) => {
   }
 });
 
+// ── POST /api/approval-requests & /api/approval-documents: Tạo yêu cầu trình Giám đốc duyệt ──
+app.post(['/api/approval-requests', '/api/approval-documents'], async (req, res) => {
+  try {
+    const b = req.body || {};
+    const entityType = b.entityType || 'PAYMENT_REQUEST';
+    const entityCode = b.entityCode || b.code || `YCCHI-${Date.now().toString().slice(-6)}`;
+    const entityTitle = b.entityTitle || b.title || 'Yêu cầu chi tiền thanh toán';
+    const department = b.department || 'Phòng Tài chính – Kế toán';
+    let requestedByName = b.requestedByName || b.submitter || '';
+    if (!requestedByName) {
+      const authUid = await resolveCurrentAuthUserId(req);
+      if (authUid) {
+        const authUser = await prisma.user.findUnique({ where: { id: authUid }, select: { name: true } });
+        if (authUser?.name) requestedByName = authUser.name;
+      }
+    }
+    if (!requestedByName) requestedByName = 'Kế toán thanh toán';
+    const amount = Number(b.amount || b.value || 0);
+    const meta = typeof b.metadata === 'object' ? b.metadata : (b.metadata ? JSON.parse(b.metadata) : {});
+
+    // Tìm một user kế toán/nhân viên (không phải Giám đốc) để làm người tạo tờ trình, đảm bảo Giám đốc luôn nhận được thông báo
+    const senderUser = await prisma.user.findFirst({
+      where: {
+        AND: [
+          { role: 'USER' },
+          { name: { not: 'Lê Công Vụ' } },
+        ],
+      },
+      select: { id: true, name: true },
+    });
+    const senderUserId = senderUser?.id || 'cmra9to1p00048oq7p8si6x1j';
+
+    // 1. Tạo hồ sơ trong bảng ApprovalRequest
+    const createdReq = await prisma.approvalRequest.create({
+      data: {
+        entityType,
+        entityId: b.entityId || b.id || `REQ-${Date.now()}`,
+        entityCode,
+        entityTitle,
+        department,
+        requestedById: senderUserId,
+        requestedByName,
+        priority: b.priority || 'high',
+        status: 'pending',
+        note: b.reason || b.summary || entityTitle,
+        metadata: JSON.stringify({
+          ...meta,
+          totalAmount: amount,
+          soTien: amount,
+          amount,
+          loaiText: entityType === 'purchase_order'
+            ? 'Phê duyệt đơn mua hàng'
+            : entityType.includes('advance')
+            ? 'Đề xuất tạm ứng NCC'
+            : 'Yêu cầu chi tiền thanh toán',
+          reason: b.reason || b.summary || entityTitle,
+          proposer: requestedByName,
+        }),
+      },
+    });
+
+    // 2. GỬI THÔNG BÁO CHO BAN GIÁM ĐỐC
+    try {
+      const directorUsers = await prisma.user.findMany({
+        where: {
+          OR: [
+            { role: 'ADMIN' },
+            { email: { contains: 'giamdoc' } },
+            { name: { contains: 'Lê Công Vụ' } },
+            { employee: { departmentCode: 'board' } },
+          ],
+        },
+        select: { id: true, name: true },
+      });
+
+      const directorIds = directorUsers.map((u) => u.id);
+
+      const isPurchaseOrder = String(entityType || '').toLowerCase() === 'purchase_order';
+      const depositNote = isPurchaseOrder && Number(meta?.datCocPct || 0) > 0
+        ? ` (Yêu cầu đặt cọc **${meta.datCocPct}%** = **${Number(meta.tienDatCoc || 0).toLocaleString('vi-VN')} đ**)`
+        : '';
+
+      await sendCrossDeptNotification({
+        title: isPurchaseOrder ? `📑 Trình duyệt đơn mua hàng: ${entityTitle}` : `📑 Trình duyệt: ${entityTitle}`,
+        content: isPurchaseOrder
+          ? `**${requestedByName}** vừa gửi trình Ban Giám đốc phê duyệt **${entityTitle}** với tổng giá trị **${amount.toLocaleString('vi-VN')} đ**${depositNote}.\nVui lòng vào Trung tâm phê duyệt để xem xét.`
+          : `Kế toán **${requestedByName}** vừa gửi trình Ban Giám đốc phê duyệt **${entityTitle}** với số tiền **${amount.toLocaleString('vi-VN')} đ**.\nVui lòng vào Trung tâm phê duyệt để xem xét và ban hành Lệnh chi tiền.`,
+        type: 'warning',
+        priority: 'urgent',
+        sourceDept: department || 'Phòng Tài chính – Kế toán',
+        targetDept: 'board',
+        recipientUserIds: directorIds,
+        senderUserId: senderUserId,
+        senderName: requestedByName,
+        link: '/board/approvals',
+        entityType: isPurchaseOrder ? 'purchase_order' : 'payment_order',
+        entityId: createdReq.id,
+      });
+    } catch (notifErr) {
+      console.warn('[Notification error for Director]:', notifErr?.message);
+    }
+
+    res.status(201).json({
+      success: true,
+      data: mapApprovalRequestToDoc(createdReq, 0),
+    });
+  } catch (err) {
+    console.error('[POST /api/approval-requests] Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/approval-documents', async (req, res) => {
   try {
     const requests = await prisma.approvalRequest.findMany({
@@ -13665,10 +13875,159 @@ app.get('/api/approval-documents', async (req, res) => {
   }
 });
 
+async function recordPurchaseOrderDebtOnApprove(approvalReq) {
+  if (!approvalReq || String(approvalReq.entityType || '').toLowerCase() !== 'purchase_order') return;
+  try {
+    const po = await prisma.purchaseOrder.findFirst({
+      where: {
+        OR: [
+          ...(approvalReq.entityId ? [{ id: approvalReq.entityId }] : []),
+          ...(approvalReq.entityCode ? [{ code: approvalReq.entityCode }] : []),
+        ],
+      },
+      include: { supplier: { select: { id: true, name: true } } },
+    });
+    if (!po || !po.supplierId || !(Number(po.tongTien) > 0)) return;
+
+    const existingDebt = await prisma.debt.findFirst({
+      where: { type: 'phai-tra', referenceId: po.code },
+    });
+    if (!existingDebt) {
+      const amt = Math.round(Number(po.tongTien) || 0);
+      const paid = Math.round(Number(po.daThanhToan) || 0);
+      await prisma.debt.create({
+        data: {
+          type: 'phai-tra',
+          supplierId: po.supplierId,
+          partnerName: po.supplier?.name || 'Nhà cung cấp',
+          amount: amt,
+          paidAmount: paid,
+          dueDate: po.ngayNhan || po.ngayDat || new Date(),
+          status: paid >= amt ? 'PAID' : 'UNPAID',
+          description: `Công nợ từ đơn mua hàng ${po.code}`,
+          referenceId: po.code,
+        },
+      });
+    }
+
+    const dbPath = path.join(__dirname, 'prisma', 'dev.db');
+    const sqliteConn = new sqlite3.Database(dbPath);
+    try {
+      await syncPrismaFinanceToAccountingTables(sqliteConn);
+    } finally {
+      sqliteConn.close();
+    }
+  } catch (debtErr) {
+    console.warn('[recordPurchaseOrderDebtOnApprove error]:', debtErr.message);
+  }
+}
+
+async function createDepositPaymentOrderOnApprove(approvalReq, approverName, note) {
+  if (!approvalReq || String(approvalReq.entityType || '').toLowerCase() !== 'purchase_order') return;
+  try {
+    let meta = {};
+    try {
+      meta = typeof approvalReq.metadata === 'string' ? JSON.parse(approvalReq.metadata) : approvalReq.metadata || {};
+    } catch { /* ignore */ }
+
+    const datCocPct = Number(meta?.datCocPct || 0);
+    const totalAmt = Number(meta?.tongCong || meta?.totalAmount || meta?.amount || 0);
+    const depositAmount = Math.round(Number(meta?.tienDatCoc || 0) || (totalAmt * datCocPct) / 100);
+    if (!(depositAmount > 0)) return;
+
+    const dbPath = path.join(__dirname, 'prisma', 'dev.db');
+    const sqliteConn = new sqlite3.Database(dbPath);
+    const dbGet = (sql, params) => new Promise((resolve, reject) => sqliteConn.get(sql, params, (e, r) => (e ? reject(e) : resolve(r))));
+    const dbRun = (sql, params) => new Promise((resolve, reject) => sqliteConn.run(sql, params, (e) => (e ? reject(e) : resolve())));
+
+    let createdOrderCode = null;
+    let createdOrderId = null;
+    try {
+      const refCode = approvalReq.entityCode || approvalReq.id;
+      const existing = await dbGet(
+        `SELECT id, order_code FROM payment_orders WHERE ref_type = 'purchase_order_deposit' AND ref_code = ?`,
+        [refCode]
+      );
+      if (!existing) {
+        const now = new Date();
+        const datePrefix = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+        const rand3 = String(Math.floor(100 + Math.random() * 900));
+        createdOrderId = `PO-LC-${approvalReq.id || Date.now()}`;
+        createdOrderCode = `LC-${datePrefix}-${rand3}`;
+        const todayVN = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+        const supplierName = meta?.supplierName || 'Nhà cung cấp';
+        const paymentMethod = meta?.hinhThucTT === 'Tiền mặt' ? 'cash' : 'bank_transfer';
+
+        await dbRun(
+          `INSERT INTO payment_orders (
+            id, order_code, ref_type, ref_id, ref_code, title,
+            beneficiary_name, beneficiary_code, department,
+            amount, amount_in_words, payment_method, bank_name, bank_account, bank_branch,
+            purpose, due_date, approved_by, approved_date, approval_note,
+            status, status_label, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          [
+            createdOrderId,
+            createdOrderCode,
+            'purchase_order_deposit',
+            approvalReq.entityId || approvalReq.id,
+            refCode,
+            `Chi tiền đặt cọc ${datCocPct}% đơn mua hàng ${refCode} - ${supplierName}`,
+            supplierName,
+            'NCC',
+            approvalReq.department || 'Phòng Mua hàng & Cung ứng',
+            depositAmount,
+            '',
+            paymentMethod,
+            '',
+            '',
+            '',
+            `Đặt cọc ${datCocPct}% đơn mua hàng ${refCode} - NCC ${supplierName}`,
+            todayVN,
+            approverName || 'Ban Giám đốc',
+            todayVN,
+            note || 'Giám đốc đã duyệt chi tiền đặt cọc đơn mua hàng',
+            'pending',
+            'Chờ chi tiền',
+          ]
+        );
+      }
+    } finally {
+      sqliteConn.close();
+    }
+
+    if (createdOrderCode) {
+      await sendCrossDeptNotification({
+        title: `💳 Lệnh chi đặt cọc mới: ${createdOrderCode}`,
+        content: `Giám đốc **${approverName || 'Lê Công Vụ'}** vừa duyệt chi tiền đặt cọc **${datCocPct}%** (**${depositAmount.toLocaleString('vi-VN')} đ**) cho đơn mua hàng **${approvalReq.entityCode}** (NCC: ${meta?.supplierName || 'Nhà cung cấp'}). Lệnh chi **${createdOrderCode}** đã được chuyển sang bộ phận Kế toán để giải ngân.`,
+        type: 'warning',
+        priority: 'urgent',
+        sourceDept: 'Ban Giám đốc',
+        targetDept: 'finance',
+        senderName: approverName || 'Ban Giám đốc',
+        link: '/finance/cashflow',
+        entityType: 'payment_order',
+        entityId: createdOrderId,
+      });
+    }
+  } catch (err) {
+    console.warn('[createDepositPaymentOrderOnApprove error]:', err.message);
+  }
+}
+
 app.patch('/api/approval-documents/:id/status', async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, note, approverName } = req.body || {};
+    const { status, note, approverName, approveDeposit } = req.body || {};
+    const existingReq = await prisma.approvalRequest.findUnique({ where: { id } });
+    let nextMetadata = existingReq?.metadata;
+    if (approveDeposit !== undefined && existingReq) {
+      let parsedMeta = {};
+      try {
+        parsedMeta = typeof existingReq.metadata === 'string' ? JSON.parse(existingReq.metadata) : existingReq.metadata || {};
+      } catch { /* ignore */ }
+      nextMetadata = JSON.stringify({ ...parsedMeta, approveDeposit: Boolean(approveDeposit) });
+    }
     const updated = await prisma.approvalRequest.update({
       where: { id },
       data: {
@@ -13677,8 +14036,16 @@ app.patch('/api/approval-documents/:id/status', async (req, res) => {
         ...(status === 'rejected' && note ? { rejectedReason: note } : {}),
         ...(approverName && { approvedById: approverName }),
         ...(status === 'approved' && { approvedAt: new Date() }),
+        ...(nextMetadata !== undefined && { metadata: nextMetadata }),
       },
     });
+
+    if (status === 'approved' && String(updated.entityType || '').toLowerCase() === 'purchase_order') {
+      await recordPurchaseOrderDebtOnApprove(updated);
+      if (approveDeposit === true) {
+        await createDepositPaymentOrderOnApprove(updated, approverName, note);
+      }
+    }
 
     if (status === 'approved' || status === 'rejected') {
       try {
@@ -13727,6 +14094,10 @@ app.patch('/api/approval-requests/:id', async (req, res) => {
         comments: { orderBy: { createdAt: 'asc' } },
       },
     });
+
+    if (status === 'approved' && String(updated.entityType || '').toLowerCase() === 'purchase_order') {
+      await recordPurchaseOrderDebtOnApprove(updated);
+    }
 
     if (status === 'approved' || status === 'rejected') {
       try {
@@ -14775,6 +15146,89 @@ app.get('/api/production/defects', async (req, res) => {
       }
     });
 
+    // Bổ sung thông tin Mã đơn hàng & Khách hàng (tên + địa chỉ) từ SaleOrder / Customer / QualityInspection
+    const rawOrderNumbers = [...new Set(defects.map((d) => (d.orderNumber || '').trim()).filter(Boolean))];
+    const qcCodes = rawOrderNumbers.filter((code) => code.toUpperCase().startsWith('QC-'));
+    const qcToSoCodeMap = {};
+    if (qcCodes.length > 0) {
+      const qcRecords = await prisma.qualityInspection.findMany({
+        where: { code: { in: qcCodes } },
+        select: { code: true, notes: true, metadata: true },
+      });
+      qcRecords.forEach((qc) => {
+        let foundSoCode = null;
+        if (qc.metadata) {
+          try {
+            const meta = JSON.parse(qc.metadata);
+            const candidate = meta?.saleOrderCode || meta?.orderCode || meta?.orderNumber || meta?.referenceCode || '';
+            const match = String(candidate).match(/DBH-[A-Za-z0-9-]+/i);
+            if (match) foundSoCode = match[0].toUpperCase();
+          } catch (_) {}
+        }
+        if (!foundSoCode && qc.notes) {
+          const match = String(qc.notes).match(/DBH-[A-Za-z0-9-]+/i);
+          if (match) foundSoCode = match[0].toUpperCase();
+        }
+        if (foundSoCode) {
+          qcToSoCodeMap[qc.code] = foundSoCode;
+        }
+      });
+    }
+
+    const candidateSoCodes = [
+      ...new Set([
+        ...rawOrderNumbers.filter((code) => !code.toUpperCase().startsWith('QC-')),
+        ...Object.values(qcToSoCodeMap),
+      ]),
+    ];
+    const ticketSoIds = [
+      ...new Set(
+        defects
+          .flatMap((d) => (d.logisticsTickets || []).map((t) => t.saleOrderId))
+          .filter(Boolean)
+      ),
+    ];
+    const customerIds = [...new Set(defects.map((d) => d.customerId).filter(Boolean))];
+
+    const [saleOrders, directCustomers] = await Promise.all([
+      candidateSoCodes.length > 0 || ticketSoIds.length > 0
+        ? prisma.saleOrder.findMany({
+            where: {
+              OR: [
+                ...(candidateSoCodes.length > 0 ? [{ code: { in: candidateSoCodes } }] : []),
+                ...(ticketSoIds.length > 0 ? [{ id: { in: ticketSoIds } }] : []),
+              ],
+            },
+            select: {
+              id: true,
+              code: true,
+              nguoiNhan: true,
+              diaChiGiaoHang: true,
+              customer: {
+                select: { id: true, name: true, address: true },
+              },
+            },
+          })
+        : Promise.resolve([]),
+      customerIds.length > 0
+        ? prisma.customer.findMany({
+            where: { id: { in: customerIds } },
+            select: { id: true, name: true, address: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const soByCode = {};
+    const soById = {};
+    saleOrders.forEach((so) => {
+      if (so.code) soByCode[so.code.toUpperCase()] = so;
+      if (so.id) soById[so.id] = so;
+    });
+    const customerById = {};
+    directCustomers.forEach((c) => {
+      customerById[c.id] = c;
+    });
+
     const formatted = defects.map((d) => {
       let mediaUrls = [];
       if (d.mediaUrls) {
@@ -14788,8 +15242,45 @@ app.get('/api/production/defects', async (req, res) => {
           }
         }
       }
+
+      const rawOrder = (d.orderNumber || '').trim();
+      const linkedSoCodeFromQc = rawOrder ? qcToSoCodeMap[rawOrder] : null;
+      const ticketSo = (d.logisticsTickets || [])
+        .map((t) => (t.saleOrderId ? soById[t.saleOrderId] : null))
+        .find(Boolean);
+
+      const resolvedOrderNumber =
+        linkedSoCodeFromQc ||
+        (rawOrder && !rawOrder.toUpperCase().startsWith('QC-') ? rawOrder : null) ||
+        ticketSo?.code ||
+        rawOrder ||
+        null;
+
+      const matchedSo =
+        (resolvedOrderNumber ? soByCode[resolvedOrderNumber.toUpperCase()] : null) ||
+        ticketSo ||
+        null;
+      const matchedCustomer = d.customerId ? customerById[d.customerId] : null;
+
+      const resolvedCustomerName =
+        (d.customerName || '').trim() ||
+        matchedSo?.customer?.name ||
+        matchedSo?.nguoiNhan ||
+        matchedCustomer?.name ||
+        null;
+
+      const resolvedCustomerAddress =
+        (d.customerAddress || '').trim() ||
+        matchedSo?.diaChiGiaoHang ||
+        matchedSo?.customer?.address ||
+        matchedCustomer?.address ||
+        null;
+
       return {
         ...d,
+        orderNumber: resolvedOrderNumber,
+        customerName: resolvedCustomerName,
+        customerAddress: resolvedCustomerAddress,
         mediaUrls,
         bomCode: d.productCode ? (bomMap[d.productCode] || null) : null,
       };
@@ -18203,21 +18694,53 @@ app.get('/api/notifications', async (req, res) => {
         meta.sender ||
         nr.notification.createdBy?.employee?.fullName ||
         nr.notification.createdBy?.name ||
-        'Hệ thống tự động';
+        '';
 
       if (
+        !senderName ||
         senderName.includes('Công ty cổ phần Seajong') ||
         senderName.includes('Seajong Faucet') ||
         senderName.toLowerCase().includes('admin')
       ) {
-        senderName = 'Hệ thống tự động';
+        const c = nr.notification.content || '';
+        const matchTiepNhan = c.match(/Người tiếp nhận:\s*\*{0,2}([^\n|*]+)/);
+        const matchBoi = c.match(/bởi\s+\*{0,2}([A-ZÀ-Ỹa-zà-ỹ\s]{2,30})\*{0,2}\s+lúc/);
+        const matchXuLy = c.match(/Người xử lý(?: kỹ thuật)?:\s*\*{0,2}([^\n|*]+)/);
+        const matchLap = c.match(/Người (?:lập|tạo|gửi|phụ trách):\s*\*{0,2}([^\n|*]+)/);
+        const matchChuyenVien = c.match(/Chuyên viên phụ trách:\s*\*{0,2}([^\n|*]+)/);
+
+        if (matchTiepNhan) senderName = matchTiepNhan[1].trim();
+        else if (matchBoi) senderName = matchBoi[1].trim();
+        else if (matchXuLy) senderName = matchXuLy[1].trim();
+        else if (matchLap) senderName = matchLap[1].trim();
+        else if (matchChuyenVien) senderName = matchChuyenVien[1].trim();
+        else senderName = 'Ban Quản trị';
       }
 
-      const deptName =
+      let deptName =
         meta.department ||
         nr.notification.createdBy?.employee?.departmentName ||
         DEPT_NAMES_MAP[nr.notification.audienceValue] ||
-        'Hệ thống';
+        '';
+
+      if (!deptName || deptName === 'Hệ thống') {
+        const text = ((nr.notification.title || '') + ' ' + (nr.notification.content || '')).toLowerCase();
+        if (text.includes('trả về') || text.includes('bảo hành') || text.includes('err-') || text.includes('wr-')) {
+          deptName = 'Bảo hành & Kỹ thuật';
+        } else if (text.includes('mua hàng') || text.includes('ycmh-') || text.includes('dh-')) {
+          deptName = 'Mua hàng & Cung ứng';
+        } else if (text.includes('phê duyệt') || text.includes('tín dụng')) {
+          deptName = 'Ban Giám đốc';
+        } else if (text.includes('kho') || text.includes('xuất kho') || text.includes('nhập kho')) {
+          deptName = 'Kho vận & Logistics';
+        } else if (text.includes('kinh doanh') || text.includes('bán hàng') || text.includes('đại lý')) {
+          deptName = 'Phòng Kinh doanh';
+        } else if (text.includes('kcs') || text.includes('qa') || text.includes('qc') || text.includes('kiểm tra')) {
+          deptName = 'Đảm bảo chất lượng QA';
+        } else {
+          deptName = 'Khối Vận hành';
+        }
+      }
 
       let type = nr.notification.type || 'info';
       if (type === 'error' || nr.notification.priority === 'urgent') {
@@ -20105,8 +20628,11 @@ app.get('/api/logistics/audit-logs', async (req, res) => {
               { code: { contains: search } },
               { nguoiNhan: { contains: search } },
               { nguoiDatHang: { contains: search } },
+              { soDienThoai: { contains: search } },
               { diaChiGiaoHang: { contains: search } },
               { customer: { name: { contains: search } } },
+              { customer: { code: { contains: search } } },
+              { customer: { dienThoai: { contains: search } } },
               { customer: { address: { contains: search } } },
             ],
           },
@@ -20118,6 +20644,7 @@ app.get('/api/logistics/audit-logs', async (req, res) => {
               { code: { contains: search } },
               { orderNumber: { contains: search } },
               { customerName: { contains: search } },
+              { customerPhone: { contains: search } },
               { customerAddress: { contains: search } },
             ],
           },
@@ -20128,6 +20655,8 @@ app.get('/api/logistics/audit-logs', async (req, res) => {
             OR: [
               { code: { contains: search } },
               { customer: { name: { contains: search } } },
+              { customer: { code: { contains: search } } },
+              { customer: { dienThoai: { contains: search } } },
               { customer: { address: { contains: search } } },
             ],
           },
@@ -20138,6 +20667,8 @@ app.get('/api/logistics/audit-logs', async (req, res) => {
             OR: [
               { code: { contains: search } },
               { customer: { name: { contains: search } } },
+              { customer: { code: { contains: search } } },
+              { customer: { dienThoai: { contains: search } } },
               { customer: { address: { contains: search } } },
             ],
           },
@@ -20148,6 +20679,8 @@ app.get('/api/logistics/audit-logs', async (req, res) => {
             OR: [
               { code: { contains: search } },
               { supplier: { name: { contains: search } } },
+              { supplier: { code: { contains: search } } },
+              { supplier: { phone: { contains: search } } },
               { supplier: { address: { contains: search } } },
             ],
           },
@@ -20248,8 +20781,8 @@ app.get('/api/logistics/audit-logs', async (req, res) => {
       })
       : [];
 
-    // Nạp dữ liệu đối chiếu Đơn hàng, Khách hàng, Địa chỉ cho các hoạt động kho trên trang hiện tại
-    const [allSaleOrders, allQcs, allDefects, allContracts, allQuotations, allPos] =
+    // Nạp dữ liệu đối chiếu Đơn hàng, Nhà cung cấp, Khách hàng, Địa chỉ cho các hoạt động kho trên trang hiện tại
+    const [allSaleOrders, allQcs, allDefects, allContracts, allQuotations, allPos, matchedTickets] =
       movements.length > 0
         ? await Promise.all([
           prisma.saleOrder.findMany({ include: { customer: true } }),
@@ -20258,8 +20791,15 @@ app.get('/api/logistics/audit-logs', async (req, res) => {
           prisma.contract.findMany({ include: { customer: true } }),
           prisma.quotation.findMany({ include: { customer: true } }),
           prisma.purchaseOrder.findMany({ include: { supplier: true } }),
+          prisma.logisticsTicket.findMany({
+            where: { code: { in: voucherCodes } },
+            include: {
+              saleOrder: { include: { customer: true } },
+              defectRecord: true,
+            },
+          }),
         ])
-        : [[], [], [], [], [], []];
+        : [[], [], [], [], [], [], []];
 
     const saleOrderByCode = new Map();
     allSaleOrders.forEach((so) => {
@@ -20291,82 +20831,198 @@ app.get('/api/logistics/audit-logs', async (req, res) => {
       if (po.code) poByCode.set(po.code.toUpperCase(), po);
     });
 
-    const resolveMovementOrderCustomer = (firstMovement, codeStr) => {
-      const text = `${codeStr || ''} ${firstMovement?.lyDo || ''}`;
-      let orderCode = null;
-      let customerName = null;
-      let customerAddress = null;
-      let partnerType = null;
+    const ticketByCode = new Map();
+    matchedTickets.forEach((tk) => {
+      if (tk.code) ticketByCode.set(tk.code.toUpperCase(), tk);
+    });
 
-      const applyFromSaleOrder = (so) => {
+    const resolveMovementPartner = (firstMovement, codeStr, activityType) => {
+      const lyDoRaw = firstMovement?.lyDo || '';
+      const text = `${codeStr || ''} ${lyDoRaw}`;
+      const isProductionInbound = activityType === 'nhap' && /nhập từ sản xuất/i.test(lyDoRaw);
+      const isReturnInbound = activityType === 'nhap' && /trả lại|thu hồi|hoàn trả/i.test(lyDoRaw);
+
+      let orderCode = null;
+      let partnerName = null;
+      let partnerCode = null;
+      let partnerPhone = null;
+      let partnerAddress = null;
+      let partnerType = null;
+      let partnerSubLabel = null;
+
+      const applyFromSupplier = (po) => {
+        if (!po) return;
+        orderCode = orderCode || po.code || null;
+        if (po.supplier) {
+          partnerName = partnerName || po.supplier.name || null;
+          partnerCode = partnerCode || po.supplier.code || null;
+          partnerPhone = partnerPhone || po.supplier.phone || null;
+          partnerAddress = partnerAddress || po.supplier.address || null;
+        }
+        partnerType = 'supplier';
+        partnerSubLabel = 'Nhà cung cấp';
+      };
+
+      const applyFromSaleOrder = (so, subLabelOverride) => {
         if (!so) return;
         orderCode = orderCode || so.code || null;
-        customerName =
-          customerName ||
+        partnerName =
+          partnerName ||
           so.customer?.name ||
           so.nguoiNhan ||
           so.nguoiDatHang ||
           null;
-        customerAddress =
-          customerAddress ||
+        partnerCode = partnerCode || so.customer?.code || null;
+        partnerPhone = partnerPhone || so.soDienThoai || so.customer?.dienThoai || null;
+        partnerAddress =
+          partnerAddress ||
           so.diaChiGiaoHang ||
           so.customer?.address ||
           null;
-        partnerType = partnerType || 'customer';
+        partnerType = 'customer';
+        partnerSubLabel = subLabelOverride || 'Khách hàng';
       };
 
-      const applyFromPurchaseOrder = (po) => {
-        if (!po) return;
-        orderCode = orderCode || po.code || null;
-        customerName = customerName || po.supplier?.name || null;
-        customerAddress = customerAddress || po.supplier?.address || null;
-        partnerType = partnerType || 'supplier';
-      };
+      // A. Nếu là NHẬP KHO: Ưu tiên tuyệt đối tra cứu Nhà cung cấp (Đơn mua DH-... / purchaseOrder)
+      if (activityType === 'nhap') {
+        if (firstMovement?.purchaseOrder) {
+          applyFromSupplier(firstMovement.purchaseOrder);
+        }
+        if (!partnerName) {
+          const dhMatch = text.match(/(DH-[0-9]{8}-[0-9]{4})/i) || text.match(/\b(DH-[0-9]{8}-[0-9A-Za-z-]+)\b/i);
+          if (dhMatch) {
+            const po = poByCode.get(dhMatch[1].toUpperCase());
+            if (po) {
+              applyFromSupplier(po);
+            } else {
+              orderCode = orderCode || dhMatch[1].toUpperCase();
+              partnerType = 'supplier';
+              partnerSubLabel = 'Nhà cung cấp';
+            }
+          }
+        }
+        if (!partnerName) {
+          const qcMatch = text.match(/\b(QC-[0-9A-Za-z-]+)\b/i);
+          if (qcMatch) {
+            const qc = qcByCode.get(qcMatch[1].toUpperCase());
+            if (qc) {
+              const qcStr = `${qc.notes || ''} ${qc.metadata || ''} ${qc.code || ''}`;
+              const qcDh = qcStr.match(/(DH-[0-9]{8}-[0-9]{4})/i) || qcStr.match(/\b(DH-[0-9]{8}-[0-9A-Za-z-]+)\b/i);
+              if (qcDh) {
+                const po = poByCode.get(qcDh[1].toUpperCase());
+                if (po) applyFromSupplier(po);
+              }
+            }
+          }
+        }
+
+        // Nếu là nhập hàng trả lại / thu hồi từ khách hàng
+        if (!partnerName && isReturnInbound) {
+          const errMatch = text.match(/\b((?:ERR|WR)-[0-9]{8}-[0-9A-Za-z-]+)\b/i);
+          if (errMatch) {
+            const defect = defectByCode.get(errMatch[1].toUpperCase());
+            if (defect) {
+              partnerName = defect.customerName || null;
+              partnerPhone = defect.customerPhone || null;
+              partnerAddress = defect.customerAddress || null;
+              partnerType = 'customer';
+              partnerSubLabel = 'Khách hoàn trả';
+              if (defect.orderNumber) {
+                const so = saleOrderByCode.get(defect.orderNumber.toUpperCase());
+                if (so) applyFromSaleOrder(so, 'Khách hoàn trả');
+                orderCode = orderCode || defect.orderNumber;
+              }
+            }
+          }
+          const dbhMatch = text.match(/\b(DBH-[0-9]{8}-[0-9A-Za-z-]+)\b/i);
+          if (!partnerName && dbhMatch) {
+            const so = saleOrderByCode.get(dbhMatch[1].toUpperCase());
+            if (so) applyFromSaleOrder(so, 'Khách hoàn trả');
+          }
+        }
+
+        // Nếu nhập thành phẩm từ sản xuất nội bộ (không có NCC bên ngoài)
+        if (!partnerName && isProductionInbound) {
+          partnerName = 'Phân xưởng sản xuất & lắp ráp';
+          partnerType = 'internal';
+          partnerSubLabel = 'Nội bộ sản xuất';
+        }
+
+        return {
+          orderCode,
+          customerName: partnerName,
+          customerAddress: partnerAddress,
+          partnerName,
+          partnerCode,
+          partnerPhone,
+          partnerAddress,
+          partnerType,
+          partnerSubLabel,
+        };
+      }
+
+      // B. Nếu là XUẤT KHO (hoặc hoạt động khác): Ưu tiên tra cứu Khách hàng
+      if (codeStr && ticketByCode.has(codeStr.toUpperCase())) {
+        const tk = ticketByCode.get(codeStr.toUpperCase());
+        if (tk.saleOrder) {
+          applyFromSaleOrder(tk.saleOrder);
+        } else if (tk.defectRecord) {
+          partnerName = partnerName || tk.defectRecord.customerName || null;
+          partnerPhone = partnerPhone || tk.defectRecord.customerPhone || null;
+          partnerAddress = partnerAddress || tk.defectRecord.customerAddress || null;
+          orderCode = orderCode || tk.defectRecord.orderNumber || tk.defectRecord.code || null;
+          if (partnerName) {
+            partnerType = 'customer';
+            partnerSubLabel = 'Khách hàng';
+          }
+        }
+      }
 
       // 1. Kiểm tra mã đơn bán hàng trực tiếp (DBH-...)
       const dbhMatch = text.match(/\b(DBH-[0-9]{8}-[0-9A-Za-z-]+)\b/i);
-      if (dbhMatch) {
+      if (dbhMatch && !partnerName) {
         const so = saleOrderByCode.get(dbhMatch[1].toUpperCase());
         if (so) {
           applyFromSaleOrder(so);
         } else {
-          orderCode = dbhMatch[1].toUpperCase();
+          orderCode = orderCode || dbhMatch[1].toUpperCase();
           partnerType = 'customer';
+          partnerSubLabel = 'Khách hàng';
         }
       }
 
       // 2. Kiểm tra mã lệnh sản xuất (LSX-...) -> liên kết tới đơn bán hàng DBH-...
-      if (!orderCode || !customerName) {
+      if (!orderCode || !partnerName) {
         const lsxMatch = text.match(/\bLSX-([0-9]{8}-[0-9A-Za-z-]+)\b/i);
         if (lsxMatch) {
           const candidateSoCode = `DBH-${lsxMatch[1]}`.toUpperCase();
           const so = saleOrderByCode.get(candidateSoCode);
           if (so) {
             applyFromSaleOrder(so);
+          } else if (activityType === 'xuat') {
+            orderCode = orderCode || `LSX-${lsxMatch[1]}`.toUpperCase();
+            partnerName = partnerName || 'Phân xưởng sản xuất & lắp ráp';
+            partnerType = partnerType || 'internal';
+            partnerSubLabel = partnerSubLabel || 'Xuất sản xuất';
           }
         }
       }
 
       // 3. Kiểm tra hồ sơ lỗi / bảo hành (ERR-... / WR-...)
-      if (!orderCode || !customerName) {
+      if (!orderCode || !partnerName) {
         const errMatch = text.match(/\b((?:ERR|WR)-[0-9]{8}-[0-9A-Za-z-]+)\b/i);
         if (errMatch) {
           const defect = defectByCode.get(errMatch[1].toUpperCase());
           if (defect) {
-            if (defect.customerName) customerName = customerName || defect.customerName;
-            if (defect.customerAddress) customerAddress = customerAddress || defect.customerAddress;
+            if (defect.customerName) partnerName = partnerName || defect.customerName;
+            if (defect.customerPhone) partnerPhone = partnerPhone || defect.customerPhone;
+            if (defect.customerAddress) partnerAddress = partnerAddress || defect.customerAddress;
             partnerType = partnerType || 'customer';
+            partnerSubLabel = partnerSubLabel || 'Khách hàng';
             if (defect.orderNumber) {
               const defOrderUpper = defect.orderNumber.toUpperCase();
               if (saleOrderByCode.has(defOrderUpper)) {
                 applyFromSaleOrder(saleOrderByCode.get(defOrderUpper));
-              } else if (qcByCode.has(defOrderUpper)) {
-                const qc = qcByCode.get(defOrderUpper);
-                const qcText = `${qc.notes || ''} ${qc.metadata || ''}`;
-                const qcDbh = qcText.match(/\b(DBH-[0-9]{8}-[0-9A-Za-z-]+)\b/i);
-                if (qcDbh && saleOrderByCode.has(qcDbh[1].toUpperCase())) {
-                  applyFromSaleOrder(saleOrderByCode.get(qcDbh[1].toUpperCase()));
-                }
               }
               orderCode = orderCode || defect.orderNumber;
             }
@@ -20374,48 +21030,8 @@ app.get('/api/logistics/audit-logs', async (req, res) => {
         }
       }
 
-      // 4. Kiểm tra biên bản QC (QC-...)
-      if (!orderCode || !customerName) {
-        const qcMatch = text.match(/\b(QC-[0-9A-Za-z-]+)\b/i);
-        if (qcMatch) {
-          const qc = qcByCode.get(qcMatch[1].toUpperCase());
-          if (qc) {
-            let metaObj = {};
-            if (qc.metadata) {
-              try {
-                metaObj = typeof qc.metadata === 'string' ? JSON.parse(qc.metadata) : qc.metadata;
-              } catch (_e) {
-                metaObj = {};
-              }
-            }
-            const qcSearchStr = `${metaObj.productionOrder || ''} ${metaObj.orderCode || ''} ${qc.notes || ''} ${qc.code || ''}`;
-            const qcDbh = qcSearchStr.match(/\b(DBH-[0-9]{8}-[0-9A-Za-z-]+)\b/i);
-            if (qcDbh) {
-              const so = saleOrderByCode.get(qcDbh[1].toUpperCase());
-              if (so) {
-                applyFromSaleOrder(so);
-              } else {
-                orderCode = orderCode || qcDbh[1].toUpperCase();
-                partnerType = partnerType || 'customer';
-              }
-            } else {
-              const qcLsx = qcSearchStr.match(/\bLSX-([0-9]{8}-[0-9A-Za-z-]+)\b/i);
-              if (qcLsx) {
-                const so = saleOrderByCode.get(`DBH-${qcLsx[1]}`.toUpperCase());
-                if (so) applyFromSaleOrder(so);
-              }
-              const qcDh = qcSearchStr.match(/\b(DH-[0-9]{8}-[0-9A-Za-z-]+)\b/i);
-              if (qcDh) {
-                const po = poByCode.get(qcDh[1].toUpperCase());
-                if (po) applyFromPurchaseOrder(po);
-              }
-            }
-          }
-        }
-      }
-
-      // 5. Kiểm tra hợp đồng / báo giá (QUO-...)
-      if (!orderCode || !customerName) {
+      // 4. Kiểm tra hợp đồng / báo giá (QUO-...)
+      if (!orderCode || !partnerName) {
         const quoMatch = text.match(/\b(QUO-[0-9]{8}-[0-9A-Za-z/-]+)\b/i);
         if (quoMatch) {
           const fullToken = quoMatch[1].toUpperCase();
@@ -20424,35 +21040,41 @@ app.get('/api/logistics/audit-logs', async (req, res) => {
           const quotation = quotationByCode.get(fullToken) || quotationByCode.get(baseToken);
           if (contract) {
             orderCode = orderCode || contract.code;
-            customerName = customerName || contract.customer?.name || null;
-            customerAddress = customerAddress || contract.customer?.address || null;
-            partnerType = partnerType || 'customer';
+            partnerName = partnerName || contract.customer?.name || null;
+            partnerCode = partnerCode || contract.customer?.code || null;
+            partnerPhone = partnerPhone || contract.customer?.dienThoai || null;
+            partnerAddress = partnerAddress || contract.customer?.address || null;
+            partnerType = 'customer';
+            partnerSubLabel = 'Khách hàng';
           } else if (quotation) {
             orderCode = orderCode || quotation.code;
-            customerName = customerName || quotation.customer?.name || null;
-            customerAddress = customerAddress || quotation.customer?.address || null;
-            partnerType = partnerType || 'customer';
-          } else {
-            orderCode = orderCode || quoMatch[1];
-            partnerType = partnerType || 'customer';
+            partnerName = partnerName || quotation.customer?.name || null;
+            partnerCode = partnerCode || quotation.customer?.code || null;
+            partnerPhone = partnerPhone || quotation.customer?.dienThoai || null;
+            partnerAddress = partnerAddress || quotation.customer?.address || null;
+            partnerType = 'customer';
+            partnerSubLabel = 'Khách hàng';
           }
         }
       }
 
-      // 6. Kiểm tra đơn mua hàng (purchaseOrderId hoặc DH-...)
-      if (!orderCode || !customerName) {
-        if (firstMovement?.purchaseOrder) {
-          applyFromPurchaseOrder(firstMovement.purchaseOrder);
-        } else {
-          const dhMatch = text.match(/\b(DH-[0-9]{8}-[0-9A-Za-z-]+)\b/i);
-          if (dhMatch) {
-            const po = poByCode.get(dhMatch[1].toUpperCase());
-            if (po) applyFromPurchaseOrder(po);
-          }
-        }
+      if (activityType === 'xuat' && !partnerName && /phân xưởng|sản xuất/i.test(lyDoRaw)) {
+        partnerName = 'Phân xưởng sản xuất & lắp ráp';
+        partnerType = 'internal';
+        partnerSubLabel = 'Xuất sản xuất';
       }
 
-      return { orderCode, customerName, customerAddress, partnerType };
+      return {
+        orderCode,
+        customerName: partnerName,
+        customerAddress: partnerAddress,
+        partnerName,
+        partnerCode,
+        partnerPhone,
+        partnerAddress,
+        partnerType,
+        partnerSubLabel,
+      };
     };
 
     // Gom các dòng theo soChungTu
@@ -20532,7 +21154,17 @@ app.get('/api/logistics/audit-logs', async (req, res) => {
       });
 
       const maxCreatedAt = g._max?.createdAt || first.createdAt || new Date();
-      const { orderCode, customerName, customerAddress, partnerType } = resolveMovementOrderCustomer(first, code);
+      const {
+        orderCode,
+        customerName,
+        customerAddress,
+        partnerName,
+        partnerCode,
+        partnerPhone,
+        partnerAddress,
+        partnerType,
+        partnerSubLabel,
+      } = resolveMovementPartner(first, code, activityType);
 
       return {
         id: first.id || code,
@@ -20557,7 +21189,12 @@ app.get('/api/logistics/audit-logs', async (req, res) => {
         orderCode,
         customerName,
         customerAddress,
+        partnerName,
+        partnerCode,
+        partnerPhone,
+        partnerAddress,
         partnerType,
+        partnerSubLabel,
         tongSoLuong,
         linesCount: lines.length,
         lines: mappedLines,
@@ -20822,6 +21459,144 @@ async function executeLogisticsRetentionCleanup({
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - days);
 
+  // Trường hợp dọn dẹp Lệnh sản xuất trên trang Quản trị sản xuất (PRODUCTION_ORDERS)
+  if (type === 'PRODUCTION_ORDERS') {
+    const prodOrConditions = [];
+    if (applyCompleted) {
+      prodOrConditions.push({ ngayHoanThanhSanXuat: { not: null, lt: cutoffDate } });
+    }
+    if (applyInProgress) {
+      prodOrConditions.push({
+        ngayHoanThanhSanXuat: null,
+        trangThai: { in: ['in_production', 'pending'] },
+        updatedAt: { lt: cutoffDate },
+      });
+    }
+    if (prodOrConditions.length === 0) return 0;
+
+    const eligibleOrders = await prisma.saleOrder.findMany({
+      where: {
+        keToanDuyet: 'approved',
+        OR: prodOrConditions,
+      },
+      select: { id: true, code: true },
+    });
+    if (eligibleOrders.length === 0) return 0;
+
+    const internalIds = eligibleOrders
+      .filter((o) => o.code && o.code.startsWith('LSX'))
+      .map((o) => o.id);
+    const linkedIds = eligibleOrders
+      .filter((o) => !o.code || !o.code.startsWith('LSX'))
+      .map((o) => o.id);
+    const allCodes = eligibleOrders.map((o) => o.code).filter(Boolean);
+
+    if (allCodes.length > 0) {
+      await prisma.task.deleteMany({
+        where: {
+          deptCode: 'production',
+          OR: allCodes.map((code) => ({ description: { contains: code } })),
+        },
+      });
+    }
+
+    if (internalIds.length > 0) {
+      const internalTickets = await prisma.logisticsTicket.findMany({
+        where: { saleOrderId: { in: internalIds } },
+        select: { id: true },
+      });
+      const internalTicketIds = internalTickets.map((t) => t.id);
+      if (internalTicketIds.length > 0) {
+        await prisma.logisticsTicketItem.deleteMany({
+          where: { ticketId: { in: internalTicketIds } },
+        });
+        await prisma.logisticsTicket.deleteMany({
+          where: { id: { in: internalTicketIds } },
+        });
+      }
+      await prisma.saleOrderItem.deleteMany({
+        where: { saleOrderId: { in: internalIds } },
+      });
+      await prisma.saleOrder.deleteMany({
+        where: { id: { in: internalIds } },
+      });
+    }
+
+    if (linkedIds.length > 0) {
+      await prisma.saleOrder.updateMany({
+        where: { id: { in: linkedIds } },
+        data: {
+          ngayHoanThanhSanXuat: null,
+          trangThai: 'completed',
+        },
+      });
+    }
+
+    return eligibleOrders.length;
+  }
+
+  // Trường hợp dọn dẹp Hồ sơ hàng lỗi trên trang Xử lý hàng lỗi (DEFECT_RECORDS)
+  if (type === 'DEFECT_RECORDS') {
+    const defectOrConditions = [];
+    if (applyCompleted) {
+      defectOrConditions.push({
+        status: 'COMPLETED',
+        OR: [
+          { completionDate: { lt: cutoffDate } },
+          { completionDate: null, updatedAt: { lt: cutoffDate } },
+        ],
+      });
+    }
+    if (applyInProgress) {
+      defectOrConditions.push({
+        status: { not: 'COMPLETED' },
+        updatedAt: { lt: cutoffDate },
+      });
+    }
+    if (defectOrConditions.length === 0) return 0;
+
+    const eligibleDefects = await prisma.defectRecord.findMany({
+      where: { OR: defectOrConditions },
+      select: { id: true, code: true },
+    });
+    if (eligibleDefects.length === 0) return 0;
+
+    const defectIds = eligibleDefects.map((d) => d.id);
+    const defectCodes = eligibleDefects.map((d) => d.code).filter(Boolean);
+
+    const linkedTickets = await prisma.logisticsTicket.findMany({
+      where: { defectRecordId: { in: defectIds } },
+      select: { id: true },
+    });
+    const linkedTicketIds = linkedTickets.map((t) => t.id);
+    if (linkedTicketIds.length > 0) {
+      await prisma.logisticsTicketItem.deleteMany({
+        where: { ticketId: { in: linkedTicketIds } },
+      });
+      await prisma.logisticsTicket.deleteMany({
+        where: { id: { in: linkedTicketIds } },
+      });
+    }
+
+    if (defectCodes.length > 0) {
+      await prisma.task.deleteMany({
+        where: {
+          deptCode: { in: ['production', 'qa'] },
+          OR: defectCodes.map((code) => ({ description: { contains: code } })),
+        },
+      });
+    }
+
+    await prisma.defectActivity.deleteMany({
+      where: { defectId: { in: defectIds } },
+    });
+    const delDefects = await prisma.defectRecord.deleteMany({
+      where: { id: { in: defectIds } },
+    });
+
+    return delDefects.count;
+  }
+
   // Trường hợp dọn dẹp Nhật ký hoạt động kho / Nhập, xuất và kiểm kho (AUDIT_LOGS)
   if (type === 'AUDIT_LOGS') {
     let deletedAuditCount = 0;
@@ -20985,7 +21760,49 @@ app.get('/api/logistics/completed-cleanup-settings', async (req, res) => {
     if (applyCompleted) statusList.push('COMPLETED');
 
     let eligibleTicketsCount = 0;
-    if (type === 'AUDIT_LOGS') {
+    if (type === 'PRODUCTION_ORDERS') {
+      const prodOrConditions = [];
+      if (applyCompleted) {
+        prodOrConditions.push({ ngayHoanThanhSanXuat: { not: null, lt: cutoffDate } });
+      }
+      if (applyInProgress) {
+        prodOrConditions.push({
+          ngayHoanThanhSanXuat: null,
+          trangThai: { in: ['in_production', 'pending'] },
+          updatedAt: { lt: cutoffDate },
+        });
+      }
+      if (prodOrConditions.length > 0) {
+        eligibleTicketsCount = await prisma.saleOrder.count({
+          where: {
+            keToanDuyet: 'approved',
+            OR: prodOrConditions,
+          },
+        });
+      }
+    } else if (type === 'DEFECT_RECORDS') {
+      const defectOrConditions = [];
+      if (applyCompleted) {
+        defectOrConditions.push({
+          status: 'COMPLETED',
+          OR: [
+            { completionDate: { lt: cutoffDate } },
+            { completionDate: null, updatedAt: { lt: cutoffDate } },
+          ],
+        });
+      }
+      if (applyInProgress) {
+        defectOrConditions.push({
+          status: { not: 'COMPLETED' },
+          updatedAt: { lt: cutoffDate },
+        });
+      }
+      if (defectOrConditions.length > 0) {
+        eligibleTicketsCount = await prisma.defectRecord.count({
+          where: { OR: defectOrConditions },
+        });
+      }
+    } else if (type === 'AUDIT_LOGS') {
       if (applyCompleted) {
         eligibleTicketsCount += await prisma.stockMovement.count({
           where: { createdAt: { lt: cutoffDate } },
@@ -24927,7 +25744,7 @@ app.post('/api/plan-finance/purchase-requests/:id/create-orders', async (req, re
         }
       }
 
-      createdOrders.push({ code, supplierName, soMatHang: group.length });
+      createdOrders.push({ id: order.id, code, supplierName, soMatHang: group.length, tongTien });
     }
 
     if (skippedIds.length > 0) {
@@ -30194,6 +31011,1130 @@ app.post('/api/market-analysis/chat', async (req, res) => {
     res.json({ success: true, reply });
   } catch (err) {
     console.error('[POST /api/market-analysis/chat]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================================
+// SỔ GHI CHÉP NỘI DUNG CUỘC HỌP & BIÊN BẢN GIAO BAN (MEETING NOTEBOOK ENGINE)
+// ============================================================================
+function parseMeetingJsonSafe(raw, fallback) {
+  if (raw == null || raw === '') return fallback;
+  if (typeof raw !== 'string') return raw;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function parseMeetingNotebookMeta(descriptionRaw) {
+  const defaults = {
+    category: 'giao-ban',
+    visibility: 'company',
+    departmentCode: 'board',
+    isPinned: false,
+    summary: '',
+  };
+  if (!descriptionRaw || typeof descriptionRaw !== 'string') {
+    return defaults;
+  }
+  const trimmed = descriptionRaw.trim();
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object') {
+        return {
+          category: parsed.category || 'giao-ban',
+          visibility: parsed.visibility === 'attendees' ? 'attendees' : 'company',
+          departmentCode: parsed.departmentCode || 'board',
+          isPinned: Boolean(parsed.isPinned),
+          summary: typeof parsed.summary === 'string' ? parsed.summary : '',
+        };
+      }
+    } catch {
+      // Plain text fallback
+    }
+  }
+  return {
+    ...defaults,
+    summary: descriptionRaw,
+  };
+}
+
+function serializeMeetingRecord(m) {
+  const meta = parseMeetingNotebookMeta(m.description);
+  const rawAttendees = parseMeetingJsonSafe(m.attendees, []);
+  const rawActionItems = parseMeetingJsonSafe(m.actionItems, []);
+  const rawFiles = parseMeetingJsonSafe(m.files, []);
+
+  return {
+    id: m.id,
+    title: m.title || 'Cuộc họp chưa đặt tiêu đề',
+    summary: meta.summary,
+    category: meta.category,
+    visibility: meta.visibility,
+    departmentCode: meta.departmentCode,
+    isPinned: meta.isPinned,
+    startTime: m.startTime ? new Date(m.startTime).toISOString() : new Date().toISOString(),
+    endTime: m.endTime ? new Date(m.endTime).toISOString() : new Date().toISOString(),
+    location: m.location || '',
+    creatorId: m.creatorId,
+    creatorName: m.creator?.name || '',
+    host: m.host || '',
+    secretary: m.secretary || '',
+    clientId: m.clientId || null,
+    minutes: m.minutes || '',
+    attendees: Array.isArray(rawAttendees) ? rawAttendees : [],
+    actionItems: Array.isArray(rawActionItems) ? rawActionItems : [],
+    files: Array.isArray(rawFiles) ? rawFiles : [],
+    createdAt: m.createdAt ? new Date(m.createdAt).toISOString() : new Date().toISOString(),
+    updatedAt: m.updatedAt ? new Date(m.updatedAt).toISOString() : new Date().toISOString(),
+  };
+}
+
+function isOwnMeetingRecord(meetingRecord, currentUserId) {
+  if (!meetingRecord || !currentUserId) return false;
+  return String(meetingRecord.creatorId || '') === String(currentUserId);
+}
+
+async function resolveValidMeetingCreatorId(req, fallbackCandidate) {
+  const authUserId = await resolveCurrentAuthUserId(req);
+  if (authUserId) {
+    const exists = await prisma.user.findUnique({ where: { id: authUserId }, select: { id: true } });
+    if (exists) return exists.id;
+  }
+
+  if (fallbackCandidate) {
+    const candidateStr = String(fallbackCandidate).trim();
+    if (candidateStr) {
+      const matched = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { id: candidateStr },
+            { email: candidateStr },
+            { employee: { id: candidateStr } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (matched) return matched.id;
+    }
+  }
+
+  return null;
+}
+
+async function resolveUserIdsFromAttendees(attendeesList) {
+  if (!Array.isArray(attendeesList) || attendeesList.length === 0) return [];
+  const recipientIds = new Set();
+
+  for (const att of attendeesList) {
+    const candidateIds = [att?.userId, att?.id].filter(Boolean).map(String);
+    const candidateEmail = att?.email ? String(att.email).trim() : '';
+    const candidateName = att?.name ? String(att.name).trim() : '';
+
+    let foundUser = null;
+    if (candidateIds.length > 0) {
+      foundUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { id: { in: candidateIds } },
+            { employee: { id: { in: candidateIds } } },
+          ],
+        },
+        select: { id: true },
+      });
+    }
+    if (!foundUser && (candidateEmail || candidateName)) {
+      const orClauses = [];
+      if (candidateEmail) {
+        orClauses.push({ email: candidateEmail });
+        orClauses.push({ employee: { workEmail: candidateEmail } });
+      }
+      if (candidateName) {
+        orClauses.push({ name: candidateName });
+        orClauses.push({ employee: { fullName: candidateName } });
+      }
+      if (orClauses.length > 0) {
+        foundUser = await prisma.user.findFirst({
+          where: { OR: orClauses },
+          select: { id: true },
+        });
+      }
+    }
+    if (foundUser?.id) {
+      recipientIds.add(foundUser.id);
+    }
+  }
+
+  return Array.from(recipientIds);
+}
+
+app.get('/api/meetings', async (req, res) => {
+  try {
+    const authUserId = await resolveCurrentAuthUserId(req);
+    if (!authUserId) {
+      return res.json([]);
+    }
+
+    const rows = await prisma.meeting.findMany({
+      where: { creatorId: authUserId },
+      orderBy: { startTime: 'desc' },
+      include: {
+        creator: {
+          select: { id: true, name: true, email: true, role: true },
+        },
+      },
+    });
+
+    res.json(rows.map(serializeMeetingRecord));
+  } catch (err) {
+    console.error('[GET /api/meetings]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/meetings', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const creatorId = await resolveValidMeetingCreatorId(req, body.creatorId);
+    if (!creatorId) {
+      return res.status(400).json({ error: 'Không xác định được tài khoản người tạo biên bản họp.' });
+    }
+
+    const startDt = body.startTime ? new Date(body.startTime) : new Date();
+    const validStart = Number.isNaN(startDt.getTime()) ? new Date() : startDt;
+    const endDt = body.endTime
+      ? new Date(body.endTime)
+      : new Date(validStart.getTime() + 60 * 60 * 1000);
+    const validEnd = Number.isNaN(endDt.getTime())
+      ? new Date(validStart.getTime() + 60 * 60 * 1000)
+      : endDt;
+
+    const descriptionJson = JSON.stringify({
+      __notebookMeta: true,
+      category: body.category || 'giao-ban',
+      visibility: body.visibility === 'attendees' ? 'attendees' : 'company',
+      departmentCode: body.departmentCode || 'board',
+      isPinned: Boolean(body.isPinned),
+      summary: body.summary || '',
+    });
+
+    const attendeesArr = Array.isArray(body.attendees) ? body.attendees : [];
+    const actionItemsArr = Array.isArray(body.actionItems) ? body.actionItems : [];
+    const filesArr = Array.isArray(body.files) ? body.files : [];
+
+    const created = await prisma.meeting.create({
+      data: {
+        title: String(body.title || 'Cuộc họp mới').trim() || 'Cuộc họp mới',
+        description: descriptionJson,
+        startTime: validStart,
+        endTime: validEnd,
+        location: body.location ? String(body.location).trim() : '',
+        creatorId,
+        host: body.host ? String(body.host).trim() : '',
+        secretary: body.secretary ? String(body.secretary).trim() : '',
+        clientId: body.clientId ? String(body.clientId) : null,
+        minutes: typeof body.minutes === 'string' ? body.minutes : '',
+        attendees: JSON.stringify(attendeesArr),
+        actionItems: JSON.stringify(actionItemsArr),
+        files: JSON.stringify(filesArr),
+      },
+      include: {
+        creator: {
+          select: { id: true, name: true, email: true, role: true },
+        },
+      },
+    });
+
+    if (body.notifyAttendees && attendeesArr.length > 0) {
+      const recipientIds = await resolveUserIdsFromAttendees(attendeesArr);
+      if (recipientIds.length > 0) {
+        const dateFormatted = validStart.toLocaleDateString('vi-VN');
+        await sendCrossDeptNotification({
+          title: `📓 Biên bản cuộc họp mới: ${created.title}`,
+          content: `Biên bản cuộc họp "${created.title}" (${dateFormatted}${created.location ? ` tại ${created.location}` : ''}) đã được cập nhật lên Sổ ghi chép cuộc họp.`,
+          type: 'info',
+          priority: 'medium',
+          sourceDept: 'Sổ ghi chép cuộc họp',
+          recipientUserIds: recipientIds,
+          senderUserId: creatorId,
+          senderName: created.host || created.creator?.name || 'Thư ký cuộc họp',
+          link: '/?menu=meetings',
+          entityType: 'meeting',
+          entityId: created.id,
+        });
+      }
+    }
+
+    res.status(201).json(serializeMeetingRecord(created));
+  } catch (err) {
+    console.error('[POST /api/meetings]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/meetings/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const body = req.body || {};
+    const authUserId = await resolveCurrentAuthUserId(req);
+
+    const existing = await prisma.meeting.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Không tìm thấy trang biên bản cuộc họp.' });
+    }
+    if (!isOwnMeetingRecord(existing, authUserId)) {
+      return res.status(403).json({ error: 'Bạn chỉ có quyền chỉnh sửa sổ ghi chép của chính mình.' });
+    }
+
+    const prevMeta = parseMeetingNotebookMeta(existing.description);
+    const nextMeta = {
+      __notebookMeta: true,
+      category: body.category !== undefined ? body.category : prevMeta.category,
+      visibility:
+        body.visibility !== undefined
+          ? body.visibility === 'attendees'
+            ? 'attendees'
+            : 'company'
+          : prevMeta.visibility,
+      departmentCode:
+        body.departmentCode !== undefined ? body.departmentCode : prevMeta.departmentCode,
+      isPinned: body.isPinned !== undefined ? Boolean(body.isPinned) : prevMeta.isPinned,
+      summary: body.summary !== undefined ? String(body.summary) : prevMeta.summary,
+    };
+
+    const updateData = {
+      description: JSON.stringify(nextMeta),
+    };
+
+    if (body.title !== undefined) {
+      updateData.title = String(body.title).trim() || 'Cuộc họp chưa đặt tiêu đề';
+    }
+    if (body.startTime !== undefined) {
+      const dt = new Date(body.startTime);
+      if (!Number.isNaN(dt.getTime())) updateData.startTime = dt;
+    }
+    if (body.endTime !== undefined) {
+      const dt = new Date(body.endTime);
+      if (!Number.isNaN(dt.getTime())) updateData.endTime = dt;
+    }
+    if (body.location !== undefined) updateData.location = String(body.location).trim();
+    if (body.host !== undefined) updateData.host = String(body.host).trim();
+    if (body.secretary !== undefined) updateData.secretary = String(body.secretary).trim();
+    if (body.clientId !== undefined) updateData.clientId = body.clientId ? String(body.clientId) : null;
+    if (body.minutes !== undefined) updateData.minutes = String(body.minutes);
+    if (body.attendees !== undefined) {
+      updateData.attendees = JSON.stringify(Array.isArray(body.attendees) ? body.attendees : []);
+    }
+    if (body.actionItems !== undefined) {
+      updateData.actionItems = JSON.stringify(
+        Array.isArray(body.actionItems) ? body.actionItems : []
+      );
+    }
+    if (body.files !== undefined) {
+      updateData.files = JSON.stringify(Array.isArray(body.files) ? body.files : []);
+    }
+
+    const updated = await prisma.meeting.update({
+      where: { id },
+      data: updateData,
+      include: {
+        creator: {
+          select: { id: true, name: true, email: true, role: true },
+        },
+      },
+    });
+
+    if (body.notifyAttendees) {
+      const serialized = serializeMeetingRecord(updated);
+      const recipientIds = await resolveUserIdsFromAttendees(serialized.attendees);
+      const senderId = (await resolveCurrentAuthUserId(req)) || updated.creatorId;
+      if (recipientIds.length > 0) {
+        const dateFormatted = new Date(updated.startTime).toLocaleDateString('vi-VN');
+        await sendCrossDeptNotification({
+          title: `📓 Cập nhật biên bản họp: ${updated.title}`,
+          content: `Nội dung và kết luận cuộc họp "${updated.title}" (${dateFormatted}) vừa được gửi tới các thành viên tham dự.`,
+          type: 'info',
+          priority: 'medium',
+          sourceDept: 'Sổ ghi chép cuộc họp',
+          recipientUserIds: recipientIds,
+          senderUserId: senderId,
+          senderName: updated.host || updated.secretary || 'Thư ký cuộc họp',
+          link: '/?menu=meetings',
+          entityType: 'meeting',
+          entityId: updated.id,
+        });
+      }
+    }
+
+    res.json(serializeMeetingRecord(updated));
+  } catch (err) {
+    console.error('[PUT /api/meetings/:id]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/meetings/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const authUserId = await resolveCurrentAuthUserId(req);
+    const existing = await prisma.meeting.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Không tìm thấy biên bản cuộc họp cần xóa.' });
+    }
+    if (!isOwnMeetingRecord(existing, authUserId)) {
+      return res.status(403).json({ error: 'Bạn chỉ có quyền xóa trang ghi chép của chính mình.' });
+    }
+    await prisma.meeting.delete({ where: { id } });
+    res.json({ success: true, id });
+  } catch (err) {
+    console.error('[DELETE /api/meetings/:id]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/meetings/:id/assign-task', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const body = req.body || {};
+    const authUserId = await resolveCurrentAuthUserId(req);
+    const meeting = await prisma.meeting.findUnique({
+      where: { id },
+      include: {
+        creator: { select: { id: true, name: true, email: true, role: true } },
+      },
+    });
+    if (!meeting) {
+      return res.status(404).json({ error: 'Không tìm thấy biên bản cuộc họp.' });
+    }
+    if (!isOwnMeetingRecord(meeting, authUserId)) {
+      return res.status(403).json({ error: 'Bạn chỉ có quyền thao tác trên sổ ghi chép của chính mình.' });
+    }
+
+    const actionItems = Array.isArray(parseMeetingJsonSafe(meeting.actionItems, []))
+      ? parseMeetingJsonSafe(meeting.actionItems, [])
+      : [];
+
+    const actionItemId = body.actionItemId ? String(body.actionItemId) : '';
+    const idx = actionItems.findIndex((item) => String(item.id) === actionItemId);
+    const targetItem = idx >= 0 ? actionItems[idx] : body;
+
+    const taskTitle = String(body.task || targetItem?.task || '').trim();
+    if (!taskTitle) {
+      return res.status(400).json({ error: 'Nội dung đầu việc cần giao không được để trống.' });
+    }
+
+    // Nếu đã đồng bộ sang bảng Task trước đó và bản ghi Task vẫn tồn tại, trả về ngay tránh tạo trùng
+    if (targetItem?.syncedTaskId && !body.forceNew) {
+      const existingTask = await prisma.task.findUnique({
+        where: { id: String(targetItem.syncedTaskId) },
+      });
+      if (existingTask) {
+        return res.json({
+          success: true,
+          alreadySynced: true,
+          task: parseMeetingJsonSafe(existingTask.actualResult, existingTask),
+          meeting: serializeMeetingRecord(meeting),
+        });
+      }
+    }
+
+    // Tra cứu nhân sự được phân công để lấy đúng Họ tên, Phòng ban & UserId nhận thông báo
+    let resolvedAssigneeName = String(body.assignee || targetItem?.assignee || '').trim();
+    let resolvedUserId = body.assigneeUserId || targetItem?.assigneeUserId || null;
+    let resolvedDeptName = String(body.department || targetItem?.department || '').trim();
+    let resolvedDeptCode = String(body.departmentCode || targetItem?.departmentCode || '').trim();
+
+    if (resolvedUserId || resolvedAssigneeName) {
+      const orConditions = [];
+      if (resolvedUserId) {
+        orConditions.push({ userId: String(resolvedUserId) });
+        orConditions.push({ id: String(resolvedUserId) });
+      }
+      if (resolvedAssigneeName) {
+        orConditions.push({ fullName: resolvedAssigneeName });
+      }
+      if (orConditions.length > 0) {
+        const emp = await prisma.employee.findFirst({
+          where: { OR: orConditions },
+          include: { user: true },
+        });
+        if (emp) {
+          resolvedAssigneeName = emp.fullName || resolvedAssigneeName;
+          resolvedUserId = emp.user?.id || emp.userId || resolvedUserId;
+          resolvedDeptName = emp.departmentName || emp.department || resolvedDeptName || 'Khối văn phòng';
+          resolvedDeptCode = emp.departmentCode || resolvedDeptCode || 'board';
+        } else if (resolvedUserId) {
+          const usr = await prisma.user.findUnique({ where: { id: String(resolvedUserId) } });
+          if (usr) {
+            resolvedAssigneeName = usr.name || resolvedAssigneeName;
+          }
+        }
+      }
+    }
+
+    if (!resolvedAssigneeName) {
+      resolvedAssigneeName = 'Chưa phân công';
+    }
+    if (!resolvedDeptName) {
+      resolvedDeptName = 'Nội bộ công ty';
+    }
+
+    const meetingDateIso = meeting.startTime
+      ? new Date(meeting.startTime).toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+    const startDate = String(body.startDate || targetItem?.startDate || meetingDateIso).slice(0, 10);
+    const endDate = String(body.deadline || targetItem?.deadline || startDate).slice(0, 10);
+    const assignerName =
+      String(body.assigner || meeting.host || meeting.creator?.name || 'Chủ tọa cuộc họp').trim();
+
+    const taskId = `utask-mtg-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const taskCode = `CV-HOP-${String(Date.now()).slice(-4)}`;
+    const isCompleted = Boolean(targetItem?.completed);
+
+    const newTaskPayload = {
+      id: taskId,
+      code: taskCode,
+      title: taskTitle,
+      project: `Biên bản họp: ${meeting.title}`,
+      contractCode: '',
+      customerName: 'Nội bộ Công ty Seajong',
+      customerAddress: meeting.location || 'Văn phòng Công ty Cổ phần Seajong Việt Nam',
+      assignee: resolvedAssigneeName,
+      assigner: assignerName,
+      department: resolvedDeptName,
+      priority: body.priority || 'high',
+      priorityLabel: body.priority === 'urgent' ? 'Khẩn cấp' : 'Ưu tiên cao',
+      startDate,
+      endDate,
+      progress: isCompleted ? 100 : 0,
+      status: isCompleted ? 'completed' : 'not_started',
+      statusLabel: isCompleted ? 'Hoàn thành' : 'Chưa thực hiện',
+      description: `Kết luận giao việc từ cuộc họp "${meeting.title}" ngày ${new Date(meeting.startTime).toLocaleDateString('vi-VN')}${meeting.location ? ` tại ${meeting.location}` : ''}.`,
+      category: 'internal',
+      categoryLabel: 'Giao ban / Nội bộ',
+      sourceMeetingId: meeting.id,
+      sourceMeetingTitle: meeting.title,
+    };
+
+    await prisma.task.create({
+      data: {
+        id: newTaskPayload.id,
+        title: newTaskPayload.title,
+        description: newTaskPayload.description,
+        status: newTaskPayload.status,
+        priority: newTaskPayload.priority,
+        assigneeId: newTaskPayload.assignee,
+        creatorId: newTaskPayload.assigner,
+        deptCode: newTaskPayload.department,
+        actualResult: JSON.stringify(newTaskPayload),
+      },
+    });
+
+    const syncedAt = new Date().toISOString();
+    if (idx >= 0) {
+      actionItems[idx] = {
+        ...actionItems[idx],
+        task: taskTitle,
+        assignee: resolvedAssigneeName,
+        assigneeUserId: resolvedUserId || undefined,
+        department: resolvedDeptName,
+        departmentCode: resolvedDeptCode || undefined,
+        startDate,
+        deadline: endDate,
+        syncedTaskId: taskId,
+        syncedTaskCode: taskCode,
+        syncedAt,
+      };
+    } else {
+      actionItems.push({
+        id: actionItemId || `ai-${Date.now()}`,
+        task: taskTitle,
+        assignee: resolvedAssigneeName,
+        assigneeUserId: resolvedUserId || undefined,
+        department: resolvedDeptName,
+        departmentCode: resolvedDeptCode || undefined,
+        startDate,
+        deadline: endDate,
+        completed: isCompleted,
+        syncedTaskId: taskId,
+        syncedTaskCode: taskCode,
+        syncedAt,
+      });
+    }
+
+    const updatedMeeting = await prisma.meeting.update({
+      where: { id },
+      data: {
+        actionItems: JSON.stringify(actionItems),
+      },
+      include: {
+        creator: { select: { id: true, name: true, email: true, role: true } },
+      },
+    });
+
+    const senderUserId = (await resolveCurrentAuthUserId(req)) || meeting.creatorId;
+    const deadlineVN = endDate.split('-').reverse().join('/');
+    await sendCrossDeptNotification({
+      title: `📋 Giao việc từ cuộc họp: ${meeting.title}`,
+      content: `${assignerName} đã phân công cho ${resolvedAssigneeName} đầu việc: "${taskTitle}" (Hạn hoàn thành: ${deadlineVN}).`,
+      type: 'info',
+      priority: 'high',
+      sourceDept: 'Biên bản cuộc họp',
+      targetDept: resolvedDeptCode || undefined,
+      recipientUserIds: resolvedUserId ? [String(resolvedUserId)] : [],
+      senderUserId,
+      senderName: assignerName,
+      link: '/?menu=my_tasks',
+      entityType: 'task',
+      entityId: taskId,
+    });
+
+    res.json({
+      success: true,
+      task: newTaskPayload,
+      meeting: serializeMeetingRecord(updatedMeeting),
+    });
+  } catch (err) {
+    console.error('[POST /api/meetings/:id/assign-task]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================================
+// THƯ VIỆN TÀI LIỆU NỘI BỘ CHUẨN DOANH NGHIỆP (INTERNAL ARCHIVE DOCUMENTS)
+// ============================================================================
+const internalDocsUploadDir = path.join(__dirname, 'public', 'uploads', 'internal-documents');
+if (!fs.existsSync(internalDocsUploadDir)) {
+  fs.mkdirSync(internalDocsUploadDir, { recursive: true });
+}
+
+const INTERNAL_DOC_DEPT_LABELS = {
+  board: 'Ban Giám đốc',
+  sales: 'Phòng Kinh doanh',
+  marketing: 'Phòng Marketing',
+  logistics: 'Kho vận & Giao nhận',
+  accounting: 'Tài chính - Kế toán',
+  finance: 'Tài chính - Kế toán',
+  hr: 'Hành chính - Nhân sự',
+  production: 'Xưởng Lắp ráp & Sản xuất',
+  qa: 'Đảm bảo chất lượng (QA/QC)',
+  general: 'Toàn công ty',
+};
+
+const INTERNAL_DOC_CODE_PREFIX = {
+  executive: 'QĐ',
+  legal_cert: 'PL',
+  sop: 'QT',
+  template: 'BM',
+  technical: 'KT',
+};
+
+function sqliteRunAsync(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    sqliteDb.run(sql, params, function (err) {
+      if (err) return reject(err);
+      resolve({ lastID: this?.lastID, changes: this?.changes });
+    });
+  });
+}
+
+function sqliteAllAsync(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    sqliteDb.all(sql, params, (err, rows) => {
+      if (err) return reject(err);
+      resolve(Array.isArray(rows) ? rows : []);
+    });
+  });
+}
+
+function sqliteGetAsync(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    sqliteDb.get(sql, params, (err, row) => {
+      if (err) return reject(err);
+      resolve(row || null);
+    });
+  });
+}
+
+let internalArchiveDocTableReady = false;
+async function ensureInternalArchiveDocumentTable() {
+  if (internalArchiveDocTableReady) return;
+  await sqliteRunAsync(`
+    CREATE TABLE IF NOT EXISTS "InternalArchiveDocument" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "code" TEXT NOT NULL,
+      "title" TEXT NOT NULL,
+      "category" TEXT NOT NULL DEFAULT 'executive',
+      "departmentCode" TEXT NOT NULL DEFAULT 'board',
+      "departmentName" TEXT NOT NULL DEFAULT 'Ban Giám đốc',
+      "version" TEXT NOT NULL DEFAULT 'v1.0',
+      "effectiveDate" TEXT NOT NULL,
+      "status" TEXT NOT NULL DEFAULT 'active',
+      "visibility" TEXT NOT NULL DEFAULT 'company',
+      "summary" TEXT NOT NULL DEFAULT '',
+      "fileName" TEXT NOT NULL DEFAULT '',
+      "fileType" TEXT NOT NULL DEFAULT '',
+      "fileSize" INTEGER NOT NULL DEFAULT 0,
+      "fileUrl" TEXT NOT NULL DEFAULT '',
+      "isPinned" INTEGER NOT NULL DEFAULT 0,
+      "downloadCount" INTEGER NOT NULL DEFAULT 0,
+      "uploadedById" TEXT NOT NULL DEFAULT '',
+      "uploadedByName" TEXT NOT NULL DEFAULT '',
+      "createdAt" TEXT NOT NULL,
+      "updatedAt" TEXT NOT NULL
+    )
+  `);
+  await sqliteRunAsync(`
+    CREATE INDEX IF NOT EXISTS "InternalArchiveDocument_category_idx"
+    ON "InternalArchiveDocument"("category")
+  `);
+  await sqliteRunAsync(`
+    CREATE INDEX IF NOT EXISTS "InternalArchiveDocument_status_idx"
+    ON "InternalArchiveDocument"("status")
+  `);
+  internalArchiveDocTableReady = true;
+}
+
+function sanitizeArchiveFileName(originalName) {
+  const raw = String(originalName || 'tai-lieu').trim();
+  const ext = path.extname(raw).toLowerCase();
+  const base = path.basename(raw, path.extname(raw));
+  const asciiBase = base
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  const safeExt = /^[.][a-z0-9]{1,10}$/.test(ext) ? ext : '';
+  return `${asciiBase || 'tai-lieu'}${safeExt}`;
+}
+
+function saveBase64ArchiveFile(fileDataBase64, originalName) {
+  if (!fileDataBase64 || typeof fileDataBase64 !== 'string') return null;
+  let rawBase64 = fileDataBase64.trim();
+  const commaIdx = rawBase64.indexOf(',');
+  if (rawBase64.startsWith('data:') && commaIdx !== -1) {
+    rawBase64 = rawBase64.slice(commaIdx + 1);
+  }
+  const buffer = Buffer.from(rawBase64, 'base64');
+  if (!buffer || buffer.length === 0) return null;
+
+  if (!fs.existsSync(internalDocsUploadDir)) {
+    fs.mkdirSync(internalDocsUploadDir, { recursive: true });
+  }
+  const safeName = sanitizeArchiveFileName(originalName);
+  const storedFileName = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}_${safeName}`;
+  const fullPath = path.join(internalDocsUploadDir, storedFileName);
+  fs.writeFileSync(fullPath, buffer);
+
+  return {
+    fileUrl: `/uploads/internal-documents/${storedFileName}`,
+    fileSize: buffer.length,
+    ext: path.extname(safeName).replace('.', '').toLowerCase(),
+  };
+}
+
+function removeLocalArchiveFileIfOwned(fileUrl) {
+  if (!fileUrl || typeof fileUrl !== 'string') return;
+  if (!fileUrl.startsWith('/uploads/internal-documents/')) return;
+  const relName = path.basename(fileUrl);
+  const targetPath = path.join(internalDocsUploadDir, relName);
+  try {
+    if (fs.existsSync(targetPath)) {
+      fs.unlinkSync(targetPath);
+    }
+  } catch (err) {
+    console.warn('[InternalArchiveDocument] Không thể xóa file cũ:', err?.message);
+  }
+}
+
+function serializeInternalDocumentRow(row) {
+  return {
+    id: String(row.id || ''),
+    code: String(row.code || ''),
+    title: String(row.title || ''),
+    category: String(row.category || 'executive'),
+    departmentCode: String(row.departmentCode || 'board'),
+    departmentName:
+      String(row.departmentName || '') ||
+      INTERNAL_DOC_DEPT_LABELS[row.departmentCode] ||
+      'Ban Giám đốc',
+    version: String(row.version || 'v1.0'),
+    effectiveDate: String(row.effectiveDate || ''),
+    status: row.status === 'archived' ? 'archived' : 'active',
+    visibility:
+      row.visibility === 'managers' || row.visibility === 'department'
+        ? row.visibility
+        : 'company',
+    summary: String(row.summary || ''),
+    fileName: String(row.fileName || ''),
+    fileType: String(row.fileType || ''),
+    fileSize: Number(row.fileSize) || 0,
+    fileUrl: String(row.fileUrl || ''),
+    isPinned: Boolean(Number(row.isPinned)),
+    downloadCount: Number(row.downloadCount) || 0,
+    uploadedById: String(row.uploadedById || ''),
+    uploadedByName: String(row.uploadedByName || ''),
+    createdAt: String(row.createdAt || ''),
+    updatedAt: String(row.updatedAt || ''),
+  };
+}
+
+function canUserAccessInternalDocument(doc, currentUser) {
+  if (!doc || doc.visibility === 'company') return true;
+  if (!currentUser) return true;
+  const userRole = String(currentUser.role || '').toUpperCase();
+  const empDept = String(currentUser.employee?.departmentCode || '').toLowerCase();
+  const empPos = String(currentUser.employee?.position || '').toLowerCase();
+
+  if (userRole === 'ADMIN' || empDept === 'board') return true;
+  if (doc.uploadedById && String(doc.uploadedById) === String(currentUser.id)) return true;
+
+  if (doc.visibility === 'managers') {
+    if (
+      userRole === 'MANAGER' ||
+      empPos.includes('giám đốc') ||
+      empPos.includes('trưởng') ||
+      empPos.includes('phó') ||
+      empPos.includes('quản lý') ||
+      empPos.includes('quản đốc')
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  if (doc.visibility === 'department') {
+    if (!empDept) return true;
+    return empDept === String(doc.departmentCode || '').toLowerCase();
+  }
+
+  return true;
+}
+
+async function generateNextInternalDocCode(category) {
+  const prefix = INTERNAL_DOC_CODE_PREFIX[category] || 'TL';
+  const year = new Date().getFullYear();
+  const row = await sqliteGetAsync(
+    `SELECT COUNT(*) AS cnt FROM "InternalArchiveDocument" WHERE "category" = ?`,
+    [category || 'executive']
+  );
+  const count = Number(row?.cnt || 0) + 1;
+  return `${prefix}-${year}/${String(count).padStart(2, '0')}`;
+}
+
+app.get('/api/internal-documents', async (req, res) => {
+  try {
+    await ensureInternalArchiveDocumentTable();
+    const authUserId = await resolveCurrentAuthUserId(req);
+    let currentUser = null;
+    if (authUserId) {
+      currentUser = await prisma.user.findUnique({
+        where: { id: authUserId },
+        include: { employee: true },
+      });
+    }
+
+    const rows = await sqliteAllAsync(`
+      SELECT * FROM "InternalArchiveDocument"
+      ORDER BY "isPinned" DESC, "updatedAt" DESC
+    `);
+
+    const items = rows
+      .map(serializeInternalDocumentRow)
+      .filter((doc) => canUserAccessInternalDocument(doc, currentUser));
+
+    res.json(items);
+  } catch (err) {
+    console.error('[GET /api/internal-documents]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/internal-documents', async (req, res) => {
+  try {
+    await ensureInternalArchiveDocumentTable();
+    const body = req.body || {};
+    const title = String(body.title || '').trim();
+    if (!title) {
+      return res.status(400).json({ error: 'Vui lòng nhập tên văn bản / tài liệu.' });
+    }
+
+    const authUserId = await resolveCurrentAuthUserId(req);
+    let currentUser = null;
+    if (authUserId) {
+      currentUser = await prisma.user.findUnique({
+        where: { id: authUserId },
+        include: { employee: true },
+      });
+    }
+
+    const category = ['executive', 'legal_cert', 'sop', 'template', 'technical'].includes(body.category)
+      ? body.category
+      : 'executive';
+
+    const code = String(body.code || '').trim() || (await generateNextInternalDocCode(category));
+    const departmentCode = String(body.departmentCode || currentUser?.employee?.departmentCode || 'board').trim();
+    const departmentName =
+      String(body.departmentName || '').trim() ||
+      INTERNAL_DOC_DEPT_LABELS[departmentCode] ||
+      'Ban Giám đốc';
+    const version = String(body.version || 'v1.0').trim() || 'v1.0';
+    const effectiveDate =
+      String(body.effectiveDate || '').trim() || new Date().toISOString().slice(0, 10);
+    const status = body.status === 'archived' ? 'archived' : 'active';
+    const visibility = ['company', 'managers', 'department'].includes(body.visibility)
+      ? body.visibility
+      : 'company';
+    const summary = String(body.summary || '').trim();
+    const isPinned = body.isPinned ? 1 : 0;
+
+    let fileName = String(body.fileName || '').trim();
+    let fileType = String(body.fileType || '').trim();
+    let fileSize = Number(body.fileSize) || 0;
+    let fileUrl = String(body.fileUrl || '').trim();
+
+    if (body.fileDataBase64) {
+      const saved = saveBase64ArchiveFile(body.fileDataBase64, fileName || `${code}.pdf`);
+      if (saved) {
+        fileUrl = saved.fileUrl;
+        fileSize = saved.fileSize;
+        if (!fileType && saved.ext) {
+          fileType = saved.ext;
+        }
+      }
+    }
+
+    if (!fileUrl) {
+      return res.status(400).json({ error: 'Vui lòng đính kèm tệp tài liệu gốc trước khi lưu trữ.' });
+    }
+
+    const nowIso = new Date().toISOString();
+    const id = `idoc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const uploadedById = String(currentUser?.id || body.uploadedById || '');
+    const uploadedByName = String(
+      currentUser?.employee?.fullName || currentUser?.name || body.uploadedByName || 'Quản trị viên'
+    ).trim();
+
+    await sqliteRunAsync(
+      `INSERT INTO "InternalArchiveDocument" (
+        "id", "code", "title", "category", "departmentCode", "departmentName",
+        "version", "effectiveDate", "status", "visibility", "summary",
+        "fileName", "fileType", "fileSize", "fileUrl", "isPinned", "downloadCount",
+        "uploadedById", "uploadedByName", "createdAt", "updatedAt"
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+      [
+        id,
+        code,
+        title,
+        category,
+        departmentCode,
+        departmentName,
+        version,
+        effectiveDate,
+        status,
+        visibility,
+        summary,
+        fileName,
+        fileType,
+        fileSize,
+        fileUrl,
+        isPinned,
+        uploadedById,
+        uploadedByName,
+        nowIso,
+        nowIso,
+      ]
+    );
+
+    if (body.notifyStaff && status === 'active') {
+      await sendCrossDeptNotification({
+        title: `🗂️ Văn bản lưu trữ mới [${code}]: ${title}`,
+        content: `${departmentName} vừa ban hành và lưu trữ tài liệu "${title}" (Phiên bản ${version}).`,
+        type: 'info',
+        priority: category === 'executive' ? 'high' : 'normal',
+        sourceDept: departmentName,
+        targetDept: visibility === 'department' ? departmentCode : undefined,
+        senderUserId: uploadedById || undefined,
+        senderName: uploadedByName,
+        link: '/?menu=documents',
+        entityType: 'internal_document',
+        entityId: id,
+      });
+    }
+
+    const createdRow = await sqliteGetAsync(
+      `SELECT * FROM "InternalArchiveDocument" WHERE "id" = ? LIMIT 1`,
+      [id]
+    );
+    res.status(201).json(serializeInternalDocumentRow(createdRow));
+  } catch (err) {
+    console.error('[POST /api/internal-documents]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/internal-documents/:id', async (req, res) => {
+  try {
+    await ensureInternalArchiveDocumentTable();
+    const { id } = req.params;
+    const existingRow = await sqliteGetAsync(
+      `SELECT * FROM "InternalArchiveDocument" WHERE "id" = ? LIMIT 1`,
+      [id]
+    );
+    if (!existingRow) {
+      return res.status(404).json({ error: 'Không tìm thấy tài liệu lưu trữ.' });
+    }
+    const existing = serializeInternalDocumentRow(existingRow);
+    const body = req.body || {};
+
+    const category = ['executive', 'legal_cert', 'sop', 'template', 'technical'].includes(body.category)
+      ? body.category
+      : existing.category;
+    const code = body.code !== undefined ? String(body.code).trim() || existing.code : existing.code;
+    const title = body.title !== undefined ? String(body.title).trim() || existing.title : existing.title;
+    const departmentCode =
+      body.departmentCode !== undefined ? String(body.departmentCode).trim() : existing.departmentCode;
+    const departmentName =
+      body.departmentName !== undefined
+        ? String(body.departmentName).trim()
+        : INTERNAL_DOC_DEPT_LABELS[departmentCode] || existing.departmentName;
+    const version =
+      body.version !== undefined ? String(body.version).trim() || existing.version : existing.version;
+    const effectiveDate =
+      body.effectiveDate !== undefined
+        ? String(body.effectiveDate).trim() || existing.effectiveDate
+        : existing.effectiveDate;
+    const status =
+      body.status !== undefined ? (body.status === 'archived' ? 'archived' : 'active') : existing.status;
+    const visibility =
+      body.visibility !== undefined && ['company', 'managers', 'department'].includes(body.visibility)
+        ? body.visibility
+        : existing.visibility;
+    const summary = body.summary !== undefined ? String(body.summary).trim() : existing.summary;
+    const isPinned =
+      body.isPinned !== undefined ? (body.isPinned ? 1 : 0) : existing.isPinned ? 1 : 0;
+
+    let fileName = body.fileName !== undefined ? String(body.fileName).trim() : existing.fileName;
+    let fileType = body.fileType !== undefined ? String(body.fileType).trim() : existing.fileType;
+    let fileSize = body.fileSize !== undefined ? Number(body.fileSize) || 0 : existing.fileSize;
+    let fileUrl = body.fileUrl !== undefined ? String(body.fileUrl).trim() : existing.fileUrl;
+
+    if (body.fileDataBase64) {
+      const saved = saveBase64ArchiveFile(body.fileDataBase64, fileName || `${code}.pdf`);
+      if (saved) {
+        if (existing.fileUrl && existing.fileUrl !== saved.fileUrl) {
+          removeLocalArchiveFileIfOwned(existing.fileUrl);
+        }
+        fileUrl = saved.fileUrl;
+        fileSize = saved.fileSize;
+        if (saved.ext) {
+          fileType = saved.ext;
+        }
+      }
+    }
+
+    const updatedAt = new Date().toISOString();
+    await sqliteRunAsync(
+      `UPDATE "InternalArchiveDocument"
+       SET "code" = ?, "title" = ?, "category" = ?, "departmentCode" = ?, "departmentName" = ?,
+           "version" = ?, "effectiveDate" = ?, "status" = ?, "visibility" = ?, "summary" = ?,
+           "fileName" = ?, "fileType" = ?, "fileSize" = ?, "fileUrl" = ?, "isPinned" = ?, "updatedAt" = ?
+       WHERE "id" = ?`,
+      [
+        code,
+        title,
+        category,
+        departmentCode,
+        departmentName,
+        version,
+        effectiveDate,
+        status,
+        visibility,
+        summary,
+        fileName,
+        fileType,
+        fileSize,
+        fileUrl,
+        isPinned,
+        updatedAt,
+        id,
+      ]
+    );
+
+    if (body.notifyStaff && status === 'active') {
+      const senderId = (await resolveCurrentAuthUserId(req)) || existing.uploadedById;
+      await sendCrossDeptNotification({
+        title: `🗂️ Cập nhật tài liệu [${code}]: ${title}`,
+        content: `Tài liệu "${title}" đã được cập nhật phiên bản ${version} trong Thư viện tài liệu nội bộ.`,
+        type: 'info',
+        priority: 'normal',
+        sourceDept: departmentName,
+        targetDept: visibility === 'department' ? departmentCode : undefined,
+        senderUserId: senderId || undefined,
+        senderName: existing.uploadedByName || 'Văn thư lưu trữ',
+        link: '/?menu=documents',
+        entityType: 'internal_document',
+        entityId: id,
+      });
+    }
+
+    const updatedRow = await sqliteGetAsync(
+      `SELECT * FROM "InternalArchiveDocument" WHERE "id" = ? LIMIT 1`,
+      [id]
+    );
+    res.json(serializeInternalDocumentRow(updatedRow));
+  } catch (err) {
+    console.error('[PUT /api/internal-documents/:id]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/internal-documents/:id/download', async (req, res) => {
+  try {
+    await ensureInternalArchiveDocumentTable();
+    const { id } = req.params;
+    await sqliteRunAsync(
+      `UPDATE "InternalArchiveDocument" SET "downloadCount" = COALESCE("downloadCount", 0) + 1 WHERE "id" = ?`,
+      [id]
+    );
+    const row = await sqliteGetAsync(
+      `SELECT "downloadCount" FROM "InternalArchiveDocument" WHERE "id" = ? LIMIT 1`,
+      [id]
+    );
+    res.json({
+      success: true,
+      downloadCount: Number(row?.downloadCount || 0),
+    });
+  } catch (err) {
+    console.error('[POST /api/internal-documents/:id/download]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/internal-documents/:id', async (req, res) => {
+  try {
+    await ensureInternalArchiveDocumentTable();
+    const { id } = req.params;
+    const existingRow = await sqliteGetAsync(
+      `SELECT * FROM "InternalArchiveDocument" WHERE "id" = ? LIMIT 1`,
+      [id]
+    );
+    if (!existingRow) {
+      return res.status(404).json({ error: 'Không tìm thấy tài liệu lưu trữ.' });
+    }
+    const existing = serializeInternalDocumentRow(existingRow);
+    await sqliteRunAsync(`DELETE FROM "InternalArchiveDocument" WHERE "id" = ?`, [id]);
+    removeLocalArchiveFileIfOwned(existing.fileUrl);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[DELETE /api/internal-documents/:id]', err);
     res.status(500).json({ error: err.message });
   }
 });

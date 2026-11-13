@@ -20,7 +20,6 @@ import { MarketingPlanPage } from '../../pages/marketing/MarketingPlanPage';
 import { MarketingDealersPage } from '../../pages/marketing/MarketingDealersPage';
 import { MarketingCompetitorsPage } from '../../pages/marketing/MarketingCompetitorsPage';
 import { MarketingMarketAnalysisPage } from '../../pages/marketing/MarketingMarketAnalysisPage';
-import { NotebookView } from '../common/NotebookView';
 import { SalesPartnersPage } from '../../pages/sales/SalesPartnersPage';
 import { SalesCustomersPage } from '../../pages/sales/SalesCustomersPage';
 import { SalesPricingPage } from '../../pages/sales/SalesPricingPage';
@@ -67,6 +66,8 @@ import { QaDefectsSummaryPage } from '../../pages/qa/QaDefectsSummaryPage';
 import { PurchaseOverviewPage } from '../../pages/purchase/PurchaseOverviewPage';
 import { PurchaseSuppliersPage } from '../../pages/purchase/PurchaseSuppliersPage';
 import { DataManagementPage } from '../../pages/departments/bom/DataManagementPage';
+import { MeetingNotebookPage } from '../../pages/common/MeetingNotebookPage';
+import { InternalDocumentLibraryPage } from '../../pages/common/InternalDocumentLibraryPage';
 import { useAuth } from '../../context/AuthContext';
 import { canAccessDepartment, isMenuLocked, getMenuLockReason } from '../../lib/permissions';
 
@@ -146,6 +147,27 @@ export const DashboardView: React.FC = () => {
   // ── CỔNG THÔNG TIN KHÁCH HÀNG (CUSTOMER PORTAL) ──
   if (activeDeptCode === 'customer' || activeDeptCode === 'khach-hang') {
     return <CustomerPortalPage />;
+  }
+
+  // ── TIỆN ÍCH DÙNG CHUNG TẤT CẢ PHÒNG BAN: THƯ VIỆN TÀI LIỆU & SỔ GHI CHÉP CUỘC HỌP ──
+  if (
+    activeMenuKey === 'documents' ||
+    activeMenuKey === 'doc_library' ||
+    activeMenuKey === 'internal-documents' ||
+    activeMenuKey === 'thu-vien-tai-lieu'
+  ) {
+    return <InternalDocumentLibraryPage deptCode={activeDeptCode} user={user} />;
+  }
+
+  if (
+    activeMenuKey === 'notebook' ||
+    activeMenuKey === 'journal' ||
+    activeMenuKey === 'meetings' ||
+    activeMenuKey === 'meeting_minutes' ||
+    activeMenuKey === 'meeting-minutes' ||
+    activeMenuKey === 'noi-dung-cuoc-hop'
+  ) {
+    return <MeetingNotebookPage deptCode={activeDeptCode} user={user} />;
   }
 
   // ── PHÒNG TÀI CHÍNH – KẾ TOÁN (FINANCE) ROUTES ──
@@ -388,11 +410,6 @@ export const DashboardView: React.FC = () => {
   }
   if (activeMenuKey === 'training') {
     return <TrainingPage />;
-  }
-
-  // Khi người dùng chọn chức năng Sổ ghi chép
-  if (activeMenuKey === 'notebook' || activeMenuKey === 'journal') {
-    return <NotebookView department={activeDeptCode} />;
   }
 
   // Khi người dùng chọn chức năng Sản phẩm (chuẩn client-seajong)

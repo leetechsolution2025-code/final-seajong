@@ -1,6 +1,13 @@
 import React from "react";
+import { Floppy, FileEarmarkPdf, Printer, SendCheck } from "react-bootstrap-icons";
 import { PrintPreviewModal, printStyles, printDocumentById } from "@/components/ui/PrintPreviewModal";
 import { exportElementToPDF } from "@/lib/utils/pdf";
+import { Button } from "../../common/Button";
+import { Badge } from "../../common/Badge";
+import { Input } from "../../common/Input";
+import { Select } from "../../common/Select";
+import { DatePicker } from "../../common/DatePicker";
+import { Toggle } from "../../common/Toggle";
 
 // ── Types ───────────────────────────────────────────────────────────────────────
 interface ReqItem {
@@ -205,6 +212,7 @@ export default function XemTruocDonMuaHangModal({
   const [supplier, setSupplier] = React.useState<Supplier | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [submittingApproval, setSubmittingApproval] = React.useState(false);
   const [saveMsg, setSaveMsg] = React.useState<string | null>(null);
   const [lang, setLang] = React.useState<"vi" | "zh">("vi");
 
@@ -218,11 +226,20 @@ export default function XemTruocDonMuaHangModal({
   const [hinhThucGH, setHinhThucGH] = React.useState("Giao hàng tận nơi");
   const [phuongTien, setPhuongTien] = React.useState("Xe tải");
   const [thueVAT, setThueVAT] = React.useState(10);
+  const [datCocPct, setDatCocPct] = React.useState(0);
   const [diaDiemGiaoHang, setDiaDiemGiaoHang] = React.useState("");
   const [nguoiNhan, setNguoiNhan] = React.useState("");
   const [sdtNhan, setSdtNhan] = React.useState("");
   const [ghiChu, setGhiChu] = React.useState("");
   const [translatedGhiChu, setTranslatedGhiChu] = React.useState("");
+  const addressRef = React.useRef<HTMLTextAreaElement>(null);
+
+  React.useEffect(() => {
+    const el = addressRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.max(44, el.scrollHeight)}px`;
+  }, [diaDiemGiaoHang]);
 
   React.useEffect(() => {
     if (lang === "zh" && ghiChu.trim()) {
@@ -312,6 +329,7 @@ export default function XemTruocDonMuaHangModal({
   const tongTienHang = orderItems.reduce((s, x) => s + x.item!.soLuong * x.donGia, 0);
   const tienThue = Math.round(tongTienHang * thueVAT / 100);
   const tongCong = tongTienHang + tienThue;
+  const tienDatCoc = Math.round((tongCong * datCocPct) / 100);
 
   const poSuffix = React.useMemo(() => {
     const ts4 = Date.now().toString().slice(-4);
@@ -329,7 +347,7 @@ export default function XemTruocDonMuaHangModal({
     const res = await fetch(`/api/plan-finance/purchase-requests/${reqId}/create-orders`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assignments, meta: { ngayDat, hinhThucTT, hinhThucGH, phuongTien, thueVAT } }),
+      body: JSON.stringify({ assignments, meta: { ngayDat, hinhThucTT, hinhThucGH, phuongTien, thueVAT, datCocPct, tienDatCoc } }),
     });
     const text = await res.text();
     let data: { createdOrders?: unknown[]; error?: string } = {};
@@ -409,6 +427,7 @@ export default function XemTruocDonMuaHangModal({
       congTienHang: "Cộng tiền hàng:",
       thueGtgt: "Thuế GTGT",
       tongCong: "TỔNG CỘNG:",
+      yeuCauDatCoc: "Yêu cầu đặt cọc",
       bangChu: "Bằng chữ:",
       nguoiLapPhieu: "NGƯỜI LẬP PHIẾU",
       keToanTruong: "KẾ TOÁN TRƯỞNG",
@@ -449,6 +468,7 @@ export default function XemTruocDonMuaHangModal({
       congTienHang: "商品总计:",
       thueGtgt: "增值税",
       tongCong: "总计:",
+      yeuCauDatCoc: "预付定金",
       bangChu: "大写:",
       nguoiLapPhieu: "制单人",
       keToanTruong: "首席会计师",
@@ -462,7 +482,7 @@ export default function XemTruocDonMuaHangModal({
   const sidebar = (
     <>
       <SField label="Ngôn ngữ in (Print language)">
-        <div style={{ display: "flex", gap: 12, marginBottom: 8 }}>
+        <div style={{ display: "flex", gap: 12, marginBottom: 4 }}>
           <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
             <input type="radio" name="lang" checked={lang === "vi"} onChange={() => setLang("vi")} /> Tiếng Việt
           </label>
@@ -471,25 +491,26 @@ export default function XemTruocDonMuaHangModal({
           </label>
         </div>
       </SField>
-      <div style={{ display: "flex", gap: 12 }}>
-        <div style={{ flex: 1 }}>
-          <p style={{ margin: "0 0 4px", fontSize: 11 }}>&nbsp;</p>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, height: 34, width: "100%", background: "var(--background)", padding: "0 10px", borderRadius: 8, border: "1px solid var(--border)", cursor: "pointer" }}>
-            <div style={{ width: 32, height: 18, background: isRMB ? "#10b981" : "#cbd5e1", borderRadius: 18, position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
-              <div style={{ width: 14, height: 14, background: "#fff", borderRadius: "50%", position: "absolute", top: 2, left: isRMB ? 16 : 2, transition: "left 0.2s", boxShadow: "0 1px 2px rgba(0,0,0,0.2)" }} />
-            </div>
-            <input type="checkbox" checked={isRMB} onChange={e => setIsRMB(e.target.checked)} style={{ display: "none" }} />
-            <span style={{ fontSize: 11.5, fontWeight: 600 }}>Sử dụng Nhân dân tệ (¥)</span>
-          </label>
+
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <div style={{ flex: 1, paddingTop: 22 }}>
+          <div style={{ display: "flex", alignItems: "center", height: 34, padding: "0 10px", background: "var(--background)", borderRadius: 8, border: "1px solid #e2e8f0" }}>
+            <Toggle
+              checked={isRMB}
+              onChange={setIsRMB}
+              label={<span style={{ fontSize: 12, fontWeight: 600 }}>Nhân dân tệ</span>}
+            />
+          </div>
         </div>
-        <div style={{ width: 100 }}>
-          <SField label="Tỷ giá (₫)">
-            <input 
-              type="text" 
-              value={tyGiaStr} 
+        <div style={{ width: 118 }}>
+          <SField label="Tỷ giá">
+            <Input
+              type="text"
+              suffix="₫"
+              value={tyGiaStr}
+              disabled={!isRMB}
               onChange={e => {
                 let raw = e.target.value;
-
                 let val = raw.replace(/[^0-9.,]/g, "");
                 if (!val) {
                   setTyGiaStr("");
@@ -505,9 +526,8 @@ export default function XemTruocDonMuaHangModal({
                   p[0] = parseInt(intPart || '0', 10).toLocaleString("vi-VN");
                 }
                 setTyGiaStr(p.join(','));
-              }} 
-              disabled={!isRMB} 
-              style={{ ...inp, opacity: isRMB ? 1 : 0.5, textAlign: "right" }} 
+              }}
+              style={{ textAlign: "right", height: 34 }}
             />
           </SField>
           {tyGiaUpdatedAt && (
@@ -515,60 +535,106 @@ export default function XemTruocDonMuaHangModal({
           )}
         </div>
       </div>
+
       <SField label="Ngày đặt hàng">
-        <input type="date" value={ngayDat} onChange={e => setNgayDat(e.target.value)} style={inp} />
+        <DatePicker value={ngayDat} onChange={setNgayDat} style={{ height: 34 }} />
       </SField>
+
       <div style={{ display: "flex", gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <SField label="Thanh toán">
-            <select value={hinhThucTT} onChange={e => setHinhThucTT(e.target.value)} style={{...inp, padding: "8px 6px"}}>
+            <Select value={hinhThucTT} onChange={e => setHinhThucTT(e.target.value)} style={{ height: 34 }}>
               {["Chuyển khoản", "Tiền mặt", "Công nợ", "Khác"].map(x => <option key={x}>{x}</option>)}
-            </select>
+            </Select>
           </SField>
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <SField label="Giao hàng">
-            <select value={hinhThucGH} onChange={e => setHinhThucGH(e.target.value)} style={{...inp, padding: "8px 6px"}}>
+            <Select value={hinhThucGH} onChange={e => setHinhThucGH(e.target.value)} style={{ height: 34 }}>
               {["Giao hàng tận nơi", "Nhận tại kho NCC", "Qua đơn vị vận chuyển"].map(x => <option key={x}>{x}</option>)}
-            </select>
+            </Select>
           </SField>
         </div>
       </div>
+
       <div style={{ display: "flex", gap: 8 }}>
-        <div style={{ flex: 2 }}>
-          <p style={{ margin: "0 0 4px", fontSize: 11, fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Phương tiện</p>
-          <select value={phuongTien} onChange={e => setPhuongTien(e.target.value)} style={inp}>
-            {["Xe tải", "Xe máy", "Xe container", "Xe khách", "Khác"].map(x => <option key={x}>{x}</option>)}
-          </select>
+        <div style={{ flex: 1.4, minWidth: 0 }}>
+          <SField label="Phương tiện">
+            <Select value={phuongTien} onChange={e => setPhuongTien(e.target.value)} style={{ height: 34 }}>
+              {["Xe tải", "Xe máy", "Xe container", "Xe khách", "Khác"].map(x => <option key={x}>{x}</option>)}
+            </Select>
+          </SField>
         </div>
-        <div style={{ flex: 1 }}>
-          <p style={{ margin: "0 0 4px", fontSize: 11, fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.04em" }}>VAT (%)</p>
-          <input type="number" min={0} max={100} value={thueVAT} onChange={e => setThueVAT(parseFloat(e.target.value) || 0)} style={{ ...inp, textAlign: "right" }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <SField label="VAT">
+            <Input
+              type="number"
+              hideZero={false}
+              suffix="%"
+              min={0}
+              max={100}
+              value={thueVAT}
+              onNumericChange={(num) => setThueVAT(Math.min(100, Math.max(0, num)))}
+              style={{ textAlign: "right", height: 34 }}
+            />
+          </SField>
         </div>
       </div>
-      <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 10px", display: "flex", flexDirection: "column", gap: 8 }}>
+
+      <div>
+        <SField label="Yêu cầu đặt cọc">
+          <Input
+            type="number"
+            hideZero={false}
+            suffix="%"
+            min={0}
+            max={100}
+            value={datCocPct}
+            onNumericChange={(num) => setDatCocPct(Math.min(100, Math.max(0, num)))}
+            style={{ textAlign: "right", height: 34 }}
+          />
+        </SField>
+        {datCocPct > 0 && (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4, fontSize: 11, color: "#0369a1", fontWeight: 600 }}>
+            <span>Giá trị đặt cọc ({datCocPct}%):</span>
+            <span>
+              {(isRMB ? tienDatCoc / tyGia : tienDatCoc).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} {isRMB ? "¥" : "₫"}
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 10px", display: "flex", flexDirection: "column", gap: 8, background: "#f8fafc" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>Giao hàng đến</p>
+          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>Giao hàng đến</p>
           <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-            <input type="checkbox" checked={showImage} onChange={e => setShowImage(e.target.checked)} style={{ width: 12, height: 12, margin: 0 }} />
-            <span style={{ fontSize: 10, color: "var(--muted-foreground)" }}>Hiện ảnh SP</span>
+            <input type="checkbox" checked={showImage} onChange={e => setShowImage(e.target.checked)} style={{ width: 13, height: 13, margin: 0 }} />
+            <span style={{ fontSize: 11, color: "#64748b" }}>Hiện ảnh SP</span>
           </label>
         </div>
         <div>
-          <p style={{ margin: "0 0 4px", fontSize: 10.5, color: "#64748b" }}>Địa chỉ</p>
-          <textarea value={diaDiemGiaoHang} onChange={e => setDiaDiemGiaoHang(e.target.value)} rows={2} placeholder="Nhập địa chỉ..." style={{ ...inp, resize: "vertical", lineHeight: 1.5, minHeight: 48 }} />
+          <p style={{ margin: "0 0 4px", fontSize: 10.5, color: "#64748b", fontWeight: 500 }}>Địa chỉ</p>
+          <textarea
+            ref={addressRef}
+            value={diaDiemGiaoHang}
+            onChange={e => setDiaDiemGiaoHang(e.target.value)}
+            rows={1}
+            placeholder="Nhập địa chỉ..."
+            style={{ ...inp, resize: "none", overflow: "hidden", lineHeight: 1.45, minHeight: 44 }}
+          />
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-          <div style={{ flex: 1 }}>
-            <p style={{ margin: "0 0 4px", fontSize: 10.5, color: "#64748b" }}>Người nhận</p>
-            <input value={nguoiNhan} onChange={e => setNguoiNhan(e.target.value)} placeholder="Họ tên..." style={inp} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ margin: "0 0 4px", fontSize: 10.5, color: "#64748b", fontWeight: 500 }}>Người nhận</p>
+            <Input value={nguoiNhan} onChange={e => setNguoiNhan(e.target.value)} placeholder="Họ tên..." style={{ height: 34 }} />
           </div>
-          <div style={{ flex: 1 }}>
-            <p style={{ margin: "0 0 4px", fontSize: 10.5, color: "#64748b" }}>Số điện thoại</p>
-            <input value={sdtNhan} onChange={e => setSdtNhan(e.target.value)} placeholder="Số điện thoại..." style={inp} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ margin: "0 0 4px", fontSize: 10.5, color: "#64748b", fontWeight: 500 }}>Số điện thoại</p>
+            <Input value={sdtNhan} onChange={e => setSdtNhan(e.target.value)} placeholder="Số điện thoại..." style={{ height: 34 }} />
           </div>
         </div>
       </div>
+
       <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
         <p style={{ margin: "0 0 4px", fontSize: 11, fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Ghi chú thêm</p>
         <textarea value={ghiChu} onChange={e => setGhiChu(e.target.value)} placeholder="Ghi chú, yêu cầu đặc biệt..." style={{ ...inp, flex: 1, resize: "none", lineHeight: 1.6 }} />
@@ -578,7 +644,23 @@ export default function XemTruocDonMuaHangModal({
 
   // ── Document ──────────────────────────────────────────────────────────────
   const doc = (
-    <div className="pdf-content-page" translate="no" style={{ fontFamily: "'Roboto Condensed', 'Arial Narrow', Arial, sans-serif", fontSize: 13, color: "#000", lineHeight: 1.45 }}>
+    <div
+      className="pdf-content-page"
+      translate="no"
+      style={{
+        fontFamily: "'Roboto Condensed', 'Arial Narrow', Arial, sans-serif",
+        fontSize: 13,
+        color: "#000",
+        lineHeight: 1.45,
+        width: "100%",
+        minHeight: "1123px",
+        background: "#ffffff",
+        padding: "32px 38px",
+        boxSizing: "border-box",
+        boxShadow: "0 4px 24px rgba(15, 23, 42, 0.12)",
+        borderRadius: 4,
+      }}
+    >
       {/* Header */}
       <table style={{ width: "100%", borderCollapse: "collapse", border: "none", marginBottom: 20 }}>
         <tbody>
@@ -724,6 +806,12 @@ export default function XemTruocDonMuaHangModal({
                     <td style={{ padding: "6px 6px", fontSize: 13.5, fontWeight: 800, color: "#003087" }}>{t.tongCong}</td>
                     <td style={{ padding: "6px 6px", fontSize: 13.5, fontWeight: 800, color: "#003087", textAlign: "right" }}>{(isRMB ? tongCong / tyGia : tongCong).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} {isRMB ? "¥" : "₫"}</td>
                   </tr>
+                  {datCocPct > 0 && (
+                    <tr>
+                      <td style={{ padding: "4px 6px", fontSize: 12, fontWeight: 600, color: "#0369a1" }}>{t.yeuCauDatCoc} ({datCocPct}%):</td>
+                      <td style={{ padding: "4px 6px", fontSize: 12, fontWeight: 700, color: "#0369a1", textAlign: "right" }}>{(isRMB ? tienDatCoc / tyGia : tienDatCoc).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} {isRMB ? "¥" : "₫"}</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
               <p style={{ margin: "6px 6px 0", fontSize: 10.5, fontStyle: "italic", color: "#64748b" }}>({t.bangChu} {lang === "zh" ? soThanhChuZh(isRMB ? tongCong / tyGia : tongCong) : soThanhChu(isRMB ? tongCong / tyGia : tongCong).replace("đồng", isRMB ? "nhân dân tệ" : "đồng")})</p>
@@ -787,45 +875,165 @@ export default function XemTruocDonMuaHangModal({
     } finally { setSubmitting(false); }
   };
 
+  const handleSubmitApproval = async () => {
+    if (submittingApproval || submitting || saving) return;
+    setSubmittingApproval(true);
+    try {
+      let targetOrderId = editOrderId || "";
+      let targetOrderCode = editOrderCode || poDraft;
+      let createdOrders: { id?: string; code: string | null; supplierName: string; soMatHang: number }[] = [];
+
+      if (!isEdit) {
+        const { res, data, text } = await callCreateOrders();
+        if (!res.ok) {
+          const msg = data.error ?? `Lỗi server (HTTP ${res.status})`;
+          alert(msg); console.error("[submit-approval create-orders]", msg, text);
+          return;
+        }
+        createdOrders = (data.createdOrders ?? []) as { id?: string; code: string | null; supplierName: string; soMatHang: number }[];
+        if (createdOrders[0]?.id) targetOrderId = createdOrders[0].id;
+        if (createdOrders[0]?.code) targetOrderCode = createdOrders[0].code;
+      }
+
+      const approvalRes = await fetch("/api/approval-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entityType: "purchase_order",
+          entityId: targetOrderId || targetOrderCode,
+          entityCode: targetOrderCode,
+          entityTitle: `Đơn mua hàng ${targetOrderCode} - ${supName}`,
+          department: "Phòng Mua hàng & Cung ứng",
+          amount: tongCong,
+          priority: "high",
+          reason: `Trình duyệt đơn mua hàng ${targetOrderCode} cho nhà cung cấp ${supName}${datCocPct > 0 ? ` (Yêu cầu đặt cọc ${datCocPct}% = ${tienDatCoc.toLocaleString("vi-VN")} đ)` : ""}`,
+          metadata: {
+            supplierId,
+            supplierName: supName,
+            ngayDat,
+            hinhThucTT,
+            hinhThucGH,
+            phuongTien,
+            thueVAT,
+            tongTienHang,
+            tienThue,
+            tongCong,
+            datCocPct,
+            tienDatCoc,
+            isRMB,
+            tyGia: isRMB ? tyGia : 1,
+            ghiChu,
+            items: orderItems.map(x => ({
+              tenHang: x.item!.tenHang,
+              donVi: x.item!.donVi,
+              soLuong: x.item!.soLuong,
+              donGia: x.donGia,
+              thanhTien: x.item!.soLuong * x.donGia,
+              ngayGiao: x.ngayGiao,
+            })),
+          },
+        }),
+      });
+
+      if (!approvalRes.ok) {
+        const errData = await approvalRes.json().catch(() => ({}));
+        alert(errData.error ?? `Lỗi trình duyệt (HTTP ${approvalRes.status})`);
+        return;
+      }
+
+      setSaveMsg("✓ Đã trình Giám đốc duyệt");
+      setTimeout(() => setSaveMsg(null), 3500);
+      onCreated(createdOrders);
+    } catch (err) {
+      alert("Lỗi kết nối. Vui lòng thử lại."); console.error(err);
+    } finally {
+      setSubmittingApproval(false);
+    }
+  };
+
   const actions = isEdit ? (
     <>
-      <button
+      {saveMsg && <Badge variant="success">{saveMsg}</Badge>}
+      <Button
+        variant="outline"
+        size="icon"
+        title="Xuất PDF"
+        aria-label="Xuất PDF"
         onClick={handleEditExportPDF}
-        style={{ padding: "8px 22px", border: "1px solid #003087", background: "transparent", color: "#003087", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}
+        style={{ width: 32, height: 32, padding: 0 }}
       >
-        <i className="bi bi-file-earmark-pdf" />Xuất PDF
-      </button>
-      <button
+        <FileEarmarkPdf size={15} />
+      </Button>
+      <Button
+        variant="outline"
+        size="icon"
+        title="In đơn hàng"
+        aria-label="In đơn hàng"
         onClick={handleEditPrint}
-        style={{ padding: "8px 22px", border: "none", background: "#003087", color: "#fff", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}
+        style={{ width: 32, height: 32, padding: 0 }}
       >
-        <i className="bi bi-printer" />In đơn hàng
-      </button>
+        <Printer size={15} />
+      </Button>
+      <Button
+        variant="primary"
+        size="sm"
+        leftIcon={<SendCheck size={14} />}
+        isLoading={submittingApproval}
+        disabled={submittingApproval || submitting || saving}
+        onClick={handleSubmitApproval}
+      >
+        {submittingApproval ? "Đang trình..." : "Trình duyệt"}
+      </Button>
     </>
   ) : (
     <>
-      {saveMsg && <span style={{ fontSize: 12.5, color: "#6ee7b7", fontWeight: 600 }}>{saveMsg}</span>}
-      <button
+      {saveMsg && <Badge variant="success">{saveMsg}</Badge>}
+      <Button
+        variant="outline"
+        size="icon"
+        title="Lưu đơn đặt hàng"
+        aria-label="Lưu đơn đặt hàng"
+        isLoading={saving}
+        disabled={saving || submitting || submittingApproval}
         onClick={handleSave}
-        disabled={saving || submitting}
-        style={{ padding: "8px 18px", border: "1px solid #3b82f6", background: "transparent", color: "#93c5fd", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: (saving || submitting) ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 7, opacity: (saving || submitting) ? 0.7 : 1 }}
+        style={{ width: 32, height: 32, padding: 0 }}
       >
-        {saving ? <><i className="bi bi-arrow-repeat" style={{ animation: "spin 0.8s linear infinite" }} />Đang lưu...</> : <><i className="bi bi-floppy" />Lưu đơn đặt hàng</>}
-      </button>
-      <button
+        {!saving && <Floppy size={15} />}
+      </Button>
+      <Button
+        variant="outline"
+        size="icon"
+        title="Lưu & Xuất PDF"
+        aria-label="Lưu & Xuất PDF"
+        isLoading={submitting}
+        disabled={submitting || saving || submittingApproval}
         onClick={handleExportPDF}
-        disabled={submitting || saving}
-        style={{ padding: "8px 22px", border: "1px solid #003087", background: "#fff", color: "#003087", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: (submitting || saving) ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 7, opacity: (submitting || saving) ? 0.7 : 1 }}
+        style={{ width: 32, height: 32, padding: 0 }}
       >
-        {submitting ? <><i className="bi bi-arrow-repeat" style={{ animation: "spin 0.8s linear infinite" }} />Đang xử lý...</> : <><i className="bi bi-file-earmark-pdf" />Lưu & Xuất PDF</>}
-      </button>
-      <button
+        {!submitting && <FileEarmarkPdf size={15} />}
+      </Button>
+      <Button
+        variant="outline"
+        size="icon"
+        title="In đơn hàng"
+        aria-label="In đơn hàng"
+        isLoading={submitting}
+        disabled={submitting || saving || submittingApproval}
         onClick={handlePrint}
-        disabled={submitting || saving}
-        style={{ padding: "8px 22px", border: "none", background: "#003087", color: "#fff", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: (submitting || saving) ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 7, opacity: (submitting || saving) ? 0.7 : 1 }}
+        style={{ width: 32, height: 32, padding: 0 }}
       >
-        {submitting ? <><i className="bi bi-arrow-repeat" style={{ animation: "spin 0.8s linear infinite" }} />Đang tạo...</> : <><i className="bi bi-printer" />Xác nhận & In</>}
-      </button>
+        {!submitting && <Printer size={15} />}
+      </Button>
+      <Button
+        variant="primary"
+        size="sm"
+        leftIcon={<SendCheck size={14} />}
+        isLoading={submittingApproval}
+        disabled={submittingApproval || submitting || saving}
+        onClick={handleSubmitApproval}
+      >
+        {submittingApproval ? "Đang trình..." : "Trình duyệt"}
+      </Button>
     </>
   );
 

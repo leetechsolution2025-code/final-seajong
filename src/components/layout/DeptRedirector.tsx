@@ -1,16 +1,23 @@
 import React, { useEffect } from 'react';
-import { useParams, Navigate } from 'react-router-dom';
+import { useParams, Navigate, useSearchParams } from 'react-router-dom';
 import { useDepartment } from '../../context/DepartmentContext';
 
 export const DeptRedirector: React.FC = () => {
-  const { deptCode } = useParams<{ deptCode: string }>();
-  const { setActiveDeptCode } = useDepartment();
+  const { deptCode, menuKey } = useParams<{ deptCode: string; menuKey?: string }>();
+  const [searchParams] = useSearchParams();
+  const { setActiveDeptCode, setActiveMenuKey } = useDepartment();
 
   useEffect(() => {
-    if (deptCode) {
-      setActiveDeptCode(deptCode);
+    const targetDept = deptCode || searchParams.get('dept');
+    const targetMenu = menuKey || searchParams.get('menu');
+
+    if (targetDept) {
+      setActiveDeptCode(targetDept);
     }
-  }, [deptCode, setActiveDeptCode]);
+    if (targetMenu) {
+      setActiveMenuKey(targetMenu);
+    }
+  }, [deptCode, menuKey, searchParams, setActiveDeptCode, setActiveMenuKey]);
 
   return <Navigate to="/" replace />;
 };

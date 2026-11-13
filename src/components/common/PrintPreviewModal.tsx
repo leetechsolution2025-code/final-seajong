@@ -179,14 +179,15 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
             <button
               type="button"
               onClick={() => setShowSidebar(!showSidebar)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border flex items-center gap-1.5 transition-colors ${
+              title={showSidebar ? 'Ẩn chữ ký & cài đặt' : 'Chữ ký & cài đặt'}
+              aria-label={showSidebar ? 'Ẩn chữ ký & cài đặt' : 'Chữ ký & cài đặt'}
+              className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors text-sm ${
                 showSidebar
                   ? 'bg-blue-50 border-blue-300 text-blue-700'
-                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
               }`}
             >
-              <i className="bi bi-sliders text-xs" />
-              <span>{showSidebar ? 'Ẩn chữ ký' : 'Chữ ký & cài đặt'}</span>
+              <i className="bi bi-sliders" />
             </button>
           )}
 

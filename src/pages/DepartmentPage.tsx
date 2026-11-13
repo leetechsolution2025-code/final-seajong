@@ -389,7 +389,7 @@ export const DepartmentPage: React.FC<{ deptCode?: string }> = ({ deptCode }) =>
           </Button>
 
           {/* Nút Ba Chấm Dropdown Menu tiện ích dùng chung */}
-          <DepartmentActionMenu />
+          <DepartmentActionMenu lockedItemIds={deptCode === 'marketing' ? ['requests_approvals'] : []} />
         </div>
       }
     >

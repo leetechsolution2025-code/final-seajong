@@ -5,7 +5,12 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { computeFinancialReports } from '../services/financialReportEngine.js';
 import { syncAllSubledgersToJournal } from '../services/journalSyncService.js';
-import { syncPrismaFinanceToAccountingTables } from '../services/prismaFinanceSyncService.js';
+
+const syncModuleTs = Date.now();
+async function syncPrismaFinanceToAccountingTables(targetDb) {
+  const mod = await import(`../services/prismaFinanceSyncService.js?t=${syncModuleTs}`);
+  return mod.syncPrismaFinanceToAccountingTables(targetDb);
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -577,6 +582,51 @@ router.get('/api/debts/order-items/:code', (req, res) => {
           }
         }
 
+        // Fallback: kiểm tra QualityInspection.metadata (khi PurchaseOrder gốc đã bị xóa/lưu trữ nhưng biên bản IQC vẫn lưu danh sách hàng hóa)
+        db.get(
+          `SELECT metadata FROM QualityInspection WHERE metadata LIKE ? OR code LIKE ? LIMIT 1`,
+          [`%${code}%`, `%${code}%`],
+          (qiErr, qiRow) => {
+            if (!qiErr && qiRow?.metadata) {
+              try {
+                const meta = JSON.parse(qiRow.metadata);
+                if (Array.isArray(meta?.items) && meta.items.length > 0) {
+                  const invIds = meta.items.map((it) => it.inventoryItemId).filter(Boolean);
+                  const enrichAndReturn = (invMap) => {
+                    const mapped = meta.items.map((it, idx) => {
+                      const inv = invMap.get(it.inventoryItemId);
+                      const qty = Number(it.quantity || it.soLuong) || 1;
+                      const price = Number(it.donGia || it.price || inv?.giaNhap || inv?.giaVon || 0);
+                      const total = Number(it.thanhTien || it.total) || (qty * price);
+                      return {
+                        id: it.id || `${code}-qi-${idx}`,
+                        tenHang: it.productName || it.tenHang || inv?.tenHang || 'Hàng hóa',
+                        soLuong: qty,
+                        donGia: price,
+                        thanhTien: total,
+                        donViTinh: it.unit || it.donViTinh || inv?.donVi || 'cái',
+                        inventoryCode: it.model || inv?.code || '',
+                        inventoryName: inv?.tenHang || it.productName || '',
+                      };
+                    });
+                    return res.json({ success: true, items: mapped });
+                  };
+                  if (invIds.length > 0) {
+                    const placeholders = invIds.map(() => '?').join(',');
+                    return db.all(
+                      `SELECT id, code, tenHang, donVi, giaNhap, giaVon FROM InventoryItem WHERE id IN (${placeholders})`,
+                      invIds,
+                      (_invErr, invRows) => {
+                        const invMap = new Map((invRows || []).map((r) => [r.id, r]));
+                        return enrichAndReturn(invMap);
+                      }
+                    );
+                  }
+                  return enrichAndReturn(new Map());
+                }
+              } catch {}
+            }
+
       // Trường hợp 1: Mã hàng trả lại / biên bản lỗi (ERR-...)
     if (code.startsWith('ERR-')) {
       const qSql = `SELECT metadata, notes FROM QualityInspection WHERE notes LIKE ? OR metadata LIKE ? LIMIT 1`;
@@ -642,6 +692,7 @@ router.get('/api/debts/order-items/:code', (req, res) => {
       }
       return res.json({ success: true, items: [] });
     });
+  });
   });
   });
 });
@@ -1233,6 +1284,7 @@ router.post('/api/debts/payables/:id/payments', (req, res) => {
         };
 
         res.json({ success: true, updated: updatedRow, newPaid, newRemaining, message: 'Đã lập phiếu chi thanh toán nhà cung cấp thành công' });
+        syncAllSubledgersToJournal(db).catch((e) => console.warn('Lỗi auto-sync journal sau khi chi trả NCC:', e.message));
       }
     );
   });
@@ -2454,7 +2506,7 @@ router.get('/api/finance/payment-orders', (req, res) => {
     params.push(term, term, term, term);
   }
 
-  sql += ' ORDER BY created_at DESC';
+  sql += " ORDER BY CASE WHEN ref_type IN ('purchase_order_deposit', 'payable_payment', 'advance_supplier') THEN 0 ELSE 1 END, created_at DESC, rowid DESC";
 
   db.all(sql, params, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -2491,6 +2543,61 @@ router.get('/api/finance/payment-orders', (req, res) => {
   });
 });
 
+function readVietnameseCurrency(num) {
+  if (!num || isNaN(num) || num <= 0) return 'Không đồng chẵn';
+  const digits = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
+
+  function readThreeDigits(n, isFirst) {
+    const hundred = Math.floor(n / 100);
+    const ten = Math.floor((n % 100) / 10);
+    const unit = n % 10;
+    let res = '';
+
+    if (hundred > 0 || !isFirst) {
+      res += digits[hundred] + ' trăm ';
+    }
+
+    if (ten > 1) {
+      res += digits[ten] + ' mươi ';
+      if (unit === 1) res += 'mốt ';
+      else if (unit === 5) res += 'lăm ';
+      else if (unit > 0) res += digits[unit] + ' ';
+    } else if (ten === 1) {
+      res += 'mười ';
+      if (unit === 5) res += 'lăm ';
+      else if (unit > 0) res += digits[unit] + ' ';
+    } else {
+      if (hundred > 0 || !isFirst) {
+        if (unit > 0) res += 'lẻ ' + digits[unit] + ' ';
+      } else {
+        if (unit > 0) res += digits[unit] + ' ';
+      }
+    }
+    return res;
+  }
+
+  const units = ['', 'nghìn', 'triệu', 'tỷ', 'nghìn tỷ'];
+  let temp = Math.floor(num);
+  const groups = [];
+  while (temp > 0) {
+    groups.push(temp % 1000);
+    temp = Math.floor(temp / 1000);
+  }
+
+  let result = '';
+  for (let i = groups.length - 1; i >= 0; i--) {
+    const val = groups[i];
+    if (val > 0) {
+      const isFirst = i === groups.length - 1;
+      result += readThreeDigits(val, isFirst) + units[i] + ' ';
+    }
+  }
+
+  const trimmed = result.trim();
+  if (!trimmed) return 'Không đồng chẵn';
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1) + ' đồng chẵn';
+}
+
 // 2. Tạo mới một lệnh chi tiền thủ công (nếu cần)
 router.post('/api/finance/payment-orders', (req, res) => {
   const b = req.body;
@@ -2503,6 +2610,50 @@ router.post('/api/finance/payment-orders', (req, res) => {
   const nowStr = new Date().toLocaleDateString('vi-VN');
   const amountVal = Number(b.amount || 0);
 
+  // Nếu là Lệnh chi tiền được duyệt từ một Yêu cầu chi tiền (submitted_director), cập nhật trực tiếp bản ghi đó thay vì tạo trùng
+  if (b.status !== 'submitted_director' && b.refCode) {
+    db.get(
+      `SELECT id FROM payment_orders WHERE (order_code = ? OR ref_code = ?) AND status = 'submitted_director' LIMIT 1`,
+      [b.refCode, b.refCode],
+      (findErr, existingRow) => {
+        if (!findErr && existingRow) {
+          db.run(
+            `UPDATE payment_orders
+             SET order_code = ?,
+                 ref_code = ?,
+                 title = ?,
+                 status = 'pending',
+                 status_label = 'Chờ chi tiền',
+                 approved_by = ?,
+                 approved_date = ?,
+                 approval_note = ?,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+            [
+              orderCode,
+              b.refCode,
+              b.title || `Lệnh chi tiền: ${b.purpose || b.beneficiaryName}`,
+              b.approvedBy || 'Ban Giám đốc',
+              b.approvedDate || nowStr,
+              b.approvalNote || '',
+              existingRow.id,
+            ],
+            function (upErr) {
+              if (upErr) return res.status(500).json({ error: upErr.message });
+              return res.status(200).json({ success: true, id: existingRow.id, orderCode });
+            }
+          );
+          return;
+        }
+        insertNewPaymentOrder();
+      }
+    );
+    return;
+  }
+
+  insertNewPaymentOrder();
+
+  function insertNewPaymentOrder() {
   const stmt = db.prepare(`
     INSERT INTO payment_orders (
       id, order_code, ref_type, ref_id, ref_code, title,
@@ -2538,9 +2689,41 @@ router.post('/api/finance/payment-orders', (req, res) => {
     b.statusLabel || 'Chờ chi tiền',
   ], function (err) {
     if (err) return res.status(500).json({ error: err.message });
+
+    // Nếu là yêu cầu trình Giám đốc duyệt (submitted_director), tự động đồng bộ vào bảng approval_documents trong SQLite
+    if (b.status === 'submitted_director') {
+      const docId = `APR-${orderCode}`;
+      const docSummary = `Đối tác: ${b.beneficiaryName} • Số tiền: ${amountVal.toLocaleString('vi-VN')} đ • Hình thức: ${b.paymentMethod === 'cash' ? 'Tiền mặt' : 'Chuyển khoản'} • Mục đích: ${b.purpose || b.title}`;
+      const docContent = b.content || `Kính gửi Ban Giám đốc,\n\nBộ phận Kế toán kính trình Ban Giám đốc xem xét phê duyệt lệnh chi tiền / tạm ứng cho đối tác:\n- Thụ hưởng: ${b.beneficiaryName}\n- Số tiền: ${amountVal.toLocaleString('vi-VN')} đ (${b.amountInWords || readVietnameseCurrency(amountVal)})\n- Lý do chi: ${b.purpose || b.title}\n\nKính đề nghị Ban Giám đốc xem xét phê duyệt.`;
+
+      db.run(
+        `INSERT OR REPLACE INTO approval_documents (
+          id, code, title, doc_type, doc_type_name, department,
+          submitter, submitter_code, submitter_role, submit_date,
+          value, value_label, summary, content, priority, status, is_read,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, 'proposal', ?, ?, ?, 'KT', 'Kế toán viên', ?, ?, ?, ?, ?, 'high', 'pending', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        [
+          docId,
+          orderCode,
+          b.title || `Yêu cầu chi tiền cho ${b.beneficiaryName}`,
+          b.refType?.includes('advance') ? 'Đề xuất tạm ứng NCC' : 'Yêu cầu chi tiền',
+          b.department || 'Phòng Tài chính – Kế toán',
+          b.submitter || 'Kế toán thanh toán',
+          nowStr,
+          amountVal,
+          `${amountVal.toLocaleString('vi-VN')} đ`,
+          docSummary,
+          docContent,
+        ],
+        () => {}
+      );
+    }
+
     res.status(201).json({ success: true, id: orderId, orderCode });
   });
   stmt.finalize();
+  }
 });
 
 // 3. Kế toán xác nhận thực hiện chi tiền (giải ngân)
@@ -2675,18 +2858,77 @@ router.patch('/api/finance/payment-orders/:id/execute', async (req, res) => {
     }
 
     // 5. Tự động cập nhật giảm công nợ phải trả nhà cung cấp (debt_payables) nếu là thanh toán mua hàng/nhà cung cấp
-    if (order.ref_code || order.beneficiary_name) {
+    if (order.ref_id || order.beneficiary_code || order.ref_code || order.beneficiary_name) {
       await new Promise((resolve) => {
-        db.run(
-          `UPDATE debt_payables
-           SET paid_amount = paid_amount + ?,
-               remaining_amount = MAX(0, total_amount - (paid_amount + ?)),
-               status = CASE WHEN (total_amount - (paid_amount + ?)) <= 0 THEN 'completed' ELSE 'partial' END,
-               status_label = CASE WHEN (total_amount - (paid_amount + ?)) <= 0 THEN 'Đã thanh toán' ELSE 'Thanh toán 1 phần' END,
-               updated_at = CURRENT_TIMESTAMP
-           WHERE po_code = ? OR code = ? OR supplier_name = ?`,
-          [order.amount, order.amount, order.amount, order.amount, order.ref_code || '', order.ref_code || '', order.beneficiary_name || ''],
-          () => resolve()
+        db.get(
+          `SELECT * FROM debt_payables
+           WHERE id = ? OR code = ? OR po_code = ? OR code = ? OR supplier_name = ?
+           ORDER BY
+             CASE
+               WHEN id = ? THEN 0
+               WHEN code = ? THEN 1
+               WHEN po_code = ? THEN 2
+               ELSE 3
+             END,
+             remaining_amount DESC
+           LIMIT 1`,
+          [
+            order.ref_id || '',
+            order.beneficiary_code || '',
+            order.ref_code || '',
+            order.ref_code || '',
+            order.beneficiary_name || '',
+            order.ref_id || '',
+            order.beneficiary_code || '',
+            order.ref_code || '',
+          ],
+          (err, payableRow) => {
+            if (!payableRow) return resolve();
+            let entries = [];
+            try { entries = JSON.parse(payableRow.entries_json || '[]'); } catch {}
+
+            const payAmt = Number(order.amount) || 0;
+            const newPaid = Number(payableRow.paid_amount || 0) + payAmt;
+            const newRemaining = Math.max(0, Number(payableRow.total_amount || 0) - newPaid);
+            const isCompleted = newRemaining <= 0;
+
+            const nowTime = new Date();
+            const timeStr = `${String(nowTime.getHours()).padStart(2, '0')}:${String(nowTime.getMinutes()).padStart(2, '0')}`;
+
+            const newPaymentLog = {
+              id: `ENTRY-AP-${Date.now()}`,
+              code: voucherCode,
+              title: order.title || order.purpose || `Chi thanh toán theo Lệnh chi ${order.order_code}`,
+              date: nowStr,
+              time: timeStr,
+              totalAmount: payAmt,
+              paidAmount: payAmt,
+              remainingAmount: 0,
+              status: 'completed',
+              statusLabel: 'Đã chi tiền',
+              debitAccount: '331',
+              creditAccount: order.payment_method === 'cash' ? '1111' : '1121',
+              paymentMethod: paymentMethod || (order.payment_method === 'cash' ? 'Tiền mặt' : 'Chuyển khoản'),
+              sourceBank: bankAccount || order.bank_name || '',
+              receiverName: order.beneficiary_name,
+              type: 'payment',
+              voucherType: 'payment',
+            };
+            entries.push(newPaymentLog);
+
+            db.run(
+              `UPDATE debt_payables
+               SET paid_amount = ?,
+                   remaining_amount = ?,
+                   status = ?,
+                   status_label = ?,
+                   entries_json = ?,
+                   updated_at = CURRENT_TIMESTAMP
+               WHERE id = ?`,
+              [newPaid, newRemaining, isCompleted ? 'completed' : 'partial', isCompleted ? 'Đã hoàn tất' : 'Thanh toán một phần', JSON.stringify(entries), payableRow.id],
+              () => resolve()
+            );
+          }
         );
       });
     }
@@ -3058,7 +3300,7 @@ router.delete('/api/finance/payment-orders/:id', (req, res) => {
 // CHỈ HIỂN THỊ CÁC NỘI DUNG ĐÃ ĐƯỢC GIÁM ĐỐC PHÊ DUYỆT, ĐỢI CHI TIỀN (Lệnh chi đã duyệt & Công nợ chưa thu đủ)
 router.get('/api/finance/cashflow-notices', (req, res) => {
   db.all(
-    "SELECT * FROM payment_orders WHERE status != 'completed' AND status != 'cancelled' AND (approved_by IS NOT NULL AND approved_by != '') AND status != 'submitted_director' AND status != 'pending_director' ORDER BY created_at DESC",
+    "SELECT * FROM payment_orders WHERE status != 'completed' AND status != 'cancelled' AND (approved_by IS NOT NULL AND approved_by != '') AND status != 'submitted_director' AND status != 'pending_director' ORDER BY CASE WHEN ref_type IN ('purchase_order_deposit', 'payable_payment', 'advance_supplier') THEN 0 ELSE 1 END, created_at DESC, rowid DESC",
     [],
     (poErr, poRows) => {
       const notices = [];

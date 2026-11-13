@@ -225,8 +225,21 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
     };
 
     fetchUnreadNotifications();
-    const timer = setInterval(fetchUnreadNotifications, 15000);
-    return () => clearInterval(timer);
+    const timer = setInterval(fetchUnreadNotifications, 10000);
+
+    const handleNotifUpdate = () => {
+      fetchUnreadNotifications();
+    };
+    window.addEventListener('decodoor_notifications_updated', handleNotifUpdate);
+    window.addEventListener('seajong_notifications_updated', handleNotifUpdate);
+    window.addEventListener('decodoor_notification_created', handleNotifUpdate);
+
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('decodoor_notifications_updated', handleNotifUpdate);
+      window.removeEventListener('seajong_notifications_updated', handleNotifUpdate);
+      window.removeEventListener('decodoor_notification_created', handleNotifUpdate);
+    };
   }, [isCustomer, user?.id]);
 
   // Nạp danh sách nhân viên Phòng Kinh doanh theo mã định danh departmentCode === 'sales'

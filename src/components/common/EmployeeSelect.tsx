@@ -18,6 +18,28 @@ export interface EmployeeItem {
 // Danh mục nhân sự mặc định khi offline / đang tải (trống mặc định, nạp 100% từ DB)
 export const DEFAULT_EMPLOYEES: EmployeeItem[] = [];
 
+export function normalizeDepartmentKey(raw?: string | null): string {
+  if (!raw) return '';
+  const s = String(raw)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'd')
+    .toLowerCase()
+    .trim();
+  if (!s || s === 'all' || s === 'tat ca') return '';
+  if (s === 'board' || s === 'bom' || s === 'bgd' || s.includes('giam doc') || s.includes('dieu hanh')) return 'board';
+  if (s === 'hr' || s === 'hcns' || s.includes('nhan su') || s.includes('hanh chinh')) return 'hr';
+  if (s === 'finance' || s === 'accounting' || s === 'tckt' || s === 'kt' || s.includes('tai chinh') || s.includes('ke toan')) return 'finance';
+  if (s === 'sales' || s === 'kd' || s.includes('kinh doanh') || s.includes('ban hang')) return 'sales';
+  if (s === 'marketing' || s === 'mkt' || s.includes('marketing') || s.includes('truyen thong')) return 'marketing';
+  if (s === 'logistics' || s === 'warehouse' || s === 'kho' || s.includes('kho van') || s.includes('giao nhan') || s.includes('kho')) return 'logistics';
+  if (s === 'purchase' || s === 'procurement' || s === 'purchasing' || s === 'mh' || s.includes('mua hang') || s.includes('cung ung')) return 'purchase';
+  if (s === 'qa' || s === 'qc' || s === 'warranty' || s === 'bh' || s.includes('chat luong') || s.includes('bao hanh') || s.includes('qa/qc') || s.includes('ky thuat')) return 'qa';
+  if (s === 'production' || s === 'sx' || s.includes('san xuat') || s.includes('lap rap') || s.includes('xuong')) return 'production';
+  return s;
+}
+
 // Bộ nhớ cache dùng chung để tránh gọi lặp lại /api/users
 let cachedEmployees: EmployeeItem[] | null = null;
 let isFetchingEmployees = false;
@@ -371,16 +393,22 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
     return value.replace(/\s*\(.*?\)/g, '').trim();
   }, [value, selectedIds, selectedTokens, staffData]);
 
-  // Lọc danh sách theo từ khoá tìm kiếm và mã phòng ban
+  // Lọc danh sách theo từ khoá tìm kiếm và mã/tên phòng ban
   const filteredEmployees = useMemo(() => {
     let list = staffData;
     if (departmentFilter) {
-      const df = departmentFilter.toLowerCase();
-      list = list.filter(
-        (e) =>
-          (e.departmentCode && e.departmentCode.toLowerCase() === df) ||
-          e.department.toLowerCase().includes(df)
-      );
+      const df = departmentFilter.toLowerCase().trim();
+      const targetKey = normalizeDepartmentKey(departmentFilter);
+      list = list.filter((e) => {
+        const empCode = (e.departmentCode || '').toLowerCase().trim();
+        const empDept = (e.department || '').toLowerCase().trim();
+        const empKey = normalizeDepartmentKey(e.departmentCode || e.department);
+        return (
+          (Boolean(targetKey) && empKey === targetKey) ||
+          (Boolean(empCode) && empCode === df) ||
+          (Boolean(empDept) && (empDept.includes(df) || df.includes(empDept)))
+        );
+      });
     }
     if (!searchTerm.trim()) return list;
 

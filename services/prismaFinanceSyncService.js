@@ -102,6 +102,7 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
       prismaQuotations,
       prismaMarketingLeads,
       prismaMarketingCampaigns,
+      prismaQualityInspections,
     ] = await Promise.all([
       dbAll(db, 'SELECT * FROM "AccountingAccount"'),
       dbAll(db, 'SELECT * FROM "MonthlyBalance"'),
@@ -127,6 +128,7 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
       dbAll(db, 'SELECT * FROM "Quotation" ORDER BY ngayBaoGia DESC'),
       dbAll(db, 'SELECT * FROM "MarketingLead"'),
       dbAll(db, 'SELECT * FROM "MarketingCampaign"'),
+      dbAll(db, 'SELECT id, code, type, metadata FROM "QualityInspection" WHERE metadata IS NOT NULL'),
     ]);
 
     const accountById = new Map();
@@ -208,6 +210,37 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
 
       if (!purchaseOrderItemsByOrderId.has(item.purchaseOrderId)) purchaseOrderItemsByOrderId.set(item.purchaseOrderId, []);
       purchaseOrderItemsByOrderId.get(item.purchaseOrderId).push(itemObj);
+    });
+
+    const inventoryById = new Map();
+    (prismaInventoryItems || []).forEach((inv) => inventoryById.set(inv.id, inv));
+
+    (prismaQualityInspections || []).forEach((qi) => {
+      if (!qi.metadata) return;
+      try {
+        const meta = JSON.parse(qi.metadata);
+        const poCode = meta.purchaseOrderCode || meta.poNumber || '';
+        if (!poCode || !Array.isArray(meta.items) || meta.items.length === 0) return;
+        if (purchaseOrderItemsByCode.has(poCode) && purchaseOrderItemsByCode.get(poCode).length > 0) return;
+        const mappedItems = meta.items.map((it, idx) => {
+          const inv = inventoryById.get(it.inventoryItemId);
+          const qty = Number(it.quantity || it.soLuong) || 1;
+          const price = Number(it.donGia || it.price || inv?.giaNhap || inv?.giaVon || 0);
+          const total = Number(it.thanhTien || it.total) || (qty * price);
+          return {
+            id: it.id || `${poCode}-qi-${idx}`,
+            tenHang: it.productName || it.tenHang || inv?.tenHang || 'Hàng hóa',
+            soLuong: qty,
+            donGia: price,
+            thanhTien: total,
+            donViTinh: it.unit || it.donViTinh || inv?.donVi || 'cái',
+            inventoryCode: it.model || inv?.code || '',
+            dinhMucId: null,
+            ghiChu: null,
+          };
+        });
+        purchaseOrderItemsByCode.set(poCode, mappedItems);
+      } catch {}
     });
 
     // ============================================================================
@@ -620,17 +653,20 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
       payableDebts.forEach((d) => {
         const supp = d.supplierId ? supplierById.get(d.supplierId) : null;
         const carr = d.carrierId ? carrierById.get(d.carrierId) : null;
-        const cleanName = (supp?.name || carr?.name || d.partnerName || 'Nhà cung cấp')
+        const rawName = supp?.name || carr?.name || d.partnerName || 'Nhà cung cấp';
+        const cleanName = rawName
           .split('–')[0]
           .split(' - ')[0]
           .trim();
-        const key = d.supplierId || d.carrierId || cleanName.toLowerCase();
+        const partnerType = carr || d.carrierId ? 'transporter' : 'supplier';
+        // Gộp theo tên chuẩn hóa + loại đối tác để không bị tách 2 dòng khi 1 bên có supplierId và 1 bên không có supplierId
+        const key = `${partnerType}:${cleanName.toLowerCase()}`;
         if (!payGroups.has(key)) {
           payGroups.set(key, {
             key,
-            partnerName: supp?.name || carr?.name || cleanName,
+            partnerName: rawName,
             partnerAddress: supp?.address || carr?.address || '',
-            partnerType: carr || d.carrierId ? 'transporter' : 'supplier',
+            partnerType,
             bills: [],
             payments: [],
             totalAmount: 0,
@@ -639,6 +675,12 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           });
         }
         const g = payGroups.get(key);
+        if (!g.partnerAddress && (supp?.address || carr?.address)) {
+          g.partnerAddress = supp?.address || carr?.address || '';
+        }
+        if ((supp?.name || carr?.name) && g.partnerName === g.partnerName.toUpperCase()) {
+          g.partnerName = supp?.name || carr?.name;
+        }
         const amt = Number(d.amount) || 0;
         const paid = Number(d.paidAmount) || 0;
         g.totalAmount += amt;
@@ -695,6 +737,51 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           };
         });
 
+        // Bổ sung các phiếu chi (Debt với paidAmount > 0 và amount === 0 hoặc referenceId bắt đầu bằng PC-) vào danh sách chi tiết
+        (g.payments || []).forEach((p, idx) => {
+          const pVal = Math.round(Number(p.paidAmount) || 0);
+          if (pVal <= 0) return;
+          const refCode = p.referenceId || `PC-${idx + 1}`;
+          if (entries.some((e) => e.code === refCode)) return;
+          const descParts = String(p.description || '').split('[PAYMENT_LOGS]:');
+          const descClean = descParts[0].trim();
+          let logInfo = null;
+          if (descParts[1]) {
+            try {
+              const logs = JSON.parse(descParts[1].trim());
+              if (Array.isArray(logs) && logs.length > 0) logInfo = logs[0];
+            } catch {}
+          }
+          const payMethod = logInfo?.method || 'Chuyển khoản';
+          let payDate = formatEpochToVNDate(p.createdAt || p.dueDate);
+          let payTime = '09:00';
+          if (logInfo?.date && String(logInfo.date).includes('-')) {
+            const dObj = new Date(logInfo.date);
+            if (!Number.isNaN(dObj.getTime())) {
+              payDate = formatEpochToVNDate(dObj.getTime());
+              payTime = `${String(dObj.getHours()).padStart(2, '0')}:${String(dObj.getMinutes()).padStart(2, '0')}`;
+            }
+          }
+          entries.push({
+            id: p.id || `ENT-PC-${idx + 1}`,
+            code: refCode,
+            title: logInfo?.note || descClean || `Phiếu chi thanh toán công nợ (${refCode})`,
+            date: payDate,
+            time: payTime,
+            totalAmount: pVal,
+            paidAmount: pVal,
+            remainingAmount: 0,
+            status: 'completed',
+            statusLabel: 'Đã chi tiền',
+            debitAccount: '331',
+            creditAccount: payMethod === 'Tiền mặt' ? '1111' : '1121',
+            paymentMethod: payMethod,
+            receiverName: g.partnerName,
+            type: 'payment',
+            voucherType: 'payment',
+          });
+        });
+
         const latestPoCode =
           g.bills.length > 0 ? g.bills[g.bills.length - 1].referenceId || code : code;
         const status = remain <= 0 ? 'completed' : 'pending';
@@ -726,12 +813,151 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
         );
       }
 
+      // Bảo toàn các Lệnh chi tiền nhà cung cấp đã giải ngân (completed) trong payment_orders
+      try {
+        const completedSupplierOrders = await dbAll(
+          db,
+          `SELECT * FROM payment_orders
+           WHERE status = 'completed'
+             AND (ref_type IN ('payable_payment', 'advance_supplier', 'purchase_order_deposit') OR ref_code LIKE 'YCCHI-%' OR ref_code LIKE 'YCU-%')`
+        );
+        if (completedSupplierOrders.length > 0) {
+          const currentPayables = await dbAll(db, 'SELECT * FROM debt_payables');
+          for (const ord of completedSupplierOrders) {
+            const ordName = String(ord.beneficiary_name || '').split('–')[0].split(' - ')[0].trim().toLowerCase();
+            const target = currentPayables.find(
+              (p) =>
+                (ord.ref_id && p.id === ord.ref_id) ||
+                (ord.beneficiary_code && p.code === ord.beneficiary_code) ||
+                (ordName && String(p.supplier_name || '').split('–')[0].split(' - ')[0].trim().toLowerCase() === ordName)
+            );
+            if (!target) continue;
+
+            let entries = [];
+            try { entries = JSON.parse(target.entries_json || '[]'); } catch {}
+            const vchCode = ord.voucher_id || `PC-${ord.order_code}`;
+            if (entries.some((e) => e.code === vchCode)) continue;
+
+            const payAmt = Number(ord.amount) || 0;
+            const newPaid = Number(target.paid_amount || 0) + payAmt;
+            const newRemain = Math.max(0, Number(target.total_amount || 0) - newPaid);
+            const isComp = newRemain <= 0;
+
+            entries.push({
+              id: `ENTRY-AP-${ord.id}`,
+              code: vchCode,
+              title: ord.title || ord.purpose || `Chi thanh toán theo Lệnh chi ${ord.order_code}`,
+              date: ord.executed_date || ord.due_date || new Date().toLocaleDateString('vi-VN'),
+              time: '08:30',
+              totalAmount: payAmt,
+              paidAmount: payAmt,
+              remainingAmount: 0,
+              status: 'completed',
+              statusLabel: 'Đã chi tiền',
+              debitAccount: '331',
+              creditAccount: ord.payment_method === 'cash' ? '1111' : '1121',
+              paymentMethod: ord.payment_method === 'cash' ? 'Tiền mặt' : 'Chuyển khoản',
+              sourceBank: ord.bank_name || '',
+              receiverName: ord.beneficiary_name,
+              type: 'payment',
+              voucherType: 'payment',
+            });
+
+            target.paid_amount = newPaid;
+            target.remaining_amount = newRemain;
+            target.entries_json = JSON.stringify(entries);
+
+            await dbRun(
+              db,
+              `UPDATE debt_payables
+               SET paid_amount = ?, remaining_amount = ?, status = ?, status_label = ?, entries_json = ?, updated_at = CURRENT_TIMESTAMP
+               WHERE id = ?`,
+              [newPaid, newRemain, isComp ? 'completed' : 'partial', isComp ? 'Đã hoàn tất' : 'Thanh toán một phần', target.entries_json, target.id]
+            );
+          }
+        }
+
+        // Bảo toàn thêm các Phiếu chi công nợ (voucher_type = 'PC') đã lập trong financial_vouchers
+        const completedPcVouchers = await dbAll(
+          db,
+          `SELECT * FROM financial_vouchers WHERE voucher_type = 'PC' AND status = 'completed'`
+        );
+        if (completedPcVouchers.length > 0) {
+          const currentPayables = await dbAll(db, 'SELECT * FROM debt_payables');
+          for (const v of completedPcVouchers) {
+            const vName = String(v.partner_name || '').split('–')[0].split(' - ')[0].trim().toLowerCase();
+            const target = currentPayables.find(
+              (p) =>
+                (v.partner_code && p.code === v.partner_code) ||
+                (vName && String(p.supplier_name || '').split('–')[0].split(' - ')[0].trim().toLowerCase() === vName)
+            );
+            if (!target) continue;
+
+            let entries = [];
+            try { entries = JSON.parse(target.entries_json || '[]'); } catch {}
+            const vchCode = v.voucher_code;
+            if (!vchCode || entries.some((e) => e.code === vchCode)) continue;
+
+            const payAmt = Number(v.amount) || 0;
+            const newPaid = Number(target.paid_amount || 0) + payAmt;
+            const newRemain = Math.max(0, Number(target.total_amount || 0) - newPaid);
+            const isComp = newRemain <= 0;
+
+            entries.push({
+              id: `ENTRY-AP-${v.id}`,
+              code: vchCode,
+              title: v.reason || `Phiếu chi ${vchCode}`,
+              date: v.date || new Date().toLocaleDateString('vi-VN'),
+              time: '08:30',
+              totalAmount: payAmt,
+              paidAmount: payAmt,
+              remainingAmount: 0,
+              status: 'completed',
+              statusLabel: 'Đã chi tiền',
+              debitAccount: '331',
+              creditAccount: v.payment_method === 'Tiền mặt' ? '1111' : '1121',
+              paymentMethod: v.payment_method || 'Chuyển khoản',
+              receiverName: v.partner_name,
+              type: 'payment',
+              voucherType: 'payment',
+            });
+
+            target.paid_amount = newPaid;
+            target.remaining_amount = newRemain;
+            target.entries_json = JSON.stringify(entries);
+
+            await dbRun(
+              db,
+              `UPDATE debt_payables
+               SET paid_amount = ?, remaining_amount = ?, status = ?, status_label = ?, entries_json = ?, updated_at = CURRENT_TIMESTAMP
+               WHERE id = ?`,
+              [newPaid, newRemain, isComp ? 'completed' : 'partial', isComp ? 'Đã hoàn tất' : 'Thanh toán một phần', target.entries_json, target.id]
+            );
+          }
+        }
+      } catch (replayErr) {
+        console.warn('[Sync] Không thể bảo toàn payment_orders đã giải ngân:', replayErr?.message);
+      }
+
       await dbRun(db, 'COMMIT');
     }
 
     // ============================================================================
     // E. ĐỒNG BỘ CHI PHÍ (financial_expenses) & LỆNH CHI TIỀN (payment_orders)
     // ============================================================================
+    // Bảo lưu các Lệnh chi tiền / Yêu cầu chi tiền tạo từ nghiệp vụ (YCCHI-/YCU-/LC-) trước khi đồng bộ
+    const preservedOrders = await dbAll(
+      db,
+      `SELECT * FROM payment_orders
+       WHERE ref_type IN ('payable_payment', 'advance_supplier', 'purchase_order_deposit')
+          OR ref_code LIKE 'YCCHI-%'
+          OR ref_code LIKE 'YCU-%'
+          OR order_code LIKE 'YCCHI-%'
+          OR order_code LIKE 'YCU-%'
+          OR id LIKE 'PO-17%'
+          OR id LIKE 'PO-LC-%'`
+    );
+
     await dbRun(db, 'DELETE FROM financial_expenses');
     await dbRun(db, 'DELETE FROM payment_orders');
     await dbRun(db, "DELETE FROM financial_vouchers WHERE voucher_type = 'payment'");
@@ -869,6 +1095,82 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
         }
       }
       await dbRun(db, 'COMMIT');
+    }
+
+    // Khôi phục lại các Lệnh chi tiền / Yêu cầu chi tiền tạo từ nghiệp vụ (YCCHI-/YCU-/LC-)
+    for (const po of preservedOrders || []) {
+      await dbRun(
+        db,
+        `INSERT OR REPLACE INTO payment_orders (
+          id, order_code, ref_type, ref_id, ref_code, title,
+          beneficiary_name, beneficiary_code, department,
+          amount, amount_in_words, payment_method, bank_name, bank_account, bank_branch,
+          purpose, due_date, approved_by, approved_date, approval_note,
+          status, status_label, executed_by, executed_date, voucher_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          po.id, po.order_code, po.ref_type, po.ref_id, po.ref_code, po.title,
+          po.beneficiary_name, po.beneficiary_code, po.department,
+          po.amount, po.amount_in_words, po.payment_method, po.bank_name, po.bank_account, po.bank_branch,
+          po.purpose, po.due_date, po.approved_by, po.approved_date, po.approval_note,
+          po.status, po.status_label, po.executed_by, po.executed_date, po.voucher_id, po.created_at, po.updated_at
+        ]
+      );
+    }
+
+    // Đồng bộ bổ sung Lệnh chi đặt cọc từ các tờ trình đơn mua hàng (purchase_order) đã được Giám đốc duyệt kèm đặt cọc
+    const approvedPoReqs = await dbAll(
+      db,
+      `SELECT * FROM "ApprovalRequest" WHERE LOWER(entityType) = 'purchase_order' AND LOWER(status) = 'approved'`
+    );
+    for (const apr of approvedPoReqs || []) {
+      let meta = {};
+      try {
+        meta = typeof apr.metadata === 'string' ? JSON.parse(apr.metadata) : apr.metadata || {};
+      } catch { /* ignore */ }
+      if (meta?.approveDeposit === false) continue;
+      const datCocPct = Number(meta?.datCocPct || 0);
+      const totalAmt = Number(meta?.tongCong || meta?.totalAmount || meta?.amount || 0);
+      const depositAmount = Math.round(Number(meta?.tienDatCoc || 0) || (totalAmt * datCocPct) / 100);
+      if (!(depositAmount > 0)) continue;
+
+      const refCode = apr.entityCode || apr.id;
+      const alreadyInPreserved = (preservedOrders || []).some(
+        (p) => p.ref_type === 'purchase_order_deposit' && p.ref_code === refCode
+      );
+      if (alreadyInPreserved) continue;
+
+      const vnDate = formatEpochToVNDate(apr.approvedAt || apr.createdAt);
+      const supplierName = meta?.supplierName || 'Nhà cung cấp';
+      const orderId = `PO-LC-${apr.id}`;
+      const suffix = String(refCode).split('-').pop() || '0001';
+      const orderCode = `LC-COC-${suffix}`;
+      await dbRun(
+        db,
+        `INSERT OR IGNORE INTO payment_orders (
+          id, order_code, ref_type, ref_id, ref_code, title,
+          beneficiary_name, beneficiary_code, department,
+          amount, amount_in_words, payment_method, bank_name, bank_account, bank_branch,
+          purpose, due_date, approved_by, approved_date, approval_note,
+          status, status_label, created_at, updated_at
+        ) VALUES (?, ?, 'purchase_order_deposit', ?, ?, ?, ?, 'NCC', ?, ?, '', ?, '', '', '', ?, ?, ?, ?, ?, 'pending', 'Chờ chi tiền', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        [
+          orderId,
+          orderCode,
+          apr.entityId || apr.id,
+          refCode,
+          `Chi tiền đặt cọc ${datCocPct}% đơn mua hàng ${refCode} - ${supplierName}`,
+          supplierName,
+          apr.department || 'Phòng Mua hàng',
+          depositAmount,
+          meta?.hinhThucTT === 'Tiền mặt' ? 'cash' : 'bank_transfer',
+          `Đặt cọc ${datCocPct}% đơn mua hàng ${refCode} - NCC ${supplierName}`,
+          vnDate,
+          apr.approvedById || 'Lê Công Vụ',
+          vnDate,
+          apr.note || 'Giám đốc đã duyệt chi tiền đặt cọc đơn mua hàng',
+        ]
+      );
     }
 
     // ============================================================================

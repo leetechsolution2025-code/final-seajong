@@ -13,6 +13,8 @@ import { SalaryAdjustmentsPage } from '../../pages/hr/SalaryAdjustmentsPage';
 import { PromotionsPage } from '../../pages/hr/PromotionsPage';
 import { TerminationsPage } from '../../pages/hr/TerminationsPage';
 import { DocumentApprovalPage } from '../../pages/departments/bom/DocumentApprovalPage';
+import { MeetingNotebookPage } from '../../pages/common/MeetingNotebookPage';
+import { InternalDocumentLibraryPage } from '../../pages/common/InternalDocumentLibraryPage';
 
 interface FeatureDetailViewProps {
   menuKey: string;
@@ -61,6 +63,26 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
 
   if (menuKey === 'approvals' || menuKey === 'requests_approvals' || menuKey === 'hr_requests_approvals') {
     return <DocumentApprovalPage />;
+  }
+
+  if (
+    menuKey === 'documents' ||
+    menuKey === 'doc_library' ||
+    menuKey === 'internal-documents' ||
+    menuKey === 'thu-vien-tai-lieu'
+  ) {
+    return <InternalDocumentLibraryPage deptCode={deptCode} />;
+  }
+
+  if (
+    menuKey === 'notebook' ||
+    menuKey === 'journal' ||
+    menuKey === 'meetings' ||
+    menuKey === 'meeting_minutes' ||
+    menuKey === 'meeting-minutes' ||
+    menuKey === 'noi-dung-cuoc-hop'
+  ) {
+    return <MeetingNotebookPage deptCode={deptCode} />;
   }
 
   const [searchTerm, setSearchTerm] = useState('');

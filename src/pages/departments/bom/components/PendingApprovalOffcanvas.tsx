@@ -9,17 +9,19 @@ import {
   Buildings,
   CashStack,
   CalendarCheck,
-  ClockHistory,
   Paperclip,
   Download,
   ChatDots,
   ShieldCheck,
+  BoxSeam,
+  ChevronRight,
 } from 'react-bootstrap-icons';
 import { Offcanvas } from '../../../../components/common/Offcanvas';
 import { Button } from '../../../../components/common/Button';
 import { Badge } from '../../../../components/common/Badge';
 import type { ApprovalDocument } from '../DocumentApprovalView';
 import { DocumentChatSlide } from './DocumentChatSlide';
+import { PurchaseOrderDetailSlide } from './PurchaseOrderDetailSlide';
 import { documentChatService } from '../services/documentChatService';
 import { openAttachmentInNewTab } from '../services/documentViewer';
 
@@ -27,7 +29,7 @@ export interface PendingApprovalOffcanvasProps {
   isOpen: boolean;
   onClose: () => void;
   document: ApprovalDocument | null;
-  onApprove: (doc: ApprovalDocument) => void;
+  onApprove: (doc: ApprovalDocument, approveDeposit?: boolean) => void;
   onReject: (doc: ApprovalDocument) => void;
   onShowToast?: (type: 'success' | 'error' | 'warning' | 'info', title: string, message: string) => void;
   initialOpenChat?: boolean;
@@ -42,19 +44,24 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
   onShowToast,
   initialOpenChat = false,
 }) => {
-  const [isChatOpen, setIsChatOpen] = useState(initialOpenChat);
+  const [activeSlide, setActiveSlide] = useState<'none' | 'chat' | 'orderDetail'>(initialOpenChat ? 'chat' : 'none');
   const [unreadCount, setUnreadCount] = useState(0);
+  const [approveDeposit, setApproveDeposit] = useState(true);
 
   // Mở chat nếu có yêu cầu mở thẳng từ thông báo/toast
   useEffect(() => {
     if (isOpen) {
       if (initialOpenChat) {
-        setIsChatOpen(true);
+        setActiveSlide('chat');
       }
     } else {
-      setIsChatOpen(false);
+      setActiveSlide('none');
     }
   }, [isOpen, initialOpenChat]);
+
+  useEffect(() => {
+    setApproveDeposit(true);
+  }, [document?.id]);
 
   // Lắng nghe số tin nhắn chưa đọc của hồ sơ này
   useEffect(() => {
@@ -68,6 +75,16 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
 
   if (!document) return null;
 
+  const isPurchaseOrder =
+    String(document.entityType || '').toLowerCase() === 'purchase_order' ||
+    document.docType === 'contract';
+  const meta = document.metadata || {};
+  const poItemCount = Array.isArray(meta.items) ? meta.items.length : 0;
+  const datCocPct = Number(meta.datCocPct || 0);
+  const tienDatCoc = Number(
+    meta.tienDatCoc || (datCocPct > 0 ? Math.round((document.value * datCocPct) / 100) : 0)
+  );
+
   return (
     <Offcanvas
       isOpen={isOpen}
@@ -78,20 +95,28 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
       width="400px"
       className="bom-approval-offcanvas"
       slidePanel={
-        <DocumentChatSlide
-          isOpen={isChatOpen}
-          onClose={() => setIsChatOpen(false)}
-          document={document}
-        />
+        activeSlide === 'chat' ? (
+          <DocumentChatSlide
+            isOpen={true}
+            onClose={() => setActiveSlide('none')}
+            document={document}
+          />
+        ) : activeSlide === 'orderDetail' ? (
+          <PurchaseOrderDetailSlide
+            isOpen={true}
+            onClose={() => setActiveSlide('none')}
+            document={document}
+          />
+        ) : undefined
       }
       footer={
-        !isChatOpen ? (
+        activeSlide === 'none' ? (
           <div className="bom-approval-offcanvas-footer" style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
             <Button
               variant="secondary"
               size="md"
               leftIcon={<ChatDots size={16} />}
-              onClick={() => setIsChatOpen(true)}
+              onClick={() => setActiveSlide('chat')}
               title="Trao đổi công việc giữa BGĐ, Người trình duyệt và Người yêu cầu"
             >
               Trao đổi
@@ -129,7 +154,7 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
                 variant="success"
                 size="md"
                 leftIcon={<CheckCircle size={16} />}
-                onClick={() => onApprove(document)}
+                onClick={() => onApprove(document, isPurchaseOrder && datCocPct > 0 ? approveDeposit : false)}
               >
                 Phê duyệt
               </Button>
@@ -258,6 +283,67 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
               <span>Nguồn: Hệ thống Seajong</span>
               <span style={{ color: '#059669', fontWeight: 600 }}>Đã kiểm tra định mức</span>
             </div>
+          </div>
+        )}
+
+        {/* Nút mở Slide chi tiết đơn mua hàng & checkbox duyệt chi đặt cọc */}
+        {isPurchaseOrder && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={() => setActiveSlide('orderDetail')}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '10px 12px',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid #cbd5e1',
+                backgroundColor: '#ffffff',
+                color: '#0f172a',
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'border-color 0.15s ease, background-color 0.15s ease',
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <BoxSeam size={15} style={{ color: '#0284c7' }} />
+                <span>Chi tiết hàng hoá & đơn mua hàng</span>
+                {poItemCount > 0 && <Badge variant="brand">{poItemCount} MH</Badge>}
+              </span>
+              <ChevronRight size={14} style={{ color: '#64748b' }} />
+            </button>
+
+            {datCocPct > 0 && (
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 12px',
+                  borderRadius: 'var(--radius-md)',
+                  border: `1px solid ${approveDeposit ? '#0284c7' : '#e2e8f0'}`,
+                  backgroundColor: approveDeposit ? '#f0f9ff' : '#f8fafc',
+                  cursor: 'pointer',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  color: '#0f172a',
+                  userSelect: 'none',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={approveDeposit}
+                  onChange={(e) => setApproveDeposit(e.target.checked)}
+                  style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#0284c7', flexShrink: 0 }}
+                />
+                <span>
+                  Duyệt chi tiền đặt cọc ({datCocPct}% — {tienDatCoc.toLocaleString('vi-VN')} đ)
+                </span>
+              </label>
+            )}
           </div>
         )}
 
@@ -511,55 +597,6 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
               <span>Hồ sơ không có tài liệu đính kèm</span>
             </div>
           )}
-        </div>
-
-        {/* Quy trình ký duyệt */}
-        <div>
-          <h4
-            style={{
-              fontSize: '0.8125rem',
-              fontWeight: 700,
-              color: 'var(--text-primary)',
-              marginBottom: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <ClockHistory size={15} />
-            Tiến trình ký duyệt hồ sơ
-          </h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-              <div style={{ width: '20px', height: '20px', borderRadius: '50%', backgroundColor: '#10b981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6875rem', fontWeight: 700, flexShrink: 0 }}>
-                ✓
-              </div>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--text-primary)' }}>Khởi tạo tờ trình</div>
-                <div style={{ fontSize: '0.71875rem', color: 'var(--text-muted)' }}>{document.submitter} • {document.submitDate}</div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-              <div style={{ width: '20px', height: '20px', borderRadius: '50%', backgroundColor: '#10b981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6875rem', fontWeight: 700, flexShrink: 0 }}>
-                ✓
-              </div>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--text-primary)' }}>Trưởng đơn vị đề xuất xác nhận</div>
-                <div style={{ fontSize: '0.71875rem', color: 'var(--text-muted)' }}>Đã ký số duyệt thông qua</div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-              <div style={{ width: '20px', height: '20px', borderRadius: '50%', backgroundColor: '#f59e0b', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6875rem', fontWeight: 700, flexShrink: 0 }}>
-                3
-              </div>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--text-primary)' }}>Ban Giám đốc phê duyệt quyết định</div>
-                <div style={{ fontSize: '0.71875rem', color: '#f59e0b', fontWeight: 600 }}>Đang chờ Ban Giám đốc xem xét ký duyệt</div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </Offcanvas>

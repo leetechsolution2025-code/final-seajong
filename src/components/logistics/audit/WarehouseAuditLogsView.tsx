@@ -53,7 +53,12 @@ export interface AuditLogItem {
   orderCode?: string | null;
   customerName?: string | null;
   customerAddress?: string | null;
-  partnerType?: 'customer' | 'supplier' | null;
+  partnerName?: string | null;
+  partnerCode?: string | null;
+  partnerPhone?: string | null;
+  partnerAddress?: string | null;
+  partnerType?: 'customer' | 'supplier' | 'internal' | null;
+  partnerSubLabel?: string | null;
   tongSoLuong?: number;
   linesCount?: number;
   lines?: AuditLogLine[];
@@ -241,22 +246,24 @@ export const WarehouseAuditLogsView: React.FC<WarehouseAuditLogsViewProps> = ({
       const today = new Date();
       const dateFormatted = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
 
-      const dataRows = items.map((it: any, idx: number) => {
-        const itemNames = (it.lines || []).map((l: any) => l.itemName).filter(Boolean).join(', ') || it.title || '';
-        const itemCodes = (it.lines || []).map((l: any) => l.itemCode).filter(Boolean).join(', ') || '';
-        const totalQty = (it.lines || []).reduce((sum: number, l: any) => sum + (Number(l.soLuong) || 0), 0) || it.soLuong || 0;
+      const dataRows = items.map((it, idx) => {
+        const itemNames = (it.lines || []).map((l) => l.itemName).filter(Boolean).join(', ') || it.itemName || '';
+        const itemCodes = (it.lines || []).map((l) => l.itemCode).filter(Boolean).join(', ') || it.itemCode || '';
+        const totalQty = (it.lines || []).reduce((sum, l) => sum + (Number(l.soLuong) || 0), 0) || it.tongSoLuong || it.soLuong || 0;
+        const partnerText = it.partnerName || it.customerName || '—';
 
         return [
           idx + 1,
-          it.code || it.soPhieu || `NK-${idx + 1}`,
+          it.soChungTu || `NK-${idx + 1}`,
           new Date(it.createdAt).toLocaleDateString('vi-VN'),
-          it.typeLabel || it.type || 'Hoạt động kho',
+          it.activityLabel || 'Hoạt động kho',
+          partnerText,
           itemCodes,
           itemNames,
           totalQty,
           it.warehouseName || it.fromWarehouseName || it.toWarehouseName || 'Kho chính',
-          it.actorName || it.nguoiThucHien || 'Hệ thống',
-          it.note || it.lyDo || it.description || '',
+          it.nguoiThucHien || 'Hệ thống',
+          it.lyDo || it.ghiChu || '',
         ];
       });
 
@@ -270,9 +277,9 @@ export const WarehouseAuditLogsView: React.FC<WarehouseAuditLogsViewProps> = ({
           'Hệ thống quản trị chuỗi cung ứng Seajong ERP',
         ],
         headers: [
-          ['STT', 'Mã chứng từ', 'Ngày thực hiện', 'Loại biến động', 'Mã vật tư', 'Tên vật tư, hàng hóa', 'Tổng số lượng', 'Kho áp dụng', 'Người thực hiện', 'Diễn giải / Ghi chú'],
+          ['STT', 'Mã chứng từ', 'Ngày thực hiện', 'Loại biến động', 'Nhà cung cấp / Khách hàng', 'Mã vật tư', 'Tên vật tư, hàng hóa', 'Tổng số lượng', 'Kho áp dụng', 'Người thực hiện', 'Diễn giải / Ghi chú'],
         ],
-        columnsWidths: [6, 16, 14, 18, 16, 36, 14, 18, 18, 28],
+        columnsWidths: [6, 18, 14, 18, 28, 16, 34, 14, 20, 18, 28],
         data: dataRows,
         signatures: ['Người lập biểu', 'Thủ kho trưởng', 'Kế toán trưởng', 'Giám đốc'],
       });
@@ -349,135 +356,136 @@ export const WarehouseAuditLogsView: React.FC<WarehouseAuditLogsViewProps> = ({
     {
       key: 'soChungTu',
       title: 'Mã chứng từ / Đơn hàng',
-      width: '180px',
-      render: (it: AuditLogItem) => (
-        <div className="flex flex-col">
-          <span className="font-bold text-xs text-blue-700 hover:underline cursor-pointer">
-            {it.soChungTu}
-          </span>
-          {it.orderCode && (
-            <span className="text-[11px] text-slate-500 flex items-center gap-1">
-              <i className="bi bi-cart-check text-slate-400" />
-              <span>{it.orderCode}</span>
-            </span>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'thoiGian',
-      title: 'Thời gian thực hiện',
-      width: '145px',
-      render: (it: AuditLogItem) => (
-        <div className="flex flex-col text-xs text-slate-700">
-          <span className="font-medium">{it.thoiGianFormatted}</span>
-          <span className="text-[10.5px] text-slate-400">
-            {new Date(it.createdAt).toLocaleDateString('vi-VN')}
-          </span>
-        </div>
-      ),
-    },
-    {
-      key: 'activityType',
-      title: 'Hoạt động',
-      width: '135px',
-      render: (it: AuditLogItem) => (
-        <span
-          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold tracking-wide border ${
-            it.activityType === 'nhap'
-              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-              : it.activityType === 'xuat'
-              ? 'bg-blue-50 text-blue-700 border-blue-200'
-              : it.activityType === 'dieu-chinh'
-              ? 'bg-amber-50 text-amber-700 border-amber-200'
-              : 'bg-purple-50 text-purple-700 border-purple-200'
-          }`}
-        >
-          {it.activityLabel}
-        </span>
-      ),
-    },
-    {
-      key: 'items',
-      title: 'Chi tiết hàng hoá & biến động',
+      width: '195px',
       render: (it: AuditLogItem) => {
-        const isExpanded = expandedIds.includes(it.id);
-        const hasLines = it.lines && it.lines.length > 0;
-
+        const count = it.lines?.length || it.linesCount || 0;
         return (
-          <div className="flex flex-col gap-1 py-1">
-            {/* Tóm tắt nhanh */}
-            <div className="flex items-center gap-2 flex-wrap text-xs">
-              {it.itemName ? (
-                <>
-                  <span className="font-semibold text-slate-800">{it.itemName}</span>
-                  {it.itemCode && (
-                    <span className="text-[11px] text-slate-500 font-mono">
-                      ({it.itemCode})
-                    </span>
-                  )}
-                  <span className="font-bold text-slate-900">
-                    {it.soLuong !== undefined ? it.soLuong.toLocaleString('vi-VN') : 0}{' '}
-                    {it.itemUnit || 'sp'}
-                  </span>
-                </>
-              ) : (
-                <span className="font-medium text-slate-700">
-                  {it.linesCount || (it.lines ? it.lines.length : 0)} mặt hàng (Tổng SL:{' '}
-                  <strong className="text-slate-900">
-                    {it.tongSoLuong?.toLocaleString('vi-VN') || 0}
-                  </strong>
-                  )
-                </span>
-              )}
-
-              {it.customerName && (
-                <span className="text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                  {it.customerName}
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-bold text-xs text-blue-700 hover:underline cursor-pointer">
+                {it.soChungTu}
+              </span>
+              {count > 0 && (
+                <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                  {count} mặt hàng
                 </span>
               )}
             </div>
+            {it.orderCode && (
+              <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                <i className="bi bi-cart-check text-slate-400" />
+                <span>{it.orderCode}</span>
+              </span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      key: 'thoiGian',
+      title: 'Thời gian & Hoạt động',
+      width: '175px',
+      render: (it: AuditLogItem) => (
+        <div className="flex flex-col items-start gap-1 text-xs text-slate-700">
+          <span className="font-medium text-slate-800">{it.thoiGianFormatted}</span>
+          <span
+            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-semibold tracking-wide border ${
+              it.activityType === 'nhap'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : it.activityType === 'xuat'
+                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                : it.activityType === 'dieu-chinh'
+                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                : 'bg-purple-50 text-purple-700 border-purple-200'
+            }`}
+          >
+            {it.activityLabel}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: 'partner',
+      title: 'Nhà cung cấp / Khách hàng',
+      render: (it: AuditLogItem) => {
+        const isProductionIn =
+          it.activityType === 'nhap' && /nhập từ sản xuất/i.test(it.lyDo || '');
+        const isReturnIn =
+          it.activityType === 'nhap' && /trả lại|thu hồi|hoàn trả/i.test(it.lyDo || '');
 
-            {/* Bảng chi tiết con khi bấm mở rộng */}
-            {isExpanded && hasLines && (
-              <div className="mt-2 border border-slate-200 rounded-lg overflow-hidden bg-slate-50/70 p-2 text-xs">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-slate-500 text-[11px]">
-                      <th className="py-1 px-2 font-semibold">Mã</th>
-                      <th className="py-1 px-2 font-semibold">Tên hàng</th>
-                      <th className="py-1 px-2 font-semibold text-right">Số lượng</th>
-                      <th className="py-1 px-2 font-semibold">ĐVT</th>
-                      <th className="py-1 px-2 font-semibold text-right">Trước</th>
-                      <th className="py-1 px-2 font-semibold text-right">Sau</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {it.lines!.map((line, lIdx) => (
-                      <tr
-                        key={line.id || lIdx}
-                        className="border-b border-slate-200/50 hover:bg-white text-slate-700 text-[11px]"
-                      >
-                        <td className="py-1 px-2 font-mono text-slate-600">{line.itemCode}</td>
-                        <td className="py-1 px-2 font-medium">{line.itemName}</td>
-                        <td className="py-1 px-2 text-right font-bold text-slate-900">
-                          {line.soLuong?.toLocaleString('vi-VN')}
-                        </td>
-                        <td className="py-1 px-2 text-slate-500">{line.itemUnit}</td>
-                        <td className="py-1 px-2 text-right text-slate-500">
-                          {line.soLuongTruoc !== null && line.soLuongTruoc !== undefined
-                            ? line.soLuongTruoc.toLocaleString('vi-VN')
-                            : '-'}
-                        </td>
-                        <td className="py-1 px-2 text-right text-slate-500">
-                          {line.soLuongSau !== null && line.soLuongSau !== undefined
-                            ? line.soLuongSau.toLocaleString('vi-VN')
-                            : '-'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+        let resolvedType = it.partnerType || null;
+        let resolvedName = it.partnerName || it.customerName || '';
+        let resolvedAddress = it.partnerAddress || it.customerAddress || '';
+        let badgeLabel = it.partnerSubLabel || '';
+
+        if (it.activityType === 'nhap') {
+          if (resolvedType === 'supplier' || (!resolvedType && it.orderCode?.startsWith('DH-'))) {
+            resolvedType = 'supplier';
+            badgeLabel = badgeLabel || 'Nhà cung cấp';
+          } else if (isProductionIn) {
+            resolvedType = 'internal';
+            resolvedName = it.partnerName || 'Phân xưởng sản xuất & lắp ráp';
+            resolvedAddress = '';
+            badgeLabel = 'Nội bộ sản xuất';
+          } else if (resolvedName && isReturnIn) {
+            resolvedType = 'customer';
+            badgeLabel = badgeLabel || 'Khách hoàn trả';
+          } else if (resolvedName && resolvedType === 'customer' && !isReturnIn) {
+            // Tránh hiển thị nhầm khách hàng khi phiếu nhập chưa rõ nguồn đơn mua
+            resolvedType = 'supplier';
+            badgeLabel = badgeLabel || 'Đối tác nhập';
+          }
+        } else if (it.activityType === 'xuat') {
+          if (resolvedName && resolvedType !== 'internal') {
+            resolvedType = 'customer';
+            badgeLabel = badgeLabel || 'Khách hàng';
+          } else if (!resolvedName && /phân xưởng|sản xuất/i.test(it.lyDo || '')) {
+            resolvedType = 'internal';
+            resolvedName = 'Phân xưởng sản xuất & lắp ráp';
+            badgeLabel = 'Xuất sản xuất';
+          }
+        }
+
+        if (!resolvedName) {
+          return (
+            <span className="text-xs text-slate-400 italic">
+              {it.activityType === 'dieu-chinh'
+                ? 'Kiểm kê kho nội bộ'
+                : it.activityType === 'luan-chuyen'
+                ? 'Luân chuyển nội bộ'
+                : '—'}
+            </span>
+          );
+        }
+
+        const badgeStyles =
+          resolvedType === 'supplier'
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            : resolvedType === 'customer'
+            ? isReturnIn
+              ? 'bg-amber-50 text-amber-700 border-amber-200'
+              : 'bg-blue-50 text-blue-700 border-blue-200'
+            : 'bg-slate-100 text-slate-600 border-slate-200';
+
+        return (
+          <div className="flex flex-col gap-0.5 text-xs min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {badgeLabel && (
+                <span
+                  className={`inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold border shrink-0 ${badgeStyles}`}
+                >
+                  {badgeLabel}
+                </span>
+              )}
+              <span className="font-semibold text-slate-800">{resolvedName}</span>
+            </div>
+            {resolvedAddress && (
+              <div
+                className="flex items-center gap-1 text-[11px] text-slate-500"
+                title={resolvedAddress}
+              >
+                <i className="bi bi-geo-alt text-[10px] text-slate-400 shrink-0" />
+                <span className="truncate max-w-[380px]">{resolvedAddress}</span>
               </div>
             )}
           </div>
@@ -575,7 +583,7 @@ export const WarehouseAuditLogsView: React.FC<WarehouseAuditLogsViewProps> = ({
           setSearch(val);
           setPage(1);
         }}
-        searchPlaceholder="Tìm mã chứng từ, đơn hàng, khách hàng, mặt hàng, người thực hiện..."
+        searchPlaceholder="Tìm mã chứng từ, đơn hàng, nhà cung cấp, khách hàng, mặt hàng..."
         searchMinWidth="240px"
         showMenu={true}
         customFilters={
@@ -701,55 +709,192 @@ export const WarehouseAuditLogsView: React.FC<WarehouseAuditLogsViewProps> = ({
         }
       />
 
-      {/* Bảng Dữ liệu FullWidthTable */}
-      <div className="flex-1 overflow-auto" style={{ minHeight: 0 }}>
-        <FullWidthTable
-          loading={loading}
-          emptyText="Không có nhật ký hoạt động kho nào phù hợp với bộ lọc tìm kiếm"
-        >
-          <table className="w-full text-left border-collapse logistics-overview-compact-table" style={{ fontSize: '13px' }}>
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-500 uppercase tracking-wider sticky top-0 z-10">
-                {columns.map((col) => (
-                  <th
-                    key={col.key}
-                    style={{ width: col.width, textAlign: col.align || 'left' }}
-                    className="py-2.5 px-3 font-semibold text-slate-600"
-                  >
-                    {col.title}
-                  </th>
-                ))}
+      {/* Bảng Dữ liệu FullWidthTable (Sticky Header chuẩn) */}
+      <FullWidthTable
+        loading={loading}
+        emptyText="Không có nhật ký hoạt động kho nào phù hợp với bộ lọc tìm kiếm"
+      >
+        <table className="w-full text-left border-collapse logistics-overview-compact-table" style={{ fontSize: '13px' }}>
+          <thead className="sticky top-0 z-20 bg-slate-50">
+            <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+              {columns.map((col) => (
+                <th
+                  key={col.key}
+                  style={{
+                    width: col.width,
+                    textAlign: col.align || 'left',
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 20,
+                    backgroundColor: '#f8fafc',
+                    boxShadow: 'inset 0 -1px 0 #e2e8f0',
+                  }}
+                  className="py-2.5 px-3 font-semibold text-slate-600"
+                >
+                  {col.title}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {items.length === 0 ? (
+              <tr>
+                <td colSpan={columns.length} className="text-center py-12 text-slate-400 font-medium">
+                  Không có nhật ký hoạt động kho nào phù hợp với bộ lọc tìm kiếm
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {items.length === 0 ? (
-                <tr>
-                  <td colSpan={columns.length} className="text-center py-12 text-slate-400 font-medium">
-                    Không có nhật ký hoạt động kho nào phù hợp với bộ lọc tìm kiếm
-                  </td>
-                </tr>
-              ) : (
-                items.map((it) => (
-                  <tr
-                    key={it.id}
-                    className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors"
-                  >
-                    {columns.map((col) => (
-                      <td
-                        key={col.key}
-                        style={{ textAlign: col.align || 'left' }}
-                        className="py-2.5 px-3 align-top"
-                      >
-                        {col.render(it)}
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </FullWidthTable>
-      </div>
+            ) : (
+              items.map((it) => {
+                const isExpanded = expandedIds.includes(it.id);
+                const hasLines = Boolean(it.lines && it.lines.length > 0);
+                const totalQty =
+                  it.tongSoLuong ??
+                  (it.lines || []).reduce((sum, l) => sum + (Number(l.soLuong) || 0), 0);
+
+                return (
+                  <React.Fragment key={it.id}>
+                    <tr
+                      onClick={() => {
+                        if (hasLines) toggleExpand(it.id);
+                      }}
+                      className={`border-b border-slate-100 transition-colors ${
+                        hasLines ? 'cursor-pointer' : ''
+                      } ${isExpanded ? 'bg-blue-50/40' : 'hover:bg-slate-50/80'}`}
+                    >
+                      {columns.map((col) => (
+                        <td
+                          key={col.key}
+                          style={{ textAlign: col.align || 'left' }}
+                          className="py-2.5 px-3 align-middle"
+                        >
+                          {col.render(it)}
+                        </td>
+                      ))}
+                    </tr>
+
+                    {isExpanded && hasLines && (
+                      <tr className="bg-slate-50/70 border-b border-slate-200">
+                        <td colSpan={columns.length} style={{ padding: 0 }}>
+                          <div className="px-4 py-3 bg-slate-50/90 border-t border-slate-200/70">
+                            <div className="flex items-center justify-between gap-3 flex-wrap mb-2 text-xs">
+                              <div className="flex items-center gap-2 font-semibold text-slate-700">
+                                <i className="bi bi-box-seam text-blue-600" />
+                                <span>
+                                  Danh sách hàng hoá thuộc chứng từ{' '}
+                                  <span className="text-blue-700 font-bold">{it.soChungTu}</span>
+                                </span>
+                                <span className="text-slate-400">•</span>
+                                <span className="text-slate-600">
+                                  {it.lines!.length} mặt hàng (Tổng SL:{' '}
+                                  <strong className="text-slate-900">
+                                    {totalQty.toLocaleString('vi-VN')}
+                                  </strong>
+                                  )
+                                </span>
+                              </div>
+                              {it.lyDo && (
+                                <span className="text-[11px] text-slate-500 truncate max-w-[520px]" title={it.lyDo}>
+                                  Diễn giải: {it.lyDo}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="w-full border border-slate-200 rounded-lg overflow-hidden bg-white shadow-2xs">
+                              <table className="w-full text-left border-collapse">
+                                <thead>
+                                  <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-600 text-[11px] uppercase tracking-wider">
+                                    <th className="py-2 px-3 font-semibold text-center" style={{ width: '52px', position: 'static' }}>
+                                      STT
+                                    </th>
+                                    <th className="py-2 px-3 font-semibold" style={{ width: '160px', position: 'static' }}>
+                                      Mã hàng hoá
+                                    </th>
+                                    <th className="py-2 px-3 font-semibold" style={{ position: 'static' }}>
+                                      Tên vật tư / Hàng hoá
+                                    </th>
+                                    <th className="py-2 px-3 font-semibold text-center" style={{ width: '90px', position: 'static' }}>
+                                      ĐVT
+                                    </th>
+                                    <th className="py-2 px-3 font-semibold" style={{ width: '210px', position: 'static' }}>
+                                      Kho áp dụng
+                                    </th>
+                                    <th className="py-2 px-3 font-semibold text-right" style={{ width: '120px', position: 'static' }}>
+                                      Tồn trước
+                                    </th>
+                                    <th className="py-2 px-3 font-semibold text-right" style={{ width: '130px', position: 'static' }}>
+                                      Biến động
+                                    </th>
+                                    <th className="py-2 px-3 font-semibold text-right" style={{ width: '120px', position: 'static' }}>
+                                      Tồn sau
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {it.lines!.map((line, lIdx) => {
+                                    const signPrefix =
+                                      it.activityType === 'nhap'
+                                        ? '+'
+                                        : it.activityType === 'xuat'
+                                        ? '-'
+                                        : '';
+                                    const qtyColor =
+                                      it.activityType === 'nhap'
+                                        ? 'text-emerald-700'
+                                        : it.activityType === 'xuat'
+                                        ? 'text-blue-700'
+                                        : 'text-slate-900';
+
+                                    return (
+                                      <tr
+                                        key={line.id || lIdx}
+                                        className="border-b last:border-b-0 border-slate-100 hover:bg-slate-50/70 text-slate-700 text-xs"
+                                      >
+                                        <td className="py-2 px-3 text-center text-slate-400 font-medium">
+                                          {lIdx + 1}
+                                        </td>
+                                        <td className="py-2 px-3 font-mono text-[11.5px] font-semibold text-slate-700">
+                                          {line.itemCode}
+                                        </td>
+                                        <td className="py-2 px-3 font-medium text-slate-800">
+                                          {line.itemName}
+                                        </td>
+                                        <td className="py-2 px-3 text-center text-slate-500">
+                                          {line.itemUnit}
+                                        </td>
+                                        <td className="py-2 px-3 text-slate-600 text-[11.5px]">
+                                          {line.warehouseName || it.warehouseName || 'Kho chính'}
+                                        </td>
+                                        <td className="py-2 px-3 text-right text-slate-500 tabular-nums">
+                                          {line.soLuongTruoc !== null && line.soLuongTruoc !== undefined
+                                            ? line.soLuongTruoc.toLocaleString('vi-VN')
+                                            : '—'}
+                                        </td>
+                                        <td className={`py-2 px-3 text-right font-bold tabular-nums ${qtyColor}`}>
+                                          {signPrefix}
+                                          {line.soLuong?.toLocaleString('vi-VN')}
+                                        </td>
+                                        <td className="py-2 px-3 text-right font-semibold text-slate-800 tabular-nums">
+                                          {line.soLuongSau !== null && line.soLuongSau !== undefined
+                                            ? line.soLuongSau.toLocaleString('vi-VN')
+                                            : '—'}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </FullWidthTable>
 
       {/* Pagination Component chuẩn của hệ thống */}
       <div className="p-3 border-t border-slate-200 bg-white">

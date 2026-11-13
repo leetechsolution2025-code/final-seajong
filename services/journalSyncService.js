@@ -279,6 +279,9 @@ function _runSyncAllSubledgersToJournal(db) {
                   const payEntryId = `JE-REC-PAY-${rec.id}-${pe.id || pIdx}`;
                   const payEntryNum = pe.code || `PT-${(rec.code || '').replace(/[^a-zA-Z0-9]/g, '')}-${pIdx + 1}`;
                   const pDate = normalizeDate(pe.date || recDate);
+                  const isCashRec = pe.debitAccount === '1111' || String(pe.paymentMethod || '').toLowerCase().includes('tiền mặt');
+                  const recAccCode = pe.debitAccount || (isCashRec ? '1111' : '1121');
+                  const recAccName = recAccCode === '1111' ? 'Tiền Việt Nam (Tiền mặt quỹ)' : 'Tiền gửi ngân hàng (VND - Vietcombank)';
 
                   insertEntryStmt.run(
                     payEntryId,
@@ -293,17 +296,17 @@ function _runSyncAllSubledgersToJournal(db) {
                     rec.manager_name || 'Kế toán thanh toán'
                   );
 
-                  // Dòng Nợ 1121
+                  // Dòng Nợ 1111 / 1121
                   insertLineStmt.run(
                     `${payEntryId}-L1`,
                     payEntryId,
                     1,
-                    '1121',
-                    '1121',
-                    'Tiền gửi ngân hàng (VND - Vietcombank)',
+                    recAccCode,
+                    recAccCode,
+                    recAccName,
                     'DEBIT',
                     pAmount,
-                    `Giấy báo Có Vietcombank thu tiền từ ${rec.customer_name}`,
+                    recAccCode === '1111' ? `Phiếu thu tiền mặt từ ${rec.customer_name}` : `Giấy báo Có Vietcombank thu tiền từ ${rec.customer_name}`,
                     rec.customer_name
                   );
 
@@ -457,13 +460,26 @@ function _runSyncAllSubledgersToJournal(db) {
               }
 
               if (Array.isArray(entriesList) && entriesList.length > 0) {
-                entriesList.forEach((pe, pIdx) => {
+                const explicitPayments = entriesList.filter(
+                  (pe) =>
+                    pe.type === 'payment' ||
+                    pe.voucherType === 'payment' ||
+                    String(pe.code || '').startsWith('PC-')
+                );
+                const paymentRowsToJournal = explicitPayments.length > 0 ? explicitPayments : entriesList;
+                let journaledSum = 0;
+
+                paymentRowsToJournal.forEach((pe, pIdx) => {
                   const pAmount = Number(pe.paidAmount) || 0;
                   if (pAmount <= 0) return;
+                  journaledSum += pAmount;
 
                   const disbEntryId = `JE-PAY-DISB-${pay.id}-${pe.id || pIdx}`;
                   const disbEntryNum = pe.code || `UNC-${(pay.code || '').replace(/[^a-zA-Z0-9]/g, '')}-${pIdx + 1}`;
                   const pDate = normalizeDate(pe.date || payDate);
+                  const isCashPay = pe.creditAccount === '1111' || String(pe.paymentMethod || '').toLowerCase().includes('tiền mặt');
+                  const payAccCode = pe.creditAccount || (isCashPay ? '1111' : '1121');
+                  const payAccName = payAccCode === '1111' ? 'Tiền Việt Nam (Tiền mặt quỹ)' : 'Tiền gửi ngân hàng (VND - Vietcombank)';
 
                   insertEntryStmt.run(
                     disbEntryId,
@@ -492,22 +508,65 @@ function _runSyncAllSubledgersToJournal(db) {
                     pay.supplier_name
                   );
 
-                  // Dòng Có 1121
+                  // Dòng Có 1111 / 1121
                   insertLineStmt.run(
                     `${disbEntryId}-L2`,
                     disbEntryId,
+                    2,
+                    payAccCode,
+                    payAccCode,
+                    payAccName,
+                    'CREDIT',
+                    pAmount,
+                    payAccCode === '1111' ? `Chi tiền mặt thanh toán cho ${pay.supplier_name}` : `Ủy nhiệm chi chuyển khoản qua ngân hàng`,
+                    payAccCode === '1111' ? 'Thủ quỹ Seajong' : 'Ngân hàng TMCP Ngoại Thương VN (VCB)'
+                  );
+
+                  syncedCount++;
+                });
+
+                const unjournaledPaid = Math.round(paidVal - journaledSum);
+                if (explicitPayments.length > 0 && unjournaledPaid > 0) {
+                  const remEntryId = `JE-PAY-DISB-${pay.id}-BASE`;
+                  const remEntryNum = `UNC-${(pay.code || '').replace(/[^a-zA-Z0-9]/g, '')}`;
+                  insertEntryStmt.run(
+                    remEntryId,
+                    remEntryNum,
+                    payDate,
+                    payDate,
+                    pay.code,
+                    'CASH',
+                    'Quỹ và Ngân hàng',
+                    `Thanh toán tiền hàng kỳ đầu cho ${pay.supplier_name}`,
+                    unjournaledPaid,
+                    pay.accountant || 'Kế toán thanh toán'
+                  );
+                  insertLineStmt.run(
+                    `${remEntryId}-L1`,
+                    remEntryId,
+                    1,
+                    '331',
+                    '331',
+                    'Phải trả cho người bán (Nhà cung cấp)',
+                    'DEBIT',
+                    unjournaledPaid,
+                    `Thanh toán trừ công nợ nhà cung cấp ${pay.supplier_name}`,
+                    pay.supplier_name
+                  );
+                  insertLineStmt.run(
+                    `${remEntryId}-L2`,
+                    remEntryId,
                     2,
                     '1121',
                     '1121',
                     'Tiền gửi ngân hàng (VND - Vietcombank)',
                     'CREDIT',
-                    pAmount,
+                    unjournaledPaid,
                     `Ủy nhiệm chi chuyển khoản qua ngân hàng Vietcombank`,
                     'Ngân hàng TMCP Ngoại Thương VN (VCB)'
                   );
-
                   syncedCount++;
-                });
+                }
               } else if (paidVal > 0) {
                 const disbEntryId = `JE-PAY-DISB-${pay.id}`;
                 const disbEntryNum = `UNC-${(pay.code || '').replace(/[^a-zA-Z0-9]/g, '')}`;

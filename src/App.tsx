@@ -11,6 +11,7 @@ export const App: React.FC = () => {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<MainLayout />}>
         <Route index element={<DashboardView />} />
+        <Route path="/:deptCode/:menuKey" element={<DeptRedirector />} />
         <Route path="/:deptCode" element={<DeptRedirector />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

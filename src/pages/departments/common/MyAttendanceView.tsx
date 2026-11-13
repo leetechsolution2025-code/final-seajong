@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { DEFAULT_WORK_LOCATIONS, type WorkLocationItem } from '../bom/IntranetSetupView';
-import { DEFAULT_HOLIDAY_RULES_DATA, DEFAULT_HOLIDAY_PERIODS_2026 } from '../bom/HolidayRulesView';
+import { DEFAULT_HOLIDAY_RULES_DATA, DEFAULT_HOLIDAY_PERIODS_2026, type HolidayRulesData } from '../bom/HolidayRulesView';
+import { DEFAULT_LABOR_RULES, type LaborRulesData, type ShiftConfig } from '../bom/LaborRulesView';
 import {
   GeoAlt,
   ArrowRepeat,
@@ -13,7 +14,6 @@ import {
   CalendarCheck,
   CashCoin,
   ExclamationTriangle,
-  InfoCircle,
   Ethernet,
   PcDisplay,
   CheckCircleFill,
@@ -22,8 +22,11 @@ import {
   ForkKnife,
   ChevronLeft,
   BoxArrowRight,
+  Clock,
 } from 'react-bootstrap-icons';
 import { Button } from '../../../components/common/Button';
+import { Badge } from '../../../components/common/Badge';
+import { Offcanvas } from '../../../components/common/Offcanvas';
 import { Select } from '../../../components/common/Select';
 import { useToast } from '../../../components/ui/Toast';
 import { useAuth } from '../../../context/AuthContext';
@@ -301,79 +304,97 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
   });
 
   // State lưu toàn bộ dữ liệu nội quy lao động và nghỉ lễ từ DB
-  const [laborRulesData, setLaborRulesData] = useState<any>(null);
-  const [holidayRulesData, setHolidayRulesData] = useState<any>(null);
+  const [laborRulesData, setLaborRulesData] = useState<LaborRulesData | null>(null);
+  const [holidayRulesData, setHolidayRulesData] = useState<HolidayRulesData | null>(null);
+  const [rulesTab, setRulesTab] = useState<'shift' | 'violation' | 'overtime' | 'holiday'>('shift');
+  const [rulesShiftId, setRulesShiftId] = useState<string>('');
 
   // Tải cấu hình nội quy lao động và lịch nghỉ lễ từ API DB SQLite
-  useEffect(() => {
-    const fetchAllRules = async () => {
-      // 1. Tải Nội quy lao động
-      try {
-        const res = await fetch('/api/labor-rules');
-        if (res.ok) {
-          const data = await res.json();
-          if (data && Array.isArray(data.shifts) && data.shifts.length > 0) {
-            setLaborRulesData(data);
-            const currentShift = data.shifts.find((s: any) => s.id === data.selectedShiftId) || data.shifts[0];
-            if (currentShift) {
-              const aStart = currentShift.afternoonStart === '13:00' ? '13:30' : (currentShift.afternoonStart || '13:30');
-              const aEnd = currentShift.afternoonEnd === '17:00' ? '17:30' : (currentShift.afternoonEnd || '17:30');
-              setShiftHours({
-                morningStart: currentShift.morningStart || '08:00',
-                morningEnd: currentShift.morningEnd || '12:00',
-                afternoonStart: aStart,
-                afternoonEnd: aEnd,
-              });
-            }
-          }
-        }
-      } catch {}
+  const fetchAllRules = useCallback(async () => {
+    let loadedLaborRules: LaborRulesData | null = null;
 
-      // Fallback localStorage cho labor_rules nếu API chưa có
+    // 1. Tải Nội quy lao động trực tiếp từ DB
+    try {
+      const res = await fetch('/api/labor-rules');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.shifts) && data.shifts.length > 0) {
+          loadedLaborRules = data;
+          setLaborRulesData(data);
+        }
+      }
+    } catch {}
+
+    // Fallback localStorage nếu API chưa phản hồi
+    if (!loadedLaborRules) {
       try {
         const cached = localStorage.getItem('seajong_labor_rules');
         if (cached) {
           const data = JSON.parse(cached);
-          if (!laborRulesData && data) setLaborRulesData((prev: any) => prev || data);
           if (data && Array.isArray(data.shifts) && data.shifts.length > 0) {
-            const currentShift = data.shifts.find((s: any) => s.id === data.selectedShiftId) || data.shifts[0];
-            if (currentShift) {
-              const aStart = currentShift.afternoonStart === '13:00' ? '13:30' : (currentShift.afternoonStart || '13:30');
-              const aEnd = currentShift.afternoonEnd === '17:00' ? '17:30' : (currentShift.afternoonEnd || '17:30');
-              setShiftHours({
-                morningStart: currentShift.morningStart || '08:00',
-                morningEnd: currentShift.morningEnd || '12:00',
-                afternoonStart: aStart,
-                afternoonEnd: aEnd,
-              });
-            }
+            loadedLaborRules = data;
+            setLaborRulesData((prev) => prev || data);
           }
         }
       } catch {}
+    }
 
-      // 2. Tải Lịch nghỉ lễ và Phép năm
-      try {
-        const hRes = await fetch('/api/holiday-rules');
-        if (hRes.ok) {
-          const hData = await hRes.json();
-          if (hData && Array.isArray(hData.periods)) {
-            setHolidayRulesData(hData);
-          }
+    if (loadedLaborRules && Array.isArray(loadedLaborRules.shifts) && loadedLaborRules.shifts.length > 0) {
+      const empDept = String(
+        dbUser?.department || (activeUser as any)?.department || _department || ''
+      )
+        .trim()
+        .toLowerCase();
+      const matchedByDept = empDept
+        ? loadedLaborRules.shifts.find((s: ShiftConfig) =>
+            String(s.departmentScope || '').toLowerCase().includes(empDept)
+          )
+        : undefined;
+      const currentShift =
+        matchedByDept ||
+        loadedLaborRules.shifts.find((s: ShiftConfig) => s.id === loadedLaborRules?.selectedShiftId) ||
+        loadedLaborRules.shifts[0];
+
+      if (currentShift) {
+        setShiftHours({
+          morningStart: currentShift.morningStart || '08:00',
+          morningEnd: currentShift.morningEnd || '12:00',
+          afternoonStart: currentShift.afternoonStart || '13:30',
+          afternoonEnd: currentShift.afternoonEnd || '17:30',
+        });
+        setRulesShiftId((prev) =>
+          prev && loadedLaborRules!.shifts.some((s) => s.id === prev) ? prev : currentShift.id
+        );
+      }
+    }
+
+    // 2. Tải Lịch nghỉ lễ và Phép năm
+    let loadedHolidayRules: HolidayRulesData | null = null;
+    try {
+      const hRes = await fetch('/api/holiday-rules');
+      if (hRes.ok) {
+        const hData = await hRes.json();
+        if (hData && Array.isArray(hData.periods)) {
+          loadedHolidayRules = hData;
+          setHolidayRulesData(hData);
         }
-      } catch {}
+      }
+    } catch {}
 
-      // Fallback localStorage cho holiday_rules nếu API chưa có
+    if (!loadedHolidayRules) {
       try {
         const hCached = localStorage.getItem('seajong_holiday_rules');
         if (hCached) {
           const hData = JSON.parse(hCached);
-          if (hData) setHolidayRulesData((prev: any) => prev || hData);
+          if (hData) setHolidayRulesData((prev) => prev || hData);
         }
       } catch {}
-    };
+    }
+  }, [dbUser?.department, activeUser, _department]);
 
+  useEffect(() => {
     fetchAllRules();
-  }, []);
+  }, [fetchAllRules]);
 
   // Chuyển đổi chuỗi giờ phút sang số phút trong ngày
   const parseTimeToMinutes = (timeStr: string, fallbackMins: number): number => {
@@ -759,6 +780,13 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
   const [approverName, setApproverName] = useState<string>('Lê Công Vụ - Ban Giám đốc');
   // State điều khiển offcanvas Quy tắc tính công rộng 400px
   const [showRulesOffcanvas, setShowRulesOffcanvas] = useState<boolean>(false);
+
+  // Đồng bộ lại Nội quy lao động & Nghỉ lễ mới nhất từ CSDL mỗi khi mở Offcanvas
+  useEffect(() => {
+    if (showRulesOffcanvas) {
+      fetchAllRules();
+    }
+  }, [showRulesOffcanvas, fetchAllRules]);
 
   // Xác thực mạng LAN / WiFi nội bộ và nhận diện trạng thái kết nối từ DB
   const verifyLanNetwork = async (showNotice = false) => {
@@ -5501,431 +5529,490 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       )}
 
       {/* ── OFFCANVAS HIỂN THỊ NỘI QUY LAO ĐỘNG VÀ QUY TẮC TÍNH CÔNG RỘNG 400PX ── */}
-      {showRulesOffcanvas && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1200 }}>
-          <div
-            onClick={() => setShowRulesOffcanvas(false)}
-            style={{
-              position: 'fixed',
-              inset: 0,
-              backgroundColor: 'rgba(15, 23, 42, 0.45)',
-              backdropFilter: 'blur(3px)',
-              transition: 'opacity 0.2s ease-in-out',
-            }}
-          />
-
-          <div
-            className="app-custom-drawer"
-            style={{
-              position: 'fixed',
-              top: 0,
-              right: 0,
-              left: isMobileScreen ? 0 : undefined,
-              bottom: 0,
-              width: isMobileScreen ? '100vw' : '400px',
-              maxWidth: '100vw',
-              height: '100dvh',
-              backgroundColor: '#ffffff',
-              boxShadow: '-6px 0 25px rgba(0, 0, 0, 0.12)',
-              zIndex: 1201,
-              display: 'flex',
-              flexDirection: 'column',
-              fontFamily: "'Roboto Condensed', sans-serif",
-              animation: 'slideInRight 0.2s ease-out',
-            }}
-          >
-            <div
-              style={{
-                padding: '12px 14px',
-                borderBottom: '1px solid #e2e8f0',
-                backgroundColor: '#ffffff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '6px',
-                    backgroundColor: '#dcfce7',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#16a34a',
-                  }}
-                >
-                  <JournalText size={17} />
-                </div>
-                <div>
-                  <h3
-                    style={{
-                      margin: 0,
-                      fontSize: '0.875rem',
-                      fontWeight: 800,
-                      color: '#0f172a',
-                      letterSpacing: '0.2px',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    Quy tắc tính công
-                  </h3>
-                  <div style={{ fontSize: '0.6875rem', color: '#64748b', fontWeight: 500 }}>
-                    Nội quy lao động Seajong
-                  </div>
-                </div>
-              </div>
-
+      <Offcanvas
+        isOpen={showRulesOffcanvas}
+        onClose={() => setShowRulesOffcanvas(false)}
+        width="400px"
+        title="Quy tắc tính công"
+        description="Đồng bộ tự động từ Nội quy lao động"
+        icon={<JournalText size={20} className="text-emerald-600" />}
+        confirmText="Đã hiểu quy tắc"
+        onConfirm={() => setShowRulesOffcanvas(false)}
+        subHeader={
+          <div className="p-2 bg-slate-50 border-b border-slate-200">
+            <div className="grid grid-cols-4 gap-1 p-0.5 bg-slate-200/70 rounded-lg text-xs font-semibold">
               <button
                 type="button"
-                onClick={() => setShowRulesOffcanvas(false)}
-                style={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: '6px',
-                  border: '1px solid #e2e8f0',
-                  backgroundColor: '#ffffff',
-                  color: '#64748b',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#f1f5f9';
-                  e.currentTarget.style.color = '#0f172a';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#ffffff';
-                  e.currentTarget.style.color = '#64748b';
-                }}
+                onClick={() => setRulesTab('shift')}
+                className={`py-1.5 px-1 rounded-md text-center transition-all truncate cursor-pointer ${
+                  rulesTab === 'shift'
+                    ? 'bg-white text-blue-700 shadow-2xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
               >
-                <X size={16} />
+                Ca làm việc
+              </button>
+              <button
+                type="button"
+                onClick={() => setRulesTab('violation')}
+                className={`py-1.5 px-1 rounded-md text-center transition-all truncate cursor-pointer ${
+                  rulesTab === 'violation'
+                    ? 'bg-white text-amber-700 shadow-2xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Vi phạm
+              </button>
+              <button
+                type="button"
+                onClick={() => setRulesTab('overtime')}
+                className={`py-1.5 px-1 rounded-md text-center transition-all truncate cursor-pointer ${
+                  rulesTab === 'overtime'
+                    ? 'bg-white text-indigo-700 shadow-2xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                OT & Ăn ca
+              </button>
+              <button
+                type="button"
+                onClick={() => setRulesTab('holiday')}
+                className={`py-1.5 px-1 rounded-md text-center transition-all truncate cursor-pointer ${
+                  rulesTab === 'holiday'
+                    ? 'bg-white text-teal-700 shadow-2xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Nghỉ lễ & Phép
               </button>
             </div>
-
-            <div
-              style={{
-                flex: '1 1 auto',
-                overflowY: 'auto',
-                padding: '10px 12px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-                backgroundColor: '#ffffff',
-              }}
-            >
-              {/* THẺ 1: KHUNG GIỜ LÀM VIỆC VÀ CÔNG CHUẨN */}
-              <div
-                style={{
-                  border: '1px solid #bfdbfe',
-                  borderRadius: '6px',
-                  padding: '9px 11px',
-                  backgroundColor: '#f8fafc',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontSize: '0.75rem',
-                    fontWeight: 800,
-                    color: '#0284c7',
-                    marginBottom: '6px',
-                    paddingBottom: '3px',
-                    borderBottom: '1px solid #e2e8f0',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  <CalendarCheck size={13} /> 1. Khung giờ làm việc và công chuẩn
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.7188rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#475569', fontWeight: 600 }}>Ca sáng:</span>
-                    <span style={{ fontWeight: 700, color: '#0f172a' }}>
-                      {shiftHours.morningStart || '08:00'} đến {shiftHours.morningEnd || '12:00'} - Tích lũy 0,5 công
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#475569', fontWeight: 600 }}>Nghỉ trưa:</span>
-                    <span style={{ color: '#64748b' }}>
-                      {shiftHours.morningEnd || '12:00'} đến {shiftHours.afternoonStart || '13:30'} - Không tính giờ làm
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#475569', fontWeight: 600 }}>Ca chiều:</span>
-                    <span style={{ fontWeight: 700, color: '#0f172a' }}>
-                      {shiftHours.afternoonStart || '13:30'} đến {shiftHours.afternoonEnd || '17:30'} - Tích lũy 0,5 công
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #cbd5e1', paddingTop: '3px', marginTop: '1px' }}>
-                    <span style={{ color: '#15803d', fontWeight: 700 }}>Tổng ngày công chuẩn:</span>
-                    <span style={{ fontWeight: 800, color: '#15803d' }}>
-                      1,0 công với {laborRulesData?.shifts?.[0]?.workHours || 8} giờ làm việc
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0369a1' }}>
-                    <span style={{ fontWeight: 700 }}>Công chuẩn tháng (N_std):</span>
-                    <span style={{ fontWeight: 600 }}>Tổng ngày tháng - số ngày CN (T7 tính đủ)</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* THẺ 2: ĐIỀU KIỆN QUẸT THẺ VÀ TÍNH CÔNG */}
-              <div
-                style={{
-                  border: '1px solid #bbf7d0',
-                  borderRadius: '6px',
-                  padding: '9px 11px',
-                  backgroundColor: '#ffffff',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontSize: '0.75rem',
-                    fontWeight: 800,
-                    color: '#15803d',
-                    marginBottom: '5px',
-                    paddingBottom: '3px',
-                    borderBottom: '1px solid #e2e8f0',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  <GeoAlt size={13} /> 2. Quy định quẹt thẻ và điều kiện tính công
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.7188rem', color: '#334155', lineHeight: 1.35 }}>
-                  <div>
-                    • <strong>Điểm danh hợp lệ:</strong> Quẹt thẻ bán kính GPS ≤ 300m quanh cơ sở hoặc kết nối mạng WiFi/LAN nội bộ Seajong.
-                  </div>
-                  <div>
-                    • <strong>Đủ 2 lượt quẹt mỗi ca:</strong> Ca sáng và Ca chiều độc lập, bắt buộc đủ cả Vào và Ra. Quên quẹt thẻ (chỉ có 1 đầu) tính 0,0 công ca đó.
-                  </div>
-                  <div>
-                    • <strong>Thời lượng ca tối thiểu:</strong> Thời gian làm việc thực tế của ca dưới 60 phút sẽ tính 0,0 công.
-                  </div>
-                  <div>
-                    • <strong>Cho phép điểm danh sớm:</strong> Tối đa 60 phút trước giờ làm việc.
-                  </div>
-                  <div>
-                    • <strong>Nhân viên công tác ngoài:</strong> Tích chọn Công tác ngoài văn phòng và ghi rõ địa điểm công trình phụ trách.
-                  </div>
-                  <div>
-                    • <strong>Chấm công ngày Chủ nhật:</strong> Hệ thống mặc định khoá các nút chấm công vào ngày Chủ nhật, chỉ mở cho các tài khoản có đăng ký làm thêm giờ được phê duyệt.
-                  </div>
-                </div>
-              </div>
-
-              {/* THẺ 3: CHẾ TÀI ĐI MUỘN VÀ VỀ SỚM */}
-              <div
-                style={{
-                  border: '1px solid #fed7aa',
-                  borderRadius: '6px',
-                  padding: '9px 11px',
-                  backgroundColor: '#fff7ed',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontSize: '0.75rem',
-                    fontWeight: 800,
-                    color: '#c2410c',
-                    marginBottom: '5px',
-                    paddingBottom: '3px',
-                    borderBottom: '1px solid #fed7aa',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  <ExclamationTriangle size={13} /> 3. Chế tài đi muộn và về sớm (xét theo ca 0,5 công)
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.7188rem', color: '#431407' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #fdba74', paddingBottom: '2px' }}>
-                    <span>Thời gian ân hạn cho phép:</span>
-                    <span style={{ fontWeight: 700, color: '#16a34a' }}>
-                      ≤ {laborRulesData?.gracePeriodMinutes || 30} phút không tính vi phạm (đủ 0,5 công)
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #fdba74', paddingBottom: '2px' }}>
-                    <span>Vi phạm 31 đến 60 phút:</span>
-                    <span style={{ fontWeight: 700, color: '#c2410c' }}>Trừ 0,125 công (còn 0,375 công) hoặc phạt 100.000 đ</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #fdba74', paddingBottom: '2px' }}>
-                    <span>Vi phạm 61 đến 120 phút:</span>
-                    <span style={{ fontWeight: 700, color: '#b91c1c' }}>Trừ 0,25 công (còn 0,25 công) hoặc phạt 150.000 đ</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #fdba74', paddingBottom: '2px' }}>
-                    <span>Nghiêm trọng (trên 120 phút):</span>
-                    <span style={{ fontWeight: 700, color: '#dc2626' }}>Trừ 0,5 công (0,0 công) hoặc phạt 200.000 đ</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: '#9a3412', paddingTop: '1px' }}>
-                    <span>Thời hạn nộp đơn giải trình:</span>
-                    <span style={{ fontWeight: 700 }}>Trong vòng {laborRulesData?.explanationDeadlineHours || 48} giờ</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* THẺ 4: LÀM THÊM GIỜ (OT) VÀ SUẤT ĂN */}
-              <div
-                style={{
-                  border: '1px solid #ddd6fe',
-                  borderRadius: '6px',
-                  padding: '9px 11px',
-                  backgroundColor: '#f8fafc',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontSize: '0.75rem',
-                    fontWeight: 800,
-                    color: '#7c3aed',
-                    marginBottom: '5px',
-                    paddingBottom: '3px',
-                    borderBottom: '1px solid #e2e8f0',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  <CashCoin size={13} /> 4. Chế độ làm thêm giờ (OT) và Suất ăn
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.7188rem', color: '#334155' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>• Hệ số làm thêm giờ (OT):</span>
-                    <span style={{ fontWeight: 700, color: '#7c3aed' }}>
-                      Ngày thường {laborRulesData?.overtimeRule?.weekdayRatePercent || 150}% • CN {laborRulesData?.overtimeRule?.weekendRatePercent || 200}% • Lễ Tết {laborRulesData?.overtimeRule?.holidayRatePercent || 300}%
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>• Ca đêm (22:00 - 06:00):</span>
-                    <span style={{ fontWeight: 700, color: '#0284c7' }}>
-                      Cộng thêm {laborRulesData?.overtimeRule?.nightBonusPercent || 30}% phụ cấp + hỗ trợ {(laborRulesData?.overtimeRule?.nightTransportSupportAmount || 50000).toLocaleString('vi-VN')} đ
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #cbd5e1', paddingTop: '3px' }}>
-                    <span>• Quy chế suất ăn ca:</span>
-                    <span style={{ fontWeight: 600, color: '#0f172a' }}>
-                      Chốt trưa trước {laborRulesData?.lunchRule?.lunchDeadlineMorning || '09:00'} • tối trước {laborRulesData?.lunchRule?.dinnerDeadlineAfternoon || '15:30'}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>
-                    Đăng ký nhưng bỏ suất ăn: Phạt <strong>{(laborRulesData?.lunchRule?.missedMealPenalty || 35000).toLocaleString('vi-VN')} đ/suất</strong>. Phụ cấp cơm tối tăng ca ≥ 2h: <strong>{(laborRulesData?.overtimeRule?.dinnerAllowanceAmount || 35000).toLocaleString('vi-VN')} đ</strong>.
-                  </div>
-                </div>
-              </div>
-
-              {/* THẺ 5: NGHỈ LỄ, TẾT VÀ PHÉP NĂM */}
-              <div
-                style={{
-                  border: '1px solid #99f6e4',
-                  borderRadius: '6px',
-                  padding: '9px 11px',
-                  backgroundColor: '#ffffff',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontSize: '0.75rem',
-                    fontWeight: 800,
-                    color: '#0f766e',
-                    marginBottom: '5px',
-                    paddingBottom: '3px',
-                    borderBottom: '1px solid #e2e8f0',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  <Briefcase size={13} /> 5. Nghỉ lễ, Tết và phép năm (Luật định)
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.7188rem', color: '#334155', lineHeight: 1.35 }}>
-                  <div>
-                    • <strong>Kỳ nghỉ lễ, Tết hưởng 100% lương:</strong> Tết Dương Lịch, Tết Âm Lịch, Giỗ Tổ Hùng Vương, 30/04 - 01/05, Quốc Khánh 02/09, Ngày Văn hoá Việt Nam (24/11).
-                  </div>
-                  <div>
-                    • <strong>Nghỉ phép năm:</strong> Định mức <strong>{holidayRulesData?.annualLeavePolicy?.standardLeaveDaysPerYear || 12} ngày/năm</strong>. Cứ đủ <strong>{holidayRulesData?.annualLeavePolicy?.seniorityBonusYears || 5} năm</strong> thâm niên được tăng thêm <strong>{holidayRulesData?.annualLeavePolicy?.seniorityBonusDays || 1} ngày</strong> phép.
-                  </div>
-                  <div>
-                    • <strong>Nghỉ việc riêng hưởng nguyên lương:</strong> Bản thân kết hôn (3 ngày), con kết hôn (1 ngày), tứ thân phụ mẫu / vợ / chồng / con mất (3 ngày).
-                  </div>
-                </div>
-              </div>
-
-              {/* THẺ 6: GIẢI TRÌNH CHẤM CÔNG */}
-              <div
-                style={{
-                  border: '1px solid #bae6fd',
-                  borderRadius: '6px',
-                  padding: '8px 11px',
-                  backgroundColor: '#f0f9ff',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontSize: '0.75rem',
-                    fontWeight: 800,
-                    color: '#0369a1',
-                    marginBottom: '3px',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  <InfoCircle size={13} /> 6. Quy trình nộp phiếu giải trình công
-                </div>
-                <div style={{ fontSize: '0.6875rem', color: '#075985', lineHeight: 1.35 }}>
-                  • Quên quẹt thẻ hoặc sự cố thiết bị: Gửi phiếu giải trình trong vòng <strong>48 giờ</strong> để quản lý duyệt. Sau 48 giờ hệ thống tự động khóa và tính nghỉ không phép.
-                </div>
-              </div>
-            </div>
-
-            <div
-              style={{
-                padding: '10px 14px',
-                paddingBottom: 'max(10px, calc(8px + env(safe-area-inset-bottom, 0px)))',
-                borderTop: '1px solid #e2e8f0',
-                backgroundColor: '#ffffff',
-              }}
-            >
-              <Button
-                type="button"
-                variant="primary"
-                onClick={() => setShowRulesOffcanvas(false)}
-                style={{
-                  width: '100%',
-                  fontWeight: 700,
-                  fontSize: '0.8438rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  padding: '7px 14px',
-                  backgroundColor: '#4f46e5',
-                  borderColor: '#4f46e5',
-                }}
-              >
-                Đã hiểu quy tắc
-              </Button>
-            </div>
           </div>
-        </div>
-      )}
+        }
+      >
+        {(() => {
+          const effectiveLaborRules = laborRulesData || DEFAULT_LABOR_RULES;
+          const shiftsList = effectiveLaborRules.shifts || DEFAULT_LABOR_RULES.shifts;
+          const activeLaborShift =
+            shiftsList.find((s) => s.id === rulesShiftId) ||
+            shiftsList.find((s) => s.id === effectiveLaborRules.selectedShiftId) ||
+            shiftsList[0];
+          const lunchRule = effectiveLaborRules.lunchRule || DEFAULT_LABOR_RULES.lunchRule;
+          const overtimeRule = effectiveLaborRules.overtimeRule || DEFAULT_LABOR_RULES.overtimeRule;
+          const violationRules = effectiveLaborRules.violationRules || DEFAULT_LABOR_RULES.violationRules;
+          const effectiveHolidayRules = holidayRulesData || DEFAULT_HOLIDAY_RULES_DATA;
+          const annualLeave = effectiveHolidayRules.annualLeavePolicy || DEFAULT_HOLIDAY_RULES_DATA.annualLeavePolicy;
+          const holidayPeriods = effectiveHolidayRules.periods || DEFAULT_HOLIDAY_PERIODS_2026;
+
+          return (
+            <div className="space-y-3.5 text-xs text-slate-700 pb-2">
+              {/* TAB 1: CA LÀM VIỆC VÀ CÔNG CHUẨN */}
+              {rulesTab === 'shift' && (
+                <div className="space-y-3">
+                  {/* Selector nếu có nhiều ca */}
+                  {shiftsList.length > 1 && (
+                    <div>
+                      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Chọn ca quy định
+                      </div>
+                      <div className="flex gap-1.5 p-1 bg-slate-100 rounded-lg">
+                        {shiftsList.map((s) => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => setRulesShiftId(s.id)}
+                            className={`flex-1 py-1.5 px-2 text-xs font-semibold rounded-md transition-all truncate cursor-pointer ${
+                              activeLaborShift.id === s.id
+                                ? 'bg-white text-blue-700 shadow-2xs font-bold'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                            title={s.name}
+                          >
+                            {s.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Thông tin ca được chọn */}
+                  <div className="p-2.5 rounded-lg bg-blue-50/60 border border-blue-200">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-bold text-slate-900">{activeLaborShift.name}</span>
+                      <span className="font-mono font-bold text-blue-700 text-xs">
+                        {activeLaborShift.workHours || 8}h / 1.0 công
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 leading-snug">
+                      Phạm vi: {activeLaborShift.departmentScope || 'Toàn công ty'}
+                    </div>
+                  </div>
+
+                  {/* Lịch trình các khung giờ */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="p-2.5 rounded-lg border border-slate-200 bg-white">
+                      <div className="text-[11px] font-bold text-slate-500 uppercase">Ca sáng (+0.5 công)</div>
+                      <div className="font-mono font-bold text-slate-900 text-sm mt-0.5">
+                        {activeLaborShift.morningStart} - {activeLaborShift.morningEnd}
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">Vào sớm ≤ {activeLaborShift.checkInEarlyLimitMinutes || 60}p</div>
+                    </div>
+                    <div className="p-2.5 rounded-lg border border-slate-200 bg-white">
+                      <div className="text-[11px] font-bold text-slate-500 uppercase">Ca chiều (+0.5 công)</div>
+                      <div className="font-mono font-bold text-slate-900 text-sm mt-0.5">
+                        {activeLaborShift.afternoonStart} - {activeLaborShift.afternoonEnd}
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">Ra muộn ≤ {activeLaborShift.checkOutLateLimitMinutes || 120}p</div>
+                    </div>
+                  </div>
+
+                  {/* Nghỉ trưa & Công chuẩn */}
+                  <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Giờ nghỉ trưa:</span>
+                      <span className="font-mono font-semibold text-slate-800">
+                        {lunchRule.lunchStart || '12:00'} - {lunchRule.lunchEnd || '13:30'} ({lunchRule.lunchDurationMinutes || 90}p)
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-slate-200/80 pt-1.5">
+                      <span className="text-slate-500">Công chuẩn tháng:</span>
+                      <span className="font-semibold text-emerald-700">
+                        {activeLaborShift.standardWorkdays || 26} công / tháng
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-slate-200/80 pt-1.5">
+                      <span className="text-slate-500">Ngày áp dụng trong tuần:</span>
+                      <div className="flex items-center gap-1">
+                        {(activeLaborShift.appliedDays || ['T2', 'T3', 'T4', 'T5', 'T6', 'T7']).map((d: string) => (
+                          <span
+                            key={d}
+                            className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800"
+                          >
+                            {d}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Yêu cầu quẹt thẻ */}
+                  <div className="rounded-lg border border-slate-200 bg-white p-2.5 space-y-1.5">
+                    <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <ShieldCheck size={14} className="text-blue-600" />
+                      <span>Điều kiện tính công hợp lệ</span>
+                    </div>
+                    <div className="text-[11px] text-slate-600 space-y-1">
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-blue-500 font-bold">•</span>
+                        <span>Điểm danh qua mạng WiFi/LAN nội bộ hoặc GPS bán kính ≤ 300m quanh cơ sở.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-blue-500 font-bold">•</span>
+                        <span>Đủ 2 lượt quẹt mỗi ca (Vào và Ra). Quẹt thiếu 1 đầu tính 0.0 công ca đó.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-blue-500 font-bold">•</span>
+                        <span>Thời lượng ca thực tế dưới 60 phút sẽ tính 0.0 công ca.</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: ĐI MUỘN, VỀ SỚM & GIẢI TRÌNH */}
+              {rulesTab === 'violation' && (
+                <div className="space-y-3">
+                  {/* 3 Metric Tiles tóm tắt */}
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200">
+                      <div className="text-[10px] font-bold text-emerald-700 uppercase">Ân hạn cho phép</div>
+                      <div className="font-mono font-bold text-emerald-800 text-sm mt-0.5">
+                        ≤ {effectiveLaborRules.gracePeriodMinutes || 30}p
+                      </div>
+                      <div className="text-[9px] text-emerald-600">Đủ 0.5 công</div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-amber-50 border border-amber-200">
+                      <div className="text-[10px] font-bold text-amber-700 uppercase">Tối đa / tháng</div>
+                      <div className="font-mono font-bold text-amber-800 text-sm mt-0.5">
+                        {effectiveLaborRules.maxGraceTimesPerMonth || 3} lần
+                      </div>
+                      <div className="text-[9px] text-amber-600">Ân hạn miễn trừ</div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-blue-50 border border-blue-200">
+                      <div className="text-[10px] font-bold text-blue-700 uppercase">Hạn giải trình</div>
+                      <div className="font-mono font-bold text-blue-800 text-sm mt-0.5">
+                        {effectiveLaborRules.explanationDeadlineHours || 48}h
+                      </div>
+                      <div className="text-[9px] text-blue-600">Kể từ khi vi phạm</div>
+                    </div>
+                  </div>
+
+                  {/* Chế tài xử lý vi phạm */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-bold text-slate-800">Khung chế tài (xét theo ca 0.5 công)</span>
+                      <span className="text-[10px] text-slate-400">
+                        Chế độ: {effectiveLaborRules.violationPenaltyMode === 'penalty_money' ? 'Phạt tiền' : 'Trừ công'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      {violationRules.map((rule) => {
+                        const isGrace =
+                          rule.deductWorkday === 0 &&
+                          rule.fromMinutes <= (effectiveLaborRules.gracePeriodMinutes || 30);
+                        return (
+                          <div
+                            key={rule.id || `${rule.fromMinutes}-${rule.toMinutes}`}
+                            className={`p-2.5 rounded-lg border flex items-center justify-between ${
+                              isGrace
+                                ? 'bg-emerald-50/60 border-emerald-200'
+                                : rule.deductWorkday >= 0.5
+                                ? 'bg-rose-50/60 border-rose-200'
+                                : 'bg-white border-slate-200'
+                            }`}
+                          >
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-mono ${
+                                    isGrace
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : rule.deductWorkday >= 0.5
+                                      ? 'bg-rose-100 text-rose-800'
+                                      : 'bg-amber-100 text-amber-800'
+                                  }`}
+                                >
+                                  {rule.fromMinutes} - {rule.toMinutes} phút
+                                </span>
+                                <span className="font-bold text-slate-800 text-[11px]">{rule.level}</span>
+                              </div>
+                              <div className="text-[10px] text-slate-500 mt-0.5">
+                                {rule.note || (isGrace ? 'Trong mức ân hạn cho phép' : 'Gửi phiếu giải trình')}
+                              </div>
+                            </div>
+
+                            <div className="text-right">
+                              {isGrace ? (
+                                <span className="font-bold text-emerald-700 text-xs">Bảo lưu 0.5 công</span>
+                              ) : effectiveLaborRules.violationPenaltyMode === 'penalty_money' && rule.penaltyAmount ? (
+                                <div>
+                                  <div className="font-mono font-bold text-rose-600 text-xs">
+                                    -{(rule.penaltyAmount).toLocaleString('vi-VN')} đ
+                                  </div>
+                                  <div className="text-[10px] text-slate-400">hoặc trừ {rule.deductWorkday} công</div>
+                                </div>
+                              ) : (
+                                <div>
+                                  <div className="font-mono font-bold text-rose-600 text-xs">
+                                    - {rule.deductWorkday} công
+                                  </div>
+                                  <div className="text-[10px] text-slate-400">
+                                    còn {(0.5 - rule.deductWorkday).toFixed(3).replace(/\.?0+$/, '')} công
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Ghi chú nộp giải trình */}
+                  <div className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/70 text-[11px] text-slate-600 space-y-1">
+                    <div className="font-bold text-slate-800">Quy trình nộp phiếu giải trình</div>
+                    <div>
+                      Khi quên quẹt thẻ hoặc có sự cố thiết bị, nộp đơn giải trình trong vòng{' '}
+                      <strong>{effectiveLaborRules.explanationDeadlineHours || 48} giờ</strong> để quản lý phê duyệt. Quá thời hạn hệ thống tự động khóa và tính nghỉ không phép.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: TĂNG CA (OT) VÀ SUẤT ĂN */}
+              {rulesTab === 'overtime' && (
+                <div className="space-y-3">
+                  {/* Hệ số OT */}
+                  <div>
+                    <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                      Hệ số làm thêm giờ (OT)
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="p-2 rounded-lg bg-blue-50 border border-blue-200">
+                        <div className="text-[10px] font-bold text-blue-700">Ngày thường</div>
+                        <div className="font-mono font-bold text-blue-800 text-sm mt-0.5">
+                          {overtimeRule.weekdayRatePercent || 150}%
+                        </div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-indigo-50 border border-indigo-200">
+                        <div className="text-[10px] font-bold text-indigo-700">Cuối tuần (CN)</div>
+                        <div className="font-mono font-bold text-indigo-800 text-sm mt-0.5">
+                          {overtimeRule.weekendRatePercent || 200}%
+                        </div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-purple-50 border border-purple-200">
+                        <div className="text-[10px] font-bold text-purple-700">Lễ & Tết</div>
+                        <div className="font-mono font-bold text-purple-800 text-sm mt-0.5">
+                          {overtimeRule.holidayRatePercent || 300}%
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Ca đêm & Phụ cấp */}
+                  <div className="rounded-lg border border-slate-200 bg-white p-2.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Khung giờ ca đêm:</span>
+                      <span className="font-mono font-bold text-slate-800">
+                        {overtimeRule.nightStartHour || '22:00'} - {overtimeRule.nightEndHour || '06:00'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-slate-200/80 pt-1.5">
+                      <span className="text-slate-500">Phụ cấp ca đêm:</span>
+                      <span className="font-semibold text-indigo-700">
+                        +{overtimeRule.nightBonusPercent || 30}% lương
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-slate-200/80 pt-1.5">
+                      <span className="text-slate-500">Hỗ trợ đi lại ca đêm:</span>
+                      <span className="font-mono font-bold text-emerald-700">
+                        {(overtimeRule.nightTransportSupportAmount || 50000).toLocaleString('vi-VN')} đ
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-slate-200/80 pt-1.5">
+                      <span className="text-slate-500">Điều kiện tính OT:</span>
+                      <span className="font-semibold text-slate-800">
+                        Tối thiểu {overtimeRule.minOtMinutesRequired || 30}p • Bước {overtimeRule.roundStepMinutes || 15}p
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-slate-200/80 pt-1.5">
+                      <span className="text-slate-500">Trần OT hàng tháng:</span>
+                      <span className="font-semibold text-slate-800">
+                        Tối đa {overtimeRule.maxMonthlyOtHours || 40}h / tháng
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Quy chế suất ăn ca */}
+                  <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 space-y-2">
+                    <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <ForkKnife size={13} className="text-amber-600" />
+                      <span>Quy chế suất ăn ca</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Chốt ăn trưa:</span>
+                      <span className="font-mono font-bold text-slate-800">
+                        Trước {lunchRule.lunchDeadlineMorning || '09:00'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-slate-200/80 pt-1.5">
+                      <span className="text-slate-500">Chốt ăn tối OT:</span>
+                      <span className="font-mono font-bold text-slate-800">
+                        Trước {lunchRule.dinnerDeadlineAfternoon || '15:30'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-slate-200/80 pt-1.5">
+                      <span className="text-slate-500">Phụ cấp cơm tối OT (≥ {overtimeRule.dinnerSupportThresholdHours || 2}h):</span>
+                      <span className="font-mono font-bold text-emerald-700">
+                        {(overtimeRule.dinnerAllowanceAmount || 35000).toLocaleString('vi-VN')} đ
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-slate-200/80 pt-1.5">
+                      <span className="text-slate-500">Phạt hủy / bỏ suất đã đăng ký:</span>
+                      <span className="font-mono font-bold text-rose-600">
+                        {(lunchRule.missedMealPenalty || 35000).toLocaleString('vi-VN')} đ / suất
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: NGHỈ LỄ & PHÉP NĂM */}
+              {rulesTab === 'holiday' && (
+                <div className="space-y-3">
+                  {/* Phép năm */}
+                  <div className="rounded-lg border border-slate-200 bg-white p-2.5 space-y-2">
+                    <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <Briefcase size={13} className="text-teal-600" />
+                      <span>Chế độ nghỉ phép năm</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Định mức phép năm tiêu chuẩn:</span>
+                      <span className="font-mono font-bold text-teal-700">
+                        {annualLeave.standardLeaveDaysPerYear || 12} ngày / năm
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-slate-200/80 pt-1.5">
+                      <span className="text-slate-500">Thâm niên làm việc:</span>
+                      <span className="font-semibold text-slate-800">
+                        +{annualLeave.seniorityBonusDays || 1} ngày / {annualLeave.seniorityBonusYears || 5} năm
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-slate-200/80 pt-1.5">
+                      <span className="text-slate-500">Chuyển tiếp sang năm sau:</span>
+                      <span className="font-semibold text-slate-800">
+                        {annualLeave.allowTransferToNextYear
+                          ? `Tối đa ${annualLeave.maxTransferredDays || 5} ngày`
+                          : 'Không áp dụng'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Nghỉ việc riêng hưởng lương */}
+                  <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 space-y-1.5">
+                    <div className="font-bold text-slate-800">Nghỉ việc riêng hưởng nguyên lương</div>
+                    <div className="grid grid-cols-3 gap-1.5 text-center pt-1">
+                      <div className="p-1.5 rounded bg-white border border-slate-200">
+                        <div className="text-[10px] text-slate-500">Bản thân kết hôn</div>
+                        <div className="font-bold text-slate-800 font-mono mt-0.5">
+                          {annualLeave.marriageLeaveDays || 3} ngày
+                        </div>
+                      </div>
+                      <div className="p-1.5 rounded bg-white border border-slate-200">
+                        <div className="text-[10px] text-slate-500">Con kết hôn</div>
+                        <div className="font-bold text-slate-800 font-mono mt-0.5">
+                          {annualLeave.childMarriageLeaveDays || 1} ngày
+                        </div>
+                      </div>
+                      <div className="p-1.5 rounded bg-white border border-slate-200">
+                        <div className="text-[10px] text-slate-500">Tang chế gia đình</div>
+                        <div className="font-bold text-slate-800 font-mono mt-0.5">
+                          {annualLeave.bereavementLeaveDays || 3} ngày
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Danh sách ngày Lễ Tết hưởng 100% lương */}
+                  <div>
+                    <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                      Kỳ nghỉ lễ, Tết hưởng 100% lương
+                    </div>
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-0.5">
+                      {holidayPeriods.map((p) => (
+                        <div
+                          key={p.id || p.code}
+                          className="p-2 rounded-lg border border-slate-200 bg-white flex items-center justify-between"
+                        >
+                          <div className="truncate mr-2">
+                            <div className="font-bold text-slate-800 text-[11px] truncate">{p.name}</div>
+                            <div className="text-[10px] text-slate-400">
+                              {p.startDate ? `${p.startDate} ${p.endDate && p.endDate !== p.startDate ? `đến ${p.endDate}` : ''}` : p.categoryLabel || 'Theo luật định'}
+                            </div>
+                          </div>
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200 shrink-0">
+                            {p.totalPaidDays || p.totalDays || 1} ngày
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </Offcanvas>
     </>
   );
 

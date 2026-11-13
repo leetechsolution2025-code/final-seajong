@@ -65,7 +65,7 @@ export const FinanceDebtsPage: React.FC<FinanceDebtsPageProps> = ({
         steps={DEBT_COST_STEPS}
         currentStep={currentStep}
         onStepChange={setCurrentStep}
-        tickerContext="debts"
+        hideTicker={true}
       >
         <DebtCostManagementView
           key={`debt-step-${currentStep}`}

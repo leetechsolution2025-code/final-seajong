@@ -28,6 +28,7 @@ import {
   matchDepartment,
 } from '../../../components/common/DepartmentSelect';
 import { openAttachmentInNewTab } from './services/documentViewer';
+import { useAuth } from '../../../context/AuthContext';
 export type ThemeMode = 'light' | 'dark';
 
 export interface ApprovalDocumentAttachment {
@@ -71,6 +72,9 @@ export interface ApprovalDocument {
   submitterCode?: string;
   tenderId?: string;
   tenderCode?: string;
+  entityType?: string;
+  entityId?: string;
+  metadata?: any;
 }
 
 export const INITIAL_APPROVAL_DOCUMENTS: ApprovalDocument[] = [];
@@ -132,6 +136,8 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
   items: externalItems,
   onItemsChange,
 }) => {
+  const { user: authUser } = useAuth();
+  const activeUser = user || authUser;
   // Dữ liệu văn bản từ CSDL thực tế
   const [internalItems, setInternalItems] = useState<ApprovalDocument[]>(() => {
     try {
@@ -311,11 +317,13 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
     type: 'approve' | 'reject';
     targetDoc: ApprovalDocument | null;
     note: string;
+    approveDeposit?: boolean;
   }>({
     isOpen: false,
     type: 'approve',
     targetDoc: null,
     note: '',
+    approveDeposit: false,
   });
   const [reopenDetailAfterCancel, setReopenDetailAfterCancel] = useState(false);
 
@@ -448,7 +456,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
   };
 
   // Mở modal phê duyệt (đóng offcanvas trước để không che khuất modal)
-  const handleOpenApproveModal = (doc: ApprovalDocument, e?: React.MouseEvent) => {
+  const handleOpenApproveModal = (doc: ApprovalDocument, e?: React.MouseEvent, approveDepositFromSlide?: boolean) => {
     e?.stopPropagation();
     if (isDetailOpen) {
       setReopenDetailAfterCancel(true);
@@ -456,11 +464,13 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
     } else {
       setReopenDetailAfterCancel(false);
     }
+    const hasDeposit = Number(doc.metadata?.datCocPct || 0) > 0;
     setActionModal({
       isOpen: true,
       type: 'approve',
       targetDoc: doc,
       note: 'Đồng ý phê duyệt nội dung tờ trình. Yêu cầu các đơn vị phối hợp triển khai đúng tiến độ.',
+      approveDeposit: approveDepositFromSlide !== undefined ? approveDepositFromSlide : hasDeposit,
     });
   };
 
@@ -499,7 +509,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
     const isApprove = actionModal.type === 'approve';
     const noteContent = actionModal.note.trim();
 
-    const approverName = user?.name || (targetDoc as any)?.approverName || 'TGĐ. Hà Hải Lâm';
+    const approverName = activeUser?.name || (targetDoc as any)?.approverName || 'Lê Công Vụ';
     const approverCode = user?.code || (targetDoc as any)?.approverCode || 'DCD-20261005-1674-PDMQ';
 
     const updated = items.map((doc) => {
@@ -541,6 +551,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
           note: noteContent,
           approverName: approverName,
           approverCode: approverCode,
+          approveDeposit: isApprove ? Boolean(actionModal.approveDeposit) : false,
         }),
       });
     } catch (err) {
@@ -769,10 +780,71 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
       console.warn('Lỗi tự động cập nhật trạng thái báo giá:', qErr);
     }
 
+    // 6. Tự động chuyển thành Lệnh chi tiền khi Giám đốc phê duyệt Yêu cầu chi tiền / Yêu cầu ứng trước
+    try {
+      const isPaymentReqDoc =
+        targetDoc.code?.startsWith('YCCHI-') ||
+        targetDoc.code?.startsWith('YCU-') ||
+        (targetDoc as any).docType === 'payment_order' ||
+        (targetDoc as any).docType === 'advance_supplier' ||
+        (targetDoc as any).docType === 'payable_payment' ||
+        targetDoc.docType === 'advance' ||
+        targetDoc.title?.toLowerCase().includes('yêu cầu chi tiền') ||
+        targetDoc.title?.toLowerCase().includes('yêu cầu ứng trước') ||
+        targetDoc.summary?.toLowerCase().includes('yêu cầu chi tiền') ||
+        targetDoc.summary?.toLowerCase().includes('ứng trước tiền mua hàng');
+
+      if (isPaymentReqDoc) {
+        if (isApprove) {
+          const lcCode = `LC-${targetDoc.code?.replace('YCCHI-', '').replace('YCU-', '') || Date.now().toString().slice(-6)}`;
+          const partnerFromSummary = targetDoc.summary?.match(/Đối tác:\s*([^•\n]+)/)?.[1]?.trim();
+          const partnerFromTitle = targetDoc.title?.match(/cho\s+(.+)$/i)?.[1]?.trim();
+          const beneficiaryName = partnerFromSummary || partnerFromTitle || targetDoc.submitter || targetDoc.department;
+          const isAdv = targetDoc.code?.startsWith('YCU-') || targetDoc.title?.toLowerCase().includes('ứng trước');
+
+          await fetch('/api/finance/payment-orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: `PO-${Date.now()}`,
+              orderCode: lcCode,
+              refType: isAdv ? 'advance_supplier' : 'payable_payment',
+              refCode: targetDoc.code,
+              title: `Lệnh chi tiền: ${targetDoc.title}`,
+              beneficiaryName,
+              amount: targetDoc.value || 0,
+              purpose: targetDoc.summary || targetDoc.title,
+              status: 'pending',
+              statusLabel: 'Chờ chi tiền',
+              approvedBy: approverName,
+              approvedDate: nowStr,
+              approvalNote: noteContent || 'Đồng ý phê duyệt, ban hành Lệnh chi tiền',
+            }),
+          }).catch(() => {});
+
+          window.dispatchEvent(new CustomEvent('decodoor_payment_orders_updated'));
+          window.dispatchEvent(new CustomEvent('decodoor_cashflow_updated'));
+        }
+      }
+    } catch (payErr) {
+      console.warn('Lỗi tự động chuyển lệnh chi tiền:', payErr);
+    }
+
     if (isApprove) {
       const isQuoteDoc = targetDoc.docTypeName?.includes('báo giá') || targetDoc.code?.includes('BG-') || (targetDoc.title && targetDoc.title.toLowerCase().includes('báo giá'));
+      const isPaymentReqDoc =
+        targetDoc.code?.startsWith('YCCHI-') ||
+        targetDoc.code?.startsWith('YCU-') ||
+        (targetDoc as any).docType === 'payment_order' ||
+        (targetDoc as any).docType === 'advance_supplier' ||
+        (targetDoc as any).docType === 'payable_payment' ||
+        targetDoc.title?.toLowerCase().includes('yêu cầu chi tiền') ||
+        targetDoc.title?.toLowerCase().includes('yêu cầu ứng trước');
+
       if (isQuoteDoc) {
         onShowToast?.('success', 'Phê duyệt thành công', `Đã phê duyệt báo giá ${targetDoc.code}, tự động chuyển trạng thái "Đã phê duyệt" và tạo hợp đồng kinh tế "Đang thương thảo"`);
+      } else if (isPaymentReqDoc) {
+        onShowToast?.('success', 'Phê duyệt thành công', `Đã phê duyệt yêu cầu ${targetDoc.code}, tự động ban hành Lệnh chi tiền chuyển Kế toán thực hiện.`);
       } else {
         onShowToast?.('success', 'Phê duyệt thành công', `Đã phê duyệt văn bản ${targetDoc.code}, tự động cập nhật trạng thái gói thầu sang "Tham gia" và chuyển sang Lập hồ sơ dự thầu`);
       }
@@ -784,7 +856,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
   // Duyệt nhanh nhiều mục đã chọn trong Bước 1
   const handleBatchApprove = async () => {
     const nowStr = new Date().toLocaleDateString('vi-VN');
-    const approverName = user?.name || 'TGĐ. Hà Hải Lâm';
+    const approverName = activeUser?.name || 'Lê Công Vụ';
     const approverCode = user?.code || 'DCD-20261005-1674-PDMQ';
 
     const targetDocs = items.filter((d) => selectedIds.includes(d.id) && d.status === 'pending');
@@ -1671,43 +1743,47 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
       </div>
 
       {/* ── 1. OFFCANVAS CHO HỒ SƠ CHỜ PHÊ DUYỆT ── */}
-      <PendingApprovalOffcanvas
-        isOpen={isDetailOpen && selectedDoc?.status === "pending"}
-        onClose={() => {
-          setIsDetailOpen(false);
-          setOpenChatOnSelect(false);
-        }}
-        document={selectedDoc}
-        initialOpenChat={openChatOnSelect}
-        onApprove={(doc) => handleOpenApproveModal(doc)}
-        onReject={(doc) => handleOpenRejectModal(doc)}
-        onShowToast={onShowToast}
-      />
+      {(() => {
+        const liveSelectedDoc = selectedDoc ? (items.find((d) => d.id === selectedDoc.id) || selectedDoc) : null;
+        return (
+          <>
+            <PendingApprovalOffcanvas
+              isOpen={isDetailOpen && liveSelectedDoc?.status === "pending"}
+              onClose={() => {
+                setIsDetailOpen(false);
+                setOpenChatOnSelect(false);
+              }}
+              document={liveSelectedDoc}
+              initialOpenChat={openChatOnSelect}
+              onApprove={(doc, approveDeposit) => handleOpenApproveModal(doc, undefined, approveDeposit)}
+              onReject={(doc) => handleOpenRejectModal(doc)}
+              onShowToast={onShowToast}
+            />
 
-      {/* ── 2. OFFCANVAS CHO HỒ SƠ ĐÃ PHÊ DUYỆT ── */}
-      <ApprovedDocumentOffcanvas
-        isOpen={isDetailOpen && selectedDoc?.status === "approved"}
-        onClose={() => {
-          setIsDetailOpen(false);
-          setOpenChatOnSelect(false);
-        }}
-        document={selectedDoc}
-        initialOpenChat={openChatOnSelect}
-        onPrint={(doc) =>
-          onShowToast?.("info", "In tài liệu", `In quyết định phê duyệt ${doc.code}`)
-        }
-        onShowToast={onShowToast}
-      />
+            {/* ── 2. OFFCANVAS CHO HỒ SƠ ĐÃ PHÊ DUYỆT ── */}
+            <ApprovedDocumentOffcanvas
+              isOpen={isDetailOpen && liveSelectedDoc?.status === "approved"}
+              onClose={() => {
+                setIsDetailOpen(false);
+                setOpenChatOnSelect(false);
+              }}
+              document={liveSelectedDoc}
+              initialOpenChat={openChatOnSelect}
+              onPrint={(doc) =>
+                onShowToast?.("info", "In tài liệu", `In quyết định phê duyệt ${doc.code}`)
+              }
+              onShowToast={onShowToast}
+            />
 
-      {/* ── 3. OFFCANVAS CHO HỒ SƠ TỪ CHỐI ── */}
-      <RejectedDocumentOffcanvas
-        isOpen={isDetailOpen && selectedDoc?.status === "rejected"}
-        onClose={() => {
-          setIsDetailOpen(false);
-          setOpenChatOnSelect(false);
-        }}
-        document={selectedDoc}
-        initialOpenChat={openChatOnSelect}
+            {/* ── 3. OFFCANVAS CHO HỒ SƠ TỪ CHỐI ── */}
+            <RejectedDocumentOffcanvas
+              isOpen={isDetailOpen && liveSelectedDoc?.status === "rejected"}
+              onClose={() => {
+                setIsDetailOpen(false);
+                setOpenChatOnSelect(false);
+              }}
+              document={liveSelectedDoc}
+              initialOpenChat={openChatOnSelect}
         onResubmit={(doc) => {
           setNewDocForm({
             title: `${doc.title} (Trình lại)`,
@@ -1727,6 +1803,9 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
         }}
         onShowToast={onShowToast}
       />
+          </>
+        );
+      })()}
 
       {/* ── MODAL BÚT PHÊ DUYỆT HOẶC TỪ CHỐI ── */}
       <Modal
@@ -1773,6 +1852,37 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
               </div>
             </div>
           )}
+
+          {actionModal.type === 'approve' && Number(actionModal.targetDoc?.metadata?.datCocPct || 0) > 0 && (() => {
+            const pct = Number(actionModal.targetDoc?.metadata?.datCocPct || 0);
+            const amt = Number(actionModal.targetDoc?.metadata?.tienDatCoc || Math.round(((actionModal.targetDoc?.value || 0) * pct) / 100));
+            return (
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 12px',
+                  marginBottom: '12px',
+                  borderRadius: 'var(--radius-md)',
+                  border: `1px solid ${actionModal.approveDeposit ? '#0284c7' : 'var(--border-default)'}`,
+                  backgroundColor: actionModal.approveDeposit ? '#f0f9ff' : 'var(--bg-surface-2)',
+                  cursor: 'pointer',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  color: 'var(--text-primary)',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={Boolean(actionModal.approveDeposit)}
+                  onChange={(e) => setActionModal((prev) => ({ ...prev, approveDeposit: e.target.checked }))}
+                  style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#0284c7', flexShrink: 0 }}
+                />
+                <span>Duyệt chi tiền đặt cọc ({pct}% — {amt.toLocaleString('vi-VN')} đ)</span>
+              </label>
+            );
+          })()}
 
           <div>
             <label

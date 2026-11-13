@@ -5,8 +5,8 @@ import { toast } from 'react-toastify';
 export interface DataRetentionOffcanvasProps {
   isOpen: boolean;
   onClose: () => void;
-  /** Loại dữ liệu: 'MATERIAL_PICKING' | 'BATCH_PACKING' | 'AUDIT_LOGS' | 'ALL' */
-  ticketType?: 'MATERIAL_PICKING' | 'BATCH_PACKING' | 'AUDIT_LOGS' | 'ALL';
+  /** Loại dữ liệu: 'MATERIAL_PICKING' | 'BATCH_PACKING' | 'AUDIT_LOGS' | 'PRODUCTION_ORDERS' | 'DEFECT_RECORDS' | 'ALL' */
+  ticketType?: 'MATERIAL_PICKING' | 'BATCH_PACKING' | 'AUDIT_LOGS' | 'PRODUCTION_ORDERS' | 'DEFECT_RECORDS' | 'ALL';
   /** Tiêu đề hiển thị trên Offcanvas */
   title?: string;
   /** Mô tả ngắn dưới tiêu đề */

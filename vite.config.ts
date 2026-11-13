@@ -2668,11 +2668,21 @@ function autoBackendPlugin(): Plugin {
       process.on('SIGTERM', cleanup)
 
       server.watcher.add(path.join(__dirname, 'server.js'))
+      server.watcher.add(path.join(__dirname, 'server', 'financeAccountingRouter.js'))
+      server.watcher.add(path.join(__dirname, 'services', 'prismaFinanceSyncService.js'))
+      server.watcher.add(path.join(__dirname, 'services', 'journalSyncService.js'))
       server.watcher.on('change', (file) => {
         if (file.endsWith('server.js')) {
           console.log('\x1b[33m%s\x1b[0m', '⚡ [Vite Plugin] server.js thay đổi -> Nạp lại Embedded Backend...')
           embeddedExpressPromise = null
           getEmbeddedExpressApp()
+        } else if (
+          file.endsWith('financeAccountingRouter.js') ||
+          file.endsWith('prismaFinanceSyncService.js') ||
+          file.endsWith('journalSyncService.js')
+        ) {
+          console.log('\x1b[33m%s\x1b[0m', `⚡ [Vite Plugin] ${path.basename(file)} thay đổi -> Khởi động lại server để xóa ESM cache...`)
+          server.restart()
         }
       })
     },

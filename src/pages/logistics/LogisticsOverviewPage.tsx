@@ -17,6 +17,7 @@ import {
   canPrintLogistics,
 } from '@/lib/logistics-permissions';
 import { StepPage } from '../../components/common/StepPage';
+import { DepartmentActionMenu } from '../../components/common/DepartmentActionMenu';
 import { EventOffcanvas } from '../../components/common/EventOffcanvas';
 import { DataRetentionOffcanvas } from '../../components/common/DataRetentionOffcanvas';
 import { TableToolbar, type TableToolbarFilter } from '../../components/common/TableToolbar';
@@ -1048,6 +1049,7 @@ export const LogisticsOverviewPage: React.FC = () => {
           >
             <span className="hidden sm:inline font-bold text-slate-800 tracking-tight">Lịch sự kiện</span>
           </Button>
+          <DepartmentActionMenu />
         </div>
       }
     >

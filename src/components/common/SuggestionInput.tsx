@@ -8,6 +8,7 @@ export interface SuggestionItem {
   subText?: string;
   category?: string;
   badge?: string;
+  rightIcon?: React.ReactNode;
 }
 
 export interface SuggestionInputProps
@@ -228,7 +229,9 @@ export const SuggestionInput: React.FC<SuggestionInputProps> = ({
           }}
         >
           {label}
-          {required && <span style={{ color: 'var(--color-danger, #ef4444)' }}>*</span>}
+          {required && (
+            <span style={{ color: 'var(--color-danger, #ef4444)' }}>*</span>
+          )}
         </label>
       )}
 
@@ -469,7 +472,12 @@ export const SuggestionInput: React.FC<SuggestionInputProps> = ({
                     >
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                         <span style={{ lineHeight: 1.35 }}>{item.label || item.value}</span>
-                        {isSelected && <Check2 size={14} style={{ color: '#0284c7', flexShrink: 0 }} />}
+                        {(item.rightIcon || isSelected) && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                            {item.rightIcon}
+                            {isSelected && <Check2 size={14} style={{ color: '#0284c7', flexShrink: 0 }} />}
+                          </div>
+                        )}
                       </div>
                       {(item.subText || item.badge) && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.6875rem', color: '#64748b' }}>
