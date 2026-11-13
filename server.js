@@ -3961,7 +3961,7 @@ app.get('/api/hr/promotions', async (req, res) => {
             select: { fullName: true }
           });
           interviewerName = intv?.fullName || '';
-        } catch (e) {}
+        } catch (e) { }
       }
 
       return {
@@ -10100,9 +10100,9 @@ app.get('/api/logistics/inventory', async (req, res) => {
         null;
       const estimatedBomCost = primaryBom
         ? (primaryBom.vatTu || []).reduce((sum, vt) => {
-            const unitCost = vt.inventoryItem?.giaNhap || vt.inventoryItem?.price || 0;
-            return sum + (Number(vt.soLuong) || 0) * unitCost;
-          }, 0)
+          const unitCost = vt.inventoryItem?.giaNhap || vt.inventoryItem?.price || 0;
+          return sum + (Number(vt.soLuong) || 0) * unitCost;
+        }, 0)
         : 0;
 
       return {
@@ -13689,7 +13689,7 @@ app.get('/api/approval-requests', async (req, res) => {
     // Lọc bỏ các yêu cầu hành chính thuần túy không liên quan đến tiền (như nghỉ phép leave, late_early 0đ) khỏi danh sách yêu cầu tài chính
     const filteredRequests = requests.filter((r) => {
       let meta = {};
-      try { meta = typeof r.metadata === 'string' ? JSON.parse(r.metadata) : r.metadata || {}; } catch {}
+      try { meta = typeof r.metadata === 'string' ? JSON.parse(r.metadata) : r.metadata || {}; } catch { }
       const ent = String(r.entityType || '').toLowerCase();
       const title = String(r.entityTitle || '').toLowerCase();
       const amt = Number(meta?.totalAmount || meta?.soTien || meta?.amount || 0);
@@ -13705,7 +13705,7 @@ app.get('/api/approval-requests', async (req, res) => {
     for (const pr of personalReqs) {
       if (existingCodes.has(pr.id) || existingCodes.has(pr.code)) continue;
       let details = {};
-      try { details = typeof pr.details === 'string' ? JSON.parse(pr.details) : pr.details || {}; } catch {}
+      try { details = typeof pr.details === 'string' ? JSON.parse(pr.details) : pr.details || {}; } catch { }
       const advAmt = Number(details.advanceAmount || details.amount || 0);
       const prStatus = String(pr.status || 'pending').toLowerCase();
       const mappedPr = {
@@ -13801,8 +13801,8 @@ app.post(['/api/approval-requests', '/api/approval-documents'], async (req, res)
           loaiText: entityType === 'purchase_order'
             ? 'Phê duyệt đơn mua hàng'
             : entityType.includes('advance')
-            ? 'Đề xuất tạm ứng NCC'
-            : 'Yêu cầu chi tiền thanh toán',
+              ? 'Đề xuất tạm ứng NCC'
+              : 'Yêu cầu chi tiền thanh toán',
           reason: b.reason || b.summary || entityTitle,
           proposer: requestedByName,
         }),
@@ -15163,7 +15163,7 @@ app.get('/api/production/defects', async (req, res) => {
             const candidate = meta?.saleOrderCode || meta?.orderCode || meta?.orderNumber || meta?.referenceCode || '';
             const match = String(candidate).match(/DBH-[A-Za-z0-9-]+/i);
             if (match) foundSoCode = match[0].toUpperCase();
-          } catch (_) {}
+          } catch (_) { }
         }
         if (!foundSoCode && qc.notes) {
           const match = String(qc.notes).match(/DBH-[A-Za-z0-9-]+/i);
@@ -15193,28 +15193,28 @@ app.get('/api/production/defects', async (req, res) => {
     const [saleOrders, directCustomers] = await Promise.all([
       candidateSoCodes.length > 0 || ticketSoIds.length > 0
         ? prisma.saleOrder.findMany({
-            where: {
-              OR: [
-                ...(candidateSoCodes.length > 0 ? [{ code: { in: candidateSoCodes } }] : []),
-                ...(ticketSoIds.length > 0 ? [{ id: { in: ticketSoIds } }] : []),
-              ],
+          where: {
+            OR: [
+              ...(candidateSoCodes.length > 0 ? [{ code: { in: candidateSoCodes } }] : []),
+              ...(ticketSoIds.length > 0 ? [{ id: { in: ticketSoIds } }] : []),
+            ],
+          },
+          select: {
+            id: true,
+            code: true,
+            nguoiNhan: true,
+            diaChiGiaoHang: true,
+            customer: {
+              select: { id: true, name: true, address: true },
             },
-            select: {
-              id: true,
-              code: true,
-              nguoiNhan: true,
-              diaChiGiaoHang: true,
-              customer: {
-                select: { id: true, name: true, address: true },
-              },
-            },
-          })
+          },
+        })
         : Promise.resolve([]),
       customerIds.length > 0
         ? prisma.customer.findMany({
-            where: { id: { in: customerIds } },
-            select: { id: true, name: true, address: true },
-          })
+          where: { id: { in: customerIds } },
+          select: { id: true, name: true, address: true },
+        })
         : Promise.resolve([]),
     ]);
 
@@ -16198,6 +16198,7 @@ app.get('/api/plan-finance/inventory/search', async (req, res) => {
         thongSoKyThuat: it.thongSoKyThuat,
         tenHang: it.tenHang,
         donVi: it.donVi,
+        categoryId: it.categoryId || null,
         giaNhap: it.giaNhap,
         giaBan: it.giaBan,
         trangThai: it.trangThai,
@@ -18067,7 +18068,7 @@ async function getResolvedHolidayRules() {
         if (parsed && typeof parsed === 'object' && Array.isArray(parsed.periods)) {
           return normalizeHolidayRulesServer(parsed);
         }
-      } catch {}
+      } catch { }
     }
     // Auto-seed default holiday_rules into LaborPolicy so DB is always synchronized
     const defaultNormalized = normalizeHolidayRulesServer(DEFAULT_HOLIDAY_RULES_DATA_SERVER);
@@ -18090,7 +18091,7 @@ async function getResolvedHolidayRules() {
           content: JSON.stringify(defaultNormalized),
         },
       })
-      .catch(() => {});
+      .catch(() => { });
     return defaultNormalized;
   } catch {
     return DEFAULT_HOLIDAY_RULES_DATA_SERVER;
@@ -18388,7 +18389,7 @@ app.get('/api/users', async (req, res) => {
         (e.socialInsuranceNumber && String(e.socialInsuranceNumber).trim() !== '') ||
         (e.insuranceSalary && Number(e.insuranceSalary) > 0)
       );
-      const validUserId = e.user?.id || e.userId || (await ensureValidChatUserId(e.id)) || e.id;
+      const validUserId = e.user?.id || e.userId || e.id;
       result.push({
         id: validUserId,
         employeeId: e.id,
@@ -18549,9 +18550,7 @@ async function resolveCurrentChatUserId(req) {
 
 app.get('/api/notifications/recipients', async (req, res) => {
   try {
-    await ensureValidChatUserId('guest-customer');
-
-    const [employees, positions] = await Promise.all([
+    const [employees, positions, guestUser] = await Promise.all([
       prisma.employee.findMany({
         where: {
           status: { not: 'resigned' },
@@ -18563,6 +18562,12 @@ app.get('/api/notifications/recipients', async (req, res) => {
       prisma.category.findMany({
         where: { type: 'position' },
         select: { code: true, name: true },
+      }),
+      prisma.user.findFirst({
+        where: {
+          OR: [{ id: 'guest-customer' }, { email: 'khachhang@seajong.com' }],
+        },
+        select: { id: true },
       }),
     ]);
 
@@ -18578,7 +18583,7 @@ app.get('/api/notifications/recipients', async (req, res) => {
           name: emp.departmentName || emp.departmentCode,
         });
       }
-      const validUid = emp.user?.id || (await ensureValidChatUserId(emp.id));
+      const validUid = emp.user?.id || emp.userId || emp.id;
       if (validUid) {
         userList.push({
           id: validUid,
@@ -18596,7 +18601,7 @@ app.get('/api/notifications/recipients', async (req, res) => {
       }
     }
 
-    const guestId = await ensureValidChatUserId('guest-customer');
+    const guestId = guestUser?.id || 'guest-customer';
     if (guestId && !userList.some((u) => u.id === guestId)) {
       userList.push({
         id: guestId,
@@ -22464,10 +22469,21 @@ app.post('/api/plan-finance/stock-counts', async (req, res) => {
   try {
     const { id, soChungTu, scope, warehouseId, nguoiKiem, ngayKiem, ghiChu, trangThai = 'hoan-thanh', lines = [] } = req.body;
 
+    let targetId = id || null;
+    if (!targetId && soChungTu) {
+      const existingByCode = await prisma.stockCount.findUnique({
+        where: { soChungTu },
+        select: { id: true },
+      }).catch(() => null);
+      if (existingByCode?.id) {
+        targetId = existingByCode.id;
+      }
+    }
+
     let stockCount;
-    if (id) {
+    if (targetId) {
       stockCount = await prisma.stockCount.update({
-        where: { id },
+        where: { id: targetId },
         data: {
           soChungTu: soChungTu || undefined,
           scope: scope || 'warehouse',
@@ -22478,21 +22494,6 @@ app.post('/api/plan-finance/stock-counts', async (req, res) => {
           trangThai: trangThai || 'hoan-thanh',
         },
       });
-
-      if (lines.length > 0) {
-        await prisma.stockCountLine.deleteMany({ where: { stockCountId: id } });
-        await prisma.stockCountLine.createMany({
-          data: lines.map((l) => ({
-            stockCountId: id,
-            inventoryItemId: l.inventoryItemId,
-            warehouseId: l.warehouseId || warehouseId || null,
-            soLuongHeTong: parseFloat(l.soLuongHeTong) || 0,
-            soLuongThucTe: l.soLuongThucTe !== null && l.soLuongThucTe !== undefined ? parseFloat(l.soLuongThucTe) : null,
-            chenh: l.chenh !== null && l.chenh !== undefined ? parseFloat(l.chenh) : null,
-            ghiChu: l.ghiChu || null,
-          })),
-        });
-      }
     } else {
       stockCount = await prisma.stockCount.create({
         data: {
@@ -22503,17 +22504,22 @@ app.post('/api/plan-finance/stock-counts', async (req, res) => {
           ngayKiem: ngayKiem ? new Date(ngayKiem) : new Date(),
           ghiChu: ghiChu || null,
           trangThai: trangThai || 'hoan-thanh',
-          lines: {
-            create: lines.map((l) => ({
-              inventoryItemId: l.inventoryItemId,
-              warehouseId: l.warehouseId || warehouseId || null,
-              soLuongHeTong: parseFloat(l.soLuongHeTong) || 0,
-              soLuongThucTe: l.soLuongThucTe !== null && l.soLuongThucTe !== undefined ? parseFloat(l.soLuongThucTe) : null,
-              chenh: l.chenh !== null && l.chenh !== undefined ? parseFloat(l.chenh) : null,
-              ghiChu: l.ghiChu || null,
-            })),
-          },
         },
+      });
+    }
+
+    if (lines.length > 0) {
+      await prisma.stockCountLine.deleteMany({ where: { stockCountId: stockCount.id } });
+      await prisma.stockCountLine.createMany({
+        data: lines.map((l) => ({
+          stockCountId: stockCount.id,
+          inventoryItemId: l.inventoryItemId,
+          warehouseId: l.warehouseId || warehouseId || null,
+          soLuongHeTong: parseFloat(l.soLuongHeTong) || 0,
+          soLuongThucTe: l.soLuongThucTe !== null && l.soLuongThucTe !== undefined ? parseFloat(l.soLuongThucTe) : null,
+          chenh: l.chenh !== null && l.chenh !== undefined ? parseFloat(l.chenh) : null,
+          ghiChu: l.ghiChu || null,
+        })),
       });
     }
 
@@ -25666,32 +25672,46 @@ app.post('/api/plan-finance/purchase-requests/:id/create-orders', async (req, re
       });
       const code = `DH-${dateStr}-${String(existing + 1).padStart(4, '0')}`;
 
-      const orderItems = group.map((a, idx) => {
+      const orderItems = [];
+      for (let idx = 0; idx < group.length; idx++) {
+        const a = group[idx];
         const item = itemMap.get(a.itemId);
+        let invItem = item?.inventoryItem || null;
+        const resolvedInventoryItemId =
+          a.inventoryItemId !== undefined ? a.inventoryItemId : item?.inventoryItemId || null;
+        if (!invItem && resolvedInventoryItemId) {
+          invItem = await prisma.inventoryItem.findUnique({
+            where: { id: resolvedInventoryItemId },
+            include: { dinhMucs: true },
+          });
+        }
         const defaultGiaNhap =
-          item?.inventoryItem?.giaNhap && item.inventoryItem.giaNhap > 0
-            ? item.inventoryItem.giaNhap
+          invItem?.giaNhap && invItem.giaNhap > 0
+            ? invItem.giaNhap
             : item?.donGiaDK || 0;
         const donGia = a.donGia !== undefined && a.donGia > 0 ? a.donGia : defaultGiaNhap;
 
         let dinhMucId = null;
-        if (item?.inventoryItem?.dinhMucs?.length > 0) {
-          const standardBom = item.inventoryItem.dinhMucs.find((d) => d.code && !/-\d+$/.test(d.code));
+        if (invItem?.dinhMucs?.length > 0) {
+          const standardBom = invItem.dinhMucs.find((d) => d.code && !/-\d+$/.test(d.code));
           if (standardBom) {
             dinhMucId = standardBom.id;
           } else {
-            const sortedByLength = [...item.inventoryItem.dinhMucs].sort(
+            const sortedByLength = [...invItem.dinhMucs].sort(
               (x, y) => (x.code?.length || 0) - (y.code?.length || 0)
             );
             dinhMucId = sortedByLength[0].id;
           }
         }
 
-        const soLuong = item?.soLuong || 1;
-        return {
-          inventoryItemId: item?.inventoryItemId || null,
-          tenHang: item?.tenHang || 'Mặt hàng',
-          donVi: item?.donVi || null,
+        const soLuong =
+          a.soLuong !== undefined && Number(a.soLuong) > 0
+            ? Number(a.soLuong)
+            : item?.soLuong || 1;
+        orderItems.push({
+          inventoryItemId: resolvedInventoryItemId,
+          tenHang: a.tenHang || item?.tenHang || invItem?.tenHang || 'Mặt hàng',
+          donVi: a.donVi !== undefined ? a.donVi : item?.donVi || invItem?.donVi || null,
           soLuong,
           donGia,
           thanhTien: soLuong * donGia,
@@ -25699,8 +25719,8 @@ app.post('/api/plan-finance/purchase-requests/:id/create-orders', async (req, re
           ghiChu: item?.ghiChu || null,
           sortOrder: idx,
           ngayGiao: a.ngayGiao ? new Date(a.ngayGiao) : null,
-        };
-      });
+        });
+      }
 
       const tongTien = orderItems.reduce((s, i) => s + i.thanhTien, 0);
       const supplierName = supplier?.name || supplierId;
@@ -25732,10 +25752,25 @@ app.post('/api/plan-finance/purchase-requests/:id/create-orders', async (req, re
       for (let i = 0; i < group.length; i++) {
         const a = group[i];
         const poItem = order.items[i];
-        if (a.itemId) {
+        if (a.itemId && itemMap.has(a.itemId)) {
           await prisma.purchaseRequestItem.update({
             where: { id: a.itemId },
             data: {
+              trangThaiXuLy: 'da-tao-don',
+              supplierId,
+              purchaseOrderItemId: poItem?.id || null,
+              ...(poItem?.soLuong ? { soLuong: poItem.soLuong } : {}),
+            },
+          });
+        } else if (ids[0]) {
+          await prisma.purchaseRequestItem.create({
+            data: {
+              purchaseRequestId: ids[0],
+              inventoryItemId: poItem?.inventoryItemId || null,
+              tenHang: poItem?.tenHang || 'Mặt hàng',
+              donVi: poItem?.donVi || null,
+              soLuong: poItem?.soLuong || 1,
+              donGiaDK: poItem?.donGia || 0,
               trangThaiXuLy: 'da-tao-don',
               supplierId,
               purchaseOrderItemId: poItem?.id || null,
@@ -25747,9 +25782,10 @@ app.post('/api/plan-finance/purchase-requests/:id/create-orders', async (req, re
       createdOrders.push({ id: order.id, code, supplierName, soMatHang: group.length, tongTien });
     }
 
-    if (skippedIds.length > 0) {
+    const validSkippedIds = skippedIds.filter((id) => itemMap.has(id));
+    if (validSkippedIds.length > 0) {
       await prisma.purchaseRequestItem.updateMany({
-        where: { id: { in: skippedIds } },
+        where: { id: { in: validSkippedIds } },
         data: { trangThaiXuLy: 'bo-qua' },
       });
     }
@@ -28887,13 +28923,17 @@ const READY_SYSTEM_TABLES = new Set([
   'BankLoan',
   'Branch',
   'BranchDevice',
+  'BranchSubnet',
   'BranchWifi',
+  'CabinetCategoryItem',
   'Candidate',
   'Carrier',
   'Category',
   'CategoryTypeDef',
+  'ChannelConnection',
   'Client',
   'CompanyInfo',
+  'Competitor',
   'Contract',
   'Customer',
   'CustomerCareHistory',
@@ -28904,15 +28944,26 @@ const READY_SYSTEM_TABLES = new Set([
   'DepartmentCategory',
   'DinhMuc',
   'DinhMucVatTu',
+  'EmailConfig',
   'Employee',
   'EmployeeProbation',
   'EmployeeProbationEvent',
   'EmploymentHistory',
   'Expense',
+  'HrAssetHandover',
+  'HrStationeryDepartmentBudget',
+  'HrStationeryNorm',
+  'HrSupplyCategory',
+  'HrSupplyItem',
+  'HrSupplyRequest',
+  'HrSupplyRequestItem',
+  'HrSupplyTransaction',
+  'Industry',
   'InsuranceBenefit',
   'InsuranceChange',
   'InsuranceConfig',
   'InsuranceHistory',
+  'InternalArchiveDocument',
   'InternalIncomeReport',
   'InternalKpiCriteria',
   'InternalKpiReport',
@@ -28933,31 +28984,57 @@ const READY_SYSTEM_TABLES = new Set([
   'LaborShift',
   'LaborViolationConfig',
   'LaborViolationRule',
+  'LogisticsRetentionConfig',
   'LogisticsSyncLog',
   'LogisticsTicket',
   'LogisticsTicketItem',
   'MarketingAnnualPlan',
+  'MarketingBudgetItem',
   'MarketingBudgetPlan',
   'MarketingCampaign',
   'MarketingContent',
+  'MarketingEvent',
+  'MarketingEventContent',
+  'MarketingEventTask',
+  'MarketingExecutionDetail',
+  'MarketingExecutionGroup',
+  'MarketingExecutionMonth',
+  'MarketingGeneralPlan',
+  'MarketingInsight',
   'MarketingLead',
+  'MarketingMonthlyBudgetItem',
+  'MarketingMonthlyBudgetTotal',
   'MarketingMonthlyPlan',
+  'MarketingTask',
+  'MarketingTaskComment',
+  'MarketingTheme',
+  'MarketingYearlyGoal',
   'MarketingYearlyPlan',
+  'MarketingYearlyTask',
   'MasterYearlyPlan',
+  'MediaAsset',
+  'MediaFolder',
   'Meeting',
   'Message',
   'MessageParticipant',
+  'Module',
   'MonthlyBalance',
+  'MonthlySalesSnapshot',
   'Notification',
   'NotificationRecipient',
   'OemMasterYearlyPlan',
   'OemSalesYearlyPlan',
+  'OmnichannelOrder',
+  'OmnichannelOrderItem',
+  'OutlineMarketingPlan',
+  'PartnerBonusFormula',
   'PartnerCareHistory',
   'PaymentNotification',
   'Payroll',
   'PayrollConfirmation',
   'PersonalRequest',
   'ProductionIncident',
+  'PromotionRequest',
   'PurchaseOrder',
   'PurchaseOrderActivity',
   'PurchaseOrderItem',
@@ -28968,7 +29045,10 @@ const READY_SYSTEM_TABLES = new Set([
   'QuotationItem',
   'QuotationNegotiation',
   'RecruitmentRequest',
+  'RetailInvoice',
+  'RetailInvoiceItem',
   'Revenue',
+  'SalaryAdjustmentRequest',
   'SaleOrder',
   'SaleOrderItem',
   'SalesMonthlyPlan',
@@ -28979,6 +29059,7 @@ const READY_SYSTEM_TABLES = new Set([
   'SeajongProduct',
   'SeajongProductVariation',
   'SeajongSyncLog',
+  'SocialConnection',
   'SoftSkillQA',
   'StockCount',
   'StockCountLine',
@@ -28987,12 +29068,17 @@ const READY_SYSTEM_TABLES = new Set([
   'SupplierCategory',
   'Task',
   'TaskComment',
+  'TaxPolicyNews',
+  'TaxQA',
+  'TerminationRequest',
   'TrainingCourse',
   'TrainingParticipant',
   'TrainingPlan',
+  'TrainingQuestion',
   'TrainingRequest',
   'User',
   'Warehouse',
+  '_ClientToModule',
   '_ProductCategories',
   'accounting_chart_of_accounts',
   'accounting_journal_entries',
@@ -29073,7 +29159,7 @@ async function inspectSqliteDatabaseTables(sourceDbPath) {
 
   try {
     const rawTables = await allSql(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != '_prisma_migrations' ORDER BY name ASC"
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != '_prisma_migrations' AND name NOT LIKE 'lost_and_found%' ORDER BY name ASC"
     );
 
     const tables = [];
@@ -29081,7 +29167,7 @@ async function inspectSqliteDatabaseTables(sourceDbPath) {
       const tblName = String(row.name);
       const safeTbl = tblName.replace(/"/g, '""');
       const countRow = await getSql(`SELECT COUNT(*) AS cnt FROM "${safeTbl}"`).catch(() => ({ cnt: 0 }));
-      const isReady = mainTableSet.has(tblName) && READY_SYSTEM_TABLES.has(tblName);
+      const isReady = mainTableSet.has(tblName) || READY_SYSTEM_TABLES.has(tblName);
       tables.push({
         name: tblName,
         rowCount: Number(countRow?.cnt || 0),
@@ -29138,88 +29224,123 @@ async function restoreSqliteDatabaseFromBackup(sourceDbPath, selectedTables = nu
   let attached = false;
 
   try {
-    await runSql('PRAGMA busy_timeout = 20000;');
+    await runSql('PRAGMA busy_timeout = 30000;');
     await runSql('PRAGMA foreign_keys = OFF;');
+    await runSql('PRAGMA wal_checkpoint(TRUNCATE);').catch(() => { });
 
     const escapedPath = sourceDbPath.replace(/'/g, "''");
     await runSql(`ATTACH DATABASE '${escapedPath}' AS restore_src;`);
     attached = true;
 
     const srcTables = await allSql(
-      "SELECT name, sql FROM restore_src.sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != '_prisma_migrations'"
+      "SELECT name, sql FROM restore_src.sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != '_prisma_migrations' AND name NOT LIKE 'lost_and_found%'"
     );
     const mainTablesRows = await allSql(
-      "SELECT name FROM main.sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+      "SELECT name FROM main.sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != '_prisma_migrations'"
     );
-    const mainTableSet = new Set(mainTablesRows.map((r) => r.name));
+    const mainTableSet = new Set(mainTablesRows.map((r) => String(r.name)));
+    const srcTableNameSet = new Set(srcTables.map((t) => String(t.name)));
+
+    // Kiểm tra xem người dùng đang chọn thay thế toàn bộ các bảng trong file backup hay chỉ chọn một phần
+    const isFullRestore =
+      !filterSet || (srcTables.length > 0 && srcTables.every((t) => filterSet.has(String(t.name))));
 
     await runSql('BEGIN IMMEDIATE TRANSACTION;');
     transactionStarted = true;
 
+    // 1. Luôn dọn bỏ các bảng rác phục hồi lỗi (lost_and_found*) nếu có trong main
+    for (const mainTbl of Array.from(mainTableSet)) {
+      if (mainTbl === 'lost_and_found' || mainTbl.startsWith('lost_and_found_')) {
+        const safeDrop = mainTbl.replace(/"/g, '""');
+        await runSql(`DROP TABLE IF EXISTS main."${safeDrop}";`).catch(() => { });
+        mainTableSet.delete(mainTbl);
+      }
+    }
+
+    // 2. Thay thế hoàn toàn dữ liệu mới cho từng bảng được chọn trong Offcanvas
     for (const tbl of srcTables) {
-      if (filterSet && !filterSet.has(tbl.name)) {
+      const tblName = String(tbl.name);
+      if (filterSet && !filterSet.has(tblName)) {
         continue;
       }
-      const safeTbl = String(tbl.name).replace(/"/g, '""');
-      if (!mainTableSet.has(tbl.name)) {
+      const safeTbl = tblName.replace(/"/g, '""');
+      if (!mainTableSet.has(tblName)) {
         if (tbl.sql) {
           await runSql(tbl.sql);
           await runSql(`INSERT OR REPLACE INTO main."${safeTbl}" SELECT * FROM restore_src."${safeTbl}";`);
+          mainTableSet.add(tblName);
           restoredTables++;
         }
       } else {
         const mainCols = await allSql(`PRAGMA main.table_info("${safeTbl}");`);
         const srcCols = await allSql(`PRAGMA restore_src.table_info("${safeTbl}");`);
-        const srcColSet = new Set(srcCols.map((c) => c.name));
-        const commonCols = mainCols.filter((c) => srcColSet.has(c.name)).map((c) => c.name);
+        const srcColSet = new Set(srcCols.map((c) => String(c.name)));
+        const commonCols = mainCols.filter((c) => srcColSet.has(String(c.name))).map((c) => String(c.name));
+        // Luôn xóa sạch 100% dữ liệu hiện tại của bảng được chọn (kể cả khi bảng nguồn có 0 dòng)
+        await runSql(`DELETE FROM main."${safeTbl}";`);
         if (commonCols.length > 0) {
-          const colListSql = commonCols.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(', ');
-          await runSql(`DELETE FROM main."${safeTbl}";`);
+          const colListSql = commonCols.map((c) => `"${c.replace(/"/g, '""')}"`).join(', ');
           await runSql(
             `INSERT OR REPLACE INTO main."${safeTbl}" (${colListSql}) SELECT ${colListSql} FROM restore_src."${safeTbl}";`
           );
-          restoredTables++;
         }
+        restoredTables++;
       }
     }
 
-    // Dọn sạch các bảng kế toán / phụ trợ trong main nếu file sao lưu nguồn không chứa các bảng đó để tránh sót dữ liệu cũ
-    const srcTableNameSet = new Set(srcTables.map((t) => String(t.name)));
-    const DERIVED_TABLES_TO_CLEAR_IF_MISSING = [
-      'accounting_journal_entries',
-      'accounting_journal_lines',
-      'accounting_opening_balances',
-      'admin_hr_items',
-      'advance_payments',
-      'advance_settlements',
-      'bank_loan_drawdowns',
-      'bank_loan_repayments',
-      'bank_loans',
-      'calendar_events',
-      'cash_and_bank_assets',
-      'contracts',
-      'debt_payables',
-      'debt_receivables',
-      'financial_expenses',
-      'financial_initial_declarations',
-      'financial_vouchers',
-      'fixed_asset_depreciations',
-      'fixed_asset_maintenances',
-      'fixed_assets',
-      'goods',
-      'monthly_payrolls',
-      'payment_orders',
-      'quotations',
-      'recruitment_candidates',
-      'recruitment_interviews',
-      'recruitment_requests',
-      'training_courses',
-      'warehouse_movements',
-    ];
-    for (const derivedTbl of DERIVED_TABLES_TO_CLEAR_IF_MISSING) {
-      if (mainTableSet.has(derivedTbl) && !srcTableNameSet.has(derivedTbl)) {
-        const safeDerived = derivedTbl.replace(/"/g, '""');
-        await runSql(`DELETE FROM main."${safeDerived}";`).catch(() => {});
+    // 3. Làm sạch các bảng không có trong file backup hoặc bảng phụ trợ phái sinh
+    if (isFullRestore) {
+      // Nếu chọn thay thế toàn bộ các bảng trong file backup: xóa sạch mọi bảng còn lại trong main không có trong file backup
+      for (const mainTbl of mainTableSet) {
+        if (!srcTableNameSet.has(mainTbl)) {
+          const safeMainTbl = mainTbl.replace(/"/g, '""');
+          await runSql(`DELETE FROM main."${safeMainTbl}";`).catch(() => { });
+        }
+      }
+    } else {
+      // Nếu chỉ chọn thay thế một số bảng trong Offcanvas: xóa sạch các bảng phụ trợ tương ứng với bảng gốc được chọn
+      const SOURCE_TO_DERIVED_MAP = {
+        AccountingAccount: ['accounting_chart_of_accounts'],
+        JournalEntry: ['accounting_journal_entries', 'accounting_journal_lines', 'cash_and_bank_assets'],
+        JournalLine: ['accounting_journal_entries', 'accounting_journal_lines', 'cash_and_bank_assets'],
+        MonthlyBalance: ['accounting_opening_balances', 'financial_initial_declarations', 'cash_and_bank_assets'],
+        Debt: ['debt_receivables', 'debt_payables', 'accounting_opening_balances', 'financial_initial_declarations'],
+        Expense: ['financial_expenses', 'payment_orders', 'financial_vouchers'],
+        ApprovalRequest: ['payment_orders'],
+        PersonalRequest: ['advance_payments', 'advance_settlements'],
+        BankLoan: ['bank_loans', 'bank_loan_drawdowns', 'bank_loan_repayments'],
+        BankDisbursement: ['bank_loans', 'bank_loan_drawdowns', 'bank_loan_repayments'],
+        Asset: ['fixed_assets', 'fixed_asset_depreciations', 'fixed_asset_maintenances'],
+        SaleOrder: ['contracts', 'debt_receivables'],
+        SaleOrderItem: ['contracts', 'debt_receivables'],
+        PurchaseOrder: ['debt_payables', 'payment_orders'],
+        PurchaseOrderItem: ['debt_payables'],
+        InventoryItem: ['goods', 'warehouse_movements'],
+        StockMovement: ['warehouse_movements'],
+        Quotation: ['quotations'],
+        Payroll: ['monthly_payrolls'],
+        Employee: ['admin_hr_items', 'monthly_payrolls'],
+        EmployeeProbation: ['admin_hr_items'],
+        RecruitmentRequest: ['recruitment_requests'],
+        Candidate: ['recruitment_candidates', 'recruitment_interviews'],
+        InterviewScorecard: ['recruitment_interviews'],
+        TrainingCourse: ['training_courses'],
+      };
+      const derivedToClear = new Set();
+      for (const [srcTbl, derivedList] of Object.entries(SOURCE_TO_DERIVED_MAP)) {
+        if (filterSet.has(srcTbl)) {
+          for (const dTbl of derivedList) {
+            if (!filterSet.has(dTbl) || !srcTableNameSet.has(dTbl)) {
+              derivedToClear.add(dTbl);
+            }
+          }
+        }
+      }
+      for (const derivedTbl of derivedToClear) {
+        if (mainTableSet.has(derivedTbl)) {
+          const safeDerived = derivedTbl.replace(/"/g, '""');
+          await runSql(`DELETE FROM main."${safeDerived}";`).catch(() => { });
+        }
       }
     }
 
@@ -29230,6 +29351,7 @@ async function restoreSqliteDatabaseFromBackup(sourceDbPath, selectedTables = nu
     attached = false;
     await syncPrismaFinanceToAccountingTables(conn);
     await runSql('PRAGMA foreign_keys = ON;');
+    await runSql('PRAGMA wal_checkpoint(TRUNCATE);').catch(() => { });
   } catch (err) {
     if (transactionStarted) {
       await runSql('ROLLBACK;').catch(() => { });
@@ -30305,10 +30427,10 @@ app.get('/api/hr/stationery/transactions', async (req, res) => {
       type: t.type === 'EXPORT' ? 'OUT' : t.type === 'IMPORT' ? 'IN' : t.type,
       item: t.item
         ? {
-            ...t.item,
-            stockQty: t.item.currentStock ?? 0,
-            unitPrice: t.item.price ?? 0,
-          }
+          ...t.item,
+          stockQty: t.item.currentStock ?? 0,
+          unitPrice: t.item.price ?? 0,
+        }
         : null,
     }));
     res.json({ transactions: mapped });
@@ -30418,8 +30540,8 @@ app.get('/api/hr/stationery/requests', async (req, res) => {
       }),
       prisma.supplier
         ? prisma.supplier
-            .findMany({ select: { id: true, name: true, code: true, phone: true } })
-            .catch(() => [])
+          .findMany({ select: { id: true, name: true, code: true, phone: true } })
+          .catch(() => [])
         : Promise.resolve([]),
     ]);
 
@@ -30447,10 +30569,10 @@ app.get('/api/hr/stationery/requests', async (req, res) => {
           unitPrice: it.unitPrice,
           item: it.item
             ? {
-                ...it.item,
-                stockQty: it.item.currentStock ?? 0,
-                unitPrice: it.item.price ?? 0,
-              }
+              ...it.item,
+              stockQty: it.item.currentStock ?? 0,
+              unitPrice: it.item.price ?? 0,
+            }
             : null,
         })),
       };
@@ -32186,5 +32308,4 @@ if (process.env.VITE_EMBEDDED_EXPRESS !== 'true') {
 
 export { app };
 export default app;
-
 

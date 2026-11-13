@@ -12,6 +12,8 @@ import {
   XLg,
   ExclamationCircle,
   InfoCircle,
+  PlusLg,
+  Trash3,
 } from "react-bootstrap-icons";
 import XemTruocDonMuaHangModal from "./XemTruocDonMuaHangModal";
 import { Button } from "../../common/Button";
@@ -24,6 +26,17 @@ import { TableToolbar } from "../../common/TableToolbar";
 import { FullWidthTable } from "../../common/FullWidthTable";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
+interface InventorySearchResult {
+  id: string;
+  code: string | null;
+  tenHang: string;
+  donVi: string | null;
+  categoryId?: string | null;
+  thongSoKyThuat?: string | null;
+  imageUrl?: string | null;
+  giaNhap?: number;
+}
+
 interface ReqItem {
   id: string;
   tenHang: string;
@@ -34,6 +47,7 @@ interface ReqItem {
   trangThaiXuLy?: string;   // cho-xu-ly | da-tao-don | bo-qua
   ghiChu?: string | null;
   ngayGiao?: string | null;
+  isAdded?: boolean;
   inventoryItem: {
     code: string | null;
     tenHang: string;
@@ -124,10 +138,44 @@ export default function TaoDonMuaHangModal({
   const [isEditPreview, setIsEditPreview]       = React.useState(false);
   const [searchQuery, setSearchQuery]           = React.useState("");
   const [supplierInputs, setSupplierInputs]     = React.useState<Record<string, string>>({});
+  const [defaultInvItems, setDefaultInvItems]   = React.useState<InventorySearchResult[]>([]);
+  const [rowInvItems, setRowInvItems]           = React.useState<Record<string, InventorySearchResult[]>>({});
+  const invSearchTimers                         = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  // Group items by tenHang for display
+  // Preload default inventory items for quick adding
+  React.useEffect(() => {
+    fetch("/api/plan-finance/inventory/search?limit=30")
+      .then(r => r.json())
+      .then(d => setDefaultInvItems(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, []);
+
+  const searchInventoryForRow = (rowId: string, q: string) => {
+    clearTimeout(invSearchTimers.current[rowId]);
+    if (!q.trim()) {
+      setRowInvItems(prev => {
+        const next = { ...prev };
+        delete next[rowId];
+        return next;
+      });
+      return;
+    }
+    invSearchTimers.current[rowId] = setTimeout(() => {
+      fetch(`/api/plan-finance/inventory/search?q=${encodeURIComponent(q)}&limit=20`)
+        .then(r => r.json())
+        .then(d => {
+          if (Array.isArray(d)) {
+            setRowInvItems(prev => ({ ...prev, [rowId]: d }));
+          }
+        })
+        .catch(() => {});
+    }, 180);
+  };
+
+  // Group items by tenHang for display (keep newly added items distinct by id)
   const groupedItems = React.useMemo(() => {
     const groups: Record<string, {
+      groupKey: string;
       tenHang: string;
       donVi: string | null;
       soLuong: number;
@@ -138,9 +186,10 @@ export default function TaoDonMuaHangModal({
     }> = {};
 
     modalItems.forEach(item => {
-      const key = item.tenHang;
+      const key = item.isAdded ? `__added_${item.id}` : item.tenHang;
       if (!groups[key]) {
         groups[key] = {
+          groupKey: key,
           tenHang: item.tenHang,
           donVi: item.donVi,
           soLuong: 0,
@@ -177,8 +226,80 @@ export default function TaoDonMuaHangModal({
   const setAssign = (itemId: string, patch: Partial<Assignment>) =>
     setAssignments(prev => prev.map(a => a.itemId === itemId ? { ...a, ...patch } : a));
 
-  const handleQuantityChange = (itemId: string, qty: number) => {
-    setModalItems(prev => prev.map(item => item.id === itemId ? { ...item, soLuong: qty } : item));
+  const handleQuantityChange = (itemId: string, qty: number, groupOriginalItems?: ReqItem[]) => {
+    if (groupOriginalItems && groupOriginalItems.length > 1) {
+      const firstId = groupOriginalItems[0].id;
+      const otherIds = new Set(groupOriginalItems.slice(1).map(i => i.id));
+      setModalItems(prev =>
+        prev.map(item => {
+          if (item.id === firstId) return { ...item, soLuong: qty };
+          if (otherIds.has(item.id)) return { ...item, soLuong: 0 };
+          return item;
+        })
+      );
+    } else {
+      setModalItems(prev => prev.map(item => item.id === itemId ? { ...item, soLuong: qty } : item));
+    }
+  };
+
+  const handleAddItem = () => {
+    const newId = `added-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const defaultSupId = editOrderId
+      ? activeSupId
+      : activeSupId && !processedIds.includes(activeSupId)
+      ? activeSupId
+      : null;
+    const defaultNgayGiao =
+      assignments[0]?.ngayGiao || (editNgayNhan ? editNgayNhan.slice(0, 10) : today);
+
+    const newItem: ReqItem = {
+      id: newId,
+      tenHang: "",
+      donVi: "Cái",
+      soLuong: 1,
+      donGiaDK: 0,
+      inventoryItemId: null,
+      trangThaiXuLy: "cho-xu-ly",
+      ngayGiao: defaultNgayGiao,
+      isAdded: true,
+      inventoryItem: null,
+    };
+
+    setModalItems(prev => [...prev, newItem]);
+    setAssignments(prev => [
+      ...prev,
+      {
+        itemId: newId,
+        supplierId: defaultSupId,
+        donGia: 0,
+        ngayGiao: defaultNgayGiao,
+        skip: false,
+      },
+    ]);
+    if (defaultSupId) {
+      const sup = suppliers.find(s => s.id === defaultSupId);
+      if (sup) {
+        setSupplierInputs(prev => ({ ...prev, [newId]: sup.name }));
+      }
+    }
+    if (searchQuery) {
+      setSearchQuery("");
+    }
+  };
+
+  const handleRemoveAddedItem = (itemId: string) => {
+    setModalItems(prev => prev.filter(i => i.id !== itemId));
+    setAssignments(prev => prev.filter(a => a.itemId !== itemId));
+    setSupplierInputs(prev => {
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
+    setRowInvItems(prev => {
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
   };
 
   // Filter NCC theo danh mục
@@ -214,8 +335,24 @@ export default function TaoDonMuaHangModal({
   // Chỉ enable nút khi đã chọn một NCC cụ thể (không phải Tất cả) và NCC đó chưa tạo đơn
   const canConfirm = !!activeSupId && !processedIds.includes(activeSupId);
 
+  const validateActiveItems = (): boolean => {
+    const activeAssigns = editOrderId
+      ? assignments.filter(a => !a.skip)
+      : assignments.filter(a => a.supplierId === activeSupId && !a.skip);
+    const hasEmptyName = activeAssigns.some(a => {
+      const it = modalItems.find(i => i.id === a.itemId);
+      return !it || !it.tenHang.trim();
+    });
+    if (hasEmptyName) {
+      alert("Vui lòng chọn hoặc nhập tên cho các dòng hàng hoá vừa thêm trước khi tạo đơn.");
+      return false;
+    }
+    return true;
+  };
+
   const handleSubmit = async () => {
     if (submitting || !activeSupId) return;
+    if (!validateActiveItems()) return;
     setSubmitting(true);
     try {
       if (editOrderId) {
@@ -252,8 +389,19 @@ export default function TaoDonMuaHangModal({
           alert(data.error ?? "Lỗi khi cập nhật đơn mua");
         }
       } else {
-        // Chỉ gửi assignments của NCC đang active
-        const filtered = assignments.filter(a => a.supplierId === activeSupId && !a.skip);
+        // Chỉ gửi assignments của NCC đang active (kèm thông tin mặt hàng thêm mới / cập nhật SL)
+        const filtered = assignments
+          .filter(a => a.supplierId === activeSupId && !a.skip)
+          .map(a => {
+            const it = modalItems.find(i => i.id === a.itemId);
+            return {
+              ...a,
+              tenHang: it?.tenHang,
+              donVi: it?.donVi,
+              soLuong: it?.soLuong,
+              inventoryItemId: it?.inventoryItemId,
+            };
+          });
         const res  = await fetch(`/api/plan-finance/purchase-requests/${reqId}/create-orders`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -285,6 +433,7 @@ export default function TaoDonMuaHangModal({
   // Mở preview modal khi click nút
   const handleOpenPreview = () => {
     if (!activeSupId || processedIds.includes(activeSupId)) return;
+    if (!validateActiveItems()) return;
     setShowPreview(true);
   };
 
@@ -387,6 +536,16 @@ export default function TaoDonMuaHangModal({
             }
             rightActions={
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  leftIcon={<PlusLg size={13} />}
+                  disabled={submitting}
+                  onClick={handleAddItem}
+                >
+                  Thêm hàng hoá
+                </Button>
+
                 <div style={{ minWidth: 220, maxWidth: 300 }}>
                   {editOrderId ? (
                     <Select
@@ -547,7 +706,7 @@ export default function TaoDonMuaHangModal({
 
                       return (
                         <tr
-                          key={gItem.tenHang}
+                          key={gItem.groupKey}
                           style={{
                             opacity: (a.skip && !isLocked) ? 0.45 : 1,
                             backgroundColor: isLocked
@@ -562,28 +721,135 @@ export default function TaoDonMuaHangModal({
                         >
                           <td style={{ textAlign: "center", fontWeight: 700, color: "#64748b" }}>{idx + 1}</td>
                           <td>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontWeight: 600, color: "#0f172a" }}>{gItem.tenHang}</div>
-                                {gItem.inventoryItem?.code && (
-                                  <div style={{ fontSize: "0.7188rem", color: "#64748b", fontFamily: "monospace", marginTop: 1 }}>
-                                    {gItem.inventoryItem.code}
+                            {representative.isAdded ? (
+                              (() => {
+                                const rawInv = rowInvItems[representative.id] ?? defaultInvItems;
+                                const invSuggestions: SuggestionItem[] = rawInv.map(inv => ({
+                                  id: inv.id,
+                                  value: inv.tenHang,
+                                  label: inv.tenHang,
+                                  subText: [
+                                    inv.code ? `Mã: ${inv.code}` : null,
+                                    inv.donVi ? `ĐVT: ${inv.donVi}` : null,
+                                    inv.giaNhap ? `Giá nhập: ${fmtVnd(inv.giaNhap)}` : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" · "),
+                                }));
+                                return (
+                                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                                    <SuggestionInput
+                                      value={gItem.tenHang}
+                                      placeholder="Tìm hoặc nhập tên hàng hoá, vật tư..."
+                                      emptyMessage="Không tìm thấy hàng hoá trong kho (có thể nhập tên tự do)"
+                                      suggestions={invSuggestions}
+                                      inputStyle={{ height: 32, fontSize: "0.8125rem", fontWeight: 600 }}
+                                      onChange={(text) => {
+                                        setModalItems(prev =>
+                                          prev.map(it =>
+                                            it.id === representative.id
+                                              ? {
+                                                  ...it,
+                                                  tenHang: text,
+                                                  inventoryItemId: null,
+                                                  inventoryItem: null,
+                                                }
+                                              : it
+                                          )
+                                        );
+                                        searchInventoryForRow(representative.id, text);
+                                      }}
+                                      onSelectSuggestion={(sugg) => {
+                                        const picked = rawInv.find(inv => inv.id === sugg.id);
+                                        if (picked) {
+                                          setModalItems(prev =>
+                                            prev.map(it =>
+                                              it.id === representative.id
+                                                ? {
+                                                    ...it,
+                                                    tenHang: picked.tenHang,
+                                                    donVi: picked.donVi || it.donVi || "Cái",
+                                                    donGiaDK: picked.giaNhap || 0,
+                                                    inventoryItemId: picked.id,
+                                                    inventoryItem: {
+                                                      code: picked.code,
+                                                      tenHang: picked.tenHang,
+                                                      donVi: picked.donVi,
+                                                      categoryId: picked.categoryId || null,
+                                                      thongSoKyThuat: picked.thongSoKyThuat || null,
+                                                      imageUrl: picked.imageUrl || null,
+                                                      giaNhap: picked.giaNhap || 0,
+                                                    },
+                                                  }
+                                                : it
+                                            )
+                                          );
+                                          if (picked.giaNhap && picked.giaNhap > 0) {
+                                            handlePriceChange(picked.giaNhap);
+                                          }
+                                        }
+                                      }}
+                                    />
+                                    {gItem.inventoryItem?.code && (
+                                      <div style={{ fontSize: "0.7188rem", color: "#64748b", fontFamily: "monospace", paddingLeft: 2 }}>
+                                        {gItem.inventoryItem.code}
+                                      </div>
+                                    )}
                                   </div>
+                                );
+                              })()
+                            ) : (
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontWeight: 600, color: "#0f172a" }}>{gItem.tenHang}</div>
+                                  {gItem.inventoryItem?.code && (
+                                    <div style={{ fontSize: "0.7188rem", color: "#64748b", fontFamily: "monospace", marginTop: 1 }}>
+                                      {gItem.inventoryItem.code}
+                                    </div>
+                                  )}
+                                </div>
+                                {isLocked && (
+                                  <Badge variant="success">✓ Đã đặt hàng</Badge>
                                 )}
                               </div>
-                              {isLocked && (
-                                <Badge variant="success">✓ Đã đặt hàng</Badge>
-                              )}
-                            </div>
+                            )}
                           </td>
-                          <td style={{ textAlign: "center", color: "#475569" }}>{gItem.donVi ?? "—"}</td>
-                          <td style={{ textAlign: "center", fontWeight: 700, color: "#0f172a" }}>
-                            {editOrderId ? (
+                          <td style={{ textAlign: "center", color: "#475569" }}>
+                            {representative.isAdded ? (
+                              <input
+                                type="text"
+                                value={gItem.donVi ?? ""}
+                                placeholder="ĐVT"
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setModalItems(prev =>
+                                    prev.map(it => (it.id === representative.id ? { ...it, donVi: val } : it))
+                                  );
+                                }}
+                                style={{
+                                  width: "100%",
+                                  height: 32,
+                                  textAlign: "center",
+                                  border: "1px solid var(--border-default, #cbd5e1)",
+                                  borderRadius: "var(--radius-md, 6px)",
+                                  fontSize: "0.8125rem",
+                                  color: "#0f172a",
+                                  background: "#ffffff",
+                                  outline: "none",
+                                  padding: "0 6px",
+                                }}
+                              />
+                            ) : (
+                              gItem.donVi ?? "—"
+                            )}
+                          </td>
+                          <td style={{ textAlign: "center", fontWeight: 700, color: "#0f172a", width: 96 }}>
+                            {!isLocked && !a.skip ? (
                               <NumberInput
                                 value={gItem.soLuong}
-                                min={0}
+                                min={1}
                                 hideZero={false}
-                                onValueChange={(num) => handleQuantityChange(representative.id, num)}
+                                onValueChange={(num) => handleQuantityChange(representative.id, Math.max(1, num), gItem.originalItems)}
                                 style={{ textAlign: "center", height: 32, padding: "4px 8px" }}
                               />
                             ) : (
@@ -676,7 +942,27 @@ export default function TaoDonMuaHangModal({
                           )}
                           {!editOrderId && (
                             <td style={{ textAlign: "center" }}>
-                              {isLocked ? (
+                              {representative.isAdded ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveAddedItem(representative.id)}
+                                  title="Xoá mặt hàng vừa thêm"
+                                  style={{
+                                    width: 28,
+                                    height: 28,
+                                    borderRadius: 6,
+                                    border: "1px solid transparent",
+                                    background: "transparent",
+                                    color: "#ef4444",
+                                    cursor: "pointer",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <Trash3 size={14} />
+                                </button>
+                              ) : isLocked ? (
                                 <LockFill size={14} style={{ color: "#10b981", margin: "0 auto" }} title="Đã được đặt hàng" />
                               ) : (
                                 <input

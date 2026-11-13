@@ -67,21 +67,11 @@ export function LichSuXuatKhoOffcanvas({ onClose }: LichSuXuatKhoOffcanvasProps)
 
   // Fetch stock movements
   React.useEffect(() => {
-    fetch("/api/plan-finance/stock-movements?limit=100")
+    fetch("/api/plan-finance/stock-movements?type=xuat&limit=300")
       .then((r) => r.json())
       .then((d) => setMovements(Array.isArray(d) ? d : []))
       .catch(() => setMovements([]))
       .finally(() => setLoading(false));
-  }, []);
-
-  // ESC key to close
-  React.useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") handleClose();
-    };
-    document.addEventListener("keydown", h);
-    return () => document.removeEventListener("keydown", h);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Group movements by soChungTu
@@ -133,6 +123,7 @@ export function LichSuXuatKhoOffcanvas({ onClose }: LichSuXuatKhoOffcanvasProps)
         }
         width="400px"
         position="right"
+        zIndex={6000}
         bodyStyle={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}
       >
         {/* 2-Slide container */}

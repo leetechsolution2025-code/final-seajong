@@ -94,6 +94,7 @@ export function StockCountDetailsOffcanvas({ stockCountId, onClose }: StockCount
       description="Chi tiết các dòng đối soát kiểm kê thực tế"
       width="400px"
       position="right"
+      zIndex={6000}
       bodyStyle={{ padding: 12, background: "var(--background)" }}
     >
       {loading ? (

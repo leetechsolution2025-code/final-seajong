@@ -414,7 +414,7 @@ export function TheKhoModal({ inventoryItemId: initItemId, warehouseId, warehous
       title="Thẻ kho"
       subtitle={
         data?.item.tenHang
-          ? <><strong style={{ color: "#e2e8f0" }}>{data.item.tenHang}</strong>{warehouseName ? <> &nbsp;·&nbsp; Kho: <span style={{ color: "#38bdf8" }}>{warehouseName}</span></> : ""}</>
+          ? <><strong style={{ color: "#0f172a" }}>{data.item.tenHang}</strong>{warehouseName ? <> &nbsp;·&nbsp; Kho: <span style={{ color: "#0284c7", fontWeight: 600 }}>{warehouseName}</span></> : ""}</>
           : warehouseName ?? "Xem trước thẻ kho"
       }
       actions={actions}

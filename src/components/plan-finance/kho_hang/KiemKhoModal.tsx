@@ -524,10 +524,23 @@ export function KiemKhoModal({ onClose, onSaved }: KiemKhoModalProps) {
 
   // ── Keyboard ─────────────────────────────────────────────────────────────────
   React.useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape" && !saving) onClose(); };
+    const h = (e: KeyboardEvent) => {
+      if (
+        e.key === "Escape" &&
+        !saving &&
+        !confirmOpen &&
+        !importConfirmOpen &&
+        !showPRModal &&
+        !showBaoCao &&
+        !showLichSu &&
+        !baoCaoType
+      ) {
+        onClose();
+      }
+    };
     document.addEventListener("keydown", h);
     return () => document.removeEventListener("keydown", h);
-  }, [onClose, saving]);
+  }, [onClose, saving, confirmOpen, importConfirmOpen, showPRModal, showBaoCao, showLichSu, baoCaoType]);
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (

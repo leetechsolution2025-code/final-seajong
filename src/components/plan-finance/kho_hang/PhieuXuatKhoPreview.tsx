@@ -293,7 +293,7 @@ export function PhieuXuatKhoPreview({
   return (
     <PrintPreviewModal
       title="Xem trước Phiếu xuất kho"
-      subtitle={<>Số: <strong style={{ color: "#e2e8f0", fontFamily: "monospace" }}>{soChungTu}</strong>&nbsp;·&nbsp;Kho: <span style={{ color: "#fcd34d" }}>{khoName}</span></>}
+      subtitle={<>Số: <strong style={{ color: "#0f172a", fontFamily: "monospace" }}>{soChungTu}</strong>&nbsp;·&nbsp;Kho: <span style={{ color: "#d97706", fontWeight: 600 }}>{khoName}</span></>}
       actions={actions}
       sidebar={sidebar}
       document={doc}

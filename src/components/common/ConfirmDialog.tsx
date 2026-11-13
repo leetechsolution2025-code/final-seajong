@@ -54,7 +54,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   icon,
   isLoading = false,
   loading,
-  zIndex = 1600,
+  zIndex = 10000,
   closeOnBackdropClick = false,
   closeOnEscape = true,
 }) => {

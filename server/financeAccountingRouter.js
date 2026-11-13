@@ -1321,6 +1321,7 @@ router.post('/api/debts/reconcile-entry', (req, res) => {
   const targetId = String(entryId || '').trim();
 
   const now = new Date();
+  const nowMs = now.getTime();
   const dd = String(now.getDate()).padStart(2, '0');
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const yyyy = now.getFullYear();
@@ -1328,27 +1329,31 @@ router.post('/api/debts/reconcile-entry', (req, res) => {
   const nowTimeVN = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const dsCode = `DS-${yyyy}${mm}${dd}-${Math.floor(100 + Math.random() * 900)}`;
 
-  const deltaLabel = delta > 0 ? `+${delta.toLocaleString('vi-VN')} đ` : `${delta.toLocaleString('vi-VN')} đ`;
   const defaultTitle =
     note && String(note).trim()
       ? String(note).trim()
-      : `Đối soát chứng từ ${targetCode}: điều chỉnh ${delta > 0 ? 'tăng (thừa)' : 'giảm (thiếu)'} ${deltaLabel} (${origVal.toLocaleString('vi-VN')} đ → ${reconciledVal.toLocaleString('vi-VN')} đ)`;
+      : `Đối soát công nợ chứng từ ${targetCode}`;
 
-  // 1. Nếu là Công nợ phải trả (payable): giữ nguyên chứng từ gốc, thêm chứng từ Đối soát (DS-...) vào danh sách công nợ
-  if (type === 'payable') {
+  const isPayableFlow = type === 'payable' || type === 'outflow';
+  const isReceivableFlow = type === 'receivable' || type === 'inflow';
+
+  // 1. Nếu là Công nợ phải trả (payable / outflow): giữ nguyên chứng từ gốc, thêm chứng từ Đối soát (DS-...) vào danh sách công nợ & DB
+  if (isPayableFlow) {
     db.get(
-      'SELECT * FROM debt_payables WHERE id = ? OR code = ?',
-      [parentId || '', parentCode || ''],
+      `SELECT * FROM debt_payables
+       WHERE (id != '' AND id = ?)
+          OR (code != '' AND code = ?)
+          OR (? != '' AND entries_json LIKE ?)
+       LIMIT 1`,
+      [parentId || '', parentCode || '', targetCode, `%${targetCode}%`],
       (err, row) => {
-        if (err || !row) {
-          return res.json({ success: true, dsCode, delta, newAmount: reconciledVal });
-        }
         let entries = [];
-        try {
-          entries = JSON.parse(row.entries_json || '[]');
-        } catch {}
+        if (row) {
+          try {
+            entries = JSON.parse(row.entries_json || '[]');
+          } catch {}
+        }
 
-        // Tìm số tiền gốc thực tế của chứng từ nếu client chưa truyền chính xác
         let resolvedOrig = origVal;
         const foundTarget = entries.find(
           (e) => (targetId && e.id === targetId) || (targetCode && e.code === targetCode)
@@ -1365,14 +1370,12 @@ router.post('/api/debts/reconcile-entry', (req, res) => {
           });
         }
 
+        const partnerName = row?.supplier_name || 'Nhà cung cấp';
         const dsEntry = {
-          id: `ENT-DS-${Date.now()}`,
+          id: `ENT-DS-${nowMs}`,
           code: dsCode,
           refVoucherCode: targetCode,
-          title:
-            note && String(note).trim()
-              ? String(note).trim()
-              : `Đối soát công nợ chứng từ ${targetCode}`,
+          title: defaultTitle,
           date: nowDateVN,
           time: nowTimeVN,
           totalAmount: finalDelta,
@@ -1388,111 +1391,139 @@ router.post('/api/debts/reconcile-entry', (req, res) => {
           voucherType: 'reconciliation',
           isReconciliation: true,
           paymentMethod: 'Đối soát công nợ',
-          receiverName: row.supplier_name,
+          receiverName: partnerName,
         };
 
-        entries.push(dsEntry);
+        const reconMeta = {
+          refVoucherCode: targetCode,
+          originalAmount: resolvedOrig,
+          reconciledAmount: reconciledVal,
+          deltaAmount: finalDelta,
+          date: nowDateVN,
+          time: nowTimeVN,
+        };
+        const debtDescription = `${dsEntry.title}\n[RECON_META]:${JSON.stringify(reconMeta)}`;
 
-        // Lưu thêm bản ghi Debt trong Prisma để đồng bộ nền luôn giữ lại chứng từ Đối soát này
+        // Lưu bản ghi Debt vào bảng Prisma chuẩn (không có cột remainingAmount) để tồn tại bền vững trong DB
         db.run(
-          `INSERT INTO Debt (id, type, partnerName, amount, paidAmount, remainingAmount, status, referenceId, description, dueDate, createdAt, updatedAt)
-           VALUES (?, 'PAYABLE', ?, 0, ?, 0, 'completed', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-          [
-            dsEntry.id,
-            row.supplier_name,
-            finalDelta,
-            dsCode,
-            dsEntry.title,
-          ],
-          () => {}
-        );
+          `INSERT INTO Debt (id, type, partnerName, amount, paidAmount, status, referenceId, description, dueDate, createdAt, updatedAt)
+           VALUES (?, 'PAYABLE', ?, 0, ?, 'PAID', ?, ?, ?, ?, ?)`,
+          [dsEntry.id, partnerName, finalDelta, dsCode, debtDescription, nowMs, nowMs, nowMs],
+          (debtErr) => {
+            if (debtErr) {
+              console.error('[reconcile-entry] Lỗi INSERT Debt (PAYABLE):', debtErr.message);
+            }
 
-        let billTotal = 0;
-        let paymentTotal = 0;
-        entries.forEach((e) => {
-          const isPayOrRecEnt =
-            e.isReconciliation ||
-            e.type === 'reconciliation' ||
-            e.type === 'payment' ||
-            e.voucherType === 'payment' ||
-            e.statusLabel === 'Đã chi tiền' ||
-            e.statusLabel === 'Đã đối soát' ||
-            String(e.code || '').startsWith('DS-') ||
-            String(e.code || '').startsWith('PC-') ||
-            String(e.code || '').startsWith('UNC-') ||
-            String(e.code || '').startsWith('CHI-');
-          if (isPayOrRecEnt) {
-            paymentTotal += Number(e.paidAmount ?? e.totalAmount ?? e.amount) || 0;
-          } else {
-            billTotal += Number(e.totalAmount ?? e.amount) || 0;
-          }
-        });
+            if (!row) {
+              syncAllSubledgersToJournal(db)
+                .catch(() => {})
+                .finally(() => {
+                  res.json({
+                    success: true,
+                    dsCode,
+                    delta: finalDelta,
+                    newAmount: reconciledVal,
+                    title: dsEntry.title,
+                    reconciliationEntry: dsEntry,
+                  });
+                });
+              return;
+            }
 
-        const finalTotal = billTotal > 0 ? billTotal : Number(row.total_amount) || 0;
-        const finalPaid = Math.max(0, paymentTotal);
+            entries.push(dsEntry);
 
-        let unalloc = finalPaid;
-        entries = entries.map((e) => {
-          const isPayOrRecEnt =
-            e.isReconciliation ||
-            e.type === 'reconciliation' ||
-            e.type === 'payment' ||
-            e.voucherType === 'payment' ||
-            e.statusLabel === 'Đã chi tiền' ||
-            e.statusLabel === 'Đã đối soát' ||
-            String(e.code || '').startsWith('DS-') ||
-            String(e.code || '').startsWith('PC-') ||
-            String(e.code || '').startsWith('UNC-') ||
-            String(e.code || '').startsWith('CHI-');
-          if (isPayOrRecEnt) return e;
-          const bVal = Number(e.totalAmount ?? e.amount) || 0;
-          const alloc = Math.min(bVal, Math.max(0, unalloc));
-          unalloc = Math.max(0, unalloc - alloc);
-          const bRem = Math.max(0, bVal - alloc);
-          return {
-            ...e,
-            paidAmount: alloc,
-            remainingAmount: bRem,
-            status: bRem <= 0 ? 'completed' : 'pending',
-            statusLabel: bRem <= 0 ? 'Đã thanh toán' : 'Chờ thanh toán',
-          };
-        });
-
-        const finalRemain = Math.max(0, finalTotal - finalPaid);
-        const finalStatus = finalRemain <= 0 ? 'completed' : 'pending';
-        const finalStatusLabel = finalRemain <= 0 ? 'Đã hoàn tất' : 'Chờ thanh toán';
-
-        db.run(
-          `UPDATE debt_payables
-           SET total_amount = ?, paid_amount = ?, remaining_amount = ?, status = ?, status_label = ?, entries_json = ?, updated_at = CURRENT_TIMESTAMP
-           WHERE id = ?`,
-          [finalTotal, finalPaid, finalRemain, finalStatus, finalStatusLabel, JSON.stringify(entries), row.id],
-          () => {
-            syncAllSubledgersToJournal(db).catch(() => {});
-            res.json({
-              success: true,
-              dsCode,
-              delta: finalDelta,
-              newAmount: reconciledVal,
-              reconciliationEntry: dsEntry,
-              updatedParent: {
-                id: row.id,
-                code: row.code,
-                supplierName: row.supplier_name,
-                supplierAddress: row.supplier_address || '',
-                poCode: row.po_code || '',
-                totalAmount: finalTotal,
-                paidAmount: finalPaid,
-                remainingAmount: finalRemain,
-                dueDate: row.due_date || '',
-                status: finalStatus,
-                statusLabel: finalStatusLabel,
-                accountant: row.accountant || '',
-                notes: row.notes || '',
-                partnerType: row.partner_type || 'supplier',
-                entries,
-              },
+            let billTotal = 0;
+            let paymentTotal = 0;
+            entries.forEach((e) => {
+              const isPayOrRecEnt =
+                e.isReconciliation ||
+                e.type === 'reconciliation' ||
+                e.type === 'payment' ||
+                e.voucherType === 'payment' ||
+                e.statusLabel === 'Đã chi tiền' ||
+                e.statusLabel === 'Đã đối soát' ||
+                String(e.code || '').startsWith('DS-') ||
+                String(e.code || '').startsWith('PC-') ||
+                String(e.code || '').startsWith('UNC-') ||
+                String(e.code || '').startsWith('CHI-');
+              if (isPayOrRecEnt) {
+                paymentTotal += Number(e.paidAmount ?? e.totalAmount ?? e.amount) || 0;
+              } else {
+                billTotal += Number(e.totalAmount ?? e.amount) || 0;
+              }
             });
+
+            const finalTotal = billTotal > 0 ? billTotal : Number(row.total_amount) || 0;
+            const finalPaid = Math.max(0, paymentTotal);
+
+            let unalloc = finalPaid;
+            entries = entries.map((e) => {
+              const isPayOrRecEnt =
+                e.isReconciliation ||
+                e.type === 'reconciliation' ||
+                e.type === 'payment' ||
+                e.voucherType === 'payment' ||
+                e.statusLabel === 'Đã chi tiền' ||
+                e.statusLabel === 'Đã đối soát' ||
+                String(e.code || '').startsWith('DS-') ||
+                String(e.code || '').startsWith('PC-') ||
+                String(e.code || '').startsWith('UNC-') ||
+                String(e.code || '').startsWith('CHI-');
+              if (isPayOrRecEnt) return e;
+              const bVal = Number(e.totalAmount ?? e.amount) || 0;
+              const alloc = Math.min(bVal, Math.max(0, unalloc));
+              unalloc = Math.max(0, unalloc - alloc);
+              const bRem = Math.max(0, bVal - alloc);
+              return {
+                ...e,
+                paidAmount: alloc,
+                remainingAmount: bRem,
+                status: bRem <= 0 ? 'completed' : 'pending',
+                statusLabel: bRem <= 0 ? 'Đã thanh toán' : 'Chờ thanh toán',
+              };
+            });
+
+            const finalRemain = Math.max(0, finalTotal - finalPaid);
+            const finalStatus = finalRemain <= 0 ? 'completed' : 'pending';
+            const finalStatusLabel = finalRemain <= 0 ? 'Đã hoàn tất' : 'Chờ thanh toán';
+
+            db.run(
+              `UPDATE debt_payables
+               SET total_amount = ?, paid_amount = ?, remaining_amount = ?, status = ?, status_label = ?, entries_json = ?, updated_at = CURRENT_TIMESTAMP
+               WHERE id = ?`,
+              [finalTotal, finalPaid, finalRemain, finalStatus, finalStatusLabel, JSON.stringify(entries), row.id],
+              () => {
+                syncAllSubledgersToJournal(db)
+                  .catch(() => {})
+                  .finally(() => {
+                    res.json({
+                      success: true,
+                      dsCode,
+                      delta: finalDelta,
+                      newAmount: reconciledVal,
+                      title: dsEntry.title,
+                      reconciliationEntry: dsEntry,
+                      updatedParent: {
+                        id: row.id,
+                        code: row.code,
+                        supplierName: row.supplier_name,
+                        supplierAddress: row.supplier_address || '',
+                        poCode: row.po_code || '',
+                        totalAmount: finalTotal,
+                        paidAmount: finalPaid,
+                        remainingAmount: finalRemain,
+                        dueDate: row.due_date || '',
+                        status: finalStatus,
+                        statusLabel: finalStatusLabel,
+                        accountant: row.accountant || '',
+                        notes: row.notes || '',
+                        partnerType: row.partner_type || 'supplier',
+                        entries,
+                      },
+                    });
+                  });
+              }
+            );
           }
         );
       }
@@ -1500,22 +1531,25 @@ router.post('/api/debts/reconcile-entry', (req, res) => {
     return;
   }
 
-  // 2. Nếu là Công nợ phải thu (receivable): giữ nguyên chứng từ gốc, thêm chứng từ Đối soát (DS-...) vào danh sách công nợ
-  if (type === 'receivable') {
+  // 2. Nếu là Công nợ phải thu (receivable / inflow): giữ nguyên chứng từ gốc, thêm chứng từ Đối soát (DS-...) vào danh sách công nợ & DB
+  if (isReceivableFlow) {
     db.get(
-      'SELECT * FROM debt_receivables WHERE id = ? OR code = ?',
-      [parentId || '', parentCode || ''],
+      `SELECT * FROM debt_receivables
+       WHERE (id != '' AND id = ?)
+          OR (code != '' AND code = ?)
+          OR (? != '' AND entries_json LIKE ?)
+       LIMIT 1`,
+      [parentId || '', parentCode || '', targetCode, `%${targetCode}%`],
       (err, row) => {
-        if (err || !row) {
-          return res.json({ success: true, dsCode, delta, newAmount: reconciledVal });
-        }
         let entries = [];
-        try {
-          entries = JSON.parse(row.entries_json || '[]');
-        } catch {}
+        if (row) {
+          try {
+            entries = JSON.parse(row.entries_json || '[]');
+          } catch {}
+        }
 
         let resolvedOrig = origVal;
-        if (!resolvedOrig) {
+        if (!resolvedOrig && entries.length > 0) {
           entries.forEach((e) => {
             if ((targetId && e.id === targetId) || (targetCode && e.code === targetCode)) {
               resolvedOrig = Math.round(Number(e.paidAmount || e.contractValue || e.amount) || 0);
@@ -1538,19 +1572,14 @@ router.post('/api/debts/reconcile-entry', (req, res) => {
           });
         }
 
+        const partnerName = row?.customer_name || 'Khách hàng';
         const dsReceipt = {
-          id: `PAY-DS-${Date.now()}`,
+          id: `PAY-DS-${nowMs}`,
           code: dsCode,
           receiptCode: dsCode,
           refVoucherCode: targetCode,
-          title:
-            note && String(note).trim()
-              ? String(note).trim()
-              : `Đối soát công nợ chứng từ ${targetCode}`,
-          note:
-            note && String(note).trim()
-              ? String(note).trim()
-              : `Đối soát công nợ chứng từ ${targetCode}`,
+          title: defaultTitle,
+          note: defaultTitle,
           date: nowDateVN,
           time: nowTimeVN,
           amount: finalDelta,
@@ -1561,94 +1590,131 @@ router.post('/api/debts/reconcile-entry', (req, res) => {
           type: 'reconciliation',
           typeLabel: 'Đối soát',
           isReconciliation: true,
-          payerName: row.customer_name || '',
-          payerAddress: row.customer_address || '',
+          payerName: partnerName,
+          payerAddress: row?.customer_address || '',
         };
 
-        if (entries.length > 0) {
-          entries[0].payments = Array.isArray(entries[0].payments) ? entries[0].payments : [];
-          entries[0].payments.push(dsReceipt);
-        }
+        const reconMeta = {
+          refVoucherCode: targetCode,
+          originalAmount: resolvedOrig,
+          reconciledAmount: reconciledVal,
+          deltaAmount: finalDelta,
+          date: nowDateVN,
+          time: nowTimeVN,
+        };
+        const debtDescription = `${dsReceipt.title}\n[RECON_META]:${JSON.stringify(reconMeta)}`;
 
-        // Lưu thêm bản ghi Debt trong Prisma để đồng bộ nền luôn giữ lại chứng từ Đối soát này
+        // Lưu bản ghi Debt vào bảng Prisma chuẩn (không có cột remainingAmount) để tồn tại bền vững trong DB
         db.run(
-          `INSERT INTO Debt (id, type, customerId, partnerName, amount, paidAmount, remainingAmount, status, referenceId, description, dueDate, createdAt, updatedAt)
-           VALUES (?, 'RECEIVABLE', ?, ?, 0, ?, 0, 'completed', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          `INSERT INTO Debt (id, type, customerId, partnerName, amount, paidAmount, status, referenceId, description, dueDate, createdAt, updatedAt)
+           VALUES (?, 'RECEIVABLE', ?, ?, 0, ?, 'PAID', ?, ?, ?, ?, ?)`,
           [
             dsReceipt.id,
-            row.customer_id || null,
-            row.customer_name,
+            row?.customer_id || null,
+            partnerName,
             finalDelta,
             dsCode,
-            dsReceipt.title,
+            debtDescription,
+            nowMs,
+            nowMs,
+            nowMs,
           ],
-          () => {}
-        );
+          (debtErr) => {
+            if (debtErr) {
+              console.error('[reconcile-entry] Lỗi INSERT Debt (RECEIVABLE):', debtErr.message);
+            }
 
-        let allReceiptsSum = 0;
-        let allInvoicesSum = 0;
-        entries.forEach((e) => {
-          allInvoicesSum += Number(e.contractValue ?? e.amount) || 0;
-          if (Array.isArray(e.payments)) {
-            e.payments.forEach((p) => {
-              allReceiptsSum += Number(p.amount) || 0;
+            if (!row) {
+              syncAllSubledgersToJournal(db)
+                .catch(() => {})
+                .finally(() => {
+                  res.json({
+                    success: true,
+                    dsCode,
+                    delta: finalDelta,
+                    newAmount: reconciledVal,
+                    title: dsReceipt.title,
+                    reconciliationEntry: dsReceipt,
+                  });
+                });
+              return;
+            }
+
+            if (entries.length > 0) {
+              entries[0].payments = Array.isArray(entries[0].payments) ? entries[0].payments : [];
+              entries[0].payments.push(dsReceipt);
+            }
+
+            let allReceiptsSum = 0;
+            let allInvoicesSum = 0;
+            entries.forEach((e) => {
+              allInvoicesSum += Number(e.contractValue ?? e.amount) || 0;
+              if (Array.isArray(e.payments)) {
+                e.payments.forEach((p) => {
+                  allReceiptsSum += Number(p.amount) || 0;
+                });
+              }
             });
-          }
-        });
 
-        const finalContract = allInvoicesSum > 0 ? allInvoicesSum : Number(row.contract_value) || 0;
-        const finalPaid = Math.max(0, allReceiptsSum > 0 ? allReceiptsSum : Number(row.paid_amount) + finalDelta);
+            const finalContract = allInvoicesSum > 0 ? allInvoicesSum : Number(row.contract_value) || 0;
+            const finalPaid = Math.max(0, allReceiptsSum > 0 ? allReceiptsSum : Number(row.paid_amount) + finalDelta);
 
-        let unalloc = finalPaid;
-        entries = entries.map((e) => {
-          const invVal = Number(e.contractValue ?? e.amount) || 0;
-          const alloc = Math.min(invVal, Math.max(0, unalloc));
-          unalloc = Math.max(0, unalloc - alloc);
-          const invRem = Math.max(0, invVal - alloc);
-          return {
-            ...e,
-            paidAmount: alloc,
-            remainingAmount: invRem,
-            status: invRem <= 0 ? 'completed' : alloc > 0 ? 'partial' : 'ontime',
-            statusLabel: invRem <= 0 ? 'Đã thu đủ' : alloc > 0 ? 'Thu một phần' : 'Chờ thanh toán',
-          };
-        });
-
-        const finalRemain = Math.max(0, finalContract - finalPaid);
-        const finalStatus = finalRemain <= 0 ? 'completed' : finalPaid > 0 ? 'ontime' : 'due';
-        const finalStatusLabel = finalRemain <= 0 ? 'Đã thu đủ' : finalPaid > 0 ? 'Đang thu hồi nợ' : 'Chờ thu nợ';
-
-        db.run(
-          `UPDATE debt_receivables
-           SET contract_value = ?, paid_amount = ?, remaining_amount = ?, status = ?, status_label = ?, entries_json = ?, updated_at = CURRENT_TIMESTAMP
-           WHERE id = ?`,
-          [finalContract, finalPaid, finalRemain, finalStatus, finalStatusLabel, JSON.stringify(entries), row.id],
-          () => {
-            syncAllSubledgersToJournal(db).catch(() => {});
-            res.json({
-              success: true,
-              dsCode,
-              delta: finalDelta,
-              newAmount: reconciledVal,
-              reconciliationEntry: dsReceipt,
-              updatedParent: {
-                id: row.id,
-                code: row.code,
-                customerId: row.customer_id,
-                customerName: row.customer_name,
-                customerAddress: row.customer_address || '',
-                projectName: row.project_name || '',
-                contractValue: finalContract,
-                paidAmount: finalPaid,
-                remainingAmount: finalRemain,
-                dueDate: row.due_date || '',
-                status: finalStatus,
-                statusLabel: finalStatusLabel,
-                managerName: row.manager_name || '',
-                notes: row.notes || '',
-                entries,
-              },
+            let unalloc = finalPaid;
+            entries = entries.map((e) => {
+              const invVal = Number(e.contractValue ?? e.amount) || 0;
+              const alloc = Math.min(invVal, Math.max(0, unalloc));
+              unalloc = Math.max(0, unalloc - alloc);
+              const invRem = Math.max(0, invVal - alloc);
+              return {
+                ...e,
+                paidAmount: alloc,
+                remainingAmount: invRem,
+                status: invRem <= 0 ? 'completed' : alloc > 0 ? 'partial' : 'ontime',
+                statusLabel: invRem <= 0 ? 'Đã thu đủ' : alloc > 0 ? 'Thu một phần' : 'Chờ thanh toán',
+              };
             });
+
+            const finalRemain = Math.max(0, finalContract - finalPaid);
+            const finalStatus = finalRemain <= 0 ? 'completed' : finalPaid > 0 ? 'ontime' : 'due';
+            const finalStatusLabel = finalRemain <= 0 ? 'Đã thu đủ' : finalPaid > 0 ? 'Đang thu hồi nợ' : 'Chờ thu nợ';
+
+            db.run(
+              `UPDATE debt_receivables
+               SET contract_value = ?, paid_amount = ?, remaining_amount = ?, status = ?, status_label = ?, entries_json = ?, updated_at = CURRENT_TIMESTAMP
+               WHERE id = ?`,
+              [finalContract, finalPaid, finalRemain, finalStatus, finalStatusLabel, JSON.stringify(entries), row.id],
+              () => {
+                syncAllSubledgersToJournal(db)
+                  .catch(() => {})
+                  .finally(() => {
+                    res.json({
+                      success: true,
+                      dsCode,
+                      delta: finalDelta,
+                      newAmount: reconciledVal,
+                      title: dsReceipt.title,
+                      reconciliationEntry: dsReceipt,
+                      updatedParent: {
+                        id: row.id,
+                        code: row.code,
+                        customerId: row.customer_id,
+                        customerName: row.customer_name,
+                        customerAddress: row.customer_address || '',
+                        projectName: row.project_name || '',
+                        contractValue: finalContract,
+                        paidAmount: finalPaid,
+                        remainingAmount: finalRemain,
+                        dueDate: row.due_date || '',
+                        status: finalStatus,
+                        statusLabel: finalStatusLabel,
+                        managerName: row.manager_name || '',
+                        notes: row.notes || '',
+                        entries,
+                      },
+                    });
+                  });
+              }
+            );
           }
         );
       }
@@ -1656,8 +1722,11 @@ router.post('/api/debts/reconcile-entry', (req, res) => {
     return;
   }
 
-  syncAllSubledgersToJournal(db).catch(() => {});
-  res.json({ success: true, dsCode, delta, newAmount: reconciledVal, title: defaultTitle });
+  syncAllSubledgersToJournal(db)
+    .catch(() => {})
+    .finally(() => {
+      res.json({ success: true, dsCode, delta, newAmount: reconciledVal, title: defaultTitle });
+    });
 });
 
 // Xóa công nợ phải trả (Tự động xóa cascade các phiếu chi liên quan, hoàn trả tiền vào quỹ/ngân hàng & cập nhật sổ cái)
@@ -2255,10 +2324,20 @@ router.get('/api/finance/journal-entries', async (req, res) => {
             if (l.type === 'CREDIT') totalCredit += l.amount;
           }
 
+          let entryTime = '';
+          if (e.created_at) {
+            const rawTs = String(e.created_at).trim();
+            const timePart = rawTs.split(/[ T]/)[1] || '';
+            if (timePart) {
+              entryTime = timePart.slice(0, 5);
+            }
+          }
+
           return {
             id: e.id,
             entryNumber: e.entry_number,
             entryDate: e.entry_date,
+            entryTime: entryTime || '08:30',
             documentDate: e.document_date || e.entry_date,
             referenceCode: e.reference_code,
             sourceModule: e.source_module,
@@ -2350,12 +2429,16 @@ router.post('/api/finance/journal-entries', (req, res) => {
       finalSourceModule === 'ADVANCE' ? 'Tạm ứng' : 'Thủ công'
     );
 
+    const now = new Date();
+    const localTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    const localCreatedAt = `${entryDate} ${localTimeStr}`;
+
     db.run(
       `INSERT INTO accounting_journal_entries (
         id, entry_number, entry_date, document_date, reference_code,
         source_module, source_label, description, total_amount, status,
-        status_label, created_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'posted', 'Đã ghi sổ', ?)`,
+        status_label, created_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'posted', 'Đã ghi sổ', ?, ?, ?)`,
       [
         entryId,
         finalNumber,
@@ -2367,6 +2450,8 @@ router.post('/api/finance/journal-entries', (req, res) => {
         description.trim(),
         debitSum,
         createdBy || 'Kế toán tổng hợp',
+        localCreatedAt,
+        localCreatedAt,
       ],
       function (err) {
         if (err) return res.status(500).json({ error: err.message });

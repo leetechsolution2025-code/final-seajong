@@ -707,10 +707,12 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
 
   // ESC close
   React.useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape" && !showPreview && !showPrintLabelModal) onClose(); };
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !showPreview && !showPrintLabelModal && !showLichSu && !confirmOpen && !saving) onClose();
+    };
     document.addEventListener("keydown", h);
     return () => document.removeEventListener("keydown", h);
-  }, [onClose, showPreview, showPrintLabelModal]);
+  }, [onClose, showPreview, showPrintLabelModal, showLichSu, confirmOpen, saving]);
 
   // ── Item search — debounce 250ms ────────────────────────────────────────────
   const searchTimers = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});

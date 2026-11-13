@@ -217,7 +217,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
         <main className="flex-1 overflow-y-auto bg-slate-200/80 p-6 flex justify-center items-start">
           <div
             id={documentId}
-            className="preview-scale-wrapper flex flex-col gap-6 h-fit pb-8"
+            className={`preview-scale-wrapper ${isLandscape ? 'is-landscape' : 'is-portrait'} flex flex-col gap-6 h-fit pb-8`}
             style={{ width: pageWidth, maxWidth: '100%' }}
           >
             {documentContent}

@@ -24,7 +24,8 @@ export const Toggle: React.FC<ToggleProps> = ({
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.6 : 1,
         userSelect: 'none',
-        width: '100%',
+        width: label || description ? '100%' : 'fit-content',
+        flexShrink: label || description ? undefined : 0,
       }}
     >
       <div

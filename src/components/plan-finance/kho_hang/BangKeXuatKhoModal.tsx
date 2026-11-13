@@ -226,7 +226,7 @@ export function BangKeXuatKhoModal({ warehouseId, warehouseName, onClose }: Prop
   return (
     <PrintPreviewModal
       title="Bảng kê Xuất kho hàng hoá"
-      subtitle={<>Kho: <strong style={{ color: "#fcd34d" }}>{warehouseName}</strong></>}
+      subtitle={<>Kho: <strong style={{ color: "#0f172a" }}>{warehouseName}</strong></>}
       actions={actions}
       sidebar={sidebar}
       document={doc}

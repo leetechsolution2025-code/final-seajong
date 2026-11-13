@@ -1,10 +1,10 @@
 {
-  "scope": "ALL",
+  "scope": "PRODUCTION_ORDERS",
   "enabled": true,
   "retentionDays": 30,
-  "applyInProgress": true,
+  "applyInProgress": false,
   "applyCompleted": true,
-  "lastRunAt": "2026-11-13T01:08:48.946Z",
-  "lastDeletedCount": 3,
-  "updatedAt": "2026-11-13T01:08:48.946Z"
+  "lastRunAt": "2026-11-13T07:06:16.461Z",
+  "lastDeletedCount": 118,
+  "updatedAt": "2026-11-13T07:06:16.461Z"
 }

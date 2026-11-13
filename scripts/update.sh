@@ -130,8 +130,9 @@ fi
 echo "-> Đang kiểm tra và cài đặt dependencies (npm install --omit=dev)..."
 npm install --omit=dev --prefer-offline
 
-echo "-> Đang khởi tạo Prisma Client (npx prisma generate)..."
+echo "-> Đang khởi tạo Prisma Client & cập nhật cấu trúc bảng mới (nếu có)..."
 npx prisma generate
+npx prisma db push --skip-generate >/dev/null 2>&1 || true
 
 # Nếu có file SQL đồng bộ các bảng được chọn từ Local thì nạp vào DB trên VPS
 if [ -f "scripts/sync_selected_tables.sql" ]; then

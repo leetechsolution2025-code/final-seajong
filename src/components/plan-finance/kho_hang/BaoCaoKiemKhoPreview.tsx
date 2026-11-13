@@ -338,7 +338,7 @@ export function BaoCaoKiemKhoPreview(props: BaoCaoKiemKhoPreviewProps) {
   return (
     <PrintPreviewModal
       title="Xem trước Biên bản kiểm kê vật tư"
-      subtitle={<>Số: <strong style={{ color: "#e2e8f0", fontFamily: "monospace" }}>{props.soChungTu}</strong>&nbsp;·&nbsp;Kho: <span style={{ color: "#38bdf8" }}>{props.warehouseName}</span></>}
+      subtitle={<>Số: <strong style={{ color: "#0f172a", fontFamily: "monospace" }}>{props.soChungTu}</strong>&nbsp;·&nbsp;Kho: <span style={{ color: "#0284c7", fontWeight: 600 }}>{props.warehouseName}</span></>}
       actions={actions}
       sidebar={sidebar}
       document={

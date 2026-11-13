@@ -316,10 +316,15 @@ export function NhapKhoModal({
 
   // ESC close
   React.useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (showLichSu || showPreview || confirmOpen || saving) return;
+        onClose();
+      }
+    };
     document.addEventListener("keydown", h);
     return () => document.removeEventListener("keydown", h);
-  }, [onClose]);
+  }, [onClose, showLichSu, showPreview, confirmOpen, saving]);
 
   React.useEffect(() => {
     if (mode !== "po") return;
@@ -1104,20 +1109,29 @@ export function NhapKhoModal({
                 <div className="form-group">
                   <label className="form-label">Thời gian</label>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <DatePicker
-                        value={ngayNhap}
-                        min={lockDate ? new Date().toISOString().slice(0, 10) : undefined}
-                        max={lockDate ? new Date().toISOString().slice(0, 10) : undefined}
-                        onChange={val => !lockDate && !success && setNgayNhap(val)}
-                        disabled={lockDate || success}
-                      />
-                    </div>
-                    <Toggle
-                      checked={lockDate}
-                      onChange={setLockDate}
-                      disabled={success}
+                    <DatePicker
+                      value={ngayNhap}
+                      min={lockDate ? new Date().toISOString().slice(0, 10) : undefined}
+                      max={lockDate ? new Date().toISOString().slice(0, 10) : undefined}
+                      onChange={val => !lockDate && !success && setNgayNhap(val)}
+                      disabled={lockDate || success}
+                      clearable={false}
+                      className="flex-1"
                     />
+                    {!success && (
+                      <div
+                        style={{ flexShrink: 0 }}
+                        title={lockDate ? "Khoá ngày hôm nay — nhấn để mở" : "Đang mở — nhấn để khoá"}
+                      >
+                        <Toggle
+                          checked={lockDate}
+                          onChange={(checked) => {
+                            setLockDate(checked);
+                            if (checked) setNgayNhap(new Date().toISOString().slice(0, 10));
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
 

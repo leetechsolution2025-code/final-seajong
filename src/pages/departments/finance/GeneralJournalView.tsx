@@ -36,6 +36,7 @@ export interface JournalEntry {
   id: string;
   entryNumber: string;
   entryDate: string;
+  entryTime?: string;
   documentDate: string;
   referenceCode?: string;
   sourceModule: 'PROCUREMENT' | 'SALES' | 'LOGISTICS' | 'PRODUCTION' | 'CASH' | 'ADVANCE' | 'MANUAL';
@@ -46,6 +47,7 @@ export interface JournalEntry {
   status: 'posted' | 'draft';
   statusLabel: string;
   createdBy?: string;
+  createdAt?: string;
 }
 
 export const CHART_OF_ACCOUNTS = [
@@ -92,6 +94,17 @@ const formatDate = (dateStr: string) => {
   const [y, m, d] = dateStr.split('-');
   if (!d) return dateStr;
   return `${d}/${m}/${y}`;
+};
+
+const formatEntryTime = (entry: JournalEntry) => {
+  if (entry.entryTime && entry.entryTime.trim()) {
+    return entry.entryTime.trim().slice(0, 5);
+  }
+  if (entry.createdAt) {
+    const timePart = String(entry.createdAt).trim().split(/[ T]/)[1] || '';
+    if (timePart) return timePart.slice(0, 5);
+  }
+  return '08:30';
 };
 
 export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowToast }) => {
@@ -845,8 +858,15 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
                     </td>
 
                     {/* Ngày ghi sổ */}
-                    <td className="hidden sm:table-cell" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                      {formatDate(entry.entryDate)}
+                    <td className="hidden sm:table-cell" style={{ whiteSpace: 'nowrap' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                          {formatDate(entry.entryDate)}
+                        </span>
+                        <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                          {formatEntryTime(entry)}
+                        </span>
+                      </div>
                     </td>
 
                     {/* Số hiệu chứng từ và Tham chiếu */}
@@ -870,7 +890,9 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
                           <span className="text-[11px] font-bold font-mono text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
                             {entry.entryNumber}
                           </span>
-                          <span className="text-[11px] text-slate-500">{formatDate(entry.entryDate)}</span>
+                          <span className="text-[11px] text-slate-500">
+                            {formatDate(entry.entryDate)} • {formatEntryTime(entry)}
+                          </span>
                           <span className="text-[10.5px] font-semibold text-emerald-700">
                             Nợ {entry.lines.filter((l) => l.type === 'DEBIT').map((l) => l.accountCode).join(',')} / Có {entry.lines.filter((l) => l.type === 'CREDIT').map((l) => l.accountCode).join(',')}
                           </span>

@@ -344,10 +344,20 @@ export default function XemTruocDonMuaHangModal({
   const ngayStr = fmtDate(ngayDat);
 
   const callCreateOrders = async () => {
+    const enrichedAssignments = assignments.map(a => {
+      const it = items.find(i => i.id === a.itemId);
+      return {
+        ...a,
+        tenHang: it?.tenHang,
+        donVi: it?.donVi,
+        soLuong: it?.soLuong,
+        inventoryItemId: it?.inventoryItemId,
+      };
+    });
     const res = await fetch(`/api/plan-finance/purchase-requests/${reqId}/create-orders`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assignments, meta: { ngayDat, hinhThucTT, hinhThucGH, phuongTien, thueVAT, datCocPct, tienDatCoc } }),
+      body: JSON.stringify({ assignments: enrichedAssignments, meta: { ngayDat, hinhThucTT, hinhThucGH, phuongTien, thueVAT, datCocPct, tienDatCoc } }),
     });
     const text = await res.text();
     let data: { createdOrders?: unknown[]; error?: string } = {};

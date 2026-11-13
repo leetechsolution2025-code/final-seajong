@@ -2391,19 +2391,30 @@ textarea.form-input {
 }
 
 /* Khổ giấy hiển thị */
-.print-paper-page {
+.print-paper-page,
+.pdf-content-page {
   background: #ffffff;
-  color: #1e293b;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.12);
+  color: #000000;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.1);
   border-radius: 2px;
   position: relative;
   box-sizing: border-box;
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  font-family: var(--font-sans);
   flex-shrink: 0;
 }
 
-[data-theme='dark'] .print-paper-page {
+.pdf-content-page {
+  width: 100%;
+  min-height: 1123px;
+  padding: 15mm 18mm;
+}
+
+.preview-scale-wrapper.is-landscape .pdf-content-page {
+  min-height: 794px;
+}
+
+[data-theme='dark'] .print-paper-page,
+[data-theme='dark'] .pdf-content-page {
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 

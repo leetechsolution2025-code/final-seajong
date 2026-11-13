@@ -56,7 +56,8 @@ function _runSyncAllSubledgersToJournal(db) {
       db.all('SELECT * FROM debt_payables', [], (payErr, payables) => {
         if (payErr) return reject(payErr);
 
-        db.serialize(() => {
+        db.all("SELECT * FROM Debt WHERE referenceId LIKE 'DS-%'", [], (_dsErr, dsDebts) => {
+          db.serialize(() => {
           db.run('PRAGMA foreign_keys = OFF');
 
           // 1. Xóa sạch toàn bộ các bút toán JE-% tự sinh cũ (bao gồm dữ liệu rác ngành cửa gỗ CNPT001...)
@@ -97,7 +98,7 @@ function _runSyncAllSubledgersToJournal(db) {
                   id, entry_number, entry_date, document_date, reference_code,
                   source_module, source_label, description, total_amount,
                   status, status_label, created_by, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'posted', 'Đã ghi sổ', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'posted', 'Đã ghi sổ', ?, ?, ?)
               `);
               insertEntryStmt.on('error', (stmtErr) => {
                 console.warn('⚠️ [journalSyncService] insertEntryStmt error:', stmtErr.message);
@@ -146,6 +147,8 @@ function _runSyncAllSubledgersToJournal(db) {
 
                     existingCodes.add(pCode);
                     const payEntryId = `JE-REC-${pCode.replace(/[^a-zA-Z0-9-]/g, '')}-${pIdx}`;
+                    const pTime = String(p.time || ent.time || '09:00').trim();
+                    const createdAtStr = pTime.length === 5 ? `${pDate} ${pTime}:00` : `${pDate} ${pTime}`;
 
                     if (isRecon) {
                       const debitAcc = rawAmt >= 0 ? '1121' : '131';
@@ -165,7 +168,9 @@ function _runSyncAllSubledgersToJournal(db) {
                         'Đối soát công nợ',
                         p.title || `Đối soát công nợ chứng từ ${p.refVoucherCode || entCode} - KH: ${rec.customer_name}`,
                         absAmt,
-                        rec.manager_name || 'Kế toán công nợ'
+                        rec.manager_name || 'Kế toán công nợ',
+                        createdAtStr,
+                        createdAtStr
                       );
 
                       insertLineStmt.run(
@@ -215,7 +220,9 @@ function _runSyncAllSubledgersToJournal(db) {
                         'Bán hàng',
                         p.title || `Thu tiền khách hàng - ${rec.customer_name}`,
                         absAmt,
-                        rec.manager_name || 'Kế toán thanh toán'
+                        rec.manager_name || 'Kế toán thanh toán',
+                        createdAtStr,
+                        createdAtStr
                       );
 
                       insertLineStmt.run(
@@ -281,6 +288,8 @@ function _runSyncAllSubledgersToJournal(db) {
                       peCode.startsWith('UNC-'));
 
                   const pDate = normalizeDate(pe.date || pe.dueDate, peCode);
+                  const peTime = String(pe.time || '08:30').trim();
+                  const peCreatedAtStr = peTime.length === 5 ? `${pDate} ${peTime}:00` : `${pDate} ${peTime}`;
                   // Bỏ qua các chứng từ lịch sử trước 11/11/2026 đã có trong Prisma JournalEntry
                   if (!isRecon && pDate < '2026-11-11') return;
 
@@ -314,7 +323,9 @@ function _runSyncAllSubledgersToJournal(db) {
                       'Đối soát công nợ',
                       pe.title || `Đối soát công nợ chứng từ ${pe.refVoucherCode || pay.code} - NCC: ${pay.supplier_name}`,
                       absDelta,
-                      pay.accountant || 'Kế toán công nợ'
+                      pay.accountant || 'Kế toán công nợ',
+                      peCreatedAtStr,
+                      peCreatedAtStr
                     );
 
                     insertLineStmt.run(
@@ -371,7 +382,9 @@ function _runSyncAllSubledgersToJournal(db) {
                       'Quỹ và Ngân hàng',
                       pe.title || `Thanh toán NCC - ${pay.supplier_name}`,
                       pAmount,
-                      pay.accountant || 'Kế toán thanh toán'
+                      pay.accountant || 'Kế toán thanh toán',
+                      peCreatedAtStr,
+                      peCreatedAtStr
                     );
 
                     insertLineStmt.run(
@@ -407,6 +420,97 @@ function _runSyncAllSubledgersToJournal(db) {
                 });
               });
 
+              // ==========================================
+              // C. ĐỒNG BỘ TRỰC TIẾP TỪ BẢNG Debt CHO CÁC CHỨNG TỪ ĐỐI SOÁT (DS-...) CHƯA NẰM TRONG SUBLEDGER
+              // ==========================================
+              (dsDebts || []).forEach((d, dIdx) => {
+                const dsCode = String(d.referenceId || '').trim();
+                if (!dsCode || existingCodes.has(dsCode)) return;
+
+                const rawDelta = Math.round(Number(d.paidAmount) || 0);
+                const absDelta = Math.abs(rawDelta);
+                if (absDelta <= 0) return;
+
+                existingCodes.add(dsCode);
+                const rawDesc = String(d.description || '');
+                const cleanTitle = rawDesc.split('\n')[0].trim();
+                let reconMeta = null;
+                if (rawDesc.includes('[RECON_META]:')) {
+                  try {
+                    reconMeta = JSON.parse(rawDesc.split('[RECON_META]:')[1].trim());
+                  } catch {}
+                }
+                const refVch = reconMeta?.refVoucherCode || dsCode;
+                const pDate = normalizeDate(reconMeta?.date || '', dsCode);
+                const dsTime = String(reconMeta?.time || '09:00').trim();
+                const dsCreatedAtStr = dsTime.length === 5 ? `${pDate} ${dsTime}:00` : `${pDate} ${dsTime}`;
+                const isRecType = d.type === 'RECEIVABLE' || d.type === 'phai-thu';
+                const entryId = `JE-DS-DEBT-${dsCode.replace(/[^a-zA-Z0-9-]/g, '')}-${dIdx}`;
+
+                const debitAcc = isRecType
+                  ? rawDelta >= 0 ? '1121' : '131'
+                  : rawDelta >= 0 ? '331' : '1121';
+                const debitName =
+                  debitAcc === '1121'
+                    ? 'Tiền gửi ngân hàng (VND)'
+                    : debitAcc === '131'
+                      ? 'Phải thu của khách hàng'
+                      : 'Phải trả cho người bán (Nhà cung cấp)';
+                const creditAcc = isRecType
+                  ? rawDelta >= 0 ? '131' : '1121'
+                  : rawDelta >= 0 ? '1121' : '331';
+                const creditName =
+                  creditAcc === '1121'
+                    ? 'Tiền gửi ngân hàng (VND)'
+                    : creditAcc === '131'
+                      ? 'Phải thu của khách hàng'
+                      : 'Phải trả cho người bán (Nhà cung cấp)';
+                const partnerName = d.partnerName || 'Đối tác';
+
+                insertEntryStmt.run(
+                  entryId,
+                  dsCode,
+                  pDate,
+                  pDate,
+                  refVch,
+                  'CASH',
+                  'Đối soát công nợ',
+                  cleanTitle || `Đối soát công nợ chứng từ ${refVch} - ${partnerName}`,
+                  absDelta,
+                  'Kế toán công nợ',
+                  dsCreatedAtStr,
+                  dsCreatedAtStr
+                );
+
+                insertLineStmt.run(
+                  `${entryId}-L1`,
+                  entryId,
+                  1,
+                  debitAcc,
+                  debitAcc,
+                  debitName,
+                  'DEBIT',
+                  absDelta,
+                  cleanTitle || `Đối soát công nợ chứng từ ${refVch}`,
+                  partnerName
+                );
+
+                insertLineStmt.run(
+                  `${entryId}-L2`,
+                  entryId,
+                  2,
+                  creditAcc,
+                  creditAcc,
+                  creditName,
+                  'CREDIT',
+                  absDelta,
+                  cleanTitle || `Đối soát công nợ chứng từ ${refVch}`,
+                  partnerName
+                );
+
+                syncedCount++;
+              });
+
               insertEntryStmt.finalize();
               insertLineStmt.finalize((finErr) => {
                 if (finErr) return reject(finErr);
@@ -417,6 +521,7 @@ function _runSyncAllSubledgersToJournal(db) {
               });
             }
           );
+          });
         });
       });
     });

@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import { PhieuNhapKhoPreview } from "./PhieuNhapKhoPreview";
 import { Offcanvas } from "@/components/common/Offcanvas";
 import { ClockHistory } from "react-bootstrap-icons";
 
@@ -50,36 +51,16 @@ const fmtVnd = (n: number) => n.toLocaleString("vi-VN") + " ₫";
 export function LichSuNhapKhoOffcanvas({ onClose }: LichSuNhapKhoOffcanvasProps) {
   const [movements, setMovements] = React.useState<MovementItem[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [visible, setVisible] = React.useState(false);
   const [selectedGroup, setSelectedGroup] = React.useState<PhieuNhapGroup | null>(null);
-
-  // Animate in
-  React.useEffect(() => {
-    requestAnimationFrame(() => setVisible(true));
-  }, []);
-
-  const handleClose = () => {
-    setVisible(false);
-    setTimeout(onClose, 280);
-  };
+  const [showPreview, setShowPreview] = React.useState(false);
 
   // Fetch stock movements
   React.useEffect(() => {
-    fetch("/api/plan-finance/stock-movements?limit=100")
+    fetch("/api/plan-finance/stock-movements?type=nhap&limit=300")
       .then((r) => r.json())
       .then((d) => setMovements(Array.isArray(d) ? d : []))
       .catch(() => setMovements([]))
       .finally(() => setLoading(false));
-  }, []);
-
-  // ESC key to close
-  React.useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") handleClose();
-    };
-    document.addEventListener("keydown", h);
-    return () => document.removeEventListener("keydown", h);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Group movements by soChungTu
@@ -110,28 +91,30 @@ export function LichSuNhapKhoOffcanvas({ onClose }: LichSuNhapKhoOffcanvasProps)
   }, [movements]);
 
   return (
-    <Offcanvas
-      isOpen={true}
-      onClose={onClose}
-      icon={<ClockHistory size={20} />}
-      title={selectedGroup ? `Phiếu nhập: ${selectedGroup.soChungTu}` : "Lịch sử nhập hàng"}
-      description={
-        selectedGroup ? (
-          <button
-            type="button"
-            onClick={() => setSelectedGroup(null)}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
-          >
-            <i className="bi bi-chevron-left text-[11px]" /> Quay lại danh sách
-          </button>
-        ) : (
-          "Danh sách phiếu nhập kho đã thực hiện"
-        )
-      }
-      width="400px"
-      position="right"
-      bodyStyle={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}
-    >
+    <>
+      <Offcanvas
+        isOpen={true}
+        onClose={onClose}
+        icon={<ClockHistory size={20} />}
+        title={selectedGroup ? `Phiếu nhập: ${selectedGroup.soChungTu}` : "Lịch sử nhập hàng"}
+        description={
+          selectedGroup ? (
+            <button
+              type="button"
+              onClick={() => setSelectedGroup(null)}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
+            >
+              <i className="bi bi-chevron-left text-[11px]" /> Quay lại danh sách
+            </button>
+          ) : (
+            "Danh sách phiếu nhập kho đã thực hiện"
+          )
+        }
+        width="400px"
+        position="right"
+        zIndex={6000}
+        bodyStyle={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}
+      >
       {/* 2-Slide container */}
       <div
         style={{
@@ -382,10 +365,54 @@ export function LichSuNhapKhoOffcanvas({ onClose }: LichSuNhapKhoOffcanvasProps)
                   <span style={{ fontWeight: 700, color: "#10b981" }}>TỔNG CỘNG PHIẾU</span>
                   <strong style={{ fontSize: 16, color: "#10b981" }}>{fmtVnd(selectedGroup.tongTien)}</strong>
                 </div>
+
+                <button
+                  onClick={() => setShowPreview(true)}
+                  style={{
+                    marginTop: 10,
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                    padding: "10px 18px",
+                    borderWidth: "1.5px",
+                    borderStyle: "solid",
+                    borderColor: "#10b981",
+                    background: "rgba(16,185,129,0.1)",
+                    color: "#10b981",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    borderRadius: 8,
+                    cursor: "pointer",
+                  }}
+                >
+                  <i className="bi bi-printer" style={{ fontSize: 14 }} /> In phiếu nhập kho
+                </button>
               </div>
             )}
           </div>
         </div>
-    </Offcanvas>
+      </Offcanvas>
+
+      {showPreview && selectedGroup && (
+        <PhieuNhapKhoPreview
+          soChungTu={selectedGroup.soChungTu}
+          ngayNhap={selectedGroup.createdAt ? new Date(selectedGroup.createdAt).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]}
+          khoName={selectedGroup.warehouseName || "—"}
+          lyDo={selectedGroup.lyDo !== "—" ? selectedGroup.lyDo : undefined}
+          nguoiThucHien={selectedGroup.nguoiThucHien !== "—" ? selectedGroup.nguoiThucHien : undefined}
+          lines={selectedGroup.movements.map(m => ({
+            tenHang:   m.inventoryItem?.tenHang || "Hàng hoá không xác định",
+            maSku:     m.inventoryItem?.code || "",
+            donVi:     m.inventoryItem?.donVi || "",
+            soLuongCT: m.soLuong,
+            soLuong:   m.soLuong,
+            donGia:    m.donGia || 0,
+          }))}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
+    </>
   );
 }

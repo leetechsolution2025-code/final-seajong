@@ -41,6 +41,39 @@ function formatEpochToISODate(val) {
   return str.slice(0, 10);
 }
 
+function formatEpochToLocalDateTime(val) {
+  if (val && (typeof val === 'number' || /^\d+$/.test(String(val)))) {
+    const d = new Date(Number(val));
+    if (!isNaN(d.getTime())) {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mi = String(d.getMinutes()).padStart(2, '0');
+      const ss = String(d.getSeconds()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+    }
+  }
+  const str = String(val || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(str)) return str;
+  const isoDate = formatEpochToISODate(val);
+  return `${isoDate} 08:30:00`;
+}
+
+function formatEpochToVNTime(val, fallback = '08:30') {
+  if (val && (typeof val === 'number' || /^\d+$/.test(String(val)))) {
+    const d = new Date(Number(val));
+    if (!isNaN(d.getTime())) {
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mi = String(d.getMinutes()).padStart(2, '0');
+      if (hh !== '00' || mi !== '00') {
+        return `${hh}:${mi}`;
+      }
+    }
+  }
+  return fallback;
+}
+
 function dbAll(db, sql, params = []) {
   return new Promise((resolve) => {
     db.all(sql, params, (err, rows) => {
@@ -103,6 +136,7 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
       prismaMarketingLeads,
       prismaMarketingCampaigns,
       prismaQualityInspections,
+      prismaPayrolls,
     ] = await Promise.all([
       dbAll(db, 'SELECT * FROM "AccountingAccount"'),
       dbAll(db, 'SELECT * FROM "MonthlyBalance"'),
@@ -129,6 +163,7 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
       dbAll(db, 'SELECT * FROM "MarketingLead"'),
       dbAll(db, 'SELECT * FROM "MarketingCampaign"'),
       dbAll(db, 'SELECT id, code, type, metadata FROM "QualityInspection" WHERE metadata IS NOT NULL'),
+      dbAll(db, 'SELECT * FROM "Payroll" ORDER BY nam DESC, thang DESC'),
     ]);
 
     const accountById = new Map();
@@ -274,6 +309,8 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
     // ============================================================================
     // B. ĐỒNG BỘ SỔ NHẬT KÝ CHUNG (accounting_journal_entries & accounting_journal_lines)
     // ============================================================================
+    await dbRun(db, 'DELETE FROM accounting_journal_lines');
+    await dbRun(db, 'DELETE FROM accounting_journal_entries');
     if (prismaJournalEntries.length > 0 && prismaJournalLines.length > 0) {
       const linesByEntryId = new Map();
       prismaJournalLines.forEach((l) => {
@@ -291,13 +328,11 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
       };
 
       await dbRun(db, 'BEGIN TRANSACTION');
-      // Làm sạch toàn bộ bút toán cũ trước khi đồng bộ lại từ Prisma & Subledgers
-      await dbRun(db, 'DELETE FROM accounting_journal_lines');
-      await dbRun(db, 'DELETE FROM accounting_journal_entries');
 
       let seq = 1;
       for (const je of prismaJournalEntries) {
         const isoDate = formatEpochToISODate(je.entryDate);
+        const createdAtStr = formatEpochToLocalDateTime(je.createdAt || je.entryDate);
         const entryNum = je.referenceCode
           ? `PKT-${String(seq).padStart(4, '0')}-${je.referenceCode}`
           : `PKT-2026-${String(seq).padStart(4, '0')}`;
@@ -310,8 +345,8 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           `INSERT OR REPLACE INTO accounting_journal_entries (
             id, entry_number, entry_date, document_date, reference_code,
             source_module, source_label, description, total_amount,
-            status, status_label, created_by
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'posted', 'Đã ghi sổ', 'Kế toán tổng hợp')`,
+            status, status_label, created_by, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'posted', 'Đã ghi sổ', 'Kế toán tổng hợp', ?, ?)`,
           [
             je.id,
             entryNum,
@@ -322,6 +357,8 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
             srcLabel,
             je.description || 'Bút toán hạch toán hệ thống',
             Number(je.totalAmount) || 0,
+            createdAtStr,
+            createdAtStr,
           ]
         );
 
@@ -480,7 +517,7 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           .split('–')[0]
           .split(' - ')[0]
           .trim();
-        const key = d.customerId || cleanName.toLowerCase();
+        const key = cleanName.toLowerCase() || d.customerId;
         if (!recGroups.has(key)) {
           recGroups.set(key, {
             key,
@@ -496,6 +533,12 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           });
         }
         const g = recGroups.get(key);
+        if (!g.customerId && (d.customerId || cust?.id)) {
+          g.customerId = d.customerId || cust.id;
+        }
+        if (!g.customerAddress && cust?.address) {
+          g.customerAddress = cust.address;
+        }
         const amt = Number(d.amount) || 0;
         const paid = Number(d.paidAmount) || 0;
         g.totalContract += amt;
@@ -521,7 +564,7 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
         const remain = Math.max(0, Math.round(g.totalContract - g.totalPaid));
         const totalContract = Math.round(g.totalContract);
         const totalPaid = Math.round(g.totalPaid);
-        if (totalContract === 0 && remain === 0) continue;
+        if (totalContract === 0 && remain === 0 && g.payments.length === 0) continue;
 
         const id = `SYNC-REC-${String(recIndex).padStart(3, '0')}`;
         const code = `CNPT-${String(recIndex).padStart(3, '0')}`;
@@ -529,8 +572,16 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
 
         const paymentRecords = g.payments.map((p, idx) => {
           const ref = String(p.referenceId || '');
-          const desc = String(p.description || '').toLowerCase();
+          const rawDesc = String(p.description || '');
+          const desc = rawDesc.toLowerCase();
           const isReconciliation = ref.startsWith('DS-');
+          let reconMeta = null;
+          if (rawDesc.includes('[RECON_META]:')) {
+            try {
+              reconMeta = JSON.parse(rawDesc.split('[RECON_META]:')[1].trim());
+            } catch {}
+          }
+          const cleanTitle = rawDesc.split('\n')[0].trim();
           const isReturn =
             !isReconciliation &&
             (p.type === 'RETURN' ||
@@ -543,16 +594,25 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
             id: p.id || `PAY-REC-${idx}`,
             code: ref || `PT-${idx + 1}`,
             receiptCode: ref || `PT-${idx + 1}`,
+            refVoucherCode: reconMeta?.refVoucherCode || undefined,
             title:
-              (p.description || '').split('\n')[0] ||
+              cleanTitle ||
               (isReconciliation
-                ? `Chứng từ đối soát công nợ (${ref})`
+                ? `Đối soát công nợ chứng từ ${reconMeta?.refVoucherCode || ref}`
                 : isReturn
                   ? `Giảm trừ công nợ do trả lại hàng theo ${ref}`
                   : `Thu nợ khách hàng ${g.customerName}`),
-            date: formatEpochToVNDate(p.createdAt || p.dueDate),
-            time: '09:00',
+            note:
+              cleanTitle ||
+              (isReconciliation
+                ? `Đối soát công nợ chứng từ ${reconMeta?.refVoucherCode || ref}`
+                : ''),
+            date: reconMeta?.date || formatEpochToVNDate(p.createdAt || p.dueDate),
+            time: reconMeta?.time || formatEpochToVNTime(p.createdAt || p.dueDate, '09:00'),
             amount: pPaid,
+            originalAmount: reconMeta?.originalAmount,
+            reconciledAmount: reconMeta?.reconciledAmount,
+            deltaAmount: isReconciliation ? pPaid : undefined,
             method: isReconciliation
               ? 'Đối soát công nợ'
               : isReturn
@@ -775,8 +835,15 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           if (!isReconciliation && pVal <= 0) return;
           if (isReconciliation && pVal === 0) return;
           if (entries.some((e) => e.code === refCode)) return;
-          const descParts = String(p.description || '').split('[PAYMENT_LOGS]:');
-          const descClean = descParts[0].trim();
+          const rawDesc = String(p.description || '');
+          let reconMeta = null;
+          if (rawDesc.includes('[RECON_META]:')) {
+            try {
+              reconMeta = JSON.parse(rawDesc.split('[RECON_META]:')[1].trim());
+            } catch {}
+          }
+          const descParts = rawDesc.split('[PAYMENT_LOGS]:');
+          const descClean = descParts[0].split('\n')[0].trim();
           let logInfo = null;
           if (descParts[1]) {
             try {
@@ -785,8 +852,8 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
             } catch {}
           }
           const payMethod = isReconciliation ? 'Đối soát công nợ' : logInfo?.method || 'Chuyển khoản';
-          let payDate = formatEpochToVNDate(p.createdAt || p.dueDate);
-          let payTime = '09:00';
+          let payDate = reconMeta?.date || formatEpochToVNDate(p.createdAt || p.dueDate);
+          let payTime = reconMeta?.time || formatEpochToVNTime(p.createdAt || p.dueDate, '09:00');
           if (logInfo?.date && String(logInfo.date).includes('-')) {
             const dObj = new Date(logInfo.date);
             if (!Number.isNaN(dObj.getTime())) {
@@ -797,23 +864,24 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           entries.push({
             id: p.id || `ENT-PC-${idx + 1}`,
             code: refCode,
+            refVoucherCode: reconMeta?.refVoucherCode || undefined,
             title:
               logInfo?.note ||
               descClean ||
               (isReconciliation
-                ? `Chứng từ đối soát công nợ (${refCode})`
+                ? `Đối soát công nợ chứng từ ${reconMeta?.refVoucherCode || refCode}`
                 : `Phiếu chi thanh toán công nợ (${refCode})`),
             date: payDate,
             time: payTime,
-            totalAmount: Math.abs(pVal),
+            totalAmount: isReconciliation ? pVal : Math.abs(pVal),
             paidAmount: pVal,
+            amount: pVal,
+            originalAmount: reconMeta?.originalAmount,
+            reconciledAmount: reconMeta?.reconciledAmount,
+            deltaAmount: isReconciliation ? pVal : undefined,
             remainingAmount: 0,
             status: 'completed',
-            statusLabel: isReconciliation
-              ? pVal >= 0
-                ? 'Đối soát bổ sung'
-                : 'Đối soát giảm trừ'
-              : 'Đã chi tiền',
+            statusLabel: isReconciliation ? 'Đã đối soát' : 'Đã chi tiền',
             debitAccount: isReconciliation ? (pVal >= 0 ? '331' : '1121') : '331',
             creditAccount: isReconciliation
               ? pVal >= 0
@@ -1435,12 +1503,13 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
     let totalRawMaterialsValue = 0;
     let totalFinishedGoodsValue = 0;
 
+    await dbRun(db, 'DELETE FROM goods');
+    await dbRun(db, 'DELETE FROM warehouse_movements');
     if (prismaInventoryItems.length > 0) {
       const catById = new Map();
       (prismaInventoryCategories || []).forEach((c) => catById.set(c.id, c.name));
 
       await dbRun(db, 'BEGIN TRANSACTION');
-      await dbRun(db, 'DELETE FROM goods');
 
       for (const item of prismaInventoryItems) {
         const qty = Number(item.soLuong) || 0;
@@ -1503,7 +1572,6 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
       }
 
       // Đồng bộ biến động xuất nhập tồn kho kỳ 2026-10
-      await dbRun(db, 'DELETE FROM warehouse_movements');
       const itemMap = new Map();
       prismaInventoryItems.forEach((it) => itemMap.set(it.id, it));
 
@@ -1546,9 +1614,9 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
     // ============================================================================
     // K. ĐỒNG BỘ BÁO GIÁ (quotations) TỪ Quotation
     // ============================================================================
+    await dbRun(db, 'DELETE FROM quotations');
     if (prismaQuotations.length > 0) {
       await dbRun(db, 'BEGIN TRANSACTION');
-      await dbRun(db, 'DELETE FROM quotations');
       for (const q of prismaQuotations) {
         const cust = q.customerId ? customerById.get(q.customerId) : null;
         const emp = q.nguoiPhuTrachId ? employeeById.get(q.nguoiPhuTrachId) : null;
@@ -1586,23 +1654,25 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
     }
 
     // ============================================================================
-    // L. ĐỒNG BỘ BẢNG LƯƠNG NHÂN SỰ (monthly_payrolls) TỪ Employee THỰC TẾ
+    // L. ĐỒNG BỘ BẢNG LƯƠNG NHÂN SỰ (monthly_payrolls) TỪ Payroll THỰC TẾ
     // ============================================================================
-    if (prismaEmployees.length > 0) {
+    await dbRun(db, 'DELETE FROM monthly_payrolls');
+    if (Array.isArray(prismaPayrolls) && prismaPayrolls.length > 0) {
       await dbRun(db, 'BEGIN TRANSACTION');
-      await dbRun(db, 'DELETE FROM monthly_payrolls');
       let pIdx = 1;
-      for (const emp of prismaEmployees) {
-        const baseSal = Number(emp.baseSalary) || 0;
-        const insSal = Number(emp.insuranceSalary) || 0;
-        const meal = Number(emp.mealAllowance) || 0;
-        const fuel = Number(emp.fuelAllowance) || 0;
-        const phone = Number(emp.phoneAllowance) || 0;
-        const sen = Number(emp.seniorityAllowance) || 0;
-        const totalAllow = meal + fuel + phone + sen;
-        const insDed = Math.round(insSal * 0.105);
+      for (const pr of prismaPayrolls) {
+        const emp = pr.employeeId ? employeeById.get(pr.employeeId) : null;
+        const baseSal = Number(pr.luongCoBan ?? emp?.baseSalary) || 0;
+        const insSal = Number(emp?.insuranceSalary || baseSal) || 0;
+        const totalAllow = Number(pr.phuCap) || 0;
+        const insDed = Number(pr.khauTruBH) || Math.round(insSal * 0.105);
         const corpIns = Math.round(insSal * 0.215);
-        const netSal = Math.max(0, baseSal + totalAllow - insDed);
+        const taxDed = Number(pr.thueTNCN) || 0;
+        const bonusAmt = Number(pr.thuong) || 0;
+        const advPen = Number(pr.phat) || 0;
+        const netSal = Number(pr.thucLinh) || Math.max(0, baseSal + totalAllow + bonusAmt - insDed - taxDed - advPen);
+        const stdDays = Number(pr.ngayCongChuan) || 26;
+        const actDays = Number(pr.ngayCongThucTe) || stdDays;
 
         await dbRun(
           db,
@@ -1613,25 +1683,30 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
             total_allowance, total_ot_converted, ot_salary, bonus_amount,
             insurance_deduction, corporate_insurance, tax_deduction, advance_or_penalties,
             net_salary, status, is_payroll_confirmed, notes, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, 10, 2026, ?, ?, 27, 27, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, 0, 0, ?, 'approved', 1, 'Đồng bộ từ hồ sơ nhân sự Seajong', CURRENT_TIMESTAMP)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Đồng bộ từ bảng lương Payroll', CURRENT_TIMESTAMP)`,
           [
             pIdx,
             pIdx,
-            emp.code || `NV-${pIdx}`,
-            emp.fullName || 'Nhân viên Seajong',
-            emp.departmentName || 'Phòng ban chung',
-            emp.position || 'Nhân viên',
+            emp?.code || `NV-${pIdx}`,
+            emp?.fullName || 'Nhân viên Seajong',
+            emp?.departmentName || 'Phòng ban chung',
+            emp?.position || 'Nhân viên',
+            Number(pr.thang) || 10,
+            Number(pr.nam) || 2026,
             baseSal,
             insSal,
+            stdDays,
+            actDays,
             baseSal,
-            meal,
-            fuel,
-            phone,
-            sen,
             totalAllow,
+            Number(pr.luongOT) || 0,
+            bonusAmt,
             insDed,
             corpIns,
+            taxDed,
+            advPen,
             netSal,
+            pr.trangThai || 'approved',
           ]
         );
         pIdx++;
