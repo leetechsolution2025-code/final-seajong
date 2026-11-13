@@ -683,7 +683,7 @@ function buildReportFromData(dbData, period) {
       amount: Number(r.remaining_amount) || 0,
       amountColor: '#0369a1',
       subtitles: [
-        r.project_name || 'Hợp đồng cửa gỗ & nội thất',
+        r.project_name || 'Đơn hàng cung cấp thiết bị vệ sinh & nhà bếp',
         `Mã: ${r.code}`,
         `Hạn TT: ${r.due_date || 'Theo tiến độ'}`,
       ],

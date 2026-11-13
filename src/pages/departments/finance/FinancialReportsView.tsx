@@ -1365,13 +1365,13 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
                     <div style={{ fontWeight: 'bold' }}>NGƯỜI LẬP BIỂU</div>
                     <div style={{ fontSize: '8.5pt', fontStyle: 'italic' }}>(Ký, họ tên)</div>
                     <div style={{ height: '60px' }}></div>
-                    <div style={{ fontWeight: 'bold' }}>Nguyễn Văn Kế Toán</div>
+                    <div style={{ fontWeight: 'bold' }}></div>
                   </div>
                   <div style={{ width: '30%' }}>
                     <div style={{ fontWeight: 'bold' }}>KẾ TOÁN TRƯỞNG</div>
                     <div style={{ fontSize: '8.5pt', fontStyle: 'italic' }}>(Ký, họ tên)</div>
                     <div style={{ height: '60px' }}></div>
-                    <div style={{ fontWeight: 'bold' }}>Trần Thị Thu Thảo</div>
+                    <div style={{ fontWeight: 'bold' }}></div>
                   </div>
                   <div style={{ width: '35%' }}>
                     <div style={{ fontSize: '9pt', fontStyle: 'italic' }}>
@@ -1380,7 +1380,7 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
                     <div style={{ fontWeight: 'bold' }}>GIÁM ĐỐC / ĐẠI DIỆN PHÁP LUẬT</div>
                     <div style={{ fontSize: '8.5pt', fontStyle: 'italic' }}>(Ký, họ tên, đóng dấu)</div>
                     <div style={{ height: '60px' }}></div>
-                    <div style={{ fontWeight: 'bold' }}>Hà Hải Lâm</div>
+                    <div style={{ fontWeight: 'bold' }}>Lê Công Vụ</div>
                   </div>
                 </div>
               </div>

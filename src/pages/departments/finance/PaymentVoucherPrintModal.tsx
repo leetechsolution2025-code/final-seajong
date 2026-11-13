@@ -142,11 +142,11 @@ export const PaymentVoucherPrintModal: React.FC<PaymentVoucherPrintModalProps> =
   const amountNumber = Number(dbData?.amount !== undefined ? dbData.amount : voucher.amount) || 0;
   const wordsAmount = convertNumberToVietnameseWords(amountNumber);
   const vNotes = dbData?.notes !== undefined ? dbData.notes : (voucher.notes || '01');
-  const vSpender = dbData?.creator || voucher.spender || 'Nguyễn Thị Tuyết';
+  const vSpender = dbData?.creator || voucher.spender || '';
   const vReceiver = dbData?.payerReceiverName || voucher.proposer || voucher.spender || 'Người nhận';
-  const vDirector = dbData?.director || company.legal_rep || 'Hà Hải Lâm';
-  const vAccountant = dbData?.accountant || 'Mai Thị Ngọc';
-  const vCashier = dbData?.cashier || 'Hoàng Thị Thảo';
+  const vDirector = dbData?.director || company.legal_rep || 'Lê Công Vụ';
+  const vAccountant = dbData?.accountant || '';
+  const vCashier = dbData?.cashier || '';
 
   return (
     <PrintPreview

@@ -54,11 +54,11 @@ export const DebtCostReportPrintModal: React.FC<DebtCostReportPrintModalProps> =
   const [onlyActiveDebts, setOnlyActiveDebts] = useState(false);
 
   // Người ký mặc định
-  const [preparedBy, setPreparedBy] = useState('Hà Thị Mai');
+  const [preparedBy, setPreparedBy] = useState('');
   const [preparedRole, setPreparedRole] = useState('Kế toán thanh toán & Công nợ');
-  const [chiefAccountant, setChiefAccountant] = useState('Nguyễn Thị Thu');
+  const [chiefAccountant, setChiefAccountant] = useState('');
   const [chiefRole, setChiefRole] = useState('Kế toán trưởng');
-  const [directorName, setDirectorName] = useState('Hà Hải Lâm');
+  const [directorName, setDirectorName] = useState('Lê Công Vụ');
   const [directorRole, setDirectorRole] = useState('Tổng Giám đốc');
 
   // Đồng bộ loại báo cáo khi mở modal hoặc thay đổi bước

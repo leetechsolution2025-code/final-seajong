@@ -691,9 +691,9 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
         paymentMethod: tx.rawPayment?.method || 'Chuyển khoản',
         debitAccount: '1121',
         creditAccount: '131',
-        creator: 'Nguyễn Thị Tuyết',
-        accountant: 'Mai Thị Ngọc',
-        director: 'Hà Hải Lâm',
+        creator: '',
+        accountant: '',
+        director: 'Lê Công Vụ',
       };
       setSelectedReceiptForPrint(receiptData);
       setReceiptPrintOpen(true);
@@ -709,8 +709,8 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
         date: tx.rawPayment?.date || (tx.date ? new Date(tx.date).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN')),
         receiverName: debt.partnerName || debt.supplierName || 'Nhà cung cấp',
         notes: tx.note,
-        accountant: 'Mai Thị Ngọc',
-        director: 'Hà Hải Lâm',
+        accountant: '',
+        director: 'Lê Công Vụ',
       });
       setPaymentPrintOpen(true);
     }
@@ -1936,9 +1936,9 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
           documentCode={debt.code || debt.referenceId || `ĐC-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}`}
           date={`${new Date().getDate()} tháng ${new Date().getMonth() + 1} năm ${new Date().getFullYear()}`}
           department="Phòng Kế toán - Tài chính"
-          author="Hà Hải Lâm"
-          performerName="Hà Hải Lâm"
-          performerRole="Kế toán trưởng / Đại diện tài chính"
+          author="Lê Công Vụ"
+          performerName="Lê Công Vụ"
+          performerRole="Giám đốc / Đại diện tài chính"
           supervisorName={partnerDisplayName}
           supervisorRole={isReceivable ? 'Đại diện Khách hàng' : 'Đại diện Nhà cung cấp'}
           customerName={partnerDisplayName}
@@ -2271,7 +2271,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1fr)', gap: '8px', fontSize: '0.78rem', marginTop: '3px', lineHeight: '1.4' }}>
                     <div style={{ wordBreak: 'break-word' }}>
-                      Đại diện: <strong>{meta.performerName || 'Hà Hải Lâm'}</strong>
+                      Đại diện: <strong>{meta.performerName || 'Lê Công Vụ'}</strong>
                     </div>
                     <div style={{ wordBreak: 'break-word' }}>
                       Chức vụ: <strong>{meta.performerRole || 'Kế toán trưởng'}</strong>

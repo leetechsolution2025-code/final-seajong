@@ -2,11 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Offcanvas } from '../../../components/common/Offcanvas';
 import { Button } from '../../../components/common/Button';
 import { Badge } from '../../../components/common/Badge';
+import { NumberInput } from '../../../components/common/NumberInput';
+import { Input } from '../../../components/common/Input';
 import {
   CheckCircle,
   Printer,
   BoxSeam,
   FileText,
+  PencilSquare,
 } from 'react-bootstrap-icons';
 
 export interface DebtSubEntryItem {
@@ -37,6 +40,8 @@ export interface DebtSubEntryDetailOffcanvasProps {
   } | null;
   onConfirmPayment?: (parent: any, entry: any) => void;
   onPrintReceipt?: (receiptData: any) => void;
+  onReconcileSuccess?: (updatedParent: any, newAmount: number, targetCode: string) => void;
+  onShowToast?: (type: 'success' | 'error' | 'warning' | 'info', title: string, message: string) => void;
   userName?: string;
 }
 
@@ -52,18 +57,35 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
   selectedSubEntry,
   onConfirmPayment,
   onPrintReceipt,
+  onReconcileSuccess,
+  onShowToast,
   userName = 'Lê Công Vụ',
 }) => {
   const [activeTab, setActiveTab] = useState<'info' | 'items'>('info');
   const [items, setItems] = useState<DebtSubEntryItem[]>([]);
   const [loadingItems, setLoadingItems] = useState<boolean>(false);
 
+  // State cho chức năng Đối soát sửa giá trị tiền đã nhập
+  const [isReconciling, setIsReconciling] = useState<boolean>(false);
+  const [reconcileTargetId, setReconcileTargetId] = useState<string>('');
+  const [reconcileTargetCode, setReconcileTargetCode] = useState<string>('');
+  const [reconcileOriginalAmount, setReconcileOriginalAmount] = useState<number>(0);
+  const [reconcileAmount, setReconcileAmount] = useState<number>(0);
+  const [reconcileNote, setReconcileNote] = useState<string>('');
+  const [reconcilingSaving, setReconcilingSaving] = useState<boolean>(false);
+  const [localReconciliationEntries, setLocalReconciliationEntries] = useState<any[]>([]);
+
   useEffect(() => {
     if (!isOpen || !selectedSubEntry) {
       setActiveTab('info');
       setItems([]);
+      setIsReconciling(false);
+      setLocalReconciliationEntries([]);
       return;
     }
+
+    setIsReconciling(false);
+    setLocalReconciliationEntries([]);
 
     const entry = selectedSubEntry.entry;
     if (entry?.items && Array.isArray(entry.items) && entry.items.length > 0) {
@@ -99,47 +121,234 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
     String(entry.title || '').toLowerCase().includes('trả lại') ||
     String(entry.title || '').toLowerCase().includes('hàng lỗi');
 
-  const origAmount = Number(isRec ? (entry.contractValue || entry.amount || 0) : (entry.totalAmount || entry.amount || 0));
-  const paidAmount = Number(entry.paidAmount || (isReturn ? origAmount : 0));
-  const remainingAmount = Number(entry.remainingAmount !== undefined ? entry.remainingAmount : (isReturn ? 0 : Math.max(0, origAmount - paidAmount)));
+  const isReconciliationVoucher =
+    entry.isReconciliation ||
+    entry.type === 'reconciliation' ||
+    entry.voucherType === 'reconciliation' ||
+    String(entry.code || '').startsWith('DS-');
+
+  const isPaymentVoucher =
+    !isReconciliationVoucher &&
+    (entry.isReceipt ||
+      entry.type === 'payment' ||
+      entry.type === 'receipt' ||
+      entry.voucherType === 'payment' ||
+      entry.voucherType === 'receipt' ||
+      entry.statusLabel === 'Đã chi tiền' ||
+      String(entry.code || '').startsWith('PT-') ||
+      String(entry.code || '').startsWith('PC-') ||
+      String(entry.code || '').startsWith('UNC-') ||
+      String(entry.code || '').startsWith('CHI-'));
+
+  const origAmount = Number(
+    isRec ? (entry.contractValue ?? entry.amount ?? 0) : (entry.totalAmount ?? entry.amount ?? 0)
+  );
+  const paidAmount = Number(
+    entry.paidAmount ?? (isReturn || isPaymentVoucher || isReconciliationVoucher ? origAmount : 0)
+  );
+  const remainingAmount = Number(
+    entry.remainingAmount !== undefined
+      ? entry.remainingAmount
+      : isReturn || isPaymentVoucher || isReconciliationVoucher
+      ? 0
+      : Math.max(0, origAmount - paidAmount)
+  );
 
   const partnerTitle = isRec ? 'Khách hàng đối tác' : 'Nhà cung cấp';
-  const partnerName = parent.customerName || parent.supplierName || parent.name || entry.customerName || 'Khách hàng';
-  const partnerAddress = parent.customerAddress || parent.supplierAddress || parent.address || entry.customerAddress || '';
-  const docParentCode = parent.code ? (isRec ? `Hợp đồng số ${parent.code}` : `Đơn mua hàng PO ${parent.poCode || parent.code}`) : (entry.code || '---');
+  const partnerName =
+    parent.customerName || parent.supplierName || parent.name || entry.customerName || 'Khách hàng';
+  const partnerAddress =
+    parent.customerAddress || parent.supplierAddress || parent.address || entry.customerAddress || '';
+  const docParentCode = parent.code
+    ? isRec
+      ? `Hợp đồng số ${parent.code}`
+      : `Đơn mua hàng PO ${parent.poCode || parent.code}`
+    : entry.code || '---';
 
   const cleanTitle = (entry.title || entry.note || '')
     .replace(new RegExp(`\\s*[-–—]\\s*${partnerName}.*$`, 'i'), '')
     .trim();
+
+  const openReconcileForEntry = () => {
+    const codeStr = String(entry.code || '');
+    setActiveTab('info');
+    setReconcileTargetId(String(entry.id || ''));
+    setReconcileTargetCode(codeStr);
+    const defaultAmt = Math.abs(
+      isPaymentVoucher || isReturn || isReconciliationVoucher ? (paidAmount || origAmount) : (paidAmount > 0 ? paidAmount : origAmount)
+    );
+    setReconcileOriginalAmount(defaultAmt);
+    setReconcileAmount(defaultAmt);
+    setReconcileNote(`Đối soát công nợ chứng từ ${codeStr}`.trim());
+    setIsReconciling(true);
+  };
+
+  const openReconcileForSubPayment = (p: any) => {
+    const pCode = String(p.code || p.receiptCode || '');
+    const currentAmt = Math.abs(Number(p.amount) || 0);
+    setActiveTab('info');
+    setReconcileTargetId(String(p.id || ''));
+    setReconcileTargetCode(pCode);
+    setReconcileOriginalAmount(currentAmt);
+    setReconcileAmount(currentAmt);
+    setReconcileNote(`Đối soát công nợ chứng từ ${pCode}`.trim());
+    setIsReconciling(true);
+  };
+
+  const isReconcileSaveDisabled =
+    reconcilingSaving ||
+    !reconcileAmount ||
+    Math.round(Number(reconcileAmount) || 0) <= 0 ||
+    Math.round(Number(reconcileAmount) || 0) === Math.round(Number(reconcileOriginalAmount) || 0);
+
+  const handleSaveReconcile = async () => {
+    const nextVal = Math.max(0, Math.round(Number(reconcileAmount) || 0));
+    const origVal = Math.max(0, Math.round(Number(reconcileOriginalAmount) || 0));
+    if (nextVal <= 0 || nextVal === origVal) {
+      return;
+    }
+
+    setReconcilingSaving(true);
+    try {
+      const isSubPayment = reconcileTargetCode && reconcileTargetCode !== String(entry.code || '');
+      const res = await fetch('/api/debts/reconcile-entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: isRec ? 'receivable' : 'payable',
+          parentId: parent.id,
+          parentCode: parent.code,
+          entryId: reconcileTargetId || entry.id,
+          entryCode: entry.code,
+          paymentCode: isSubPayment ? reconcileTargetCode : undefined,
+          originalAmount: origVal,
+          newAmount: nextVal,
+          note: reconcileNote.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || data?.success === false) {
+        onShowToast?.('warning', 'Không thể lưu đối soát', data?.error || 'Số tiền đối soát không hợp lệ');
+        return;
+      }
+
+      const deltaVal = nextVal - origVal;
+      const targetVoucherCode = reconcileTargetCode || entry.code;
+      const createdVoucher = data?.reconciliationEntry || {
+        id: `DS-LOCAL-${Date.now()}`,
+        code: `DS-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-001`,
+        title:
+          reconcileNote.trim() ||
+          `Đối soát công nợ chứng từ ${targetVoucherCode}`,
+        date: new Date().toLocaleDateString('vi-VN'),
+        time: new Date().toTimeString().slice(0, 5),
+        amount: deltaVal,
+        paidAmount: deltaVal,
+        originalAmount: origVal,
+        reconciledAmount: nextVal,
+        refVoucherCode: reconcileTargetCode || entry.code,
+        method: 'Đối soát công nợ',
+        type: 'reconciliation',
+        typeLabel: 'Đối soát',
+        isReconciliation: true,
+      };
+
+      setLocalReconciliationEntries((prev) => [...prev, createdVoucher]);
+      setIsReconciling(false);
+      onReconcileSuccess?.(data?.updatedParent || null, nextVal, reconcileTargetCode || entry.code);
+      onShowToast?.(
+        'success',
+        'Đã tạo chứng từ đối soát',
+        `Đã lập chứng từ ${createdVoucher.code} (${deltaVal > 0 ? '+' : ''}${formatNumberGroup(deltaVal)} đ) cho ${reconcileTargetCode || entry.code}`
+      );
+      window.dispatchEvent(new CustomEvent('seajong_finance_updated'));
+    } catch {
+      onShowToast?.('error', 'Lỗi đối soát', 'Không thể lưu dữ liệu đối soát, vui lòng thử lại');
+    } finally {
+      setReconcilingSaving(false);
+    }
+  };
 
   return (
     <Offcanvas
       isOpen={isOpen}
       onClose={onClose}
       closeOnBackdropClick={false}
-      title={isReturn ? 'Chi tiết giảm trừ công nợ' : 'Chi tiết khoản nợ'}
+      title={
+        isReconciliationVoucher
+          ? 'Chi tiết chứng từ đối soát'
+          : isReturn
+          ? 'Chi tiết giảm trừ công nợ'
+          : isPaymentVoucher
+          ? isRec
+            ? 'Chi tiết phiếu thu'
+            : 'Chi tiết phiếu chi'
+          : 'Chi tiết khoản nợ'
+      }
       description={`Phiếu phát sinh mã ${entry.code || '---'}`}
       width="400px"
       position="right"
       footer={
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', width: '100%' }}>
-          <Button type="button" variant="secondary" onClick={onClose}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', width: '100%' }}>
+          <Button type="button" variant="secondary" size="sm" onClick={onClose}>
             Đóng
           </Button>
-          {!isReturn && remainingAmount > 0 && onConfirmPayment && (
-            <Button
-              type="button"
-              variant="primary"
-              onClick={() => {
-                onClose();
-                onConfirmPayment(parent, entry);
-              }}
-              leftIcon={<CheckCircle size={14} />}
-              style={{ fontWeight: 700 }}
-            >
-              Xác nhận thanh toán
-            </Button>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {isReconciling ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsReconciling(false)}
+                  disabled={reconcilingSaving}
+                >
+                  Huỷ
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  isLoading={reconcilingSaving}
+                  disabled={isReconcileSaveDisabled}
+                  onClick={handleSaveReconcile}
+                  leftIcon={<CheckCircle size={14} />}
+                >
+                  Lưu đối soát
+                </Button>
+              </>
+            ) : (
+              <>
+                {!isReconciliationVoucher && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={openReconcileForEntry}
+                    leftIcon={<PencilSquare size={13} />}
+                  >
+                    Đối soát
+                  </Button>
+                )}
+                {!isReturn && !isPaymentVoucher && !isReconciliationVoucher && remainingAmount > 0 && onConfirmPayment && (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    onClick={() => {
+                      onClose();
+                      onConfirmPayment(parent, entry);
+                    }}
+                    leftIcon={<CheckCircle size={14} />}
+                    style={{ fontWeight: 700 }}
+                  >
+                    Xác nhận thanh toán
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       }
     >
@@ -409,6 +618,69 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
               </div>
             </div>
 
+            {/* Khung Đối soát điều chỉnh giá trị tiền đã nhập */}
+            {isReconciling && (
+              <div
+                style={{
+                  backgroundColor: '#eff6ff',
+                  borderRadius: '8px',
+                  border: '1px solid #bfdbfe',
+                  padding: '12px 14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontWeight: 700, color: '#1e40af', fontSize: '0.8125rem' }}>
+                    Đối soát giá trị tiền
+                  </span>
+                  <Badge variant="brand">{reconcileTargetCode || entry.code}</Badge>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', backgroundColor: '#ffffff', padding: '6px 10px', borderRadius: '6px', border: '1px solid #dbeafe' }}>
+                  <div>
+                    <span style={{ color: '#64748b' }}>Số tiền gốc: </span>
+                    <strong style={{ color: '#0f172a' }}>{formatNumberGroup(reconcileOriginalAmount)} đ</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b' }}>Chênh lệch: </span>
+                    <strong
+                      style={{
+                        color:
+                          Math.round(Number(reconcileAmount) || 0) - Math.round(Number(reconcileOriginalAmount) || 0) > 0
+                            ? '#059669'
+                            : Math.round(Number(reconcileAmount) || 0) - Math.round(Number(reconcileOriginalAmount) || 0) < 0
+                            ? '#dc2626'
+                            : '#64748b',
+                      }}
+                    >
+                      {(() => {
+                        const diff = Math.round(Number(reconcileAmount) || 0) - Math.round(Number(reconcileOriginalAmount) || 0);
+                        return `${diff > 0 ? '+' : ''}${formatNumberGroup(diff)} đ`;
+                      })()}
+                    </strong>
+                  </div>
+                </div>
+
+                <NumberInput
+                  label="Số tiền sau đối soát"
+                  required
+                  hideZero={false}
+                  suffix="₫"
+                  value={reconcileAmount}
+                  onValueChange={(val) => setReconcileAmount(val)}
+                />
+
+                <Input
+                  label="Nội dung chi tiết / Lý do điều chỉnh"
+                  value={reconcileNote}
+                  onChange={(e) => setReconcileNote(e.target.value)}
+                  placeholder="Nhập nội dung đối soát..."
+                />
+              </div>
+            )}
+
             {/* Thông tin chứng từ phát sinh */}
             <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8125rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '6px' }}>
@@ -438,16 +710,50 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
                 <span style={{ color: '#64748b' }}>Trạng thái:</span>
                 <span
                   style={{
-                    backgroundColor: isReturn ? '#fef3c7' : (remainingAmount <= 0 ? '#dcfce7' : '#eff6ff'),
-                    color: isReturn ? '#b45309' : (remainingAmount <= 0 ? '#15803d' : '#1d4ed8'),
-                    border: `1px solid ${isReturn ? '#fde68a' : (remainingAmount <= 0 ? '#86efac' : '#bfdbfe')}`,
+                    backgroundColor: isReconciliationVoucher
+                      ? '#f5f3ff'
+                      : isReturn
+                      ? '#fef3c7'
+                      : remainingAmount <= 0
+                      ? '#dcfce7'
+                      : '#eff6ff',
+                    color: isReconciliationVoucher
+                      ? '#6d28d9'
+                      : isReturn
+                      ? '#b45309'
+                      : remainingAmount <= 0
+                      ? '#15803d'
+                      : '#1d4ed8',
+                    border: `1px solid ${
+                      isReconciliationVoucher
+                        ? '#ddd6fe'
+                        : isReturn
+                        ? '#fde68a'
+                        : remainingAmount <= 0
+                        ? '#86efac'
+                        : '#bfdbfe'
+                    }`,
                     padding: '2px 8px',
                     borderRadius: '4px',
                     fontWeight: 700,
                     fontSize: '0.7188rem',
                   }}
                 >
-                  {isReturn ? 'Đã giảm trừ' : (remainingAmount <= 0 ? 'Đã thu đủ' : 'Đang theo dõi')}
+                  {isReconciliationVoucher
+                    ? paidAmount >= 0
+                      ? 'Đối soát bổ sung'
+                      : 'Đối soát giảm trừ'
+                    : isReturn
+                    ? 'Đã giảm trừ'
+                    : isPaymentVoucher
+                    ? isRec
+                      ? 'Đã thu tiền'
+                      : 'Đã chi tiền'
+                    : remainingAmount <= 0
+                    ? isRec
+                      ? 'Đã thu đủ'
+                      : 'Đã thanh toán'
+                    : 'Đang theo dõi'}
                 </span>
               </div>
             </div>
@@ -492,22 +798,30 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
               </div>
             </div>
 
-            {/* Lịch sử các phiếu thu / Giảm trừ công nợ của đợt thanh toán này */}
-            {entry.payments && entry.payments.length > 0 && (
+            {/* Lịch sử các phiếu thu / Giảm trừ / Đối soát của chứng từ này */}
+            {((entry.payments && entry.payments.length > 0) || localReconciliationEntries.length > 0) && (
               <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8125rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>Chứng từ thanh toán & Giảm trừ</span>
-                  <Badge variant="brand">{entry.payments.length} chứng từ</Badge>
+                  <span>Chứng từ thanh toán & Đối soát</span>
+                  <Badge variant="brand">{(entry.payments?.length || 0) + localReconciliationEntries.length} chứng từ</Badge>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {entry.payments.map((p: any, idx: number) => {
+                  {[...(entry.payments || []), ...localReconciliationEntries].map((p: any, idx: number) => {
+                    const pCode = String(p.code || p.receiptCode || '');
+                    const rawPayAmount = Number(p.amount ?? p.paidAmount) || 0;
+                    const displayPayAmount = Math.abs(rawPayAmount);
+                    const isRecon =
+                      p.isReconciliation ||
+                      p.type === 'reconciliation' ||
+                      pCode.startsWith('DS-');
                     const isRet =
-                      p.isReturn ||
-                      p.type === 'return_deduction' ||
-                      String(p.code || p.receiptCode || '').startsWith('ERR-') ||
-                      String(p.title || '').toLowerCase().includes('trả lại') ||
-                      String(p.note || '').toLowerCase().includes('trả lại') ||
-                      String(p.title || '').toLowerCase().includes('hàng lỗi');
+                      !isRecon &&
+                      (p.isReturn ||
+                        p.type === 'return_deduction' ||
+                        pCode.startsWith('ERR-') ||
+                        String(p.title || '').toLowerCase().includes('trả lại') ||
+                        String(p.note || '').toLowerCase().includes('trả lại') ||
+                        String(p.title || '').toLowerCase().includes('hàng lỗi'));
 
                     return (
                       <div key={p.id || idx} style={{ backgroundColor: '#f8fafc', padding: '8px 10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
@@ -515,35 +829,69 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span
                               style={{
-                                backgroundColor: isRet ? '#fef3c7' : '#eff6ff',
-                                color: isRet ? '#b45309' : '#1d4ed8',
-                                border: `1px solid ${isRet ? '#fde68a' : '#bfdbfe'}`,
+                                backgroundColor: isRecon ? '#f5f3ff' : isRet ? '#fef3c7' : '#eff6ff',
+                                color: isRecon ? '#6d28d9' : isRet ? '#b45309' : '#1d4ed8',
+                                border: `1px solid ${isRecon ? '#ddd6fe' : isRet ? '#fde68a' : '#bfdbfe'}`,
                                 padding: '1px 6px',
                                 borderRadius: '3px',
                                 fontSize: '0.6875rem',
                                 fontWeight: 700,
                               }}
                             >
-                              {isRet ? 'Giảm trừ công nợ' : 'Phiếu thu'}
+                              {isRecon ? 'Đối soát' : isRet ? 'Giảm trừ công nợ' : 'Phiếu thu'}
                             </span>
-                            <span style={{ fontWeight: 700, color: '#0f172a' }}>{p.code || p.receiptCode}</span>
+                            <span style={{ fontWeight: 700, color: '#0f172a' }}>{pCode}</span>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontWeight: 800, color: isRet ? '#d97706' : '#059669' }}>
-                              {isRet ? '-' : '+'}{formatNumberGroup(p.amount)} đ
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span
+                              style={{
+                                fontWeight: 800,
+                                color: isRecon
+                                  ? rawPayAmount >= 0
+                                    ? '#059669'
+                                    : '#dc2626'
+                                  : isRet
+                                  ? '#d97706'
+                                  : '#059669',
+                              }}
+                            >
+                              {isRecon ? (rawPayAmount >= 0 ? '+' : '-') : isRet ? '-' : '+'}
+                              {formatNumberGroup(displayPayAmount)} đ
                             </span>
-                            {onPrintReceipt && (
+                            {!isRecon && (
+                              <button
+                                type="button"
+                                title="Đối soát chứng từ này"
+                                onClick={() => openReconcileForSubPayment(p)}
+                                style={{
+                                  width: '22px',
+                                  height: '22px',
+                                  borderRadius: '4px',
+                                  border: '1px solid #cbd5e1',
+                                  backgroundColor: '#ffffff',
+                                  color: '#475569',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: 'pointer',
+                                  padding: 0,
+                                }}
+                              >
+                                <PencilSquare size={11} />
+                              </button>
+                            )}
+                            {onPrintReceipt && !isRecon && (
                               <button
                                 type="button"
                                 title={isRet ? 'Xem chứng từ giảm trừ công nợ A4' : 'Xem và in phiếu thu A4'}
                                 onClick={() => {
                                   const isBankTransfer = !isRet && ((p.method || '').toLowerCase().includes('khoản') || (p.method || '').toLowerCase().includes('ngân hàng'));
                                   onPrintReceipt({
-                                    code: p.code || p.receiptCode || (isRet ? 'BBGT-20261109' : 'PT-20261004'),
+                                    code: pCode || (isRet ? 'BBGT-20261109' : 'PT-20261004'),
                                     date: p.date || '23/10/2026',
                                     customerName: partnerName,
                                     customerAddress: partnerAddress,
-                                    amount: p.amount,
+                                    amount: displayPayAmount,
                                     reason: p.title || p.note || (isRet ? `Giảm trừ công nợ do trả lại hàng - ${cleanTitle}` : `Thu tiền khách hàng - ${cleanTitle}`),
                                     contractCode: parent.code,
                                     stageTitle: cleanTitle,
@@ -552,9 +900,9 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
                                     creditAccount: '131',
                                     notes: isRet ? 'Hồ sơ hàng trả lại (ERR)' : isBankTransfer ? 'Giấy báo Có ngân hàng' : '01 Chứng từ gốc',
                                     creator: userName,
-                                    accountant: 'Mai Thị Ngọc',
+                                    accountant: '',
                                     cashier: '',
-                                    director: 'Hà Hải Lâm',
+                                    director: 'Lê Công Vụ',
                                   });
                                 }}
                                 style={{
@@ -577,7 +925,7 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
                           </div>
                         </div>
                         <div style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '3px' }}>
-                          {p.time || '08:30'} • {p.date} • <span style={{ fontStyle: 'italic' }}>({isRet ? (p.method || 'Cấn trừ hàng trả lại') : (p.method || 'Chuyển khoản')})</span>
+                          {p.time || '08:30'} • {p.date} • <span style={{ fontStyle: 'italic' }}>({isRecon ? (p.title || 'Đối soát công nợ') : isRet ? (p.method || 'Cấn trừ hàng trả lại') : (p.method || 'Chuyển khoản')})</span>
                         </div>
                       </div>
                     );
@@ -592,4 +940,3 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
   );
 };
 export default DebtSubEntryDetailOffcanvas;
-

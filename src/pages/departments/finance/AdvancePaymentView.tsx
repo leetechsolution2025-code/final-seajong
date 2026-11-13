@@ -113,9 +113,9 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
   // State Modal tạo mới phiếu tạm ứng
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newPurpose, setNewPurpose] = useState('');
-  const [newProject, setNewProject] = useState('Sun Grand Boulevard Sầm Sơn');
+  const [newProject, setNewProject] = useState('');
   const [newAmount, setNewAmount] = useState<number | ''>('');
-  const [newDepartment, setNewDepartment] = useState('Xưởng Sản xuất gỗ');
+  const [newDepartment, setNewDepartment] = useState('Phòng Kinh doanh');
   const [newPaymentMethod, setNewPaymentMethod] = useState<'bank_transfer' | 'cash'>('bank_transfer');
   const [newBankName, setNewBankName] = useState('Techcombank');
   const [newBankAccount, setNewBankAccount] = useState('');
@@ -228,7 +228,7 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
 
   // Hành động Phê duyệt
   const handleApprove = async (item: AdvancePaymentItem) => {
-    const approverName = user?.name ? `${user.name} (Phê duyệt)` : 'Hà Hải Lâm (Ban Giám Đốc)';
+    const approverName = user?.name ? `${user.name} (Phê duyệt)` : 'Lê Công Vụ (Ban Giám Đốc)';
     const today = new Date().toISOString().split('T')[0];
 
     try {

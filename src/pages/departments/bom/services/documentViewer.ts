@@ -353,14 +353,14 @@ export function openOfficialDocumentSheet(doc: DocumentViewerData, fileNameOverr
       <div>
         <div class="sig-role">NGƯỜI TRÌNH DUYỆT</div>
         <div class="sig-note">(Ký, ghi rõ họ tên)</div>
-        <div class="sig-name">${doc.submitter || 'Hà Hải Lâm'}</div>
+        <div class="sig-name">${doc.submitter || 'Người trình duyệt'}</div>
       </div>
       <div>
         <div class="sig-role">BAN GIÁM ĐỐC PHÊ DUYỆT</div>
         <div class="sig-note">(Ký số điện tử và đóng dấu)</div>
         ${isApproved ? `
           <div class="sign-stamp">✓ ĐÃ KÝ DUYỆT ĐIỆN TỬ</div>
-          <div class="sig-name">${doc.approvedBy || 'TGĐ. Hà Hải Lâm'}</div>
+          <div class="sig-name">${doc.approvedBy || 'TGĐ. Lê Công Vụ'}</div>
         ` : `
           <div style="height: 60px;"></div>
           <div class="sig-name">Ban Giám đốc Seajong</div>

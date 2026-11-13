@@ -2306,17 +2306,17 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
               <div>
                 <div style={{ fontWeight: 700 }}>Kế toán thanh toán</div>
                 <div style={{ fontSize: '11px', fontStyle: 'italic' }}>(Ký, họ tên)</div>
-                <div style={{ marginTop: '55px', fontWeight: 700 }}>Vũ Thị Lan Hương</div>
+                <div style={{ marginTop: '55px', fontWeight: 700 }}></div>
               </div>
               <div>
                 <div style={{ fontWeight: 700 }}>Kế toán trưởng</div>
                 <div style={{ fontSize: '11px', fontStyle: 'italic' }}>(Ký, họ tên)</div>
-                <div style={{ marginTop: '55px', fontWeight: 700 }}>Phạm Thanh Thảo</div>
+                <div style={{ marginTop: '55px', fontWeight: 700 }}></div>
               </div>
               <div>
                 <div style={{ fontWeight: 700 }}>Thủ trưởng đơn vị</div>
                 <div style={{ fontSize: '11px', fontStyle: 'italic' }}>(Ký, đóng dấu)</div>
-                <div style={{ marginTop: '55px', fontWeight: 700 }}>Hà Hải Lâm</div>
+                <div style={{ marginTop: '55px', fontWeight: 700 }}>Lê Công Vụ</div>
               </div>
             </div>
           </div>

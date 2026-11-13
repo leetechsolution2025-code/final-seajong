@@ -298,7 +298,7 @@ export const CashAssetsView: React.FC<CashAssetsViewProps> = ({ onShowToast }) =
         if (!formName || formName.includes('Quỹ két') || formName.includes('Tài khoản')) {
           setFormName(`Hợp đồng tiền gửi tiết kiệm ${formTermMonths || 6} tháng`);
         }
-        setFormManagerName('Hà Hải Lâm | Giám đốc');
+        setFormManagerName('Lê Công Vụ | Giám đốc');
       } else {
         if (!formName || formName.includes('Quỹ két') || formName.includes('Hợp đồng')) {
           setFormName(`Tài khoản thanh toán ${formBankName || 'Vietcombank'}`);

@@ -39,6 +39,7 @@ import {
   FileEarmarkArrowDownFill,
   SendCheckFill,
   CalendarEvent,
+  PencilSquare,
 } from 'react-bootstrap-icons';
 import { TableToolbar, type TableToolbarFilter, type TableToolbarMenuItem } from '../../../components/common/TableToolbar';
 import { FullWidthTable, SwipeableTableRow } from '../../../components/common/FullWidthTable';
@@ -49,6 +50,7 @@ import { Modal } from '../../../components/common/Modal';
 import { Offcanvas } from '../../../components/common/Offcanvas';
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog';
 import { Input } from '../../../components/common/Input';
+import { NumberInput } from '../../../components/common/NumberInput';
 import { Select } from '../../../components/common/Select';
 import { Toggle } from '../../../components/common/Toggle';
 import { PrintPreview } from '../../../components/common/PrintPreview';
@@ -812,6 +814,10 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
   }, [filteredExpenseOps]);
 
   // Khi chuyển bước: Reset filter, page & các dòng được chọn
+  const [isReconcilingCashflow, setIsReconcilingCashflow] = useState<boolean>(false);
+  const [reconcileCashflowAmount, setReconcileCashflowAmount] = useState<number>(0);
+  const [reconcileCashflowNote, setReconcileCashflowNote] = useState<string>('');
+  const [reconcileCashflowSaving, setReconcileCashflowSaving] = useState<boolean>(false);
   useEffect(() => {
     setSearchTerm('');
     setFilter1('all');
@@ -3395,67 +3401,156 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
               )}
             </div>
           }
-          width="420px"
+          width="400px"
           footer={
-            <div className="flex items-center justify-end gap-2 w-full">
-              <Button variant="outline" size="sm" onClick={() => setSelectedOutflow(null)}>
+            <div className="flex items-center justify-between gap-2 w-full">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setIsReconcilingCashflow(false);
+                  setSelectedOutflow(null);
+                }}
+              >
                 Đóng
               </Button>
-              {selectedOutflow.status === 'cho_chi' ? (
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={async () => {
-                    const currentOutflow = selectedOutflow;
-                    const voucherNum = await handleExecutePayout(currentOutflow);
-                    if (isPrintVoucherToggle) {
-                      setPrintPreviewItem({
-                        voucherCode: voucherNum,
-                        code: currentOutflow.code,
-                        amount: currentOutflow.amount,
-                        beneficiary: currentOutflow.beneficiary,
-                        categoryTitle: currentOutflow.categoryTitle,
-                        note: currentOutflow.note || '',
-                        method: payoutMethod,
-                        debitAccount: payoutDebitAccount,
-                        creditAccount: payoutCreditAccount,
-                        bankAccountId: payoutBankAccountId,
-                        executor: payoutExecutor,
-                        date: payoutExecutionDate || new Date().toLocaleDateString('vi-VN'),
-                      });
-                      setIsPrintPreviewOpen(true);
-                    }
-                    setSelectedOutflow(null);
-                  }}
-                >
-                  Xác nhận giải ngân
-                </Button>
-              ) : (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => {
-                    setPrintPreviewItem({
-                      voucherCode: selectedOutflow.voucherCode || `PC-${selectedOutflow.code}`,
-                      code: selectedOutflow.code,
-                      amount: selectedOutflow.amount,
-                      beneficiary: selectedOutflow.beneficiary,
-                      categoryTitle: selectedOutflow.categoryTitle,
-                      note: selectedOutflow.note || '',
-                      method: payoutMethod,
-                      debitAccount: payoutDebitAccount,
-                      creditAccount: payoutCreditAccount,
-                      bankAccountId: payoutBankAccountId,
-                      executor: payoutExecutor,
-                      date: payoutExecutionDate || selectedOutflow.dueDate || new Date().toLocaleDateString('vi-VN'),
-                    });
-                    setIsPrintPreviewOpen(true);
-                  }}
-                >
-                  <Printer size={13} className="mr-1 inline" />
-                  In chứng từ chi
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {isReconcilingCashflow ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={reconcileCashflowSaving}
+                      onClick={() => setIsReconcilingCashflow(false)}
+                    >
+                      Huỷ
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      isLoading={reconcileCashflowSaving}
+                      disabled={
+                        reconcileCashflowSaving ||
+                        !reconcileCashflowAmount ||
+                        Math.round(Number(reconcileCashflowAmount) || 0) <= 0 ||
+                        Math.round(Number(reconcileCashflowAmount) || 0) === Math.round(Number(selectedOutflow.amount) || 0)
+                      }
+                      leftIcon={<CheckCircle size={13} />}
+                      onClick={async () => {
+                        const nextVal = Math.max(0, Math.round(Number(reconcileCashflowAmount) || 0));
+                        if (nextVal <= 0 || nextVal === Math.round(Number(selectedOutflow.amount) || 0)) {
+                          return;
+                        }
+                        setReconcileCashflowSaving(true);
+                        try {
+                          await fetch('/api/debts/reconcile-entry', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              type: 'outflow',
+                              entryId: selectedOutflow.id,
+                              entryCode: selectedOutflow.code,
+                              newAmount: nextVal,
+                              note: reconcileCashflowNote.trim(),
+                            }),
+                          });
+                          const nextNote = reconcileCashflowNote.trim() || selectedOutflow.categoryTitle;
+                          setOutflows((prev) =>
+                            prev.map((o) =>
+                              o.id === selectedOutflow.id
+                                ? { ...o, amount: nextVal, categoryTitle: nextNote }
+                                : o
+                            )
+                          );
+                          setSelectedOutflow((prev) =>
+                            prev ? { ...prev, amount: nextVal, categoryTitle: nextNote } : null
+                          );
+                          setIsReconcilingCashflow(false);
+                          onShowToast?.(
+                            'success',
+                            'Đối soát thành công',
+                            `Đã cập nhật số tiền lệnh chi ${selectedOutflow.code} thành ${formatVND(nextVal)}`
+                          );
+                        } finally {
+                          setReconcileCashflowSaving(false);
+                        }
+                      }}
+                    >
+                      Lưu đối soát
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      leftIcon={<PencilSquare size={13} />}
+                      onClick={() => {
+                        setReconcileCashflowAmount(selectedOutflow.amount);
+                        setReconcileCashflowNote(`Đối soát công nợ chứng từ ${selectedOutflow.code}`);
+                        setIsReconcilingCashflow(true);
+                      }}
+                    >
+                      Đối soát
+                    </Button>
+                    {selectedOutflow.status === 'cho_chi' ? (
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={async () => {
+                          const currentOutflow = selectedOutflow;
+                          const voucherNum = await handleExecutePayout(currentOutflow);
+                          if (isPrintVoucherToggle) {
+                            setPrintPreviewItem({
+                              voucherCode: voucherNum,
+                              code: currentOutflow.code,
+                              amount: currentOutflow.amount,
+                              beneficiary: currentOutflow.beneficiary,
+                              categoryTitle: currentOutflow.categoryTitle,
+                              note: currentOutflow.note || '',
+                              method: payoutMethod,
+                              debitAccount: payoutDebitAccount,
+                              creditAccount: payoutCreditAccount,
+                              bankAccountId: payoutBankAccountId,
+                              executor: payoutExecutor,
+                              date: payoutExecutionDate || new Date().toLocaleDateString('vi-VN'),
+                            });
+                            setIsPrintPreviewOpen(true);
+                          }
+                          setSelectedOutflow(null);
+                        }}
+                      >
+                        Xác nhận giải ngân
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => {
+                          setPrintPreviewItem({
+                            voucherCode: selectedOutflow.voucherCode || `PC-${selectedOutflow.code}`,
+                            code: selectedOutflow.code,
+                            amount: selectedOutflow.amount,
+                            beneficiary: selectedOutflow.beneficiary,
+                            categoryTitle: selectedOutflow.categoryTitle,
+                            note: selectedOutflow.note || '',
+                            method: payoutMethod,
+                            debitAccount: payoutDebitAccount,
+                            creditAccount: payoutCreditAccount,
+                            bankAccountId: payoutBankAccountId,
+                            executor: payoutExecutor,
+                            date: payoutExecutionDate || selectedOutflow.dueDate || new Date().toLocaleDateString('vi-VN'),
+                          });
+                          setIsPrintPreviewOpen(true);
+                        }}
+                      >
+                        <Printer size={13} className="mr-1 inline" />
+                        In chứng từ chi
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           }
         >
@@ -3531,6 +3626,29 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                 {formatVND(selectedOutflow.amount)}
               </span>
             </div>
+
+            {isReconcilingCashflow && (
+              <div className="p-3 bg-blue-50/90 border border-blue-200 rounded-xl flex flex-col gap-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-blue-900">Đối soát giá trị tiền</span>
+                  <Badge variant="brand">{selectedOutflow.code}</Badge>
+                </div>
+                <NumberInput
+                  label="Số tiền sau đối soát"
+                  required
+                  hideZero={false}
+                  suffix="₫"
+                  value={reconcileCashflowAmount}
+                  onValueChange={(val) => setReconcileCashflowAmount(val)}
+                />
+                <Input
+                  label="Nội dung chi tiết / Lý do điều chỉnh"
+                  value={reconcileCashflowNote}
+                  onChange={(e) => setReconcileCashflowNote(e.target.value)}
+                  placeholder="Nhập nội dung đối soát..."
+                />
+              </div>
+            )}
 
             {/* CÔNG TẮC TOGGLE "IN CHỨNG TỪ" DƯỚI SỐ TIỀN XUẤT QUỸ */}
             <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between shadow-xs">
@@ -3704,71 +3822,160 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
               )}
             </div>
           }
-          width="420px"
+          width="400px"
           footer={
-            <div className="flex items-center justify-end gap-2 w-full">
-              <Button variant="outline" size="sm" onClick={() => setSelectedInflow(null)}>
+            <div className="flex items-center justify-between gap-2 w-full">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setIsReconcilingCashflow(false);
+                  setSelectedInflow(null);
+                }}
+              >
                 Đóng
               </Button>
-              {selectedInflow.status === 'cho_thu' ? (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  className="!bg-emerald-600 hover:!bg-emerald-700 !text-white"
-                  onClick={() => {
-                    const currentInflow = selectedInflow;
-                    const voucherNum = handleExecuteInflow(currentInflow);
-                    if (isInflowPrintToggle) {
-                      setPrintPreviewItem({
-                        voucherCode: voucherNum,
-                        code: currentInflow.code,
-                        amount: currentInflow.amount,
-                        beneficiary: currentInflow.payerName,
-                        categoryTitle: currentInflow.sourceTitle,
-                        note: currentInflow.note || '',
-                        method: inflowMethod === 'tien_mat' ? 'tien_mat' : 'ngan_hang',
-                        direction: 'inflow',
-                        debitAccount: inflowDebitAccount,
-                        creditAccount: inflowCreditAccount,
-                        bankAccountId: inflowBankAccountId,
-                        executor: inflowCollector,
-                        date: inflowExecutionDate || new Date().toLocaleDateString('vi-VN'),
-                      });
-                      setIsPrintPreviewOpen(true);
-                    }
-                    setSelectedInflow(null);
-                  }}
-                >
-                  <CheckCircleFill size={13} className="mr-1 inline" />
-                  Xác nhận thu tiền
-                </Button>
-              ) : (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => {
-                    setPrintPreviewItem({
-                      voucherCode: selectedInflow.voucherCode || selectedInflow.code,
-                      code: selectedInflow.code,
-                      amount: selectedInflow.amount,
-                      beneficiary: selectedInflow.payerName,
-                      categoryTitle: selectedInflow.sourceTitle,
-                      note: selectedInflow.note || '',
-                      method: inflowMethod === 'tien_mat' ? 'tien_mat' : 'ngan_hang',
-                      direction: 'inflow',
-                      debitAccount: inflowDebitAccount,
-                      creditAccount: inflowCreditAccount,
-                      bankAccountId: inflowBankAccountId,
-                      executor: inflowCollector,
-                      date: inflowExecutionDate || new Date().toLocaleDateString('vi-VN'),
-                    });
-                    setIsPrintPreviewOpen(true);
-                  }}
-                >
-                  <Printer size={13} className="mr-1 inline" />
-                  In chứng từ thu
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {isReconcilingCashflow ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={reconcileCashflowSaving}
+                      onClick={() => setIsReconcilingCashflow(false)}
+                    >
+                      Huỷ
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      isLoading={reconcileCashflowSaving}
+                      disabled={
+                        reconcileCashflowSaving ||
+                        !reconcileCashflowAmount ||
+                        Math.round(Number(reconcileCashflowAmount) || 0) <= 0 ||
+                        Math.round(Number(reconcileCashflowAmount) || 0) === Math.round(Number(selectedInflow.amount) || 0)
+                      }
+                      leftIcon={<CheckCircle size={13} />}
+                      onClick={async () => {
+                        const nextVal = Math.max(0, Math.round(Number(reconcileCashflowAmount) || 0));
+                        if (nextVal <= 0 || nextVal === Math.round(Number(selectedInflow.amount) || 0)) {
+                          return;
+                        }
+                        setReconcileCashflowSaving(true);
+                        try {
+                          await fetch('/api/debts/reconcile-entry', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              type: 'inflow',
+                              entryId: selectedInflow.id,
+                              entryCode: selectedInflow.code,
+                              newAmount: nextVal,
+                              note: reconcileCashflowNote.trim(),
+                            }),
+                          });
+                          const nextNote = reconcileCashflowNote.trim() || selectedInflow.sourceTitle;
+                          setInflows((prev) =>
+                            prev.map((inf) =>
+                              inf.id === selectedInflow.id
+                                ? { ...inf, amount: nextVal, sourceTitle: nextNote }
+                                : inf
+                            )
+                          );
+                          setSelectedInflow((prev) =>
+                            prev ? { ...prev, amount: nextVal, sourceTitle: nextNote } : null
+                          );
+                          setIsReconcilingCashflow(false);
+                          onShowToast?.(
+                            'success',
+                            'Đối soát thành công',
+                            `Đã cập nhật số tiền phiếu thu ${selectedInflow.code} thành ${formatVND(nextVal)}`
+                          );
+                        } finally {
+                          setReconcileCashflowSaving(false);
+                        }
+                      }}
+                    >
+                      Lưu đối soát
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      leftIcon={<PencilSquare size={13} />}
+                      onClick={() => {
+                        setReconcileCashflowAmount(selectedInflow.amount);
+                        setReconcileCashflowNote(`Đối soát công nợ chứng từ ${selectedInflow.code}`);
+                        setIsReconcilingCashflow(true);
+                      }}
+                    >
+                      Đối soát
+                    </Button>
+                    {selectedInflow.status === 'cho_thu' ? (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="!bg-emerald-600 hover:!bg-emerald-700 !text-white"
+                        onClick={() => {
+                          const currentInflow = selectedInflow;
+                          const voucherNum = handleExecuteInflow(currentInflow);
+                          if (isInflowPrintToggle) {
+                            setPrintPreviewItem({
+                              voucherCode: voucherNum,
+                              code: currentInflow.code,
+                              amount: currentInflow.amount,
+                              beneficiary: currentInflow.payerName,
+                              categoryTitle: currentInflow.sourceTitle,
+                              note: currentInflow.note || '',
+                              method: inflowMethod === 'tien_mat' ? 'tien_mat' : 'ngan_hang',
+                              direction: 'inflow',
+                              debitAccount: inflowDebitAccount,
+                              creditAccount: inflowCreditAccount,
+                              bankAccountId: inflowBankAccountId,
+                              executor: inflowCollector,
+                              date: inflowExecutionDate || new Date().toLocaleDateString('vi-VN'),
+                            });
+                            setIsPrintPreviewOpen(true);
+                          }
+                          setSelectedInflow(null);
+                        }}
+                      >
+                        <CheckCircleFill size={13} className="mr-1 inline" />
+                        Xác nhận thu tiền
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => {
+                          setPrintPreviewItem({
+                            voucherCode: selectedInflow.voucherCode || selectedInflow.code,
+                            code: selectedInflow.code,
+                            amount: selectedInflow.amount,
+                            beneficiary: selectedInflow.payerName,
+                            categoryTitle: selectedInflow.sourceTitle,
+                            note: selectedInflow.note || '',
+                            method: inflowMethod === 'tien_mat' ? 'tien_mat' : 'ngan_hang',
+                            direction: 'inflow',
+                            debitAccount: inflowDebitAccount,
+                            creditAccount: inflowCreditAccount,
+                            bankAccountId: inflowBankAccountId,
+                            executor: inflowCollector,
+                            date: inflowExecutionDate || new Date().toLocaleDateString('vi-VN'),
+                          });
+                          setIsPrintPreviewOpen(true);
+                        }}
+                      >
+                        <Printer size={13} className="mr-1 inline" />
+                        In chứng từ thu
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           }
         >
@@ -3844,6 +4051,29 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                 +{formatVND(selectedInflow.amount)}
               </span>
             </div>
+
+            {isReconcilingCashflow && (
+              <div className="p-3 bg-blue-50/90 border border-blue-200 rounded-xl flex flex-col gap-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-blue-900">Đối soát giá trị tiền</span>
+                  <Badge variant="brand">{selectedInflow.code}</Badge>
+                </div>
+                <NumberInput
+                  label="Số tiền sau đối soát"
+                  required
+                  hideZero={false}
+                  suffix="₫"
+                  value={reconcileCashflowAmount}
+                  onValueChange={(val) => setReconcileCashflowAmount(val)}
+                />
+                <Input
+                  label="Nội dung chi tiết / Lý do điều chỉnh"
+                  value={reconcileCashflowNote}
+                  onChange={(e) => setReconcileCashflowNote(e.target.value)}
+                  placeholder="Nhập nội dung đối soát..."
+                />
+              </div>
+            )}
 
             {/* CÔNG TẮC TOGGLE "IN CHỨNG TỪ" */}
             <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between shadow-xs">

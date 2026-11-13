@@ -565,7 +565,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
     const compProfile = {
       company_name: company.company_name || 'CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM',
       address: company.address || 'Cụm 4, Xã Sơn Đồng, Thành phố Hà Nội, Việt Nam',
-      legal_rep: company.legal_rep || 'Hà Hải Lâm',
+      legal_rep: company.legal_rep || 'Lê Công Vụ',
       tax_code: company.tax_code,
       phone: company.phone,
       email: company.email,
@@ -2624,7 +2624,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#0f172a' }}>ĐẠI DIỆN BAN GIÁM ĐỐC</div>
                 <div style={{ fontSize: '0.6875rem', color: '#64748b', fontStyle: 'italic' }}>(Ký tên, đóng dấu)</div>
                 <div style={{ height: '55px' }} />
-                <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0f172a' }}>{company.legal_rep || 'Hà Hải Lâm'}</div>
+                <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0f172a' }}>{company.legal_rep || 'Lê Công Vụ'}</div>
                 <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>Tổng Giám đốc</div>
               </div>
             </div>

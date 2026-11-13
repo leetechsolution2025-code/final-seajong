@@ -50,21 +50,23 @@ export interface JournalEntry {
 
 export const CHART_OF_ACCOUNTS = [
   { code: '1111', name: 'Tiền Việt Nam (Tiền mặt quỹ)' },
-  { code: '1121', name: 'Tiền gửi ngân hàng (VND - Vietcombank)' },
+  { code: '1121', name: 'Tiền gửi ngân hàng (VND)' },
   { code: '131', name: 'Phải thu của khách hàng' },
   { code: '1331', name: 'Thuế GTGT đầu vào được khấu trừ' },
   { code: '141', name: 'Tạm ứng nhân viên' },
-  { code: '1521', name: 'Nguyên liệu, vật liệu chính (Gỗ sấy, phôi)' },
-  { code: '1522', name: 'Vật liệu phụ, phụ kiện khoá và bản lề' },
+  { code: '1521', name: 'Nguyên vật liệu, linh kiện sen vòi & thiết bị vệ sinh' },
+  { code: '1522', name: 'Vật liệu phụ, phụ kiện lắp đặt' },
   { code: '154', name: 'Chi phí sản xuất kinh doanh dở dang' },
-  { code: '155', name: 'Thành phẩm thiết bị vệ sinh & nhà bếp Seajong' },
-  { code: '211', name: 'Tài sản cố định hữu hình (Máy móc CNC)' },
+  { code: '155', name: 'Thành phẩm thiết bị phòng tắm & nhà bếp Seajong' },
+  { code: '156', name: 'Hàng hóa thiết bị phòng tắm & nhà bếp Seajong' },
+  { code: '211', name: 'Tài sản cố định hữu hình' },
   { code: '2141', name: 'Hao mòn tài sản cố định hữu hình' },
   { code: '331', name: 'Phải trả cho người bán (Nhà cung cấp)' },
   { code: '3331', name: 'Thuế GTGT đầu ra phải nộp' },
   { code: '334', name: 'Phải trả người lao động (Tiền lương)' },
   { code: '338', name: 'Phải trả, phải nộp khác' },
-  { code: '5112', name: 'Doanh thu bán thành phẩm cửa' },
+  { code: '5112', name: 'Doanh thu bán thành phẩm, hàng hóa Seajong' },
+  { code: '5212', name: 'Hàng bán bị trả lại' },
   { code: '621', name: 'Chi phí nguyên liệu, vật liệu trực tiếp' },
   { code: '622', name: 'Chi phí nhân công trực tiếp xưởng' },
   { code: '627', name: 'Chi phí sản xuất chung' },
@@ -446,6 +448,12 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
         return (
           <span style={{ fontSize: '0.6875rem', fontWeight: 600, padding: '2px 7px', borderRadius: '4px', backgroundColor: 'rgba(168, 85, 247, 0.12)', color: '#9333ea', border: '1px solid rgba(168, 85, 247, 0.25)' }}>
             Tạm ứng
+          </span>
+        );
+      case 'PRODUCTION':
+        return (
+          <span style={{ fontSize: '0.6875rem', fontWeight: 600, padding: '2px 7px', borderRadius: '4px', backgroundColor: 'rgba(20, 184, 166, 0.12)', color: '#0d9488', border: '1px solid rgba(20, 184, 166, 0.25)' }}>
+            TSCĐ / SX
           </span>
         );
       default:
@@ -1508,7 +1516,7 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
                       <td style={{ width: '33%', textAlign: 'center', verticalAlign: 'top' }}>
                         <div style={{ fontWeight: 'bold' }}>Kế toán trưởng</div>
                         <div style={{ fontSize: '8.5pt', fontStyle: 'italic' }}>(Ký, họ tên)</div>
-                        <div style={{ marginTop: '55px', fontWeight: 'bold' }}>Trần Thị Thu Thảo</div>
+                        <div style={{ marginTop: '55px', fontWeight: 'bold' }}></div>
                       </td>
                       <td style={{ width: '34%', textAlign: 'center', verticalAlign: 'top' }}>
                         <div style={{ fontStyle: 'italic', fontSize: '9pt' }}>
@@ -1516,7 +1524,7 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
                         </div>
                         <div style={{ fontWeight: 'bold', marginTop: '2px' }}>Tổng Giám đốc</div>
                         <div style={{ fontSize: '8.5pt', fontStyle: 'italic' }}>(Ký, họ tên, đóng dấu)</div>
-                        <div style={{ marginTop: '55px', fontWeight: 'bold' }}>Hà Hải Lâm</div>
+                        <div style={{ marginTop: '55px', fontWeight: 'bold' }}>Lê Công Vụ</div>
                       </td>
                     </tr>
                   </tbody>

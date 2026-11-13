@@ -507,7 +507,11 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
         if (amt > 0) {
           g.invoices.push(d);
         }
-        if (paid > 0 && (amt === 0 || String(d.referenceId || '').startsWith('PT-'))) {
+        const refIdStr = String(d.referenceId || '');
+        if (
+          (paid > 0 && (amt === 0 || refIdStr.startsWith('PT-'))) ||
+          (paid !== 0 && refIdStr.startsWith('DS-'))
+        ) {
           g.payments.push(d);
         }
       });
@@ -526,26 +530,48 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
         const paymentRecords = g.payments.map((p, idx) => {
           const ref = String(p.referenceId || '');
           const desc = String(p.description || '').toLowerCase();
+          const isReconciliation = ref.startsWith('DS-');
           const isReturn =
-            p.type === 'RETURN' ||
-            ref.startsWith('ERR-') ||
-            desc.includes('trả lại') ||
-            desc.includes('hàng lỗi');
+            !isReconciliation &&
+            (p.type === 'RETURN' ||
+              ref.startsWith('ERR-') ||
+              desc.includes('trả lại') ||
+              desc.includes('hàng lỗi'));
+          const pPaid = Math.round(Number(p.paidAmount) || 0);
 
           return {
             id: p.id || `PAY-REC-${idx}`,
             code: ref || `PT-${idx + 1}`,
             receiptCode: ref || `PT-${idx + 1}`,
-            title: (p.description || '').split('\n')[0] || (isReturn ? `Giảm trừ công nợ do trả lại hàng theo ${ref}` : `Thu nợ khách hàng ${g.customerName}`),
+            title:
+              (p.description || '').split('\n')[0] ||
+              (isReconciliation
+                ? `Chứng từ đối soát công nợ (${ref})`
+                : isReturn
+                  ? `Giảm trừ công nợ do trả lại hàng theo ${ref}`
+                  : `Thu nợ khách hàng ${g.customerName}`),
             date: formatEpochToVNDate(p.createdAt || p.dueDate),
             time: '09:00',
-            amount: Math.round(Number(p.paidAmount) || 0),
-            method: isReturn ? 'Cấn trừ hàng trả lại' : 'Chuyển khoản',
-            type: isReturn ? 'return_deduction' : 'receipt',
-            typeLabel: isReturn ? 'Giảm trừ công nợ' : 'Phiếu thu',
+            amount: pPaid,
+            method: isReconciliation
+              ? 'Đối soát công nợ'
+              : isReturn
+                ? 'Cấn trừ hàng trả lại'
+                : 'Chuyển khoản',
+            type: isReconciliation
+              ? 'reconciliation'
+              : isReturn
+                ? 'return_deduction'
+                : 'receipt',
+            typeLabel: isReconciliation
+              ? 'Đối soát'
+              : isReturn
+                ? 'Giảm trừ công nợ'
+                : 'Phiếu thu',
+            isReconciliation,
             isReturn,
-            debitAccount: isReturn ? '5212' : '1121',
-            creditAccount: '131',
+            debitAccount: isReconciliation ? (pPaid >= 0 ? '1121' : '131') : isReturn ? '5212' : '1121',
+            creditAccount: isReconciliation ? (pPaid >= 0 ? '131' : '1121') : '131',
             payerName: g.customerName,
             payerAddress: g.customerAddress,
           };
@@ -689,7 +715,11 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           g.latestDueDate = d.dueDate;
         }
         if (amt > 0) g.bills.push(d);
-        if (paid > 0 && (amt === 0 || String(d.referenceId || '').startsWith('PC-'))) {
+        const refIdStr = String(d.referenceId || '');
+        if (
+          (paid > 0 && (amt === 0 || refIdStr.startsWith('PC-'))) ||
+          (paid !== 0 && refIdStr.startsWith('DS-'))
+        ) {
           g.payments.push(d);
         }
       });
@@ -737,11 +767,13 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           };
         });
 
-        // Bổ sung các phiếu chi (Debt với paidAmount > 0 và amount === 0 hoặc referenceId bắt đầu bằng PC-) vào danh sách chi tiết
+        // Bổ sung các phiếu chi (Debt với paidAmount > 0 và amount === 0 hoặc referenceId bắt đầu bằng PC-) và chứng từ đối soát (DS-) vào danh sách chi tiết
         (g.payments || []).forEach((p, idx) => {
           const pVal = Math.round(Number(p.paidAmount) || 0);
-          if (pVal <= 0) return;
           const refCode = p.referenceId || `PC-${idx + 1}`;
+          const isReconciliation = String(refCode).startsWith('DS-');
+          if (!isReconciliation && pVal <= 0) return;
+          if (isReconciliation && pVal === 0) return;
           if (entries.some((e) => e.code === refCode)) return;
           const descParts = String(p.description || '').split('[PAYMENT_LOGS]:');
           const descClean = descParts[0].trim();
@@ -752,7 +784,7 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
               if (Array.isArray(logs) && logs.length > 0) logInfo = logs[0];
             } catch {}
           }
-          const payMethod = logInfo?.method || 'Chuyển khoản';
+          const payMethod = isReconciliation ? 'Đối soát công nợ' : logInfo?.method || 'Chuyển khoản';
           let payDate = formatEpochToVNDate(p.createdAt || p.dueDate);
           let payTime = '09:00';
           if (logInfo?.date && String(logInfo.date).includes('-')) {
@@ -765,20 +797,36 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           entries.push({
             id: p.id || `ENT-PC-${idx + 1}`,
             code: refCode,
-            title: logInfo?.note || descClean || `Phiếu chi thanh toán công nợ (${refCode})`,
+            title:
+              logInfo?.note ||
+              descClean ||
+              (isReconciliation
+                ? `Chứng từ đối soát công nợ (${refCode})`
+                : `Phiếu chi thanh toán công nợ (${refCode})`),
             date: payDate,
             time: payTime,
-            totalAmount: pVal,
+            totalAmount: Math.abs(pVal),
             paidAmount: pVal,
             remainingAmount: 0,
             status: 'completed',
-            statusLabel: 'Đã chi tiền',
-            debitAccount: '331',
-            creditAccount: payMethod === 'Tiền mặt' ? '1111' : '1121',
+            statusLabel: isReconciliation
+              ? pVal >= 0
+                ? 'Đối soát bổ sung'
+                : 'Đối soát giảm trừ'
+              : 'Đã chi tiền',
+            debitAccount: isReconciliation ? (pVal >= 0 ? '331' : '1121') : '331',
+            creditAccount: isReconciliation
+              ? pVal >= 0
+                ? '1121'
+                : '331'
+              : payMethod === 'Tiền mặt'
+                ? '1111'
+                : '1121',
             paymentMethod: payMethod,
             receiverName: g.partnerName,
-            type: 'payment',
-            voucherType: 'payment',
+            type: isReconciliation ? 'reconciliation' : 'payment',
+            voucherType: isReconciliation ? 'reconciliation' : 'payment',
+            isReconciliation,
           });
         });
 
@@ -1757,7 +1805,7 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
     }
 
     try {
-      const { syncAllSubledgersToJournal } = await import('./journalSyncService.js');
+      const { syncAllSubledgersToJournal } = await import(`./journalSyncService.js?t=${Date.now()}`);
       await syncAllSubledgersToJournal(db);
     } catch (subErr) {
       console.warn('⚠️ Lỗi đồng bộ subledgers trong prismaFinanceSyncService:', subErr.message);

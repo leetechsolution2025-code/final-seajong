@@ -4316,10 +4316,28 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                       return (
                                         <tr
                                           key={pay.id || `return-${pIdx}`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedSubEntry({
+                                              entry: {
+                                                ...pay,
+                                                code: pay.code || pay.receiptCode,
+                                                contractValue: pay.amount,
+                                                paidAmount: pay.amount,
+                                                remainingAmount: 0,
+                                                isReturn: true,
+                                              },
+                                              parent: item,
+                                              type: 'receivable',
+                                            });
+                                            setSubEntryDetailOpen(true);
+                                          }}
+                                          title="Nhấn để xem chi tiết & đối soát giảm trừ công nợ"
                                           style={{
                                             backgroundColor: '#f1f5f9',
                                             borderBottom: pIdx === returnDeductions.length - 1 ? '1px solid #e2e8f0' : '1px dashed #e2e8f0',
                                             fontSize: '0.7813rem',
+                                            cursor: 'pointer',
                                           }}
                                         >
                                           {/* Cột Khách hàng: Thụt lề với ký hiệu nhánh ↳ và badge Giảm trừ công nợ */}
@@ -4434,15 +4452,41 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                 );
                               })}
 
-                              {/* 2. CÁC PHIẾU THU ĐƯỢC ĐẶT Ở NGOÀI CÁC ĐƠN HÀNG, CÙNG CẤP VỚI ĐƠN BÁN HÀNG */}
+                              {/* 2. CÁC PHIẾU THU & CHỨNG TỪ ĐỐI SOÁT ĐƯỢC ĐẶT Ở NGOÀI CÁC ĐƠN HÀNG, CÙNG CẤP VỚI ĐƠN BÁN HÀNG */}
                               {customerReceipts.map((pay: any, pIdx: number) => {
+                                const payCode = String(pay.code || pay.receiptCode || '');
+                                const isRecon =
+                                  pay.isReconciliation ||
+                                  pay.type === 'reconciliation' ||
+                                  payCode.startsWith('DS-');
+                                const payAmt = Number(pay.amount) || 0;
                                 const isBankTransfer = (pay.method || '').toLowerCase().includes('khoản') || (pay.method || '').toLowerCase().includes('ngân hàng');
                                 return (
                                   <tr
                                     key={pay.id || `cust-receipt-${pIdx}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedSubEntry({
+                                        entry: {
+                                          ...pay,
+                                          code: payCode,
+                                          contractValue: Math.abs(payAmt),
+                                          paidAmount: payAmt,
+                                          remainingAmount: 0,
+                                          isReceipt: !isRecon,
+                                          isReconciliation: isRecon,
+                                          type: isRecon ? 'reconciliation' : 'receipt',
+                                        },
+                                        parent: item,
+                                        type: 'receivable',
+                                      });
+                                      setSubEntryDetailOpen(true);
+                                    }}
+                                    title={isRecon ? 'Nhấn để xem chi tiết chứng từ đối soát' : 'Nhấn để xem chi tiết & đối soát phiếu thu'}
                                     style={{
                                       backgroundColor: '#f8fafc',
                                       borderBottom: '1px solid #e2e8f0',
+                                      cursor: 'pointer',
                                       transition: 'background-color 0.15s ease',
                                     }}
                                     onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
@@ -4453,28 +4497,28 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                       <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                         <span
                                           style={{
-                                            backgroundColor: '#dcfce7',
-                                            color: '#15803d',
-                                            border: '1px solid #86efac',
+                                            backgroundColor: isRecon ? '#f5f3ff' : '#dcfce7',
+                                            color: isRecon ? '#6d28d9' : '#15803d',
+                                            border: `1px solid ${isRecon ? '#ddd6fe' : '#86efac'}`,
                                             padding: '1px 6px',
                                             borderRadius: '4px',
                                             fontSize: '0.6875rem',
                                             fontWeight: 700,
                                           }}
                                         >
-                                          Phiếu thu
+                                          {isRecon ? 'Đối soát' : 'Phiếu thu'}
                                         </span>
-                                        <span style={{ color: '#0369a1', fontWeight: 700 }}>{pay.code || pay.receiptCode}</span>
+                                        <span style={{ color: isRecon ? '#6d28d9' : '#0369a1', fontWeight: 700 }}>{payCode}</span>
                                         <span style={{ color: '#cbd5e1' }}>|</span>
                                         <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 400 }}>
                                           {pay.time || '08:30'} • {pay.date}
                                         </span>
                                         <span style={{ color: '#64748b', fontSize: '0.75rem', fontStyle: 'italic', fontWeight: 400 }}>
-                                          ({pay.method || 'Chuyển khoản'})
+                                          ({pay.method || (isRecon ? 'Đối soát công nợ' : 'Chuyển khoản')})
                                         </span>
                                       </div>
                                       <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '2px', fontWeight: 500 }}>
-                                        {pay.title || pay.note || `Thu tiền khách hàng theo phiếu ${pay.code || pay.receiptCode}`}
+                                        {pay.title || pay.note || (isRecon ? `Chứng từ đối soát công nợ ${payCode}` : `Thu tiền khách hàng theo phiếu ${payCode}`)}
                                       </div>
                                     </td>
 
@@ -4483,20 +4527,42 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                       —
                                     </td>
 
-                                    {/* Cột Đã thanh toán: Hiển thị số tiền đã thu */}
-                                    <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                      +{formatNumberGroup(pay.amount)}
+                                    {/* Cột Đã thanh toán: Hiển thị số tiền đã thu / chênh lệch đối soát */}
+                                    <td
+                                      className="hidden sm:table-cell"
+                                      style={{
+                                        padding: '8px 14px',
+                                        textAlign: 'right',
+                                        fontWeight: 700,
+                                        color: payAmt < 0 ? '#dc2626' : '#059669',
+                                        fontSize: '0.8125rem',
+                                        whiteSpace: 'nowrap',
+                                      }}
+                                    >
+                                      {payAmt >= 0 ? '+' : '-'}{formatNumberGroup(Math.abs(payAmt))}
                                     </td>
 
                                     {/* Cột Hạn thanh toán / Trạng thái */}
-                                    <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'center', color: '#059669', fontWeight: 600, fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                      Đã thu
+                                    <td
+                                      className="hidden sm:table-cell"
+                                      style={{
+                                        padding: '8px 14px',
+                                        textAlign: 'center',
+                                        color: isRecon ? '#6d28d9' : '#059669',
+                                        fontWeight: 600,
+                                        fontSize: '0.8125rem',
+                                        whiteSpace: 'nowrap',
+                                      }}
+                                    >
+                                      {isRecon ? 'Đối soát' : 'Đã thu'}
                                     </td>
 
                                     {/* Cột Còn lại */}
                                     <td style={{ padding: '8px 14px', textAlign: 'right', color: '#94a3b8', whiteSpace: 'nowrap' }}>
                                       <span className="hidden sm:inline">—</span>
-                                      <span className="sm:hidden font-bold text-emerald-600">+{formatNumberGroup(pay.amount)}</span>
+                                      <span className={`sm:hidden font-bold ${payAmt < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                        {payAmt >= 0 ? '+' : '-'}{formatNumberGroup(Math.abs(payAmt))}
+                                      </span>
                                     </td>
 
                                     {/* Cột Thao tác: Nút in phiếu thu A4 */}
@@ -4924,7 +4990,12 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                               return entry.status === statusFilter;
                             })
                             .map((entry) => {
-                              const isPayment = !entry.code?.startsWith('DH-') && !entry.code?.startsWith('PO-') && (
+                              const isReconciliation =
+                                (entry as any).isReconciliation ||
+                                (entry as any).type === 'reconciliation' ||
+                                (entry as any).voucherType === 'reconciliation' ||
+                                String(entry.code || '').startsWith('DS-');
+                              const isPayment = !isReconciliation && !entry.code?.startsWith('DH-') && !entry.code?.startsWith('PO-') && (
                                 entry.code?.startsWith('PC-') ||
                                 entry.code?.startsWith('UNC-') ||
                                 entry.statusLabel === 'Đã chi tiền' ||
@@ -4933,11 +5004,12 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                 String(entry.title || '').toLowerCase().includes('ứng trước') ||
                                 String(entry.title || '').toLowerCase().includes('chi tiền')
                               );
-                              const isPurchaseOrder = !isPayment && (
+                              const isPurchaseOrder = !isPayment && !isReconciliation && (
                                 String(entry.code || '').startsWith('DH-') ||
                                 String(entry.code || '').startsWith('PO-') ||
                                 String(entry.title || '').toLowerCase().includes('đơn mua hàng')
                               );
+                              const rawPaidVal = Number(entry.paidAmount ?? entry.totalAmount) || 0;
 
                               return (
                                 <tr
@@ -4947,7 +5019,13 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                     setSelectedSubEntry({ entry, parent: item, type: 'payable' });
                                     setSubEntryDetailOpen(true);
                                   }}
-                                  title={isPayment ? 'Nhấn để xem chi tiết phiếu chi' : 'Nhấn để xem chi tiết khoản nợ'}
+                                  title={
+                                    isReconciliation
+                                      ? 'Nhấn để xem chi tiết chứng từ đối soát'
+                                      : isPayment
+                                      ? 'Nhấn để xem chi tiết phiếu chi'
+                                      : 'Nhấn để xem chi tiết khoản nợ'
+                                  }
                                   style={{
                                     backgroundColor: '#f8fafc',
                                     borderBottom: '1px solid #f1f5f9',
@@ -4957,9 +5035,24 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                   onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
                                   onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
                                 >
-                                  {/* Cột Nhà cung cấp: Có badge Phiếu chi vào đầu dòng giống như Phiếu thu đối với công nợ phải thu */}
+                                  {/* Cột Nhà cung cấp: Có badge Phiếu chi / Đối soát / Mua hàng vào đầu dòng */}
                                   <td style={{ padding: '6px 14px 6px 36px' }}>
                                     <div style={{ fontWeight: 500, color: '#334155', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                      {isReconciliation && (
+                                        <span
+                                          style={{
+                                            backgroundColor: '#f5f3ff',
+                                            color: '#6d28d9',
+                                            border: '1px solid #ddd6fe',
+                                            padding: '1px 6px',
+                                            borderRadius: '4px',
+                                            fontSize: '0.6875rem',
+                                            fontWeight: 700,
+                                          }}
+                                        >
+                                          Đối soát
+                                        </span>
+                                      )}
                                       {isPayment && (
                                         <span
                                           style={{
@@ -4990,12 +5083,19 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                           Mua hàng
                                         </span>
                                       )}
-                                      <span style={{ color: isPayment ? '#0369a1' : '#334155', fontWeight: isPayment ? 700 : 500 }}>{entry.code}</span>
+                                      <span
+                                        style={{
+                                          color: isReconciliation ? '#6d28d9' : isPayment ? '#0369a1' : '#334155',
+                                          fontWeight: isReconciliation || isPayment ? 700 : 500,
+                                        }}
+                                      >
+                                        {entry.code}
+                                      </span>
                                       <span style={{ color: '#cbd5e1' }}>|</span>
                                       <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 400 }}>
                                         {entry.time || '09:00'} • {entry.date}
                                       </span>
-                                      {isPayment && (entry as any).paymentMethod && (
+                                      {(isPayment || isReconciliation) && (entry as any).paymentMethod && (
                                         <span style={{ color: '#64748b', fontSize: '0.75rem', fontStyle: 'italic', fontWeight: 400 }}>
                                           ({(entry as any).paymentMethod})
                                         </span>
@@ -5008,22 +5108,46 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
 
                                   {/* Cột Tổng tiền đơn: font thường không đậm */}
                                   <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 400, color: '#334155', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                    {isPayment ? '—' : formatNumberGroup(entry.totalAmount)}
+                                    {isPayment || isReconciliation ? '—' : formatNumberGroup(entry.totalAmount)}
                                   </td>
 
                                   {/* Cột Đã thanh toán: font thường không đậm */}
-                                  <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', fontWeight: isPayment ? 700 : 400, color: '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                    {isPayment ? `+${formatNumberGroup(entry.paidAmount || entry.totalAmount)}` : formatNumberGroup(entry.paidAmount)}
+                                  <td
+                                    className="hidden sm:table-cell"
+                                    style={{
+                                      padding: '6px 14px',
+                                      textAlign: 'right',
+                                      fontWeight: isPayment || isReconciliation ? 700 : 400,
+                                      color: isReconciliation && rawPaidVal < 0 ? '#dc2626' : '#059669',
+                                      fontSize: '0.8125rem',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    {isReconciliation
+                                      ? `${rawPaidVal >= 0 ? '+' : '-'}${formatNumberGroup(Math.abs(rawPaidVal))}`
+                                      : isPayment
+                                      ? `+${formatNumberGroup(entry.paidAmount || entry.totalAmount)}`
+                                      : formatNumberGroup(entry.paidAmount)}
                                   </td>
 
                                   {/* Cột Hạn thanh toán: font thường không đậm */}
-                                  <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'center', fontWeight: isPayment ? 600 : 400, color: isPayment ? '#059669' : '#475569', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                    {isPayment ? 'Đã chi' : (entry.dueDate || '—')}
+                                  <td
+                                    className="hidden sm:table-cell"
+                                    style={{
+                                      padding: '6px 14px',
+                                      textAlign: 'center',
+                                      fontWeight: isPayment || isReconciliation ? 600 : 400,
+                                      color: isReconciliation ? '#6d28d9' : isPayment ? '#059669' : '#475569',
+                                      fontSize: '0.8125rem',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    {isReconciliation ? 'Đối soát' : isPayment ? 'Đã chi' : (entry.dueDate || '—')}
                                   </td>
 
                                   {/* Cột Còn lại: font thường không đậm */}
-                                  <td style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 400, color: isPayment ? '#94a3b8' : (entry.remainingAmount > 0 ? '#dc2626' : '#059669'), fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                    {isPayment ? '—' : formatNumberGroup(entry.remainingAmount)}
+                                  <td style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 400, color: isPayment || isReconciliation ? '#94a3b8' : (entry.remainingAmount > 0 ? '#dc2626' : '#059669'), fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                    {isPayment || isReconciliation ? '—' : formatNumberGroup(entry.remainingAmount)}
                                   </td>
 
                                   {/* Cột Thao tác: Nút in phiếu chi A4 (giống như nút in phiếu thu Bước 1) */}
@@ -7449,7 +7573,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                 <span style={{ fontWeight: 700, color: '#334155' }}>Giám đốc duyệt:</span> Lê Công Vụ
               </div>
               <div>
-                <span style={{ fontWeight: 700, color: '#334155' }}>Thủ quỹ / Chi tiền:</span> {paymentMethod === 'Tiền mặt' ? 'Vũ Thu Trang' : 'Ngân hàng điện tử'}
+                <span style={{ fontWeight: 700, color: '#334155' }}>Thủ quỹ / Chi tiền:</span> {paymentMethod === 'Tiền mặt' ? 'Thủ quỹ Seajong' : 'Ngân hàng điện tử'}
               </div>
             </div>
           </div>
@@ -7494,6 +7618,18 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
           setReceiptToPrint(receiptData);
           setIsPrintReceiptModalOpen(true);
         }}
+        onReconcileSuccess={(updatedParent) => {
+          if (updatedParent) {
+            if (selectedSubEntry?.type === "payable") {
+              setPayables((prev) => prev.map((p) => (p.id === updatedParent.id ? updatedParent : p)));
+            } else {
+              setReceivables((prev) => prev.map((r) => (r.id === updatedParent.id ? updatedParent : r)));
+            }
+          }
+          fetchReceivables();
+          fetchPayables();
+        }}
+        onShowToast={onShowToast}
         userName={getLoggedInUserName(activeUser) || "Lê Công Vụ"}
       />
 

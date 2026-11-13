@@ -4,11 +4,14 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { computeFinancialReports } from '../services/financialReportEngine.js';
-import { syncAllSubledgersToJournal } from '../services/journalSyncService.js';
 
-const syncModuleTs = Date.now();
+async function syncAllSubledgersToJournal(targetDb) {
+  const mod = await import(`../services/journalSyncService.js?t=${Date.now()}`);
+  return mod.syncAllSubledgersToJournal(targetDb);
+}
+
 async function syncPrismaFinanceToAccountingTables(targetDb) {
-  const mod = await import(`../services/prismaFinanceSyncService.js?t=${syncModuleTs}`);
+  const mod = await import(`../services/prismaFinanceSyncService.js?t=${Date.now()}`);
   return mod.syncPrismaFinanceToAccountingTables(targetDb);
 }
 
@@ -908,10 +911,10 @@ router.post('/api/debts/receivables/:id/payments', (req, res) => {
             row.code || (targetStage ? targetStage.code : ''),
             targetStage ? targetStage.title : '',
             notesStr || (isBank ? 'Giấy báo Có ngân hàng / Ủy nhiệm chi' : '01 Chứng từ gốc'),
-            'Phạm Thu Hằng (Kế toán thanh toán)',
-            payRecord.accountant || 'Trần Bích Thủy (Kế toán trưởng)',
+            'Phòng Tài chính - Kế toán',
+            payRecord.accountant || 'Phòng Tài chính - Kế toán',
             '',
-            'Hà Hải Lâm',
+            'Lê Công Vụ',
           ],
           (vErr) => {
             if (vErr) console.warn('Lỗi ghi financial_vouchers từ thu nợ:', vErr.message);
@@ -1115,9 +1118,9 @@ router.post('/api/debts/payables/:id/payments', (req, res) => {
   const receiverAddress = b.receiverAddress || b.address || '';
   const sourceBank = b.sourceBankAccount || '';
   const destBank = b.destBankAccount || '';
-  const creator = b.creator || 'Phạm Thu Hằng';
-  const accountant = b.accountant || 'Mai Thị Ngọc';
-  const director = b.director || 'Hà Hải Lâm';
+  const creator = b.creator || 'Phòng Tài chính - Kế toán';
+  const accountant = b.accountant || 'Phòng Tài chính - Kế toán';
+  const director = b.director || 'Lê Công Vụ';
   const targetEntryId = b.entryId || null;
 
   db.get('SELECT * FROM debt_payables WHERE id = ?', [id], (err, row) => {
@@ -1288,6 +1291,373 @@ router.post('/api/debts/payables/:id/payments', (req, res) => {
       }
     );
   });
+});
+
+// Đối soát chứng từ thu, chi: giữ nguyên giá trị chứng từ gốc, sinh thêm 1 chứng từ Đối soát (DS-...) để cập nhật số tiền thừa/thiếu vào danh sách công nợ
+router.post('/api/debts/reconcile-entry', (req, res) => {
+  const {
+    type, // 'receivable' | 'payable' | 'inflow' | 'outflow'
+    parentId,
+    parentCode,
+    entryId,
+    entryCode,
+    paymentCode,
+    originalAmount,
+    newAmount,
+    note,
+  } = req.body || {};
+
+  const reconciledVal = Math.max(0, Math.round(Number(newAmount) || 0));
+  const origVal = Math.max(0, Math.round(Number(originalAmount) || 0));
+  const delta = reconciledVal - origVal;
+
+  if (reconciledVal <= 0 || (origVal > 0 && delta === 0)) {
+    return res.status(400).json({
+      error: 'Số tiền sau đối soát phải lớn hơn 0 và khác với số tiền đã thu/chi của chứng từ gốc',
+    });
+  }
+
+  const targetCode = String(paymentCode || entryCode || '').trim();
+  const targetId = String(entryId || '').trim();
+
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, '0');
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const yyyy = now.getFullYear();
+  const nowDateVN = `${dd}/${mm}/${yyyy}`;
+  const nowTimeVN = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const dsCode = `DS-${yyyy}${mm}${dd}-${Math.floor(100 + Math.random() * 900)}`;
+
+  const deltaLabel = delta > 0 ? `+${delta.toLocaleString('vi-VN')} đ` : `${delta.toLocaleString('vi-VN')} đ`;
+  const defaultTitle =
+    note && String(note).trim()
+      ? String(note).trim()
+      : `Đối soát chứng từ ${targetCode}: điều chỉnh ${delta > 0 ? 'tăng (thừa)' : 'giảm (thiếu)'} ${deltaLabel} (${origVal.toLocaleString('vi-VN')} đ → ${reconciledVal.toLocaleString('vi-VN')} đ)`;
+
+  // 1. Nếu là Công nợ phải trả (payable): giữ nguyên chứng từ gốc, thêm chứng từ Đối soát (DS-...) vào danh sách công nợ
+  if (type === 'payable') {
+    db.get(
+      'SELECT * FROM debt_payables WHERE id = ? OR code = ?',
+      [parentId || '', parentCode || ''],
+      (err, row) => {
+        if (err || !row) {
+          return res.json({ success: true, dsCode, delta, newAmount: reconciledVal });
+        }
+        let entries = [];
+        try {
+          entries = JSON.parse(row.entries_json || '[]');
+        } catch {}
+
+        // Tìm số tiền gốc thực tế của chứng từ nếu client chưa truyền chính xác
+        let resolvedOrig = origVal;
+        const foundTarget = entries.find(
+          (e) => (targetId && e.id === targetId) || (targetCode && e.code === targetCode)
+        );
+        if (!resolvedOrig && foundTarget) {
+          resolvedOrig = Math.round(
+            Number(foundTarget.paidAmount || foundTarget.totalAmount || foundTarget.amount) || 0
+          );
+        }
+        const finalDelta = reconciledVal - resolvedOrig;
+        if (finalDelta === 0) {
+          return res.status(400).json({
+            error: 'Số tiền sau đối soát trùng với số tiền hiện tại của chứng từ',
+          });
+        }
+
+        const dsEntry = {
+          id: `ENT-DS-${Date.now()}`,
+          code: dsCode,
+          refVoucherCode: targetCode,
+          title:
+            note && String(note).trim()
+              ? String(note).trim()
+              : `Đối soát công nợ chứng từ ${targetCode}`,
+          date: nowDateVN,
+          time: nowTimeVN,
+          totalAmount: finalDelta,
+          paidAmount: finalDelta,
+          amount: finalDelta,
+          originalAmount: resolvedOrig,
+          reconciledAmount: reconciledVal,
+          deltaAmount: finalDelta,
+          remainingAmount: 0,
+          status: 'completed',
+          statusLabel: 'Đã đối soát',
+          type: 'reconciliation',
+          voucherType: 'reconciliation',
+          isReconciliation: true,
+          paymentMethod: 'Đối soát công nợ',
+          receiverName: row.supplier_name,
+        };
+
+        entries.push(dsEntry);
+
+        // Lưu thêm bản ghi Debt trong Prisma để đồng bộ nền luôn giữ lại chứng từ Đối soát này
+        db.run(
+          `INSERT INTO Debt (id, type, partnerName, amount, paidAmount, remainingAmount, status, referenceId, description, dueDate, createdAt, updatedAt)
+           VALUES (?, 'PAYABLE', ?, 0, ?, 0, 'completed', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          [
+            dsEntry.id,
+            row.supplier_name,
+            finalDelta,
+            dsCode,
+            dsEntry.title,
+          ],
+          () => {}
+        );
+
+        let billTotal = 0;
+        let paymentTotal = 0;
+        entries.forEach((e) => {
+          const isPayOrRecEnt =
+            e.isReconciliation ||
+            e.type === 'reconciliation' ||
+            e.type === 'payment' ||
+            e.voucherType === 'payment' ||
+            e.statusLabel === 'Đã chi tiền' ||
+            e.statusLabel === 'Đã đối soát' ||
+            String(e.code || '').startsWith('DS-') ||
+            String(e.code || '').startsWith('PC-') ||
+            String(e.code || '').startsWith('UNC-') ||
+            String(e.code || '').startsWith('CHI-');
+          if (isPayOrRecEnt) {
+            paymentTotal += Number(e.paidAmount ?? e.totalAmount ?? e.amount) || 0;
+          } else {
+            billTotal += Number(e.totalAmount ?? e.amount) || 0;
+          }
+        });
+
+        const finalTotal = billTotal > 0 ? billTotal : Number(row.total_amount) || 0;
+        const finalPaid = Math.max(0, paymentTotal);
+
+        let unalloc = finalPaid;
+        entries = entries.map((e) => {
+          const isPayOrRecEnt =
+            e.isReconciliation ||
+            e.type === 'reconciliation' ||
+            e.type === 'payment' ||
+            e.voucherType === 'payment' ||
+            e.statusLabel === 'Đã chi tiền' ||
+            e.statusLabel === 'Đã đối soát' ||
+            String(e.code || '').startsWith('DS-') ||
+            String(e.code || '').startsWith('PC-') ||
+            String(e.code || '').startsWith('UNC-') ||
+            String(e.code || '').startsWith('CHI-');
+          if (isPayOrRecEnt) return e;
+          const bVal = Number(e.totalAmount ?? e.amount) || 0;
+          const alloc = Math.min(bVal, Math.max(0, unalloc));
+          unalloc = Math.max(0, unalloc - alloc);
+          const bRem = Math.max(0, bVal - alloc);
+          return {
+            ...e,
+            paidAmount: alloc,
+            remainingAmount: bRem,
+            status: bRem <= 0 ? 'completed' : 'pending',
+            statusLabel: bRem <= 0 ? 'Đã thanh toán' : 'Chờ thanh toán',
+          };
+        });
+
+        const finalRemain = Math.max(0, finalTotal - finalPaid);
+        const finalStatus = finalRemain <= 0 ? 'completed' : 'pending';
+        const finalStatusLabel = finalRemain <= 0 ? 'Đã hoàn tất' : 'Chờ thanh toán';
+
+        db.run(
+          `UPDATE debt_payables
+           SET total_amount = ?, paid_amount = ?, remaining_amount = ?, status = ?, status_label = ?, entries_json = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [finalTotal, finalPaid, finalRemain, finalStatus, finalStatusLabel, JSON.stringify(entries), row.id],
+          () => {
+            syncAllSubledgersToJournal(db).catch(() => {});
+            res.json({
+              success: true,
+              dsCode,
+              delta: finalDelta,
+              newAmount: reconciledVal,
+              reconciliationEntry: dsEntry,
+              updatedParent: {
+                id: row.id,
+                code: row.code,
+                supplierName: row.supplier_name,
+                supplierAddress: row.supplier_address || '',
+                poCode: row.po_code || '',
+                totalAmount: finalTotal,
+                paidAmount: finalPaid,
+                remainingAmount: finalRemain,
+                dueDate: row.due_date || '',
+                status: finalStatus,
+                statusLabel: finalStatusLabel,
+                accountant: row.accountant || '',
+                notes: row.notes || '',
+                partnerType: row.partner_type || 'supplier',
+                entries,
+              },
+            });
+          }
+        );
+      }
+    );
+    return;
+  }
+
+  // 2. Nếu là Công nợ phải thu (receivable): giữ nguyên chứng từ gốc, thêm chứng từ Đối soát (DS-...) vào danh sách công nợ
+  if (type === 'receivable') {
+    db.get(
+      'SELECT * FROM debt_receivables WHERE id = ? OR code = ?',
+      [parentId || '', parentCode || ''],
+      (err, row) => {
+        if (err || !row) {
+          return res.json({ success: true, dsCode, delta, newAmount: reconciledVal });
+        }
+        let entries = [];
+        try {
+          entries = JSON.parse(row.entries_json || '[]');
+        } catch {}
+
+        let resolvedOrig = origVal;
+        if (!resolvedOrig) {
+          entries.forEach((e) => {
+            if ((targetId && e.id === targetId) || (targetCode && e.code === targetCode)) {
+              resolvedOrig = Math.round(Number(e.paidAmount || e.contractValue || e.amount) || 0);
+            }
+            if (Array.isArray(e.payments)) {
+              e.payments.forEach((p) => {
+                const pCode = String(p.code || p.receiptCode || '').trim();
+                if ((targetId && p.id === targetId) || (targetCode && pCode === targetCode)) {
+                  resolvedOrig = Math.round(Number(p.amount) || 0);
+                }
+              });
+            }
+          });
+        }
+
+        const finalDelta = reconciledVal - resolvedOrig;
+        if (finalDelta === 0) {
+          return res.status(400).json({
+            error: 'Số tiền sau đối soát trùng với số tiền hiện tại của chứng từ',
+          });
+        }
+
+        const dsReceipt = {
+          id: `PAY-DS-${Date.now()}`,
+          code: dsCode,
+          receiptCode: dsCode,
+          refVoucherCode: targetCode,
+          title:
+            note && String(note).trim()
+              ? String(note).trim()
+              : `Đối soát công nợ chứng từ ${targetCode}`,
+          note:
+            note && String(note).trim()
+              ? String(note).trim()
+              : `Đối soát công nợ chứng từ ${targetCode}`,
+          date: nowDateVN,
+          time: nowTimeVN,
+          amount: finalDelta,
+          originalAmount: resolvedOrig,
+          reconciledAmount: reconciledVal,
+          deltaAmount: finalDelta,
+          method: 'Đối soát công nợ',
+          type: 'reconciliation',
+          typeLabel: 'Đối soát',
+          isReconciliation: true,
+          payerName: row.customer_name || '',
+          payerAddress: row.customer_address || '',
+        };
+
+        if (entries.length > 0) {
+          entries[0].payments = Array.isArray(entries[0].payments) ? entries[0].payments : [];
+          entries[0].payments.push(dsReceipt);
+        }
+
+        // Lưu thêm bản ghi Debt trong Prisma để đồng bộ nền luôn giữ lại chứng từ Đối soát này
+        db.run(
+          `INSERT INTO Debt (id, type, customerId, partnerName, amount, paidAmount, remainingAmount, status, referenceId, description, dueDate, createdAt, updatedAt)
+           VALUES (?, 'RECEIVABLE', ?, ?, 0, ?, 0, 'completed', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          [
+            dsReceipt.id,
+            row.customer_id || null,
+            row.customer_name,
+            finalDelta,
+            dsCode,
+            dsReceipt.title,
+          ],
+          () => {}
+        );
+
+        let allReceiptsSum = 0;
+        let allInvoicesSum = 0;
+        entries.forEach((e) => {
+          allInvoicesSum += Number(e.contractValue ?? e.amount) || 0;
+          if (Array.isArray(e.payments)) {
+            e.payments.forEach((p) => {
+              allReceiptsSum += Number(p.amount) || 0;
+            });
+          }
+        });
+
+        const finalContract = allInvoicesSum > 0 ? allInvoicesSum : Number(row.contract_value) || 0;
+        const finalPaid = Math.max(0, allReceiptsSum > 0 ? allReceiptsSum : Number(row.paid_amount) + finalDelta);
+
+        let unalloc = finalPaid;
+        entries = entries.map((e) => {
+          const invVal = Number(e.contractValue ?? e.amount) || 0;
+          const alloc = Math.min(invVal, Math.max(0, unalloc));
+          unalloc = Math.max(0, unalloc - alloc);
+          const invRem = Math.max(0, invVal - alloc);
+          return {
+            ...e,
+            paidAmount: alloc,
+            remainingAmount: invRem,
+            status: invRem <= 0 ? 'completed' : alloc > 0 ? 'partial' : 'ontime',
+            statusLabel: invRem <= 0 ? 'Đã thu đủ' : alloc > 0 ? 'Thu một phần' : 'Chờ thanh toán',
+          };
+        });
+
+        const finalRemain = Math.max(0, finalContract - finalPaid);
+        const finalStatus = finalRemain <= 0 ? 'completed' : finalPaid > 0 ? 'ontime' : 'due';
+        const finalStatusLabel = finalRemain <= 0 ? 'Đã thu đủ' : finalPaid > 0 ? 'Đang thu hồi nợ' : 'Chờ thu nợ';
+
+        db.run(
+          `UPDATE debt_receivables
+           SET contract_value = ?, paid_amount = ?, remaining_amount = ?, status = ?, status_label = ?, entries_json = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [finalContract, finalPaid, finalRemain, finalStatus, finalStatusLabel, JSON.stringify(entries), row.id],
+          () => {
+            syncAllSubledgersToJournal(db).catch(() => {});
+            res.json({
+              success: true,
+              dsCode,
+              delta: finalDelta,
+              newAmount: reconciledVal,
+              reconciliationEntry: dsReceipt,
+              updatedParent: {
+                id: row.id,
+                code: row.code,
+                customerId: row.customer_id,
+                customerName: row.customer_name,
+                customerAddress: row.customer_address || '',
+                projectName: row.project_name || '',
+                contractValue: finalContract,
+                paidAmount: finalPaid,
+                remainingAmount: finalRemain,
+                dueDate: row.due_date || '',
+                status: finalStatus,
+                statusLabel: finalStatusLabel,
+                managerName: row.manager_name || '',
+                notes: row.notes || '',
+                entries,
+              },
+            });
+          }
+        );
+      }
+    );
+    return;
+  }
+
+  syncAllSubledgersToJournal(db).catch(() => {});
+  res.json({ success: true, dsCode, delta, newAmount: reconciledVal, title: defaultTitle });
 });
 
 // Xóa công nợ phải trả (Tự động xóa cascade các phiếu chi liên quan, hoàn trả tiền vào quỹ/ngân hàng & cập nhật sổ cái)
@@ -1658,7 +2028,7 @@ router.post('/api/debts/expenses', (req, res) => {
           payer_receiver_name, amount, reason, payment_method, debit_account,
           credit_account, reference_code, notes, creator, accountant,
           cashier, director, has_stamp, status, updated_at
-        ) VALUES (?, ?, 'payment', ?, 'other', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Mai Thị Ngọc', '', 'Hà Hải Lâm', 1, 'completed', CURRENT_TIMESTAMP)
+        ) VALUES (?, ?, 'payment', ?, 'other', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Phòng Tài chính - Kế toán', '', 'Lê Công Vụ', 1, 'completed', CURRENT_TIMESTAMP)
         ON CONFLICT(voucher_code) DO UPDATE SET
           date = excluded.date,
           amount = excluded.amount,
@@ -1806,24 +2176,11 @@ router.get('/api/finance/chart-of-accounts', (req, res) => {
 router.get('/api/finance/journal-entries', async (req, res) => {
   const { month, sourceModule, accountCode, search } = req.query;
 
-  // Tự động kiểm tra và phục hồi đồng bộ phân hệ Chi phí & Tạm ứng nếu bảng sổ nhật ký chưa đủ
+  // Luôn tự động đồng bộ Sổ nhật ký chung từ toàn bộ các phân hệ của bộ máy tài chính kế toán (Chi phí, Công nợ phải thu, Công nợ phải trả, Đối soát, TSCĐ)
   try {
-    const needSync = await new Promise((resolve) => {
-      db.get("SELECT COUNT(*) as expCnt FROM accounting_journal_entries WHERE id LIKE 'JE-EXP-%'", [], (err, row) => {
-        if (err || !row || row.expCnt === 0) {
-          db.get("SELECT COUNT(*) as expTotal FROM financial_expenses", [], (eErr, eRow) => {
-            resolve(!eErr && eRow && eRow.expTotal > 0);
-          });
-        } else {
-          resolve(false);
-        }
-      });
-    });
-    if (needSync) {
-      await syncAllSubledgersToJournal(db);
-    }
+    await syncAllSubledgersToJournal(db);
   } catch (syncErr) {
-    console.warn('Lỗi kiểm tra auto-sync Sổ nhật ký chung:', syncErr.message);
+    console.warn('Lỗi auto-sync Sổ nhật ký chung:', syncErr.message);
   }
 
   let query = 'SELECT * FROM accounting_journal_entries WHERE 1=1';
@@ -2153,7 +2510,7 @@ router.post('/api/advance-payments', (req, res) => {
     itemCode,
     employeeName || 'Cán bộ nhân viên',
     employeeCode || 'NV-001',
-    department || 'Xưởng Sản xuất gỗ',
+    department || 'Phòng Tài chính - Kế toán',
     purpose,
     project || '',
     Number(amount || 0),

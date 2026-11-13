@@ -1,9 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CheckCircle,
+  PencilSquare,
 } from 'react-bootstrap-icons';
 import { Offcanvas } from '../../../components/common/Offcanvas';
 import { Button } from '../../../components/common/Button';
+import { Badge } from '../../../components/common/Badge';
+import { NumberInput } from '../../../components/common/NumberInput';
+import { Input } from '../../../components/common/Input';
 import { notifyFinanceUpdated } from '../../../services/financeSyncService';
 
 export function numberToVietnameseWords(num: number): string {
@@ -78,6 +82,18 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
 }) => {
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
   const [localExecuted, setLocalExecuted] = useState<boolean>(false);
+  const [isReconciling, setIsReconciling] = useState<boolean>(false);
+  const [reconcileAmount, setReconcileAmount] = useState<number>(0);
+  const [reconcileNote, setReconcileNote] = useState<string>('');
+  const [reconcilingSaving, setReconcilingSaving] = useState<boolean>(false);
+  const [localAmountOverride, setLocalAmountOverride] = useState<number | null>(null);
+  const [localPurposeOverride, setLocalPurposeOverride] = useState<string | null>(null);
+
+  useEffect(() => {
+    setIsReconciling(false);
+    setLocalAmountOverride(null);
+    setLocalPurposeOverride(null);
+  }, [isOpen, data]);
 
   if (!data) return null;
 
@@ -92,9 +108,10 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
   const refCode = po.refCode || metadata.advanceRefCode || (data.code?.startsWith('YC') ? data.code : '');
   const beneficiary = po.beneficiaryName || data.proposer || data.requestedByName || data.partner || metadata.proposer || 'Cán bộ';
   const department = po.department || data.department || metadata.departmentName || 'Phòng ban Seajong';
-  const rawAmount = Number(po.amount || data.amount || data.rawAmount || metadata.totalAmount || metadata.amount || 0);
-  const amountInWords = po.amountInWords || metadata.amountInWords || numberToVietnameseWords(rawAmount);
-  const purpose = po.purpose || metadata.reason || data.reason || data.title || 'Chi tạm ứng công tác phí';
+  const baseRawAmount = Number(po.amount || data.amount || data.rawAmount || metadata.totalAmount || metadata.amount || 0);
+  const rawAmount = localAmountOverride ?? baseRawAmount;
+  const amountInWords = numberToVietnameseWords(rawAmount);
+  const purpose = localPurposeOverride ?? (po.purpose || metadata.reason || data.reason || data.title || 'Chi tạm ứng công tác phí');
   const paymentMethod = po.paymentMethod || metadata.paymentMethod || (data.reason?.toLowerCase().includes('tiền mặt') ? 'cash' : 'bank_transfer');
   const bankName = po.bankName || metadata.bankName || '';
   const bankAccount = po.bankAccount || metadata.bankAccount || '';
@@ -157,6 +174,38 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
     }
   };
 
+  const handleSaveReconcile = async () => {
+    const nextVal = Math.max(0, Math.round(Number(reconcileAmount) || 0));
+    if (nextVal <= 0) {
+      onShowToast?.('warning', 'Giá trị không hợp lệ', 'Vui lòng nhập số tiền đối soát lớn hơn 0');
+      return;
+    }
+    setReconcilingSaving(true);
+    try {
+      await fetch('/api/debts/reconcile-entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'outflow',
+          entryId: po.id || data.id,
+          entryCode: orderCode,
+          newAmount: nextVal,
+          note: reconcileNote.trim(),
+        }),
+      });
+      setLocalAmountOverride(nextVal);
+      if (reconcileNote.trim()) setLocalPurposeOverride(reconcileNote.trim());
+      setIsReconciling(false);
+      notifyFinanceUpdated('payment_order', 'update');
+      onSuccess?.();
+      onShowToast?.('success', 'Đối soát thành công', `Đã cập nhật số tiền lệnh chi ${orderCode} thành ${nextVal.toLocaleString('vi-VN')} đ`);
+    } catch {
+      onShowToast?.('error', 'Lỗi đối soát', 'Không thể lưu dữ liệu đối soát, vui lòng thử lại');
+    } finally {
+      setReconcilingSaving(false);
+    }
+  };
+
   return (
     <Offcanvas
       isOpen={isOpen}
@@ -165,7 +214,7 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
       width="400px"
       position="right"
       footer={
-        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', width: '100%' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', width: '100%' }}>
           <Button
             variant="secondary"
             size="sm"
@@ -173,18 +222,62 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
           >
             Đóng
           </Button>
-          {!isCompleted && (
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<CheckCircle size={15} />}
-              disabled={isExecuting}
-              onClick={handleExecutePayment}
-              style={{ flex: 1, justifyContent: 'center', whiteSpace: 'nowrap' }}
-            >
-              {isExecuting ? 'Đang hạch toán & xuất quỹ...' : 'Xác nhận đã chi tiền / Lập phiếu chi'}
-            </Button>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, justifyContent: 'flex-end' }}>
+            {isReconciling ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsReconciling(false)}
+                  disabled={reconcilingSaving}
+                >
+                  Huỷ
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  isLoading={reconcilingSaving}
+                  disabled={
+                    reconcilingSaving ||
+                    !reconcileAmount ||
+                    Math.round(Number(reconcileAmount) || 0) <= 0 ||
+                    Math.round(Number(reconcileAmount) || 0) === Math.round(Number(rawAmount) || 0)
+                  }
+                  leftIcon={<CheckCircle size={14} />}
+                  onClick={handleSaveReconcile}
+                >
+                  Lưu đối soát
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  leftIcon={<PencilSquare size={13} />}
+                  onClick={() => {
+                    setReconcileAmount(rawAmount);
+                    setReconcileNote(`Đối soát công nợ chứng từ ${orderCode}`);
+                    setIsReconciling(true);
+                  }}
+                >
+                  Đối soát
+                </Button>
+                {!isCompleted && (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    leftIcon={<CheckCircle size={15} />}
+                    disabled={isExecuting}
+                    onClick={handleExecutePayment}
+                    style={{ justifyContent: 'center', whiteSpace: 'nowrap' }}
+                  >
+                    {isExecuting ? 'Đang chi...' : 'Xác nhận chi'}
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       }
     >
@@ -301,6 +394,41 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
               Bằng chữ: <strong>{amountInWords}</strong>
             </div>
           </div>
+
+          {isReconciling && (
+            <div
+              style={{
+                backgroundColor: '#eff6ff',
+                borderRadius: '8px',
+                border: '1px solid #bfdbfe',
+                padding: '12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontWeight: 700, color: '#1e40af', fontSize: '0.8125rem' }}>
+                  Đối soát giá trị tiền
+                </span>
+                <Badge variant="brand">{orderCode}</Badge>
+              </div>
+              <NumberInput
+                label="Số tiền sau đối soát"
+                required
+                hideZero={false}
+                suffix="₫"
+                value={reconcileAmount}
+                onValueChange={(val) => setReconcileAmount(val)}
+              />
+              <Input
+                label="Nội dung / Lý do điều chỉnh"
+                value={reconcileNote}
+                onChange={(e) => setReconcileNote(e.target.value)}
+                placeholder="Nhập nội dung đối soát..."
+              />
+            </div>
+          )}
 
           {/* Mục đích chi */}
           <div>

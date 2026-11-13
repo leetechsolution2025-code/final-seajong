@@ -174,7 +174,7 @@ export const ReceiptVoucherPrintModal: React.FC<ReceiptVoucherPrintModalProps> =
         u.position?.toLowerCase().includes('giám đốc') ||
         u.department?.toLowerCase().includes('ban giám đốc')
     );
-    return found?.name || company.legal_rep || 'Hà Hải Lâm';
+    return found?.name || company.legal_rep || 'Lê Công Vụ';
   }, [dbUsers, company.legal_rep]);
 
   // Tìm Trưởng phòng Tài chính / Kế toán trưởng từ DB
@@ -184,7 +184,7 @@ export const ReceiptVoucherPrintModal: React.FC<ReceiptVoucherPrintModalProps> =
         (u.department?.toLowerCase().includes('tài chính') || u.department?.toLowerCase().includes('kế toán')) &&
         (u.position?.toLowerCase().includes('trưởng phòng') || u.position?.toLowerCase().includes('kế toán trưởng'))
     );
-    return found?.name || 'Mai Thị Ngọc';
+    return found?.name || '';
   }, [dbUsers]);
 
   // Tìm Kế toán viên từ DB

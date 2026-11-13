@@ -67,7 +67,7 @@ const vitePrisma: PrismaClient = new Proxy({} as any, {
 })
 
 /**
- * Plugin tự động kích hoạt backend Express server.js cùng lúc với Vite dev server
+ * Plugin tự động kích hoạt backend Express server.js cùng lúc với Vite dev server (Synced Journal Engine)
  */
 function autoBackendPlugin(): Plugin {
   let embeddedExpressPromise: Promise<any> | null = null
