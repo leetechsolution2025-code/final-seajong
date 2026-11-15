@@ -234,15 +234,24 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
     const handleNotifUpdate = () => {
       fetchUnreadNotifications();
     };
+    const handleStorageNotif = (e: StorageEvent) => {
+      if (e.key === 'decodoor_request_last_created' || e.key?.includes('notif') || e.key?.includes('finance')) {
+        fetchUnreadNotifications();
+      }
+    };
     window.addEventListener('decodoor_notifications_updated', handleNotifUpdate);
     window.addEventListener('seajong_notifications_updated', handleNotifUpdate);
     window.addEventListener('decodoor_notification_created', handleNotifUpdate);
+    window.addEventListener('seajong_finance_updated', handleNotifUpdate);
+    window.addEventListener('storage', handleStorageNotif);
 
     return () => {
       clearInterval(timer);
       window.removeEventListener('decodoor_notifications_updated', handleNotifUpdate);
       window.removeEventListener('seajong_notifications_updated', handleNotifUpdate);
       window.removeEventListener('decodoor_notification_created', handleNotifUpdate);
+      window.removeEventListener('seajong_finance_updated', handleNotifUpdate);
+      window.removeEventListener('storage', handleStorageNotif);
     };
   }, [isCustomer, user?.id]);
 

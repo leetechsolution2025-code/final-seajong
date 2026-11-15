@@ -19,7 +19,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const dbPath = path.join(__dirname, '..', 'prisma', 'dev.db');
 
-let currentInode = null;
+let currentInode = globalThis.__seajongFinanceDbInode || null;
 try {
   currentInode = fs.statSync(dbPath).ino;
 } catch {}
@@ -29,15 +29,28 @@ function createSafeSqliteDb(p) {
     if (err) console.warn('⚠️ [FinanceSQLite] Kết nối DB cảnh báo:', err.message);
   });
   if (typeof instance.configure === 'function') {
-    instance.configure('busyTimeout', 30000);
+    instance.configure('busyTimeout', 5000);
   }
+  instance.run('PRAGMA journal_mode = WAL;');
+  instance.run('PRAGMA synchronous = NORMAL;');
   instance.on('error', (err) => {
     console.warn('⚠️ [FinanceSQLite rawDb error event]', err.message);
   });
   return instance;
 }
 
-let rawDb = createSafeSqliteDb(dbPath);
+if (!globalThis.__seajongFinanceRawDb || globalThis.__seajongFinanceDbInode !== currentInode) {
+  if (globalThis.__seajongFinanceRawDb) {
+    const prevDb = globalThis.__seajongFinanceRawDb;
+    setTimeout(() => {
+      try { prevDb.close(); } catch {}
+    }, 2000);
+  }
+  globalThis.__seajongFinanceRawDb = createSafeSqliteDb(dbPath);
+  globalThis.__seajongFinanceDbInode = currentInode;
+}
+
+let rawDb = globalThis.__seajongFinanceRawDb;
 let lastReconnectTime = 0;
 
 function ensureHealthyDb() {
@@ -47,10 +60,12 @@ function ensureHealthyDb() {
       console.warn('⚠️ [FinanceSQLite Auto-Heal] Phát hiện file dev.db được thay mới (inode thay đổi), đang kết nối lại...');
       const oldDb = rawDb;
       currentInode = stat.ino;
+      globalThis.__seajongFinanceDbInode = currentInode;
       rawDb = createSafeSqliteDb(dbPath);
+      globalThis.__seajongFinanceRawDb = rawDb;
       setTimeout(() => {
         try { oldDb.close(); } catch {}
-      }, 5000);
+      }, 2000);
     }
   } catch {}
   return rawDb;
@@ -66,11 +81,13 @@ function reconnectRawDb() {
   const oldDb = rawDb;
   try {
     currentInode = fs.statSync(dbPath).ino;
+    globalThis.__seajongFinanceDbInode = currentInode;
   } catch {}
   rawDb = createSafeSqliteDb(dbPath);
+  globalThis.__seajongFinanceRawDb = rawDb;
   setTimeout(() => {
     try { oldDb.close(); } catch {}
-  }, 5000);
+  }, 2000);
   return rawDb;
 }
 
@@ -103,6 +120,7 @@ export const db = new Proxy({}, {
 });
 
 console.log('✓ FinanceAccountingRouter đã kết nối SQLite (Auto-Heal):', dbPath);
+db.run('ALTER TABLE advance_payments ADD COLUMN approved_amount REAL', () => {});
 syncPrismaFinanceToAccountingTables(db)
   .then((res) => {
     console.log('✓ Đã đồng bộ dữ liệu Tài chính - Kế toán từ DB thực tế:', res);
@@ -820,16 +838,32 @@ router.post('/api/debts/receivables/:id/payments', (req, res) => {
       targetStage = entries[0];
     }
 
+    const isCustomerAdvance =
+      Boolean(req.body.isAdvance) ||
+      Number(row.contract_value || 0) === 0 ||
+      entries.length === 0 ||
+      actualNote.toLowerCase().includes('ứng trước') ||
+      actualNote.toLowerCase().includes('trả trước') ||
+      actualNote.toLowerCase().includes('đặt cọc');
+
+    const resolvedVCode = receiptCode || `PT-${Date.now().toString().slice(-6)}`;
     const payRecord = {
       id: `PAY-${Date.now()}`,
-      code: receiptCode || `PT-${Date.now().toString().slice(-6)}`,
-      receiptCode: receiptCode || `PT-${Date.now().toString().slice(-6)}`,
-      title: actualNote || `Thu tiền khách hàng theo phiếu ${receiptCode || ''}`,
+      code: resolvedVCode,
+      receiptCode: resolvedVCode,
+      title:
+        actualNote ||
+        (isCustomerAdvance
+          ? `Khách hàng trả tiền trước (Ứng trước) - ${row.customer_name || ''}`
+          : `Thu tiền khách hàng theo phiếu ${resolvedVCode}`),
       date: actualDate,
       time: '08:30',
       amount: payAmt,
       method: actualMethod,
       note: actualNote,
+      isAdvance: isCustomerAdvance,
+      type: 'receipt',
+      typeLabel: isCustomerAdvance ? 'Khách trả trước' : 'Phiếu thu',
       debitAccount: actualDebit,
       creditAccount: actualCredit,
       bankAccount: bankAccount || '',
@@ -840,6 +874,28 @@ router.post('/api/debts/receivables/:id/payments', (req, res) => {
       originalDocsCount: originalDocsCount || '',
     };
 
+    if (!targetStage) {
+      targetStage = {
+        id: `STG-ADV-${Date.now()}`,
+        code: `UT-${resolvedVCode}`,
+        title: isCustomerAdvance
+          ? `Khách hàng trả tiền trước / Ứng trước (${resolvedVCode})`
+          : `Đợt thu tiền (${resolvedVCode})`,
+        date: actualDate,
+        time: '08:30',
+        contractValue: 0,
+        paidAmount: 0,
+        remainingAmount: 0,
+        dueDate: actualDate,
+        status: 'completed',
+        statusLabel: isCustomerAdvance ? 'Khách ứng trước' : 'Đã thu đủ',
+        isAdvance: isCustomerAdvance,
+        items: [],
+        payments: [],
+      };
+      entries.push(targetStage);
+    }
+
     if (targetStage) {
       targetStage.payments = targetStage.payments || [];
       targetStage.payments.push(payRecord);
@@ -847,14 +903,45 @@ router.post('/api/debts/receivables/:id/payments', (req, res) => {
       const stageVal = Number(targetStage.contractValue !== undefined ? targetStage.contractValue : (targetStage.amount || 0));
       targetStage.remainingAmount = Math.max(0, stageVal - targetStage.paidAmount);
       targetStage.status = targetStage.remainingAmount <= 0 ? 'completed' : 'partial';
-      targetStage.statusLabel = targetStage.remainingAmount <= 0 ? 'Đã thu đủ' : 'Thu một phần';
+      targetStage.statusLabel = isCustomerAdvance && stageVal === 0
+        ? 'Khách ứng trước'
+        : targetStage.remainingAmount <= 0
+          ? 'Đã thu đủ'
+          : 'Thu một phần';
     }
 
     const newPaid = entries.reduce((sum, s) => sum + (Number(s.paidAmount) || 0), 0);
     const contractVal = Number(row.contract_value) || 0;
     const newRemaining = Math.max(0, contractVal - newPaid);
     const newStatus = newRemaining <= 0 ? 'completed' : (newPaid > 0 ? 'in_progress' : 'ontime');
-    const newStatusLabel = newRemaining <= 0 ? 'Đã thu đủ' : (newPaid > 0 ? 'Đang thu' : 'Trong hạn thanh toán');
+    const newStatusLabel = isCustomerAdvance && contractVal === 0
+      ? 'Khách ứng trước'
+      : newRemaining <= 0
+        ? 'Đã thu đủ'
+        : newPaid > 0
+          ? 'Đang thu'
+          : 'Trong hạn thanh toán';
+
+    // Lưu đồng thời vào bảng Prisma Debt để đồng bộ bền vững khi syncPrismaFinanceToAccountingTables chạy
+    const nowEpoch = Date.now();
+    db.run(
+      `INSERT OR REPLACE INTO "Debt" (
+        "id", "type", "customerId", "partnerName", "amount", "paidAmount",
+        "dueDate", "status", "description", "referenceId", "createdAt", "updatedAt"
+      ) VALUES (?, 'RECEIVABLE', ?, ?, 0, ?, ?, 'PAID', ?, ?, ?, ?)`,
+      [
+        `debt-rec-${resolvedVCode}`,
+        row.customer_id || null,
+        row.customer_name || payerName || 'Khách hàng',
+        payAmt,
+        nowEpoch,
+        payRecord.title,
+        resolvedVCode,
+        nowEpoch,
+        nowEpoch,
+      ],
+      () => {}
+    );
 
     db.run(
       'UPDATE debt_receivables SET paid_amount = ?, remaining_amount = ?, status = ?, status_label = ?, entries_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
@@ -1154,10 +1241,20 @@ router.post('/api/debts/payables/:id/payments', (req, res) => {
       });
     }
 
+    const isSupplierAdvance =
+      Boolean(b.isAdvance) ||
+      Number(row.total_amount || 0) === 0 ||
+      String(paymentNote).toLowerCase().includes('ứng trước') ||
+      String(paymentNote).toLowerCase().includes('đặt cọc');
+
     const newPaymentLog = {
       id: `ENTRY-AP-${Date.now()}`,
       code: paymentCode,
-      title: paymentNote,
+      title:
+        paymentNote ||
+        (isSupplierAdvance
+          ? `Ứng trước / Đặt cọc cho nhà cung cấp - ${row.supplier_name}`
+          : `Thanh toán tiền hàng cho nhà cung cấp - ${row.supplier_name}`),
       date: paymentDate,
       totalAmount: payAmt,
       paidAmount: payAmt,
@@ -1170,8 +1267,31 @@ router.post('/api/debts/payables/:id/payments', (req, res) => {
       sourceBank,
       destBank,
       receiverName: receiverName || row.supplier_name,
+      type: 'payment',
+      voucherType: 'payment',
+      isAdvance: isSupplierAdvance,
     };
     entries.push(newPaymentLog);
+
+    // Lưu đồng thời vào bảng Prisma Debt để đồng bộ bền vững
+    const nowEpoch = Date.now();
+    db.run(
+      `INSERT OR REPLACE INTO "Debt" (
+        "id", "type", "partnerName", "amount", "paidAmount",
+        "dueDate", "status", "description", "referenceId", "createdAt", "updatedAt"
+      ) VALUES (?, 'PAYABLE', ?, 0, ?, ?, 'PAID', ?, ?, ?, ?)`,
+      [
+        `debt-pay-${paymentCode}`,
+        row.supplier_name || receiverName || 'Nhà cung cấp',
+        payAmt,
+        nowEpoch,
+        newPaymentLog.title,
+        paymentCode,
+        nowEpoch,
+        nowEpoch,
+      ],
+      () => {}
+    );
 
     db.run(
       'UPDATE debt_payables SET paid_amount = ?, remaining_amount = ?, status = ?, status_label = ?, entries_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
@@ -2518,40 +2638,239 @@ router.delete('/api/finance/journal-entries/:id', (req, res) => {
 // API QUẢN LÝ TẠM ỨNG (ADVANCE PAYMENTS)
 // ==========================================
 
+// Helper: Đồng bộ tự động từ PersonalRequest sang advance_payments và từ advance_payments sang advance_settlements
+function ensureAdvanceTablesSynced(callback) {
+  db.all(
+    `SELECT pr.id, pr.type, pr.status, pr.reason, pr.details, pr.createdAt, pr.endDate,
+            e.fullName as emp_name, e.code as emp_code, e.departmentName as emp_dept
+     FROM PersonalRequest pr
+     LEFT JOIN Employee e ON pr.employeeId = e.id
+     WHERE lower(pr.type) IN ('advance', 'salary-advance', 'salary_advance', 'advance_payment')`,
+    [],
+    (prErr, prRows) => {
+      const syncPersonalRows = (rows, idx, done) => {
+        if (!rows || idx >= rows.length) return done();
+        const r = rows[idx];
+        let details = {};
+        try {
+          details = typeof r.details === 'string' ? JSON.parse(r.details) : r.details || {};
+        } catch {
+          details = {};
+        }
+        const itemCode = details.code || r.id;
+        const amount = Number(details.advanceAmount || details.amount || 0);
+        if (amount <= 0) return syncPersonalRows(rows, idx + 1, done);
+
+        db.get(
+          'SELECT id, status FROM advance_payments WHERE id = ? OR code = ?',
+          [r.id, itemCode],
+          (chkErr, existingAdv) => {
+            if (!existingAdv) {
+              const statusUpper = String(r.status || 'PENDING').toUpperCase();
+              const mappedStatus =
+                statusUpper === 'APPROVED' || statusUpper === 'COMPLETED'
+                  ? 'approved'
+                  : statusUpper === 'REJECTED' || statusUpper === 'CANCELLED'
+                  ? 'rejected'
+                  : 'pending';
+              const empName = r.emp_name || details.applicantName || details.employeeName || 'Cán bộ nhân viên';
+              const empCode = r.emp_code || details.employeeCode || 'NV-001';
+              const dept = r.emp_dept || details.department || 'Phòng ban';
+              const purpose = details.advancePurpose || details.purpose || details.title || r.reason || 'Tạm ứng chi phí';
+              const isCash = details.paymentMethod === 'cash' || details.method === 'cash';
+              const payMethod = isCash ? 'cash' : 'bank_transfer';
+              const bankName = details.bankName || details.bankInfo?.bankName || 'Techcombank';
+              const bankAcc = details.bankAccount || details.bankInfo?.accountNumber || '';
+              const bankAccName = details.bankAccountName || details.bankInfo?.accountName || empName;
+              const reqDate = details.createdAt
+                ? String(details.createdAt).slice(0, 10)
+                : r.createdAt
+                ? new Date(r.createdAt).toLocaleDateString('vi-VN')
+                : new Date().toLocaleDateString('vi-VN');
+              const deadline = details.advanceDueDate || details.deadlineRefund || reqDate;
+              const approver = details.approver || 'Phòng Tài chính – Kế toán';
+              const note = details.note || details.content || '';
+
+              db.run(
+                `INSERT OR IGNORE INTO advance_payments (
+                  id, code, employee_name, employee_code, department, purpose, project,
+                  amount, requested_date, payment_method, bank_name, bank_account, bank_account_name,
+                  status, review_status, approver, approved_date, deadline_refund, note, attached_docs_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+                [
+                  r.id,
+                  itemCode,
+                  empName,
+                  empCode,
+                  dept,
+                  purpose,
+                  details.project || 'Nội bộ công ty',
+                  amount,
+                  reqDate,
+                  payMethod,
+                  isCash ? null : bankName,
+                  isCash ? null : bankAcc,
+                  isCash ? null : bankAccName,
+                  mappedStatus,
+                  mappedStatus === 'approved' ? 'approved' : 'unprocessed',
+                  approver,
+                  mappedStatus === 'approved' ? reqDate : null,
+                  deadline,
+                  note,
+                ],
+                () => syncPersonalRows(rows, idx + 1, done)
+              );
+            } else {
+              syncPersonalRows(rows, idx + 1, done);
+            }
+          }
+        );
+      };
+
+      syncPersonalRows(prRows || [], 0, () => {
+        // Đồng bộ từ advance_payments sang advance_settlements cho các phiếu chưa bị từ chối
+        db.all("SELECT * FROM advance_payments WHERE status != 'rejected'", [], (advErr, advRows) => {
+          const syncAdvToSettlement = (list, i, finish) => {
+            if (!list || i >= list.length) return finish();
+            const adv = list[i];
+            db.get(
+              'SELECT id FROM advance_settlements WHERE advance_id = ? OR advance_code = ?',
+              [adv.id, adv.code],
+              (sErr, sRow) => {
+                if (!sRow) {
+                  db.run(
+                    `INSERT OR IGNORE INTO advance_settlements (
+                      id, advance_id, advance_code, employee_name, employee_code,
+                      department, purpose, project, advance_amount, approved_date,
+                      approver, deadline_refund, status, actual_spent, invoices, note
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unsettled', 0, '[]', ?)`,
+                    [
+                      `SET-${adv.id}`,
+                      adv.id,
+                      adv.code,
+                      adv.employee_name,
+                      adv.employee_code,
+                      adv.department,
+                      adv.purpose,
+                      adv.project || 'Nội bộ công ty',
+                      Number(adv.amount || 0),
+                      adv.approved_date || adv.requested_date || new Date().toLocaleDateString('vi-VN'),
+                      adv.approver || (adv.status === 'approved' ? 'Ban Giám đốc' : 'Chờ phê duyệt'),
+                      adv.deadline_refund || adv.requested_date || '',
+                      adv.note || '',
+                    ],
+                    () => syncAdvToSettlement(list, i + 1, finish)
+                  );
+                } else {
+                  syncAdvToSettlement(list, i + 1, finish);
+                }
+              }
+            );
+          };
+          syncAdvToSettlement(advRows || [], 0, callback);
+        });
+      });
+    }
+  );
+}
+
 // 1. Lấy danh sách phiếu tạm ứng
 router.get('/api/advance-payments', (req, res) => {
-  const query = 'SELECT * FROM advance_payments ORDER BY created_at DESC';
-  db.all(query, [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    const formatted = (rows || []).map((r) => ({
-      id: r.id,
-      code: r.code,
-      employeeName: r.employee_name,
-      employeeCode: r.employee_code,
-      department: r.department,
-      purpose: r.purpose,
-      project: r.project,
-      amount: Number(r.amount || 0),
-      requestedDate: r.requested_date,
-      paymentMethod: r.payment_method || 'bank_transfer',
-      bankInfo: r.bank_name ? {
-        bankName: r.bank_name,
-        accountNumber: r.bank_account || '',
-        accountName: r.bank_account_name || '',
-      } : undefined,
-      status: r.status || 'pending',
-      reviewStatus: r.review_status || 'unprocessed',
-      approver: r.approver,
-      approvedDate: r.approved_date,
-      rejectReason: r.reject_reason,
-      rejectedDate: r.rejected_date,
-      deadlineRefund: r.deadline_refund,
-      note: r.note,
-      attachedDocsCount: r.attached_docs_count || 0,
-      createdAt: r.created_at,
-    }));
-    res.json(formatted);
-  });
+  const queryAndSend = (shouldSyncBg) => {
+    const query = 'SELECT * FROM advance_payments ORDER BY created_at DESC';
+    db.all(query, [], (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if ((!rows || rows.length === 0) && shouldSyncBg) {
+        return ensureAdvanceTablesSynced(() => queryAndSend(false));
+      }
+      if (shouldSyncBg) {
+        setTimeout(() => {
+          try { ensureAdvanceTablesSynced(() => {}); } catch {}
+        }, 50);
+      }
+      const parseDmyMs = (dStr) => {
+        const m = String(dStr || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (!m) return 0;
+        return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).getTime();
+      };
+      const addFiveDaysVN = (dStr) => {
+        const ms = parseDmyMs(dStr);
+        const d = ms ? new Date(ms) : new Date();
+        d.setDate(d.getDate() + 5);
+        return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+      };
+      const formatted = (rows || []).map((r) => {
+        let deadlineVal = r.deadline_refund || '';
+        if (!deadlineVal) {
+          const mDate = String(r.purpose || r.note || '').match(/(\d{2}\/\d{2}\/\d{4})/);
+          if (mDate) {
+            deadlineVal = mDate[1];
+          } else {
+            const mSal = String(r.project || '').match(/(\d{1,2})\/(\d{4})/);
+            if (mSal) {
+              const lastDay = new Date(Number(mSal[2]), Number(mSal[1]), 0).getDate();
+              deadlineVal = `${String(lastDay).padStart(2, '0')}/${String(mSal[1]).padStart(2, '0')}/${mSal[2]}`;
+            } else {
+              deadlineVal = addFiveDaysVN(r.requested_date);
+            }
+          }
+        }
+        const reqMs = parseDmyMs(r.requested_date);
+        const deadMs = parseDmyMs(deadlineVal);
+        if (reqMs > 0 && (!deadMs || deadMs < reqMs)) {
+          deadlineVal = addFiveDaysVN(r.requested_date);
+        }
+        const rawProj = String(r.project || '').trim();
+        const projectVal =
+          rawProj.toLowerCase().includes('lương')
+            ? 'Trừ tạm ứng vào lương'
+            : rawProj === 'Tạm ứng công tác' || rawProj === 'Nội bộ công ty'
+            ? ''
+            : rawProj;
+        const statusVal = r.status || 'pending';
+        const reviewStatusVal =
+          statusVal === 'approved'
+            ? (r.review_status === 'disbursed' ? 'disbursed' : 'approved')
+            : statusVal === 'rejected'
+            ? 'rejected'
+            : r.review_status || 'unprocessed';
+        const rawAmt = Number(r.amount || 0);
+        const appAmt = r.approved_amount !== null && r.approved_amount !== undefined && Number(r.approved_amount) > 0
+          ? Number(r.approved_amount)
+          : (statusVal === 'approved' ? rawAmt : undefined);
+        return {
+          id: r.id,
+          code: r.code,
+          employeeName: r.employee_name,
+          employeeCode: r.employee_code,
+          department: r.department,
+          purpose: String(r.purpose || '').replace(/^'+|'+$/g, '').trim(),
+          project: projectVal,
+          amount: rawAmt,
+          approvedAmount: appAmt,
+          requestedDate: r.requested_date,
+          paymentMethod: r.payment_method || 'bank_transfer',
+          bankInfo: r.bank_name ? {
+            bankName: r.bank_name,
+            accountNumber: String(r.bank_account || '').replace(/^'+|'+$/g, '').trim(),
+            accountName: String(r.bank_account_name || '').replace(/^'+|'+$/g, '').trim(),
+          } : undefined,
+          status: statusVal,
+          reviewStatus: reviewStatusVal,
+          approver: r.approver,
+          approvedDate: r.approved_date,
+          rejectReason: r.reject_reason,
+          rejectedDate: r.rejected_date,
+          deadlineRefund: deadlineVal,
+          note: r.note,
+          attachedDocsCount: r.attached_docs_count || 0,
+          createdAt: r.created_at,
+        };
+      });
+      res.json(formatted);
+    });
+  };
+  queryAndSend(true);
 });
 
 // 2. Tạo mới phiếu đề nghị tạm ứng
@@ -2644,6 +2963,31 @@ router.post('/api/advance-payments', (req, res) => {
       }
     );
 
+    // Đồng bộ sang advance_settlements để theo dõi trên cả Bước 2
+    db.run(
+      `INSERT OR IGNORE INTO advance_settlements (
+        id, advance_id, advance_code, employee_name, employee_code,
+        department, purpose, project, advance_amount, approved_date,
+        approver, deadline_refund, status, actual_spent, invoices, note
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unsettled', 0, '[]', ?)`,
+      [
+        `SET-${itemId}`,
+        itemId,
+        itemCode,
+        employeeName || 'Cán bộ nhân viên',
+        employeeCode || 'NV-001',
+        department || 'Phòng Tài chính - Kế toán',
+        purpose,
+        project || 'Nội bộ công ty',
+        advAmt,
+        requestedDate || new Date().toLocaleDateString('vi-VN'),
+        'Phòng Tài chính – Kế toán',
+        deadlineRefund || '',
+        note || '',
+      ],
+      () => {}
+    );
+
     res.status(201).json({
       id: itemId,
       code: itemCode,
@@ -2679,6 +3023,7 @@ router.put('/api/advance-payments/:id', (req, res) => {
     purpose,
     project,
     amount,
+    approvedAmount,
     deadlineRefund,
     note,
     paymentMethod,
@@ -2697,6 +3042,7 @@ router.put('/api/advance-payments/:id', (req, res) => {
   if (purpose !== undefined) { query += ', purpose = ?'; params.push(purpose); }
   if (project !== undefined) { query += ', project = ?'; params.push(project); }
   if (amount !== undefined) { query += ', amount = ?'; params.push(Number(amount)); }
+  if (approvedAmount !== undefined) { query += ', approved_amount = ?'; params.push(Number(approvedAmount)); }
   if (deadlineRefund !== undefined) { query += ', deadline_refund = ?'; params.push(deadlineRefund); }
   if (note !== undefined) { query += ', note = ?'; params.push(note); }
   if (paymentMethod !== undefined) { query += ', payment_method = ?'; params.push(paymentMethod); }
@@ -2704,17 +3050,18 @@ router.put('/api/advance-payments/:id', (req, res) => {
   if (bankInfo?.accountNumber !== undefined) { query += ', bank_account = ?'; params.push(bankInfo.accountNumber); }
   if (bankInfo?.accountName !== undefined) { query += ', bank_account_name = ?'; params.push(bankInfo.accountName); }
 
-  query += ' WHERE id = ?';
-  params.push(id);
+  query += ' WHERE id = ? OR code = ?';
+  params.push(id, id);
 
   db.run(query, params, function (err) {
     if (err) return res.status(500).json({ error: err.message });
 
-    db.get('SELECT * FROM advance_payments WHERE id = ?', [id], (findErr, adv) => {
+    db.get('SELECT * FROM advance_payments WHERE id = ? OR code = ?', [id, id], (findErr, adv) => {
       if (!findErr && adv) {
-        // Đồng bộ sang approval_documents và personal_requests
+        // Đồng bộ sang approval_documents, personal_requests và PersonalRequest (Prisma)
         if (status !== undefined) {
           const syncStatus = status === 'approved' ? 'approved' : (status === 'rejected' ? 'rejected' : 'pending');
+          const syncUpper = syncStatus.toUpperCase();
           db.run(
             `UPDATE approval_documents
              SET status = ?, approved_by = ?, approval_date = ?, rejection_reason = ?, updated_at = CURRENT_TIMESTAMP
@@ -2725,17 +3072,37 @@ router.put('/api/advance-payments/:id', (req, res) => {
           db.run(
             `UPDATE personal_requests
              SET status = ?, status_label = ?, approver = ?, approval_date = ?, rejection_reason = ?, updated_at = CURRENT_TIMESTAMP
-             WHERE code = ?`,
-            [syncStatus, syncStatus === 'approved' ? 'Đã duyệt' : (syncStatus === 'rejected' ? 'Từ chối' : 'Chờ duyệt'), adv.approver || 'Ban Giám đốc', adv.approved_date || null, adv.reject_reason || null, adv.code],
+             WHERE code = ? OR id = ?`,
+            [syncStatus, syncStatus === 'approved' ? 'Đã duyệt' : (syncStatus === 'rejected' ? 'Từ chối' : 'Chờ duyệt'), adv.approver || 'Ban Giám đốc', adv.approved_date || null, adv.reject_reason || null, adv.code, adv.id],
             () => {}
           );
+          db.get('SELECT id, details FROM PersonalRequest WHERE id = ? OR id = ?', [adv.id, adv.code], (prErr, prRow) => {
+            if (!prErr && prRow) {
+              let d = {};
+              try { d = typeof prRow.details === 'string' ? JSON.parse(prRow.details) : prRow.details || {}; } catch {}
+              d.status = syncStatus;
+              d.statusLabel = syncStatus === 'approved' ? 'Đã duyệt' : syncStatus === 'rejected' ? 'Từ chối' : 'Chờ duyệt';
+              if (adv.approver) d.approver = adv.approver;
+              if (adv.approved_date) d.approvalDate = adv.approved_date;
+              if (adv.reject_reason) d.rejectionReason = adv.reject_reason;
+              db.run(
+                'UPDATE PersonalRequest SET status = ?, details = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+                [syncUpper, JSON.stringify(d), prRow.id],
+                () => {}
+              );
+            }
+          });
         }
 
-        // Khi duyệt (status === 'approved'), tự động đồng bộ sang bảng advance_settlements để theo dõi hoàn ứng
+        // Khi duyệt (status === 'approved'), tự động đồng bộ sang bảng advance_settlements để theo dõi hoàn ứng và tự sinh Lệnh chi tiền
         if (status === 'approved') {
-          db.get('SELECT id FROM advance_settlements WHERE advance_id = ? OR advance_code = ?', [id, adv.code], (setErr, setRow) => {
+          const effectiveApprovedAmt =
+            adv.approved_amount !== null && adv.approved_amount !== undefined && Number(adv.approved_amount) > 0
+              ? Number(adv.approved_amount)
+              : Number(adv.amount || 0);
+          db.get('SELECT id FROM advance_settlements WHERE advance_id = ? OR advance_code = ?', [adv.id, adv.code], (setErr, setRow) => {
             if (!setRow) {
-              const settlementId = `set-${Date.now()}`;
+              const settlementId = `SET-${adv.id}`;
               db.run(`
                 INSERT INTO advance_settlements (
                   id, advance_id, advance_code, employee_name, employee_code,
@@ -2751,13 +3118,103 @@ router.put('/api/advance-payments/:id', (req, res) => {
                 adv.department,
                 adv.purpose,
                 adv.project,
-                adv.amount,
+                effectiveApprovedAmt,
                 adv.approved_date || new Date().toISOString().split('T')[0],
                 adv.approver || 'Ban Giám Đốc',
                 adv.deadline_refund,
               ]);
+            } else {
+              db.run(
+                `UPDATE advance_settlements
+                 SET approver = ?, approved_date = ?, advance_amount = ?, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?`,
+                [adv.approver || 'Ban Giám Đốc', adv.approved_date || new Date().toISOString().split('T')[0], effectiveApprovedAmt, setRow.id],
+                () => {}
+              );
             }
           });
+
+          // Tự sinh Lệnh chi tiền trong bảng payment_orders để hiển thị ở Trang Tổng quan
+          const poRefCode = adv.code || adv.id;
+          const poId = `PO-ADV-${poRefCode}`;
+          const poOrderCode = `LC-${String(poRefCode).replace(/^(YC-|YCU-)/, '')}`;
+          const todayVN = adv.approved_date || new Date().toLocaleDateString('vi-VN');
+          const approverLabel = adv.approver || 'Ban Giám Đốc';
+          const beneficiaryName = adv.employee_name || 'Cán bộ nhân viên';
+          const deptName = adv.department || 'Phòng ban Seajong';
+          const purposeText = adv.purpose || `Chi tạm ứng ${poRefCode}`;
+          const amountNum = effectiveApprovedAmt;
+          if (amountNum > 0) {
+            db.get(
+              `SELECT id FROM payment_orders WHERE id = ? OR order_code = ? OR (ref_code = ? AND status != 'completed') LIMIT 1`,
+              [poId, poOrderCode, poRefCode],
+              (poFindErr, poExisting) => {
+                if (!poFindErr && poExisting) {
+                  db.run(
+                    `UPDATE payment_orders SET
+                      amount = ?,
+                      amount_in_words = ?,
+                      title = ?,
+                      beneficiary_name = ?,
+                      department = ?,
+                      purpose = ?,
+                      approved_by = ?,
+                      approved_date = ?,
+                      status = 'pending',
+                      status_label = 'Chờ chi tiền',
+                      updated_at = CURRENT_TIMESTAMP
+                     WHERE id = ?`,
+                    [
+                      amountNum,
+                      numberToVietnameseWords(amountNum),
+                      `Chi tạm ứng ${poRefCode} - ${beneficiaryName}`,
+                      beneficiaryName,
+                      deptName,
+                      purposeText,
+                      approverLabel,
+                      todayVN,
+                      poExisting.id,
+                    ],
+                    () => {}
+                  );
+                } else {
+                  db.run(
+                    `INSERT INTO payment_orders (
+                      id, order_code, ref_type, ref_id, ref_code, title,
+                      beneficiary_name, beneficiary_code, department,
+                      amount, amount_in_words, payment_method, bank_name, bank_account, bank_branch,
+                      purpose, due_date, approved_by, approved_date, approval_note,
+                      status, status_label, created_at, updated_at
+                    ) VALUES (?, ?, 'advance_payment', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, 'pending', 'Chờ chi tiền', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+                    [
+                      poId,
+                      poOrderCode,
+                      adv.id,
+                      poRefCode,
+                      `Chi tạm ứng ${poRefCode} - ${beneficiaryName}`,
+                      beneficiaryName,
+                      adv.employee_id || adv.employee_code || 'NV',
+                      deptName,
+                      amountNum,
+                      numberToVietnameseWords(amountNum),
+                      adv.payment_method || 'bank_transfer',
+                      adv.bank_name || '',
+                      adv.bank_account || '',
+                      purposeText,
+                      adv.due_date || adv.deadline_refund || todayVN,
+                      approverLabel,
+                      todayVN,
+                      'Đã phê duyệt yêu cầu tạm ứng',
+                    ],
+                    () => {}
+                  );
+                }
+              }
+            );
+          }
+        } else if (status === 'rejected') {
+          db.run("DELETE FROM advance_settlements WHERE (advance_id = ? OR advance_code = ?) AND status = 'unsettled'", [adv.id, adv.code], () => {});
+          db.run("DELETE FROM payment_orders WHERE (ref_code = ? OR ref_id = ?) AND status != 'completed'", [adv.code, adv.id], () => {});
         }
       }
     });
@@ -2774,7 +3231,7 @@ router.delete('/api/advance-payments/:id', (req, res) => {
     db.run('DELETE FROM advance_payments WHERE id = ?', [id], function (err) {
       if (err) return res.status(500).json({ error: err.message });
       // Đồng thời xóa khỏi bảng settlement nếu có
-      db.run('DELETE FROM advance_settlements WHERE advance_id = ?', [id]);
+      db.run('DELETE FROM advance_settlements WHERE advance_id = ? OR advance_code = ?', [id, advCode || id]);
       if (advCode) {
         db.run('DELETE FROM approval_documents WHERE code = ? OR id = ?', [advCode, `APR-${id}`], () => {});
       }
@@ -2789,40 +3246,51 @@ router.delete('/api/advance-payments/:id', (req, res) => {
 
 // 1. Lấy danh sách hoàn tạm ứng
 router.get('/api/advance-settlements', (req, res) => {
-  const query = 'SELECT * FROM advance_settlements ORDER BY created_at DESC';
-  db.all(query, [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    const formatted = (rows || []).map((r) => {
-      let invoices = [];
-      try {
-        invoices = r.invoices ? JSON.parse(r.invoices) : [];
-      } catch (e) {
-        invoices = [];
+  const queryAndSend = (shouldSyncBg) => {
+    const query = 'SELECT * FROM advance_settlements ORDER BY created_at DESC';
+    db.all(query, [], (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if ((!rows || rows.length === 0) && shouldSyncBg) {
+        return ensureAdvanceTablesSynced(() => queryAndSend(false));
       }
-      return {
-        id: r.id,
-        advanceId: r.advance_id,
-        advanceCode: r.advance_code,
-        settlementCode: r.settlement_code,
-        employeeName: r.employee_name,
-        employeeCode: r.employee_code,
-        department: r.department,
-        purpose: r.purpose,
-        project: r.project,
-        advanceAmount: Number(r.advance_amount || 0),
-        approvedDate: r.approved_date,
-        approver: r.approver,
-        deadlineRefund: r.deadline_refund,
-        settlementDate: r.settlement_date,
-        actualSpent: Number(r.actual_spent || 0),
-        status: r.status || 'unsettled',
-        invoices,
-        note: r.note,
-        createdAt: r.created_at,
-      };
+      if (shouldSyncBg) {
+        setTimeout(() => {
+          try { ensureAdvanceTablesSynced(() => {}); } catch {}
+        }, 50);
+      }
+      const formatted = (rows || []).map((r) => {
+        let invoices = [];
+        try {
+          invoices = r.invoices ? JSON.parse(r.invoices) : [];
+        } catch (e) {
+          invoices = [];
+        }
+        return {
+          id: r.id,
+          advanceId: r.advance_id,
+          advanceCode: r.advance_code,
+          settlementCode: r.settlement_code,
+          employeeName: r.employee_name,
+          employeeCode: r.employee_code,
+          department: r.department,
+          purpose: r.purpose,
+          project: r.project,
+          advanceAmount: Number(r.advance_amount || 0),
+          approvedDate: r.approved_date,
+          approver: r.approver,
+          deadlineRefund: r.deadline_refund,
+          settlementDate: r.settlement_date,
+          actualSpent: Number(r.actual_spent || 0),
+          status: r.status || 'unsettled',
+          invoices,
+          note: r.note,
+          createdAt: r.created_at,
+        };
+      });
+      res.json(formatted);
     });
-    res.json(formatted);
-  });
+  };
+  queryAndSend(true);
 });
 
 // 2. Tạo mới / lưu quyết toán hoàn tạm ứng
@@ -2878,6 +3346,7 @@ router.post('/api/advance-settlements', (req, res) => {
     note || '',
   ], function (err) {
     if (err) return res.status(500).json({ error: err.message });
+    syncAllSubledgersToJournal(db).catch((e) => console.warn('Lỗi đồng bộ journal sau khi tạo quyết toán tạm ứng:', e.message));
     res.status(201).json({ success: true, id: itemId });
   });
   stmt.finalize();
@@ -2910,6 +3379,7 @@ router.put('/api/advance-settlements/:id', (req, res) => {
 
   db.run(query, params, function (err) {
     if (err) return res.status(500).json({ error: err.message });
+    syncAllSubledgersToJournal(db).catch((e) => console.warn('Lỗi đồng bộ journal sau khi cập nhật quyết toán tạm ứng:', e.message));
     res.json({ success: true, message: 'Cập nhật quyết toán hoàn ứng thành công' });
   });
 });
@@ -2919,6 +3389,7 @@ router.delete('/api/advance-settlements/:id', (req, res) => {
   const { id } = req.params;
   db.run('DELETE FROM advance_settlements WHERE id = ?', [id], function (err) {
     if (err) return res.status(500).json({ error: err.message });
+    syncAllSubledgersToJournal(db).catch((e) => console.warn('Lỗi đồng bộ journal sau khi xóa quyết toán tạm ứng:', e.message));
     res.json({ success: true, message: 'Đã xóa hồ sơ hoàn ứng' });
   });
 });
@@ -3052,11 +3523,11 @@ router.post('/api/finance/payment-orders', (req, res) => {
   const nowStr = new Date().toLocaleDateString('vi-VN');
   const amountVal = Number(b.amount || 0);
 
-  // Nếu là Lệnh chi tiền được duyệt từ một Yêu cầu chi tiền (submitted_director), cập nhật trực tiếp bản ghi đó thay vì tạo trùng
-  if (b.status !== 'submitted_director' && b.refCode) {
+  // Nếu là Lệnh chi tiền được duyệt từ một Yêu cầu chi tiền (submitted_director) hoặc đã tồn tại theo mã hồ sơ tham chiếu, cập nhật trực tiếp bản ghi đó thay vì tạo trùng
+  if (b.status !== 'submitted_director' && (b.refCode || b.id)) {
     db.get(
-      `SELECT id FROM payment_orders WHERE (order_code = ? OR ref_code = ?) AND status = 'submitted_director' LIMIT 1`,
-      [b.refCode, b.refCode],
+      `SELECT id FROM payment_orders WHERE (id = ? OR order_code = ? OR ref_code = ?) AND status != 'completed' LIMIT 1`,
+      [orderId, b.refCode || orderCode, b.refCode || ''],
       (findErr, existingRow) => {
         if (!findErr && existingRow) {
           db.run(
@@ -3064,6 +3535,11 @@ router.post('/api/finance/payment-orders', (req, res) => {
              SET order_code = ?,
                  ref_code = ?,
                  title = ?,
+                 beneficiary_name = ?,
+                 department = ?,
+                 amount = ?,
+                 amount_in_words = ?,
+                 purpose = ?,
                  status = 'pending',
                  status_label = 'Chờ chi tiền',
                  approved_by = ?,
@@ -3073,8 +3549,13 @@ router.post('/api/finance/payment-orders', (req, res) => {
              WHERE id = ?`,
             [
               orderCode,
-              b.refCode,
+              b.refCode || '',
               b.title || `Lệnh chi tiền: ${b.purpose || b.beneficiaryName}`,
+              b.beneficiaryName,
+              b.department || 'Tài chính - Kế toán',
+              amountVal,
+              b.amountInWords || numberToVietnameseWords(amountVal),
+              b.purpose || b.title || '',
               b.approvedBy || 'Ban Giám đốc',
               b.approvedDate || nowStr,
               b.approvalNote || '',
@@ -3203,6 +3684,62 @@ router.patch('/api/finance/payment-orders/:id/execute', async (req, res) => {
       );
     });
 
+    const refTypeStr = String(order.ref_type || '').trim();
+    const refCodeStr = String(order.ref_code || '').trim();
+    const ordCodeStr = String(order.order_code || '').trim();
+    const isPayrollOrder =
+      refTypeStr === 'payroll' ||
+      refCodeStr.startsWith('BL-') ||
+      ordCodeStr.startsWith('LC-LUONG-');
+    const isInsuranceOrder =
+      refTypeStr === 'insurance' ||
+      refCodeStr.startsWith('BHXH-') ||
+      ordCodeStr.startsWith('LC-BHXH-');
+    const isDirectExpenseOrder =
+      refTypeStr === 'expense' ||
+      refCodeStr.startsWith('CP-') ||
+      ordCodeStr.startsWith('LC-CP-');
+    const isSupplierOrder =
+      !isPayrollOrder &&
+      !isInsuranceOrder &&
+      !isDirectExpenseOrder &&
+      (refTypeStr === 'advance_supplier' ||
+        refTypeStr === 'purchase_order_deposit' ||
+        refTypeStr === 'payable_payment' ||
+        refTypeStr === 'procurement' ||
+        refCodeStr.startsWith('YCU-') ||
+        refCodeStr.startsWith('YCCHI-') ||
+        refCodeStr.startsWith('DH-') ||
+        ordCodeStr.startsWith('LC-COC-'));
+
+    const resolvedPartnerType = isSupplierOrder
+      ? 'supplier'
+      : isInsuranceOrder
+        ? 'other'
+        : 'employee';
+    const resolvedDebitAcc = isPayrollOrder
+      ? '334'
+      : isInsuranceOrder
+        ? '338'
+        : isDirectExpenseOrder
+          ? '642'
+          : isSupplierOrder
+            ? '331'
+            : '141';
+    const resolvedDebitName = isPayrollOrder
+      ? 'Phải trả người lao động'
+      : isInsuranceOrder
+        ? 'Phải trả, phải nộp khác (BHXH, BHYT, BHTN)'
+        : isDirectExpenseOrder
+          ? 'Chi phí quản lý doanh nghiệp'
+          : isSupplierOrder
+            ? 'Phải trả cho người bán (Nhà cung cấp)'
+            : 'Tạm ứng người lao động';
+    const resolvedExpCat = isSupplierOrder ? 'production' : 'administrative';
+    const resolvedExpCatLabel = isSupplierOrder
+      ? 'Chi phí mua hàng & sản xuất'
+      : 'Chi phí quản lý doanh nghiệp';
+
     // 1. Tự động lập Phiếu chi trong sổ kế toán financial_vouchers
     await new Promise((resolve, reject) => {
       db.run(
@@ -3211,11 +3748,12 @@ router.patch('/api/finance/payment-orders/:id/execute', async (req, res) => {
           partner_code, payer_receiver_name, amount, amount_in_words,
           reason, payment_method, debit_account, credit_account, reference_code,
           creator, accountant, director, has_stamp, status, created_at, updated_at
-        ) VALUES (?, ?, 'PC', ?, 'employee', ?, ?, ?, ?, ?, ?, ?, '141', ?, ?, ?, ?, ?, 1, 'completed', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        ) VALUES (?, ?, 'PC', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'completed', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
         [
           voucherId,
           voucherCode,
           nowStr,
+          resolvedPartnerType,
           order.beneficiary_name,
           order.beneficiary_code,
           order.beneficiary_name,
@@ -3223,6 +3761,7 @@ router.patch('/api/finance/payment-orders/:id/execute', async (req, res) => {
           order.amount_in_words,
           order.purpose || order.title,
           paymentMethod || (order.payment_method === 'cash' ? 'Tiền mặt' : 'Chuyển khoản'),
+          resolvedDebitAcc,
           order.payment_method === 'cash' ? '1111' : '1121',
           order.ref_code,
           executedBy || 'Kế toán viên',
@@ -3249,8 +3788,8 @@ router.patch('/api/finance/payment-orders/:id/execute', async (req, res) => {
           expenseId,
           voucherCode,
           order.title || order.purpose,
-          'administrative',
-          'Chi phí quản lý doanh nghiệp',
+          resolvedExpCat,
+          resolvedExpCatLabel,
           order.amount,
           order.department || 'Ban giám đốc',
           nowStr,
@@ -3258,11 +3797,11 @@ router.patch('/api/finance/payment-orders/:id/execute', async (req, res) => {
           'approved',
           'Đã chi tiền',
           `Chi theo Lệnh chi ${order.order_code} (Căn cứ ${order.ref_code || ''}). Bút phê duyệt: ${order.approval_note || 'Đồng ý phê duyệt'}`,
-          '141',
-          'Tạm ứng người lao động',
+          resolvedDebitAcc,
+          resolvedDebitName,
           creditAcc,
           creditName,
-          'advance_payment',
+          isSupplierOrder ? 'payable_payment' : 'advance_payment',
           order.beneficiary_name
         ],
         (err) => (err ? reject(err) : resolve())
@@ -3286,21 +3825,113 @@ router.patch('/api/finance/payment-orders/:id/execute', async (req, res) => {
       }
     });
 
-    // 4. Đồng bộ trạng thái đã giải ngân trong bảng advance_payments
-    if (order.ref_code) {
+    // 4. Đồng bộ trạng thái đã giải ngân (Đã chi tiền) trong bảng advance_payments và PersonalRequest (nếu là tạm ứng nhân viên)
+    if (!isSupplierOrder && !isPayrollOrder && !isInsuranceOrder && !isDirectExpenseOrder && order.ref_code) {
       await new Promise((resolve) => {
         db.run(
           `UPDATE advance_payments
            SET status = 'approved', review_status = 'disbursed', updated_at = CURRENT_TIMESTAMP
-           WHERE code = ?`,
-          [order.ref_code],
+           WHERE code = ? OR id = ?`,
+          [order.ref_code, order.ref_code],
           () => resolve()
+        );
+      });
+      await new Promise((resolve) => {
+        db.get(
+          `SELECT id, details FROM PersonalRequest WHERE id = ? OR details LIKE ? LIMIT 1`,
+          [order.ref_code, `%${order.ref_code}%`],
+          (prErr, prRow) => {
+            if (!prErr && prRow) {
+              let d = {};
+              try { d = typeof prRow.details === 'string' ? JSON.parse(prRow.details) : prRow.details || {}; } catch {}
+              d.isDisbursed = true;
+              d.disbursedAt = nowStr;
+              d.disbursedAmount = Number(order.amount || 0);
+              db.run(
+                `UPDATE PersonalRequest SET details = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`,
+                [JSON.stringify(d), prRow.id],
+                () => resolve()
+              );
+            } else {
+              resolve();
+            }
+          }
         );
       });
     }
 
-    // 5. Tự động cập nhật giảm công nợ phải trả nhà cung cấp (debt_payables) nếu là thanh toán mua hàng/nhà cung cấp
-    if (order.ref_id || order.beneficiary_code || order.ref_code || order.beneficiary_name) {
+    // 4b. Nếu là lệnh chi lương (payroll), cập nhật trạng thái bảng lương thành 'da_chi_tra'
+    if (isPayrollOrder) {
+      const mMatch = refCodeStr.match(/(\d{4})[-]?(\d{2})/) || ordCodeStr.match(/(\d{4})[-]?(\d{2})/);
+      if (mMatch) {
+        const pMonth = `${mMatch[1]}-${mMatch[2]}`;
+        await new Promise((resolve) => {
+          db.run(
+            `UPDATE "Payroll" SET "trangThai" = 'da_chi_tra', "updatedAt" = ? WHERE "month" = ?`,
+            [Date.now(), pMonth],
+            () => resolve()
+          );
+        });
+      }
+    }
+
+    // 5. Tự động cập nhật công nợ phải trả nhà cung cấp (debt_payables & Debt) nếu là ứng trước / đặt cọc / thanh toán NCC
+    if (isSupplierOrder) {
+      const payAmt = Number(order.amount) || 0;
+      const nowTime = new Date();
+      const timeStr = `${String(nowTime.getHours()).padStart(2, '0')}:${String(nowTime.getMinutes()).padStart(2, '0')}`;
+      const isAdvSupplier =
+        order.ref_type === 'advance_supplier' ||
+        order.ref_type === 'purchase_order_deposit' ||
+        String(order.ref_code || '').startsWith('YCU-') ||
+        String(order.order_code || '').startsWith('LC-COC-');
+      const newPaymentLog = {
+        id: `ENTRY-AP-${Date.now()}`,
+        code: voucherCode,
+        title:
+          order.title ||
+          order.purpose ||
+          (isAdvSupplier
+            ? `Ứng trước / Đặt cọc cho nhà cung cấp theo Lệnh chi ${order.order_code}`
+            : `Chi thanh toán theo Lệnh chi ${order.order_code}`),
+        date: nowStr,
+        time: timeStr,
+        totalAmount: payAmt,
+        paidAmount: payAmt,
+        remainingAmount: 0,
+        status: 'completed',
+        statusLabel: 'Đã chi tiền',
+        debitAccount: '331',
+        creditAccount: order.payment_method === 'cash' ? '1111' : '1121',
+        paymentMethod: paymentMethod || (order.payment_method === 'cash' ? 'Tiền mặt' : 'Chuyển khoản'),
+        sourceBank: bankAccount || order.bank_name || '',
+        receiverName: order.beneficiary_name,
+        type: 'payment',
+        voucherType: 'payment',
+        isAdvance: isAdvSupplier,
+      };
+
+      const nowEpoch = Date.now();
+      await new Promise((resolve) => {
+        db.run(
+          `INSERT OR REPLACE INTO "Debt" (
+            "id", "type", "partnerName", "amount", "paidAmount",
+            "dueDate", "status", "description", "referenceId", "createdAt", "updatedAt"
+          ) VALUES (?, 'PAYABLE', ?, 0, ?, ?, 'PAID', ?, ?, ?, ?)`,
+          [
+            `debt-pay-${voucherCode}`,
+            order.beneficiary_name || 'Nhà cung cấp',
+            payAmt,
+            nowEpoch,
+            newPaymentLog.title,
+            voucherCode,
+            nowEpoch,
+            nowEpoch,
+          ],
+          () => resolve()
+        );
+      });
+
       await new Promise((resolve) => {
         db.get(
           `SELECT * FROM debt_payables
@@ -3325,37 +3956,36 @@ router.patch('/api/finance/payment-orders/:id/execute', async (req, res) => {
             order.ref_code || '',
           ],
           (err, payableRow) => {
-            if (!payableRow) return resolve();
+            if (!payableRow) {
+              const newPayId = `AP-ADV-${Date.now()}`;
+              const newPayCode = `CNPT-NCC-${Date.now().toString().slice(-4)}`;
+              db.run(
+                `INSERT OR REPLACE INTO debt_payables (
+                  id, code, supplier_name, supplier_address, po_code,
+                  total_amount, paid_amount, remaining_amount, due_date,
+                  status, status_label, accountant, notes, partner_type, entries_json, updated_at
+                ) VALUES (?, ?, ?, '', ?, 0, ?, 0, ?, 'completed', 'Đã ứng trước', 'Kế toán công nợ Seajong', ?, 'supplier', ?, CURRENT_TIMESTAMP)`,
+                [
+                  newPayId,
+                  newPayCode,
+                  order.beneficiary_name || 'Nhà cung cấp',
+                  order.ref_code || order.order_code,
+                  payAmt,
+                  nowStr,
+                  `Ứng trước / Đặt cọc cho NCC: ${payAmt.toLocaleString('vi-VN')} đ`,
+                  JSON.stringify([newPaymentLog]),
+                ],
+                () => resolve()
+              );
+              return;
+            }
             let entries = [];
             try { entries = JSON.parse(payableRow.entries_json || '[]'); } catch {}
 
-            const payAmt = Number(order.amount) || 0;
             const newPaid = Number(payableRow.paid_amount || 0) + payAmt;
             const newRemaining = Math.max(0, Number(payableRow.total_amount || 0) - newPaid);
             const isCompleted = newRemaining <= 0;
 
-            const nowTime = new Date();
-            const timeStr = `${String(nowTime.getHours()).padStart(2, '0')}:${String(nowTime.getMinutes()).padStart(2, '0')}`;
-
-            const newPaymentLog = {
-              id: `ENTRY-AP-${Date.now()}`,
-              code: voucherCode,
-              title: order.title || order.purpose || `Chi thanh toán theo Lệnh chi ${order.order_code}`,
-              date: nowStr,
-              time: timeStr,
-              totalAmount: payAmt,
-              paidAmount: payAmt,
-              remainingAmount: 0,
-              status: 'completed',
-              statusLabel: 'Đã chi tiền',
-              debitAccount: '331',
-              creditAccount: order.payment_method === 'cash' ? '1111' : '1121',
-              paymentMethod: paymentMethod || (order.payment_method === 'cash' ? 'Tiền mặt' : 'Chuyển khoản'),
-              sourceBank: bankAccount || order.bank_name || '',
-              receiverName: order.beneficiary_name,
-              type: 'payment',
-              voucherType: 'payment',
-            };
             entries.push(newPaymentLog);
 
             db.run(
@@ -3723,9 +4353,26 @@ router.delete('/api/finance/payment-orders/:id', (req, res) => {
       db.run("DELETE FROM accounting_journal_lines WHERE entry_id IN (SELECT id FROM accounting_journal_entries WHERE reference_code = ? OR entry_number = ?)", [vCode, vCode]);
       db.run("DELETE FROM accounting_journal_entries WHERE reference_code = ? OR entry_number = ?", [vCode, vCode]);
 
-      // 5. Trả trạng thái tạm ứng về approved
+      // 5. Trả trạng thái tạm ứng về approved (chưa giải ngân)
       if (order.ref_code) {
-        db.run("UPDATE advance_payments SET review_status = 'approved', updated_at = CURRENT_TIMESTAMP WHERE code = ?", [order.ref_code]);
+        db.run("UPDATE advance_payments SET review_status = 'approved', updated_at = CURRENT_TIMESTAMP WHERE code = ? OR id = ?", [order.ref_code, order.ref_code]);
+        db.get(
+          `SELECT id, details FROM PersonalRequest WHERE id = ? OR details LIKE ? LIMIT 1`,
+          [order.ref_code, `%${order.ref_code}%`],
+          (prErr, prRow) => {
+            if (!prErr && prRow) {
+              let d = {};
+              try { d = typeof prRow.details === 'string' ? JSON.parse(prRow.details) : prRow.details || {}; } catch {}
+              d.isDisbursed = false;
+              delete d.disbursedAt;
+              delete d.disbursedAmount;
+              db.run(
+                `UPDATE PersonalRequest SET details = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`,
+                [JSON.stringify(d), prRow.id]
+              );
+            }
+          }
+        );
       }
     }
 
@@ -3742,7 +4389,7 @@ router.delete('/api/finance/payment-orders/:id', (req, res) => {
 // CHỈ HIỂN THỊ CÁC NỘI DUNG ĐÃ ĐƯỢC GIÁM ĐỐC PHÊ DUYỆT, ĐỢI CHI TIỀN (Lệnh chi đã duyệt & Công nợ chưa thu đủ)
 router.get('/api/finance/cashflow-notices', (req, res) => {
   db.all(
-    "SELECT * FROM payment_orders WHERE status != 'completed' AND status != 'cancelled' AND (approved_by IS NOT NULL AND approved_by != '') AND status != 'submitted_director' AND status != 'pending_director' ORDER BY CASE WHEN ref_type IN ('purchase_order_deposit', 'payable_payment', 'advance_supplier') THEN 0 ELSE 1 END, created_at DESC, rowid DESC",
+    "SELECT * FROM payment_orders WHERE status != 'completed' AND status != 'cancelled' AND (approved_by IS NOT NULL AND approved_by != '') AND status != 'submitted_director' AND status != 'pending_director' ORDER BY CASE WHEN ref_type IN ('purchase_order_deposit', 'payable_payment', 'advance_supplier', 'advance_payment', 'advance') THEN 0 ELSE 1 END, created_at DESC, rowid DESC",
     [],
     (poErr, poRows) => {
       const notices = [];

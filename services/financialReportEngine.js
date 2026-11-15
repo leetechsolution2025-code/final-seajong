@@ -30,7 +30,9 @@ export async function computeFinancialReports(db, period) {
       bankLoansDetail: "SELECT sum(CASE WHEN term_type = 'short_term' OR loan_type LIKE '%ngắn%' OR loan_type LIKE '%lưu động%' THEN remaining_principal ELSE COALESCE(due_within_12m, 0) END) as short_term_remaining, sum(CASE WHEN term_type = 'long_term' OR loan_type LIKE '%dài%' OR loan_type LIKE '%trung%' THEN MAX(0, remaining_principal - COALESCE(due_within_12m, 0)) ELSE 0 END) as long_term_remaining, sum(COALESCE(monthly_interest_est, 0)) as monthly_interest_total FROM bank_loans WHERE status != 'closed' AND remaining_principal > 0",
       bankLoansList: "SELECT id, code, bank_name, contract_code, facility_type, facility_label, term_type, loan_limit, paid_principal, remaining_principal, due_within_12m, interest_rate, interest_rate_val, interest_type, monthly_interest_est, status, status_label FROM bank_loans ORDER BY remaining_principal DESC",
       bankLoanDrawdowns: "SELECT * FROM bank_loan_drawdowns ORDER BY drawdown_date DESC",
-      expenses: "SELECT category, sum(amount) as amt FROM financial_expenses GROUP BY category",
+      expenses: "SELECT category, sum(amount) as amt FROM financial_expenses WHERE COALESCE(debit_account, '') NOT IN ('141', '331') AND COALESCE(status, 'approved') IN ('approved', 'completed', 'paid') GROUP BY category",
+      supplierPrepayments: "SELECT COALESCE(sum(CASE WHEN paid_amount > total_amount THEN paid_amount - total_amount ELSE 0 END), 0) as overpayment, COALESCE((SELECT sum(amount) FROM financial_vouchers WHERE voucher_type IN ('payment', 'PC') AND status = 'completed' AND debit_account LIKE '331%' AND (LOWER(COALESCE(reason, '')) LIKE '%tạm ứng%' OR LOWER(COALESCE(reason, '')) LIKE '%ứng trước%' OR LOWER(COALESCE(reason, '')) LIKE '%đặt cọc%' OR LOWER(COALESCE(stage_title, '')) LIKE '%tạm ứng%' OR LOWER(COALESCE(stage_title, '')) LIKE '%ứng trước%' OR LOWER(COALESCE(stage_title, '')) LIKE '%đặt cọc%')), 0) as adv_voucher FROM debt_payables",
+      customerPrepaymentsDb: "SELECT COALESCE(sum(CASE WHEN paid_amount > contract_value THEN paid_amount - contract_value ELSE 0 END), 0) as overpayment, COALESCE((SELECT sum(amount) FROM financial_vouchers WHERE voucher_type IN ('receipt', 'PT') AND status = 'completed' AND credit_account LIKE '131%' AND (LOWER(COALESCE(reason, '')) LIKE '%ứng trước%' OR LOWER(COALESCE(reason, '')) LIKE '%trả trước%' OR LOWER(COALESCE(reason, '')) LIKE '%đặt cọc%' OR LOWER(COALESCE(stage_title, '')) LIKE '%ứng trước%' OR LOWER(COALESCE(stage_title, '')) LIKE '%trả trước%' OR LOWER(COALESCE(stage_title, '')) LIKE '%đặt cọc%')), 0) as adv_voucher FROM debt_receivables",
       quotations: 'SELECT sum(total_value) as rev FROM quotations',
       contracts: 'SELECT sum(contract_value) as contract_val, sum(disbursed_value) as disbursed_val FROM contracts',
       contractsList: 'SELECT id, contract_code, project_name, investor_name, contract_value, disbursed_value, sign_date, status FROM contracts ORDER BY contract_value DESC LIMIT 20',
@@ -39,12 +41,12 @@ export async function computeFinancialReports(db, period) {
       warehouseMovements: `SELECT sum(opening_stock * unit_price) as opening_val, sum(in_stock * unit_price) as in_val, sum(out_stock * unit_price) as out_val, sum(closing_stock * unit_price) as closing_val, count(*) as count FROM warehouse_movements WHERE period = '${targetPeriod}'`,
       assetDepreciations: `SELECT sum(depreciation_amount) as total_depreciation FROM fixed_asset_depreciations WHERE period = '${targetPeriod}'`,
       journalAccounts: "SELECT l.account_code, l.type, sum(l.amount) as amt FROM accounting_journal_lines l INNER JOIN accounting_journal_entries e ON l.entry_id = e.id GROUP BY l.account_code, l.type",
-      payrolls: "SELECT sum(net_salary) as net_salary, sum(insurance_salary) as ins_salary, sum(tax_deduction) as tax_deduction, sum(advance_or_penalties) as advances FROM monthly_payrolls",
+      payrolls: "SELECT sum(net_salary) as net_salary, sum(insurance_salary) as ins_salary, sum(insurance_deduction) as emp_ins, sum(ROUND(COALESCE(insurance_salary, 0) * 0.215)) as corp_ins, sum(tax_deduction) as tax_deduction, sum(advance_or_penalties) as advances FROM monthly_payrolls",
       initialDeclaration: `SELECT data_json FROM financial_initial_declarations WHERE period = '${targetPeriod}' OR period LIKE '${currentYear}%' ORDER BY CASE WHEN period = '${targetPeriod}' THEN 0 ELSE 1 END, updated_at DESC LIMIT 1`,
       fixedAssetsList: "SELECT id, code, name, category, original_price, residual_value, accumulated_depreciation FROM fixed_assets ORDER BY original_price DESC",
       receivablesList: "SELECT id, code, customer_name, project_name, contract_value, paid_amount, remaining_amount, due_date, status_label FROM debt_receivables ORDER BY remaining_amount DESC",
       payablesList: "SELECT id, code, supplier_name, po_code, total_amount, paid_amount, remaining_amount, due_date, status_label FROM debt_payables ORDER BY remaining_amount DESC",
-      expensesList: "SELECT id, code, title, category, category_label, amount, department, spend_date FROM financial_expenses ORDER BY amount DESC",
+      expensesList: "SELECT id, code, title, category, category_label, amount, department, spend_date FROM financial_expenses WHERE COALESCE(debit_account, '') NOT IN ('141', '331') AND COALESCE(status, 'approved') IN ('approved', 'completed', 'paid') ORDER BY amount DESC",
       goodsList: "SELECT id, code, name, category, warehouse, actual_stock, system_stock, unit, cost_price, purchase_price FROM goods WHERE (actual_stock > 0 OR system_stock > 0) ORDER BY (COALESCE(cost_price, purchase_price, 0) * CASE WHEN actual_stock > 0 THEN actual_stock ELSE system_stock END) DESC LIMIT 15",
       payrollsList: "SELECT id, employee_name, department, net_salary, insurance_salary, tax_deduction FROM monthly_payrolls ORDER BY net_salary DESC",
       tableCounts: `SELECT 
@@ -259,12 +261,18 @@ function buildReportFromData(dbData, period) {
   const vat1331Debit = journalMap['1331']?.debit || 0;
   const vat3331Credit = journalMap['3331']?.credit || 0;
   const material152Flow = ((journalMap['1521']?.debit || 0) + (journalMap['1522']?.debit || 0)) - ((journalMap['1521']?.credit || 0) + (journalMap['1522']?.credit || 0));
-  const directProdExpenseJournal = (journalMap['621']?.debit || 0) + (journalMap['627']?.debit || 0);
-  const adminExpenseJournal = journalMap['642']?.debit || 0;
-  const payables331Flow = (journalMap['331']?.credit || 0) - (journalMap['331']?.debit || 0);
+  const directProdExpenseJournal = Math.round((journalMap['632']?.debit || 0) + (journalMap['621']?.debit || 0) + (journalMap['622']?.debit || 0) + (journalMap['627']?.debit || 0));
+  const adminExpenseJournal = Math.round(journalMap['642']?.debit || 0);
+  const payables331Flow = Math.round((journalMap['331']?.credit || 0) - (journalMap['331']?.debit || 0));
+  const journal214Credit = Math.round((journalMap['214']?.credit || 0) + (journalMap['2141']?.credit || 0));
+  const journal334Balance = Math.round(Math.max(0, (journalMap['334']?.credit || 0) - (journalMap['334']?.debit || 0)));
+  const journal338Balance = Math.round(Math.max(0, (journalMap['338']?.credit || 0) - (journalMap['338']?.debit || 0)));
 
   // Dữ liệu bảng lương nhân sự monthly_payrolls
   const payrollNet = Number(dbData.payrolls?.net_salary) || 0;
+  const payrollEmpIns = Number(dbData.payrolls?.emp_ins) || 0;
+  const payrollCorpIns = Number(dbData.payrolls?.corp_ins) || 0;
+  const payrollTotalIns = payrollEmpIns + payrollCorpIns;
   const payrollTax = Number(dbData.payrolls?.tax_deduction) || 0;
   const payrollAdv = Number(dbData.payrolls?.advances) || 0;
 
@@ -290,8 +298,8 @@ function buildReportFromData(dbData, period) {
   const expSales = (expMap['sales'] || 0);
   const expProduction = (expMap['production'] || 0);
 
-  // Giá vốn hàng bán (COGS): Chi phí sản xuất trực tiếp từ CSDL (financial_expenses + TK 621, 627)
-  const cogs = expProduction + directProdExpenseJournal; // Mã 11
+  // Giá vốn hàng bán (COGS): Chi phí giá vốn xuất kho & sản xuất trực tiếp từ CSDL (TK 632, 621, 622, 627 / financial_expenses)
+  const cogs = directProdExpenseJournal > 0 ? directProdExpenseJournal : expProduction; // Mã 11
   const prevCogs = 0;
 
   const grossProfit = netRevenue - cogs; // Mã 20
@@ -350,15 +358,15 @@ function buildReportFromData(dbData, period) {
   const financialExpense = interestExpense + expFinance; // Mã 22
   const prevFinancialExpense = 0;
 
-  // Chi phí bán hàng và Chi phí quản lý (Tích hợp thêm TK 642 từ Nhật ký chung)
+  // Chi phí bán hàng và Chi phí quản lý (Tích hợp TK 641, TK 642 từ Nhật ký chung)
   const salesExpenseJournal = journalMap['641']?.debit || 0;
 
-  // Chi phí bán hàng: Đồng bộ thực tế từ financial_expenses nhóm sales + bút toán TK 641 từ Sổ nhật ký chung
-  const salesExpense = expSales + salesExpenseJournal; // Mã 25
+  // Chi phí bán hàng: Đồng bộ thực tế từ Sổ nhật ký chung TK 641 / financial_expenses nhóm sales
+  const salesExpense = Math.max(expSales, salesExpenseJournal); // Mã 25
   const prevSalesExpense = 0;
 
-  // Chi phí quản lý DN: Đồng bộ thực tế từ financial_expenses nhóm admin + bút toán TK 642 từ Sổ nhật ký chung
-  const adminExpense = expAdmin + adminExpenseJournal; // Mã 26
+  // Chi phí quản lý DN: Đồng bộ thực tế từ Sổ nhật ký chung TK 642 (lương, BHXH, khấu hao, chi phí quản lý) / financial_expenses nhóm admin
+  const adminExpense = Math.max(expAdmin, adminExpenseJournal); // Mã 26
   const prevAdminExpense = 0;
 
   // Lợi nhuận thuần từ HĐKD (Mã 30 = 20 + 21 - 22 - 25 - 26)
@@ -442,14 +450,20 @@ function buildReportFromData(dbData, period) {
   const hasPayablesDb = dbData.tableCounts?.pay_cnt !== undefined && dbData.tableCounts?.pay_cnt !== null;
   const payablesBase = hasPayablesDb ? dbPayRemaining : initPayablesToSuppliers;
   const payablesToSuppliers = Math.max(0, payablesBase); // Mã 311
-  const customerPrepayments = initCustomerPrepayments; // Mã 312
+  const dbCustPrepay = Math.max(
+    Number(dbData.customerPrepaymentsDb?.overpayment) || 0,
+    Number(dbData.customerPrepaymentsDb?.adv_voucher) || 0
+  );
+  const customerPrepayments = initCustomerPrepayments + dbCustPrepay; // Mã 312
 
   // Thuế và các khoản phải nộp Nhà nước: Bù trừ thuế GTGT đầu ra (TK 3331) và thuế GTGT đầu vào (TK 1331) + Thuế TNCN từ bảng lương
   const netVatPayable = Math.max(0, vat3331Credit - vat1331Debit);
   const taxPayables = initTaxPayables + netVatPayable + payrollTax; // Mã 313
 
-  // Phải trả người lao động: Tự động liên kết trực tiếp với Bảng lương nhân sự monthly_payrolls
-  const employeePayables = initEmployeePayables + payrollNet; // Mã 314
+  // Phải trả người lao động & Bảo hiểm bắt buộc: Tự động liên kết trực tiếp với Bảng lương nhân sự monthly_payrolls & TK 334, 338
+  const effectiveSalaryPayable = journal334Balance > 0 ? journal334Balance : payrollNet;
+  const effectiveInsPayable = journal338Balance > 0 ? journal338Balance : payrollTotalIns;
+  const employeePayables = initEmployeePayables + effectiveSalaryPayable + effectiveInsPayable; // Mã 314
 
   // Nợ vay ngân hàng ngắn hạn và dài hạn từ bảng bank_loans
   const shortTermLoans = (dbShortTermLoans > 0 ? dbShortTermLoans : initShortTermLoans); // Mã 320
@@ -464,9 +478,9 @@ function buildReportFromData(dbData, period) {
 
   // TÀI SẢN (Mã 270)
   // Tài sản dài hạn (Mã 200)
-  // Tích hợp dữ liệu trực tiếp 100% từ bảng fixed_assets trong Database:
+  // Tích hợp dữ liệu trực tiếp 100% từ bảng fixed_assets và bút toán khấu hao TK 214 trong Database:
   const faOrigValue = dbFaOrig > 0 ? dbFaOrig : initTangibleOriginal; // Mã 222
-  const faAccDepreciation = dbFaOrig > 0 ? dbFaAcc : Math.abs(initTangibleDepreciation); // Mã 223 (dương tính theo giá trị hao mòn)
+  const faAccDepreciation = dbFaAcc > 0 ? dbFaAcc : (journal214Credit > 0 ? journal214Credit : Math.abs(initTangibleDepreciation)); // Mã 223 (dương tính theo giá trị hao mòn)
   const faNetBookValue = faOrigValue - faAccDepreciation; // Mã 221
 
   const longTermReceivables = initLongTermReceivables; // Mã 210
@@ -500,10 +514,14 @@ function buildReportFromData(dbData, period) {
   // Phải thu ngắn hạn của khách hàng: Tích hợp 100% từ bảng debt_receivables trong SQLite
   const hasReceivablesDb = dbData.tableCounts?.rec_cnt !== undefined && dbData.tableCounts?.rec_cnt !== null;
   const shortTermReceivables = hasReceivablesDb ? dbRecRemaining : initRec; // Mã 131
-  const prepaymentsToSuppliers = initPrepaymentsToSuppliers; // Mã 132
+  const dbSuppPrepay = Math.max(
+    Number(dbData.supplierPrepayments?.overpayment) || 0,
+    Number(dbData.supplierPrepayments?.adv_voucher) || 0
+  );
+  const prepaymentsToSuppliers = initPrepaymentsToSuppliers + dbSuppPrepay; // Mã 132
 
-  // Phải thu ngắn hạn khác: Tự động liên kết phát sinh Tạm ứng TK 141 & Tạm ứng Bảng lương
-  const otherShortTermReceivables = initOtherShortTermReceivables + advance141Flow + payrollAdv; // Mã 136
+  // Phải thu ngắn hạn khác: Tự động liên kết số dư ròng Tạm ứng TK 141 (đã bù trừ khấu trừ lương)
+  const otherShortTermReceivables = Math.max(0, initOtherShortTermReceivables + advance141Flow); // Mã 136
   const totalShortTermReceivables = shortTermReceivables + prepaymentsToSuppliers + otherShortTermReceivables; // Mã 130
 
   // Hàng tồn kho: Tự động liên kết bảng goods (InventoryItem) và warehouse_movements
@@ -743,10 +761,10 @@ function buildReportFromData(dbData, period) {
         amountColor: '#059669',
         subtitles: [
           `Mã: ${g.code}`,
-          `Kho: ${g.warehouse || 'Kho chính Thạch Thất'}`,
+          `Kho: ${g.warehouse || 'Kho trung tâm Seajong'}`,
           `Tồn: ${qty} ${g.unit || ''}`,
         ],
-        note: `Đơn giá vốn: ${formatVND(price)}/${g.unit || 'đv'} • Nhóm: ${g.category === 'accessories' ? 'Phụ kiện kim khí' : g.category === 'wood' ? 'Gỗ tấm tự nhiên & công nghiệp' : 'Vật tư sản xuất'}`,
+        note: `Đơn giá vốn: ${formatVND(price)}/${g.unit || 'đv'} • Nhóm: ${g.category === 'accessories' ? 'Linh kiện & Phụ kiện sen vòi' : g.category === 'wood' ? 'Thiết bị phòng tắm & Nhà bếp' : 'Hàng hóa & Vật tư'}`,
       };
     }),
   };
@@ -775,34 +793,34 @@ function buildReportFromData(dbData, period) {
         `Nguyên giá: ${formatVND(f.original_price)}`,
         `Hao mòn: -${formatVND(f.accumulated_depreciation)}`,
       ],
-      note: `Nhóm: ${f.category === 'machinery' ? 'Máy móc thiết bị xưởng' : f.category === 'vehicle' ? 'Phương tiện vận tải' : f.category === 'it_office' ? 'CNTT & Văn phòng' : f.category === 'intangible' ? 'Tài sản vô hình' : 'Nhà xưởng công trình'}`,
+      note: `Nhóm: ${f.category === 'machinery' ? 'Máy móc thiết bị' : f.category === 'vehicle' ? 'Phương tiện vận tải' : f.category === 'it_office' ? 'CNTT & Văn phòng' : f.category === 'intangible' ? 'Tài sản vô hình' : 'Cơ sở hạ tầng & Showroom'}`,
     })),
   };
 
-  // 6. Phải trả người lao động (monthly_payrolls)
+  // 6. Phải trả người lao động & Bảo hiểm (monthly_payrolls)
   const rawPayrollList = Array.isArray(dbData.payrollsList) ? dbData.payrollsList : [];
   const payrollBreakdown = {
     type: 'payroll',
-    title: 'Phải trả người lao động (Lương & BHXH)',
-    sourceTable: 'monthly_payrolls',
-    sourceLabel: 'Đồng bộ tự động từ bảng lương nhân sự monthly_payrolls',
-    totalLabel: 'Tổng quỹ lương & nghĩa vụ nhân sự:',
+    title: 'Phải trả người lao động & Bảo hiểm bắt buộc',
+    sourceTable: 'monthly_payrolls & TK 334, 338',
+    sourceLabel: 'Đồng bộ tự động từ bảng lương nhân sự monthly_payrolls & Sổ nhật ký chung',
+    totalLabel: 'Tổng quỹ lương thực lĩnh & BHXH phải nộp:',
     totalAmount: employeePayables,
     stats: [
       { label: 'Số lao động trong kỳ:', value: `${dbData.tableCounts?.payroll_cnt || rawPayrollList.length || 0} nhân sự`, color: '#059669' },
-      { label: 'Bảo hiểm & thuế trích nộp:', value: formatVND(payrollTax + (rawPayrollList.reduce((s, p) => s + (p.insurance_salary || 0), 0) * 0.105)), color: '#0284c7' },
+      { label: 'BHXH, BHYT, BHTN phải nộp (TK 338):', value: formatVND(effectiveInsPayable), color: '#0284c7' },
     ],
-    hint: 'Để xem bảng chấm công chi tiết, tính lương KPI hoặc trích nộp bảo hiểm, vui lòng truy cập phân hệ Hành chính Nhân sự → Bảng lương.',
+    hint: 'Để xem bảng chấm công chi tiết, tính lương KPI hoặc trích nộp bảo hiểm, vui lòng truy cập phân hệ Hành chính Nhân sự → Bảng lương & Bảo hiểm.',
     items: rawPayrollList.slice(0, 15).map((p) => ({
       id: String(p.id),
       title: p.employee_name,
-      amount: (Number(p.net_salary) > 0 ? Number(p.net_salary) : Number(p.insurance_salary)) || 0,
+      amount: Number(p.net_salary) || 0,
       amountColor: '#059669',
       subtitles: [
-        `Bộ phận: ${p.department || 'Xưởng sản xuất'}`,
+        `Bộ phận: ${p.department || 'Khối Vận hành'}`,
         `Lương đóng BH: ${formatVND(p.insurance_salary)}`,
       ],
-      note: `Giảm trừ thuế/tạm ứng: ${formatVND(p.tax_deduction || 0)} • Chi trả kỳ ${periodTitle}`,
+      note: `Giảm trừ thuế TNCN: ${formatVND(p.tax_deduction || 0)} • Chi trả kỳ ${periodTitle}`,
     })),
   };
 
@@ -1076,7 +1094,7 @@ function buildReportFromData(dbData, period) {
       { label: 'Tỷ lệ giá vốn / Doanh thu thuần:', value: netRevenue > 0 ? `${((cogs / netRevenue) * 100).toFixed(1)}%` : '0.0%', color: '#d97706' },
       { label: 'Lợi nhuận gộp tạo ra:', value: formatVND(grossProfit), color: '#059669' },
     ],
-    hint: 'Để theo dõi chi phí sản xuất từng lô sản phẩm cửa hoặc định mức hao hụt nguyên vật liệu, vui lòng truy cập phân hệ Sản xuất và Kho hàng.',
+    hint: 'Để theo dõi giá vốn xuất kho thiết bị phòng tắm, nhà bếp hoặc định mức vật tư, vui lòng truy cập phân hệ Quản lý kho hàng và Kế toán nội bộ.',
     items: cogsItems,
   };
 
@@ -1085,12 +1103,12 @@ function buildReportFromData(dbData, period) {
     { code: '100', name: 'A. TÀI SẢN NGẮN HẠN', note: 'V.01', closing: finalShortTermAssets, opening: openingShortTermAssets, isBold: true, isHeader: true, level: 0 },
     { code: '110', name: 'I. Tiền và các khoản tương đương tiền', note: 'V.02', closing: totalCashAndEquivalents, opening: initCash + initBank, isBold: true, level: 1, breakdown: cashGeneralBreakdown },
     { code: '111', name: '1. Tiền mặt tại quỹ', note: '', closing: cashInHand, opening: initCash, level: 2, isEstimated: (cash111Flow === 0 && !hasInitDec), estimateNote: cash111Flow !== 0 ? 'Đã liên kết phát sinh thực tế TK 1111 (Sổ nhật ký chung)' : (initNote || 'Định mức tồn két'), breakdown: cashInHandBreakdown },
-    { code: '112', name: '2. Tiền gửi ngân hàng (Vietcombank, BIDV, Techcombank)', note: '', closing: bankDeposits, opening: initBank, level: 2, isEstimated: (bank112Flow === 0 && !hasInitDec), estimateNote: bank112Flow !== 0 ? 'Đã liên kết phát sinh thực tế TK 1121 (Sổ nhật ký chung - Vietcombank)' : (initNote || 'Định mức tiền gửi'), breakdown: bankDepositBreakdown },
+    { code: '112', name: '2. Tiền gửi ngân hàng', note: '', closing: bankDeposits, opening: initBank, level: 2, isEstimated: (bank112Flow === 0 && !hasInitDec), estimateNote: bank112Flow !== 0 ? 'Đã liên kết phát sinh thực tế TK 1121 (Sổ nhật ký chung)' : (initNote || 'Định mức tiền gửi'), breakdown: bankDepositBreakdown },
     { code: '120', name: 'II. Đầu tư tài chính ngắn hạn', note: 'V.03', closing: shortTermInvestments, opening: initShortTermInvestments, isBold: true, level: 1, isEstimated: !hasInitDec, estimateNote: initNote || 'Định mức tiền gửi có kỳ hạn đầu tư ngắn hạn', breakdown: termDepositBreakdown },
     { code: '121', name: '1. Tiền gửi có kỳ hạn 3 - 6 tháng', note: '', closing: shortTermInvestments, opening: initShortTermInvestments, level: 2, isEstimated: !hasInitDec, estimateNote: initNote || 'Định mức tiền gửi có kỳ hạn', breakdown: termDepositBreakdown },
     { code: '130', name: 'III. Các khoản phải thu ngắn hạn', note: 'V.04', closing: totalShortTermReceivables, opening: initRec + initPrepaymentsToSuppliers + initOtherShortTermReceivables, isBold: true, level: 1, breakdown: receivablesBreakdown },
     { code: '131', name: '1. Phải thu ngắn hạn của khách hàng', note: '', closing: shortTermReceivables, opening: initRec, level: 2, breakdown: receivablesBreakdown },
-    { code: '132', name: '2. Trả trước cho người bán ngắn hạn', note: '', closing: prepaymentsToSuppliers, opening: initPrepaymentsToSuppliers, level: 2, isEstimated: !hasInitDec, estimateNote: initNote || 'Tạm ứng nhà cung cấp' },
+    { code: '132', name: '2. Trả trước cho người bán ngắn hạn', note: '', closing: prepaymentsToSuppliers, opening: initPrepaymentsToSuppliers, level: 2, isEstimated: prepaymentsToSuppliers === 0 && !hasInitDec, estimateNote: prepaymentsToSuppliers > 0 ? 'Đã đồng bộ từ các khoản ứng trước / đặt cọc cho nhà cung cấp (TK 331)' : (initNote || 'Tạm ứng nhà cung cấp') },
     {
       code: '136',
       name: '3. Phải thu ngắn hạn khác (Tạm ứng công tác, mua sắm)',
@@ -1106,7 +1124,7 @@ function buildReportFromData(dbData, period) {
     { code: '140', name: 'IV. Hàng tồn kho', note: 'V.05', closing: totalInventory, opening: initInventoryTotal, isBold: true, level: 1, breakdown: inventoryBreakdown },
     {
       code: '141',
-      name: '1. Hàng tồn kho (Nguyên phụ liệu gỗ, phụ kiện inox, bán thành phẩm)',
+      name: '1. Hàng tồn kho',
       note: '',
       closing: inventoryGross,
       opening: initInventoryGross,
@@ -1136,22 +1154,22 @@ function buildReportFromData(dbData, period) {
     { code: '200', name: 'B. TÀI SẢN DÀI HẠN', note: 'V.07', closing: totalLongTermAssets, opening: openingLongTermAssets, isBold: true, isHeader: true, level: 0 },
     { code: '210', name: 'I. Các khoản phải thu dài hạn', note: 'V.08', closing: longTermReceivables, opening: initLongTermReceivables, isBold: true, level: 1, isEstimated: !hasInitDec, estimateNote: initNote || 'Ký cược, ký quỹ dài hạn' },
     { code: '220', name: 'II. Tài sản cố định', note: 'V.09', closing: totalFixedAssets, opening: initTangibleNet + initIntangibleNet, isBold: true, level: 1, breakdown: fixedAssetsBreakdown },
-    { code: '221', name: '1. Tài sản cố định hữu hình (Máy CNC, máy ép nhiệt, nhà xưởng)', note: '', closing: faNetBookValue, opening: initTangibleNet, level: 2, breakdown: fixedAssetsBreakdown },
+    { code: '221', name: '1. Tài sản cố định hữu hình', note: '', closing: faNetBookValue, opening: initTangibleNet, level: 2, breakdown: fixedAssetsBreakdown },
     { code: '222', name: '- Nguyên giá', note: '', closing: faOrigValue, opening: initTangibleOriginal, level: 3, breakdown: fixedAssetsBreakdown },
     { code: '223', name: '- Giá trị hao mòn luỹ kế (*)', note: '', closing: -faAccDepreciation, opening: initTangibleDepreciation, level: 3, breakdown: fixedAssetsBreakdown },
-    { code: '227', name: '2. Tài sản cố định vô hình (Phần mềm ERP, bản quyền thiết kế)', note: '', closing: intangibleAssets, opening: initIntangibleNet, level: 2, isEstimated: (dbFaIntangibleOrig === 0 && !hasInitDec), estimateNote: (dbFaIntangibleOrig > 0) ? 'Đã đồng bộ từ CSDL fixed_assets loại vô hình' : (initNote || 'Phần mềm ERP, bản quyền thiết kế'), breakdown: fixedAssetsBreakdown },
+    { code: '227', name: '2. Tài sản cố định vô hình', note: '', closing: intangibleAssets, opening: initIntangibleNet, level: 2, isEstimated: (dbFaIntangibleOrig === 0 && !hasInitDec), estimateNote: (dbFaIntangibleOrig > 0) ? 'Đã đồng bộ từ CSDL fixed_assets loại vô hình' : (initNote || 'Tài sản cố định vô hình'), breakdown: fixedAssetsBreakdown },
     { code: '240', name: 'III. Tài sản dở dang dài hạn', note: 'V.10', closing: constructionInProgress, opening: initConstructionInProgress, isBold: true, level: 1, isEstimated: !hasInitDec, estimateNote: initNote || 'Chi phí XDCB dở dang' },
-    { code: '242', name: '1. Chi phí xây dựng cơ bản dở dang (Mở rộng Xưởng số 2)', note: '', closing: constructionInProgress, opening: initConstructionInProgress, level: 2, isEstimated: !hasInitDec, estimateNote: initNote || 'Mở rộng xưởng số 2' },
+    { code: '242', name: '1. Chi phí xây dựng cơ bản dở dang', note: '', closing: constructionInProgress, opening: initConstructionInProgress, level: 2, isEstimated: !hasInitDec, estimateNote: initNote || 'Chi phí XDCB dở dang' },
     { code: '260', name: 'IV. Tài sản dài hạn khác', note: 'V.11', closing: otherLongTermAssets, opening: initLongTermPrepayments, isBold: true, level: 1, isEstimated: !hasInitDec, estimateNote: initNote || 'Chi phí trả trước dài hạn' },
-    { code: '261', name: '1. Chi phí trả trước dài hạn (Thuê đất KCN, bảo dưỡng lớn)', note: '', closing: otherLongTermAssets, opening: initLongTermPrepayments, level: 2, isEstimated: !hasInitDec, estimateNote: initNote || 'Tiền thuê đất KCN trả trước' },
+    { code: '261', name: '1. Chi phí trả trước dài hạn', note: '', closing: otherLongTermAssets, opening: initLongTermPrepayments, level: 2, isEstimated: !hasInitDec, estimateNote: initNote || 'Chi phí trả trước dài hạn' },
 
     { code: '270', name: 'TỔNG CỘNG TÀI SẢN (270 = 100 + 200)', note: '', closing: finalTotalAssets, opening: openingTotalAssets, isBold: true, isHeader: true, level: 0 },
 
     // NGUỒN VỐN
     { code: '300', name: 'C. NỢ PHẢI TRẢ', note: 'V.12', closing: totalLiabilities, opening: openingLiabilities, isBold: true, isHeader: true, level: 0 },
     { code: '310', name: 'I. Nợ ngắn hạn', note: 'V.13', closing: totalShortTermLiabilities, opening: openingShortTermLiabilities, isBold: true, level: 1, breakdown: payablesBreakdown },
-    { code: '311', name: '1. Phải trả người bán ngắn hạn (An Cường, KinLong, Vicostone)', note: '', closing: payablesToSuppliers, opening: initPayablesToSuppliers, level: 2, breakdown: payablesBreakdown },
-    { code: '312', name: '2. Người mua trả tiền trước ngắn hạn', note: '', closing: customerPrepayments, opening: initCustomerPrepayments, level: 2, isEstimated: !hasInitDec, estimateNote: initNote || 'Khách hàng đặt cọc trước tiền hàng' },
+    { code: '311', name: '1. Phải trả người bán ngắn hạn', note: '', closing: payablesToSuppliers, opening: initPayablesToSuppliers, level: 2, breakdown: payablesBreakdown },
+    { code: '312', name: '2. Người mua trả tiền trước ngắn hạn', note: '', closing: customerPrepayments, opening: initCustomerPrepayments, level: 2, isEstimated: customerPrepayments === 0 && !hasInitDec, estimateNote: customerPrepayments > 0 ? 'Đã đồng bộ từ các khoản khách hàng trả trước / đặt cọc (TK 131)' : (initNote || 'Khách hàng đặt cọc trước tiền hàng') },
     {
       code: '313',
       name: '3. Thuế và các khoản phải nộp Nhà nước',
@@ -1166,15 +1184,15 @@ function buildReportFromData(dbData, period) {
     },
     {
       code: '314',
-      name: '4. Phải trả người lao động (Lương, thưởng)',
+      name: '4. Phải trả người lao động & Bảo hiểm bắt buộc',
       note: '',
       closing: employeePayables,
       opening: initEmployeePayables,
       level: 2,
       isEstimated: !hasRealPayroll && !hasInitDec,
       estimateNote: hasRealPayroll
-        ? 'Đã đồng bộ tự động từ Bảng lương nhân sự monthly_payrolls'
-        : (initNote || 'Lương nhân sự kỳ trước chưa chi trả'),
+        ? 'Đã đồng bộ tự động từ Bảng lương nhân sự monthly_payrolls & TK 334, 338'
+        : (initNote || 'Lương & bảo hiểm nhân sự kỳ trước chưa chi trả'),
       breakdown: payrollBreakdown,
     },
     {
@@ -1219,7 +1237,7 @@ function buildReportFromData(dbData, period) {
     { code: '01', name: '1. Doanh thu bán hàng và cung cấp dịch vụ', note: 'VI.01', closing: baseRevenue, opening: prevRevenue, isBold: true, level: 0, breakdown: revenueBreakdown },
     { code: '02', name: '2. Các khoản giảm trừ doanh thu (Chiết khấu, giảm giá)', note: 'VI.02', closing: salesDiscounts, opening: prevSalesDiscounts, level: 0, isEstimated: true, estimateNote: 'Chiết khấu thương mại định mức (Cần thiết lập chính sách bán hàng khi khởi tạo)' },
     { code: '10', name: '3. Doanh thu thuần về bán hàng và CCDV (10 = 01 - 02)', note: 'VI.03', closing: netRevenue, opening: prevNetRevenue, isBold: true, isHeader: true, level: 0, breakdown: revenueBreakdown },
-    { code: '11', name: '4. Giá vốn hàng bán (Chi phí nguyên vật liệu, nhân công, SXC)', note: 'VI.04', closing: cogs, opening: prevCogs, level: 0, breakdown: cogsBreakdown },
+    { code: '11', name: '4. Giá vốn hàng bán', note: 'VI.04', closing: cogs, opening: prevCogs, level: 0, breakdown: cogsBreakdown },
     { code: '20', name: '5. Lợi nhuận gộp về bán hàng và CCDV (20 = 10 - 11)', note: '', closing: grossProfit, opening: prevGrossProfit, isBold: true, isHeader: true, level: 0 },
     {
       code: '21',
@@ -1248,10 +1266,10 @@ function buildReportFromData(dbData, period) {
       loanBreakdown: shortTermLoanBreakdown.concat(longTermLoanBreakdown),
       breakdown: loanExpenseBreakdown,
     },
-    { code: '25', name: '8. Chi phí bán hàng (Vận chuyển, hoa hồng thầu, tiếp thị)', note: 'VI.07', closing: salesExpense, opening: prevSalesExpense, level: 0, breakdown: salesExpenseBreakdown },
-    { code: '26', name: '9. Chi phí quản lý doanh nghiệp (Lương văn phòng, khấu hao, quản lý)', note: 'VI.08', closing: adminExpense, opening: prevAdminExpense, level: 0, breakdown: adminExpenseBreakdown },
+    { code: '25', name: '8. Chi phí bán hàng (Vận chuyển, tiếp thị, chiết khấu)', note: 'VI.07', closing: salesExpense, opening: prevSalesExpense, level: 0, breakdown: salesExpenseBreakdown },
+    { code: '26', name: '9. Chi phí quản lý doanh nghiệp (Lương, bảo hiểm, khấu hao, quản lý)', note: 'VI.08', closing: adminExpense, opening: prevAdminExpense, level: 0, breakdown: adminExpenseBreakdown },
     { code: '30', name: '10. Lợi nhuận thuần từ hoạt động kinh doanh (30 = 20 + 21 - 22 - 25 - 26)', note: '', closing: operatingProfit, opening: prevOperatingProfit, isBold: true, isHeader: true, level: 0 },
-    { code: '31', name: '11. Thu nhập khác (Thanh lý phế liệu gỗ, vật tư vụn)', note: '', closing: otherIncome, opening: 0, level: 0 },
+    { code: '31', name: '11. Thu nhập khác', note: '', closing: otherIncome, opening: 0, level: 0 },
     { code: '32', name: '12. Chi phí khác', note: '', closing: otherExpense, opening: 0, level: 0 },
     { code: '40', name: '13. Lợi nhuận khác (40 = 31 - 32)', note: '', closing: otherProfit, opening: prevOtherProfit, isBold: true, level: 0 },
     { code: '50', name: '14. Tổng lợi nhuận kế toán trước thuế (50 = 30 + 40)', note: '', closing: profitBeforeTax, opening: prevProfitBeforeTax, isBold: true, isHeader: true, level: 0 },
@@ -1550,8 +1568,8 @@ function buildReportFromData(dbData, period) {
     },
     connectedTables: [
       { id: 'cash_and_bank_assets', name: 'Tài sản bằng tiền & Tiền gửi', count: Number(dbData.tableCounts?.cash_cnt) || 0, description: 'Quỹ tiền mặt, tài khoản ngân hàng và các khoản tiền gửi', targets: 'Mã 110, 111, 112, 120, 121 (B01, B03) & Mã 21 (B02-DN)' },
-      { id: 'fixed_assets', name: 'Tài sản cố định (Hữu hình & Vô hình)', count: Number(dbData.tableCounts?.fa_cnt) || 0, description: 'Danh mục tài sản cố định, máy móc nhà xưởng và bản quyền phần mềm', targets: 'Mã 220, 221, 222, 223, 227 (B01, B03)' },
-      { id: 'goods', name: 'Kho hàng hóa & Vật tư', count: Number(dbData.tableCounts?.goods_cnt) || 0, description: 'Danh mục vật tư, nguyên phụ liệu sản xuất và thành phẩm cửa', targets: 'Mã 140, 141, 149 (B01, B02)' },
+      { id: 'fixed_assets', name: 'Tài sản cố định (Hữu hình & Vô hình)', count: Number(dbData.tableCounts?.fa_cnt) || 0, description: 'Danh mục tài sản cố định, máy móc thiết bị, phương tiện và phần mềm', targets: 'Mã 220, 221, 222, 223, 227 (B01, B03)' },
+      { id: 'goods', name: 'Kho hàng hóa & Vật tư', count: Number(dbData.tableCounts?.goods_cnt) || 0, description: 'Danh mục thiết bị phòng tắm, nhà bếp, linh kiện và phụ kiện', targets: 'Mã 140, 141, 149 (B01, B02)' },
       { id: 'warehouse_movements', name: 'Biến động xuất nhập tồn kho', count: Number(dbData.tableCounts?.whm_cnt) || 0, description: 'Phiếu nhập, xuất kho và biến động tồn kho thực tế trong kỳ', targets: 'Mã 140 (B01), Mã 11 Giá vốn (B02)' },
       { id: 'debt_receivables', name: 'Công nợ phải thu khách hàng', count: Number(dbData.tableCounts?.rec_cnt) || 0, description: 'Phải thu khách hàng, chủ đầu tư, tổng thầu các dự án', targets: 'Mã 130, 131 (B01), Mã 01 Thu bán hàng (B03)' },
       { id: 'debt_payables', name: 'Công nợ phải trả nhà cung cấp', count: Number(dbData.tableCounts?.pay_cnt) || 0, description: 'Phải trả các nhà cung ứng vật tư, phụ kiện và dịch vụ', targets: 'Mã 310, 311 (B01), Mã 02 Chi trả NCC (B03)' },

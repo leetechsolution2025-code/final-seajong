@@ -489,9 +489,14 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
   );
 
   // Form Tạm ứng
+  const getPlusDaysDmy = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+  };
   const [advanceAmount, setAdvanceAmount] = useState('5000000');
   const [advancePurpose, setAdvancePurpose] = useState('Tạm ứng công tác phí');
-  const [advanceDueDate, setAdvanceDueDate] = useState('20/10/2026');
+  const [advanceDueDate, setAdvanceDueDate] = useState(() => getPlusDaysDmy(5));
   const [deductFromSalary, setDeductFromSalary] = useState<boolean>(true);
   const [advancePaymentMethod, setAdvancePaymentMethod] = useState<'bank' | 'cash'>('bank');
   const [bankAccount, setBankAccount] = useState('19033458992011');
@@ -506,8 +511,8 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
   // Form Đi công tác
   const [tripDestination, setTripDestination] = useState('Thành phố Hồ Chí Minh');
   const [tripPurpose, setTripPurpose] = useState('Họp đại hội khách hàng và ký kết đại lý');
-  const [tripFromDate, setTripFromDate] = useState('15/10/2026');
-  const [tripToDate, setTripToDate] = useState('17/10/2026');
+  const [tripFromDate, setTripFromDate] = useState(defaultTodayDmy);
+  const [tripToDate, setTripToDate] = useState(() => getPlusDaysDmy(2));
   const [tripTransport, setTripTransport] = useState('Máy bay khứ hồi và taxi nội đô');
   const [tripEstimatedCost, setTripEstimatedCost] = useState('10000000');
 
@@ -849,77 +854,71 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
   const isMoneyRequest = (t: RequestType) => t === 'advance' || t === 'refund';
   const isHrRequest = (t: RequestType) => t === 'late_early' || t === 'leave' || t === 'business_trip';
 
-  // Nhóm người phê duyệt điều hướng tự động theo phân luồng Kế toán (Tiền) / Nhân sự (Công, Nghỉ, Đi lại)
+  // Nạp danh sách nhân sự thực tế từ CSDL (/api/hr/employees) để chọn Người phê duyệt
+  const [dbEmployees, setDbEmployees] = useState<any[]>([]);
+  useEffect(() => {
+    fetch('/api/hr/employees?pageSize=200')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((res) => {
+        if (Array.isArray(res?.employees)) {
+          setDbEmployees(res.employees);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Nhóm người phê duyệt lấy từ dữ liệu thực tế trong bảng Employee của DB
   const relevantApproverGroups = useMemo(() => {
-    const isMoney = isMoneyRequest(selectedCreateType);
-    if (isMoney) {
-      return [
-        {
-          group: 'Phòng Tài chính – Kế toán (Bộ phận xử lý)',
-          options: [
-            { label: 'Trần Thị Linh - Phòng Tài chính – Kế toán', value: 'Trần Thị Linh - Phòng Tài chính – Kế toán' },
-          ],
-        },
-        {
-          group: 'Ban Giám đốc (Phê duyệt chi ngân sách)',
-          options: [
-            { label: 'Lê Công Vụ - Ban Giám đốc', value: 'Lê Công Vụ - Ban Giám đốc' },
-            { label: 'Đoàn Thị Yến - Ban Giám đốc', value: 'Đoàn Thị Yến - Ban Giám đốc' },
-          ],
-        },
-        {
-          group: 'Trưởng các phòng ban khác',
-          options: [
-            { label: 'Cao Thị Phương - Phòng Nhân sự', value: 'Cao Thị Phương - Phòng Nhân sự' },
-            { label: 'Hà Thị Bích Ngọc - Phòng Sản xuất', value: 'Hà Thị Bích Ngọc - Phòng Sản xuất' },
-            { label: 'Nguyễn Văn Tiền - Phòng Kho vận', value: 'Nguyễn Văn Tiền - Phòng Kho vận' },
-            { label: 'Nguyễn Thu Huyền - Phòng Marketing', value: 'Nguyễn Thu Huyền - Phòng Marketing' },
-            { label: 'Lê Anh Vân - Phòng Đảm bảo chất lượng', value: 'Lê Anh Vân - Phòng Đảm bảo chất lượng' },
-          ],
-        },
-      ];
-    } else {
-      return [
-        {
-          group: 'Phòng Hành chính - Nhân sự (Bộ phận xử lý)',
-          options: [
-            { label: 'Cao Thị Phương - Phòng Nhân sự', value: 'Cao Thị Phương - Phòng Nhân sự' },
-          ],
-        },
-        {
-          group: 'Ban Giám đốc (Phê duyệt cấp cao)',
-          options: [
-            { label: 'Lê Công Vụ - Ban Giám đốc', value: 'Lê Công Vụ - Ban Giám đốc' },
-            { label: 'Đoàn Thị Yến - Ban Giám đốc', value: 'Đoàn Thị Yến - Ban Giám đốc' },
-          ],
-        },
-        {
-          group: 'Trưởng các phòng ban trực tiếp',
-          options: [
-            { label: 'Hà Thị Bích Ngọc - Phòng Sản xuất', value: 'Hà Thị Bích Ngọc - Phòng Sản xuất' },
-            { label: 'Nguyễn Văn Tiền - Phòng Kho vận', value: 'Nguyễn Văn Tiền - Phòng Kho vận' },
-            { label: 'Nguyễn Thu Huyền - Phòng Marketing', value: 'Nguyễn Thu Huyền - Phòng Marketing' },
-            { label: 'Lê Anh Vân - Phòng Đảm bảo chất lượng', value: 'Lê Anh Vân - Phòng Đảm bảo chất lượng' },
-            { label: 'Trần Thị Linh - Phòng Tài chính – Kế toán', value: 'Trần Thị Linh - Phòng Tài chính – Kế toán' },
-          ],
-        },
-      ];
+    const activeEmps = dbEmployees.filter(
+      (e: any) =>
+        String(e.status || '').toLowerCase() !== 'resigned' &&
+        String(e.profileStatus || '').toLowerCase() !== 'resigned'
+    );
+
+    const boardOpts: Array<{ label: string; value: string }> = [];
+    const managerOpts: Array<{ label: string; value: string }> = [];
+    const leaderKeywords = ['giám đốc', 'trưởng phòng', 'trưởng bộ phận', 'quản đốc', 'thủ kho', 'kế toán', 'nhân sự'];
+
+    activeEmps.forEach((e: any) => {
+      const name = String(e.fullName || '').trim();
+      if (!name) return;
+      const deptCode = String(e.departmentCode || '').toLowerCase();
+      const deptName = String(e.departmentName || 'Phòng ban').trim();
+      const posTitle = String(e.positionTitle || e.position || '').trim();
+      const posLower = posTitle.toLowerCase();
+      const val = `${name} - ${deptName}`;
+      const label = posTitle && posTitle !== '—' ? `${name} (${posTitle} - ${deptName})` : val;
+
+      if (deptCode === 'board' || deptName.toLowerCase().includes('giám đốc')) {
+        boardOpts.push({ label, value: val });
+      } else if (leaderKeywords.some((kw) => posLower.includes(kw))) {
+        managerOpts.push({ label, value: val });
+      }
+    });
+
+    const groups: Array<{ group: string; options: Array<{ label: string; value: string }> }> = [];
+    if (boardOpts.length > 0) {
+      groups.push({
+        group: 'Ban Giám đốc (Dữ liệu thực tế DB)',
+        options: boardOpts,
+      });
     }
-  }, [selectedCreateType]);
+    if (managerOpts.length > 0) {
+      groups.push({
+        group: 'Trưởng / Quản lý các bộ phận (Dữ liệu thực tế DB)',
+        options: managerOpts,
+      });
+    }
+
+    return groups;
+  }, [dbEmployees, selectedCreateType]);
 
   // Xử lý chuyển đổi loại yêu cầu và tự động chuyển phòng ban tiếp nhận
   const handleTypeChange = (newType: RequestType) => {
     setSelectedCreateType(newType);
-    if (isMoneyRequest(newType)) {
-      // Các vấn đề liên quan đến tiền: chuyển phòng kế toán xử lý
-      if (!formApprover.includes('Kế toán') && !formApprover.includes('Ban Giám đốc')) {
-        setFormApprover('Trần Thị Linh - Phòng Tài chính – Kế toán');
-      }
-    } else {
-      // Các vấn đề liên quan đến đi muộn, về sớm, nghỉ phép: chuyển phòng nhân sự xử lý
-      if (formApprover.includes('Kế toán')) {
-        setFormApprover('Cao Thị Phương - Phòng Nhân sự');
-      }
+    const firstOpt = relevantApproverGroups[0]?.options?.[0]?.value;
+    if (firstOpt && !formApprover) {
+      setFormApprover(firstOpt);
     }
   };
 
@@ -932,12 +931,9 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
     setFormContent('');
     setFormNote('');
     setDeductFromSalary(true);
-    // Tự động phân luồng phòng ban xử lý ngay khi mở form
-    if (isMoneyRequest(type)) {
-      setFormApprover('Trần Thị Linh - Phòng Tài chính – Kế toán');
-    } else {
-      setFormApprover('Cao Thị Phương - Phòng Nhân sự');
-    }
+    setAdvanceDueDate(getPlusDaysDmy(5));
+    const firstOpt = relevantApproverGroups[0]?.options?.[0]?.value || 'Lê Công Vụ - Ban Giám đốc';
+    setFormApprover(firstOpt);
     setFormPriority('medium');
     setCreateModalOpen(true);
   };
@@ -1145,6 +1141,9 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
         if (res.ok) {
           const saved = await res.json();
           setRequests((prev) => prev.map((r) => (r.id === editingRequest.id ? saved : r)));
+          notifyFinanceUpdated('personal_requests', 'update');
+          window.dispatchEvent(new CustomEvent('seajong_notifications_updated'));
+          window.dispatchEvent(new CustomEvent('decodoor_notifications_updated'));
         } else {
           setRequests((prev) => prev.map((r) => (r.id === editingRequest.id ? updatedItem : r)));
         }
@@ -1269,12 +1268,16 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
       if (res.ok) {
         const saved = await res.json();
         setRequests((prev) => [saved, ...prev]);
+        notifyFinanceUpdated('personal_requests', 'create');
         window.dispatchEvent(new CustomEvent('decodoor_request_created', { detail: saved }));
+        window.dispatchEvent(new CustomEvent('seajong_notifications_updated'));
+        window.dispatchEvent(new CustomEvent('decodoor_notifications_updated'));
         try {
           localStorage.setItem('decodoor_request_last_created', Date.now().toString());
         } catch {}
       } else {
         setRequests((prev) => [newItem, ...prev]);
+        notifyFinanceUpdated('personal_requests', 'create');
         window.dispatchEvent(new CustomEvent('decodoor_request_created', { detail: newItem }));
       }
     } catch (err) {

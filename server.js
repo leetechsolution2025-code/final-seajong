@@ -34,19 +34,42 @@ const PORT = process.env.PORT || 3005;
 const JWT_SECRET = process.env.JWT_SECRET || 'seajong_default_secret_key_2026';
 
 // Khởi tạo PrismaClient với cơ chế Auto-Heal (tự động phục hồi kết nối nếu SQLite gặp lỗi gián đoạn hoặc stale socket)
-let rawPrisma = new PrismaClient();
+if (!globalThis.__seajongRawPrisma) {
+  globalThis.__seajongRawPrisma = new PrismaClient();
+}
+let rawPrisma = globalThis.__seajongRawPrisma;
+const isSqliteReconnectError = (err) => {
+  const msg = String(err?.message || '');
+  const code = String(err?.code || '');
+  return (
+    code === 'P2010' ||
+    msg.includes('malformed') ||
+    msg.includes('disk I/O error') ||
+    msg.includes('5898') ||
+    msg.includes('QueryError') ||
+    msg.includes('ConnectorError')
+  );
+};
 const prisma = new Proxy({}, {
   get(_target, prop) {
-    if (prop === '$transaction' || prop === '$queryRaw' || prop === '$executeRaw' || prop === '$disconnect' || prop === '$connect') {
+    if (
+      prop === '$transaction' ||
+      prop === '$queryRaw' ||
+      prop === '$queryRawUnsafe' ||
+      prop === '$executeRaw' ||
+      prop === '$executeRawUnsafe' ||
+      prop === '$disconnect' ||
+      prop === '$connect'
+    ) {
       return async (...args) => {
         try {
           return await rawPrisma[prop](...args);
         } catch (err) {
-          const msg = String(err?.message || '');
-          if (msg.includes('malformed') || msg.includes('QueryError') || msg.includes('ConnectorError')) {
+          if (isSqliteReconnectError(err)) {
             console.warn('⚠️ [Prisma Auto-Heal] Phát hiện kết nối SQLite lỗi, đang tự động kết nối lại PrismaClient...');
             try { await rawPrisma.$disconnect(); } catch { }
             rawPrisma = new PrismaClient();
+            globalThis.__seajongRawPrisma = rawPrisma;
             return await rawPrisma[prop](...args);
           }
           throw err;
@@ -66,11 +89,11 @@ const prisma = new Proxy({}, {
               try {
                 return await mVal.apply(mTarget, args);
               } catch (err) {
-                const msg = String(err?.message || '');
-                if (msg.includes('malformed') || msg.includes('QueryError') || msg.includes('ConnectorError')) {
+                if (isSqliteReconnectError(err)) {
                   console.warn('⚠️ [Prisma Auto-Heal] Phát hiện kết nối SQLite lỗi, đang tự động kết nối lại PrismaClient...');
                   try { await rawPrisma.$disconnect(); } catch { }
                   rawPrisma = new PrismaClient();
+                  globalThis.__seajongRawPrisma = rawPrisma;
                   return await rawPrisma[prop][mProp](...args);
                 }
                 throw err;
@@ -248,19 +271,25 @@ async function getDepartmentHeadUserIds(departmentCode) {
       return [...new Set(deptUserIds)];
     }
 
+    const extraOrConditions = [
+      { deptAccess: { contains: dept } },
+      { role: 'ADMIN' },
+    ];
+    if (dept === 'finance' || dept === 'accounting') {
+      extraOrConditions.push({ email: { contains: 'tranthilinh' } });
+      extraOrConditions.push({ name: { contains: 'Trần Thị Linh' } });
+    }
+
     const usersWithDeptAccess = await prisma.user.findMany({
       where: {
-        OR: [
-          { deptAccess: { contains: dept } },
-          { role: 'ADMIN' },
-        ],
+        OR: extraOrConditions,
       },
       select: { id: true, name: true, role: true, email: true },
-      take: 5,
+      take: 15,
     });
 
     if (usersWithDeptAccess.length > 0) {
-      return [usersWithDeptAccess[0].id];
+      return [...new Set(usersWithDeptAccess.map((u) => u.id))];
     }
   } catch (err) {
     console.warn('[getDepartmentHeadUserIds] Error:', err.message);
@@ -287,6 +316,7 @@ async function sendCrossDeptNotification({
   link = '',
   entityType = null,
   entityId = null,
+  allowSelfNotify = false,
 }) {
   try {
     let finalRecipientIds = [];
@@ -301,8 +331,8 @@ async function sendCrossDeptNotification({
       finalRecipientIds = await getDepartmentHeadUserIds(targetDept);
     }
 
-    // Lọc bỏ chính người tạo thông báo để không thông báo cho chính mình
-    if (senderUserId) {
+    // Lọc bỏ chính người tạo thông báo để không thông báo cho chính mình (trừ khi allowSelfNotify = true)
+    if (senderUserId && !allowSelfNotify) {
       finalRecipientIds = finalRecipientIds.filter((id) => id !== senderUserId);
     }
 
@@ -311,13 +341,13 @@ async function sendCrossDeptNotification({
       const fallbackAdmins = await prisma.user.findMany({
         where: {
           role: 'ADMIN',
-          ...(senderUserId ? { id: { not: senderUserId } } : {}),
+          ...(senderUserId && !allowSelfNotify ? { id: { not: senderUserId } } : {}),
         },
         select: { id: true },
-        take: 1,
+        take: 5,
       });
       if (fallbackAdmins.length > 0) {
-        finalRecipientIds = [fallbackAdmins[0].id];
+        finalRecipientIds = fallbackAdmins.map((a) => a.id);
       }
     }
 
@@ -326,7 +356,7 @@ async function sendCrossDeptNotification({
       return null;
     }
 
-    let validCreatedById = senderUserId;
+    let validCreatedById = allowSelfNotify ? null : senderUserId;
     if (validCreatedById) {
       const userExists = await prisma.user.findUnique({
         where: { id: validCreatedById },
@@ -335,11 +365,19 @@ async function sendCrossDeptNotification({
       if (!userExists) validCreatedById = null;
     }
     if (!validCreatedById) {
-      const admin = await prisma.user.findFirst({
-        where: { role: 'ADMIN' },
+      const systemAdmin = await prisma.user.findFirst({
+        where: { email: 'admin@seajong.com' },
         select: { id: true },
       });
-      validCreatedById = admin?.id || finalRecipientIds[0];
+      if (systemAdmin) {
+        validCreatedById = systemAdmin.id;
+      } else {
+        const admin = await prisma.user.findFirst({
+          where: { role: 'ADMIN' },
+          select: { id: true },
+        });
+        validCreatedById = admin?.id || finalRecipientIds[0];
+      }
     }
 
     const attachments = JSON.stringify({
@@ -480,8 +518,8 @@ const handleSaveCompanyInfo = async (req, res) => {
     ).trim();
     const address = String(
       body.address ??
-        existing?.address ??
-        'Sàn dịch vụ thương mại tầng 1, chung cư CT3, KHu nhà ở Cầu Diễn, Phường Phú Diễn, Thành Phố Hà Nội, Việt Nam'
+      existing?.address ??
+      'Sàn dịch vụ thương mại tầng 1, chung cư CT3, KHu nhà ở Cầu Diễn, Phường Phú Diễn, Thành Phố Hà Nội, Việt Nam'
     ).trim();
     const phone = String(body.phone ?? existing?.phone ?? '0931339343| 1900 633 862').trim();
     const email = String(body.email ?? existing?.email ?? 'contact@seajong.com').trim();
@@ -9195,7 +9233,10 @@ app.post('/api/plan-finance/quotations', async (req, res) => {
         });
       }
 
-      // Notifications for Finance / Accounting
+      // Notifications for Finance / Accounting & Auto-sync to Debt + General Journal
+      await syncOrderToAccountingAndDebt(saleOrder.id, false).catch((e) =>
+        console.warn('Lỗi syncOrderToAccountingAndDebt khi tạo SaleOrder:', e.message)
+      );
       await notifyAccountingDepartmentOfOrder({ order: saleOrder, isUpdate: false });
     }
 
@@ -14432,7 +14473,8 @@ const mapApprovalRequestToDoc = (row, idx = 0) => {
     docTypeName = meta?.loaiText || 'Yêu cầu chi tiền';
   } else if (entityType.includes('expense') || entityType.includes('advance') || meta?.type?.includes('advance')) {
     docType = 'advance';
-    docTypeName = meta?.loaiText || 'Đề xuất tạm ứng NCC';
+    const codeStr = String(row.entityCode || row.id || '');
+    docTypeName = meta?.loaiText || (codeStr.startsWith('YC-') || entityType === 'advance_payment' || entityType === 'advance' ? 'Yêu cầu tạm ứng nhân viên' : 'Đề xuất tạm ứng NCC');
   } else if (entityType.includes('personal')) {
     docType = 'proposal';
     docTypeName = meta?.loaiText || 'Đề xuất nhân sự';
@@ -14541,17 +14583,19 @@ app.get('/api/approval-requests', async (req, res) => {
 
     // Thêm các yêu cầu cá nhân về tiền / tạm ứng vào danh sách
     for (const pr of personalReqs) {
-      if (existingCodes.has(pr.id) || existingCodes.has(pr.code)) continue;
       let details = {};
       try { details = typeof pr.details === 'string' ? JSON.parse(pr.details) : pr.details || {}; } catch { }
+      const prCode = details.code || pr.id;
+      if (existingCodes.has(pr.id) || existingCodes.has(prCode)) continue;
       const advAmt = Number(details.advanceAmount || details.amount || 0);
+      const approvedAmt = Number(details.approvedAmount || advAmt || 0);
       const prStatus = String(pr.status || 'pending').toLowerCase();
       const mappedPr = {
         id: pr.id,
-        entityType: 'advance',
+        entityType: 'advance_payment',
         entityId: pr.id,
-        entityCode: pr.id,
-        entityTitle: details.title || `Tạm ứng: ${details.advancePurpose || pr.reason || 'Tạm ứng công tác phí'}`,
+        entityCode: prCode,
+        entityTitle: details.title || `Tạm ứng ${advAmt.toLocaleString('vi-VN')} VND cho ${details.advancePurpose || pr.reason || 'Tạm ứng công tác phí'}`,
         status: prStatus === 'approved' ? 'approved' : prStatus === 'rejected' ? 'rejected' : 'pending',
         priority: details.priority === 'urgent' ? 'urgent' : details.priority === 'high' ? 'high' : 'normal',
         dueDate: details.advanceDueDate || details.deadlineRefund || '',
@@ -14567,6 +14611,8 @@ app.get('/api/approval-requests', async (req, res) => {
           totalAmount: advAmt,
           soTien: advAmt,
           amount: advAmt,
+          approvedAmount: prStatus === 'approved' ? approvedAmt : undefined,
+          loaiText: 'Yêu cầu tạm ứng nhân viên',
           proposer: pr.employee?.name || details.applicantName || 'Cán bộ Seajong',
           departmentName: pr.employee?.department || details.department || 'Phòng ban Seajong',
           reason: details.advancePurpose || details.content || pr.reason,
@@ -14577,6 +14623,7 @@ app.get('/api/approval-requests', async (req, res) => {
       };
       filteredRequests.unshift(mappedPr);
       existingCodes.add(pr.id);
+      if (prCode) existingCodes.add(prCode);
     }
 
     res.json({ success: true, data: filteredRequests, items: filteredRequests.map((r, i) => mapApprovalRequestToDoc(r, i)) });
@@ -14856,32 +14903,415 @@ async function createDepositPaymentOrderOnApprove(approvalReq, approverName, not
 app.patch('/api/approval-documents/:id/status', async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, note, approverName, approveDeposit } = req.body || {};
-    const existingReq = await prisma.approvalRequest.findUnique({ where: { id } });
-    let nextMetadata = existingReq?.metadata;
-    if (approveDeposit !== undefined && existingReq) {
-      let parsedMeta = {};
+    const {
+      status,
+      note,
+      approverName,
+      approveDeposit,
+      approvedAmount,
+      entityCode: bodyEntityCode,
+      entityId: bodyEntityId,
+      entityType: bodyEntityType,
+      entityTitle: bodyEntityTitle,
+      department: bodyDepartment,
+      submitter: bodySubmitter,
+    } = req.body || {};
+
+    let existingReq = await prisma.approvalRequest.findFirst({
+      where: {
+        OR: [
+          { id },
+          { entityCode: id },
+          { entityId: id },
+          ...(bodyEntityCode ? [{ entityCode: bodyEntityCode }] : []),
+        ],
+      },
+    });
+
+    let parsedMeta = {};
+    if (existingReq?.metadata) {
       try {
         parsedMeta = typeof existingReq.metadata === 'string' ? JSON.parse(existingReq.metadata) : existingReq.metadata || {};
       } catch { /* ignore */ }
-      nextMetadata = JSON.stringify({ ...parsedMeta, approveDeposit: Boolean(approveDeposit) });
     }
-    const updated = await prisma.approvalRequest.update({
-      where: { id },
-      data: {
-        ...(status && { status }),
-        ...(note !== undefined && { note }),
-        ...(status === 'rejected' && note ? { rejectedReason: note } : {}),
-        ...(approverName && { approvedById: approverName }),
-        ...(status === 'approved' && { approvedAt: new Date() }),
-        ...(nextMetadata !== undefined && { metadata: nextMetadata }),
-      },
-    });
+
+    const numericApprovedAmount = Number(approvedAmount);
+    const hasCustomApprovedAmount = !isNaN(numericApprovedAmount) && numericApprovedAmount > 0;
+    if (approveDeposit !== undefined) {
+      parsedMeta.approveDeposit = Boolean(approveDeposit);
+    }
+    if (hasCustomApprovedAmount) {
+      parsedMeta.approvedAmount = numericApprovedAmount;
+    }
+
+    let updated;
+    if (existingReq) {
+      updated = await prisma.approvalRequest.update({
+        where: { id: existingReq.id },
+        data: {
+          ...(status && { status }),
+          ...(note !== undefined && { note }),
+          ...(status === 'rejected' && note ? { rejectedReason: note } : {}),
+          ...(approverName && { approvedById: approverName }),
+          ...(status === 'approved' && { approvedAt: new Date() }),
+          metadata: JSON.stringify(parsedMeta),
+        },
+      });
+    } else {
+      // Nếu hồ sơ xuất phát từ PersonalRequest / advance_payments chưa có trong bảng ApprovalRequest
+      const prRecord = await prisma.personalRequest.findFirst({
+        where: {
+          OR: [
+            { id },
+            ...(bodyEntityCode ? [{ id: bodyEntityCode }, { details: { contains: bodyEntityCode } }] : [{ details: { contains: id } }]),
+          ],
+        },
+        include: { employee: true },
+      }).catch(() => null);
+      let prDetails = {};
+      if (prRecord?.details) {
+        try {
+          prDetails = typeof prRecord.details === 'string' ? JSON.parse(prRecord.details) : prRecord.details || {};
+        } catch { /* ignore */ }
+      }
+      const fallbackAmt = hasCustomApprovedAmount
+        ? numericApprovedAmount
+        : Number(prDetails.advanceAmount || prDetails.amount || 0);
+      const originalAmt = Number(prDetails.advanceAmount || prDetails.amount || fallbackAmt || 0);
+      const resolvedCode = prDetails.code || bodyEntityCode || id;
+      const mergedMeta = {
+        ...prDetails,
+        ...parsedMeta,
+        totalAmount: originalAmt,
+        soTien: originalAmt,
+        amount: originalAmt,
+        approvedAmount: fallbackAmt,
+        loaiText: 'Yêu cầu tạm ứng nhân viên',
+      };
+      updated = await prisma.approvalRequest.create({
+        data: {
+          entityType: bodyEntityType || 'advance_payment',
+          entityId: prRecord?.id || bodyEntityId || id,
+          entityCode: resolvedCode,
+          entityTitle: bodyEntityTitle || prDetails.title || `Yêu cầu tạm ứng ${resolvedCode}`,
+          department: prRecord?.employee?.department || bodyDepartment || prDetails.department || 'Phòng ban Seajong',
+          requestedById: prRecord?.employeeId || '',
+          requestedByName: prRecord?.employee?.name || bodySubmitter || prDetails.applicantName || 'Cán bộ Seajong',
+          priority: 'high',
+          status: status || 'approved',
+          note: note || '',
+          ...(status === 'rejected' && note ? { rejectedReason: note } : {}),
+          ...(approverName && { approvedById: approverName }),
+          ...(status === 'approved' && { approvedAt: new Date() }),
+          metadata: JSON.stringify(mergedMeta),
+        },
+      });
+    }
 
     if (status === 'approved' && String(updated.entityType || '').toLowerCase() === 'purchase_order') {
       await recordPurchaseOrderDebtOnApprove(updated);
       if (approveDeposit === true) {
         await createDepositPaymentOrderOnApprove(updated, approverName, note);
+      }
+    }
+
+    const entLower = String(updated.entityType || bodyEntityType || '').toLowerCase();
+    const codeCheck = String(updated.entityCode || bodyEntityCode || id || '');
+    const isSupplierPaymentOrAdvance =
+      entLower === 'advance_supplier' ||
+      entLower === 'payable_payment' ||
+      codeCheck.startsWith('YCU-') ||
+      codeCheck.startsWith('YCCHI-');
+    const isAdvanceRequest =
+      !isSupplierPaymentOrAdvance &&
+      (entLower.includes('advance') ||
+        codeCheck.startsWith('YC-') ||
+        String(updated.entityTitle || '').toLowerCase().includes('tạm ứng'));
+
+    if ((status === 'approved' || status === 'rejected') && isSupplierPaymentOrAdvance) {
+      try {
+        const now = new Date();
+        const todayVN = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+        const approverDisplay = approverName
+          ? (approverName.includes('Giám') ? approverName : `${approverName} (Ban Giám Đốc)`)
+          : 'Lê Công Vụ (Ban Giám Đốc)';
+        const refCode = updated.entityCode || bodyEntityCode || id;
+        const finalAmt = hasCustomApprovedAmount
+          ? numericApprovedAmount
+          : Number(parsedMeta?.totalAmount || parsedMeta?.amount || 0);
+        if (status === 'approved') {
+          if (finalAmt > 0) {
+            await prisma.$executeRawUnsafe(
+              `UPDATE payment_orders
+               SET amount = ?, status = 'pending', status_label = 'Chờ chi tiền',
+                   approved_by = ?, approved_date = ?, approval_note = ?, updated_at = CURRENT_TIMESTAMP
+               WHERE order_code = ? OR ref_code = ? OR id = ?`,
+              finalAmt,
+              approverDisplay,
+              todayVN,
+              note || 'Ban Giám đốc đã phê duyệt lệnh chi / ứng trước NCC',
+              refCode,
+              refCode,
+              updated.entityId || id
+            );
+          } else {
+            await prisma.$executeRawUnsafe(
+              `UPDATE payment_orders
+               SET status = 'pending', status_label = 'Chờ chi tiền',
+                   approved_by = ?, approved_date = ?, approval_note = ?, updated_at = CURRENT_TIMESTAMP
+               WHERE order_code = ? OR ref_code = ? OR id = ?`,
+              approverDisplay,
+              todayVN,
+              note || 'Ban Giám đốc đã phê duyệt lệnh chi / ứng trước NCC',
+              refCode,
+              refCode,
+              updated.entityId || id
+            );
+          }
+        } else {
+          await prisma.$executeRawUnsafe(
+            `UPDATE payment_orders
+             SET status = 'rejected', status_label = 'Từ chối chi',
+                 approval_note = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE (order_code = ? OR ref_code = ? OR id = ?) AND status != 'completed'`,
+            note || 'Ban Giám đốc từ chối phê duyệt',
+            refCode,
+            refCode,
+            updated.entityId || id
+          );
+        }
+      } catch (suppAprErr) {
+        console.warn('⚠️ Lỗi đồng bộ payment_orders cho đề xuất NCC:', suppAprErr.message);
+      }
+    }
+
+    if ((status === 'approved' || status === 'rejected') && isAdvanceRequest) {
+      try {
+        const now = new Date();
+        const todayVN = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+        const approverDisplay = approverName
+          ? (approverName.includes('Giám') ? approverName : `${approverName} (Ban Giám Đốc)`)
+          : 'Lê Công Vụ (Ban Giám Đốc)';
+        const advCode = updated.entityCode || bodyEntityCode || id;
+        const advId = updated.entityId || bodyEntityId || id;
+
+        // Lấy thông tin phiếu tạm ứng hiện tại trong advance_payments
+        const advRows = await prisma.$queryRawUnsafe(
+          `SELECT * FROM advance_payments WHERE id = ? OR code = ? LIMIT 1`,
+          advId || '',
+          advCode || ''
+        );
+        const advRow = Array.isArray(advRows) && advRows.length > 0 ? advRows[0] : null;
+        const finalApprovedAmount = hasCustomApprovedAmount
+          ? numericApprovedAmount
+          : Number(advRow?.amount || parsedMeta?.totalAmount || parsedMeta?.amount || 0);
+
+        if (status === 'approved') {
+          await prisma.$executeRawUnsafe(
+            `ALTER TABLE advance_payments ADD COLUMN approved_amount REAL`
+          ).catch(() => { });
+          if (finalApprovedAmount > 0) {
+            await prisma.$executeRawUnsafe(
+              `UPDATE advance_payments SET status = 'approved', review_status = 'in_review', approved_amount = ?, approver = ?, approved_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? OR code = ?`,
+              finalApprovedAmount,
+              approverDisplay,
+              todayVN,
+              advId || '',
+              advCode || ''
+            );
+          } else {
+            await prisma.$executeRawUnsafe(
+              `UPDATE advance_payments SET status = 'approved', review_status = 'in_review', approver = ?, approved_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? OR code = ?`,
+              approverDisplay,
+              todayVN,
+              advId || '',
+              advCode || ''
+            );
+          }
+
+          // Đồng bộ sang bảng advance_settlements (Quyết toán hoàn ứng)
+          const targetAdvId = advRow?.id || advId || advCode;
+          const targetAdvCode = advRow?.code || advCode;
+          const existingStl = await prisma.$queryRawUnsafe(
+            `SELECT id FROM advance_settlements WHERE advance_id = ? OR advance_code = ? LIMIT 1`,
+            targetAdvId,
+            targetAdvCode
+          );
+          if (Array.isArray(existingStl) && existingStl.length > 0) {
+            await prisma.$executeRawUnsafe(
+              `UPDATE advance_settlements SET advance_amount = ?, approver = ?, approved_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+              finalApprovedAmount,
+              approverDisplay,
+              todayVN,
+              existingStl[0].id
+            );
+          } else if (advRow) {
+            const stlId = `SET-${targetAdvId}`;
+            const stlCode = `QTU-${String(targetAdvCode).replace(/^(YCU-|YC-)/, '')}`;
+            await prisma.$executeRawUnsafe(
+              `INSERT INTO advance_settlements (
+                id, advance_id, advance_code, settlement_code, employee_name, employee_code,
+                department, purpose, project, advance_amount, approved_date,
+                approver, deadline_refund, status, actual_spent, invoices, note
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unsettled', 0, '[]', ?)`,
+              stlId,
+              targetAdvId,
+              targetAdvCode,
+              stlCode,
+              advRow.employee_name || updated.requestedByName || 'Cán bộ Seajong',
+              advRow.employee_id || advRow.employee_code || 'NV',
+              advRow.department || updated.department || 'Phòng ban Seajong',
+              advRow.purpose || updated.entityTitle || 'Tạm ứng công tác phí',
+              advRow.project || '',
+              finalApprovedAmount,
+              todayVN,
+              approverDisplay,
+              advRow.deadline_refund || advRow.due_date || todayVN,
+              advRow.note || ''
+            );
+          }
+
+          // Tự động sinh Lệnh chi tiền trong bảng payment_orders để hiển thị ở danh sách Trang Tổng quan (cashflow-notices)
+          if (finalApprovedAmount > 0) {
+            const poRefCode = advRow?.code || advCode;
+            const poId = `PO-ADV-${poRefCode}`;
+            const poOrderCode = `LC-${String(poRefCode).replace(/^(YC-|YCU-)/, '')}`;
+            const beneficiaryName = advRow?.employee_name || parsedMeta?.proposer || updated.requestedByName || 'Cán bộ nhân viên';
+            const beneficiaryCode = advRow?.employee_id || parsedMeta?.employeeId || 'NV';
+            const deptName = advRow?.department || updated.department || 'Phòng ban Seajong';
+            const paymentMethod = advRow?.payment_method || parsedMeta?.paymentMethod || 'bank_transfer';
+            const bankName = advRow?.bank_name || parsedMeta?.bankName || '';
+            const bankAccount = advRow?.bank_account || parsedMeta?.bankAccount || '';
+            const purposeText = advRow?.purpose || parsedMeta?.reason || updated.entityTitle || `Chi tạm ứng ${poRefCode}`;
+            const dueDateStr = advRow?.due_date || parsedMeta?.dueDate || todayVN;
+
+            const existingPo = await prisma.$queryRawUnsafe(
+              `SELECT id FROM payment_orders WHERE id = ? OR order_code = ? OR (ref_code = ? AND status != 'completed') LIMIT 1`,
+              poId,
+              poOrderCode,
+              poRefCode
+            );
+
+            if (Array.isArray(existingPo) && existingPo.length > 0) {
+              await prisma.$executeRawUnsafe(
+                `UPDATE payment_orders SET
+                  amount = ?,
+                  title = ?,
+                  beneficiary_name = ?,
+                  department = ?,
+                  purpose = ?,
+                  approved_by = ?,
+                  approved_date = ?,
+                  approval_note = ?,
+                  status = 'pending',
+                  status_label = 'Chờ chi tiền',
+                  updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?`,
+                finalApprovedAmount,
+                `Chi tạm ứng ${poRefCode} - ${beneficiaryName}`,
+                beneficiaryName,
+                deptName,
+                purposeText,
+                approverDisplay,
+                todayVN,
+                note || 'Giám đốc đã phê duyệt tạm ứng',
+                existingPo[0].id
+              );
+            } else {
+              await prisma.$executeRawUnsafe(
+                `INSERT INTO payment_orders (
+                  id, order_code, ref_type, ref_id, ref_code, title,
+                  beneficiary_name, beneficiary_code, department,
+                  amount, amount_in_words, payment_method, bank_name, bank_account, bank_branch,
+                  purpose, due_date, approved_by, approved_date, approval_note,
+                  status, status_label, created_at, updated_at
+                ) VALUES (?, ?, 'advance_payment', ?, ?, ?, ?, ?, ?, ?, '', ?, ?, '', '', ?, ?, ?, ?, ?, 'pending', 'Chờ chi tiền', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+                poId,
+                poOrderCode,
+                advRow?.id || advId,
+                poRefCode,
+                `Chi tạm ứng ${poRefCode} - ${beneficiaryName}`,
+                beneficiaryName,
+                beneficiaryCode,
+                deptName,
+                finalApprovedAmount,
+                paymentMethod,
+                bankName,
+                bankAccount,
+                purposeText,
+                dueDateStr,
+                approverDisplay,
+                todayVN,
+                note || 'Giám đốc đã phê duyệt tạm ứng'
+              );
+            }
+          }
+        } else {
+          // Từ chối yêu cầu tạm ứng -> Đổi trạng thái thành rejected (Từ chối) và xóa lệnh chi chờ (nếu có)
+          await prisma.$executeRawUnsafe(
+            `UPDATE advance_payments SET status = 'rejected', approver = ?, rejected_date = ?, reject_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? OR code = ?`,
+            approverDisplay,
+            todayVN,
+            note || 'Ban Giám đốc từ chối phê duyệt tạm ứng',
+            advId || '',
+            advCode || ''
+          );
+          await prisma.$executeRawUnsafe(
+            `DELETE FROM payment_orders WHERE (ref_code = ? OR ref_id = ?) AND status != 'completed'`,
+            advCode || '',
+            advId || ''
+          );
+          await prisma.$executeRawUnsafe(
+            `DELETE FROM advance_settlements WHERE (advance_code = ? OR advance_id = ?) AND status = 'unsettled'`,
+            advCode || '',
+            advId || ''
+          );
+        }
+
+        // Đồng bộ trạng thái sang bảng PersonalRequest và approval_documents
+        if (advCode || advId) {
+          const matchingPrs = await prisma.personalRequest.findMany({
+            where: {
+              OR: [
+                ...(advCode ? [{ id: advCode }, { details: { contains: advCode } }] : []),
+                ...(advId ? [{ id: advId }, { details: { contains: advId } }] : []),
+              ],
+            },
+          }).catch(() => []);
+          for (const prItem of matchingPrs) {
+            let prDet = {};
+            try {
+              prDet = typeof prItem.details === 'string' ? JSON.parse(prItem.details) : prItem.details || {};
+            } catch { /* ignore */ }
+            if (status === 'approved' && finalApprovedAmount > 0) {
+              prDet.approvedAmount = finalApprovedAmount;
+            }
+            prDet.status = status === 'approved' ? 'approved' : 'rejected';
+            prDet.statusLabel = status === 'approved' ? 'Đã duyệt' : 'Từ chối';
+            await prisma.personalRequest.update({
+              where: { id: prItem.id },
+              data: {
+                status: status === 'approved' ? 'APPROVED' : 'REJECTED',
+                directorApproved: status === 'approved',
+                directorNote: note || (status === 'approved' ? 'Giám đốc đã phê duyệt' : 'Giám đốc từ chối'),
+                details: JSON.stringify(prDet),
+              },
+            });
+          }
+
+          await prisma.$executeRawUnsafe(
+            `UPDATE approval_documents SET status = ?, approved_by = ?, approved_date = ?, approval_note = ?, rejection_reason = ? WHERE code = ? OR id = ?`,
+            status === 'approved' ? 'approved' : 'rejected',
+            approverDisplay,
+            todayVN,
+            status === 'approved' ? (note || 'Giám đốc đã phê duyệt') : '',
+            status === 'rejected' ? (note || 'Ban Giám đốc từ chối phê duyệt') : '',
+            advCode || '',
+            advId || ''
+          ).catch(() => { });
+        }
+      } catch (syncAdvErr) {
+        console.warn('[Sync advance_payment on approval error]:', syncAdvErr?.message);
       }
     }
 
@@ -14911,6 +15341,236 @@ app.patch('/api/approval-documents/:id/status', async (req, res) => {
     res.json({ success: true, data: mapApprovalRequestToDoc(updated, 0) });
   } catch (err) {
     console.error('[PATCH /api/approval-documents/:id/status]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/advance-payments/:id/submit-director: Trình Giám đốc phê duyệt yêu cầu tạm ứng vượt định mức ──
+app.post('/api/advance-payments/:id/submit-director', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const b = req.body || {};
+
+    const rows = await prisma.$queryRawUnsafe(
+      `SELECT * FROM advance_payments WHERE id = ? OR code = ? LIMIT 1`,
+      id,
+      b.code || id
+    );
+    const adv = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+
+    const code = adv?.code || b.code || id;
+    const employeeName = adv?.employee_name || b.employeeName || 'Nhân viên';
+    const employeeCode = adv?.employee_code || b.employeeCode || 'NV';
+    const department = adv?.department || b.department || 'Phòng Tài chính - Kế toán';
+    const purpose = adv?.purpose || b.purpose || 'Yêu cầu tạm ứng chi phí';
+    const project = adv?.project || b.project || '';
+    const amount = Number(adv?.amount ?? b.amount ?? 0);
+    const requestedDate = adv?.requested_date || b.requestedDate || new Date().toLocaleDateString('vi-VN');
+    const deadlineRefund = adv?.deadline_refund || b.deadlineRefund || '';
+    const paymentMethod = adv?.payment_method || b.paymentMethod || 'bank_transfer';
+    const bankName = adv?.bank_name || b.bankInfo?.bankName || '';
+    const bankAccount = adv?.bank_account || b.bankInfo?.accountNumber || '';
+    const bankAccountName = adv?.bank_account_name || b.bankInfo?.accountName || '';
+    const note = adv?.note || b.note || '';
+    const limitAmount = Number(b.limitAmount || 3000000);
+    const submittedBy = b.submittedBy || 'Bộ phận Kế toán';
+
+    // 1. Cập nhật trạng thái review_status = 'in_review' trong bảng advance_payments
+    await prisma.$executeRawUnsafe(
+      `UPDATE advance_payments
+       SET review_status = 'in_review',
+           approver = COALESCE(NULLIF(approver, ''), 'Lê Công Vụ - Ban Giám đốc'),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? OR code = ?`,
+      adv?.id || id,
+      code
+    );
+
+    // 2. Đồng bộ trạng thái sang PersonalRequest nếu có
+    try {
+      const pr = await prisma.personalRequest.findFirst({
+        where: { OR: [{ id: code }, { id }, { details: { contains: code } }] },
+      });
+      if (pr) {
+        let details = {};
+        try {
+          details = typeof pr.details === 'string' ? JSON.parse(pr.details) : pr.details || {};
+        } catch { /* ignore */ }
+        await prisma.personalRequest.update({
+          where: { id: pr.id },
+          data: {
+            details: JSON.stringify({
+              ...details,
+              approver: 'Lê Công Vụ - Ban Giám đốc',
+              reviewStatus: 'in_review',
+              submittedToDirectorAt: new Date().toISOString(),
+              submittedBy,
+            }),
+          },
+        });
+      }
+    } catch (prErr) {
+      console.warn('[Sync PersonalRequest on submit-director]:', prErr?.message);
+    }
+
+    // 3. Tạo hoặc cập nhật hồ sơ trong bảng ApprovalRequest (Trung tâm phê duyệt của Ban Giám đốc)
+    const senderUser = await prisma.user.findFirst({
+      where: {
+        AND: [
+          { role: 'USER' },
+          { name: { not: 'Lê Công Vụ' } },
+        ],
+      },
+      select: { id: true, name: true },
+    });
+    const senderUserId = senderUser?.id || 'cmra9to1p00048oq7p8si6x1j';
+
+    const entityTitle = `Yêu cầu tạm ứng ${code} - ${employeeName} (${Number(amount).toLocaleString('vi-VN')} đ)`;
+    const reasonSummary = `Mục đích: ${purpose}${project ? ` (${project})` : ''}. Ngày hoàn tạm ứng: ${deadlineRefund || requestedDate}. Số tiền ${Number(amount).toLocaleString('vi-VN')} đ vượt hạn mức quy định trong Nội quy lao động (${Number(limitAmount).toLocaleString('vi-VN')} đ), kính trình Giám đốc phê duyệt.`;
+
+    const metaObj = {
+      type: 'advance_payment',
+      loaiText: 'Yêu cầu tạm ứng nhân viên',
+      code,
+      employeeName,
+      employeeCode,
+      department,
+      purpose,
+      project,
+      amount,
+      totalAmount: amount,
+      soTien: amount,
+      requestedDate,
+      deadlineRefund,
+      paymentMethod,
+      bankName,
+      bankAccount,
+      bankAccountName,
+      note,
+      limitAmount,
+      reason: reasonSummary,
+      proposer: employeeName,
+      submittedBy,
+    };
+
+    const existingApproval = await prisma.approvalRequest.findFirst({
+      where: {
+        entityCode: code,
+        entityType: { in: ['advance_payment', 'ADVANCE_REQUEST'] },
+      },
+    });
+
+    let approvalReq;
+    if (existingApproval) {
+      approvalReq = await prisma.approvalRequest.update({
+        where: { id: existingApproval.id },
+        data: {
+          entityTitle,
+          department,
+          requestedByName: `${employeeName} (Trình bởi: ${submittedBy})`,
+          priority: 'urgent',
+          status: 'pending',
+          note: reasonSummary,
+          metadata: JSON.stringify(metaObj),
+        },
+      });
+    } else {
+      approvalReq = await prisma.approvalRequest.create({
+        data: {
+          entityType: 'advance_payment',
+          entityId: adv?.id || id,
+          entityCode: code,
+          entityTitle,
+          department,
+          requestedById: senderUserId,
+          requestedByName: `${employeeName} (Trình bởi: ${submittedBy})`,
+          priority: 'urgent',
+          status: 'pending',
+          note: reasonSummary,
+          metadata: JSON.stringify(metaObj),
+        },
+      });
+    }
+
+    // Đồng bộ vào bảng approval_documents SQLite để đảm bảo hiển thị xuyên suốt
+    try {
+      const nowVN = new Date().toLocaleDateString('vi-VN');
+      await prisma.$executeRawUnsafe(
+        `INSERT OR REPLACE INTO approval_documents (
+          id, doc_code, title, doc_type, doc_type_name, department, department_code,
+          submitter, submitter_role, submitted_date, deadline, priority, status,
+          value, summary, attachments, steps, history, notes, ref_type, ref_id,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        `DOC-ADV-${code}`,
+        code,
+        entityTitle,
+        'advance',
+        'Yêu cầu tạm ứng nhân viên',
+        department,
+        'finance',
+        employeeName,
+        department,
+        requestedDate || nowVN,
+        deadlineRefund || nowVN,
+        'urgent',
+        'pending',
+        amount,
+        reasonSummary,
+        '[]',
+        '[]',
+        '[]',
+        note || reasonSummary,
+        'advance_payment',
+        adv?.id || id
+      );
+    } catch (docErr) {
+      console.warn('[Sync approval_documents on submit-director]:', docErr?.message);
+    }
+
+    // 4. Gửi thông báo thời gian thực cho Giám đốc (Ban Giám đốc)
+    try {
+      const directorUsers = await prisma.user.findMany({
+        where: {
+          OR: [
+            { role: 'ADMIN' },
+            { email: { contains: 'giamdoc' } },
+            { name: { contains: 'Lê Công Vụ' } },
+            { employee: { departmentCode: 'board' } },
+          ],
+        },
+        select: { id: true, name: true },
+      });
+      const directorIds = directorUsers.map((u) => u.id);
+
+      await sendCrossDeptNotification({
+        title: `📑 Trình Giám đốc phê duyệt tạm ứng: ${code} (${Number(amount).toLocaleString('vi-VN')} đ)`,
+        content: `**${submittedBy}** vừa trình Giám đốc xin phê duyệt yêu cầu tạm ứng **${code}** của **${employeeName}** (${department}) với số tiền **${Number(amount).toLocaleString('vi-VN')} đ** (vượt mức quy định **${Number(limitAmount).toLocaleString('vi-VN')} đ** trong Nội quy lao động).\n• Mục đích: ${purpose}${project ? ` — ${project}` : ''}\n• Ngày hoàn tạm ứng: ${deadlineRefund || requestedDate}\nVui lòng vào Trung tâm phê duyệt hoặc Quản lý tạm ứng để xét duyệt.`,
+        type: 'warning',
+        priority: 'urgent',
+        sourceDept: 'Phòng Tài chính – Kế toán',
+        targetDept: 'board',
+        recipientUserIds: directorIds,
+        senderUserId,
+        senderName: submittedBy,
+        link: '/board/approvals',
+        entityType: 'advance_payment',
+        entityId: approvalReq.id,
+        allowSelfNotify: true,
+      });
+    } catch (notifErr) {
+      console.warn('[Director notification error on submit-director]:', notifErr?.message);
+    }
+
+    res.json({
+      success: true,
+      code,
+      reviewStatus: 'in_review',
+      approvalRequestId: approvalReq.id,
+      message: `Đã gửi thông tin và thông báo trình Giám đốc xin phê duyệt yêu cầu tạm ứng ${code}.`,
+    });
+  } catch (err) {
+    console.error('[POST /api/advance-payments/:id/submit-director] Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -15357,6 +16017,18 @@ app.patch('/api/finance/payment-notifications/:id', async (req, res) => {
 
       return up;
     });
+
+    if (status === 'verified') {
+      if (updated?.saleOrderId) {
+        await syncOrderToAccountingAndDebt(updated.saleOrderId, false).catch((e) =>
+          console.warn('Lỗi syncOrderToAccountingAndDebt sau khi xác nhận báo có:', e.message)
+        );
+      } else {
+        await syncPrismaFinanceToAccountingTables(financeDb).catch((e) =>
+          console.warn('Lỗi syncPrismaFinanceToAccountingTables sau khi xác nhận báo có:', e.message)
+        );
+      }
+    }
 
     res.json(updated);
   } catch (err) {
@@ -18145,44 +18817,12 @@ app.get('/api/sales/internal-reports/income', async (req, res) => {
         insuranceDeduction = payrollRecord.khauTruBH;
       }
 
-      // 2. Tính trừ tạm ứng trong tháng
-      const monthYearStr1 = `${month}/${year}`;
-      const monthYearStr2 = `${String(month).padStart(2, '0')}/${year}`;
-      let totalAdvanceFromRequests = 0;
-
-      for (const reqItem of advanceRequests) {
-        let parsed = null;
-        try {
-          parsed =
-            typeof reqItem.details === 'string'
-              ? JSON.parse(reqItem.details)
-              : reqItem.details;
-        } catch {
-          parsed = null;
-        }
-
-        const reqAmount = Number(parsed?.advanceAmount || parsed?.amount || 0);
-        if (reqAmount <= 0) continue;
-
-        const isDeductFromSalary = parsed?.deductFromSalary !== undefined ? Boolean(parsed.deductFromSalary) : true;
-        const isSettled = Boolean(parsed?.settled || parsed?.isRefunded || reqItem.status === 'COMPLETED');
-        if (!isDeductFromSalary || isSettled) continue;
-
-        const salaryMonth = String(parsed?.salaryMonth || '').trim();
-        if (salaryMonth === monthYearStr1 || salaryMonth === monthYearStr2) {
-          totalAdvanceFromRequests += reqAmount;
-        } else {
-          const refDate = parseFlexibleDate(parsed?.advanceDueDate || parsed?.deadlineRefund) || reqItem.endDate || reqItem.startDate || reqItem.createdAt;
-          if (refDate && refDate >= startDate && refDate <= endDate) {
-            totalAdvanceFromRequests += reqAmount;
-          }
-        }
+      // 2. Tính trừ tạm ứng trong tháng (chỉ tính các khoản ĐÃ CHI TIỀN và có chọn Trừ tạm ứng vào lương, lấy từ kết quả computeHrAttendanceAndPayroll)
+      if (empHr && empHr.advanceDeduction !== undefined) {
+        advanceDeduction = Number(empHr.advanceDeduction) || 0;
+      } else {
+        advanceDeduction = payrollRecord?.khauTruKhac || 0;
       }
-
-      advanceDeduction =
-        totalAdvanceFromRequests > 0
-          ? totalAdvanceFromRequests
-          : payrollRecord?.khauTruKhac || 0;
     }
 
     if (!income) {
@@ -19533,37 +20173,56 @@ app.get('/api/notifications', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
     }
 
-    const recipients = await prisma.notificationRecipient.findMany({
-      where: {
-        userId: currentUserId,
-        notification: {
-          createdById: { not: currentUserId },
+    const [recipients, currentUserEmp] = await Promise.all([
+      prisma.notificationRecipient.findMany({
+        where: {
+          userId: currentUserId,
+          notification: {
+            OR: [
+              { createdById: { not: currentUserId } },
+              { audienceType: 'personal_slip' },
+            ],
+          },
         },
-      },
-      include: {
-        notification: {
-          include: {
-            createdBy: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                employee: {
-                  select: {
-                    fullName: true,
-                    departmentName: true,
-                    departmentCode: true,
-                    position: true,
+        include: {
+          notification: {
+            include: {
+              createdBy: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  employee: {
+                    select: {
+                      fullName: true,
+                      departmentName: true,
+                      departmentCode: true,
+                      position: true,
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    });
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
+      prisma.employee.findFirst({
+        where: { userId: currentUserId },
+        include: {
+          attendanceConfirmations: true,
+          payrollConfirmations: true,
+        },
+      }).catch(() => null),
+    ]);
+
+    const confirmedAttSet = new Set(
+      (currentUserEmp?.attendanceConfirmations || []).map((c) => `${c.employeeId}_${c.month}_${c.year}`)
+    );
+    const confirmedPaySet = new Set(
+      (currentUserEmp?.payrollConfirmations || []).map((c) => `${c.employeeId}_${c.month}_${c.year}`)
+    );
 
     const DEPT_NAMES_MAP = {
       board: 'Ban Giám đốc',
@@ -19658,7 +20317,9 @@ app.get('/api/notifications', async (req, res) => {
       let link = meta.link || meta.url || '';
       if (!link) {
         const titleLower = (nr.notification.title || '').toLowerCase();
-        if (titleLower.includes('phê duyệt') || titleLower.includes('trình duyệt')) {
+        if (titleLower.includes('tạm ứng') || titleLower.includes('hoàn ứng')) {
+          link = '/finance/advances';
+        } else if (titleLower.includes('phê duyệt') || titleLower.includes('trình duyệt')) {
           link = '/board/approvals';
         } else if (titleLower.includes('xuất kho') || titleLower.includes('nhập kho') || titleLower.includes('logistics')) {
           link = '/logistics';
@@ -19670,6 +20331,18 @@ app.get('/api/notifications', async (req, res) => {
           link = '/production/defects';
         }
       }
+
+      const slipType = meta.slipType || null;
+      const slipEmpId = meta.employeeId || currentUserEmp?.id || '';
+      const slipMonth = Number(meta.month || meta.slipData?.month || 0);
+      const slipYear = Number(meta.year || meta.slipData?.year || 0);
+      const confirmKey = `${slipEmpId}_${slipMonth}_${slipYear}`;
+      const isSlipConfirmed =
+        slipType === 'ATTENDANCE_SLIP'
+          ? confirmedAttSet.has(confirmKey) || Boolean(meta.isConfirmed)
+          : slipType === 'PAYSLIP'
+          ? confirmedPaySet.has(confirmKey) || Boolean(meta.isPayrollConfirmed)
+          : false;
 
       return {
         id: nr.id,
@@ -19685,6 +20358,12 @@ app.get('/api/notifications', async (req, res) => {
         priority: priorityLabel,
         priorityLevel: rawPriority,
         link,
+        slipType,
+        slipData: meta.slipData || null,
+        employeeId: slipEmpId || null,
+        month: slipMonth || null,
+        year: slipYear || null,
+        isSlipConfirmed,
       };
     });
 
@@ -22534,6 +23213,48 @@ async function executeLogisticsRetentionCleanup({
     return delDefects.count;
   }
 
+  // Trường hợp dọn dẹp Phiếu tạm ứng & hoàn tạm ứng (ADVANCE_PAYMENTS)
+  if (type === 'ADVANCE_PAYMENTS') {
+    const rows = await prisma.$queryRawUnsafe(
+      `SELECT id, code, status, requested_date, created_at FROM advance_payments`
+    );
+    if (!Array.isArray(rows) || rows.length === 0) return 0;
+
+    const eligibleRows = rows.filter((r) => {
+      const st = String(r.status || 'pending').toLowerCase();
+      const isPending = st === 'pending';
+      const isDone = st === 'approved' || st === 'rejected';
+      if (!((applyInProgress && isPending) || (applyCompleted && isDone))) return false;
+
+      let recordDate = null;
+      const reqStr = String(r.requested_date || '').trim();
+      const dmy = reqStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (dmy) {
+        recordDate = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
+      } else if (reqStr) {
+        const parsed = new Date(reqStr);
+        if (!isNaN(parsed.getTime())) recordDate = parsed;
+      }
+      if (!recordDate && r.created_at) {
+        const parsed = new Date(r.created_at);
+        if (!isNaN(parsed.getTime())) recordDate = parsed;
+      }
+      return recordDate ? recordDate.getTime() < cutoffDate.getTime() : false;
+    });
+
+    if (eligibleRows.length === 0) return 0;
+    for (const r of eligibleRows) {
+      await prisma.$executeRawUnsafe(`DELETE FROM advance_payments WHERE id = ?`, r.id);
+      if (r.code) {
+        await prisma.$executeRawUnsafe(`DELETE FROM advance_settlements WHERE advance_code = ?`, r.code);
+        await prisma.personalRequest.deleteMany({
+          where: { OR: [{ id: r.code }, { id: r.id }, { details: { contains: r.code } }] },
+        }).catch(() => { });
+      }
+    }
+    return eligibleRows.length;
+  }
+
   // Trường hợp dọn dẹp Nhật ký hoạt động kho / Nhập, xuất và kiểm kho (AUDIT_LOGS)
   if (type === 'AUDIT_LOGS') {
     let deletedAuditCount = 0;
@@ -22663,10 +23384,16 @@ async function runScheduledLogisticsRetentionFromDB() {
   }
 }
 
-setTimeout(() => {
+if (globalThis.__seajongLogisticsRetentionTimeout) {
+  clearTimeout(globalThis.__seajongLogisticsRetentionTimeout);
+}
+if (globalThis.__seajongLogisticsRetentionTimer) {
+  clearInterval(globalThis.__seajongLogisticsRetentionTimer);
+}
+globalThis.__seajongLogisticsRetentionTimeout = setTimeout(() => {
   runScheduledLogisticsRetentionFromDB();
 }, 5000);
-setInterval(() => {
+globalThis.__seajongLogisticsRetentionTimer = setInterval(() => {
   runScheduledLogisticsRetentionFromDB();
 }, 30 * 60 * 1000);
 
@@ -22754,6 +23481,33 @@ app.get('/api/logistics/completed-cleanup-settings', async (req, res) => {
         eligibleTicketsCount = await prisma.defectRecord.count({
           where: { OR: defectOrConditions },
         });
+      }
+    } else if (type === 'ADVANCE_PAYMENTS') {
+      const rows = await prisma.$queryRawUnsafe(
+        `SELECT id, code, status, requested_date, created_at FROM advance_payments`
+      );
+      if (Array.isArray(rows)) {
+        eligibleTicketsCount = rows.filter((r) => {
+          const st = String(r.status || 'pending').toLowerCase();
+          const isPending = st === 'pending';
+          const isDone = st === 'approved' || st === 'rejected';
+          if (!((applyInProgress && isPending) || (applyCompleted && isDone))) return false;
+
+          let recordDate = null;
+          const reqStr = String(r.requested_date || '').trim();
+          const dmy = reqStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+          if (dmy) {
+            recordDate = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
+          } else if (reqStr) {
+            const parsed = new Date(reqStr);
+            if (!isNaN(parsed.getTime())) recordDate = parsed;
+          }
+          if (!recordDate && r.created_at) {
+            const parsed = new Date(r.created_at);
+            if (!isNaN(parsed.getTime())) recordDate = parsed;
+          }
+          return recordDate ? recordDate.getTime() < cutoffDate.getTime() : false;
+        }).length;
       }
     } else if (type === 'AUDIT_LOGS') {
       if (applyCompleted) {
@@ -25768,6 +26522,94 @@ app.post('/api/personal-requests', async (req, res) => {
       await syncPersonalRequestAdvanceToFinance(created.id, prisma);
     } catch (syncAdvErr) {
       console.warn('⚠️ Lỗi đồng bộ phiếu tạm ứng sau POST:', syncAdvErr.message);
+    }
+
+    // Tự động gửi thông báo thời gian thực cho Bộ phận Kế toán khi nhân viên khởi tạo yêu cầu tạm ứng / hoàn tạm ứng
+    try {
+      const reqTypeLower = String(body.type || '').toLowerCase().trim();
+      const isAdvReq =
+        reqTypeLower === 'advance' ||
+        reqTypeLower === 'salary-advance' ||
+        reqTypeLower === 'salary_advance' ||
+        reqTypeLower === 'advance_payment' ||
+        reqTypeLower.includes('tạm ứng');
+      const isRefundReq =
+        reqTypeLower === 'refund' ||
+        reqTypeLower === 'advance-refund' ||
+        reqTypeLower === 'advance_refund' ||
+        reqTypeLower.includes('hoàn ứng');
+
+      if (isAdvReq || isRefundReq) {
+        const applicantName =
+          employee.fullName ||
+          employee.name ||
+          body.applicantName ||
+          body.employeeName ||
+          'Cán bộ nhân viên';
+        const deptName =
+          employee.departmentName ||
+          employee.department ||
+          body.department ||
+          'Phòng ban';
+        const reqCode = body.code || created.id;
+        const advAmount = Number(body.advanceAmount || body.amount || body.initialAdvanceAmount || 0);
+        const actualSpent = Number(body.actualSpentAmount || body.actualSpent || 0);
+        const purpose =
+          body.advancePurpose ||
+          body.purpose ||
+          body.title ||
+          created.reason ||
+          (isRefundReq ? 'Hoàn tạm ứng chi phí' : 'Tạm ứng công tác phí');
+        const dueDate = body.advanceDueDate || body.deadlineRefund || 'Theo quy định';
+        const isCash = body.paymentMethod === 'cash' || body.method === 'cash';
+        const payMethodText = isCash
+          ? 'Tiền mặt tại quỹ'
+          : `Chuyển khoản (${body.bankName || 'Ngân hàng'}${body.bankAccount ? ` - STK: ${body.bankAccount}` : ''})`;
+        const approverName = body.approver || 'Phòng Tài chính – Kế toán';
+
+        const notifTitle = isRefundReq
+          ? `[Hoàn tạm ứng TK 141] Yêu cầu quyết toán hoàn ứng ${reqCode} — ${applicantName}`
+          : `[Tạm ứng TK 141] Đề nghị tạm ứng mới ${reqCode} (${advAmount.toLocaleString('vi-VN')} đ) — ${applicantName}`;
+
+        const notifContent = isRefundReq
+          ? [
+            `Bộ phận **Phòng Tài chính - Kế toán** vừa nhận được hồ sơ đề nghị quyết toán hoàn tạm ứng từ **${applicantName}** (${deptName}):`,
+            `• Mã phiếu hoàn ứng: **${reqCode}** (Phiếu gốc: **${body.advanceRefCode || reqCode}**)`,
+            `• Số tiền đã tạm ứng: **${advAmount.toLocaleString('vi-VN')} đ**`,
+            `• Thực chi theo hóa đơn: **${actualSpent.toLocaleString('vi-VN')} đ**`,
+            `• Nội dung giải trình: **${purpose}**`,
+            `• Người tiếp nhận xử lý: **${approverName}**`,
+            `Vui lòng kiểm tra chứng từ và đối soát tại trang **Quản lý tạm ứng và hoàn tạm ứng**.`,
+          ].join('\n')
+          : [
+            `Bộ phận **Phòng Tài chính - Kế toán** vừa nhận được đề nghị tạm ứng mới cần thẩm định và xử lý:`,
+            `• Mã phiếu tạm ứng: **${reqCode}**`,
+            `• Người đề xuất: **${applicantName}** (${deptName})`,
+            `• Số tiền xin tạm ứng: **${advAmount.toLocaleString('vi-VN')} đ**`,
+            `• Mục đích tạm ứng: **${purpose}**`,
+            `• Phương thức nhận tiền: **${payMethodText}**`,
+            `• Hạn hoàn ứng dự kiến: **${dueDate}**`,
+            `• Người phê duyệt: **${approverName}**`,
+            `Vui lòng kiểm tra và xử lý tại trang **Quản lý tạm ứng và hoàn tạm ứng**.`,
+          ].join('\n');
+
+        await sendCrossDeptNotification({
+          title: notifTitle,
+          content: notifContent,
+          type: body.priority === 'urgent' ? 'urgent' : 'warning',
+          priority: body.priority === 'urgent' ? 'urgent' : 'high',
+          sourceDept: deptName,
+          targetDept: 'finance',
+          senderUserId: employee.userId || body.userId || null,
+          senderName: applicantName,
+          link: '/finance/advances',
+          entityType: 'advance_payment',
+          entityId: created.id,
+          allowSelfNotify: true,
+        });
+      }
+    } catch (notifErr) {
+      console.warn('⚠️ Lỗi gửi thông báo tạm ứng cho bộ phận kế toán:', notifErr.message);
     }
 
     const mapped = mapPersonalRequestRow(created);
@@ -28897,6 +29739,8 @@ const computeHrAttendanceAndPayroll = async (month, year) => {
     allPersonalRequests,
     payrollRecords,
     posCategories,
+    advancePaymentRows,
+    paymentOrderRows,
   ] = await Promise.all([
     getResolvedHolidayRules().catch(() => DEFAULT_HOLIDAY_RULES_DATA_SERVER),
     prisma.laborPolicy
@@ -28927,9 +29771,22 @@ const computeHrAttendanceAndPayroll = async (month, year) => {
       where: { type: 'position' },
       select: { code: true, name: true },
     }),
+    prisma.$queryRawUnsafe(`SELECT id, code, status, review_status, project, amount, approved_amount FROM advance_payments`).catch(() => []),
+    prisma.$queryRawUnsafe(`SELECT ref_code, status FROM payment_orders WHERE ref_code IS NOT NULL AND ref_code != ''`).catch(() => []),
   ]);
 
   const posMap = new Map(posCategories.map((p) => [p.code, p.name]));
+  const advPayByCode = new Map();
+  (Array.isArray(advancePaymentRows) ? advancePaymentRows : []).forEach((ap) => {
+    if (ap.code) advPayByCode.set(ap.code, ap);
+    if (ap.id) advPayByCode.set(ap.id, ap);
+  });
+  const disbursedRefCodes = new Set();
+  (Array.isArray(paymentOrderRows) ? paymentOrderRows : []).forEach((po) => {
+    if (String(po.status || '').toLowerCase() === 'completed' && po.ref_code) {
+      disbursedRefCodes.add(po.ref_code);
+    }
+  });
 
   // Trích xuất bản đồ các ngày nghỉ lễ được hưởng nguyên lương từ Nội quy lao động (holiday_rules)
   const paidHolidaysMap = extractPaidHolidaysMap(holidayRulesData, y);
@@ -29033,17 +29890,31 @@ const computeHrAttendanceAndPayroll = async (month, year) => {
       const statusLower = String(reqItem.status || details.status || 'pending').toLowerCase();
       const rawType = String(details.type || reqItem.type || '').toLowerCase();
 
-      // Tạm ứng đã duyệt trong tháng: Tự động khấu trừ vào lương nếu được cấu hình trừ lương và chưa quyết toán
+      // Tạm ứng đã duyệt VÀ ĐÃ XÁC NHẬN CHI TIỀN (disbursed) trong tháng: chỉ khấu trừ khi có lựa chọn Trừ tạm ứng vào lương
       if (
         (rawType === 'advance' || rawType === 'salary-advance') &&
         (statusLower === 'approved' || statusLower === 'completed')
       ) {
-        const isDeductFromSalary = details.deductFromSalary !== undefined ? Boolean(details.deductFromSalary) : true;
+        const reqCode = details.code || reqItem.id;
+        const apRow = advPayByCode.get(reqCode) || advPayByCode.get(reqItem.id);
+        const isDeductFromSalary =
+          details.deductFromSalary !== undefined
+            ? Boolean(details.deductFromSalary)
+            : String(apRow?.project || '').toLowerCase().includes('lương') || rawType === 'salary-advance';
+        const isDisbursed = Boolean(
+          details.isDisbursed ||
+          String(apRow?.review_status || '').toLowerCase() === 'disbursed' ||
+          disbursedRefCodes.has(reqCode) ||
+          disbursedRefCodes.has(reqItem.id)
+        );
         const isSettled = Boolean(details.settled || details.isRefunded || statusLower === 'completed');
-        if (isDeductFromSalary && !isSettled) {
+        if (isDeductFromSalary && isDisbursed && !isSettled) {
           const advDate = parseFlexibleDate(details.advanceDueDate || details.deadlineRefund || reqItem.endDate || reqItem.startDate || reqItem.createdAt);
           if (advDate && advDate.getFullYear() === y && advDate.getMonth() + 1 === m) {
-            approvedAdvanceTotal += Number(details.advanceAmount || details.amount || 0);
+            const deductAmt = Number(
+              apRow?.approved_amount || details.approvedAmount || details.advanceAmount || details.amount || apRow?.amount || 0
+            );
+            approvedAdvanceTotal += deductAmt;
           }
         }
       }
@@ -29576,19 +30447,271 @@ const upsertMonthPayrollRecords = async (month, year, targetStatus) => {
       updatedCount++;
     }
   }
+
+  // Tự động đồng bộ sang bộ máy Tài chính - Kế toán (monthly_payrolls, Sổ nhật ký chung & Báo cáo tài chính)
+  try {
+    const mm = String(m).padStart(2, '0');
+    const compactMonth = `${y}${mm}`;
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    // Khi Ban Giám đốc phê duyệt bảng lương ('Đã duyệt'), tự động sinh Lệnh chi tiền lương & Lệnh chi BHXH chờ chi
+    if (targetStatus === 'Đã duyệt') {
+      const monthRows = await prisma.payroll.findMany({ where: { thang: m, nam: y } });
+      const totalNetSalary = Math.round(monthRows.reduce((s, r) => s + (Number(r.luongThucNhan) || 0), 0));
+      const totalInsPayable = Math.round(
+        monthRows.reduce((s, r) => s + (Number(r.khauTruBH) || 0) + (Number(r.chiPhiCtyDong) || 0), 0)
+      );
+
+      if (totalNetSalary > 0) {
+        const salOrderCode = `LC-LUONG-${compactMonth}`;
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO payment_orders (
+            id, order_code, ref_type, ref_id, ref_code, title, beneficiary_name, beneficiary_code,
+            department, amount, payment_method, purpose, approved_by, approved_date,
+            approval_note, status, status_label, due_date, created_at, updated_at
+          ) VALUES (?, ?, 'payroll', ?, ?, ?, ?, 'CBNV', 'Hành chính - Nhân sự', ?, 'bank_transfer', ?, 'Ban Giám đốc', ?, 'Đã phê duyệt bảng lương tháng', 'pending', 'Chờ chi tiền', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ON CONFLICT(order_code) DO UPDATE SET
+            amount = CASE WHEN status = 'pending' THEN excluded.amount ELSE amount END,
+            updated_at = CURRENT_TIMESTAMP`,
+          `PO-SAL-${compactMonth}`,
+          salOrderCode,
+          `BL-${compactMonth}`,
+          `BL-${compactMonth}`,
+          `Chi trả lương & phụ cấp thực lĩnh kỳ ${mm}/${y} (${monthRows.length} nhân sự)`,
+          `Tập thể CBNV (${monthRows.length} NS)`,
+          totalNetSalary,
+          `Thanh toán tiền lương & phụ cấp thực lĩnh tháng ${mm}/${y} theo bảng lương đã phê duyệt`,
+          todayStr,
+          todayStr
+        ).catch(() => {});
+      }
+
+      if (totalInsPayable > 0) {
+        const insOrderCode = `LC-BHXH-${compactMonth}`;
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO payment_orders (
+            id, order_code, ref_type, ref_id, ref_code, title, beneficiary_name, beneficiary_code,
+            department, amount, payment_method, purpose, approved_by, approved_date,
+            approval_note, status, status_label, due_date, created_at, updated_at
+          ) VALUES (?, ?, 'insurance', ?, ?, ?, 'Cơ quan Bảo hiểm Xã hội', 'BHXH-VN', 'Hành chính - Nhân sự', ?, 'bank_transfer', ?, 'Ban Giám đốc', ?, 'Trích nộp BHXH bắt buộc theo bảng lương', 'pending', 'Chờ chi tiền', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ON CONFLICT(order_code) DO UPDATE SET
+            amount = CASE WHEN status = 'pending' THEN excluded.amount ELSE amount END,
+            updated_at = CURRENT_TIMESTAMP`,
+          `PO-INS-${compactMonth}`,
+          insOrderCode,
+          `BHXH-${compactMonth}`,
+          `BHXH-${compactMonth}`,
+          `Nộp BHXH, BHYT, BHTN bắt buộc kỳ ${mm}/${y} (DN 21.5% + NLĐ 10.5%)`,
+          totalInsPayable,
+          `Nộp tiền bảo hiểm bắt buộc tháng ${mm}/${y} cho Cơ quan BHXH`,
+          todayStr,
+          todayStr
+        ).catch(() => {});
+      }
+    }
+
+    if (typeof financeDb !== 'undefined' && financeDb) {
+      await syncPrismaFinanceToAccountingTables(financeDb);
+    }
+  } catch (syncErr) {
+    console.warn('⚠️ [Payroll -> Accounting Sync] Cảnh báo:', syncErr.message);
+  }
+
   return updatedCount;
+};
+
+const resolveSenderForHrSlip = async (req) => {
+  let senderId = await resolveCurrentAuthUserId(req);
+  let senderName = 'Phòng Hành chính - Nhân sự';
+  if (senderId) {
+    const u = await prisma.user.findUnique({
+      where: { id: senderId },
+      include: { employee: true },
+    }).catch(() => null);
+    if (u?.employee?.fullName) senderName = u.employee.fullName;
+    else if (u?.name && !u.name.includes('Công ty cổ phần')) senderName = u.name;
+  } else {
+    const hrOrAdmin = await prisma.user.findFirst({
+      where: { role: 'ADMIN' },
+      include: { employee: true },
+    }).catch(() => null);
+    senderId = hrOrAdmin?.id || null;
+    if (hrOrAdmin?.employee?.fullName) senderName = hrOrAdmin.employee.fullName;
+  }
+  return { senderId, senderName };
 };
 
 app.post('/api/hr/attendance/publish', async (req, res) => {
   try {
-    const { month, year } = req.body || {};
-    const count = await upsertMonthPayrollRecords(month, year, null);
+    const { month, year, employeeId } = req.body || {};
+    const m = parseInt(month, 10) || new Date().getMonth() + 1;
+    const y = parseInt(year, 10) || new Date().getFullYear();
+    const mm = String(m).padStart(2, '0');
+
+    await upsertMonthPayrollRecords(m, y, null);
+    const data = await computeHrAttendanceAndPayroll(m, y);
+    const stdDays = data.stats.workDays || 26;
+    const { senderId, senderName } = await resolveSenderForHrSlip(req);
+
+    const allUsers = await prisma.user.findMany({
+      where: { NOT: { role: { in: ['CUSTOMER', 'DEALER'] } } },
+      select: { id: true, name: true, email: true },
+    });
+
+    const allEmps = data.departments.flatMap((d) =>
+      (d.employees || []).map((emp) => ({ ...emp, deptName: d.name }))
+    );
+    const targetEmps = employeeId
+      ? allEmps.filter((e) => e.id === employeeId || e.code === employeeId || e.userId === employeeId)
+      : allEmps;
+
+    const notifiedUserIds = new Set();
+    let sentEmpCount = 0;
+
+    for (const emp of targetEmps) {
+      const primaryUid = emp.userId || (await ensureValidChatUserId(emp.id));
+      const matchingUsers = allUsers.filter(
+        (u) =>
+          u.id === primaryUid ||
+          (u.name && emp.fullName && u.name.trim().toLowerCase() === emp.fullName.trim().toLowerCase())
+      );
+      const empRecipientUids = Array.from(
+        new Set([primaryUid, ...matchingUsers.map((u) => u.id)].filter(Boolean))
+      );
+      if (empRecipientUids.length === 0) continue;
+
+      const cong = (emp.attendance || []).reduce((acc, a) => acc + (a?.workday || 0), 0);
+      const phep = (emp.attendance || []).reduce((acc, a) => {
+        if (typeof a?.leaveDays === 'number' && a.leaveDays > 0) return acc + a.leaveDays;
+        if (['P', 'KL', 'BHXH'].includes(a?.code || '')) return acc + 1;
+        return acc;
+      }, 0);
+      const otHours = (emp.attendance || []).reduce((acc, a) => acc + (a?.otHours || 0), 0);
+      const viPham = (emp.attendance || []).reduce((acc, a) => acc + (a?.violationMinutes || 0), 0);
+      const comTrua = (emp.attendance || []).filter((a) => a?.registeredLunch).length;
+      const comToi = (emp.attendance || []).filter((a) => a?.registeredDinner).length;
+
+      const daysList = [];
+      (emp.attendance || []).forEach((cell, idx) => {
+        if (!cell || !cell.code) return;
+        daysList.push({
+          day: idx + 1,
+          dateStr: `${String(idx + 1).padStart(2, '0')}/${mm}`,
+          code: cell.code,
+          workday: Number((cell.workday || 0).toFixed(1)),
+          label: cell.label || '—',
+        });
+      });
+
+      const title = `📋 Phiếu chấm công tháng ${mm}/${y} — ${emp.fullName}`;
+      const content = [
+        `Nhân sự: **${emp.fullName}** (${emp.positionTitle || 'Nhân viên'} • ${emp.deptName})`,
+        `Kỳ chấm công: **Tháng ${mm}/${y}** (Chuẩn công: **${stdDays} ngày**)`,
+        `Tổng ngày công thực tế: **${cong.toFixed(2)} / ${stdDays} ngày**`,
+        `Nghỉ phép / Nghỉ KL: **${Number.isInteger(phep) ? phep : phep.toFixed(1)} ngày**`,
+        `Tăng ca (OT): **${otHours.toFixed(1)} giờ**`,
+        `Vi phạm muộn / sớm: **${viPham} phút**`,
+        `Suất ăn đăng ký: **${comTrua} bữa trưa • ${comToi} bữa tối**`,
+        `Đề nghị nhân viên kiểm tra bảng tổng hợp công chi tiết bên dưới và bấm xác nhận số liệu.`,
+      ].join('\n');
+
+      const slipData = {
+        month: m,
+        year: y,
+        standardWorkDays: stdDays,
+        totalWorkdays: Number(cong.toFixed(2)),
+        leaveDays: Number(phep.toFixed(1)),
+        otHours: Number(otHours.toFixed(1)),
+        violationMinutes: viPham,
+        lunchCount: comTrua,
+        dinnerCount: comToi,
+        days: daysList,
+      };
+
+      const attachments = JSON.stringify({
+        slipType: 'ATTENDANCE_SLIP',
+        month: m,
+        year: y,
+        employeeId: emp.id,
+        employeeCode: emp.code,
+        employeeName: emp.fullName,
+        positionTitle: emp.positionTitle || 'Nhân viên',
+        departmentName: emp.deptName,
+        department: 'Hành chính - Nhân sự',
+        sender: senderName,
+        link: '/hr/my_attendance',
+        isConfirmed: Boolean(emp.isConfirmed),
+        slipData,
+        timestamp: new Date().toISOString(),
+      });
+
+      const notif = await prisma.notification.create({
+        data: {
+          title,
+          content,
+          type: 'info',
+          priority: 'high',
+          audienceType: 'personal_slip',
+          audienceValue: 'hr',
+          attachments,
+          createdById: senderId || empRecipientUids[0],
+        },
+      });
+
+      for (const uId of empRecipientUids) {
+        notifiedUserIds.add(uId);
+        await prisma.notificationRecipient.upsert({
+          where: { notificationId_userId: { notificationId: notif.id, userId: uId } },
+          update: { isRead: false, readAt: null },
+          create: { notificationId: notif.id, userId: uId, isRead: false },
+        });
+      }
+
+      sentEmpCount++;
+    }
+
+    // Nếu phát hành toàn hệ thống, gửi thêm thông báo tổng hợp cho các tài khoản quản trị/nhân sự chưa gắn hồ sơ Employee trực tiếp
+    if (!employeeId) {
+      const remainingUids = allUsers
+        .map((u) => u.id)
+        .filter((uid) => uid && !notifiedUserIds.has(uid));
+      if (remainingUids.length > 0) {
+        const summaryNotif = await prisma.notification.create({
+          data: {
+            title: `📋 Đã phát hành phiếu chấm công tháng ${mm}/${y} toàn hệ thống`,
+            content: `Phòng Hành chính - Nhân sự đã phát hành phiếu tổng hợp công **Tháng ${mm}/${y}** đến **${sentEmpCount} nhân viên** trên toàn hệ thống (Chuẩn công: **${stdDays} ngày**).`,
+            type: 'info',
+            priority: 'high',
+            audienceType: 'personal_slip',
+            audienceValue: 'hr',
+            attachments: JSON.stringify({
+              department: 'Hành chính - Nhân sự',
+              sender: senderName,
+              link: '/hr/attendance-payroll',
+              timestamp: new Date().toISOString(),
+            }),
+            createdById: senderId || remainingUids[0],
+          },
+        });
+        for (const uId of remainingUids) {
+          await prisma.notificationRecipient.upsert({
+            where: { notificationId_userId: { notificationId: summaryNotif.id, userId: uId } },
+            update: { isRead: false, readAt: null },
+            create: { notificationId: summaryNotif.id, userId: uId, isRead: false },
+          });
+        }
+      }
+    }
+
     res.json({
       success: true,
-      message: `Đã phát hành phiếu chấm công tháng ${month}/${year} cho ${count} nhân viên.`,
-      count,
+      message: employeeId
+        ? `Đã gửi thông báo & thông tin phiếu chấm công tháng ${mm}/${y} tới nhân viên!`
+        : `Đã phát hành và gửi thông báo phiếu chấm công tháng ${mm}/${y} đến tất cả ${sentEmpCount} nhân viên trong hệ thống!`,
+      count: sentEmpCount,
     });
   } catch (err) {
+    console.error('[POST /api/hr/attendance/publish] Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -29651,14 +30774,278 @@ app.post('/api/hr/payroll/approve-director', async (req, res) => {
 
 app.post('/api/hr/payroll/publish', async (req, res) => {
   try {
-    const { month, year } = req.body || {};
-    const count = await upsertMonthPayrollRecords(month, year, null);
+    const { month, year, employeeId } = req.body || {};
+    const m = parseInt(month, 10) || new Date().getMonth() + 1;
+    const y = parseInt(year, 10) || new Date().getFullYear();
+    const mm = String(m).padStart(2, '0');
+
+    await upsertMonthPayrollRecords(m, y, null);
+    const data = await computeHrAttendanceAndPayroll(m, y);
+    const stdDays = data.stats.workDays || 26;
+    const { senderId, senderName } = await resolveSenderForHrSlip(req);
+
+    const insConfig = await prisma.insuranceConfig
+      .findFirst({ where: { isActive: true }, orderBy: { createdAt: 'desc' } })
+      .catch(() => null);
+    const empInsRate = insConfig
+      ? Number(insConfig.empBhxhRate ?? 8) +
+        Number(insConfig.empBhytRate ?? 1.5) +
+        Number(insConfig.empBhtnRate ?? 1)
+      : 10.5;
+
+    const allUsers = await prisma.user.findMany({
+      where: { NOT: { role: { in: ['CUSTOMER', 'DEALER'] } } },
+      select: { id: true, name: true, email: true },
+    });
+
+    const allEmps = data.departments.flatMap((d) =>
+      (d.employees || []).map((emp) => ({ ...emp, deptName: d.name }))
+    );
+    const targetEmps = employeeId
+      ? allEmps.filter((e) => e.id === employeeId || e.code === employeeId || e.userId === employeeId)
+      : allEmps;
+
+    const notifiedUserIds = new Set();
+    let sentEmpCount = 0;
+
+    for (const emp of targetEmps) {
+      const primaryUid = emp.userId || (await ensureValidChatUserId(emp.id));
+      const matchingUsers = allUsers.filter(
+        (u) =>
+          u.id === primaryUid ||
+          (u.name && emp.fullName && u.name.trim().toLowerCase() === emp.fullName.trim().toLowerCase())
+      );
+      const empRecipientUids = Array.from(
+        new Set([primaryUid, ...matchingUsers.map((u) => u.id)].filter(Boolean))
+      );
+      if (empRecipientUids.length === 0) continue;
+
+      const cong = (emp.attendance || []).reduce((acc, a) => acc + (a?.workday || 0), 0);
+      const ot = (emp.attendance || []).reduce((acc, a) => acc + (a?.otHours || 0), 0);
+      const salary = Math.round(emp.baseSalary || 0);
+      const mealTotal = Math.round((emp.mealAllowance || 0) * cong);
+      const otherAllowances = Math.round(
+        (emp.fuelAllowance || 0) + (emp.phoneAllowance || 0) + (emp.seniorityAllowance || 0)
+      );
+      const allowances = mealTotal + otherAllowances;
+      const salaryTheoCong = Math.round((salary / stdDays) * cong);
+      const otSalary = Math.round(ot * (salary / stdDays / 8));
+      const khauTruBH = Math.round(emp.insuranceDeduction ?? 0);
+      const khauTruTamUng = Math.round(emp.advanceDeduction ?? 0);
+      const net = Math.max(
+        0,
+        Math.round(salaryTheoCong + allowances + otSalary - khauTruBH - khauTruTamUng)
+      );
+
+      const title = `💰 Phiếu lương tháng ${mm}/${y} — ${emp.fullName} (Thực lĩnh: ${net.toLocaleString('vi-VN')} đ)`;
+      const contentLines = [
+        `Nhân sự: **${emp.fullName}** (${emp.positionTitle || 'Nhân viên'} • ${emp.deptName})`,
+        `Kỳ lương: **Tháng ${mm}/${y}**`,
+        `Lương cơ bản định mức: **${salary.toLocaleString('vi-VN')} đ**`,
+        `Ngày công thực tế / Ngày chuẩn: **${cong.toFixed(2)} / ${stdDays} ngày**`,
+        `Lương theo ngày công: **${salaryTheoCong.toLocaleString('vi-VN')} đ**`,
+        `Phụ cấp ăn ca (${cong.toFixed(1)} công): **${mealTotal.toLocaleString('vi-VN')} đ**`,
+        `Phụ cấp xăng xe, điện thoại, thâm niên: **${otherAllowances.toLocaleString('vi-VN')} đ**`,
+        `Lương làm thêm giờ (${ot.toFixed(1)}h): **${otSalary.toLocaleString('vi-VN')} đ**`,
+        `Khấu trừ BHXH, BHYT, BHTN (${empInsRate}%): **-${khauTruBH.toLocaleString('vi-VN')} đ**`,
+      ];
+      if (khauTruTamUng > 0) {
+        contentLines.push(
+          `Khấu trừ tạm ứng đã chi tiền: **-${khauTruTamUng.toLocaleString('vi-VN')} đ**`
+        );
+      }
+      contentLines.push(`Thực lĩnh: **${net.toLocaleString('vi-VN')} đ**`);
+      contentLines.push(`Đề nghị kiểm tra chi tiết phiếu lương bên dưới và bấm xác nhận phiếu lương.`);
+
+      const slipData = {
+        month: m,
+        year: y,
+        baseSalary: salary,
+        standardWorkDays: stdDays,
+        totalWorkdays: Number(cong.toFixed(2)),
+        salaryByWorkdays: salaryTheoCong,
+        mealAllowanceTotal: mealTotal,
+        otherAllowances,
+        otHours: Number(ot.toFixed(1)),
+        otSalary,
+        insuranceRate: empInsRate,
+        insuranceDeduction: khauTruBH,
+        advanceDeduction: khauTruTamUng,
+        netSalary: net,
+      };
+
+      const attachments = JSON.stringify({
+        slipType: 'PAYSLIP',
+        month: m,
+        year: y,
+        employeeId: emp.id,
+        employeeCode: emp.code,
+        employeeName: emp.fullName,
+        positionTitle: emp.positionTitle || 'Nhân viên',
+        departmentName: emp.deptName,
+        department: 'Tài chính - Kế toán & Nhân sự',
+        sender: senderName,
+        link: '/hr/my_attendance',
+        isPayrollConfirmed: Boolean(emp.isPayrollConfirmed),
+        slipData,
+        timestamp: new Date().toISOString(),
+      });
+
+      const notif = await prisma.notification.create({
+        data: {
+          title,
+          content: contentLines.join('\n'),
+          type: 'success',
+          priority: 'high',
+          audienceType: 'personal_slip',
+          audienceValue: 'hr',
+          attachments,
+          createdById: senderId || empRecipientUids[0],
+        },
+      });
+
+      for (const uId of empRecipientUids) {
+        notifiedUserIds.add(uId);
+        await prisma.notificationRecipient.upsert({
+          where: { notificationId_userId: { notificationId: notif.id, userId: uId } },
+          update: { isRead: false, readAt: null },
+          create: { notificationId: notif.id, userId: uId, isRead: false },
+        });
+      }
+
+      sentEmpCount++;
+    }
+
+    // Gửi thêm thông báo tổng hợp cho các tài khoản quản trị/kế toán chưa gắn hồ sơ Employee trực tiếp
+    if (!employeeId) {
+      const remainingUids = allUsers
+        .map((u) => u.id)
+        .filter((uid) => uid && !notifiedUserIds.has(uid));
+      if (remainingUids.length > 0) {
+        const summaryNotif = await prisma.notification.create({
+          data: {
+            title: `💰 Đã phát hành phiếu lương tháng ${mm}/${y} toàn hệ thống`,
+            content: `Phòng Hành chính - Nhân sự & Kế toán đã phát hành phiếu lương **Tháng ${mm}/${y}** đến **${sentEmpCount} nhân viên** trên toàn hệ thống.`,
+            type: 'success',
+            priority: 'high',
+            audienceType: 'personal_slip',
+            audienceValue: 'hr',
+            attachments: JSON.stringify({
+              department: 'Tài chính - Kế toán & Nhân sự',
+              sender: senderName,
+              link: '/hr/attendance-payroll',
+              timestamp: new Date().toISOString(),
+            }),
+            createdById: senderId || remainingUids[0],
+          },
+        });
+        for (const uId of remainingUids) {
+          await prisma.notificationRecipient.upsert({
+            where: { notificationId_userId: { notificationId: summaryNotif.id, userId: uId } },
+            update: { isRead: false, readAt: null },
+            create: { notificationId: summaryNotif.id, userId: uId, isRead: false },
+          });
+        }
+      }
+    }
+
     res.json({
       success: true,
-      message: `Đã phát hành phiếu lương tháng ${month}/${year} cho ${count} nhân viên!`,
-      count,
+      message: employeeId
+        ? `Đã gửi thông báo & thông tin phiếu lương tháng ${mm}/${y} tới nhân viên!`
+        : `Đã phát hành và gửi thông báo phiếu lương tháng ${mm}/${y} đến tất cả ${sentEmpCount} nhân viên trong hệ thống!`,
+      count: sentEmpCount,
     });
   } catch (err) {
+    console.error('[POST /api/hr/payroll/publish] Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/hr/attendance/confirm', async (req, res) => {
+  try {
+    const { employeeId, month, year } = req.body || {};
+    const m = parseInt(month, 10) || new Date().getMonth() + 1;
+    const y = parseInt(year, 10) || new Date().getFullYear();
+
+    let targetEmpId = employeeId;
+    if (!targetEmpId) {
+      const uid = await resolveCurrentAuthUserId(req);
+      if (uid) {
+        const emp = await prisma.employee.findFirst({ where: { userId: uid } });
+        if (emp) targetEmpId = emp.id;
+      }
+    }
+    if (!targetEmpId) {
+      return res.status(400).json({ error: 'Không xác định được nhân viên xác nhận.' });
+    }
+
+    await prisma.attendanceConfirmation.upsert({
+      where: {
+        employeeId_month_year: {
+          employeeId: targetEmpId,
+          month: m,
+          year: y,
+        },
+      },
+      update: { confirmedAt: new Date() },
+      create: {
+        employeeId: targetEmpId,
+        month: m,
+        year: y,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: `Đã xác nhận bảng chấm công tháng ${m}/${y} thành công!`,
+    });
+  } catch (err) {
+    console.error('[POST /api/hr/attendance/confirm] Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/hr/payroll/confirm', async (req, res) => {
+  try {
+    const { employeeId, month, year } = req.body || {};
+    const m = parseInt(month, 10) || new Date().getMonth() + 1;
+    const y = parseInt(year, 10) || new Date().getFullYear();
+
+    let targetEmpId = employeeId;
+    if (!targetEmpId) {
+      const uid = await resolveCurrentAuthUserId(req);
+      if (uid) {
+        const emp = await prisma.employee.findFirst({ where: { userId: uid } });
+        if (emp) targetEmpId = emp.id;
+      }
+    }
+    if (!targetEmpId) {
+      return res.status(400).json({ error: 'Không xác định được nhân viên xác nhận.' });
+    }
+
+    await prisma.payrollConfirmation.upsert({
+      where: {
+        employeeId_month_year: {
+          employeeId: targetEmpId,
+          month: m,
+          year: y,
+        },
+      },
+      update: { confirmedAt: new Date() },
+      create: {
+        employeeId: targetEmpId,
+        month: m,
+        year: y,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: `Đã xác nhận phiếu lương tháng ${m}/${y} thành công!`,
+    });
+  } catch (err) {
+    console.error('[POST /api/hr/payroll/confirm] Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -29666,9 +31053,40 @@ app.post('/api/hr/payroll/publish', async (req, res) => {
 app.post('/api/hr/attendance/lunch-notification', async (req, res) => {
   try {
     const { summaryDate, totalLunch = 0, totalDinner = 0 } = req.body || {};
+    const { senderId, senderName } = await resolveSenderForHrSlip(req);
+    const allUsers = await prisma.user.findMany({
+      where: { NOT: { role: { in: ['CUSTOMER', 'DEALER'] } } },
+      select: { id: true },
+    });
+    if (allUsers.length > 0) {
+      const notif = await prisma.notification.create({
+        data: {
+          title: `🍱 Tổng hợp suất ăn ngày ${summaryDate} (${totalLunch} trưa • ${totalDinner} tối)`,
+          content: `Phòng Hành chính - Nhân sự thông báo tổng hợp suất ăn ngày **${summaryDate}**:\n• Ăn trưa: **${totalLunch} suất**\n• Ăn tối: **${totalDinner} suất**`,
+          type: 'info',
+          priority: 'normal',
+          audienceType: 'personal_slip',
+          audienceValue: 'hr',
+          attachments: JSON.stringify({
+            department: 'Hành chính - Nhân sự',
+            sender: senderName,
+            link: '/hr/attendance-payroll',
+            timestamp: new Date().toISOString(),
+          }),
+          createdById: senderId || allUsers[0].id,
+        },
+      });
+      for (const u of allUsers) {
+        await prisma.notificationRecipient.upsert({
+          where: { notificationId_userId: { notificationId: notif.id, userId: u.id } },
+          update: { isRead: false, readAt: null },
+          create: { notificationId: notif.id, userId: u.id, isRead: false },
+        });
+      }
+    }
     res.json({
       success: true,
-      message: `Đã gửi danh sách suất ăn ngày ${summaryDate} (${totalLunch} trưa, ${totalDinner} tối) tới bộ phận Bếp!`,
+      message: `Đã gửi danh sách suất ăn ngày ${summaryDate} (${totalLunch} trưa, ${totalDinner} tối) tới bộ phận Bếp & toàn hệ thống!`,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -33265,6 +34683,39 @@ app.get('/api/system/version', (req, res) => {
   }
 });
 
+// ── API /api/tenders (Hồ sơ mời thầu / Đấu thầu) để ngăn lỗi Vite proxy ECONNREFUSED ──
+app.get('/api/tenders', async (req, res) => {
+  try {
+    const rows = await prisma.$queryRawUnsafe(`SELECT * FROM tenders ORDER BY rowid DESC`).catch(() => []);
+    res.json(Array.isArray(rows) ? rows : []);
+  } catch {
+    res.json([]);
+  }
+});
+
+app.patch('/api/tenders/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, statusLabel, badgeVariant } = req.body || {};
+    await prisma.$executeRawUnsafe(
+      `UPDATE tenders SET status = ?, status_label = ?, badge_variant = ? WHERE id = ? OR code = ?`,
+      status || 'participating',
+      statusLabel || 'Tham gia',
+      badgeVariant || 'success',
+      id,
+      id
+    ).catch(() => { });
+    res.json({ success: true });
+  } catch {
+    res.json({ success: true });
+  }
+});
+
+// Fallback cho các route /api/* chưa định nghĩa để trả về JSON chuẩn (không rơi xuống Vite proxy port 3005 gây ECONNREFUSED)
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.originalUrl}` });
+});
+
 // Phục vụ thư mục public và thư mục build tĩnh dist (Production SPA mode)
 const publicDir = path.join(__dirname, 'public');
 if (fs.existsSync(publicDir)) {
@@ -33295,4 +34746,3 @@ if (process.env.VITE_EMBEDDED_EXPRESS !== 'true') {
 
 export { app };
 export default app;
-

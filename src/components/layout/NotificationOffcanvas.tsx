@@ -34,6 +34,12 @@ export interface NotificationItem {
   priorityLevel?: string;
   link?: string;
   createdAt?: string;
+  slipType?: 'ATTENDANCE_SLIP' | 'PAYSLIP' | null;
+  slipData?: any;
+  employeeId?: string | null;
+  month?: number | null;
+  year?: number | null;
+  isSlipConfirmed?: boolean;
 }
 
 interface NotificationOffcanvasProps {
@@ -56,6 +62,43 @@ export const NotificationOffcanvas: React.FC<NotificationOffcanvasProps> = ({
   // Quản lý 2 slide: Slide 1 (Danh sách), Slide 2 (Chi tiết)
   const [activeSlide, setActiveSlide] = useState<1 | 2>(1);
   const [selectedNotif, setSelectedNotif] = useState<NotificationItem | null>(null);
+  const [confirmingSlip, setConfirmingSlip] = useState<boolean>(false);
+
+  const handleConfirmSlip = async (item: NotificationItem) => {
+    if (!item.slipType || item.isSlipConfirmed || confirmingSlip) return;
+    setConfirmingSlip(true);
+    try {
+      const token = sessionStorage.getItem('seajong_token') || localStorage.getItem('seajong_token');
+      const endpoint =
+        item.slipType === 'ATTENDANCE_SLIP'
+          ? '/api/hr/attendance/confirm'
+          : '/api/hr/payroll/confirm';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(user?.id ? { 'x-chat-user-id': user.id } : {}),
+        },
+        body: JSON.stringify({
+          employeeId: item.employeeId,
+          month: item.month || item.slipData?.month,
+          year: item.year || item.slipData?.year,
+        }),
+      });
+      if (res.ok) {
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === item.id ? { ...n, isSlipConfirmed: true } : n))
+        );
+        setSelectedNotif((prev) => (prev && prev.id === item.id ? { ...prev, isSlipConfirmed: true } : prev));
+        window.dispatchEvent(new CustomEvent('attendance-updated'));
+      }
+    } catch (err) {
+      console.error('Lỗi xác nhận phiếu:', err);
+    } finally {
+      setConfirmingSlip(false);
+    }
+  };
 
   // Quản lý ConfirmDialog
   const [itemToDelete, setItemToDelete] = useState<NotificationItem | null>(null);
@@ -585,6 +628,167 @@ export const NotificationOffcanvas: React.FC<NotificationOffcanvasProps> = ({
                             {renderContentLines(selectedNotif.content)}
                           </div>
                         </div>
+
+                        {/* Bảng chi tiết Phiếu chấm công nếu slipType === 'ATTENDANCE_SLIP' */}
+                        {selectedNotif.slipType === 'ATTENDANCE_SLIP' && selectedNotif.slipData && (
+                          <div className="space-y-3">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+                                <div className="text-[11px] text-slate-500 font-medium">Tổng ngày công</div>
+                                <div className="text-[14px] font-bold text-emerald-600">
+                                  {Number(selectedNotif.slipData.totalWorkdays || 0).toFixed(2)} / {selectedNotif.slipData.standardWorkDays || 26} ngày
+                                </div>
+                              </div>
+                              <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+                                <div className="text-[11px] text-slate-500 font-medium">Nghỉ phép / KL</div>
+                                <div className="text-[14px] font-bold text-blue-600">
+                                  {selectedNotif.slipData.leaveDays || 0} ngày
+                                </div>
+                              </div>
+                              <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+                                <div className="text-[11px] text-slate-500 font-medium">Tăng ca (OT)</div>
+                                <div className="text-[14px] font-bold text-sky-600">
+                                  {Number(selectedNotif.slipData.otHours || 0).toFixed(1)} giờ
+                                </div>
+                              </div>
+                              <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50/70">
+                                <div className="text-[11px] text-slate-500 font-medium">Vi phạm muộn/sớm</div>
+                                <div className="text-[14px] font-bold text-amber-600">
+                                  {selectedNotif.slipData.violationMinutes || 0} phút
+                                </div>
+                              </div>
+                            </div>
+
+                            {Array.isArray(selectedNotif.slipData.days) && selectedNotif.slipData.days.length > 0 && (
+                              <div className="border border-slate-200 rounded-xl overflow-hidden max-h-60 overflow-y-auto">
+                                <table className="w-full text-[11.5px]">
+                                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold sticky top-0">
+                                    <tr>
+                                      <th className="py-1.5 px-2.5 text-left w-14">Ngày</th>
+                                      <th className="py-1.5 px-1.5 text-center w-12">Mã</th>
+                                      <th className="py-1.5 px-1.5 text-center w-12">Công</th>
+                                      <th className="py-1.5 px-2.5 text-left">Chi tiết</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {selectedNotif.slipData.days.map((d: any) => (
+                                      <tr key={d.day} className="hover:bg-slate-50/60">
+                                        <td className="py-1.5 px-2.5 font-semibold text-slate-700">{d.dateStr}</td>
+                                        <td className="py-1.5 px-1.5 text-center font-bold text-slate-700">{d.code}</td>
+                                        <td className="py-1.5 px-1.5 text-center font-bold text-emerald-700">{Number(d.workday || 0).toFixed(1)}</td>
+                                        <td className="py-1.5 px-2.5 text-slate-600">{d.label || '—'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+
+                            <button
+                              type="button"
+                              disabled={Boolean(selectedNotif.isSlipConfirmed) || confirmingSlip}
+                              onClick={() => handleConfirmSlip(selectedNotif)}
+                              className={`w-full py-2.5 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer ${
+                                selectedNotif.isSlipConfirmed
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default'
+                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
+                              }`}
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span>
+                                {selectedNotif.isSlipConfirmed
+                                  ? 'Đã xác nhận bảng chấm công'
+                                  : confirmingSlip
+                                  ? 'Đang xác nhận...'
+                                  : 'Xác nhận số liệu chấm công'}
+                              </span>
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Bảng chi tiết Phiếu lương nếu slipType === 'PAYSLIP' */}
+                        {selectedNotif.slipType === 'PAYSLIP' && selectedNotif.slipData && (
+                          <div className="space-y-2.5">
+                            <div className="p-3 rounded-xl border border-slate-200 bg-white space-y-2 text-[12.5px]">
+                              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                                <span className="text-slate-500">Lương cơ bản định mức</span>
+                                <span className="font-bold text-slate-800">
+                                  {Number(selectedNotif.slipData.baseSalary || 0).toLocaleString('vi-VN')} đ
+                                </span>
+                              </div>
+                              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                                <span className="text-slate-500">Ngày công thực tế / Ngày chuẩn</span>
+                                <span className="font-bold text-slate-800">
+                                  {Number(selectedNotif.slipData.totalWorkdays || 0).toFixed(2)} / {selectedNotif.slipData.standardWorkDays || 26} ngày
+                                </span>
+                              </div>
+                              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                                <span className="text-slate-500">Lương theo ngày công</span>
+                                <span className="font-bold text-slate-800">
+                                  {Number(selectedNotif.slipData.salaryByWorkdays || 0).toLocaleString('vi-VN')} đ
+                                </span>
+                              </div>
+                              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                                <span className="text-slate-500">Phụ cấp ăn ca</span>
+                                <span className="font-semibold text-slate-700">
+                                  {Number(selectedNotif.slipData.mealAllowanceTotal || 0).toLocaleString('vi-VN')} đ
+                                </span>
+                              </div>
+                              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                                <span className="text-slate-500">Phụ cấp xăng xe, ĐT, thâm niên</span>
+                                <span className="font-semibold text-slate-700">
+                                  {Number(selectedNotif.slipData.otherAllowances || 0).toLocaleString('vi-VN')} đ
+                                </span>
+                              </div>
+                              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                                <span className="text-slate-500">Lương làm thêm giờ ({Number(selectedNotif.slipData.otHours || 0).toFixed(1)}h)</span>
+                                <span className="font-bold text-amber-600">
+                                  {Number(selectedNotif.slipData.otSalary || 0).toLocaleString('vi-VN')} đ
+                                </span>
+                              </div>
+                              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                                <span className="text-slate-500">Khấu trừ BHXH, BHYT, BHTN ({selectedNotif.slipData.insuranceRate || 10.5}%)</span>
+                                <span className="font-bold text-rose-600">
+                                  -{Number(selectedNotif.slipData.insuranceDeduction || 0).toLocaleString('vi-VN')} đ
+                                </span>
+                              </div>
+                              {Number(selectedNotif.slipData.advanceDeduction || 0) > 0 && (
+                                <div className="flex justify-between py-1.5 border-b border-slate-100">
+                                  <span className="text-slate-500">Khấu trừ tạm ứng đã chi tiền</span>
+                                  <span className="font-bold text-rose-600">
+                                    -{Number(selectedNotif.slipData.advanceDeduction || 0).toLocaleString('vi-VN')} đ
+                                  </span>
+                                </div>
+                              )}
+                              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between mt-2">
+                                <span className="font-bold text-emerald-900 text-[13px]">THỰC LĨNH</span>
+                                <span className="font-bold text-emerald-700 text-[16px]">
+                                  {Number(selectedNotif.slipData.netSalary || 0).toLocaleString('vi-VN')} đ
+                                </span>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              disabled={Boolean(selectedNotif.isSlipConfirmed) || confirmingSlip}
+                              onClick={() => handleConfirmSlip(selectedNotif)}
+                              className={`w-full py-2.5 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer ${
+                                selectedNotif.isSlipConfirmed
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default'
+                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
+                              }`}
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span>
+                                {selectedNotif.isSlipConfirmed
+                                  ? 'Đã xác nhận phiếu lương'
+                                  : confirmingSlip
+                                  ? 'Đang xác nhận...'
+                                  : 'Xác nhận phiếu lương'}
+                              </span>
+                            </button>
+                          </div>
+                        )}
 
                         {/* Nút hành động trực tiếp xem chứng từ (nếu có liên kết) */}
                         {selectedNotif.link && (

@@ -1010,7 +1010,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
         {
           tag: 'KẾ HOẠCH DÒNG TIỀN',
           tagVariant: 'brand' as const,
-          text: `Cân đối dòng tiền chi trả vật tư gỗ An Cường, phụ kiện kim khí và các tổ đội gia công`,
+          text: `Cân đối dòng tiền chi trả nhà cung cấp thiết bị phòng tắm, nhà bếp, linh kiện sen vòi và dịch vụ vận chuyển`,
         },
       ];
     }
@@ -2403,9 +2403,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+    const fullDateCode = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
     const dateCode = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
     setPaymentDate(`${timeStr} ${dateStr}`);
-    setReceiptCodeInput(`PT-20261004-${Math.floor(100 + Math.random() * 900)}`);
+    setReceiptCodeInput(`PT-${fullDateCode}-${Math.floor(100 + Math.random() * 900)}`);
     setPaymentBankRef(`FT${dateCode}-${Math.floor(1000 + Math.random() * 9000)}`);
     setPaymentPayerName(item.customerName || '');
     setPaymentPayerAddress(item.customerAddress || 'Hà Nội');
@@ -2430,9 +2431,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+    const fullDateCode = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
     const dateCode = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
     setPaymentDate(`${timeStr} ${dateStr}`);
-    setReceiptCodeInput(`PT-20261004-${Math.floor(100 + Math.random() * 900)}`);
+    setReceiptCodeInput(`PT-${fullDateCode}-${Math.floor(100 + Math.random() * 900)}`);
     setPaymentBankRef(`FT${dateCode}-${Math.floor(1000 + Math.random() * 9000)}`);
     setPaymentPayerName(item.customerName || '');
     setPaymentPayerAddress(item.customerAddress || 'Hà Nội');
@@ -2456,9 +2458,11 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     const currentItem = selectedReceivableForPayment;
     const targetStage = selectedStageForPayment;
     const isBankTransfer = paymentMethod.toLowerCase().includes('khoản') || paymentMethod.toLowerCase().includes('ngân hàng');
+    const nowFallback = new Date();
+    const fallbackYmd = `${nowFallback.getFullYear()}${String(nowFallback.getMonth() + 1).padStart(2, '0')}${String(nowFallback.getDate()).padStart(2, '0')}`;
     const newHistItem: PaymentHistoryRecord = {
       id: `hist-${Date.now()}`,
-      code: receiptCodeInput || `PT-20261004-${Math.floor(100 + Math.random() * 900)}`,
+      code: receiptCodeInput || `PT-${fallbackYmd}-${Math.floor(100 + Math.random() * 900)}`,
       dateTime: paymentDate,
       method: paymentMethod,
       amount: paidNum,
@@ -2534,6 +2538,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
           paymentDate,
           paymentMethod,
           paymentNote,
+          isAdvance: isAdvancePayment,
           stageId: targetStage?.id,
           stageCode: targetStage?.code,
           debitAccount: paymentDebitAccount,
@@ -6165,7 +6170,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                         currentStep === 2
                           ? formPartnerType === 'transporter'
                             ? 'Ví dụ: Viettel Post, GHTK, Vận tải Á Châu...'
-                            : 'Ví dụ: Công ty Cổ phần Gỗ An Cường, KinLong...'
+                            : 'Ví dụ: Nhà cung cấp thiết bị vệ sinh, phụ kiện sen vòi...'
                           : 'Nhập tên chi tiết...'
                       }
                       value={formName}
@@ -7861,7 +7866,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                 </label>
                 <Input
                   type="text"
-                  placeholder="Ví dụ: Mua lô nguyên vật liệu gỗ MDF..."
+                  placeholder="Ví dụ: Thanh toán lô hàng thiết bị vệ sinh, linh kiện sen vòi..."
                   value={ddPurpose}
                   onChange={(e) => setDdPurpose(e.target.value)}
                   style={{ marginBottom: 0, backgroundColor: '#ffffff' }}
@@ -8026,7 +8031,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                 {formatNumberGroup(fixedAssetDepreciationMonthly.prod)} đ
               </div>
               <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px' }}>
-                Máy CNC, dàn sơn, trạm biến áp, máy nén khí
+                Máy thử nước sen vòi, máy khắc laser, dây chuyền lắp ráp
               </div>
             </div>
 

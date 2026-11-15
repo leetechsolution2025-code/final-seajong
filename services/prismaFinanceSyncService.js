@@ -94,20 +94,20 @@ function dbRun(db, sql, params = []) {
   });
 }
 
-let _prismaFinanceSyncPromise = null;
-
 export async function syncPrismaFinanceToAccountingTables(db) {
-  if (_prismaFinanceSyncPromise) {
-    return _prismaFinanceSyncPromise;
+  if (globalThis.__seajongPrismaFinanceSyncPromise) {
+    return globalThis.__seajongPrismaFinanceSyncPromise;
   }
-  _prismaFinanceSyncPromise = _runSyncPrismaFinanceToAccountingTables(db).finally(() => {
-    _prismaFinanceSyncPromise = null;
+  globalThis.__seajongPrismaFinanceSyncPromise = _runSyncPrismaFinanceToAccountingTables(db).finally(() => {
+    globalThis.__seajongPrismaFinanceSyncPromise = null;
   });
-  return _prismaFinanceSyncPromise;
+  return globalThis.__seajongPrismaFinanceSyncPromise;
 }
 
 async function _runSyncPrismaFinanceToAccountingTables(db) {
   try {
+    await dbRun(db, 'PRAGMA journal_mode = WAL');
+    await dbRun(db, 'PRAGMA synchronous = NORMAL');
     await dbRun(db, 'PRAGMA foreign_keys = OFF');
     // 1. Kiểm tra xem bảng Prisma có dữ liệu thực tế không
     const [
@@ -138,6 +138,8 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
       prismaQualityInspections,
       prismaPayrolls,
       prismaShipments,
+      prismaPaymentNotifications,
+      prismaPositionCategories,
     ] = await Promise.all([
       dbAll(db, 'SELECT * FROM "AccountingAccount"'),
       dbAll(db, 'SELECT * FROM "MonthlyBalance"'),
@@ -166,7 +168,14 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
       dbAll(db, 'SELECT id, code, type, metadata FROM "QualityInspection" WHERE metadata IS NOT NULL'),
       dbAll(db, 'SELECT * FROM "Payroll" ORDER BY nam DESC, thang DESC'),
       dbAll(db, 'SELECT * FROM "LogisticsShipment" ORDER BY createdAt ASC'),
+      dbAll(db, 'SELECT * FROM "PaymentNotification" WHERE status = \'verified\' ORDER BY createdAt ASC'),
+      dbAll(db, 'SELECT code, name FROM "Category" WHERE type = \'position\''),
     ]);
+
+    const positionByCode = new Map();
+    (prismaPositionCategories || []).forEach((p) => {
+      if (p.code) positionByCode.set(String(p.code), p.name);
+    });
 
     const accountById = new Map();
     const accountByCode = new Map();
@@ -402,9 +411,9 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
         ASSETS: 'Tài sản cố định',
         MANUAL: 'Kế toán tổng hợp',
         PROCUREMENT: 'Mua hàng',
+        ADVANCE: 'Tạm ứng & Hoàn ứng',
       };
 
-      await dbRun(db, 'BEGIN TRANSACTION');
 
       let seq = 1;
       for (const je of prismaJournalEntries) {
@@ -466,7 +475,6 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           );
         }
       }
-      await dbRun(db, 'COMMIT');
     }
 
     // ============================================================================
@@ -580,7 +588,6 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
     await dbRun(db, 'DELETE FROM debt_payables');
     await dbRun(db, "DELETE FROM financial_vouchers WHERE voucher_type = 'receipt'");
     if (prismaDebts.length > 0) {
-      await dbRun(db, 'BEGIN TRANSACTION');
 
       // 1. Nhóm Công nợ Phải thu theo Khách hàng
       const recGroups = new Map();
@@ -633,15 +640,85 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           (paid !== 0 && refIdStr.startsWith('DS-'))
         ) {
           g.payments.push(d);
+        } else if (amt > 0 && paid > 0 && refIdStr.startsWith('DBH-')) {
+          const matchedOrder = saleOrderByCode.get(refIdStr);
+          const matchedNotif = (prismaPaymentNotifications || []).find(
+            (pn) =>
+              (matchedOrder && pn.saleOrderId === matchedOrder.id) ||
+              (g.customerId && pn.customerId === g.customerId && Math.round(Number(pn.amount) || 0) === Math.round(paid))
+          );
+          const ptCode = matchedNotif?.code || `PT-${refIdStr}`;
+          if (!g.payments.some((existingP) => String(existingP.referenceId || '') === ptCode)) {
+            g.payments.push({
+              id: matchedNotif?.id || `PREP-${d.id}`,
+              referenceId: ptCode,
+              paidAmount: paid,
+              amount: 0,
+              createdAt: matchedNotif?.createdAt || d.createdAt,
+              dueDate: d.dueDate,
+              isAdvance: true,
+              description: `Khách hàng trả tiền trước / đặt cọc đơn hàng ${refIdStr} - ${g.customerName}`,
+            });
+          }
         }
       });
+
+      // Bổ sung các phiếu báo có / khách hàng trả tiền trước độc lập (chưa gắn đơn hàng hoặc chưa nằm trong Debt)
+      for (const pn of prismaPaymentNotifications || []) {
+        const pnAmt = Math.round(Number(pn.amount) || 0);
+        if (pnAmt <= 0 || !pn.code) continue;
+        const alreadyInPayments = Array.from(recGroups.values()).some((grp) =>
+          grp.payments.some((p) => String(p.referenceId || '') === String(pn.code))
+        );
+        if (alreadyInPayments) continue;
+        const linkedOrder = pn.saleOrderId ? saleOrderById.get(pn.saleOrderId) : null;
+        const cust =
+          (pn.customerId && customerById.get(pn.customerId)) ||
+          (linkedOrder?.customerId && customerById.get(linkedOrder.customerId)) ||
+          null;
+        const cleanName = (cust?.name || linkedOrder?.nguoiNhan || 'Khách hàng trả trước')
+          .split('–')[0]
+          .split(' - ')[0]
+          .trim();
+        const key = cleanName.toLowerCase();
+        if (!recGroups.has(key)) {
+          recGroups.set(key, {
+            key,
+            customerId: cust?.id || pn.customerId || null,
+            customerName: cust?.name || cleanName,
+            customerAddress: cust?.address || '',
+            customerPhone: cust?.dienThoai || '',
+            invoices: [],
+            payments: [],
+            totalContract: 0,
+            totalPaid: 0,
+            latestDueDate: pn.createdAt,
+          });
+        }
+        const g = recGroups.get(key);
+        if (!linkedOrder) {
+          g.totalPaid += pnAmt;
+        }
+        g.payments.push({
+          id: pn.id,
+          referenceId: pn.code,
+          paidAmount: pnAmt,
+          amount: 0,
+          createdAt: pn.createdAt,
+          dueDate: pn.createdAt,
+          isAdvance: true,
+          description: linkedOrder?.code
+            ? `Khách hàng trả tiền trước / đặt cọc đơn hàng ${linkedOrder.code} - ${g.customerName}`
+            : `Khách hàng trả tiền trước (Ứng trước) theo phiếu ${pn.code} - ${g.customerName}`,
+        });
+      }
 
       let recIndex = 1;
       for (const g of recGroups.values()) {
         const remain = Math.max(0, Math.round(g.totalContract - g.totalPaid));
         const totalContract = Math.round(g.totalContract);
         const totalPaid = Math.round(g.totalPaid);
-        if (totalContract === 0 && remain === 0 && g.payments.length === 0) continue;
+        if (totalContract === 0 && remain === 0 && totalPaid === 0 && g.payments.length === 0) continue;
 
         const id = `SYNC-REC-${String(recIndex).padStart(3, '0')}`;
         const code = `CNPT-${String(recIndex).padStart(3, '0')}`;
@@ -665,6 +742,14 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
               ref.startsWith('ERR-') ||
               desc.includes('trả lại') ||
               desc.includes('hàng lỗi'));
+          const isAdvance =
+            !isReconciliation &&
+            !isReturn &&
+            (Boolean(p.isAdvance) ||
+              desc.includes('ứng trước') ||
+              desc.includes('trả trước') ||
+              desc.includes('trả tiền trước') ||
+              desc.includes('đặt cọc'));
           const pPaid = Math.round(Number(p.paidAmount) || 0);
 
           return {
@@ -678,7 +763,9 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
                 ? `Đối soát công nợ chứng từ ${reconMeta?.refVoucherCode || ref}`
                 : isReturn
                   ? `Giảm trừ công nợ do trả lại hàng theo ${ref}`
-                  : `Thu nợ khách hàng ${g.customerName}`),
+                  : isAdvance
+                    ? `Khách hàng trả tiền trước (Ứng trước) - ${g.customerName}`
+                    : `Thu nợ khách hàng ${g.customerName}`),
             note:
               cleanTitle ||
               (isReconciliation
@@ -704,9 +791,12 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
               ? 'Đối soát'
               : isReturn
                 ? 'Giảm trừ công nợ'
-                : 'Phiếu thu',
+                : isAdvance
+                  ? 'Khách trả trước'
+                  : 'Phiếu thu',
             isReconciliation,
             isReturn,
+            isAdvance,
             debitAccount: isReconciliation ? (pPaid >= 0 ? '1121' : '131') : isReturn ? '5212' : '1121',
             creditAccount: isReconciliation ? (pPaid >= 0 ? '131' : '1121') : '131',
             payerName: g.customerName,
@@ -741,6 +831,26 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
             payments: idx === 0 ? paymentRecords : [],
           };
         });
+
+        if (entries.length === 0 && paymentRecords.length > 0) {
+          const firstPr = paymentRecords[0];
+          entries.push({
+            id: `ENT-ADV-${id}`,
+            code: `UT-${firstPr.code || code}`,
+            title: `Khách hàng trả tiền trước / Ứng trước tiền hàng (${g.customerName})`,
+            date: firstPr.date || formatEpochToVNDate(g.latestDueDate),
+            time: firstPr.time || '09:00',
+            contractValue: 0,
+            paidAmount: totalPaid,
+            remainingAmount: 0,
+            dueDate: firstPr.date || formatEpochToVNDate(g.latestDueDate),
+            status: 'completed',
+            statusLabel: 'Khách ứng trước',
+            isAdvance: true,
+            items: [],
+            payments: paymentRecords,
+          });
+        }
 
         const latestInvoiceRef =
           g.invoices.length > 0
@@ -866,7 +976,7 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
         const totalAmount = Math.round(g.totalAmount);
         const totalPaid = Math.round(g.totalPaid);
         const remain = Math.max(0, totalAmount - totalPaid);
-        if (totalAmount === 0 && remain === 0) continue;
+        if (totalAmount === 0 && remain === 0 && totalPaid === 0 && g.payments.length === 0) continue;
 
         const id = `SYNC-PAY-${String(payIndex).padStart(3, '0')}`;
         const code =
@@ -1088,28 +1198,22 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           const currentPayables = await dbAll(db, 'SELECT * FROM debt_payables');
           for (const ord of completedSupplierOrders) {
             const ordName = String(ord.beneficiary_name || '').split('–')[0].split(' - ')[0].trim().toLowerCase();
-            const target = currentPayables.find(
+            let target = currentPayables.find(
               (p) =>
                 (ord.ref_id && p.id === ord.ref_id) ||
                 (ord.beneficiary_code && p.code === ord.beneficiary_code) ||
                 (ordName && String(p.supplier_name || '').split('–')[0].split(' - ')[0].trim().toLowerCase() === ordName)
             );
-            if (!target) continue;
-
-            let entries = [];
-            try { entries = JSON.parse(target.entries_json || '[]'); } catch {}
             const vchCode = ord.voucher_id || `PC-${ord.order_code}`;
-            if (entries.some((e) => e.code === vchCode)) continue;
-
             const payAmt = Number(ord.amount) || 0;
-            const newPaid = Number(target.paid_amount || 0) + payAmt;
-            const newRemain = Math.max(0, Number(target.total_amount || 0) - newPaid);
-            const isComp = newRemain <= 0;
-
-            entries.push({
+            const isAdv =
+              ord.ref_type === 'advance_supplier' ||
+              ord.ref_type === 'purchase_order_deposit' ||
+              String(ord.ref_code || '').startsWith('YCU-');
+            const newEntry = {
               id: `ENTRY-AP-${ord.id}`,
               code: vchCode,
-              title: ord.title || ord.purpose || `Chi thanh toán theo Lệnh chi ${ord.order_code}`,
+              title: ord.title || ord.purpose || (isAdv ? `Ứng trước cho nhà cung cấp theo ${ord.order_code}` : `Chi thanh toán theo Lệnh chi ${ord.order_code}`),
               date: ord.executed_date || ord.due_date || new Date().toLocaleDateString('vi-VN'),
               time: '08:30',
               totalAmount: payAmt,
@@ -1124,7 +1228,52 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
               receiverName: ord.beneficiary_name,
               type: 'payment',
               voucherType: 'payment',
-            });
+              isAdvance: isAdv,
+            };
+
+            if (!target) {
+              const newPayId = `SYNC-PAY-ADV-${ord.id}`;
+              const newPayCode = `CNPT-NCC-${currentPayables.length + 1}`;
+              const entriesJson = JSON.stringify([newEntry]);
+              await dbRun(
+                db,
+                `INSERT OR REPLACE INTO debt_payables (
+                  id, code, supplier_name, supplier_address, po_code,
+                  total_amount, paid_amount, remaining_amount, due_date,
+                  status, status_label, accountant, notes, partner_type, entries_json, updated_at
+                ) VALUES (?, ?, ?, '', ?, 0, ?, 0, ?, 'completed', 'Đã ứng trước', 'Kế toán công nợ Seajong', ?, 'supplier', ?, CURRENT_TIMESTAMP)`,
+                [
+                  newPayId,
+                  newPayCode,
+                  ord.beneficiary_name || 'Nhà cung cấp',
+                  ord.ref_code || ord.order_code,
+                  payAmt,
+                  newEntry.date,
+                  `Ứng trước / Đặt cọc cho NCC: ${payAmt.toLocaleString('vi-VN')} đ`,
+                  entriesJson,
+                ]
+              );
+              currentPayables.push({
+                id: newPayId,
+                code: newPayCode,
+                supplier_name: ord.beneficiary_name || 'Nhà cung cấp',
+                total_amount: 0,
+                paid_amount: payAmt,
+                remaining_amount: 0,
+                entries_json: entriesJson,
+              });
+              continue;
+            }
+
+            let entries = [];
+            try { entries = JSON.parse(target.entries_json || '[]'); } catch {}
+            if (entries.some((e) => e.code === vchCode)) continue;
+
+            const newPaid = Number(target.paid_amount || 0) + payAmt;
+            const newRemain = Math.max(0, Number(target.total_amount || 0) - newPaid);
+            const isComp = newRemain <= 0;
+
+            entries.push(newEntry);
 
             target.paid_amount = newPaid;
             target.remaining_amount = newRemain;
@@ -1140,33 +1289,31 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           }
         }
 
-        // Bảo toàn thêm các Phiếu chi công nợ (voucher_type = 'PC') đã lập trong financial_vouchers
+        // Bảo toàn thêm các Phiếu chi công nợ NCC (voucher_type = 'PC' & debit_account LIKE '331%') đã lập trong financial_vouchers
         const completedPcVouchers = await dbAll(
           db,
-          `SELECT * FROM financial_vouchers WHERE voucher_type = 'PC' AND status = 'completed'`
+          `SELECT * FROM financial_vouchers
+           WHERE voucher_type = 'PC'
+             AND status = 'completed'
+             AND (debit_account LIKE '331%' OR partner_type IN ('supplier', 'transporter'))`
         );
         if (completedPcVouchers.length > 0) {
           const currentPayables = await dbAll(db, 'SELECT * FROM debt_payables');
           for (const v of completedPcVouchers) {
             const vName = String(v.partner_name || '').split('–')[0].split(' - ')[0].trim().toLowerCase();
-            const target = currentPayables.find(
+            let target = currentPayables.find(
               (p) =>
                 (v.partner_code && p.code === v.partner_code) ||
                 (vName && String(p.supplier_name || '').split('–')[0].split(' - ')[0].trim().toLowerCase() === vName)
             );
-            if (!target) continue;
-
-            let entries = [];
-            try { entries = JSON.parse(target.entries_json || '[]'); } catch {}
             const vchCode = v.voucher_code;
-            if (!vchCode || entries.some((e) => e.code === vchCode)) continue;
-
+            if (!vchCode) continue;
             const payAmt = Number(v.amount) || 0;
-            const newPaid = Number(target.paid_amount || 0) + payAmt;
-            const newRemain = Math.max(0, Number(target.total_amount || 0) - newPaid);
-            const isComp = newRemain <= 0;
-
-            entries.push({
+            const isAdv =
+              String(v.reason || '').toLowerCase().includes('ứng trước') ||
+              String(v.reason || '').toLowerCase().includes('đặt cọc') ||
+              String(v.reference_code || '').startsWith('YCU-');
+            const newEntry = {
               id: `ENTRY-AP-${v.id}`,
               code: vchCode,
               title: v.reason || `Phiếu chi ${vchCode}`,
@@ -1183,7 +1330,52 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
               receiverName: v.partner_name,
               type: 'payment',
               voucherType: 'payment',
-            });
+              isAdvance: isAdv,
+            };
+
+            if (!target) {
+              const newPayId = `SYNC-PAY-VCH-${v.id}`;
+              const newPayCode = `CNPT-NCC-${currentPayables.length + 1}`;
+              const entriesJson = JSON.stringify([newEntry]);
+              await dbRun(
+                db,
+                `INSERT OR REPLACE INTO debt_payables (
+                  id, code, supplier_name, supplier_address, po_code,
+                  total_amount, paid_amount, remaining_amount, due_date,
+                  status, status_label, accountant, notes, partner_type, entries_json, updated_at
+                ) VALUES (?, ?, ?, '', ?, 0, ?, 0, ?, 'completed', 'Đã ứng trước', 'Kế toán công nợ Seajong', ?, 'supplier', ?, CURRENT_TIMESTAMP)`,
+                [
+                  newPayId,
+                  newPayCode,
+                  v.partner_name || 'Nhà cung cấp',
+                  v.reference_code || vchCode,
+                  payAmt,
+                  newEntry.date,
+                  `Ứng trước / Thanh toán cho NCC: ${payAmt.toLocaleString('vi-VN')} đ`,
+                  entriesJson,
+                ]
+              );
+              currentPayables.push({
+                id: newPayId,
+                code: newPayCode,
+                supplier_name: v.partner_name || 'Nhà cung cấp',
+                total_amount: 0,
+                paid_amount: payAmt,
+                remaining_amount: 0,
+                entries_json: entriesJson,
+              });
+              continue;
+            }
+
+            let entries = [];
+            try { entries = JSON.parse(target.entries_json || '[]'); } catch {}
+            if (entries.some((e) => e.code === vchCode)) continue;
+
+            const newPaid = Number(target.paid_amount || 0) + payAmt;
+            const newRemain = Math.max(0, Number(target.total_amount || 0) - newPaid);
+            const isComp = newRemain <= 0;
+
+            entries.push(newEntry);
 
             target.paid_amount = newPaid;
             target.remaining_amount = newRemain;
@@ -1202,30 +1394,35 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
         console.warn('[Sync] Không thể bảo toàn payment_orders đã giải ngân:', replayErr?.message);
       }
 
-      await dbRun(db, 'COMMIT');
     }
 
     // ============================================================================
     // E. ĐỒNG BỘ CHI PHÍ (financial_expenses) & LỆNH CHI TIỀN (payment_orders)
     // ============================================================================
-    // Bảo lưu các Lệnh chi tiền / Yêu cầu chi tiền tạo từ nghiệp vụ (YCCHI-/YCU-/LC-) trước khi đồng bộ
+    // Bảo lưu các Lệnh chi tiền / Yêu cầu chi tiền tạo từ nghiệp vụ (YCCHI-/YCU-/LC-/PO-ADV-) trước khi đồng bộ
     const preservedOrders = await dbAll(
       db,
       `SELECT * FROM payment_orders
-       WHERE ref_type IN ('payable_payment', 'advance_supplier', 'purchase_order_deposit')
+       WHERE ref_type IN ('payable_payment', 'advance_supplier', 'purchase_order_deposit', 'advance_payment', 'advance')
           OR ref_code LIKE 'YCCHI-%'
           OR ref_code LIKE 'YCU-%'
           OR order_code LIKE 'YCCHI-%'
           OR order_code LIKE 'YCU-%'
           OR id LIKE 'PO-17%'
-          OR id LIKE 'PO-LC-%'`
+          OR id LIKE 'PO-LC-%'
+          OR id LIKE 'PO-ADV-%'`
     );
+    const existingAdvanceRows = await dbAll(db, 'SELECT * FROM advance_payments');
+    const existingAdvanceByCode = new Map();
+    (existingAdvanceRows || []).forEach((r) => {
+      if (r.code) existingAdvanceByCode.set(String(r.code), r);
+      if (r.id) existingAdvanceByCode.set(String(r.id), r);
+    });
 
     await dbRun(db, 'DELETE FROM financial_expenses');
     await dbRun(db, 'DELETE FROM payment_orders');
     await dbRun(db, "DELETE FROM financial_vouchers WHERE voucher_type = 'payment'");
     if (prismaExpenses.length > 0) {
-      await dbRun(db, 'BEGIN TRANSACTION');
       let expIdx = 1;
       for (const exp of prismaExpenses) {
         const amt = Math.round(Number(exp.soTien) || 0);
@@ -1250,7 +1447,10 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           categoryLabel = 'Chi phí mua hàng & sản xuất';
           debitAcc = '331';
           debitAccName = 'Phải trả cho người bán';
-        } else if (loaiLower.includes('tạm ứng') || exp.referenceType === 'PERSONAL_REQUEST') {
+        } else if (
+          loaiLower.includes('tạm ứng') ||
+          String(exp.referenceType || '').toUpperCase() === 'PERSONAL_REQUEST'
+        ) {
           category = 'administrative';
           categoryLabel = 'Tạm ứng lương & phúc lợi';
           debitAcc = '141';
@@ -1309,7 +1509,7 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           [
             `PO-${exp.id}`,
             orderCode,
-            exp.referenceType === 'PERSONAL_REQUEST' ? 'advance' : 'procurement',
+            String(exp.referenceType || '').toUpperCase() === 'PERSONAL_REQUEST' ? 'advance' : 'procurement',
             exp.referenceId || exp.id,
             exp.referenceId || code,
             title,
@@ -1339,11 +1539,12 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
               id, voucher_code, voucher_type, date, partner_type, partner_name,
               payer_receiver_name, amount, reason, payment_method,
               debit_account, credit_account, reference_code, notes, status, has_stamp
-            ) VALUES (?, ?, 'payment', ?, 'supplier', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', 1)`,
+            ) VALUES (?, ?, 'payment', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', 1)`,
             [
               `VCH-EXP-${exp.id}`,
               code,
               vnDate,
+              debitAcc === '141' ? 'employee' : 'supplier',
               exp.nguoiChiTra || 'Đối tác',
               exp.nguoiChiTra || 'Đối tác',
               amt,
@@ -1357,10 +1558,9 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           );
         }
       }
-      await dbRun(db, 'COMMIT');
     }
 
-    // Khôi phục lại các Lệnh chi tiền / Yêu cầu chi tiền tạo từ nghiệp vụ (YCCHI-/YCU-/LC-)
+    // Khôi phục lại các Lệnh chi tiền / Yêu cầu chi tiền tạo từ nghiệp vụ (YCCHI-/YCU-/LC-/PO-ADV-)
     for (const po of preservedOrders || []) {
       await dbRun(
         db,
@@ -1437,11 +1637,10 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
     }
 
     // ============================================================================
-    // F. ĐỒNG BỘ TẠM ỨNG NHÂN VIÊN (advance_payments) TỪ PersonalRequest
+    // F. ĐỒNG BỘ TẠM ỨNG NHÂN VIÊN (advance_payments & advance_settlements) TỪ PersonalRequest
     // ============================================================================
-    await dbRun(db, 'DELETE FROM advance_payments');
-    await dbRun(db, 'DELETE FROM advance_settlements');
     if (prismaPersonalRequests.length > 0) {
+      const allPaymentOrdersNow = await dbAll(db, "SELECT * FROM payment_orders WHERE ref_type IN ('advance', 'advance_payment')");
       for (const req of prismaPersonalRequests) {
         if (req.type !== 'salary-advance' && req.type !== 'advance') continue;
         let details = {};
@@ -1449,38 +1648,147 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           details = JSON.parse(req.details || '{}');
         } catch {}
         const emp = req.employeeId ? employeeById.get(req.employeeId) : null;
-        const amt = Number(details.amount) || 3000000;
+        const amt = Number(details.advanceAmount || details.amount) || 3000000;
         const isApproved = req.status === 'APPROVED' || req.directorApproved === 1;
+        const isRejected = req.status === 'REJECTED';
         const vnDate = formatEpochToVNDate(req.createdAt || req.startDate);
+        const empName = emp?.fullName || details.applicantName || 'Cán bộ nhân viên';
+        const empCode = emp?.code || emp?.employeeCode || req.employeeId || 'NV';
+        const deptName = emp?.departmentName || details.department || 'Kho vận';
+        const purposeText = String(
+          details.advancePurpose || details.purpose || details.reason || req.reason || 'Tạm ứng kinh phí'
+        )
+          .replace(/^'+|'+$/g, '')
+          .trim();
+
+        const parseDmyToMs = (dStr) => {
+          const m = String(dStr || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+          if (!m) return 0;
+          return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).getTime();
+        };
+        const addFiveDaysVN = (dStr) => {
+          const ms = parseDmyToMs(dStr);
+          const d = ms ? new Date(ms) : new Date();
+          d.setDate(d.getDate() + 5);
+          return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+        };
+
+        let deadlineRefund = details.advanceDueDate || details.deadlineRefund || details.expectedRefundDate || '';
+        if (!deadlineRefund) {
+          const dateMatch = String(req.reason || details.content || '').match(/(\d{2}\/\d{2}\/\d{4})/);
+          if (dateMatch) {
+            deadlineRefund = dateMatch[1];
+          } else if (details.salaryMonth && /^\d{1,2}\/\d{4}$/.test(String(details.salaryMonth))) {
+            const [mStr, yStr] = String(details.salaryMonth).split('/');
+            const lastDay = new Date(Number(yStr), Number(mStr), 0).getDate();
+            deadlineRefund = `${String(lastDay).padStart(2, '0')}/${String(mStr).padStart(2, '0')}/${yStr}`;
+          } else {
+            deadlineRefund = addFiveDaysVN(vnDate);
+          }
+        }
+        // Đảm bảo ngày hoàn tạm ứng không bao giờ trước ngày yêu cầu tạm ứng
+        const reqMs = parseDmyToMs(vnDate);
+        const deadMs = parseDmyToMs(deadlineRefund);
+        if (reqMs > 0 && (!deadMs || deadMs < reqMs)) {
+          deadlineRefund = addFiveDaysVN(vnDate);
+        }
+
+        const itemCode = details.code || req.id;
+        const existingAdv = existingAdvanceByCode.get(String(itemCode)) || existingAdvanceByCode.get(String(req.id));
+        const matchedPo = (allPaymentOrdersNow || []).find(
+          (po) => String(po.ref_code || '') === String(itemCode) || String(po.ref_id || '') === String(req.id)
+        );
+        const isDisbursed =
+          existingAdv?.review_status === 'disbursed' ||
+          matchedPo?.status === 'completed';
+        const resolvedApprovedAmt =
+          Number(details.approvedAmount || existingAdv?.approved_amount || matchedPo?.amount) ||
+          (isApproved ? amt : null);
+
+        const projectLabel =
+          req.type === 'salary-advance' || details.deductFromSalary || details.salaryMonth
+            ? 'Trừ tạm ứng vào lương'
+            : '';
+        const mappedStatus = isApproved ? 'approved' : isRejected ? 'rejected' : 'pending';
+        const mappedReviewStatus = isDisbursed
+          ? 'disbursed'
+          : existingAdv?.review_status === 'in_review'
+            ? 'in_review'
+            : isApproved
+              ? 'approved'
+              : isRejected
+                ? 'rejected'
+                : 'unprocessed';
+        const approverName = details.approver || (isApproved ? 'Lê Công Vụ - Ban Giám đốc' : 'Phòng Tài chính – Kế toán');
+        const approvedDateVal = isApproved ? formatEpochToVNDate(req.updatedAt || req.createdAt) : null;
 
         await dbRun(
           db,
           `INSERT OR REPLACE INTO advance_payments (
             id, code, employee_name, employee_code, department, purpose, project,
-            amount, requested_date, payment_method, bank_name, bank_account, bank_account_name,
-            status, review_status, approver, approved_date, note
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            amount, approved_amount, requested_date, payment_method, bank_name, bank_account, bank_account_name,
+            status, review_status, approver, approved_date, deadline_refund, note
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             req.id,
-            req.id,
-            emp?.fullName || 'Cán bộ nhân viên',
-            emp?.employeeCode || req.employeeId || 'NV',
-            'Công ty CP Seajong Việt Nam',
-            details.reason || req.reason || 'Tạm ứng lương cá nhân',
-            details.salaryMonth ? `Lương tháng ${details.salaryMonth}` : 'Tạm ứng lương',
+            itemCode,
+            empName,
+            empCode,
+            deptName,
+            purposeText,
+            projectLabel,
             amt,
+            resolvedApprovedAmt,
             vnDate,
-            (details.paymentMethod || '').toLowerCase().includes('mặt') ? 'cash' : 'bank_transfer',
+            (details.paymentMethod || '').toLowerCase().includes('mặt') || details.paymentMethod === 'cash'
+              ? 'cash'
+              : 'bank_transfer',
             details.bankName || '',
             details.bankAccount || '',
-            details.bankAccountName || '',
-            isApproved ? 'approved' : 'pending',
-            isApproved ? 'disbursed' : 'unprocessed',
-            isApproved ? 'Lê Công Vụ' : null,
-            isApproved ? formatEpochToVNDate(req.updatedAt) : null,
-            req.directorNote || req.hrNote || '',
+            details.bankAccountName || empName,
+            mappedStatus,
+            mappedReviewStatus,
+            approverName,
+            approvedDateVal,
+            deadlineRefund,
+            details.note || req.directorNote || req.hrNote || '',
           ]
         );
+
+        if (!isRejected) {
+          await dbRun(
+            db,
+            `INSERT OR REPLACE INTO advance_settlements (
+              id, advance_id, advance_code, employee_name, employee_code,
+              department, purpose, project, advance_amount, approved_date,
+              approver, deadline_refund, status, actual_spent, invoices, note
+            ) VALUES (
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+              COALESCE((SELECT status FROM advance_settlements WHERE id = ?), 'unsettled'),
+              COALESCE((SELECT actual_spent FROM advance_settlements WHERE id = ?), 0),
+              COALESCE((SELECT invoices FROM advance_settlements WHERE id = ?), '[]'),
+              ?
+            )`,
+            [
+              `SET-${req.id}`,
+              req.id,
+              itemCode,
+              empName,
+              empCode,
+              deptName,
+              purposeText,
+              projectLabel,
+              amt,
+              approvedDateVal || vnDate,
+              approverName,
+              deadlineRefund,
+              `SET-${req.id}`,
+              `SET-${req.id}`,
+              `SET-${req.id}`,
+              details.note || req.directorNote || req.hrNote || '',
+            ]
+          );
+        }
       }
     }
 
@@ -1560,41 +1868,62 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
     }
 
     // ============================================================================
-    // H. ĐỒNG BỘ TÀI SẢN CỐ ĐỊNH (fixed_assets) TỪ Asset
+    // H. ĐỒNG BỘ TÀI SẢN CỐ ĐỊNH (fixed_assets) TỪ Asset & Sổ nhật ký chung TK 214
     // ============================================================================
     await dbRun(db, 'DELETE FROM fixed_asset_depreciations');
     await dbRun(db, 'DELETE FROM fixed_asset_maintenances');
     await dbRun(db, 'DELETE FROM fixed_assets');
     if (prismaAssets.length > 0) {
+      const depByAssetCode = new Map();
+      (prismaJournalEntries || []).forEach((je) => {
+        if (
+          je.sourceModule === 'ASSETS' &&
+          je.referenceCode &&
+          String(je.description || '').toLowerCase().includes('khấu hao')
+        ) {
+          const code = String(je.referenceCode).trim();
+          const amt = Math.round(Number(je.totalAmount) || 0);
+          depByAssetCode.set(code, (depByAssetCode.get(code) || 0) + amt);
+        }
+      });
+
       let assetIdx = 1;
       for (const a of prismaAssets) {
         const orig = Number(a.giaTriMua) || 0;
-        const resVal = Number(a.giaTriConLai !== null && a.giaTriConLai !== undefined ? a.giaTriConLai : orig);
-        const accDep = Math.max(0, orig - resVal);
         const id = a.id || `TS-${String(assetIdx).padStart(3, '0')}`;
+        const assetCode = String(a.code || id).trim();
         assetIdx++;
+
+        const depFromJournal = depByAssetCode.get(assetCode) || 0;
+        const rawResVal = Number(a.giaTriConLai !== null && a.giaTriConLai !== undefined ? a.giaTriConLai : orig);
+        const rawAccDep = Math.max(0, orig - rawResVal);
+        const accDep = Math.max(rawAccDep, depFromJournal);
+        const resVal = Math.max(0, orig - accDep);
+        const depMonths = Number(a.soThangKhauHao) || 36;
+        const monthlyDep = depMonths > 0 ? Math.round(orig / depMonths) : 0;
 
         await dbRun(
           db,
           `INSERT OR REPLACE INTO fixed_assets (
             id, code, name, category, category_label, original_price, residual_value,
-            accumulated_depreciation, department, manager_name, status, status_label,
+            accumulated_depreciation, monthly_depreciation, department, manager_name, status, status_label,
             serial_number, purchased_date, depreciation_months, depreciation_start_date,
             maintenance_cycle, notes, account_code, depreciation_account_code, updated_at
-          ) VALUES (?, ?, ?, 'machinery', ?, ?, ?, ?, ?, ?, 'active', 'Đang sử dụng', ?, ?, ?, ?, ?, ?, '211', '2141', CURRENT_TIMESTAMP)`,
+          ) VALUES (?, ?, ?, 'machinery', ?, ?, ?, ?, ?, ?, ?, 'active', 'Đang sử dụng', ?, ?, ?, ?, ?, ?, '211', '2141', CURRENT_TIMESTAMP)`,
           [
             id,
-            a.code || id,
+            assetCode,
             a.tenTaiSan || 'Tài sản cố định',
             a.loai || 'Máy móc, thiết bị',
             orig,
             resVal,
             accDep,
+            monthlyDep,
             a.donVi || 'Bộ phận sản xuất',
             a.nguoiSuDungId || 'Ban Quản lý',
             a.serialNumber || a.model || '',
             formatEpochToVNDate(a.ngayMua),
-            Number(a.soThangKhauHao) || 36,
+            depMonths,
             formatEpochToVNDate(a.ngayBatDauKhauHao || a.ngayMua),
             a.chuKyBaoDuong ? `${a.chuKyBaoDuong} tháng` : '6 tháng',
             a.ghiChu || '',
@@ -1608,7 +1937,6 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
     // ============================================================================
     await dbRun(db, 'DELETE FROM contracts');
     if (prismaSaleOrders.length > 0) {
-      await dbRun(db, 'BEGIN TRANSACTION');
       for (const so of prismaSaleOrders) {
         if (so.trangThai === 'cancelled') continue;
         const cust = so.customerId ? customerById.get(so.customerId) : null;
@@ -1640,7 +1968,6 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           ]
         );
       }
-      await dbRun(db, 'COMMIT');
     }
 
     // ============================================================================
@@ -1656,7 +1983,6 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
       const catById = new Map();
       (prismaInventoryCategories || []).forEach((c) => catById.set(c.id, c.name));
 
-      await dbRun(db, 'BEGIN TRANSACTION');
 
       for (const item of prismaInventoryItems) {
         const qty = Number(item.soLuong) || 0;
@@ -1755,7 +2081,6 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           [`WHM-${movIdx++}`, item.id, opening, mv.inQty, mv.outQty, closing, uPrice]
         );
       }
-      await dbRun(db, 'COMMIT');
     }
 
     // ============================================================================
@@ -1763,7 +2088,6 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
     // ============================================================================
     await dbRun(db, 'DELETE FROM quotations');
     if (prismaQuotations.length > 0) {
-      await dbRun(db, 'BEGIN TRANSACTION');
       for (const q of prismaQuotations) {
         const cust = q.customerId ? customerById.get(q.customerId) : null;
         const emp = q.nguoiPhuTrachId ? employeeById.get(q.nguoiPhuTrachId) : null;
@@ -1797,7 +2121,6 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           ]
         );
       }
-      await dbRun(db, 'COMMIT');
     }
 
     // ============================================================================
@@ -1805,21 +2128,53 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
     // ============================================================================
     await dbRun(db, 'DELETE FROM monthly_payrolls');
     if (Array.isArray(prismaPayrolls) && prismaPayrolls.length > 0) {
-      await dbRun(db, 'BEGIN TRANSACTION');
       let pIdx = 1;
       for (const pr of prismaPayrolls) {
         const emp = pr.employeeId ? employeeById.get(pr.employeeId) : null;
-        const baseSal = Number(pr.luongCoBan ?? emp?.baseSalary) || 0;
-        const insSal = Number(emp?.insuranceSalary || baseSal) || 0;
-        const totalAllow = Number(pr.phuCap) || 0;
-        const insDed = Number(pr.khauTruBH) || Math.round(insSal * 0.105);
-        const corpIns = Math.round(insSal * 0.215);
-        const taxDed = Number(pr.thueTNCN) || 0;
-        const bonusAmt = Number(pr.thuong) || 0;
-        const advPen = Number(pr.phat) || 0;
-        const netSal = Number(pr.thucLinh) || Math.max(0, baseSal + totalAllow + bonusAmt - insDed - taxDed - advPen);
-        const stdDays = Number(pr.ngayCongChuan) || 26;
-        const actDays = Number(pr.ngayCongThucTe) || stdDays;
+        const baseSal = Math.round(Number(pr.luongCoBan ?? emp?.baseSalary) || 0);
+        const stdDays = Number(pr.ngayCongChuan) || 25;
+        const actDays =
+          pr.ngayCong !== undefined && pr.ngayCong !== null
+            ? Number(pr.ngayCong)
+            : Number(pr.ngayCongThucTe) || stdDays;
+        const isEnrolled = Boolean(
+          emp?.isInsuranceEnrolled ||
+            (emp?.socialInsuranceNumber && String(emp.socialInsuranceNumber).trim() !== '') ||
+            Number(emp?.insuranceSalary) > 0 ||
+            Number(pr.khauTruBH) > 0 ||
+            Number(pr.chiPhiCtyDong) > 0
+        );
+        const insSal = isEnrolled ? Math.round(Number(emp?.insuranceSalary) || baseSal || 0) : 0;
+        const totalAllow = Math.round(Number(pr.phuCap) || 0);
+        const otSal = Math.round(Number(pr.luongLamThem ?? pr.luongOT) || 0);
+        const bonusAmt = Math.round(Number(pr.thuong) || 0);
+        const insDed = Math.round(
+          pr.khauTruBH !== undefined && pr.khauTruBH !== null
+            ? Number(pr.khauTruBH)
+            : isEnrolled
+              ? insSal * 0.105
+              : 0
+        );
+        const corpIns = Math.round(
+          pr.chiPhiCtyDong !== undefined && pr.chiPhiCtyDong !== null
+            ? Number(pr.chiPhiCtyDong)
+            : isEnrolled
+              ? insSal * 0.215
+              : 0
+        );
+        const taxDed = Math.round(Number(pr.thueTNCN) || 0);
+        const advPen = Math.round(Number(pr.khauTruKhac ?? pr.phat) || 0);
+        const workSal =
+          Number(pr.tongChiPhiCty) > 0
+            ? Math.max(0, Math.round(Number(pr.tongChiPhiCty) - corpIns - totalAllow - otSal - bonusAmt))
+            : Math.round((baseSal / stdDays) * actDays);
+        const netSal =
+          pr.luongThucNhan !== undefined && pr.luongThucNhan !== null
+            ? Math.round(Number(pr.luongThucNhan))
+            : Math.max(0, workSal + totalAllow + otSal + bonusAmt - insDed - taxDed - advPen);
+        const resolvedPos =
+          (emp?.position && positionByCode.get(String(emp.position))) ||
+          (String(emp?.position || '').startsWith('vtr-') ? 'Nhân viên' : emp?.position || 'Nhân viên');
 
         await dbRun(
           db,
@@ -1830,23 +2185,24 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
             total_allowance, total_ot_converted, ot_salary, bonus_amount,
             insurance_deduction, corporate_insurance, tax_deduction, advance_or_penalties,
             net_salary, status, is_payroll_confirmed, notes, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Đồng bộ từ bảng lương Payroll', CURRENT_TIMESTAMP)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Đồng bộ từ bảng lương Payroll', CURRENT_TIMESTAMP)`,
           [
             pIdx,
             pIdx,
             emp?.code || `NV-${pIdx}`,
             emp?.fullName || 'Nhân viên Seajong',
             emp?.departmentName || 'Phòng ban chung',
-            emp?.position || 'Nhân viên',
-            Number(pr.thang) || 10,
+            resolvedPos,
+            Number(pr.thang) || 11,
             Number(pr.nam) || 2026,
             baseSal,
             insSal,
             stdDays,
             actDays,
-            baseSal,
+            workSal,
             totalAllow,
-            Number(pr.luongOT) || 0,
+            Number(pr.gioLamThem) || 0,
+            otSal,
             bonusAmt,
             insDed,
             corpIns,
@@ -1858,7 +2214,6 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
         );
         pIdx++;
       }
-      await dbRun(db, 'COMMIT');
     }
 
     // ============================================================================
@@ -1987,7 +2342,6 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
         isBalanced: true,
       };
 
-      await dbRun(db, 'BEGIN TRANSACTION');
       await dbRun(
         db,
         `INSERT OR REPLACE INTO financial_initial_declarations (period, data_json, updated_at) VALUES ('2026-10', ?, CURRENT_TIMESTAMP)`,
@@ -2023,7 +2377,6 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           [`OB-2026-${obIdx++}`, ol.code, ol.debit, ol.credit]
         );
       }
-      await dbRun(db, 'COMMIT');
     }
 
     try {

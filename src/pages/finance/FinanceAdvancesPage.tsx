@@ -40,7 +40,7 @@ export const FinanceAdvancesPage: React.FC<FinanceAdvancesPageProps> = ({
   return (
     <div className="finance-advances-page h-full">
       <StepPage
-        title="Quản lý tạm ứng & Hoàn ứng"
+        title="Quản lý tạm ứng và hoàn tạm ứng"
         description="Quy trình thẩm định tạm ứng chi phí công tác, mua sắm và quyết toán hóa đơn hoàn ứng của cán bộ công nhân viên"
         icon="bi-cash-coin"
         color="amber"

@@ -29,6 +29,7 @@ import {
 } from '../../../components/common/DepartmentSelect';
 import { openAttachmentInNewTab } from './services/documentViewer';
 import { useAuth } from '../../../context/AuthContext';
+import { notifyFinanceUpdated } from '../../../services/financeSyncService';
 export type ThemeMode = 'light' | 'dark';
 
 export interface ApprovalDocumentAttachment {
@@ -318,12 +319,14 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
     targetDoc: ApprovalDocument | null;
     note: string;
     approveDeposit?: boolean;
+    approvedAmount?: number;
   }>({
     isOpen: false,
     type: 'approve',
     targetDoc: null,
     note: '',
     approveDeposit: false,
+    approvedAmount: undefined,
   });
   const [reopenDetailAfterCancel, setReopenDetailAfterCancel] = useState(false);
 
@@ -456,8 +459,32 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
   };
 
   // Mở modal phê duyệt (đóng offcanvas trước để không che khuất modal)
-  const handleOpenApproveModal = (doc: ApprovalDocument, e?: React.MouseEvent, approveDepositFromSlide?: boolean) => {
+  const handleOpenApproveModal = (
+    doc: ApprovalDocument,
+    e?: React.MouseEvent,
+    approveDepositFromSlide?: boolean,
+    approvedAmountFromSlide?: number
+  ) => {
     e?.stopPropagation();
+    const isAdvDoc =
+      doc.docType === 'advance' ||
+      String(doc.entityType || '').toLowerCase().includes('advance') ||
+      String(doc.code || '').startsWith('YC-') ||
+      String(doc.code || '').startsWith('YCU-') ||
+      String(doc.title || '').toLowerCase().includes('tạm ứng');
+
+    // Nếu Giám đốc nhấn Phê duyệt từ trong Offcanvas tạm ứng (đã có ô Số tiền phê duyệt), thực thi phê duyệt ngay
+    if (isAdvDoc && approvedAmountFromSlide !== undefined) {
+      executeApprovalAction(
+        doc,
+        true,
+        'Đồng ý phê duyệt yêu cầu tạm ứng, ban hành Lệnh chi tiền.',
+        false,
+        approvedAmountFromSlide
+      );
+      return;
+    }
+
     if (isDetailOpen) {
       setReopenDetailAfterCancel(true);
       setIsDetailOpen(false);
@@ -471,12 +498,31 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
       targetDoc: doc,
       note: 'Đồng ý phê duyệt nội dung tờ trình. Yêu cầu các đơn vị phối hợp triển khai đúng tiến độ.',
       approveDeposit: approveDepositFromSlide !== undefined ? approveDepositFromSlide : hasDeposit,
+      approvedAmount: approvedAmountFromSlide !== undefined ? approvedAmountFromSlide : doc.value,
     });
   };
 
   // Mở modal từ chối (đóng offcanvas trước để không che khuất modal)
-  const handleOpenRejectModal = (doc: ApprovalDocument, e?: React.MouseEvent) => {
+  const handleOpenRejectModal = (doc: ApprovalDocument, e?: React.MouseEvent, directFromOffcanvas?: boolean) => {
     e?.stopPropagation();
+    const isAdvDoc =
+      doc.docType === 'advance' ||
+      String(doc.entityType || '').toLowerCase().includes('advance') ||
+      String(doc.code || '').startsWith('YC-') ||
+      String(doc.code || '').startsWith('YCU-') ||
+      String(doc.title || '').toLowerCase().includes('tạm ứng');
+
+    if (isAdvDoc && directFromOffcanvas) {
+      executeApprovalAction(
+        doc,
+        false,
+        'Giám đốc từ chối phê duyệt yêu cầu tạm ứng.',
+        false,
+        doc.value
+      );
+      return;
+    }
+
     if (isDetailOpen) {
       setReopenDetailAfterCancel(true);
       setIsDetailOpen(false);
@@ -488,26 +534,34 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
       type: 'reject',
       targetDoc: doc,
       note: '',
+      approvedAmount: doc.value,
     });
   };
 
   // Đóng modal bút phê duyệt / từ chối (phục hồi offcanvas nếu trước đó mở từ offcanvas)
   const handleCloseActionModal = () => {
-    setActionModal({ isOpen: false, type: 'approve', targetDoc: null, note: '' });
+    setActionModal({ isOpen: false, type: 'approve', targetDoc: null, note: '', approvedAmount: undefined });
     if (reopenDetailAfterCancel) {
       setIsDetailOpen(true);
       setReopenDetailAfterCancel(false);
     }
   };
 
-  // Xử lý xác nhận phê duyệt hoặc từ chối
-  const handleConfirmAction = async () => {
-    if (!actionModal.targetDoc) return;
-    const targetDoc = actionModal.targetDoc;
+  // Thực thi phê duyệt hoặc từ chối
+  const executeApprovalAction = async (
+    targetDoc: ApprovalDocument,
+    isApprove: boolean,
+    rawNote: string,
+    approveDepositFlag?: boolean,
+    customApprovedAmount?: number
+  ) => {
     const docId = targetDoc.id;
     const nowStr = new Date().toLocaleDateString('vi-VN');
-    const isApprove = actionModal.type === 'approve';
-    const noteContent = actionModal.note.trim();
+    const noteContent = rawNote.trim();
+    const finalApprovedAmount =
+      customApprovedAmount !== undefined && customApprovedAmount > 0
+        ? customApprovedAmount
+        : targetDoc.value || 0;
 
     const approverName = activeUser?.name || (targetDoc as any)?.approverName || 'Lê Công Vụ';
     const approverCode = user?.code || (targetDoc as any)?.approverCode || 'DCD-20261005-1674-PDMQ';
@@ -517,6 +571,10 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
         if (isApprove) {
           return {
             ...doc,
+            metadata: {
+              ...(doc.metadata || {}),
+              approvedAmount: finalApprovedAmount,
+            },
             status: 'approved' as const,
             approvalDate: nowStr,
             approvedBy: approverName,
@@ -528,7 +586,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
             status: 'rejected' as const,
             rejectionDate: nowStr,
             rejectedBy: approverName,
-            rejectionReason: noteContent || 'Hồ sơ chưa đạt yêu cầu, cần bổ sung tài liệu.',
+            rejectionReason: noteContent || 'Giám đốc từ chối phê duyệt.',
           };
         }
       }
@@ -536,12 +594,12 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
     });
 
     updateItems(updated);
-    setActionModal({ isOpen: false, type: 'approve', targetDoc: null, note: '' });
+    setActionModal({ isOpen: false, type: 'approve', targetDoc: null, note: '', approvedAmount: undefined });
     setReopenDetailAfterCancel(false);
     setIsDetailOpen(false);
     setSelectedDoc(null);
 
-    // 1. Gọi API cập nhật vào CSDL SQLite
+    // 1. Gọi API cập nhật vào CSDL SQLite (bao gồm tự động sinh Lệnh chi tiền & đồng bộ trạng thái tạm ứng)
     try {
       await fetch(`/api/approval-documents/${docId}/status`, {
         method: 'PATCH',
@@ -551,7 +609,14 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
           note: noteContent,
           approverName: approverName,
           approverCode: approverCode,
-          approveDeposit: isApprove ? Boolean(actionModal.approveDeposit) : false,
+          approveDeposit: isApprove ? Boolean(approveDepositFlag) : false,
+          approvedAmount: finalApprovedAmount,
+          entityCode: targetDoc.code,
+          entityType: targetDoc.entityType || targetDoc.docType,
+          title: targetDoc.title,
+          department: targetDoc.department,
+          submitter: targetDoc.submitter,
+          summary: targetDoc.summary,
         }),
       });
     } catch (err) {
@@ -583,8 +648,16 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
       console.warn('Lỗi gửi thông báo tự động:', err);
     }
 
-    // 3. Tự động cập nhật thông tin sang trang "Lập hồ sơ dự thầu" khi Giám đốc phê duyệt
-    if (isApprove) {
+    const isTenderDoc =
+      String(targetDoc.docType) === 'tender' ||
+      String(targetDoc.entityType || '').toLowerCase().includes('tender') ||
+      String(targetDoc.code || '').startsWith('HSMT-') ||
+      String(targetDoc.code || '').startsWith('HSDT-') ||
+      String(targetDoc.title || '').toLowerCase().includes('mời thầu') ||
+      String(targetDoc.title || '').toLowerCase().includes('dự thầu');
+
+    // 3. Tự động cập nhật thông tin sang trang "Lập hồ sơ dự thầu" khi Giám đốc phê duyệt hồ sơ thầu
+    if (isApprove && isTenderDoc) {
       try {
         const rawTitle = targetDoc.title || '';
         const cleanedTitle = rawTitle
@@ -690,62 +763,64 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
     }
 
     // 4. Tự động thay đổi trạng thái gói thầu trong trang "Phân tích hồ sơ mời thầu"
-    try {
-      let targetTenderId = targetDoc.tenderId || (targetDoc as any).tender_id;
-      let targetTenderCode = targetDoc.tenderCode || (targetDoc as any).tender_code;
-
+    if (isTenderDoc) {
       try {
-        const res = await fetch('/api/tenders');
-        if (res.ok) {
-          const tenders = await res.json();
-          if (Array.isArray(tenders) && tenders.length > 0) {
-            const matched = tenders.find((t: any) =>
-              (targetTenderId && t.id === targetTenderId) ||
-              (targetTenderCode && t.code === targetTenderCode) ||
-              (t.code && targetDoc.code && targetDoc.code.includes(t.code.replace('HSMT-', ''))) ||
-              (targetDoc.title && t.title && (targetDoc.title.includes(t.title) || t.title.includes(targetDoc.title))) ||
-              (targetDoc.content && t.code && targetDoc.content.includes(t.code)) ||
-              (targetDoc.content && t.title && targetDoc.content.includes(t.title)) ||
-              (t.code && targetDoc.title && targetDoc.title.includes(t.code))
-            );
-            if (matched) {
-              targetTenderId = matched.id;
-              targetTenderCode = matched.code;
-            } else if (tenders.length === 1) {
-              targetTenderId = tenders[0].id;
-              targetTenderCode = tenders[0].code;
+        let targetTenderId = targetDoc.tenderId || (targetDoc as any).tender_id;
+        let targetTenderCode = targetDoc.tenderCode || (targetDoc as any).tender_code;
+
+        try {
+          const res = await fetch('/api/tenders');
+          if (res.ok) {
+            const tenders = await res.json();
+            if (Array.isArray(tenders) && tenders.length > 0) {
+              const matched = tenders.find((t: any) =>
+                (targetTenderId && t.id === targetTenderId) ||
+                (targetTenderCode && t.code === targetTenderCode) ||
+                (t.code && targetDoc.code && targetDoc.code.includes(t.code.replace('HSMT-', ''))) ||
+                (targetDoc.title && t.title && (targetDoc.title.includes(t.title) || t.title.includes(targetDoc.title))) ||
+                (targetDoc.content && t.code && targetDoc.content.includes(t.code)) ||
+                (targetDoc.content && t.title && targetDoc.content.includes(t.title)) ||
+                (t.code && targetDoc.title && targetDoc.title.includes(t.code))
+              );
+              if (matched) {
+                targetTenderId = matched.id;
+                targetTenderCode = matched.code;
+              } else if (tenders.length === 1) {
+                targetTenderId = tenders[0].id;
+                targetTenderCode = tenders[0].code;
+              }
             }
           }
+        } catch {}
+
+        if (targetTenderId) {
+          const newStatus = isApprove ? 'participating' : 'not_participating';
+          const newStatusLabel = isApprove ? 'Tham gia' : 'Không tham gia';
+          const newBadgeVariant = isApprove ? 'success' : 'danger';
+
+          await fetch(`/api/tenders/${targetTenderId}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status: newStatus,
+              statusLabel: newStatusLabel,
+              badgeVariant: newBadgeVariant,
+            }),
+          });
+
+          // Bắn sự kiện thời gian thực cho trang Phân tích hồ sơ mời thầu và Quản lý khách hàng
+          window.dispatchEvent(new CustomEvent('decodoor_tender_updated', {
+            detail: { id: targetTenderId, code: targetTenderCode, status: newStatus, statusLabel: newStatusLabel, badgeVariant: newBadgeVariant }
+          }));
+          window.dispatchEvent(new CustomEvent('decodoor_bidding_tender_updated'));
+          if (isApprove) {
+            window.dispatchEvent(new CustomEvent('decodoor_customers_updated'));
+            window.dispatchEvent(new CustomEvent('decodoor_customer_created'));
+          }
         }
-      } catch {}
-
-      if (targetTenderId) {
-        const newStatus = isApprove ? 'participating' : 'not_participating';
-        const newStatusLabel = isApprove ? 'Tham gia' : 'Không tham gia';
-        const newBadgeVariant = isApprove ? 'success' : 'danger';
-
-        await fetch(`/api/tenders/${targetTenderId}/status`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            status: newStatus,
-            statusLabel: newStatusLabel,
-            badgeVariant: newBadgeVariant,
-          }),
-        });
-
-        // Bắn sự kiện thời gian thực cho trang Phân tích hồ sơ mời thầu và Quản lý khách hàng
-        window.dispatchEvent(new CustomEvent('decodoor_tender_updated', {
-          detail: { id: targetTenderId, code: targetTenderCode, status: newStatus, statusLabel: newStatusLabel, badgeVariant: newBadgeVariant }
-        }));
-        window.dispatchEvent(new CustomEvent('decodoor_bidding_tender_updated'));
-        if (isApprove) {
-          window.dispatchEvent(new CustomEvent('decodoor_customers_updated'));
-          window.dispatchEvent(new CustomEvent('decodoor_customer_created'));
-        }
+      } catch (tenderErr) {
+        console.warn('Lỗi tự động cập nhật trạng thái gói thầu:', tenderErr);
       }
-    } catch (tenderErr) {
-      console.warn('Lỗi tự động cập nhật trạng thái gói thầu:', tenderErr);
     }
 
     // 5. Tự động cập nhật trạng thái Báo giá dự án nếu là tờ trình báo giá
@@ -796,24 +871,39 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
 
       if (isPaymentReqDoc) {
         if (isApprove) {
-          const lcCode = `LC-${targetDoc.code?.replace('YCCHI-', '').replace('YCU-', '') || Date.now().toString().slice(-6)}`;
+          const cleanRefCode = String(targetDoc.code || '').replace(/^(YCCHI-|YCU-|YC-)/, '');
+          const lcCode = `LC-${cleanRefCode || Date.now().toString().slice(-6)}`;
+          const isEmployeeAdvance =
+            targetDoc.docType === 'advance' ||
+            String(targetDoc.entityType || '').toLowerCase().includes('advance') ||
+            String(targetDoc.code || '').startsWith('YC-');
+          const cleanSubmitter = String(targetDoc.submitter || '').replace(/\s*\(Trình bởi:.*\)$/i, '').trim();
           const partnerFromSummary = targetDoc.summary?.match(/Đối tác:\s*([^•\n]+)/)?.[1]?.trim();
-          const partnerFromTitle = targetDoc.title?.match(/cho\s+(.+)$/i)?.[1]?.trim();
-          const beneficiaryName = partnerFromSummary || partnerFromTitle || targetDoc.submitter || targetDoc.department;
-          const isAdv = targetDoc.code?.startsWith('YCU-') || targetDoc.title?.toLowerCase().includes('ứng trước');
+          const partnerFromTitle = !isEmployeeAdvance ? targetDoc.title?.match(/cho\s+(.+)$/i)?.[1]?.trim() : undefined;
+          const beneficiaryName = isEmployeeAdvance
+            ? targetDoc.metadata?.employeeName || targetDoc.metadata?.proposer || cleanSubmitter || targetDoc.department
+            : partnerFromSummary || partnerFromTitle || cleanSubmitter || targetDoc.department;
+          const isAdv = isEmployeeAdvance || targetDoc.code?.startsWith('YCU-') || targetDoc.title?.toLowerCase().includes('ứng trước');
 
           await fetch('/api/finance/payment-orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              id: `PO-${Date.now()}`,
+              id: `PO-ADV-${targetDoc.code || Date.now()}`,
               orderCode: lcCode,
-              refType: isAdv ? 'advance_supplier' : 'payable_payment',
+              refType: isEmployeeAdvance ? 'advance_payment' : isAdv ? 'advance_supplier' : 'payable_payment',
               refCode: targetDoc.code,
-              title: `Lệnh chi tiền: ${targetDoc.title}`,
+              title: isEmployeeAdvance
+                ? `Lệnh chi tạm ứng ${targetDoc.code} - ${beneficiaryName}`
+                : `Lệnh chi tiền: ${targetDoc.title}`,
               beneficiaryName,
-              amount: targetDoc.value || 0,
-              purpose: targetDoc.summary || targetDoc.title,
+              department: targetDoc.department,
+              amount: finalApprovedAmount,
+              paymentMethod: targetDoc.metadata?.paymentMethod || 'bank_transfer',
+              bankName: targetDoc.metadata?.bankName || '',
+              bankAccount: targetDoc.metadata?.bankAccount || '',
+              purpose: targetDoc.metadata?.purpose || targetDoc.metadata?.reason || targetDoc.summary || targetDoc.title,
+              dueDate: targetDoc.metadata?.deadlineRefund || nowStr,
               status: 'pending',
               statusLabel: 'Chờ chi tiền',
               approvedBy: approverName,
@@ -822,8 +912,16 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
             }),
           }).catch(() => {});
 
+          notifyFinanceUpdated('payment_order', 'create');
+          notifyFinanceUpdated('advance_payments', 'update');
+          window.dispatchEvent(new CustomEvent('seajong_payment_orders_updated'));
+          window.dispatchEvent(new CustomEvent('seajong_cashflow_updated'));
           window.dispatchEvent(new CustomEvent('decodoor_payment_orders_updated'));
           window.dispatchEvent(new CustomEvent('decodoor_cashflow_updated'));
+        } else {
+          notifyFinanceUpdated('advance_payments', 'update');
+          window.dispatchEvent(new CustomEvent('seajong_payment_orders_updated'));
+          window.dispatchEvent(new CustomEvent('seajong_cashflow_updated'));
         }
       }
     } catch (payErr) {
@@ -835,22 +933,41 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
       const isPaymentReqDoc =
         targetDoc.code?.startsWith('YCCHI-') ||
         targetDoc.code?.startsWith('YCU-') ||
+        targetDoc.code?.startsWith('YC-') ||
         (targetDoc as any).docType === 'payment_order' ||
         (targetDoc as any).docType === 'advance_supplier' ||
         (targetDoc as any).docType === 'payable_payment' ||
+        targetDoc.docType === 'advance' ||
+        String(targetDoc.entityType || '').toLowerCase().includes('advance') ||
         targetDoc.title?.toLowerCase().includes('yêu cầu chi tiền') ||
+        targetDoc.title?.toLowerCase().includes('tạm ứng') ||
         targetDoc.title?.toLowerCase().includes('yêu cầu ứng trước');
 
       if (isQuoteDoc) {
         onShowToast?.('success', 'Phê duyệt thành công', `Đã phê duyệt báo giá ${targetDoc.code}, tự động chuyển trạng thái "Đã phê duyệt" và tạo hợp đồng kinh tế "Đang thương thảo"`);
       } else if (isPaymentReqDoc) {
-        onShowToast?.('success', 'Phê duyệt thành công', `Đã phê duyệt yêu cầu ${targetDoc.code}, tự động ban hành Lệnh chi tiền chuyển Kế toán thực hiện.`);
+        onShowToast?.(
+          'success',
+          'Phê duyệt & Tạo lệnh chi thành công',
+          `Đã phê duyệt ${targetDoc.code} với số tiền ${finalApprovedAmount.toLocaleString('vi-VN')} đ và tự động sinh Lệnh chi tiền vào danh sách trang Tổng quan.`
+        );
       } else {
         onShowToast?.('success', 'Phê duyệt thành công', `Đã phê duyệt văn bản ${targetDoc.code}, tự động cập nhật trạng thái gói thầu sang "Tham gia" và chuyển sang Lập hồ sơ dự thầu`);
       }
     } else {
-      onShowToast?.('warning', 'Đã từ chối', `Đã từ chối văn bản ${targetDoc.code} và gửi thông báo phản hồi tới ${targetDoc.submitter}`);
+      onShowToast?.('warning', 'Đã từ chối', `Đã từ chối ${targetDoc.code} và tự động chuyển trạng thái yêu cầu sang "Từ chối".`);
     }
+  };
+
+  const handleConfirmAction = async () => {
+    if (!actionModal.targetDoc) return;
+    await executeApprovalAction(
+      actionModal.targetDoc,
+      actionModal.type === 'approve',
+      actionModal.note,
+      actionModal.approveDeposit,
+      actionModal.approvedAmount
+    );
   };
 
   // Duyệt nhanh nhiều mục đã chọn trong Bước 1
@@ -1568,37 +1685,44 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                           return (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                               {doc.value > 0 ? (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                  <span
-                                    style={{
-                                      fontWeight: 700,
-                                      color: 'var(--color-primary, #0284c7)',
-                                      fontSize: '0.8125rem',
-                                    }}
-                                  >
-                                    {doc.value.toLocaleString('vi-VN')} đ
-                                  </span>
-                                  {methodBadge && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                     <span
                                       style={{
-                                        fontSize: '0.6875rem',
-                                        fontWeight: 600,
-                                        padding: '1px 7px',
-                                        borderRadius: '4px',
-                                        backgroundColor: methodBadge.toLowerCase().includes('tiền mặt')
-                                          ? 'rgba(245, 158, 11, 0.12)'
-                                          : 'rgba(2, 132, 199, 0.1)',
-                                        color: methodBadge.toLowerCase().includes('tiền mặt') ? '#d97706' : '#0284c7',
-                                        border: methodBadge.toLowerCase().includes('tiền mặt')
-                                          ? '1px solid rgba(245, 158, 11, 0.25)'
-                                          : '1px solid rgba(2, 132, 199, 0.2)',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        lineHeight: 1.3,
+                                        fontWeight: 700,
+                                        color: 'var(--color-primary, #0284c7)',
+                                        fontSize: '0.8125rem',
                                       }}
-                                      title={`Phương thức giải ngân: ${methodBadge}`}
                                     >
-                                      {methodBadge}
+                                      {doc.value.toLocaleString('vi-VN')} đ
+                                    </span>
+                                    {methodBadge && (
+                                      <span
+                                        style={{
+                                          fontSize: '0.6875rem',
+                                          fontWeight: 600,
+                                          padding: '1px 7px',
+                                          borderRadius: '4px',
+                                          backgroundColor: methodBadge.toLowerCase().includes('tiền mặt')
+                                            ? 'rgba(245, 158, 11, 0.12)'
+                                            : 'rgba(2, 132, 199, 0.1)',
+                                          color: methodBadge.toLowerCase().includes('tiền mặt') ? '#d97706' : '#0284c7',
+                                          border: methodBadge.toLowerCase().includes('tiền mặt')
+                                            ? '1px solid rgba(245, 158, 11, 0.25)'
+                                            : '1px solid rgba(2, 132, 199, 0.2)',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          lineHeight: 1.3,
+                                        }}
+                                        title={`Phương thức giải ngân: ${methodBadge}`}
+                                      >
+                                        {methodBadge}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {doc.status === 'approved' && (doc.docType === 'advance' || String(doc.code || '').startsWith('YC-')) && (
+                                    <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#16a34a' }}>
+                                      Duyệt: {Number(doc.metadata?.approvedAmount || doc.value).toLocaleString('vi-VN')} đ
                                     </span>
                                   )}
                                 </div>
@@ -1755,8 +1879,10 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
               }}
               document={liveSelectedDoc}
               initialOpenChat={openChatOnSelect}
-              onApprove={(doc, approveDeposit) => handleOpenApproveModal(doc, undefined, approveDeposit)}
-              onReject={(doc) => handleOpenRejectModal(doc)}
+              onApprove={(doc, approveDeposit, approvedAmount) =>
+                handleOpenApproveModal(doc, undefined, approveDeposit, approvedAmount)
+              }
+              onReject={(doc) => handleOpenRejectModal(doc, undefined, true)}
               onShowToast={onShowToast}
             />
 
@@ -1852,6 +1978,39 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
               </div>
             </div>
           )}
+
+          {actionModal.type === 'approve' &&
+            actionModal.targetDoc &&
+            (actionModal.targetDoc.docType === 'advance' ||
+              String(actionModal.targetDoc.entityType || '').toLowerCase().includes('advance') ||
+              String(actionModal.targetDoc.code || '').startsWith('YC-')) && (
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.8125rem',
+                    fontWeight: 700,
+                    color: 'var(--text-primary)',
+                    marginBottom: '6px',
+                  }}
+                >
+                  Số tiền phê duyệt (VNĐ):
+                </label>
+                <Input
+                  type="text"
+                  value={
+                    actionModal.approvedAmount !== undefined
+                      ? Number(actionModal.approvedAmount || 0).toLocaleString('vi-VN')
+                      : Number(actionModal.targetDoc.value || 0).toLocaleString('vi-VN')
+                  }
+                  onChange={(e) => {
+                    const num = Number(e.target.value.replace(/[^0-9]/g, '')) || 0;
+                    setActionModal((prev) => ({ ...prev, approvedAmount: num }));
+                  }}
+                  style={{ fontWeight: 700, color: '#0369a1' }}
+                />
+              </div>
+            )}
 
           {actionModal.type === 'approve' && Number(actionModal.targetDoc?.metadata?.datCocPct || 0) > 0 && (() => {
             const pct = Number(actionModal.targetDoc?.metadata?.datCocPct || 0);

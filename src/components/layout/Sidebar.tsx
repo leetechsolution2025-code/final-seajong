@@ -143,7 +143,7 @@ const DEPT_SIDEBAR_CONFIGS: Record<string, { deptName: string; sections: NavSect
         items: [
           { id: 'journal-entries', name: 'Sổ nhật ký chung' },
           { id: 'initial-declaration', name: 'Khai báo số dư đầu kỳ' },
-          { id: 'advances', name: 'Tạm ứng và chi phí' },
+          { id: 'advances', name: 'Tạm ứng và hoàn tạm ứng' },
         ],
       },
       {

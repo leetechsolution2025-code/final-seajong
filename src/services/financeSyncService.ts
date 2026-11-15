@@ -128,10 +128,22 @@ export function useFinanceRealtimeSync(onRefresh: () => void, enablePolling = tr
     // 2. Lắng nghe BroadcastChannel từ các tab khác
     const handleBroadcast = (e: any) => {
       triggerRefresh(Boolean(e?.data?.force));
+      window.dispatchEvent(new CustomEvent('seajong_notifications_updated'));
+      window.dispatchEvent(new CustomEvent('decodoor_notifications_updated'));
     };
     if (broadcastChannel) {
       broadcastChannel.addEventListener('message', handleBroadcast);
     }
+
+    // 2b. Lắng nghe sự kiện storage từ các tab khác
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'decodoor_request_last_created' || e.key?.includes('finance')) {
+        triggerRefresh(true);
+        window.dispatchEvent(new CustomEvent('seajong_notifications_updated'));
+        window.dispatchEvent(new CustomEvent('decodoor_notifications_updated'));
+      }
+    };
+    window.addEventListener('storage', handleStorage);
 
     // 3. Lắng nghe sự kiện Window Focus (Khi click chuột quay lại màn hình)
     const handleFocus = () => {
@@ -146,11 +158,13 @@ export function useFinanceRealtimeSync(onRefresh: () => void, enablePolling = tr
         if (!document.hidden && !isUserActivelyInteracting()) {
           triggerRefresh(false);
         }
-      }, 10000);
+      }, 3000);
     }
 
     return () => {
       window.removeEventListener(FINANCE_SYNC_EVENT, handleCustomEvent);
+      window.removeEventListener(LEGACY_FINANCE_SYNC_EVENT, handleCustomEvent);
+      window.removeEventListener('storage', handleStorage);
       if (broadcastChannel) {
         broadcastChannel.removeEventListener('message', handleBroadcast);
       }

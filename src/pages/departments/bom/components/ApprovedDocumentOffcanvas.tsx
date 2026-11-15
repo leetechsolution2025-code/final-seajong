@@ -217,10 +217,19 @@ export const ApprovedDocumentOffcanvas: React.FC<ApprovedDocumentOffcanvasProps>
                 <CashStack size={20} />
               </div>
               <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Giá trị phê duyệt</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  {document.docType === 'advance' || String(document.code || '').startsWith('YC-')
+                    ? 'Số tiền xin tạm ứng'
+                    : 'Giá trị phê duyệt'}
+                </div>
                 <div style={{ fontSize: '1.0625rem', fontWeight: 800, color: 'var(--color-primary)' }}>
                   {document.value.toLocaleString('vi-VN')} VNĐ
                 </div>
+                {(document.docType === 'advance' || String(document.code || '').startsWith('YC-')) && (
+                  <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#059669', marginTop: '2px' }}>
+                    Số tiền phê duyệt: {Number(document.metadata?.approvedAmount || document.value).toLocaleString('vi-VN')} VNĐ
+                  </div>
+                )}
               </div>
             </div>
             <div

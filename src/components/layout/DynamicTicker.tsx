@@ -599,6 +599,30 @@ export const CASHFLOW_TICKER_ITEMS: TickerItem[] = [
   },
 ];
 
+// ── 22C. QUẢN LÝ TẠM ỨNG VÀ HOÀN TẠM ỨNG (ADVANCES & SETTLEMENTS - TK 141) ──
+export const ADVANCES_TICKER_ITEMS: TickerItem[] = [
+  {
+    badge: 'ĐỀ NGHỊ TẠM ỨNG (TK 141)',
+    badgeColor: 'bg-blue-50 text-blue-700 border-blue-200 font-bold',
+    text: 'Tiếp nhận và thẩm định phiếu đề nghị tạm ứng công tác phí, mua sắm vật tư và chi phí vận hành của cán bộ nhân viên (Định khoản Nợ TK 141 / Có TK 1111, 1121)',
+  },
+  {
+    badge: 'QUYẾT TOÁN HOÀN ỨNG',
+    badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold',
+    text: 'Đối chiếu hóa đơn GTGT, bảng kê chứng từ thực chi hợp lệ để tất toán công nợ tạm ứng (Nợ TK 641, 642, 152, 1331 / Có TK 141)',
+  },
+  {
+    badge: 'ĐỐI SOÁT CHÊNH LỆCH THU / BÙ',
+    badgeColor: 'bg-amber-50 text-amber-800 border-amber-200 font-bold',
+    text: 'Tự động tính toán chênh lệch giữa số tiền đã tạm ứng và thực chi: Thu hồi tiền thừa nộp hoàn quỹ (Nợ TK 111 / Có TK 141) hoặc chi bù vượt định mức',
+  },
+  {
+    badge: 'KIỂM SOÁT HẠN HOÀN ỨNG',
+    badgeColor: 'bg-rose-50 text-rose-700 border-rose-200 font-bold',
+    text: 'Quy định hoàn ứng trong vòng 05 ngày làm việc sau khi kết thúc công tác/mua sắm; cảnh báo các hồ sơ quá hạn chứng từ và đồng bộ khấu trừ lương cuối kỳ',
+  },
+];
+
 // ── 23. CÔNG VIỆC CÁ NHÂN & NHIỆM VỤ (TASKS) ───────────────────────────────
 export const TASKS_TICKER_ITEMS: TickerItem[] = [
   {
@@ -809,6 +833,7 @@ export function resolveContext(
     if (ctx.includes('crm') || ctx.includes('complaint')) return 'crm';
     if (ctx.includes('supplier') || ctx.includes('purchase')) return 'suppliers';
     if (ctx.includes('approval')) return 'approvals';
+    if (ctx.includes('advance') || ctx.includes('tam-ung') || ctx.includes('tam_ung') || ctx.includes('settlement')) return 'advances';
     if (ctx.includes('categor')) return 'categories';
     if (ctx.includes('task') || ctx.includes('req')) return 'tasks';
     if (ctx.includes('doc') || ctx.includes('meet')) return 'documents';
@@ -841,7 +866,8 @@ export function resolveContext(
     if (m === 'customers' || m === 'pricing' || m === 'business-results' || m === 'sales-reports' || m === 'internal-reports' || m === 'retail') return 'sales';
     if (m === 'marketing') return 'marketing';
     if (m === 'cashflow' || m === 'dong-tien' || m === 'dong_tien') return 'cashflow';
-    if (m === 'assets' || m === 'debts' || m === 'journal-entries' || m === 'advances' || m === 'reports') return 'finance';
+    if (m === 'advances' || m === 'advance-payments' || m === 'advance-settlements') return 'advances';
+    if (m === 'assets' || m === 'debts' || m === 'journal-entries' || m === 'reports') return 'finance';
     if (m === 'approvals') return 'approvals';
     if (m === 'categories') return 'categories';
     if (m === 'my_tasks' || m === 'tasks' || m === 'my_requests') return 'tasks';
@@ -875,7 +901,8 @@ export function resolveContext(
     if (t.includes('đại lý') || t.includes('khách hàng') || t.includes('bán hàng') || t.includes('báo giá') || t.includes('chiết khấu') || t.includes('kinh doanh')) return 'sales';
     if (t.includes('quảng cáo') || t.includes('marketing') || t.includes('chiến dịch') || t.includes('lead')) return 'marketing';
     if (t.includes('dòng tiền') || t.includes('thu chi') || t.includes('cashflow')) return 'cashflow';
-    if (t.includes('tài sản') || t.includes('công nợ') || t.includes('tài chính') || t.includes('kế toán') || t.includes('tạm ứng') || t.includes('sổ cái')) return 'finance';
+    if (t.includes('tạm ứng') || t.includes('hoàn ứng') || t.includes('hoàn tạm ứng')) return 'advances';
+    if (t.includes('tài sản') || t.includes('công nợ') || t.includes('tài chính') || t.includes('kế toán') || t.includes('sổ cái')) return 'finance';
     if (t.includes('phê duyệt') || t.includes('tờ trình') || t.includes('ký số')) return 'approvals';
     if (t.includes('danh mục')) return 'categories';
     if (t.includes('công việc') || t.includes('nhiệm vụ') || t.includes('đề xuất cá nhân')) return 'tasks';
@@ -938,6 +965,78 @@ export const DynamicTicker: React.FC<DynamicTickerProps> = ({
   const [liveHrItems, setLiveHrItems] = useState<TickerItem[] | null>(null);
   const [liveQaItems, setLiveQaItems] = useState<TickerItem[] | null>(null);
   const [liveSuppliersItems, setLiveSuppliersItems] = useState<TickerItem[] | null>(null);
+  const [liveAdvancesItems, setLiveAdvancesItems] = useState<TickerItem[] | null>(null);
+
+  useEffect(() => {
+    if (resolvedContext === 'advances' && (!items || items.length === 0) && (!customNews || customNews.length === 0)) {
+      const fetchAdvancesTicker = () => {
+        Promise.all([
+          fetch('/api/advance-payments').then((r) => (r.ok ? r.json() : [])).catch(() => []),
+          fetch('/api/advance-settlements').then((r) => (r.ok ? r.json() : [])).catch(() => []),
+        ]).then(([payRes, setRes]) => {
+          const payments = Array.isArray(payRes) ? payRes : [];
+          const settlements = Array.isArray(setRes) ? setRes : [];
+
+          const pendingCount = payments.filter((p: any) => p.status === 'pending').length;
+          const approvedPayments = payments.filter((p: any) => p.status === 'approved');
+          const approvedCount = approvedPayments.length;
+          const totalApprovedAmount = approvedPayments.reduce(
+            (sum: number, p: any) => sum + (Number(p.amount) || 0),
+            0
+          );
+
+          const totalActualSpent = settlements.reduce((sum: number, s: any) => sum + (Number(s.actualSpent) || 0), 0);
+          const settledCount = settlements.filter((s: any) => s.status === 'settled').length;
+          const unsettledCount = settlements.filter(
+            (s: any) => s.status === 'unsettled' || s.status === 'processing' || s.status === 'overdue'
+          ).length;
+
+          let refundToCollect = 0;
+          let extraReimbursement = 0;
+          settlements.forEach((s: any) => {
+            const actual = Number(s.actualSpent) || 0;
+            const adv = Number(s.advanceAmount) || 0;
+            if (actual > 0) {
+              const diff = actual - adv;
+              if (diff < 0) refundToCollect += Math.abs(diff);
+              else if (diff > 0) extraReimbursement += diff;
+            }
+          });
+
+          setLiveAdvancesItems([
+            {
+              badge: 'ĐỀ NGHỊ TẠM ỨNG (TK 141)',
+              badgeColor: 'bg-blue-50 text-blue-700 border-blue-200 font-bold',
+              text: `Tổng tạm ứng đã duyệt giải ngân: <strong>${totalApprovedAmount.toLocaleString('vi-VN')} đ</strong> (${approvedCount} phiếu) • Đang chờ xét duyệt: <strong>${pendingCount} phiếu</strong>`,
+            },
+            {
+              badge: 'QUYẾT TOÁN HOÀN ỨNG',
+              badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold',
+              text: `Thực chi đã quyết toán hóa đơn: <strong>${totalActualSpent.toLocaleString('vi-VN')} đ</strong> — Đã tất toán: <strong>${settledCount} hồ sơ</strong> • Đang theo dõi chứng từ: <strong>${unsettledCount} hồ sơ</strong>`,
+            },
+            {
+              badge: 'ĐỐI SOÁT CHÊNH LỆCH THU / BÙ',
+              badgeColor: 'bg-amber-50 text-amber-800 border-amber-200 font-bold',
+              text: `Cần thu hoàn trả quỹ (TK 111/112): <strong>${refundToCollect.toLocaleString('vi-VN')} đ</strong> • Công ty cần chi bù thêm vượt định mức: <strong>${extraReimbursement.toLocaleString('vi-VN')} đ</strong>`,
+            },
+            {
+              badge: 'QUY ĐỊNH QUẢN LÝ TK 141',
+              badgeColor: 'bg-purple-50 text-purple-700 border-purple-200 font-bold',
+              text: 'Hoàn ứng chứng từ hợp lệ trong vòng 05 ngày sau khi kết thúc công tác/mua sắm; tự động kết chuyển Sổ nhật ký chung và đối trừ bảng lương cuối kỳ',
+            },
+          ]);
+        });
+      };
+
+      fetchAdvancesTicker();
+      window.addEventListener('seajong_finance_updated', fetchAdvancesTicker);
+      window.addEventListener('storage', fetchAdvancesTicker);
+      return () => {
+        window.removeEventListener('seajong_finance_updated', fetchAdvancesTicker);
+        window.removeEventListener('storage', fetchAdvancesTicker);
+      };
+    }
+  }, [resolvedContext, items, customNews]);
 
   useEffect(() => {
     if (resolvedContext === 'employees' && (!items || items.length === 0) && (!customNews || customNews.length === 0)) {
@@ -1213,6 +1312,9 @@ export const DynamicTicker: React.FC<DynamicTickerProps> = ({
         break;
       case 'finance':
         displayItems = FINANCE_TICKER_ITEMS;
+        break;
+      case 'advances':
+        displayItems = liveAdvancesItems || ADVANCES_TICKER_ITEMS;
         break;
       case 'cashflow':
         displayItems = CASHFLOW_TICKER_ITEMS;

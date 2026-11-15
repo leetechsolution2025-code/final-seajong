@@ -22,10 +22,15 @@ import { Button } from '../../../components/common/Button';
 import { TableToolbar, type TableToolbarFilter } from '../../../components/common/TableToolbar';
 import { Pagination } from '../../../components/common/Pagination';
 import { Modal } from '../../../components/common/Modal';
+import { DataRetentionOffcanvas } from '../../../components/common/DataRetentionOffcanvas';
 import {
   useDepartmentOptions,
   matchDepartment,
 } from '../../../components/common/DepartmentSelect';
+import {
+  useFinanceRealtimeSync,
+  notifyFinanceUpdated,
+} from '../../../services/financeSyncService';
 
 // --- DATA TYPES ---
 export interface InvoiceItem {
@@ -78,24 +83,43 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
   const [isLoading, setIsLoading] = useState(false);
 
   // Tải dữ liệu hoàn tạm ứng từ Database
-  const fetchSettlements = async () => {
-    setIsLoading(true);
+  const fetchSettlements = React.useCallback(async (silent = false, retryCount = 0) => {
+    if (!silent) setIsLoading(true);
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 6000);
     try {
-      const res = await fetch('/api/advance-settlements');
+      const res = await fetch('/api/advance-settlements', {
+        signal: controller.signal,
+        headers: { 'Cache-Control': 'no-cache' },
+      });
+      window.clearTimeout(timeoutId);
       if (res.ok) {
         const rows = await res.json();
-        setData(rows || []);
+        setData(Array.isArray(rows) ? rows : []);
+      } else if (retryCount < 2) {
+        window.setTimeout(() => fetchSettlements(silent, retryCount + 1), 800);
+        return;
       }
     } catch (e) {
+      window.clearTimeout(timeoutId);
+      if (retryCount < 2) {
+        window.setTimeout(() => fetchSettlements(silent, retryCount + 1), 800);
+        return;
+      }
       console.error('Lỗi tải dữ liệu hoàn tạm ứng:', e);
     } finally {
-      setIsLoading(false);
+      window.clearTimeout(timeoutId);
+      if (!silent) setIsLoading(false);
     }
-  };
+  }, []);
 
   React.useEffect(() => {
     fetchSettlements();
-  }, []);
+  }, [fetchSettlements]);
+
+  useFinanceRealtimeSync(() => {
+    fetchSettlements(true);
+  }, true);
 
   // Filters và Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -120,6 +144,7 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isCreateSettlementModalOpen, setIsCreateSettlementModalOpen] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [isCleanupOffcanvasOpen, setIsCleanupOffcanvasOpen] = useState(false);
 
   // Form state cho lập phiếu hoàn ứng mới
   const [targetAdvanceId, setTargetAdvanceId] = useState('');
@@ -628,6 +653,7 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
         );
 
         setIsCreateSettlementModalOpen(false);
+        notifyFinanceUpdated('advance_settlements', 'update');
         onShowToast?.(
           'success',
           asCompleted ? 'Quyết toán hoàn tất' : 'Đã cập nhật hồ sơ hoàn ứng',
@@ -653,116 +679,7 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
         backgroundColor: 'var(--bg-surface-1)',
       }}
     >
-      {/* 1. KHỐI THỐNG KÊ TỔNG QUAN (KPI CARDS) */}
-      <div
-        className="finance-settlement-kpi-grid"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: '12px',
-          padding: '16px 20px',
-          borderBottom: '1px solid var(--border-subtle)',
-          backgroundColor: 'var(--bg-surface-2)',
-        }}
-      >
-        {/* Card 1: Tổng tiền tạm ứng đã duyệt */}
-        <div
-          style={{
-            padding: '12px 16px',
-            backgroundColor: 'var(--bg-surface-1)',
-            borderRadius: '8px',
-            border: '1px solid var(--border-subtle)',
-            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              TỔNG TẠM ỨNG ĐÃ DUYỆT
-            </span>
-            <CashCoin size={18} style={{ color: 'var(--color-primary)' }} />
-          </div>
-          <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-            {formatCurrency(stats.totalAdvance)}
-          </div>
-          <div style={{ fontSize: '0.71875rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Tổng cộng {stats.totalCount} phiếu tạm ứng đã giải ngân
-          </div>
-        </div>
-
-        {/* Card 2: Thực chi đã thẩm tra */}
-        <div
-          style={{
-            padding: '12px 16px',
-            backgroundColor: 'var(--bg-surface-1)',
-            borderRadius: '8px',
-            border: '1px solid var(--border-subtle)',
-            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              THỰC CHI ĐÃ QUYẾT TOÁN
-            </span>
-            <Receipt size={18} style={{ color: '#059669' }} />
-          </div>
-          <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#059669' }}>
-            {formatCurrency(stats.totalActualSpent)}
-          </div>
-          <div style={{ fontSize: '0.71875rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            {stats.settledCount} phiếu đã quyết toán ({stats.totalCount > 0 ? Math.round((stats.settledCount / stats.totalCount) * 100) : 0}%)
-          </div>
-        </div>
-
-        {/* Card 3: Cần thu hoàn nộp lại quỹ */}
-        <div
-          style={{
-            padding: '12px 16px',
-            backgroundColor: 'var(--bg-surface-1)',
-            borderRadius: '8px',
-            border: '1px solid var(--border-subtle)',
-            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              CẦN THU HOÀN TRẢ QUỸ
-            </span>
-            <ArrowDownLeft size={18} style={{ color: '#059669' }} />
-          </div>
-          <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#059669' }}>
-            {formatCurrency(stats.refundToCollect)}
-          </div>
-          <div style={{ fontSize: '0.71875rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Tiền dư thừa nhân viên cần nộp hoàn quỹ
-          </div>
-        </div>
-
-        {/* Card 4: Công ty cần chi bù thêm */}
-        <div
-          style={{
-            padding: '12px 16px',
-            backgroundColor: 'var(--bg-surface-1)',
-            borderRadius: '8px',
-            border: '1px solid var(--border-subtle)',
-            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              CÔNG TY CẦN CHI BÙ THÊM
-            </span>
-            <ArrowUpRight size={18} style={{ color: '#d97706' }} />
-          </div>
-          <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#d97706' }}>
-            {formatCurrency(stats.extraReimbursement)}
-          </div>
-          <div style={{ fontSize: '0.71875rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Chi vượt hóa đơn thực tế hợp lệ
-          </div>
-        </div>
-      </div>
-
-      {/* 2. THANH CÔNG CỤ TÌM KIẾM, BỘ LỌC VÀ NÚT TÁC VỤ */}
+      {/* THANH CÔNG CỤ TÌM KIẾM, BỘ LỌC VÀ NÚT TÁC VỤ */}
       <TableToolbar
         searchValue={searchQuery}
         onSearchChange={(v) => {
@@ -772,23 +689,23 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
         searchPlaceholder="Tìm mã phiếu TU/HTU, tên nhân viên, dự án, mục đích..."
         searchMinWidth="260px"
         filters={toolbarFilters}
+        menuItems={[
+          {
+            id: 'cleanup-settings',
+            label: 'Thiết lập xoá',
+            icon: <ClockHistory size={15} style={{ color: '#d97706' }} />,
+            onClick: () => setIsCleanupOffcanvasOpen(true),
+          },
+        ]}
         actionsAfterSearch={
           <Button
             variant="secondary"
+            size="sm"
             className="!hidden sm:!inline-flex"
+            leftIcon={areAllExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
             onClick={() => toggleAllExpand(!areAllExpanded)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '0.78125rem',
-              fontWeight: 600,
-              padding: '0 12px',
-              height: '38px',
-              whiteSpace: 'nowrap',
-            }}
+            style={{ fontWeight: 600, whiteSpace: 'nowrap' }}
           >
-            {areAllExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             {areAllExpanded ? 'Thu gọn nhóm' : 'Mở rộng tất cả'}
           </Button>
         }
@@ -796,36 +713,24 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Button
               variant="secondary"
+              size="sm"
               className="!hidden sm:!inline-flex"
+              leftIcon={<FileEarmarkSpreadsheet size={14} />}
               onClick={() => {
                 onShowToast?.('info', 'Xuất Excel', 'Đang trích xuất danh sách hoàn tạm ứng ra file Excel...');
               }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '0.78125rem',
-                fontWeight: 600,
-                height: '38px',
-              }}
+              style={{ fontWeight: 600, whiteSpace: 'nowrap' }}
             >
-              <FileEarmarkSpreadsheet size={15} /> Xuất Excel
+              Xuất Excel
             </Button>
 
             <Button
               variant="primary"
+              size="sm"
+              leftIcon={<Plus size={15} />}
               onClick={() => handleOpenCreateModal()}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '0.78125rem',
-                fontWeight: 600,
-                height: '38px',
-                whiteSpace: 'nowrap',
-              }}
+              style={{ fontWeight: 700, whiteSpace: 'nowrap' }}
             >
-              <Plus size={16} />
               <span className="hidden sm:inline">Lập phiếu hoàn ứng</span>
               <span className="sm:hidden">Hoàn ứng</span>
             </Button>
@@ -2322,6 +2227,16 @@ export const AdvanceSettlementView: React.FC<AdvanceSettlementViewProps> = ({
           </div>
         </Modal>
       )}
+
+      <DataRetentionOffcanvas
+        isOpen={isCleanupOffcanvasOpen}
+        onClose={() => setIsCleanupOffcanvasOpen(false)}
+        ticketType="ADVANCE_PAYMENTS"
+        title="Thiết lập thời gian lưu trữ"
+        description="Cấu hình tự động dọn dẹp hồ sơ hoàn tạm ứng quá thời hạn lưu trữ"
+        entityLabel="phiếu"
+        onCleanedUp={() => fetchSettlements(true)}
+      />
     </div>
   );
 };

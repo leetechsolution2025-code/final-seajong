@@ -689,18 +689,32 @@ export const AttendancePayrollPage: React.FC = () => {
     }
   };
 
+  const getAuthHeaders = (): Record<string, string> => {
+    const token =
+      typeof window !== 'undefined'
+        ? sessionStorage.getItem('seajong_token') || localStorage.getItem('seajong_token')
+        : null;
+    return {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(currentUser?.id ? { 'x-chat-user-id': String(currentUser.id) } : {}),
+    };
+  };
+
   const runConfirmedPost = async (url: string, successFallback: string) => {
     setConfirmModal(null);
     setLoading(true);
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ month, year }),
       });
       const result = await res.json();
       if (res.ok) {
         showToast('success', result.message || successFallback);
+        window.dispatchEvent(new CustomEvent('decodoor_notification_created'));
+        window.dispatchEvent(new CustomEvent('seajong_notifications_updated'));
         await fetchData();
       } else {
         showToast('error', result.error || 'Có lỗi xảy ra.');
@@ -1037,7 +1051,7 @@ export const AttendancePayrollPage: React.FC = () => {
                   variant="success"
                   size="sm"
                   onClick={handlePublishPayroll}
-                  disabled={loading || !isAccountingApproved}
+                  disabled={loading}
                   leftIcon={<EnvelopePaper size={14} />}
                   title="Phát hành phiếu lương"
                   style={{ fontWeight: 700 }}
@@ -2152,7 +2166,7 @@ export const AttendancePayrollPage: React.FC = () => {
               try {
                 const res = await fetch('/api/hr/attendance/lunch-notification', {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: getAuthHeaders(),
                   body: JSON.stringify({
                     summaryDate,
                     totalLunch,
@@ -2160,6 +2174,8 @@ export const AttendancePayrollPage: React.FC = () => {
                   }),
                 });
                 if (res.ok) {
+                  window.dispatchEvent(new CustomEvent('decodoor_notification_created'));
+                  window.dispatchEvent(new CustomEvent('seajong_notifications_updated'));
                   showToast(
                     'success',
                     'Đã gửi danh sách suất ăn tới bộ phận Bếp thành công!',
@@ -2279,16 +2295,23 @@ export const AttendancePayrollPage: React.FC = () => {
             onConfirm={async () => {
               if (!emp) return;
               try {
-                await fetch('/api/hr/attendance/publish', {
+                const res = await fetch('/api/hr/attendance/publish', {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: getAuthHeaders(),
                   body: JSON.stringify({ month, year, employeeId: emp.id }),
                 });
-                showToast(
-                  'success',
-                  `Đã gửi thông tin phiếu tổng hợp công tháng ${month}/${year} tới ${emp.fullName}!`,
-                );
-                await fetchData();
+                const result = await res.json().catch(() => ({}));
+                if (res.ok) {
+                  window.dispatchEvent(new CustomEvent('decodoor_notification_created'));
+                  window.dispatchEvent(new CustomEvent('seajong_notifications_updated'));
+                  showToast(
+                    'success',
+                    result.message || `Đã gửi thông tin phiếu tổng hợp công tháng ${month}/${year} tới ${emp.fullName}!`,
+                  );
+                  await fetchData();
+                } else {
+                  showToast('error', result.error || 'Không thể gửi thông tin phiếu chấm công.');
+                }
               } catch {
                 showToast('error', 'Không thể gửi thông tin phiếu chấm công.');
               }
@@ -2419,16 +2442,23 @@ export const AttendancePayrollPage: React.FC = () => {
             onConfirm={async () => {
               if (!emp) return;
               try {
-                await fetch('/api/hr/payroll/publish', {
+                const res = await fetch('/api/hr/payroll/publish', {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: getAuthHeaders(),
                   body: JSON.stringify({ month, year, employeeId: emp.id }),
                 });
-                showToast(
-                  'success',
-                  `Đã gửi thông tin phiếu lương tháng ${month}/${year} tới ${emp.fullName}!`,
-                );
-                await fetchData();
+                const result = await res.json().catch(() => ({}));
+                if (res.ok) {
+                  window.dispatchEvent(new CustomEvent('decodoor_notification_created'));
+                  window.dispatchEvent(new CustomEvent('seajong_notifications_updated'));
+                  showToast(
+                    'success',
+                    result.message || `Đã gửi thông tin phiếu lương tháng ${month}/${year} tới ${emp.fullName}!`,
+                  );
+                  await fetchData();
+                } else {
+                  showToast('error', result.error || 'Không thể gửi thông tin phiếu lương.');
+                }
               } catch {
                 showToast('error', 'Không thể gửi thông tin phiếu lương.');
               }
@@ -2483,7 +2513,7 @@ export const AttendancePayrollPage: React.FC = () => {
                 </div>
                 {khauTruTamUng > 0 && (
                   <div className="flex justify-between py-2 border-b border-slate-100">
-                    <span className="text-slate-500">Khấu trừ tạm ứng đã duyệt</span>
+                    <span className="text-slate-500">Khấu trừ tạm ứng đã chi tiền</span>
                     <span className="font-bold text-rose-600">
                       -{Math.round(khauTruTamUng).toLocaleString('vi-VN')} đ
                     </span>

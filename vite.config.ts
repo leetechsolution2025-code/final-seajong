@@ -15,19 +15,42 @@ import {
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-let rawVitePrisma = new PrismaClient()
+if (!(globalThis as any).__seajongVitePrisma) {
+  ;(globalThis as any).__seajongVitePrisma = new PrismaClient()
+}
+let rawVitePrisma: PrismaClient = (globalThis as any).__seajongVitePrisma
+const isViteSqliteReconnectError = (err: any) => {
+  const msg = String(err?.message || '')
+  const code = String(err?.code || '')
+  return (
+    code === 'P2010' ||
+    msg.includes('malformed') ||
+    msg.includes('disk I/O error') ||
+    msg.includes('5898') ||
+    msg.includes('QueryError') ||
+    msg.includes('ConnectorError')
+  )
+}
 const vitePrisma: PrismaClient = new Proxy({} as any, {
   get(_target, prop) {
-    if (prop === '$transaction' || prop === '$queryRaw' || prop === '$executeRaw' || prop === '$disconnect' || prop === '$connect') {
+    if (
+      prop === '$transaction' ||
+      prop === '$queryRaw' ||
+      prop === '$queryRawUnsafe' ||
+      prop === '$executeRaw' ||
+      prop === '$executeRawUnsafe' ||
+      prop === '$disconnect' ||
+      prop === '$connect'
+    ) {
       return async (...args: any[]) => {
         try {
           return await (rawVitePrisma as any)[prop](...args)
         } catch (err: any) {
-          const msg = String(err?.message || '')
-          if (msg.includes('malformed') || msg.includes('QueryError') || msg.includes('ConnectorError')) {
+          if (isViteSqliteReconnectError(err)) {
             console.warn('⚠️ [VitePrisma Auto-Heal] Phát hiện kết nối SQLite lỗi, đang tự động kết nối lại...')
             try { await rawVitePrisma.$disconnect() } catch {}
             rawVitePrisma = new PrismaClient()
+            ;(globalThis as any).__seajongVitePrisma = rawVitePrisma
             return await (rawVitePrisma as any)[prop](...args)
           }
           throw err
@@ -47,11 +70,11 @@ const vitePrisma: PrismaClient = new Proxy({} as any, {
               try {
                 return await mVal.apply(mTarget, args)
               } catch (err: any) {
-                const msg = String(err?.message || '')
-                if (msg.includes('malformed') || msg.includes('QueryError') || msg.includes('ConnectorError')) {
+                if (isViteSqliteReconnectError(err)) {
                   console.warn('⚠️ [VitePrisma Auto-Heal] Phát hiện kết nối SQLite lỗi, đang tự động kết nối lại...')
                   try { await rawVitePrisma.$disconnect() } catch {}
                   rawVitePrisma = new PrismaClient()
+                  ;(globalThis as any).__seajongVitePrisma = rawVitePrisma
                   return await (rawVitePrisma as any)[prop][mProp](...args)
                 }
                 throw err
@@ -2672,17 +2695,15 @@ function autoBackendPlugin(): Plugin {
       server.watcher.add(path.join(__dirname, 'services', 'prismaFinanceSyncService.js'))
       server.watcher.add(path.join(__dirname, 'services', 'journalSyncService.js'))
       server.watcher.on('change', (file) => {
-        if (file.endsWith('server.js')) {
-          console.log('\x1b[33m%s\x1b[0m', '⚡ [Vite Plugin] server.js thay đổi -> Nạp lại Embedded Backend...')
-          embeddedExpressPromise = null
-          getEmbeddedExpressApp()
-        } else if (
+        if (
+          file.endsWith('server.js') ||
           file.endsWith('financeAccountingRouter.js') ||
           file.endsWith('prismaFinanceSyncService.js') ||
           file.endsWith('journalSyncService.js')
         ) {
-          console.log('\x1b[33m%s\x1b[0m', `⚡ [Vite Plugin] ${path.basename(file)} thay đổi -> Khởi động lại server để xóa ESM cache...`)
-          server.restart()
+          console.log('\x1b[33m%s\x1b[0m', `⚡ [Vite Plugin] ${path.basename(file)} thay đổi -> Nạp lại Embedded Backend...`)
+          embeddedExpressPromise = null
+          getEmbeddedExpressApp()
         }
       })
     },

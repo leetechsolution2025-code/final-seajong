@@ -3,8 +3,6 @@ import {
   Plus,
   CheckCircle,
   XCircle,
-  Eye,
-  Printer,
   CashCoin,
   Building,
   CreditCard,
@@ -13,16 +11,22 @@ import {
   CheckLg,
   XLg,
   FileEarmarkSpreadsheet,
+  FileEarmarkPlus,
+  FileEarmarkText,
+  Send,
 } from 'react-bootstrap-icons';
 import { Button } from '../../../components/common/Button';
 import { TableToolbar, type TableToolbarFilter } from '../../../components/common/TableToolbar';
 import { Pagination } from '../../../components/common/Pagination';
-import { Modal } from '../../../components/common/Modal';
+import { Offcanvas } from '../../../components/common/Offcanvas';
+import { DataRetentionOffcanvas } from '../../../components/common/DataRetentionOffcanvas';
+import { Input } from '../../../components/common/Input';
+import { Select } from '../../../components/common/Select';
 import {
-  DepartmentSelect,
   useDepartmentOptions,
   matchDepartment,
 } from '../../../components/common/DepartmentSelect';
+import { useFinanceRealtimeSync, notifyFinanceUpdated } from '../../../services/financeSyncService';
 
 export interface AdvancePaymentItem {
   id: string;
@@ -33,6 +37,7 @@ export interface AdvancePaymentItem {
   purpose: string;
   project?: string;
   amount: number;
+  approvedAmount?: number;
   requestedDate: string;
   paymentMethod: 'bank_transfer' | 'cash';
   bankInfo?: {
@@ -41,7 +46,7 @@ export interface AdvancePaymentItem {
     accountName: string;
   };
   status: 'pending' | 'approved' | 'rejected';
-  reviewStatus?: 'unprocessed' | 'in_review'; // 'Chưa xử lý' | 'Đang trình duyệt'
+  reviewStatus?: 'unprocessed' | 'in_review' | 'approved' | 'disbursed' | 'rejected';
   approver?: string;
   approvedDate?: string;
   rejectReason?: string;
@@ -66,6 +71,19 @@ const formatVND = (val: number): string => {
   return new Intl.NumberFormat('vi-VN').format(val) + ' đ';
 };
 
+// Định dạng phân cách hàng nghìn bằng dấu chấm
+const formatNumberGroup = (val: string | number): string => {
+  const numStr = String(val ?? '').replace(/[^0-9]/g, '');
+  if (!numStr) return '';
+  return Number(numStr).toLocaleString('vi-VN');
+};
+
+const getDefaultDeadlineVN = (): string => {
+  const d = new Date();
+  d.setDate(d.getDate() + 5);
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+};
+
 export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
   currentStep,
   onStepChange,
@@ -76,25 +94,109 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
   const [payments, setPayments] = useState<AdvancePaymentItem[]>(INITIAL_ADVANCE_PAYMENTS);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Tải dữ liệu tạm ứng từ Database
-  const fetchPayments = async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch('/api/advance-payments');
-      if (res.ok) {
-        const data = await res.json();
-        setPayments(data || []);
-      }
-    } catch (e) {
-      console.error('Lỗi nạp dữ liệu tạm ứng:', e);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Danh sách nhân sự thực tế từ DB để chọn Người phê duyệt
+  const [dbApproverGroups, setDbApproverGroups] = useState<
+    Array<{ group: string; options: Array<{ label: string; value: string }> }>
+  >([]);
 
   React.useEffect(() => {
-    fetchPayments();
+    fetch('/api/hr/employees?pageSize=200')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((res) => {
+        const emps = Array.isArray(res?.employees) ? res.employees : [];
+        const activeEmps = emps.filter(
+          (e: any) => String(e.status || '').toLowerCase() !== 'resigned' && String(e.profileStatus || '').toLowerCase() !== 'resigned'
+        );
+
+        const boardOpts: Array<{ label: string; value: string }> = [];
+        const financeOpts: Array<{ label: string; value: string }> = [];
+        const managerOpts: Array<{ label: string; value: string }> = [];
+
+        const leaderKeywords = ['giám đốc', 'trưởng phòng', 'trưởng bộ phận', 'quản đốc', 'thủ kho', 'kế toán'];
+
+        activeEmps.forEach((e: any) => {
+          const name = String(e.fullName || '').trim();
+          if (!name) return;
+          const deptCode = String(e.departmentCode || '').toLowerCase();
+          const deptName = String(e.departmentName || 'Phòng ban').trim();
+          const posTitle = String(e.positionTitle || e.position || '').trim();
+          const posLower = posTitle.toLowerCase();
+          const val = `${name} - ${deptName}`;
+          const label = posTitle && posTitle !== '—' ? `${name} (${posTitle} - ${deptName})` : val;
+
+          if (deptCode === 'board' || deptName.toLowerCase().includes('giám đốc')) {
+            boardOpts.push({ label, value: val });
+          } else if (
+            deptCode === 'finance' ||
+            deptCode === 'accounting' ||
+            deptName.toLowerCase().includes('kế toán') ||
+            deptName.toLowerCase().includes('tài chính')
+          ) {
+            financeOpts.push({ label, value: val });
+          } else if (leaderKeywords.some((kw) => posLower.includes(kw))) {
+            managerOpts.push({ label, value: val });
+          }
+        });
+
+        const groups: Array<{ group: string; options: Array<{ label: string; value: string }> }> = [];
+        if (boardOpts.length > 0) {
+          groups.push({ group: 'Ban Giám đốc (Dữ liệu thực tế DB)', options: boardOpts });
+        }
+        if (financeOpts.length > 0) {
+          groups.push({ group: 'Phòng Tài chính – Kế toán (Dữ liệu thực tế DB)', options: financeOpts });
+        }
+        if (managerOpts.length > 0) {
+          groups.push({ group: 'Trưởng / Quản lý các bộ phận (Dữ liệu thực tế DB)', options: managerOpts });
+        }
+
+        setDbApproverGroups(groups);
+        const firstOpt = groups[0]?.options?.[0]?.value;
+        if (firstOpt) {
+          setNewApprover(firstOpt);
+        }
+      })
+      .catch(() => { });
   }, []);
+
+  // Tải dữ liệu tạm ứng từ Database (hỗ trợ làm mới ngầm thời gian thực không giật loading)
+  const fetchPayments = React.useCallback(async (silent = false, retryCount = 0) => {
+    if (!silent) setIsLoading(true);
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 6000);
+    try {
+      const res = await fetch('/api/advance-payments', {
+        signal: controller.signal,
+        headers: { 'Cache-Control': 'no-cache' },
+      });
+      window.clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        setPayments(Array.isArray(data) ? data : []);
+      } else if (retryCount < 2) {
+        window.setTimeout(() => fetchPayments(silent, retryCount + 1), 800);
+        return;
+      }
+    } catch (e) {
+      window.clearTimeout(timeoutId);
+      if (retryCount < 2) {
+        window.setTimeout(() => fetchPayments(silent, retryCount + 1), 800);
+        return;
+      }
+      console.error('Lỗi nạp dữ liệu tạm ứng:', e);
+    } finally {
+      window.clearTimeout(timeoutId);
+      if (!silent) setIsLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchPayments(false);
+  }, [fetchPayments]);
+
+  // Đồng bộ tự động thời gian thực (BroadcastChannel, CustomEvent, Storage & Polling)
+  useFinanceRealtimeSync(() => {
+    fetchPayments(true);
+  }, true);
 
   // Bộ lọc và tìm kiếm cho TableToolbar
   const [searchQuery, setSearchQuery] = useState('');
@@ -107,20 +209,88 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  // State Modal xem chi tiết phiếu
+  // State Offcanvas xem chi tiết phiếu
   const [selectedPayment, setSelectedPayment] = useState<AdvancePaymentItem | null>(null);
+  const [approvedAmountStr, setApprovedAmountStr] = useState<string>('');
+  const [isSubmittingDirector, setIsSubmittingDirector] = useState(false);
 
-  // State Modal tạo mới phiếu tạm ứng
+  React.useEffect(() => {
+    if (selectedPayment) {
+      setApprovedAmountStr(String(selectedPayment.amount || 0));
+    }
+  }, [selectedPayment?.id, selectedPayment?.amount]);
+
+  // State Offcanvas Thiết lập xoá (dọn dẹp dữ liệu quá hạn)
+  const [isCleanupOffcanvasOpen, setIsCleanupOffcanvasOpen] = useState(false);
+
+  // Định mức tạm ứng theo quy định trong Nội quy lao động (mặc định 3.000.000 đ)
+  const [advanceLimit, setAdvanceLimit] = useState<number>(3000000);
+  const [isAutoApproveEnabled, setIsAutoApproveEnabled] = useState<boolean>(true);
+
+  React.useEffect(() => {
+    const loadLaborAdvanceLimit = () => {
+      const savedAuto = localStorage.getItem('seajong_accounting_auto_enabled');
+      if (savedAuto !== null) {
+        setIsAutoApproveEnabled(savedAuto !== 'false');
+      }
+
+      fetch('/api/system-settings')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data && data.accounting_auto_enabled !== undefined) {
+            setIsAutoApproveEnabled(Boolean(data.accounting_auto_enabled));
+          }
+          if (data && Number(data.accounting_emergency_advance) > 0) {
+            const dbLimit = Number(data.accounting_emergency_advance);
+            setAdvanceLimit(dbLimit);
+            localStorage.setItem('seajong_accounting_emergency_advance', String(dbLimit));
+          } else {
+            const localVal = Number(localStorage.getItem('seajong_accounting_emergency_advance') || 0);
+            if (localVal > 0 && localVal !== 5000000) {
+              setAdvanceLimit(localVal);
+            } else {
+              setAdvanceLimit(3000000);
+            }
+          }
+        })
+        .catch(() => {
+          const localVal = Number(localStorage.getItem('seajong_accounting_emergency_advance') || 0);
+          if (localVal > 0 && localVal !== 5000000) {
+            setAdvanceLimit(localVal);
+          }
+        });
+    };
+
+    loadLaborAdvanceLimit();
+
+    const handleSettingsSaved = (e: Event) => {
+      const customEvt = e as CustomEvent;
+      if (customEvt.detail) {
+        if (customEvt.detail.accountingAutoEnabled !== undefined) {
+          setIsAutoApproveEnabled(Boolean(customEvt.detail.accountingAutoEnabled));
+        }
+        if (Number(customEvt.detail.accountingEmergencyAdvance) > 0) {
+          setAdvanceLimit(Number(customEvt.detail.accountingEmergencyAdvance));
+        }
+      } else {
+        loadLaborAdvanceLimit();
+      }
+    };
+
+    window.addEventListener('seajong_settings_saved', handleSettingsSaved);
+    return () => window.removeEventListener('seajong_settings_saved', handleSettingsSaved);
+  }, []);
+
+  // State Offcanvas tạo mới phiếu tạm ứng (đồng bộ với Tạo yêu cầu cá nhân)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newPurpose, setNewPurpose] = useState('');
-  const [newProject, setNewProject] = useState('');
-  const [newAmount, setNewAmount] = useState<number | ''>('');
-  const [newDepartment, setNewDepartment] = useState('Phòng Kinh doanh');
+  const [newAmount, setNewAmount] = useState<string>('5000000');
+  const [deductFromSalary, setDeductFromSalary] = useState<boolean>(true);
   const [newPaymentMethod, setNewPaymentMethod] = useState<'bank_transfer' | 'cash'>('bank_transfer');
-  const [newBankName, setNewBankName] = useState('Techcombank');
-  const [newBankAccount, setNewBankAccount] = useState('');
-  const [newAccountName, setNewAccountName] = useState('');
-  const [newDeadline, setNewDeadline] = useState('');
+  const [newBankName, setNewBankName] = useState('Techcombank Đà Nẵng');
+  const [newBankAccount, setNewBankAccount] = useState('19033458992011');
+  const [newDeadline, setNewDeadline] = useState<string>(() => getDefaultDeadlineVN());
+  const [newApprover, setNewApprover] = useState<string>('Lê Công Vụ - Ban Giám đốc');
   const [newNote, setNewNote] = useState('');
 
   // Xác định danh sách theo bước hiện tại
@@ -137,11 +307,24 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
     }
   }, [currentStep]);
 
-  // Lọc dữ liệu theo bước, từ khóa, bộ phận, trạng thái xử lý
+  // Lọc dữ liệu theo bước, từ khóa, bộ phận, trạng thái xử lý (ưu tiên xếp phiếu chờ duyệt lên đầu ở Bước 1)
   const filteredPayments = useMemo(() => {
-    return payments.filter((item) => {
-      // Lọc theo bước (status)
-      if (item.status !== stepStatus) return false;
+    const filtered = payments.filter((item) => {
+      if (currentStep === 2 && item.status !== 'approved') return false;
+      if (currentStep === 3 && item.status !== 'rejected') return false;
+
+      // Lọc theo trạng thái ở bước 1
+      if (currentStep === 1 && selectedReviewStatus !== 'all') {
+        if (selectedReviewStatus === 'pending' && item.status !== 'pending') return false;
+        if (selectedReviewStatus === 'approved' && item.status !== 'approved') return false;
+        if (selectedReviewStatus === 'rejected' && item.status !== 'rejected') return false;
+        if (
+          (selectedReviewStatus === 'unprocessed' || selectedReviewStatus === 'in_review') &&
+          (item.status !== 'pending' || item.reviewStatus !== selectedReviewStatus)
+        ) {
+          return false;
+        }
+      }
 
       // Lọc theo từ khóa tìm kiếm
       if (searchQuery.trim()) {
@@ -159,14 +342,15 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
       // Lọc theo hình thức chi
       if (selectedPaymentMethod !== 'all' && item.paymentMethod !== selectedPaymentMethod) return false;
 
-      // Lọc theo trạng thái xử lý ở bước 1 (Chưa xử lý, Đang trình duyệt)
-      if (currentStep === 1 && selectedReviewStatus !== 'all') {
-        if (item.reviewStatus !== selectedReviewStatus) return false;
-      }
-
       return true;
     });
-  }, [payments, stepStatus, searchQuery, selectedDept, selectedReviewStatus, selectedPaymentMethod, currentStep]);
+
+    if (currentStep === 1) {
+      const orderMap: Record<string, number> = { pending: 0, approved: 1, rejected: 2 };
+      return [...filtered].sort((a, b) => (orderMap[a.status] ?? 9) - (orderMap[b.status] ?? 9));
+    }
+    return filtered;
+  }, [payments, searchQuery, selectedDept, selectedReviewStatus, selectedPaymentMethod, currentStep]);
 
   // Dữ liệu phân trang
   const paginatedData = useMemo(() => {
@@ -197,11 +381,12 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
           setSelectedReviewStatus(val);
           setCurrentPage(1);
         },
-        minWidth: '165px',
+        minWidth: '175px',
         options: [
           { value: 'all', label: 'Tất cả trạng thái' },
-          { value: 'unprocessed', label: 'Chưa xử lý' },
-          { value: 'in_review', label: 'Đang trình duyệt' },
+          { value: 'pending', label: 'Chờ phê duyệt' },
+          { value: 'approved', label: 'Đã phê duyệt' },
+          { value: 'rejected', label: 'Đã từ chối' },
         ],
       });
     }
@@ -224,12 +409,14 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
     }
 
     return filters;
-  }, [selectedDept, selectedReviewStatus, selectedPaymentMethod, currentStep]);
+  }, [selectedDept, selectedReviewStatus, selectedPaymentMethod, currentStep, deptOptions]);
 
   // Hành động Phê duyệt
-  const handleApprove = async (item: AdvancePaymentItem) => {
+  const handleApprove = async (item: AdvancePaymentItem, customAmount?: number) => {
     const approverName = user?.name ? `${user.name} (Phê duyệt)` : 'Lê Công Vụ (Ban Giám Đốc)';
-    const today = new Date().toISOString().split('T')[0];
+    const d = new Date();
+    const today = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    const finalAmount = customAmount && customAmount > 0 ? customAmount : item.amount;
 
     try {
       const res = await fetch(`/api/advance-payments/${item.id}`, {
@@ -237,6 +424,7 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'approved',
+          approvedAmount: finalAmount,
           approver: approverName,
           approvedDate: today,
         }),
@@ -247,15 +435,24 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
           prev.map((p) =>
             p.id === item.id
               ? {
-                  ...p,
-                  status: 'approved',
-                  approver: approverName,
-                  approvedDate: today,
-                }
+                ...p,
+                status: 'approved',
+                approvedAmount: finalAmount,
+                approver: approverName,
+                approvedDate: today,
+              }
               : p
           )
         );
-        onShowToast?.('success', 'Đã duyệt tạm ứng', `Phiếu ${item.code} với số tiền ${formatVND(item.amount)} đã được phê duyệt thành công.`);
+        notifyFinanceUpdated('advance_payments', 'update');
+        notifyFinanceUpdated('payment_orders', 'create');
+        window.dispatchEvent(new CustomEvent('seajong_payment_orders_updated'));
+        window.dispatchEvent(new CustomEvent('seajong_cashflow_updated'));
+        onShowToast?.(
+          'success',
+          'Đã duyệt tạm ứng & sinh Lệnh chi tiền',
+          `Phiếu ${item.code} đã được duyệt với số tiền ${formatVND(finalAmount)} và tự động sinh Lệnh chi tiền trên Trang Tổng quan.`
+        );
       } else {
         onShowToast?.('error', 'Lỗi', 'Không thể duyệt phiếu tạm ứng trên hệ thống.');
       }
@@ -272,7 +469,8 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
   const handleReject = async (item: AdvancePaymentItem, reason?: string) => {
     const finalReason = reason || 'Hồ sơ tạm ứng chưa cung cấp đủ dự toán chi tiết hoặc hóa đơn đính kèm';
     const approverName = user?.name ? `${user.name} (Từ chối)` : 'Phạm Thanh Thảo (Kế toán trưởng)';
-    const today = new Date().toISOString().split('T')[0];
+    const d = new Date();
+    const today = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 
     try {
       const res = await fetch(`/api/advance-payments/${item.id}`, {
@@ -291,15 +489,16 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
           prev.map((p) =>
             p.id === item.id
               ? {
-                  ...p,
-                  status: 'rejected',
-                  approver: approverName,
-                  rejectedDate: today,
-                  rejectReason: finalReason,
-                }
+                ...p,
+                status: 'rejected',
+                approver: approverName,
+                rejectedDate: today,
+                rejectReason: finalReason,
+              }
               : p
           )
         );
+        notifyFinanceUpdated('advance_payments', 'update');
         onShowToast?.('warning', 'Từ chối tạm ứng', `Đã từ chối phiếu ${item.code}. Lý do: ${finalReason}`);
       } else {
         onShowToast?.('error', 'Lỗi', 'Không thể từ chối phiếu tạm ứng trên hệ thống.');
@@ -313,43 +512,118 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
     }
   };
 
+  // Hành động Trình Giám đốc phê duyệt (khi số tiền vượt mức quy định trong Nội quy lao động)
+  const handleSubmitToDirector = async (item: AdvancePaymentItem) => {
+    setIsSubmittingDirector(true);
+    const submitterName = user?.name || 'Bộ phận Kế toán';
+    try {
+      const res = await fetch(`/api/advance-payments/${item.id}/submit-director`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: item.code,
+          employeeName: item.employeeName,
+          employeeCode: item.employeeCode,
+          department: item.department,
+          purpose: item.purpose,
+          project: item.project,
+          amount: item.amount,
+          requestedDate: item.requestedDate,
+          deadlineRefund: item.deadlineRefund,
+          paymentMethod: item.paymentMethod,
+          bankInfo: item.bankInfo,
+          note: item.note,
+          limitAmount: advanceLimit,
+          submittedBy: submitterName,
+        }),
+      });
+
+      if (res.ok) {
+        setPayments((prev) =>
+          prev.map((p) =>
+            p.id === item.id
+              ? {
+                ...p,
+                reviewStatus: 'in_review',
+                approver: 'Lê Công Vụ - Ban Giám đốc',
+              }
+              : p
+          )
+        );
+        notifyFinanceUpdated('advance_payments', 'update');
+        window.dispatchEvent(new CustomEvent('seajong_approval_documents_updated'));
+        window.dispatchEvent(new CustomEvent('seajong_notifications_updated'));
+        onShowToast?.(
+          'info',
+          'Đã trình Giám đốc phê duyệt',
+          `Phiếu ${item.code} (${formatVND(item.amount)}) vượt mức quy định (${formatVND(advanceLimit)}) đã được gửi thông tin và thông báo tới Giám đốc.`
+        );
+        setSelectedPayment(null);
+      } else {
+        onShowToast?.('error', 'Lỗi', 'Không thể gửi trình phê duyệt lên Giám đốc.');
+      }
+    } catch {
+      onShowToast?.('error', 'Lỗi mạng', 'Không thể kết nối đến máy chủ.');
+    } finally {
+      setIsSubmittingDirector(false);
+    }
+  };
+
   // Tạo mới phiếu tạm ứng
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPurpose || !newAmount || Number(newAmount) <= 0) {
-      if (onShowToast) {
-        onShowToast('error', 'Thiếu thông tin', 'Vui lòng nhập mục đích và số tiền tạm ứng hợp lệ.');
-      }
+    const numericAmount = Number(String(newAmount).replace(/[^0-9]/g, '')) || 0;
+    if (!newPurpose.trim() || numericAmount <= 0) {
+      onShowToast?.('error', 'Thiếu thông tin', 'Vui lòng nhập mục đích và số tiền tạm ứng hợp lệ.');
       return;
     }
 
     const nextIndex = payments.length + 1;
-    const newCode = `TU-${new Date().getFullYear()}/${String(nextIndex).padStart(3, '0')}`;
-    const today = new Date().toISOString().split('T')[0];
+    const newCode = `YC-${new Date().getFullYear()}-${String(100 + nextIndex)}`;
+    const now = new Date();
+    const todayVN = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+    const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const deadlineParts = String(newDeadline || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (deadlineParts) {
+      const deadMs = new Date(
+        Number(deadlineParts[3]),
+        Number(deadlineParts[2]) - 1,
+        Number(deadlineParts[1])
+      ).getTime();
+      if (deadMs < todayMidnight) {
+        onShowToast?.(
+          'error',
+          'Ngày hoàn ứng không hợp lệ',
+          'Hạn hoàn ứng dự kiến không được nhỏ hơn ngày yêu cầu tạm ứng.'
+        );
+        return;
+      }
+    }
 
     const newItemPayload = {
       code: newCode,
-      employeeName: user?.name || 'Nguyễn Văn Thành',
-      employeeCode: user?.employeeCode || 'NV-2026-08',
-      department: newDepartment,
-      purpose: newPurpose,
-      project: newProject,
-      amount: Number(newAmount),
-      requestedDate: today,
+      employeeName: user?.name || 'Lê Công Vụ',
+      employeeCode: user?.employeeCode || 'NV-2026-01',
+      department: user?.departmentName || user?.department || 'Phòng Tài chính - Kế toán',
+      purpose: newPurpose.trim(),
+      project: deductFromSalary ? 'Trừ tạm ứng vào lương' : '',
+      amount: numericAmount,
+      requestedDate: todayVN,
       paymentMethod: newPaymentMethod,
       bankInfo:
         newPaymentMethod === 'bank_transfer'
           ? {
-              bankName: newBankName,
-              accountNumber: newBankAccount || '19038291048192',
-              accountName: (newAccountName || user?.name || 'NGUYEN VAN THANH').toUpperCase(),
-            }
+            bankName: newBankName || 'Techcombank Đà Nẵng',
+            accountNumber: newBankAccount || '19033458992011',
+            accountName: (user?.name || 'LE CONG VU').toUpperCase(),
+          }
           : undefined,
       status: 'pending',
       reviewStatus: 'unprocessed',
-      deadlineRefund: newDeadline || today,
-      note: newNote,
-      attachedDocsCount: 0,
+      approver: newApprover,
+      deadlineRefund: newDeadline || getDefaultDeadlineVN(),
+      note: newNote.trim(),
+      attachedDocsCount: 1,
     };
 
     try {
@@ -362,20 +636,17 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
       if (res.ok) {
         const created = await res.json();
         setPayments((prev) => [created, ...prev]);
+        notifyFinanceUpdated('advance_payments', 'create');
         setIsCreateModalOpen(false);
 
         // Reset form
         setNewPurpose('');
-        setNewAmount('');
+        setNewAmount('5000000');
         setNewNote('');
-        setNewBankAccount('');
-        setNewAccountName('');
+        setNewDeadline(getDefaultDeadlineVN());
 
-        if (onShowToast) {
-          onShowToast('success', 'Tạo yêu cầu thành công', `Đã lưu phiếu tạm ứng ${newCode} vào cơ sở dữ liệu.`);
-        }
+        onShowToast?.('success', 'Tạo yêu cầu thành công', `Đã lưu phiếu tạm ứng ${newCode} vào cơ sở dữ liệu.`);
 
-        // Nếu không ở bước 1, chuyển về bước 1
         if (currentStep !== 1 && onStepChange) {
           onStepChange(1);
         }
@@ -409,47 +680,43 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
           currentStep === 1
             ? 'Tìm mã phiếu, người đề xuất, nội dung tạm ứng...'
             : currentStep === 2
-            ? 'Tìm phiếu tạm ứng đã duyệt, dự án, người duyệt...'
-            : 'Tìm phiếu tạm ứng bị từ chối, lý do...'
+              ? 'Tìm phiếu tạm ứng đã duyệt, dự án, người duyệt...'
+              : 'Tìm phiếu tạm ứng bị từ chối, lý do...'
         }
         searchMinWidth="240px"
         filters={toolbarFilters}
+        menuItems={[
+          {
+            id: 'cleanup-settings',
+            label: 'Thiết lập xoá',
+            icon: <ClockHistory size={15} style={{ color: '#d97706' }} />,
+            onClick: () => setIsCleanupOffcanvasOpen(true),
+          },
+        ]}
         rightActions={
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             {currentStep === 2 && (
               <Button
                 variant="outline"
+                size="sm"
                 className="!hidden sm:!inline-flex"
+                leftIcon={<FileEarmarkSpreadsheet size={14} />}
                 onClick={() => {
-                  if (onShowToast) {
-                    onShowToast('info', 'Xuất báo cáo', 'Đang tải về danh sách các khoản tạm ứng đã phê duyệt (Excel).');
-                  }
+                  onShowToast?.('info', 'Xuất báo cáo', 'Đang tải về danh sách các khoản tạm ứng đã phê duyệt (Excel).');
                 }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  borderRadius: '10px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                }}
+                style={{ fontWeight: 600, whiteSpace: 'nowrap' }}
               >
-                <FileEarmarkSpreadsheet size={15} /> Xuất Excel
+                Xuất Excel
               </Button>
             )}
 
             <Button
               variant="primary"
+              size="sm"
+              leftIcon={<Plus size={15} />}
               onClick={() => setIsCreateModalOpen(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                borderRadius: '10px',
-                fontWeight: 600,
-              }}
+              style={{ fontWeight: 700, whiteSpace: 'nowrap' }}
             >
-              <Plus size={16} />
               <span className="hidden sm:inline">Tạo yêu cầu tạm ứng</span>
               <span className="sm:hidden">Tạo mới</span>
             </Button>
@@ -516,26 +783,25 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
               >
                 <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '50px', textAlign: 'center' }}>STT</th>
                 <th style={{ padding: '8px 14px' }}>Mã phiếu</th>
-                <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '180px' }}>Người đề xuất</th>
-                <th style={{ padding: '8px 14px', width: '130px', textAlign: 'right' }}>Số tiền tạm ứng</th>
+                <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '190px' }}>Người đề xuất</th>
+                <th style={{ padding: '8px 14px', width: '140px', textAlign: 'right' }}>Số tiền tạm ứng</th>
                 {currentStep === 1 && (
                   <>
-                    <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '110px', textAlign: 'center' }}>Ngày yêu cầu</th>
-                    <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '110px', textAlign: 'center' }}>Hạn hoàn ứng</th>
+                    <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '125px', textAlign: 'center' }}>Ngày yêu cầu</th>
+                    <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '145px', textAlign: 'center' }}>Ngày hoàn tạm ứng</th>
+                    <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '150px', textAlign: 'center' }}>Trạng thái</th>
                   </>
                 )}
                 {currentStep === 2 && (
                   <>
-                    <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '180px' }}>Người duyệt và Ngày duyệt</th>
-                    <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '110px', textAlign: 'center' }}>Hạn hoàn ứng</th>
-                    <th style={{ padding: '8px 14px', width: '100px', textAlign: 'center' }}>Thao tác</th>
+                    <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '190px' }}>Người duyệt và Ngày duyệt</th>
+                    <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '145px', textAlign: 'center' }}>Ngày hoàn tạm ứng</th>
                   </>
                 )}
                 {currentStep === 3 && (
                   <>
                     <th className="hidden sm:table-cell" style={{ padding: '8px 14px', minWidth: '220px' }}>Lý do từ chối</th>
-                    <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '160px' }}>Người từ chối</th>
-                    <th style={{ padding: '8px 14px', width: '100px', textAlign: 'center' }}>Thao tác</th>
+                    <th className="hidden sm:table-cell" style={{ padding: '8px 14px', width: '170px' }}>Người từ chối</th>
                   </>
                 )}
               </tr>
@@ -545,7 +811,7 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
               {isLoading ? (
                 <tr>
                   <td
-                    colSpan={currentStep === 1 ? 6 : 7}
+                    colSpan={currentStep === 1 ? 7 : 6}
                     style={{
                       textAlign: 'center',
                       padding: '48px 16px',
@@ -561,7 +827,7 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
               ) : paginatedData.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={currentStep === 1 ? 6 : 7}
+                    colSpan={currentStep === 1 ? 7 : 6}
                     style={{
                       textAlign: 'center',
                       padding: '48px 16px',
@@ -582,9 +848,11 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
                   return (
                     <tr
                       key={item.id}
+                      onClick={() => setSelectedPayment(item)}
                       style={{
                         borderBottom: '1px solid var(--border-subtle, #f1f5f9)',
                         transition: 'background-color 0.15s ease',
+                        cursor: 'pointer',
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.backgroundColor = 'var(--bg-surface-2, #f8fafc)';
@@ -592,17 +860,17 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
                       onMouseLeave={(e) => {
                         e.currentTarget.style.backgroundColor = 'transparent';
                       }}
+                      title="Nhấn để xem chi tiết & xử lý phiếu tạm ứng"
                     >
                       {/* 1. STT */}
                       <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center', color: 'var(--text-secondary)', fontWeight: 500 }}>
                         {stt}
                       </td>
 
-                      {/* 2. Mã phiếu + Badge hình thức + Trạng thái xử lý + Mục đích và Dự án */}
+                      {/* 2. Mã phiếu + Badge Trừ tạm ứng vào lương (nếu có) + Badge hình thức + Mục đích */}
                       <td style={{ padding: '7px 14px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px', flexWrap: 'wrap' }}>
                           <span
-                            onClick={() => setSelectedPayment(item)}
                             style={{
                               fontFamily: 'monospace',
                               fontWeight: 700,
@@ -611,12 +879,29 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
                               padding: '2px 7px',
                               borderRadius: '5px',
                               fontSize: '0.75rem',
-                              cursor: 'pointer',
                             }}
-                            title="Xem chi tiết phiếu tạm ứng"
                           >
                             {item.code}
                           </span>
+
+                          {/* Badge Trừ tạm ứng vào lương (nếu có) đặt trước Chuyển khoản */}
+                          {item.project && item.project.toLowerCase().includes('lương') && (
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                fontSize: '0.6875rem',
+                                fontWeight: 600,
+                                color: '#7c3aed',
+                                background: 'rgba(124, 58, 237, 0.08)',
+                                padding: '1.5px 7px',
+                                borderRadius: '20px',
+                              }}
+                            >
+                              <Building size={10} /> Trừ tạm ứng vào lương
+                            </span>
+                          )}
 
                           {/* Badge hình thức bên cạnh mã phiếu */}
                           {item.paymentMethod === 'bank_transfer' ? (
@@ -652,31 +937,9 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
                               <Cash size={11} /> Tiền mặt
                             </span>
                           )}
-
-                          {/* Badge trạng thái xử lý ở bước 1 */}
-                          {currentStep === 1 && item.reviewStatus && (
-                            <span
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '3px',
-                                fontSize: '0.6875rem',
-                                fontWeight: 600,
-                                color: item.reviewStatus === 'in_review' ? '#b45309' : '#475569',
-                                background:
-                                  item.reviewStatus === 'in_review'
-                                    ? 'rgba(245, 158, 11, 0.12)'
-                                    : 'rgba(100, 116, 139, 0.1)',
-                                padding: '1.5px 7px',
-                                borderRadius: '20px',
-                              }}
-                            >
-                              {item.reviewStatus === 'in_review' ? 'Đang trình duyệt' : 'Chưa xử lý'}
-                            </span>
-                          )}
                         </div>
 
-                        {/* Nội dung Mục đích và Dự án đưa xuống dưới mã phiếu */}
+                        {/* Nội dung Mục đích đưa xuống dưới mã phiếu */}
                         <div
                           style={{
                             fontWeight: 500,
@@ -688,24 +951,6 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
                         >
                           {item.purpose}
                         </div>
-                        {item.project && (
-                          <div
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              marginTop: '2px',
-                              fontSize: '0.7rem',
-                              color: '#0284c7',
-                              background: 'rgba(2, 132, 199, 0.08)',
-                              padding: '1.5px 6px',
-                              borderRadius: '4px',
-                              fontWeight: 500,
-                            }}
-                          >
-                            <Building size={10} /> {item.project}
-                          </div>
-                        )}
                         <div className="sm:hidden flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[11px] text-slate-500">
                           <span className="font-semibold text-slate-700">{item.employeeName}</span>
                           <span>•</span>
@@ -713,13 +958,13 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
                           {item.deadlineRefund && (
                             <>
                               <span>•</span>
-                              <span>Hạn: <strong className="font-mono text-amber-700">{item.deadlineRefund}</strong></span>
+                              <span>Hoàn ứng: <strong className="font-mono text-amber-700">{item.deadlineRefund}</strong></span>
                             </>
                           )}
                         </div>
                       </td>
 
-                      {/* 3. Người đề xuất (Không hiển thị mã nhân viên dưới tên) */}
+                      {/* 3. Người đề xuất */}
                       <td className="hidden sm:table-cell" style={{ padding: '7px 14px' }}>
                         <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                           {item.employeeName}
@@ -729,33 +974,123 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
                         </div>
                       </td>
 
-                      {/* 4. Số tiền tạm ứng */}
+                      {/* 4. Số tiền tạm ứng (và Số tiền phê duyệt hiển thị bên dưới) */}
                       <td
                         style={{
                           padding: '7px 14px',
                           textAlign: 'right',
-                          fontWeight: 700,
-                          fontSize: '0.875rem',
                           whiteSpace: 'nowrap',
-                          color:
-                            currentStep === 2
-                              ? '#16a34a'
-                              : currentStep === 3
-                              ? '#dc2626'
-                              : '#ea580c',
                         }}
                       >
-                        {formatVND(item.amount)}
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            fontSize: '0.875rem',
+                            color:
+                              currentStep === 2
+                                ? '#16a34a'
+                                : currentStep === 3
+                                  ? '#dc2626'
+                                  : '#ea580c',
+                          }}
+                        >
+                          {formatVND(item.amount)}
+                        </div>
+                        {item.status === 'approved' && (
+                          <div
+                            style={{
+                              fontSize: '0.72rem',
+                              fontWeight: 600,
+                              color: '#16a34a',
+                              marginTop: '2px',
+                            }}
+                          >
+                            Duyệt: {formatVND(item.approvedAmount || item.amount)}
+                          </div>
+                        )}
                       </td>
 
-                      {/* CÁC CỘT THEO BƯỚC 1: YÊU CẦU TẠM ỨNG (Bỏ cột thao tác duyệt) */}
+                      {/* CÁC CỘT THEO BƯỚC 1: YÊU CẦU TẠM ỨNG & XỬ LÝ */}
                       {currentStep === 1 && (
                         <>
-                          <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                          <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
                             {item.requestedDate}
                           </td>
-                          <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center', color: '#b45309', fontWeight: 600 }}>
-                            {item.deadlineRefund}
+                          <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center', color: '#b45309', fontWeight: 700, fontFamily: 'monospace' }}>
+                            {item.deadlineRefund || item.requestedDate || '—'}
+                          </td>
+                          <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center' }}>
+                            {item.status === 'approved' ? (
+                              item.reviewStatus === 'disbursed' ? (
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '3px 9px',
+                                    borderRadius: '20px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    backgroundColor: 'rgba(16, 185, 129, 0.14)',
+                                    color: '#047857',
+                                    border: '1px solid rgba(16, 185, 129, 0.35)',
+                                  }}
+                                >
+                                  <CheckCircle size={11} /> Đã chi tiền
+                                </span>
+                              ) : (
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '3px 9px',
+                                    borderRadius: '20px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    backgroundColor: 'rgba(22, 163, 74, 0.1)',
+                                    color: '#15803d',
+                                    border: '1px solid rgba(22, 163, 74, 0.25)',
+                                  }}
+                                >
+                                  <CheckCircle size={11} /> Đã phê duyệt
+                                </span>
+                              )
+                            ) : item.status === 'rejected' ? (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '3px 9px',
+                                  borderRadius: '20px',
+                                  fontSize: '0.7rem',
+                                  fontWeight: 700,
+                                  backgroundColor: 'rgba(220, 38, 38, 0.1)',
+                                  color: '#b91c1c',
+                                  border: '1px solid rgba(220, 38, 38, 0.25)',
+                                }}
+                              >
+                                <XCircle size={11} /> Đã từ chối
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '3px 9px',
+                                  borderRadius: '20px',
+                                  fontSize: '0.7rem',
+                                  fontWeight: 700,
+                                  backgroundColor: 'rgba(234, 88, 12, 0.1)',
+                                  color: '#c2410c',
+                                  border: '1px solid rgba(234, 88, 12, 0.25)',
+                                }}
+                              >
+                                <ClockHistory size={11} /> Chờ phê duyệt
+                              </span>
+                            )}
                           </td>
                         </>
                       )}
@@ -771,50 +1106,8 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
                               Duyệt ngày {item.approvedDate}
                             </div>
                           </td>
-                          <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center', color: '#0f172a', fontWeight: 600 }}>
-                            {item.deadlineRefund}
-                          </td>
-                          <td style={{ padding: '7px 14px', textAlign: 'center' }}>
-                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                title="Xem chi tiết"
-                                onClick={() => setSelectedPayment(item)}
-                                style={{
-                                  background: 'rgba(59, 130, 246, 0.1)',
-                                  color: '#2563eb',
-                                  width: '26px',
-                                  height: '26px',
-                                  borderRadius: '6px',
-                                  padding: 0,
-                                }}
-                              >
-                                <Eye size={13} />
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                title="In phiếu chi tạm ứng"
-                                onClick={() => {
-                                  if (onShowToast) {
-                                    onShowToast('info', 'In phiếu chi', `Đang kết nối máy in phiếu chi cho mã ${item.code}`);
-                                  }
-                                }}
-                                style={{
-                                  background: 'rgba(100, 116, 139, 0.1)',
-                                  color: '#475569',
-                                  width: '26px',
-                                  height: '26px',
-                                  borderRadius: '6px',
-                                  padding: 0,
-                                }}
-                              >
-                                <Printer size={13} />
-                              </Button>
-                            </div>
+                          <td className="hidden sm:table-cell" style={{ padding: '7px 14px', textAlign: 'center', color: '#0f172a', fontWeight: 700, fontFamily: 'monospace' }}>
+                            {item.deadlineRefund || item.requestedDate || '—'}
                           </td>
                         </>
                       )}
@@ -841,25 +1134,6 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
                             <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '1px' }}>
                               Từ chối: {item.rejectedDate}
                             </div>
-                          </td>
-                          <td style={{ padding: '7px 14px', textAlign: 'center' }}>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              title="Xem chi tiết"
-                              onClick={() => setSelectedPayment(item)}
-                              style={{
-                                background: 'rgba(59, 130, 246, 0.1)',
-                                color: '#2563eb',
-                                width: '26px',
-                                height: '26px',
-                                borderRadius: '6px',
-                                padding: 0,
-                              }}
-                            >
-                              <Eye size={13} />
-                            </Button>
                           </td>
                         </>
                       )}
@@ -900,452 +1174,449 @@ export const AdvancePaymentView: React.FC<AdvancePaymentViewProps> = ({
         </div>
       </div>
 
-      {/* MODAL 1: TẠO MỚI YÊU CẦU TẠM ỨNG */}
-      <Modal
+      {/* OFFCANVAS 1: TẠO MỚI YÊU CẦU TẠM ỨNG (CHUẨN 400PX ĐỒNG BỘ YÊU CẦU CÁ NHÂN) */}
+      <Offcanvas
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        title="Lập phiếu đề xuất tạm ứng"
-        maxWidth="680px"
+        icon={<FileEarmarkPlus size={22} style={{ color: 'var(--brand-600, #2563eb)' }} />}
+        title="Tạo yêu cầu tạm ứng"
+        description="Điền thông tin đề nghị tạm ứng kinh phí để trình duyệt"
+        width="400px"
+        position="right"
+        bodyStyle={{ display: 'flex', flexDirection: 'column' }}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', width: '100%' }}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsCreateModalOpen(false)}
+            >
+              Đóng
+            </Button>
+            <Button
+              type="submit"
+              form="create-advance-payment-form"
+              variant="primary"
+              style={{ fontWeight: 700 }}
+            >
+              Gửi yêu cầu phê duyệt
+            </Button>
+          </div>
+        }
       >
-        <form onSubmit={handleCreateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+        <form
+          id="create-advance-payment-form"
+          onSubmit={handleCreateSubmit}
+          style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, minHeight: 0 }}
+        >
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '5px' }}>
-                Phòng ban đề xuất <span style={{ color: '#dc2626' }}>*</span>
-              </label>
-              <DepartmentSelect
-                value={newDepartment}
-                onChange={(e) => setNewDepartment(e.target.value)}
-                style={{
-                  width: '100%',
-                  height: '38px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--border-default)',
-                  background: 'var(--bg-surface-1)',
-                  padding: '0 12px',
-                  fontSize: '13px',
-                  outline: 'none',
-                }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '5px' }}>
-                Dự án / Công trình liên quan
-              </label>
-              <select
-                value={newProject}
-                onChange={(e) => setNewProject(e.target.value)}
-                style={{
-                  width: '100%',
-                  height: '38px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--border-default)',
-                  background: 'var(--bg-surface-1)',
-                  padding: '0 12px',
-                  fontSize: '13px',
-                  outline: 'none',
-                }}
-              >
-                <option value="Sun Grand Boulevard Sầm Sơn">Sun Grand Boulevard Sầm Sơn</option>
-                <option value="Vinhomes Royal Island Vũ Yên Hải Phòng">Vinhomes Royal Island Vũ Yên Hải Phòng</option>
-                <option value="Masteri Centre Point Quận 9">Masteri Centre Point Quận 9</option>
-                <option value="Khu Đô Thị Sinh Thái Aqua City">Khu Đô Thị Sinh Thái Aqua City</option>
-                <option value="Ecopark Retreat Bến Lức Long An">Ecopark Retreat Bến Lức Long An</option>
-                <option value="Nhà máy Seajong">Nhà máy Seajong</option>
-                <option value="Nội bộ công ty">Nội bộ công ty</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '5px' }}>
-              Mục đích và Nội dung tạm ứng <span style={{ color: '#dc2626' }}>*</span>
-            </label>
-            <textarea
-              required
-              rows={2}
-              value={newPurpose}
-              onChange={(e) => setNewPurpose(e.target.value)}
-              placeholder="Ví dụ: Tạm ứng công tác phí đo đạc công trình, mua vật tư cấp bách xưởng gỗ..."
-              style={{
-                width: '100%',
-                borderRadius: '8px',
-                border: '1px solid var(--border-default)',
-                background: 'var(--bg-surface-1)',
-                padding: '8px 12px',
-                fontSize: '13px',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '5px' }}>
-                Số tiền tạm ứng (VNĐ) <span style={{ color: '#dc2626' }}>*</span>
-              </label>
-              <input
-                type="number"
+              <Input
+                label="Số tiền xin tạm ứng VND"
                 required
-                min={100000}
-                step={50000}
-                value={newAmount}
-                onChange={(e) => setNewAmount(e.target.value ? Number(e.target.value) : '')}
-                placeholder="Nhập số tiền..."
-                style={{
-                  width: '100%',
-                  height: '38px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--border-default)',
-                  background: 'var(--bg-surface-1)',
-                  padding: '0 12px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  outline: 'none',
-                  boxSizing: 'border-box',
-                }}
+                type="text"
+                value={formatNumberGroup(newAmount)}
+                onChange={(e) => setNewAmount(e.target.value.replace(/[^0-9]/g, ''))}
+                style={{ fontWeight: 700, color: '#b91c1c' }}
               />
+              <div style={{ marginTop: '8px' }}>
+                <label
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '7px',
+                    cursor: 'pointer',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    color: '#1e293b',
+                    userSelect: 'none',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={deductFromSalary}
+                    onChange={(e) => setDeductFromSalary(e.target.checked)}
+                    style={{
+                      width: '15px',
+                      height: '15px',
+                      accentColor: '#2563eb',
+                      cursor: 'pointer',
+                    }}
+                  />
+                  <span>Trừ tạm ứng vào lương</span>
+                </label>
+              </div>
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '5px' }}>
-                Hình thức nhận tiền
-              </label>
-              <select
-                value={newPaymentMethod}
-                onChange={(e) => setNewPaymentMethod(e.target.value as any)}
-                style={{
-                  width: '100%',
-                  height: '38px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--border-default)',
-                  background: 'var(--bg-surface-1)',
-                  padding: '0 12px',
-                  fontSize: '13px',
-                  outline: 'none',
-                }}
-              >
-                <option value="bank_transfer">Chuyển khoản ngân hàng</option>
-                <option value="cash">Tiền mặt tại thủ quỹ</option>
-              </select>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '5px' }}>
-                Hạn hoàn ứng dự kiến
-              </label>
-              <input
-                type="date"
+              <Input
+                label="Hạn hoàn ứng dự kiến"
+                required
+                type="text"
                 value={newDeadline}
                 onChange={(e) => setNewDeadline(e.target.value)}
+                placeholder="DD/MM/YYYY"
+              />
+            </div>
+          </div>
+
+          <Input
+            label="Mục đích tạm ứng chi tiết"
+            required
+            type="text"
+            value={newPurpose}
+            onChange={(e) => setNewPurpose(e.target.value)}
+            placeholder="Ví dụ: Tạm ứng công tác phí dự án, mua vật tư mẫu..."
+          />
+
+          <Select
+            label="Phương thức nhận tiền"
+            value={newPaymentMethod}
+            onChange={(e) => setNewPaymentMethod(e.target.value as 'bank_transfer' | 'cash')}
+          >
+            <option value="bank_transfer">Chuyển khoản qua số tài khoản cá nhân</option>
+            <option value="cash">Nhận tiền mặt tại quỹ công ty</option>
+          </Select>
+
+          {newPaymentMethod === 'bank_transfer' && (
+            <>
+              <Input
+                label="Số tài khoản thụ hưởng"
+                type="text"
+                value={newBankAccount}
+                onChange={(e) => setNewBankAccount(e.target.value)}
+                placeholder="Ví dụ: 19033458992011"
+              />
+
+              <Input
+                label="Ngân hàng thụ hưởng"
+                type="text"
+                value={newBankName}
+                onChange={(e) => setNewBankName(e.target.value)}
+                placeholder="Ví dụ: Techcombank Đà Nẵng"
+              />
+            </>
+          )}
+
+          <div
+            style={{
+              marginTop: '6px',
+              paddingTop: '14px',
+              borderTop: '1px dashed #e2e8f0',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              flex: 1,
+              minHeight: 0,
+            }}
+          >
+            <Select
+              label="Người phê duyệt"
+              required
+              value={newApprover}
+              onChange={(e) => setNewApprover(e.target.value)}
+              style={{ fontWeight: 600 }}
+            >
+              {dbApproverGroups.map((grp) => (
+                <optgroup key={grp.group} label={grp.group}>
+                  {grp.options.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </Select>
+
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+              <label
+                style={{
+                  display: 'block',
+                  fontSize: '0.8125rem',
+                  fontWeight: 700,
+                  color: '#334155',
+                  marginBottom: '4px',
+                  flexShrink: 0,
+                }}
+              >
+                Ghi chú hoặc ý kiến bổ sung
+              </label>
+              <textarea
+                value={newNote}
+                onChange={(e) => setNewNote(e.target.value)}
+                placeholder="Nhập thêm chi tiết hoặc giải trình nếu cần..."
                 style={{
                   width: '100%',
-                  height: '38px',
+                  flex: 1,
+                  minHeight: '72px',
                   borderRadius: '8px',
-                  border: '1px solid var(--border-default)',
-                  background: 'var(--bg-surface-1)',
-                  padding: '0 12px',
-                  fontSize: '13px',
+                  border: '1px solid var(--border-default, #cbd5e1)',
+                  backgroundColor: 'var(--bg-surface-1, #ffffff)',
+                  padding: '8px 12px',
+                  fontSize: '0.8125rem',
                   outline: 'none',
+                  resize: 'none',
                   boxSizing: 'border-box',
                 }}
               />
             </div>
           </div>
-
-          {newPaymentMethod === 'bank_transfer' && (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr 1fr',
-                gap: '14px',
-                background: 'var(--bg-surface-2)',
-                padding: '12px',
-                borderRadius: '8px',
-              }}
-            >
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                  Ngân hàng
-                </label>
-                <input
-                  type="text"
-                  value={newBankName}
-                  onChange={(e) => setNewBankName(e.target.value)}
-                  placeholder="Techcombank, Vietcombank..."
-                  style={{
-                    width: '100%',
-                    height: '34px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-default)',
-                    background: 'var(--bg-surface-1)',
-                    padding: '0 10px',
-                    fontSize: '12px',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                  Số tài khoản
-                </label>
-                <input
-                  type="text"
-                  value={newBankAccount}
-                  onChange={(e) => setNewBankAccount(e.target.value)}
-                  placeholder="1903..."
-                  style={{
-                    width: '100%',
-                    height: '34px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-default)',
-                    background: 'var(--bg-surface-1)',
-                    padding: '0 10px',
-                    fontSize: '12px',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                  Chủ tài khoản
-                </label>
-                <input
-                  type="text"
-                  value={newAccountName}
-                  onChange={(e) => setNewAccountName(e.target.value)}
-                  placeholder="NGUYEN VAN A"
-                  style={{
-                    width: '100%',
-                    height: '34px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-default)',
-                    background: 'var(--bg-surface-1)',
-                    padding: '0 10px',
-                    fontSize: '12px',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '5px' }}>
-              Ghi chú bổ sung
-            </label>
-            <input
-              type="text"
-              value={newNote}
-              onChange={(e) => setNewNote(e.target.value)}
-              placeholder="Đính kèm thông tin hóa đơn hoặc lý do giải ngân cấp tốc..."
-              style={{
-                width: '100%',
-                height: '38px',
-                borderRadius: '8px',
-                border: '1px solid var(--border-default)',
-                background: 'var(--bg-surface-1)',
-                padding: '0 12px',
-                fontSize: '13px',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-            <Button variant="secondary" type="button" onClick={() => setIsCreateModalOpen(false)}>
-              Hủy bỏ
-            </Button>
-            <Button variant="primary" type="submit">
-              <CheckLg size={16} /> Gửi duyệt đề xuất
-            </Button>
-          </div>
         </form>
-      </Modal>
+      </Offcanvas>
 
-      {/* MODAL 2: XEM CHI TIẾT PHIẾU TẠM ỨNG */}
-      {selectedPayment && (
-        <Modal
-          isOpen={true}
-          onClose={() => setSelectedPayment(null)}
-          title={`Chi tiết phiếu tạm ứng ${selectedPayment.code}`}
-          maxWidth="680px"
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Header tóm tắt */}
+      {/* OFFCANVAS 2: XEM CHI TIẾT & PHÊ DUYỆT PHIẾU TẠM ỨNG (CHUẨN 400PX) */}
+      <Offcanvas
+        isOpen={Boolean(selectedPayment)}
+        onClose={() => setSelectedPayment(null)}
+        icon={<FileEarmarkText size={22} style={{ color: 'var(--brand-600, #2563eb)' }} />}
+        title={selectedPayment ? `Chi tiết phiếu ${selectedPayment.code}` : 'Chi tiết phiếu tạm ứng'}
+        description="Thông tin đề nghị tạm ứng và trạng thái xét duyệt"
+        width="400px"
+        position="right"
+        footer={
+          selectedPayment ? (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', width: '100%' }}>
+              <Button variant="outline" size="sm" onClick={() => setSelectedPayment(null)}>
+                Đóng
+              </Button>
+              {selectedPayment.status === 'pending' && (
+                <>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    leftIcon={<XLg size={13} />}
+                    onClick={() => handleReject(selectedPayment)}
+                  >
+                    Từ chối
+                  </Button>
+                  {!isAutoApproveEnabled || selectedPayment.amount > advanceLimit ? (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      leftIcon={<Send size={13} />}
+                      disabled={isSubmittingDirector}
+                      onClick={() => handleSubmitToDirector(selectedPayment)}
+                    >
+                      {isSubmittingDirector ? 'Đang trình...' : 'Trình phê duyệt'}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      leftIcon={<CheckLg size={14} />}
+                      onClick={() => {
+                        const parsed = Number(approvedAmountStr.replace(/[^0-9]/g, ''));
+                        handleApprove(selectedPayment, parsed > 0 ? parsed : selectedPayment.amount);
+                      }}
+                    >
+                      Phê duyệt
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          ) : undefined
+        }
+      >
+        {selectedPayment && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.8125rem' }}>
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: '16px 20px',
-                borderRadius: '10px',
+                padding: '12px 14px',
+                borderRadius: '8px',
                 background:
                   selectedPayment.status === 'approved'
                     ? 'rgba(22, 163, 74, 0.08)'
                     : selectedPayment.status === 'rejected'
-                    ? 'rgba(220, 38, 38, 0.08)'
-                    : 'rgba(234, 88, 12, 0.08)',
+                      ? 'rgba(220, 38, 38, 0.08)'
+                      : 'rgba(234, 88, 12, 0.08)',
                 border:
                   selectedPayment.status === 'approved'
                     ? '1px solid rgba(22, 163, 74, 0.2)'
                     : selectedPayment.status === 'rejected'
-                    ? '1px solid rgba(220, 38, 38, 0.2)'
-                    : '1px solid rgba(234, 88, 12, 0.2)',
+                      ? '1px solid rgba(220, 38, 38, 0.2)'
+                      : '1px solid rgba(234, 88, 12, 0.2)',
               }}
             >
               <div>
-                <span style={{ fontSize: '11px', textTransform: 'uppercase', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                  SỐ TIỀN TẠM ỨNG
-                </span>
+                <div style={{ fontSize: '11px', textTransform: 'uppercase', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                  Số tiền xin tạm ứng
+                </div>
                 <div
                   style={{
-                    fontSize: '22px',
+                    fontSize: '18px',
                     fontWeight: 800,
                     color:
                       selectedPayment.status === 'approved'
                         ? '#16a34a'
                         : selectedPayment.status === 'rejected'
-                        ? '#dc2626'
-                        : '#ea580c',
+                          ? '#dc2626'
+                          : '#ea580c',
                   }}
                 >
                   {formatVND(selectedPayment.amount)}
                 </div>
+                {selectedPayment.status === 'approved' && (
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#15803d', marginTop: '3px' }}>
+                    Số tiền phê duyệt: {formatVND(selectedPayment.approvedAmount || selectedPayment.amount)}
+                  </div>
+                )}
               </div>
 
-              <div>
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '6px 12px',
-                    borderRadius: '20px',
-                    fontWeight: 700,
-                    fontSize: '12px',
-                    background:
-                      selectedPayment.status === 'approved'
-                        ? '#16a34a'
-                        : selectedPayment.status === 'rejected'
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '4px 10px',
+                  borderRadius: '20px',
+                  fontWeight: 700,
+                  fontSize: '11px',
+                  background:
+                    selectedPayment.status === 'approved'
+                      ? '#16a34a'
+                      : selectedPayment.status === 'rejected'
                         ? '#dc2626'
                         : '#ea580c',
-                    color: '#ffffff',
-                  }}
-                >
-                  {selectedPayment.status === 'approved' ? (
-                    <>
-                      <CheckCircle size={14} /> ĐÃ DUYỆT VÀ GIẢI NGÂN
-                    </>
-                  ) : selectedPayment.status === 'rejected' ? (
-                    <>
-                      <XCircle size={14} /> ĐÃ TỪ CHỐI
-                    </>
-                  ) : (
-                    <>
-                      <ClockHistory size={14} /> ĐANG CHỜ DUYỆT
-                    </>
-                  )}
-                </span>
-              </div>
+                  color: '#ffffff',
+                }}
+              >
+                {selectedPayment.status === 'approved' ? (
+                  <>
+                    <CheckCircle size={12} /> {selectedPayment.reviewStatus === 'disbursed' ? 'Đã chi tiền' : 'Đã phê duyệt'}
+                  </>
+                ) : selectedPayment.status === 'rejected' ? (
+                  <>
+                    <XCircle size={12} /> Đã từ chối
+                  </>
+                ) : (
+                  <>
+                    <ClockHistory size={12} /> Chờ phê duyệt
+                  </>
+                )}
+              </span>
             </div>
 
-            {/* Thông tin chi tiết */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px' }}>
-              <div style={{ background: 'var(--bg-surface-2)', padding: '12px 16px', borderRadius: '8px' }}>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '11px', marginBottom: '2px' }}>Người yêu cầu:</div>
-                <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {selectedPayment.employeeName} ({selectedPayment.employeeCode})
+            {selectedPayment.status === 'pending' && isAutoApproveEnabled && selectedPayment.amount <= advanceLimit && (
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '5px' }}>
+                  Số tiền phê duyệt (VNĐ)
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatNumberGroup(approvedAmountStr)}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^0-9]/g, '');
+                      setApprovedAmountStr(raw);
+                    }}
+                    placeholder="Nhập số tiền phê duyệt..."
+                    style={{
+                      width: '100%',
+                      padding: '8px 42px 8px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-subtle, #cbd5e1)',
+                      fontSize: '14px',
+                      fontWeight: 700,
+                      color: '#2563eb',
+                      outline: 'none',
+                    }}
+                  />
+                  <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', fontWeight: 700, color: '#94a3b8' }}>
+                    VNĐ
+                  </span>
                 </div>
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div style={{ background: 'var(--bg-surface-2)', padding: '10px 12px', borderRadius: '8px' }}>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '11px', marginBottom: '2px' }}>Người đề xuất</div>
+                <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{selectedPayment.employeeName}</div>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{selectedPayment.department}</div>
               </div>
 
-              <div style={{ background: 'var(--bg-surface-2)', padding: '12px 16px', borderRadius: '8px' }}>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '11px', marginBottom: '2px' }}>Dự án liên quan:</div>
-                <div style={{ fontWeight: 700, color: '#0284c7' }}>{selectedPayment.project || 'Nội bộ'}</div>
+              <div style={{ background: 'var(--bg-surface-2)', padding: '10px 12px', borderRadius: '8px' }}>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '11px', marginBottom: '2px' }}>Ngày hoàn tạm ứng</div>
+                <div style={{ fontWeight: 700, color: '#b45309', fontFamily: 'monospace' }}>
+                  {selectedPayment.deadlineRefund || selectedPayment.requestedDate || '—'}
+                </div>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
-                  Hạn hoàn ứng: <strong>{selectedPayment.deadlineRefund}</strong>
+                  Yêu cầu: {selectedPayment.requestedDate}
                 </div>
               </div>
             </div>
 
-            <div style={{ background: 'var(--bg-surface-2)', padding: '14px 16px', borderRadius: '8px', fontSize: '13px' }}>
-              <div style={{ color: 'var(--text-secondary)', fontSize: '11px', marginBottom: '4px' }}>Mục đích tạm ứng:</div>
-              <div style={{ fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.5 }}>
+            <div style={{ background: 'var(--bg-surface-2)', padding: '10px 12px', borderRadius: '8px' }}>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '11px', marginBottom: '3px' }}>Mục đích tạm ứng</div>
+              <div style={{ fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.45 }}>
                 {selectedPayment.purpose}
               </div>
+              {selectedPayment.project && (
+                <div style={{ marginTop: '4px', fontSize: '12px', color: '#0284c7', fontWeight: 600 }}>
+                  Phân loại: {selectedPayment.project}
+                </div>
+              )}
               {selectedPayment.note && (
-                <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                <div style={{ marginTop: '4px', fontSize: '12px', color: 'var(--text-secondary)' }}>
                   Ghi chú: {selectedPayment.note}
                 </div>
               )}
             </div>
 
-            {/* Thông tin nhận tiền */}
             {selectedPayment.paymentMethod === 'bank_transfer' && selectedPayment.bankInfo && (
-              <div style={{ background: 'var(--bg-surface-2)', padding: '12px 16px', borderRadius: '8px', fontSize: '13px' }}>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '11px', marginBottom: '4px' }}>Tài khoản nhận tiền:</div>
+              <div style={{ background: 'var(--bg-surface-2)', padding: '10px 12px', borderRadius: '8px' }}>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '11px', marginBottom: '3px' }}>Tài khoản nhận tiền</div>
                 <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {selectedPayment.bankInfo.bankName} - Số TK: <strong>{selectedPayment.bankInfo.accountNumber}</strong>
+                  {selectedPayment.bankInfo.bankName}
                 </div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
-                  Chủ TK: {selectedPayment.bankInfo.accountName}
+                <div style={{ color: 'var(--text-primary)', fontSize: '12px', fontFamily: 'monospace', fontWeight: 700 }}>
+                  STK: {selectedPayment.bankInfo.accountNumber}
                 </div>
+                {selectedPayment.bankInfo.accountName && (
+                  <div style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
+                    Chủ TK: {selectedPayment.bankInfo.accountName}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Thông tin phê duyệt nếu đã duyệt / từ chối */}
             {selectedPayment.status === 'approved' && (
-              <div style={{ background: 'rgba(22, 163, 74, 0.06)', border: '1px solid rgba(22, 163, 74, 0.2)', padding: '12px 16px', borderRadius: '8px', fontSize: '13px' }}>
-                <div style={{ color: '#16a34a', fontWeight: 700, marginBottom: '2px' }}>Phê duyệt bởi:</div>
-                <div style={{ color: 'var(--text-primary)' }}>{selectedPayment.approver} vào ngày {selectedPayment.approvedDate}</div>
+              <div style={{ background: 'rgba(22, 163, 74, 0.06)', border: '1px solid rgba(22, 163, 74, 0.2)', padding: '10px 12px', borderRadius: '8px' }}>
+                <div style={{ color: '#16a34a', fontWeight: 700, fontSize: '12px' }}>Thông tin phê duyệt</div>
+                <div style={{ color: 'var(--text-primary)', fontSize: '12px', marginTop: '2px' }}>
+                  {selectedPayment.approver} • Ngày duyệt: {selectedPayment.approvedDate}
+                </div>
               </div>
             )}
 
             {selectedPayment.status === 'rejected' && (
-              <div style={{ background: 'rgba(220, 38, 38, 0.06)', border: '1px solid rgba(220, 38, 38, 0.2)', padding: '12px 16px', borderRadius: '8px', fontSize: '13px' }}>
-                <div style={{ color: '#dc2626', fontWeight: 700, marginBottom: '2px' }}>Lý do từ chối:</div>
-                <div style={{ color: 'var(--text-primary)', marginBottom: '4px' }}>{selectedPayment.rejectReason}</div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>Xử lý bởi: {selectedPayment.approver} ({selectedPayment.rejectedDate})</div>
+              <div style={{ background: 'rgba(220, 38, 38, 0.06)', border: '1px solid rgba(220, 38, 38, 0.2)', padding: '10px 12px', borderRadius: '8px' }}>
+                <div style={{ color: '#dc2626', fontWeight: 700, fontSize: '12px' }}>Lý do từ chối</div>
+                <div style={{ color: 'var(--text-primary)', fontSize: '12px', marginTop: '2px' }}>{selectedPayment.rejectReason}</div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '11px', marginTop: '2px' }}>
+                  Xử lý bởi: {selectedPayment.approver} ({selectedPayment.rejectedDate})
+                </div>
               </div>
             )}
-
-            {/* Nút thao tác dưới Modal */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
-              <Button variant="secondary" onClick={() => setSelectedPayment(null)}>
-                Đóng
-              </Button>
-
-              {selectedPayment.status === 'pending' && (
-                <>
-                  <Button
-                    variant="danger"
-                    onClick={() => handleReject(selectedPayment)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <XLg size={14} /> Từ chối
-                  </Button>
-                  <Button
-                    variant="primary"
-                    onClick={() => handleApprove(selectedPayment)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <CheckLg size={16} /> Phê duyệt tạm ứng
-                  </Button>
-                </>
-              )}
-            </div>
           </div>
-        </Modal>
-      )}
+        )}
+      </Offcanvas>
+
+      {/* OFFCANVAS 3: THIẾT LẬP XOÁ DỮ LIỆU TẠM ỨNG QUÁ HẠN (CHUẨN 400PX) */}
+      <DataRetentionOffcanvas
+        isOpen={isCleanupOffcanvasOpen}
+        onClose={() => setIsCleanupOffcanvasOpen(false)}
+        ticketType="ADVANCE_PAYMENTS"
+        title="Thiết lập thời gian lưu trữ"
+        description="Cấu hình tự động dọn dẹp phiếu tạm ứng quá thời hạn lưu trữ"
+        entityLabel="phiếu"
+        onCleanedUp={() => fetchPayments(true)}
+      />
     </div>
   );
 };

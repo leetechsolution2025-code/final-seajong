@@ -29,7 +29,7 @@ export interface PendingApprovalOffcanvasProps {
   isOpen: boolean;
   onClose: () => void;
   document: ApprovalDocument | null;
-  onApprove: (doc: ApprovalDocument, approveDeposit?: boolean) => void;
+  onApprove: (doc: ApprovalDocument, approveDeposit?: boolean, approvedAmount?: number) => void;
   onReject: (doc: ApprovalDocument) => void;
   onShowToast?: (type: 'success' | 'error' | 'warning' | 'info', title: string, message: string) => void;
   initialOpenChat?: boolean;
@@ -47,6 +47,7 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
   const [activeSlide, setActiveSlide] = useState<'none' | 'chat' | 'orderDetail'>(initialOpenChat ? 'chat' : 'none');
   const [unreadCount, setUnreadCount] = useState(0);
   const [approveDeposit, setApproveDeposit] = useState(true);
+  const [approvedAmountStr, setApprovedAmountStr] = useState<string>('');
 
   // Mở chat nếu có yêu cầu mở thẳng từ thông báo/toast
   useEffect(() => {
@@ -61,7 +62,8 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
 
   useEffect(() => {
     setApproveDeposit(true);
-  }, [document?.id]);
+    setApprovedAmountStr(String(document?.value || 0));
+  }, [document?.id, document?.value]);
 
   // Lắng nghe số tin nhắn chưa đọc của hồ sơ này
   useEffect(() => {
@@ -78,12 +80,20 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
   const isPurchaseOrder =
     String(document.entityType || '').toLowerCase() === 'purchase_order' ||
     document.docType === 'contract';
+  const isAdvanceDoc =
+    document.docType === 'advance' ||
+    String(document.entityType || '').toLowerCase().includes('advance') ||
+    String(document.code || '').startsWith('YC-') ||
+    String(document.code || '').startsWith('YCU-') ||
+    String(document.title || '').toLowerCase().includes('tạm ứng');
   const meta = document.metadata || {};
   const poItemCount = Array.isArray(meta.items) ? meta.items.length : 0;
   const datCocPct = Number(meta.datCocPct || 0);
   const tienDatCoc = Number(
     meta.tienDatCoc || (datCocPct > 0 ? Math.round((document.value * datCocPct) / 100) : 0)
   );
+  const parsedApprovedAmount =
+    Number(String(approvedAmountStr || '').replace(/[^0-9]/g, '')) || document.value || 0;
 
   return (
     <Offcanvas
@@ -154,7 +164,13 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
                 variant="success"
                 size="md"
                 leftIcon={<CheckCircle size={16} />}
-                onClick={() => onApprove(document, isPurchaseOrder && datCocPct > 0 ? approveDeposit : false)}
+                onClick={() =>
+                  onApprove(
+                    document,
+                    isPurchaseOrder && datCocPct > 0 ? approveDeposit : false,
+                    isAdvanceDoc ? parsedApprovedAmount : undefined
+                  )
+                }
               >
                 Phê duyệt
               </Button>
@@ -264,12 +280,58 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
                 <CashStack size={20} />
               </div>
               <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Giá trị dự toán / Hợp đồng</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  {isAdvanceDoc ? 'Số tiền xin tạm ứng' : 'Giá trị dự toán / Hợp đồng'}
+                </div>
                 <div style={{ fontSize: '1.0625rem', fontWeight: 800, color: 'var(--color-primary)' }}>
                   {document.value.toLocaleString('vi-VN')} VNĐ
                 </div>
               </div>
             </div>
+            {isAdvanceDoc && (
+              <div
+                style={{
+                  marginTop: '2px',
+                  paddingTop: '10px',
+                  borderTop: '1px dashed rgba(2, 132, 199, 0.25)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '5px',
+                }}
+              >
+                <label
+                  style={{
+                    fontSize: '0.78125rem',
+                    fontWeight: 700,
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  Số tiền phê duyệt (VNĐ)
+                </label>
+                <input
+                  type="text"
+                  value={
+                    approvedAmountStr
+                      ? Number(approvedAmountStr.replace(/[^0-9]/g, '') || 0).toLocaleString('vi-VN')
+                      : ''
+                  }
+                  onChange={(e) => setApprovedAmountStr(e.target.value.replace(/[^0-9]/g, ''))}
+                  placeholder="Nhập số tiền phê duyệt..."
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #0284c7',
+                    backgroundColor: '#ffffff',
+                    fontSize: '0.9375rem',
+                    fontWeight: 800,
+                    color: '#0369a1',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+            )}
             <div
               style={{
                 display: 'flex',

@@ -39,7 +39,7 @@ export interface JournalEntry {
   entryTime?: string;
   documentDate: string;
   referenceCode?: string;
-  sourceModule: 'PROCUREMENT' | 'SALES' | 'LOGISTICS' | 'PRODUCTION' | 'CASH' | 'ADVANCE' | 'MANUAL';
+  sourceModule: 'PROCUREMENT' | 'SALES' | 'LOGISTICS' | 'PRODUCTION' | 'CASH' | 'ADVANCE' | 'HR' | 'ASSETS' | 'MANUAL';
   sourceLabel: string;
   description: string;
   totalAmount: number;
@@ -326,6 +326,8 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
       PRODUCTION: 'Sản xuất',
       CASH: 'Quỹ và Ngân hàng',
       ADVANCE: 'Tạm ứng',
+      HR: 'Tiền lương & BHXH',
+      ASSETS: 'Tài sản cố định',
       MANUAL: 'Thủ công',
     };
 
@@ -463,10 +465,17 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
             Tạm ứng
           </span>
         );
+      case 'HR':
+        return (
+          <span style={{ fontSize: '0.6875rem', fontWeight: 600, padding: '2px 7px', borderRadius: '4px', backgroundColor: 'rgba(236, 72, 153, 0.12)', color: '#db2777', border: '1px solid rgba(236, 72, 153, 0.25)' }}>
+            Lương & BHXH
+          </span>
+        );
+      case 'ASSETS':
       case 'PRODUCTION':
         return (
           <span style={{ fontSize: '0.6875rem', fontWeight: 600, padding: '2px 7px', borderRadius: '4px', backgroundColor: 'rgba(20, 184, 166, 0.12)', color: '#0d9488', border: '1px solid rgba(20, 184, 166, 0.25)' }}>
-            TSCĐ / SX
+            TSCĐ / Khấu hao
           </span>
         );
       default:
@@ -688,6 +697,8 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
               { value: 'CASH', label: 'Quỹ và Ngân hàng' },
               { value: 'LOGISTICS', label: 'Kho vận' },
               { value: 'ADVANCE', label: 'Tạm ứng' },
+              { value: 'HR', label: 'Tiền lương & BHXH' },
+              { value: 'ASSETS', label: 'Tài sản cố định' },
               { value: 'MANUAL', label: 'Thủ công' },
             ],
           },
@@ -706,13 +717,16 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
               { value: '112', label: 'TK 112 - Tiền gửi NH' },
               { value: '131', label: 'TK 131 - Phải thu KH' },
               { value: '141', label: 'TK 141 - Tạm ứng' },
-              { value: '152', label: 'TK 152 - Nguyên vật liệu' },
-              { value: '155', label: 'TK 155 - Thành phẩm' },
+              { value: '156', label: 'TK 156 - Hàng hóa' },
+              { value: '214', label: 'TK 214 - Hao mòn TSCĐ' },
               { value: '331', label: 'TK 331 - Phải trả NCC' },
+              { value: '334', label: 'TK 334 - Phải trả NLĐ (Lương)' },
+              { value: '338', label: 'TK 338 - Bảo hiểm (BHXH, BHYT)' },
+              { value: '341', label: 'TK 341 - Vay & nợ thuê TC' },
               { value: '511', label: 'TK 511 - Doanh thu' },
-              { value: '621', label: 'TK 621 - CP NVL trực tiếp' },
-              { value: '627', label: 'TK 627 - CP sản xuất chung' },
-              { value: '642', label: 'TK 642 - CP quản lý' },
+              { value: '632', label: 'TK 632 - Giá vốn hàng bán' },
+              { value: '641', label: 'TK 641 - CP bán hàng' },
+              { value: '642', label: 'TK 642 - CP quản lý DN' },
             ],
           },
         ]}

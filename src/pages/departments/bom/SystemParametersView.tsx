@@ -108,7 +108,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
   const [accountingAutoEnabled, setAccountingAutoEnabled] = useState<boolean>(true);
   const [accountingSingleLimit, setAccountingSingleLimit] = useState<number>(20000000);
   const [accountingDailyLimit, setAccountingDailyLimit] = useState<number>(100000000);
-  const [accountingEmergencyAdvance, setAccountingEmergencyAdvance] = useState<number>(5000000);
+  const [accountingEmergencyAdvance, setAccountingEmergencyAdvance] = useState<number>(3000000);
   const [accountingRequireReceipt, setAccountingRequireReceipt] = useState<boolean>(true);
   const [accountingAllowedCategories, setAccountingAllowedCategories] = useState<string[]>(
     DEFAULT_ACCOUNTING_EXPENSE_CATEGORIES
@@ -271,6 +271,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
             accountingAutoEnabled,
             accountingSingleLimit,
             accountingDailyLimit,
+            accountingEmergencyAdvance,
           },
         })
       );
@@ -292,6 +293,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
             accountingAutoEnabled,
             accountingSingleLimit,
             accountingDailyLimit,
+            accountingEmergencyAdvance,
           },
         })
       );
@@ -407,7 +409,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
       setAccountingAutoEnabled(true);
       setAccountingSingleLimit(20000000);
       setAccountingDailyLimit(100000000);
-      setAccountingEmergencyAdvance(5000000);
+      setAccountingEmergencyAdvance(3000000);
       setAccountingRequireReceipt(true);
       setAccountingAllowedCategories(DEFAULT_ACCOUNTING_EXPENSE_CATEGORIES);
 
@@ -416,7 +418,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
       localStorage.setItem('seajong_accounting_auto_enabled', 'true');
       localStorage.setItem('seajong_accounting_single_limit', '20000000');
       localStorage.setItem('seajong_accounting_daily_limit', '100000000');
-      localStorage.setItem('seajong_accounting_emergency_advance', '5000000');
+      localStorage.setItem('seajong_accounting_emergency_advance', '3000000');
       localStorage.setItem('seajong_accounting_require_receipt', 'true');
       localStorage.setItem('seajong_accounting_allowed_categories', JSON.stringify(DEFAULT_ACCOUNTING_EXPENSE_CATEGORIES));
 
@@ -429,7 +431,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
           accounting_auto_enabled: true,
           accounting_single_limit: 20000000,
           accounting_daily_limit: 100000000,
-          accounting_emergency_advance: 5000000,
+          accounting_emergency_advance: 3000000,
           accounting_require_receipt: true,
           accounting_allowed_categories: DEFAULT_ACCOUNTING_EXPENSE_CATEGORIES,
         }),
@@ -442,6 +444,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
             accountingAutoEnabled: true,
             accountingSingleLimit: 20000000,
             accountingDailyLimit: 100000000,
+            accountingEmergencyAdvance: 3000000,
           },
         })
       );
@@ -1315,7 +1318,7 @@ export const SystemParametersView: React.FC<SystemParametersViewProps> = ({ onSh
 
             {/* Nút mốc nhanh */}
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', paddingTop: '4px' }}>
-              {[2000000, 5000000, 10000000, 15000000].map((val) => (
+              {[2000000, 3000000, 5000000, 10000000].map((val) => (
                 <button
                   key={val}
                   type="button"

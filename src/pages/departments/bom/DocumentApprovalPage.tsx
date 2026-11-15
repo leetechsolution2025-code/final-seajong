@@ -26,7 +26,11 @@ const mapDbApprovalToDocument = (row: any, idx: number): ApprovalDocument => {
     docTypeName = meta?.loaiText || 'Yêu cầu chi tiền';
   } else if (entityType.includes('expense') || entityType.includes('advance') || meta?.type?.includes('advance')) {
     docType = 'advance';
-    docTypeName = meta?.loaiText || 'Đề xuất tạm ứng NCC';
+    docTypeName =
+      meta?.loaiText ||
+      (String(row.entityCode || '').startsWith('YC-') || entityType === 'advance' || entityType === 'advance_payment'
+        ? 'Yêu cầu tạm ứng nhân viên'
+        : 'Đề xuất tạm ứng NCC');
   } else if (entityType.includes('personal')) {
     docType = 'proposal';
     docTypeName = meta?.loaiText || 'Đề xuất nhân sự';
