@@ -8,12 +8,15 @@ import { Badge } from '../../components/common/Badge';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { EventOffcanvas } from '../../components/common/EventOffcanvas';
 import { Offcanvas } from '../../components/common/Offcanvas';
+import { DataRetentionOffcanvas } from '../../components/common/DataRetentionOffcanvas';
 import { TaoDonHangModal } from '../../components/plan-finance/bao_gia/TaoDonHangModal';
 import { BaoGiaSanitaryModal } from '../../components/plan-finance/bao_gia/BaoGiaSanitaryModal';
+import { ChiTietBaoGiaOffcanvas } from '../../components/plan-finance/bao_gia/ChiTietBaoGiaOffcanvas';
 import { CreateDefectOffcanvas } from '../production/defects/CreateDefectOffcanvas';
 import { DefectSummaryOffcanvas } from '../production/defects/DefectSummaryOffcanvas';
 import { DefectProcessModal } from '../production/defects/DefectProcessModal';
 import { getCustomerGroupInfo } from '../../utils/customerGroupUtils';
+import { categoryService } from '../../services/categoryService';
 import type { ModernStepItem } from '../../types';
 import type { TickerItem } from '../../components/layout/DynamicTicker';
 import {
@@ -58,7 +61,14 @@ interface Quotation {
   chiPhiThiCong: number;
   thanhTien: number;
   ghiChu?: string;
+  type?: string;
   createdAt: string;
+  nguoiPhuTrach?: {
+    id: string;
+    fullName: string;
+  } | null;
+  items?: any[];
+  negotiations?: any[];
 }
 
 interface SaleOrder {
@@ -88,7 +98,20 @@ interface SaleOrder {
   diaChiGiaoHang?: string;
   orderSource?: string;
   createdAt: string;
+  editedAt?: string | null;
   saleOrderItems?: any[];
+}
+
+function formatOrderUpdatedAt(isoStr?: string | null): string | null {
+  if (!isoStr) return null;
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return null;
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `Cập nhật: ${hh}:${mi} ${dd}/${mm}/${yyyy}`;
 }
 
 interface OmnichannelOrder {
@@ -247,6 +270,49 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+// ── Order Execution Status Badge (Theo danh mục DB: Trạng thái thực hiện) ──
+function OrderStatusBadge({ status, keToanDuyet }: { status?: string; keToanDuyet?: string }) {
+  const s = (status || '').trim();
+  const sLower = s.toLowerCase();
+  const kt = (keToanDuyet || '').trim().toLowerCase();
+
+  let resolvedLabel = 'Chưa thực hiện';
+  if (kt === 'rejected' || ['cancelled', 'canceled', 'rejected', 'huỷ bỏ', 'hủy bỏ'].includes(sLower)) {
+    resolvedLabel = 'Huỷ bỏ';
+  } else if (['paused', 'tạm dừng'].includes(sLower)) {
+    resolvedLabel = 'Tạm dừng';
+  } else if (['done', 'completed', 'delivered', 'hoàn thành', 'hoàn tất'].includes(sLower)) {
+    resolvedLabel = 'Hoàn thành';
+  } else if (kt === 'pending' || ['pending', 'draft', 'pending_approval', 'chưa thực hiện'].includes(sLower)) {
+    resolvedLabel = 'Chưa thực hiện';
+  } else {
+    resolvedLabel = 'Đang thực hiện';
+  }
+
+  const styleMap: Record<string, { bg: string; text: string; border: string }> = {
+    'Chưa thực hiện': { bg: '#fffbeb', text: '#b45309', border: '#fde68a' },
+    'Đang thực hiện': { bg: '#eff6ff', text: '#2563eb', border: '#bfdbfe' },
+    'Tạm dừng': { bg: '#fff7ed', text: '#c2410c', border: '#fed7aa' },
+    'Hoàn thành': { bg: '#ecfdf5', text: '#059669', border: '#a7f3d0' },
+    'Huỷ bỏ': { bg: '#fef2f2', text: '#b91c1c', border: '#fecaca' },
+  };
+
+  const conf = styleMap[resolvedLabel] || { bg: '#f8fafc', text: '#475569', border: '#e2e8f0' };
+
+  return (
+    <span
+      className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
+      style={{
+        backgroundColor: conf.bg,
+        color: conf.text,
+        border: `1px solid ${conf.border}`,
+      }}
+    >
+      {resolvedLabel}
+    </span>
+  );
+}
+
 // ── Dealer Order Status Badge (Chỉ 3 trạng thái: Chưa xử lý, Đã xử lý, Từ chối) ──
 function DealerOrderStatusBadge({ status }: { status: string }) {
   const s = (status || '').toLowerCase();
@@ -304,7 +370,8 @@ export const SalesOrderTrackingPage: React.FC = () => {
   const [quotationTotal, setQuotationTotal] = useState<number>(0);
   const [selectedQuotationIds, setSelectedQuotationIds] = useState<Set<string>>(new Set());
   const [quotationMatchingCustomers, setQuotationMatchingCustomers] = useState<CustomerOption[]>([]);
-  const [, setSelectedQuotation] = useState<Quotation | null>(null);
+  const [selectedQuotation, setSelectedQuotation] = useState<Quotation | null>(null);
+  const [editingQuotationForModal, setEditingQuotationForModal] = useState<any | null>(null);
 
   // ── Step 2: Orders State ──
   const [orders, setOrders] = useState<SaleOrder[]>([]);
@@ -318,6 +385,40 @@ export const SalesOrderTrackingPage: React.FC = () => {
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const [orderMatchingCustomers, setOrderMatchingCustomers] = useState<CustomerOption[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<SaleOrder | null>(null);
+  const [orderViewMode, setOrderViewMode] = useState<'by-time' | 'by-customer'>('by-time');
+  const [expandedCustomerGroups, setExpandedCustomerGroups] = useState<Set<string>>(() => new Set());
+  const [showOrderRetentionOffcanvas, setShowOrderRetentionOffcanvas] = useState<boolean>(false);
+  const [executionStatusItems, setExecutionStatusItems] = useState<string[]>([
+    'Chưa thực hiện',
+    'Đang thực hiện',
+    'Tạm dừng',
+    'Hoàn thành',
+    'Huỷ bỏ',
+  ]);
+
+  useEffect(() => {
+    const loadExecutionStatuses = async () => {
+      try {
+        const items = await categoryService.getItems('trang_th_i_th_c_hi_n');
+        const activeNames = (items || [])
+          .filter((it) => it.status !== 'hidden' && it.name)
+          .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+          .map((it) => it.name.trim());
+        if (activeNames.length > 0) {
+          setExecutionStatusItems(activeNames);
+        }
+      } catch (err) {
+        console.warn('Không thể tải danh mục Trạng thái thực hiện:', err);
+      }
+    };
+    loadExecutionStatuses();
+    window.addEventListener('seajong_categories_updated', loadExecutionStatuses);
+    window.addEventListener('decodoor_categories_updated', loadExecutionStatuses);
+    return () => {
+      window.removeEventListener('seajong_categories_updated', loadExecutionStatuses);
+      window.removeEventListener('decodoor_categories_updated', loadExecutionStatuses);
+    };
+  }, []);
 
   // ── Step 3: Dealer Orders State (Đơn hàng từ đại lý) ──
   const [dealerOrders, setDealerOrders] = useState<SaleOrder[]>([]);
@@ -425,8 +526,8 @@ export const SalesOrderTrackingPage: React.FC = () => {
     setOrderLoading(true);
     try {
       const params = new URLSearchParams({
-        page: String(orderPage),
-        pageSize: String(orderPageSize),
+        page: orderViewMode === 'by-customer' ? '1' : String(orderPage),
+        pageSize: orderViewMode === 'by-customer' ? '2000' : String(orderPageSize),
         orderSource: 'system',
       });
       if (orderSearch) params.set('search', orderSearch);
@@ -558,7 +659,65 @@ export const SalesOrderTrackingPage: React.FC = () => {
 
   useEffect(() => {
     fetchOrders();
-  }, [orderPage, orderPageSize, orderSearch, orderStatusFilter, orderTimeFilter]);
+  }, [orderPage, orderPageSize, orderSearch, orderStatusFilter, orderTimeFilter, orderViewMode]);
+
+  const toggleCustomerGroup = (groupKey: string) => {
+    setExpandedCustomerGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
+  };
+
+  const groupedOrdersByCustomer = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        groupKey: string;
+        customerName: string;
+        customerAddress: string;
+        customerPhone: string;
+        orders: SaleOrder[];
+        totalAmount: number;
+      }
+    >();
+
+    for (const o of orders) {
+      const customerName = (o.customer?.name || o.nguoiNhan || 'Khách vãng lai').trim();
+      const customerAddress = (
+        o.customer?.address ||
+        o.diaChiGiaoHang ||
+        (o.customer?.dienThoai ? `SĐT: ${o.customer.dienThoai}` : 'Không rõ địa chỉ')
+      ).trim();
+      const customerPhone = o.customer?.dienThoai || o.soDienThoai || '';
+      const groupKey = o.customerId
+        ? `cust_${o.customerId}`
+        : `name_${customerName.toLowerCase()}__${customerAddress.toLowerCase()}`;
+
+      let group = map.get(groupKey);
+      if (!group) {
+        group = {
+          groupKey,
+          customerName,
+          customerAddress,
+          customerPhone,
+          orders: [],
+          totalAmount: 0,
+        };
+        map.set(groupKey, group);
+      }
+      group.orders.push(o);
+      group.totalAmount += Number(o.tongTien || 0);
+    }
+
+    return Array.from(map.values());
+  }, [orders]);
+
+  const paginatedCustomerGroups = useMemo(() => {
+    const start = (orderPage - 1) * orderPageSize;
+    return groupedOrdersByCustomer.slice(start, start + orderPageSize);
+  }, [groupedOrdersByCustomer, orderPage, orderPageSize]);
 
   useEffect(() => {
     fetchDealerOrders();
@@ -791,6 +950,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
 
   const handleSelectCustomerForAction = (customer: CustomerOption) => {
     setEditingOrderForModal(null);
+    setEditingQuotationForModal(null);
     setActiveCustomerForNew(customer);
     setShowCustomerSelect(false);
     if (customerDrawerMode === 'quotation') {
@@ -934,16 +1094,6 @@ export const SalesOrderTrackingPage: React.FC = () => {
                       </Button>
                     )}
                     <Button
-                      variant="outline"
-                      size="sm"
-                      className="border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
-                      onClick={() => setShowOrderCameraScanner(true)}
-                      title="Quét đơn bằng camera"
-                    >
-                      <Camera className="w-3.5 h-3.5 md:mr-1 text-emerald-600" />
-                      <span className="sales-order-btn-label hidden md:inline">Quét đơn</span>
-                    </Button>
-                    <Button
                       variant="primary"
                       size="sm"
                       className="bg-[#003087] hover:bg-[#00256c] text-white border-[#003087]"
@@ -1029,6 +1179,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
                             onRowClick={() => setSelectedQuotation(q)}
                             onEdit={() => {
                               setActiveCustomerForNew((q.customer as any) || null);
+                              setEditingQuotationForModal(q);
                               setShowCreateQuotationModal(true);
                             }}
                             onDelete={() => handleDeleteQuotationById(q.id)}
@@ -1121,7 +1272,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
           {currentStep === 2 && (
             <div className="flex-1 flex flex-col h-full overflow-hidden">
               <TableToolbar
-                showMenu={false}
+                showMenu={true}
                 searchPlaceholder="Tìm mã đơn, tên KH, mã KH, SĐT..."
                 searchValue={orderSearch}
                 onSearchChange={(v) => {
@@ -1139,12 +1290,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
                     },
                     options: [
                       { value: '', label: 'Tất cả trạng thái' },
-                      { value: 'pending', label: 'Chờ duyệt' },
-                      { value: 'approved', label: 'Đã phê duyệt' },
-                      { value: 'active', label: 'Đang thực hiện' },
-                      { value: 'completed', label: 'Hoàn tất' },
-                      { value: 'done', label: 'Hoàn thành' },
-                      { value: 'cancelled', label: 'Huỷ bỏ' },
+                      ...executionStatusItems.map((name) => ({ value: name, label: name })),
                     ],
                   },
                   {
@@ -1165,6 +1311,55 @@ export const SalesOrderTrackingPage: React.FC = () => {
                     ],
                   },
                 ]}
+                menuItems={[
+                  {
+                    id: 'cleanup-settings',
+                    label: (
+                      <span className="flex items-center gap-2 text-slate-700 py-0.5">
+                        <i className="bi bi-clock-history text-amber-600 text-sm" />
+                        <span>Thiết lập xoá</span>
+                      </span>
+                    ),
+                    onClick: () => setShowOrderRetentionOffcanvas(true),
+                  },
+                  {
+                    id: 'group-by-customer',
+                    label: (
+                      <div className="flex items-center justify-between w-full py-0.5">
+                        <span className="flex items-center gap-2 text-slate-700">
+                          <i className="bi bi-people text-blue-600 text-sm" />
+                          <span>Nhóm theo khách hàng</span>
+                        </span>
+                        {orderViewMode === 'by-customer' && (
+                          <i className="bi bi-check2 text-blue-600 font-bold ml-3" />
+                        )}
+                      </div>
+                    ),
+                    onClick: () => {
+                      setExpandedCustomerGroups(new Set());
+                      setOrderViewMode('by-customer');
+                      setOrderPage(1);
+                    },
+                  },
+                  {
+                    id: 'sort-by-time',
+                    label: (
+                      <div className="flex items-center justify-between w-full py-0.5">
+                        <span className="flex items-center gap-2 text-slate-700">
+                          <i className="bi bi-clock text-indigo-600 text-sm" />
+                          <span>Theo thời gian tạo đơn</span>
+                        </span>
+                        {orderViewMode === 'by-time' && (
+                          <i className="bi bi-check2 text-blue-600 font-bold ml-3" />
+                        )}
+                      </div>
+                    ),
+                    onClick: () => {
+                      setOrderViewMode('by-time');
+                      setOrderPage(1);
+                    },
+                  },
+                ]}
                 rightActions={
                   <div className="flex items-center gap-1.5 sm:gap-2">
                     {selectedOrderIds.size > 0 && (
@@ -1178,16 +1373,6 @@ export const SalesOrderTrackingPage: React.FC = () => {
                         <span className="sales-order-btn-label hidden md:inline">Xoá ({selectedOrderIds.size})</span>
                       </Button>
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
-                      onClick={() => setShowOrderCameraScanner(true)}
-                      title="Quét đơn bằng camera"
-                    >
-                      <Camera className="w-3.5 h-3.5 md:mr-1 text-emerald-600" />
-                      <span className="sales-order-btn-label hidden md:inline">Quét đơn</span>
-                    </Button>
                     <Button
                       variant="primary"
                       size="sm"
@@ -1252,7 +1437,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
                             className="rounded border-slate-300 text-sky-600 cursor-pointer"
                           />
                         </th>
-                        <th className="py-2.5 px-2.5 sm:px-3.5 sm:w-44">Mã đơn hàng</th>
+                        <th className="py-2.5 px-2.5 sm:px-3.5 sm:w-48">Mã đơn hàng</th>
                         <th className="hidden sm:table-cell py-2.5 px-3.5">Khách hàng</th>
                         <th className="hidden sm:table-cell py-2.5 px-3.5 w-36">Ngày tạo đơn</th>
                         <th className="hidden sm:table-cell py-2.5 px-3.5 w-36">Ngày giao hàng</th>
@@ -1268,6 +1453,184 @@ export const SalesOrderTrackingPage: React.FC = () => {
                             Không tìm thấy đơn hàng nào phù hợp
                           </td>
                         </tr>
+                      ) : orderViewMode === 'by-customer' ? (
+                        paginatedCustomerGroups.map((group) => {
+                          const isCollapsed = !expandedCustomerGroups.has(group.groupKey);
+                          const isGroupAllSelected =
+                            group.orders.length > 0 &&
+                            group.orders.every((o) => selectedOrderIds.has(o.id));
+
+                          return (
+                            <React.Fragment key={group.groupKey}>
+                              <tr
+                                className="bg-slate-100/90 hover:bg-slate-200/60 transition-colors border-t border-b border-slate-200 cursor-pointer"
+                                onClick={() => toggleCustomerGroup(group.groupKey)}
+                              >
+                                <td
+                                  className="py-2.5 px-2.5 sm:px-3.5 text-center"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isGroupAllSelected}
+                                    onChange={(e) => {
+                                      const next = new Set(selectedOrderIds);
+                                      if (e.target.checked) {
+                                        group.orders.forEach((o) => next.add(o.id));
+                                      } else {
+                                        group.orders.forEach((o) => next.delete(o.id));
+                                      }
+                                      setSelectedOrderIds(next);
+                                    }}
+                                    className="rounded border-slate-300 text-sky-600 cursor-pointer"
+                                  />
+                                </td>
+                                <td colSpan={6} className="py-2.5 px-2.5 sm:px-3.5">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          toggleCustomerGroup(group.groupKey);
+                                        }}
+                                        className="w-6 h-6 rounded-md bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 flex items-center justify-center text-slate-600 transition-all shadow-2xs shrink-0 cursor-pointer"
+                                        title={isCollapsed ? 'Hiện danh sách đơn hàng' : 'Ẩn danh sách đơn hàng'}
+                                      >
+                                        {isCollapsed ? (
+                                          <ChevronRight className="w-3 h-3" />
+                                        ) : (
+                                          <ChevronDown className="w-3 h-3" />
+                                        )}
+                                      </button>
+                                      <div className="min-w-0">
+                                        <div className="flex items-center flex-wrap gap-2">
+                                          <span className="font-bold text-slate-900 text-[13px] truncate">
+                                            {group.customerName}
+                                          </span>
+                                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                            {group.orders.length} đơn hàng
+                                          </span>
+                                        </div>
+                                        <div className="text-slate-500 text-[11.5px] mt-0.5 flex items-center gap-1 truncate">
+                                          <i className="bi bi-geo-alt text-slate-400 text-[11px]" />
+                                          <span className="truncate">{group.customerAddress}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-3 shrink-0">
+                                      <div className="text-right">
+                                        <span className="hidden sm:inline text-slate-500 text-xs mr-1.5">
+                                          Tổng giá trị:
+                                        </span>
+                                        <span className="font-mono font-bold text-[#003087] text-[13px]">
+                                          {group.totalAmount.toLocaleString('vi-VN')} đ
+                                        </span>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          toggleCustomerGroup(group.groupKey);
+                                        }}
+                                        className="hidden md:inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 border border-slate-200 transition-colors cursor-pointer"
+                                      >
+                                        <span>{isCollapsed ? 'Hiện đơn' : 'Ẩn đơn'}</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                              {!isCollapsed &&
+                                group.orders.map((o) => (
+                                  <SwipeableTableRow
+                                    key={o.id}
+                                    rowId={o.id}
+                                    onRowClick={() => setSelectedOrder(o)}
+                                    onEdit={() => handleEditSingleOrder(o)}
+                                    onDelete={() => handleDeleteOrderById(o.id)}
+                                    deleteConfirmTitle="Xác nhận xoá đơn hàng"
+                                    deleteConfirmMessage={`Bạn có chắc chắn muốn xoá đơn hàng "${o.code}" (${o.customer?.name || 'Khách vãng lai'}) không? Thao tác này không thể hoàn tác.`}
+                                    deleteConfirmText="Xoá đơn hàng"
+                                    className="hover:bg-slate-50/80 transition-colors cursor-pointer border-b border-slate-100"
+                                  >
+                                    <td
+                                      className="py-2.5 px-2.5 sm:px-3.5 text-center"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedOrderIds.has(o.id)}
+                                        onChange={(e) => {
+                                          const next = new Set(selectedOrderIds);
+                                          if (e.target.checked) next.add(o.id);
+                                          else next.delete(o.id);
+                                          setSelectedOrderIds(next);
+                                        }}
+                                        className="rounded border-slate-300 text-sky-600 cursor-pointer"
+                                      />
+                                    </td>
+                                    <td className="py-2.5 px-2.5 sm:px-3.5 min-w-0">
+                                      <div className="flex items-center justify-between gap-1.5">
+                                        <span className="font-bold text-[#003087] hover:underline cursor-pointer text-[13px] truncate">
+                                          {o.code}
+                                        </span>
+                                        <span className="sm:hidden text-[10.5px] text-slate-400 shrink-0">
+                                          {o.ngayDat
+                                            ? new Date(o.ngayDat).toLocaleDateString('vi-VN')
+                                            : o.createdAt
+                                              ? new Date(o.createdAt).toLocaleDateString('vi-VN')
+                                              : '—'}
+                                        </span>
+                                      </div>
+                                      {o.editedAt && formatOrderUpdatedAt(o.editedAt) && (
+                                        <div className="text-[11px] text-slate-400 mt-0.5 truncate">
+                                          {formatOrderUpdatedAt(o.editedAt)}
+                                        </div>
+                                      )}
+                                      <div className="sm:hidden mt-0.5 flex items-center justify-between gap-2">
+                                        <span className="font-semibold text-slate-900 text-xs truncate">
+                                          {o.customer?.name || 'Khách vãng lai'}
+                                        </span>
+                                        <span className="font-mono font-bold text-slate-900 text-xs shrink-0">
+                                          {Number(o.tongTien || 0).toLocaleString('vi-VN')} đ
+                                        </span>
+                                      </div>
+                                    </td>
+                                    <td className="hidden sm:table-cell py-2.5 px-3.5">
+                                      <div>
+                                        <div className="font-semibold text-slate-900 text-[13px]">
+                                          {o.customer?.name || 'Khách vãng lai'}
+                                        </div>
+                                        <div className="text-slate-400 text-[11px] mt-0.5 truncate max-w-sm">
+                                          {o.customer?.address ||
+                                            (o.customer?.dienThoai
+                                              ? `SĐT: ${o.customer.dienThoai}`
+                                              : 'Không rõ địa chỉ')}
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td className="hidden sm:table-cell py-2.5 px-3.5 text-slate-600 text-[13px]">
+                                      {o.ngayDat
+                                        ? new Date(o.ngayDat).toLocaleDateString('vi-VN')
+                                        : o.createdAt
+                                          ? new Date(o.createdAt).toLocaleDateString('vi-VN')
+                                          : '—'}
+                                    </td>
+                                    <td className="hidden sm:table-cell py-2.5 px-3.5 text-slate-600 text-[13px]">
+                                      {o.ngayGiao ? new Date(o.ngayGiao).toLocaleDateString('vi-VN') : '—'}
+                                    </td>
+                                    <td className="hidden sm:table-cell py-2.5 px-3.5 text-right font-bold text-slate-900 text-[13px]">
+                                      {Number(o.tongTien || 0).toLocaleString('vi-VN')}
+                                    </td>
+                                    <td className="py-2.5 px-2.5 sm:px-3.5 text-center">
+                                      <OrderStatusBadge status={o.trangThai} keToanDuyet={o.keToanDuyet} />
+                                    </td>
+                                  </SwipeableTableRow>
+                                ))}
+                            </React.Fragment>
+                          );
+                        })
                       ) : (
                         orders.map((o) => (
                           <SwipeableTableRow
@@ -1303,6 +1666,11 @@ export const SalesOrderTrackingPage: React.FC = () => {
                                   {o.ngayDat ? new Date(o.ngayDat).toLocaleDateString('vi-VN') : (o.createdAt ? new Date(o.createdAt).toLocaleDateString('vi-VN') : '—')}
                                 </span>
                               </div>
+                              {o.editedAt && formatOrderUpdatedAt(o.editedAt) && (
+                                <div className="text-[11px] text-slate-400 mt-0.5 truncate">
+                                  {formatOrderUpdatedAt(o.editedAt)}
+                                </div>
+                              )}
                               {/* Mobile summary: 1 dòng gọn gàng Tên KH + Tổng tiền */}
                               <div className="sm:hidden mt-0.5 flex items-center justify-between gap-2">
                                 <span className="font-semibold text-slate-900 text-xs truncate">
@@ -1333,7 +1701,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
                               {Number(o.tongTien || 0).toLocaleString('vi-VN')}
                             </td>
                             <td className="py-2.5 px-2.5 sm:px-3.5 text-center">
-                              <StatusBadge status={o.trangThai} />
+                              <OrderStatusBadge status={o.trangThai} keToanDuyet={o.keToanDuyet} />
                             </td>
                           </SwipeableTableRow>
                         ))
@@ -1346,10 +1714,18 @@ export const SalesOrderTrackingPage: React.FC = () => {
               {/* Order Footer Pagination */}
               <Pagination
                 currentPage={orderPage}
-                totalPages={Math.max(1, Math.ceil((orderTotal || orders.length) / orderPageSize))}
-                totalItems={orderTotal || orders.length}
+                totalPages={
+                  orderViewMode === 'by-customer'
+                    ? Math.max(1, Math.ceil(groupedOrdersByCustomer.length / orderPageSize))
+                    : Math.max(1, Math.ceil((orderTotal || orders.length) / orderPageSize))
+                }
+                totalItems={
+                  orderViewMode === 'by-customer'
+                    ? groupedOrdersByCustomer.length
+                    : orderTotal || orders.length
+                }
                 pageSize={orderPageSize}
-                itemName="đơn hàng"
+                itemName={orderViewMode === 'by-customer' ? 'khách hàng' : 'đơn hàng'}
                 onPageChange={setOrderPage}
                 onPageSizeChange={(sz) => {
                   setOrderPageSize(sz);
@@ -1515,6 +1891,11 @@ export const SalesOrderTrackingPage: React.FC = () => {
                                   <div className="font-bold text-[#003087] hover:underline cursor-pointer text-[13px] whitespace-nowrap">
                                     {o.code}
                                   </div>
+                                  {o.editedAt && formatOrderUpdatedAt(o.editedAt) && (
+                                    <div className="text-[11px] text-slate-400 mt-0.5 truncate">
+                                      {formatOrderUpdatedAt(o.editedAt)}
+                                    </div>
+                                  )}
                                   <div className="text-slate-400 text-[11px] mt-0.5 truncate">
                                     Người lập: {o.nguoiDatHang || o.customer?.name || o.nguoiNhan || (isCustomerSelfOrder ? 'Khách hàng' : 'Đại lý')}
                                   </div>
@@ -2500,12 +2881,44 @@ export const SalesOrderTrackingPage: React.FC = () => {
           open={showCreateQuotationModal}
           onClose={() => {
             setShowCreateQuotationModal(false);
+            setEditingQuotationForModal(null);
           }}
           customer={activeCustomerForNew as any}
-          type={customerTab === 'vang_lai' ? 'retail' : 'agency'}
+          editData={editingQuotationForModal}
+          type={
+            editingQuotationForModal
+              ? editingQuotationForModal.type ||
+                (editingQuotationForModal.customer?.nhom === 'dai-ly' ? 'agency' : 'retail')
+              : customerTab === 'vang_lai'
+                ? 'retail'
+                : 'agency'
+          }
           onSaved={() => {
             fetchQuotations();
             fetchOrders();
+          }}
+        />
+
+        {/* ══════════════════════════════════════════════════════════════════════
+          OFFCANVAS: CHI TIẾT BÁO GIÁ & LỊCH SỬ THƯƠNG THẢO (RỘNG 400PX)
+          ══════════════════════════════════════════════════════════════════════ */}
+        <ChiTietBaoGiaOffcanvas
+          quotation={selectedQuotation}
+          onClose={() => setSelectedQuotation(null)}
+          onEditQuotation={(quote) => {
+            setActiveCustomerForNew((quote.customer as any) || null);
+            setEditingQuotationForModal(quote);
+            setSelectedQuotation(null);
+            setShowCreateQuotationModal(true);
+          }}
+          onCreateOrderFromQuotation={(quote) => {
+            setActiveCustomerForNew((quote.customer as any) || null);
+            setEditingOrderForModal(null);
+            setSelectedQuotation(null);
+            setShowCreateOrderModal(true);
+          }}
+          onRefresh={() => {
+            fetchQuotations();
           }}
         />
 
@@ -2544,7 +2957,12 @@ export const SalesOrderTrackingPage: React.FC = () => {
           bodyClassName="p-4 space-y-4"
           footer={
             <div className="w-full flex items-center justify-end gap-2">
-              {selectedOrder && (selectedOrder.trangThai === 'pending' || selectedOrder.trangThai === 'draft') && (
+              {selectedOrder &&
+                (selectedOrder.orderSource === 'dealer_portal' ||
+                  selectedOrder.orderSource === 'customer_portal' ||
+                  (selectedOrder.code || '').startsWith('DH-DL-') ||
+                  (selectedOrder.code || '').startsWith('KHL-')) &&
+                (selectedOrder.trangThai === 'pending' || selectedOrder.trangThai === 'draft') && (
                 <>
                   <Button
                     variant="danger"
@@ -2600,7 +3018,7 @@ export const SalesOrderTrackingPage: React.FC = () => {
                   (selectedOrder.code || '').startsWith('KHL-') ? (
                     <DealerOrderStatusBadge status={selectedOrder.trangThai} />
                   ) : (
-                    <StatusBadge status={selectedOrder.trangThai} />
+                    <OrderStatusBadge status={selectedOrder.trangThai} keToanDuyet={selectedOrder.keToanDuyet} />
                   )}
                 </div>
                 <div className="font-bold text-[15px] text-slate-900">
@@ -2974,6 +3392,20 @@ export const SalesOrderTrackingPage: React.FC = () => {
             setProcessingDefectId(null);
           }}
           onRefresh={fetchDefects}
+        />
+
+        {/* ── Offcanvas Thiết Lập Thời Gian Lưu Trữ Dữ Liệu Đơn Hàng ── */}
+        <DataRetentionOffcanvas
+          isOpen={showOrderRetentionOffcanvas}
+          onClose={() => setShowOrderRetentionOffcanvas(false)}
+          ticketType="SALES_ORDERS"
+          title="Thiết lập thời gian lưu trữ"
+          description="Cấu hình tự động dọn dẹp đơn hàng quá thời hạn lưu trữ"
+          entityLabel="đơn hàng"
+          onCleanedUp={() => {
+            fetchOrders();
+            fetchDealerOrders();
+          }}
         />
 
         {/* ── Offcanvas Lịch Sự Kiện Đa Năng Chuẩn client-skydoor ── */}

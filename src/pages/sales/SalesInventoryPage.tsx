@@ -1,9 +1,17 @@
 import React, { useState } from 'react';
 import { StandardPage } from '../../components/layout/StandardPage';
 import { WarehouseInventoryView } from '../../components/common/InventoryTable';
+import { useDepartment } from '../../context/DepartmentContext';
 
 export const SalesInventoryPage: React.FC = () => {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const { activeDeptCode } = useDepartment();
+
+  const isFinanceDept =
+    activeDeptCode === 'finance' ||
+    activeDeptCode === 'tai-chinh' ||
+    activeDeptCode === 'ke-toan' ||
+    (typeof window !== 'undefined' && window.location.pathname.includes('finance'));
 
   const handleExportExcel = () => {
     setToastMsg('Đang trích xuất dữ liệu kho hàng ra file Excel...');
@@ -27,7 +35,7 @@ export const SalesInventoryPage: React.FC = () => {
         </div>
       )}
 
-      <WarehouseInventoryView onExportExcel={handleExportExcel} />
+      <WarehouseInventoryView canEdit={isFinanceDept} onExportExcel={handleExportExcel} />
     </StandardPage>
   );
 };

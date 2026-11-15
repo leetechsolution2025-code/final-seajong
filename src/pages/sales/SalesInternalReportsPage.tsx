@@ -64,6 +64,23 @@ export const SalesInternalReportsPage: React.FC = () => {
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [empDropdownOpen, setEmpDropdownOpen] = useState<boolean>(false);
   const empDropdownRef = useRef<HTMLDivElement>(null);
+  const kpiChartWrapRef = useRef<HTMLDivElement>(null);
+  const [kpiChartHeight, setKpiChartHeight] = useState<number>(240);
+
+  useEffect(() => {
+    const el = kpiChartWrapRef.current;
+    if (!el || isMobile) return;
+    const updateHeight = () => {
+      const h = Math.floor(el.getBoundingClientRect().height);
+      if (h > 180) {
+        setKpiChartHeight(h);
+      }
+    };
+    updateHeight();
+    const ro = new ResizeObserver(() => updateHeight());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [currentStep, isMobile]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -304,9 +321,11 @@ export const SalesInternalReportsPage: React.FC = () => {
     const mealAllowanceTotal = (displayedEmployee?.mealAllowance || 0) * mealCount;
     const allowance =
       mealAllowanceTotal +
-      (displayedEmployee?.fuelAllowance || 0) +
-      (displayedEmployee?.phoneAllowance || 0) +
-      (displayedEmployee?.seniorityAllowance || 0);
+      (actualWorkingDays > 0
+        ? (displayedEmployee?.fuelAllowance || 0) +
+          (displayedEmployee?.phoneAllowance || 0) +
+          (displayedEmployee?.seniorityAllowance || 0)
+        : 0);
     const performanceBonus = incomeData.performanceBonus || 0;
 
     const activeConfig = currentStep === 1 ? step1KpiConfig : step2KpiConfig;
@@ -353,6 +372,7 @@ export const SalesInternalReportsPage: React.FC = () => {
 
     return {
       baseSalary,
+      actualWorkingDays,
       allowance,
       performanceBonus,
       salesCommission,
@@ -568,13 +588,13 @@ export const SalesInternalReportsPage: React.FC = () => {
     <div className="flex-1 h-full flex flex-col lg:flex-row w-full overflow-auto min-h-0">
       {/* Cột trái (tỷ lệ 5/12) */}
       <div
-        className="shrink-0 flex flex-col custom-scrollbar"
+        className="shrink-0 flex flex-col custom-scrollbar lg:h-full min-h-0"
         style={{
           width: isMobile ? "100%" : "41.666667%",
           padding: isMobile ? "16px" : "20px 24px",
         }}
       >
-        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 shrink-0">
           <div className="sm:col-span-5">
             <div className="flex flex-col items-center justify-center" style={{ height: 220 }}>
               <span className="font-bold text-slate-500 mb-1 text-[12px]">
@@ -770,14 +790,18 @@ export const SalesInternalReportsPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="mt-4 border-t border-slate-200 pt-4">
-          <h6 className="font-bold text-slate-800 mb-3 text-[13px]">
+        <div className="mt-4 border-t border-slate-200 pt-4 flex-1 flex flex-col min-h-0">
+          <h6 className="font-bold text-slate-800 mb-2 text-[13px] shrink-0">
             CHI TIẾT ĐIỂM KPI CÁC THÁNG
           </h6>
-          <div style={{ marginLeft: -15, marginRight: -15 }}>
+          <div
+            ref={kpiChartWrapRef}
+            className="flex-1 min-h-[210px] relative"
+            style={{ marginLeft: -15, marginRight: -15 }}
+          >
             <ReactApexChart
               type="line"
-              height={210}
+              height={isMobile ? 210 : kpiChartHeight}
               series={[
                 { name: "Điểm KPI", type: "column", data: kpiData },
                 { name: "Trung bình", type: "line", data: avgData },
@@ -994,13 +1018,19 @@ export const SalesInternalReportsPage: React.FC = () => {
                       {calculatedIncome.totalIncome.toLocaleString("en-US")} đ
                     </span>
                   </div>
+                  <div className="text-[11.5px] text-slate-500 mt-0.5">
+                    Số công làm việc trong tháng:{" "}
+                    <span className="font-semibold text-slate-700">
+                      {calculatedIncome.actualWorkingDays} công
+                    </span>
+                  </div>
                 </div>
                 <div className="md:col-span-7">
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     <div>
                       <div className="text-slate-500 mb-1 text-[11px]">Lương cơ bản</div>
                       <div className="font-bold text-slate-800 text-[13px]">
-                        {calculatedIncome.baseSalary.toLocaleString("en-US")} đ
+                        {calculatedIncome.baseSalary.toLocaleString("en-US")} đ/ngày
                       </div>
                     </div>
                     <div>

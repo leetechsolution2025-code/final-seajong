@@ -327,7 +327,9 @@ export function getRequiredPermissionsForMenu(
     key === 'danh-muc' ||
     key === 'data-management' ||
     key === 'board_data' ||
-    key === 'data'
+    key === 'data' ||
+    key === 'company-info' ||
+    key === 'company_info'
   ) {
     return {
       keys: [],
@@ -480,6 +482,12 @@ export function getRequiredPermissionsForMenu(
     return {
       keys: ['logistics_picking', 'logistics_print', 'logistics_assign'],
       label: 'Cấp phát vật tư & gom hàng / In tem nhiệt',
+    };
+  }
+  if (key === 'shipment-tracking') {
+    return {
+      keys: ['logistics_assign', 'logistics_in_out', 'logistics_picking', 'logistics_print'],
+      label: 'Theo dõi vận đơn & vận chuyển hàng hoá',
     };
   }
   if (

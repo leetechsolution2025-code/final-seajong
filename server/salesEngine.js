@@ -275,7 +275,7 @@ export const SalesEngine = {
         daThanhToan: paidAmount,
         discount: discountAmount,
         vat: vatAmount,
-        trangThai: 'active',
+        trangThai: 'pending',
         keToanDuyet: 'pending',
         trangThaiKho: hasShortage ? 'out_of_stock' : 'in_stock',
         ghiChu: ghiChu || '',
@@ -414,7 +414,7 @@ export const SalesEngine = {
       where: { id: orderId },
       data: {
         keToanDuyet: 'approved',
-        trangThai: existing.trangThai === 'draft' ? 'active' : existing.trangThai,
+        trangThai: 'active',
         updatedAt: new Date(),
       },
       include: { customer: true, saleOrderItems: true }

@@ -43,6 +43,7 @@ import { LogisticsOverviewPage } from '../../pages/logistics/LogisticsOverviewPa
 import { LogisticsInboundPage } from '../../pages/logistics/LogisticsInboundPage';
 import { LogisticsMaterialPickingPage } from '../../pages/logistics/LogisticsMaterialPickingPage';
 import { LogisticsBatchPackingPage } from '../../pages/logistics/LogisticsBatchPackingPage';
+import { LogisticsShipmentTrackingPage } from '../../pages/logistics/LogisticsShipmentTrackingPage';
 import { WarehousesPage } from '../../pages/logistics/WarehousesPage';
 import { LogisticsReportsPage } from '../../pages/logistics/LogisticsReportsPage';
 import { LogisticsAuditLogsPage } from '../../pages/logistics/LogisticsAuditLogsPage';
@@ -224,6 +225,9 @@ export const DashboardView: React.FC = () => {
     if (activeMenuKey === 'batch-packing') {
       return <LogisticsBatchPackingPage />;
     }
+    if (activeMenuKey === 'shipment-tracking') {
+      return <LogisticsShipmentTrackingPage />;
+    }
     if (activeMenuKey === 'inventory-reports' || activeMenuKey === 'reports' || activeMenuKey === 'bao-cao-kho') {
       return <LogisticsReportsPage />;
     }
@@ -324,6 +328,9 @@ export const DashboardView: React.FC = () => {
   }
   if (activeMenuKey === 'batch-packing') {
     return <LogisticsBatchPackingPage />;
+  }
+  if (activeMenuKey === 'shipment-tracking') {
+    return <LogisticsShipmentTrackingPage />;
   }
   if (activeMenuKey === 'system' || activeMenuKey === 'warehouses' || activeMenuKey === 'warehouse-system') {
     return <WarehousesPage />;

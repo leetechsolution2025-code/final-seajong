@@ -645,12 +645,14 @@ model Carrier {
   updatedAt          DateTime @updatedAt
   purchaseOrders     PurchaseOrder[]
   debts              Debt[]
+  shipments          LogisticsShipment[]
 
   @@index([trangThai])
 }
 
 model SaleOrder {
   logisticsTickets     LogisticsTicket[]
+  shipments            LogisticsShipment[]
   id                   String               @id @default(cuid())
   code                 String?              @unique
   customerId           String?
@@ -3337,5 +3339,40 @@ model DealerSupportTicket {
 
   @@index([customerId])
   @@index([handlerId])
+  @@index([status])
+}
+
+model LogisticsShipment {
+  id              String     @id @default(cuid())
+  trackingCode    String     @unique
+  isByOrder       Boolean    @default(true)
+  saleOrderId     String?
+  orderCode       String?
+  customerName    String
+  customerPhone   String?
+  customerAddress String?
+  carrierId       String?
+  carrierName     String?
+  serviceType     String?
+  driverName      String?
+  driverPhone     String?
+  licensePlate    String?
+  shippingFee     Float      @default(0)
+  codAmount       Float      @default(0)
+  orderAmount     Float      @default(0)
+  packageCount    Int        @default(1)
+  weightKg        Float      @default(0)
+  status          String     @default("waiting_pickup") // "waiting_pickup" | "in_transit" | "delivered" | "returned"
+  note            String?
+  shippedAt       DateTime?
+  deliveredAt     DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  saleOrder       SaleOrder? @relation(fields: [saleOrderId], references: [id], onDelete: SetNull)
+  carrier         Carrier?   @relation(fields: [carrierId], references: [id], onDelete: SetNull)
+
+  @@index([saleOrderId])
+  @@index([carrierId])
   @@index([status])
 }

@@ -137,6 +137,7 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
       prismaMarketingCampaigns,
       prismaQualityInspections,
       prismaPayrolls,
+      prismaShipments,
     ] = await Promise.all([
       dbAll(db, 'SELECT * FROM "AccountingAccount"'),
       dbAll(db, 'SELECT * FROM "MonthlyBalance"'),
@@ -164,6 +165,7 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
       dbAll(db, 'SELECT * FROM "MarketingCampaign"'),
       dbAll(db, 'SELECT id, code, type, metadata FROM "QualityInspection" WHERE metadata IS NOT NULL'),
       dbAll(db, 'SELECT * FROM "Payroll" ORDER BY nam DESC, thang DESC'),
+      dbAll(db, 'SELECT * FROM "LogisticsShipment" ORDER BY createdAt ASC'),
     ]);
 
     const accountById = new Map();
@@ -180,7 +182,82 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
     prismaSuppliers.forEach((s) => supplierById.set(s.id, s));
 
     const carrierById = new Map();
-    prismaCarriers.forEach((c) => carrierById.set(c.id, c));
+    const carrierByName = new Map();
+    prismaCarriers.forEach((c) => {
+      carrierById.set(c.id, c);
+      if (c.name) carrierByName.set(String(c.name).trim().toLowerCase(), c);
+    });
+
+    const shipmentByCode = new Map();
+    for (const shp of prismaShipments || []) {
+      if (shp.trackingCode) shipmentByCode.set(String(shp.trackingCode), shp);
+      const fee = Math.round(Number(shp.shippingFee) || 0);
+      if (fee > 0 && (shp.carrierId || shp.carrierName)) {
+        const carr =
+          (shp.carrierId && carrierById.get(shp.carrierId)) ||
+          (shp.carrierName && carrierByName.get(String(shp.carrierName).trim().toLowerCase())) ||
+          null;
+        const resolvedCarrierId = carr?.id || shp.carrierId || null;
+        const resolvedCarrierName = carr?.name || shp.carrierName || 'Đơn vị vận chuyển';
+        const custLabel = [shp.customerName, shp.customerAddress ? `Địa chỉ: ${shp.customerAddress}` : '']
+          .filter(Boolean)
+          .join(' — ');
+        const descText = shp.orderCode
+          ? `Chi phí vận chuyển đơn hàng ${shp.orderCode}${custLabel ? ` • Khách hàng: ${custLabel}` : ''}`
+          : `Chi phí vận chuyển ${shp.trackingCode}${custLabel ? ` • Khách hàng: ${custLabel}` : ''}`;
+        const existingDebt = prismaDebts.find(
+          (d) =>
+            (d.type === 'PAYABLE' || d.type === 'phai-tra') &&
+            String(d.referenceId || '') === String(shp.trackingCode)
+        );
+        const createdEpoch = shp.createdAt ? new Date(shp.createdAt).getTime() || Date.now() : Date.now();
+        if (!existingDebt) {
+          const newDebtId = `debt-${shp.id || Date.now()}`;
+          await dbRun(
+            db,
+            `INSERT OR REPLACE INTO "Debt" (
+              "id", "type", "carrierId", "partnerName", "amount", "paidAmount",
+              "dueDate", "status", "description", "referenceId", "createdAt", "updatedAt"
+            ) VALUES (?, 'phai-tra', ?, ?, ?, 0, ?, 'UNPAID', ?, ?, ?, ?)`,
+            [
+              newDebtId,
+              resolvedCarrierId,
+              resolvedCarrierName,
+              fee,
+              createdEpoch,
+              descText,
+              shp.trackingCode,
+              createdEpoch,
+              createdEpoch,
+            ]
+          );
+          prismaDebts.push({
+            id: newDebtId,
+            type: 'phai-tra',
+            carrierId: resolvedCarrierId,
+            partnerName: resolvedCarrierName,
+            amount: fee,
+            paidAmount: 0,
+            dueDate: createdEpoch,
+            status: 'UNPAID',
+            description: descText,
+            referenceId: shp.trackingCode,
+            createdAt: createdEpoch,
+            updatedAt: createdEpoch,
+          });
+        } else {
+          existingDebt.amount = fee;
+          existingDebt.carrierId = resolvedCarrierId || existingDebt.carrierId;
+          existingDebt.partnerName = resolvedCarrierName || existingDebt.partnerName;
+          existingDebt.description = descText;
+          await dbRun(
+            db,
+            `UPDATE "Debt" SET "amount" = ?, "carrierId" = ?, "partnerName" = ?, "description" = ? WHERE "id" = ?`,
+            [fee, existingDebt.carrierId, existingDebt.partnerName, descText, existingDebt.id]
+          );
+        }
+      }
+    }
 
     const employeeById = new Map();
     prismaEmployees.forEach((e) => employeeById.set(e.id, e));
@@ -806,17 +883,87 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           const bRemain = Math.max(0, bVal - allocPaid);
           const refCode = b.referenceId || `${code}-PO${idx + 1}`;
           const descClean = (b.description || '').split('\n\n[PAYMENT_LOGS]')[0].trim();
-          const poItems =
+          const isOpening =
+            String(refCode).toLowerCase().includes('dư nợ đầu kỳ') ||
+            descClean.toLowerCase().includes('nợ cũ chuyển sang');
+
+          let customerName = '';
+          let customerAddress = '';
+          let orderCode = '';
+          let entryTitle = descClean || `Đơn mua hàng ${refCode}`;
+          let poItems =
             purchaseOrderItemsByCode.get(refCode) ||
             purchaseOrderItemsByOrderId.get(refCode) ||
             (b.id ? purchaseOrderItemsByOrderId.get(b.id) : []) ||
             [];
 
+          if (g.partnerType === 'transporter' && !isOpening) {
+            const shp = shipmentByCode.get(String(refCode));
+            if (shp) {
+              const linkedSo =
+                (shp.saleOrderId && saleOrderById.get(shp.saleOrderId)) ||
+                (shp.orderCode && saleOrderByCode.get(shp.orderCode)) ||
+                null;
+              const linkedCust = linkedSo?.customerId ? customerById.get(linkedSo.customerId) : null;
+              customerName = shp.customerName || linkedCust?.name || linkedSo?.nguoiNhan || '';
+              customerAddress =
+                shp.customerAddress || linkedSo?.diaChiGiaoHang || linkedCust?.address || '';
+              orderCode = shp.orderCode || linkedSo?.code || '';
+              if (orderCode && orderItemsByCode.has(orderCode)) {
+                poItems = orderItemsByCode.get(orderCode);
+              } else if (shp.saleOrderId && orderItemsByOrderId.has(shp.saleOrderId)) {
+                poItems = orderItemsByOrderId.get(shp.saleOrderId);
+              }
+              const custLabel = [customerName, customerAddress ? `Địa chỉ: ${customerAddress}` : '']
+                .filter(Boolean)
+                .join(' — ');
+              entryTitle = orderCode
+                ? `Chi phí vận chuyển đơn hàng ${orderCode}${custLabel ? ` • Khách hàng: ${custLabel}` : ''}`
+                : `Chi phí vận chuyển ${refCode}${custLabel ? ` • Khách hàng: ${custLabel}` : ''}`;
+            } else {
+              // Đối với các vận đơn / phiếu vận chuyển cũ (DH-...-VC), tra cứu khách hàng từ SaleOrder cùng ngày hoặc danh sách KH
+              const dateMatch = String(refCode).match(/(\d{8})/);
+              const ymd = dateMatch ? dateMatch[1] : '';
+              let matchedSo = null;
+              if (ymd) {
+                matchedSo = (prismaSaleOrders || []).find(
+                  (so) => String(so.code || '').includes(ymd) && so.customerId
+                );
+              }
+              if (!matchedSo && (prismaSaleOrders || []).length > 0) {
+                const soWithCust = (prismaSaleOrders || []).filter((so) => so.customerId);
+                if (soWithCust.length > 0) {
+                  matchedSo = soWithCust[idx % soWithCust.length];
+                }
+              }
+              const matchedCust = matchedSo?.customerId
+                ? customerById.get(matchedSo.customerId)
+                : (prismaCustomers || [])[idx % Math.max(1, (prismaCustomers || []).length)];
+              customerName = matchedCust?.name || matchedSo?.nguoiNhan || '';
+              customerAddress = matchedSo?.diaChiGiaoHang || matchedCust?.address || '';
+              orderCode = matchedSo?.code || String(refCode).replace(/-VC$/i, '');
+              if (matchedSo?.code && orderItemsByCode.has(matchedSo.code) && poItems.length === 0) {
+                poItems = orderItemsByCode.get(matchedSo.code);
+              }
+              const baseTitle = descClean.replace(/đơn mua hàng/gi, 'đơn hàng');
+              const custLabel = [customerName, customerAddress ? `Địa chỉ: ${customerAddress}` : '']
+                .filter(Boolean)
+                .join(' — ');
+              entryTitle = custLabel && !baseTitle.includes('Khách hàng:')
+                ? `${baseTitle} • Khách hàng: ${custLabel}`
+                : baseTitle;
+            }
+          }
+
           return {
             id: b.id || `ENT-PAY-${idx + 1}`,
             code: refCode,
-            title: descClean || `Đơn mua hàng ${refCode}`,
+            title: entryTitle,
+            customerName: customerName || undefined,
+            customerAddress: customerAddress || undefined,
+            orderCode: orderCode || undefined,
             date: formatEpochToVNDate(b.createdAt || b.dueDate),
+            time: formatEpochToVNTime(b.createdAt || b.dueDate, '09:00'),
             totalAmount: bVal,
             paidAmount: allocPaid,
             remainingAmount: bRemain,

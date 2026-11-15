@@ -1288,6 +1288,7 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           keToanDuyet: 'rejected',
+          trangThai: 'cancelled',
         }),
       });
       if (!res.ok) {

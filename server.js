@@ -405,26 +405,41 @@ app.get('/api/health', (req, res) => {
 app.get('/api/company', async (req, res) => {
   try {
     const company = await prisma.companyInfo.findFirst().catch(() => null);
+    let extraMeta = {};
+    try {
+      const metaRows = await prisma.$queryRawUnsafe(
+        `SELECT value FROM system_settings WHERE key = 'company_extra_meta' LIMIT 1`
+      );
+      if (Array.isArray(metaRows) && metaRows[0]?.value) {
+        extraMeta = JSON.parse(metaRows[0].value);
+      }
+    } catch {
+      // ignore
+    }
+    const cleanTaxCode = String(company?.taxCode ?? '0111509681').replace(/^'+|'+$/g, '').trim();
     const info = {
-      name: 'Công ty cổ phần Seajong Việt Nam',
-      shortName: 'Seajong VietNam.,JSC',
-      logoUrl: '/logo.png',
-      address: 'Sàn dịch vụ thương mại tầng 1, chung cư CT3, KHu nhà ở Cầu Diễn, Phường Phú Diễn, Thành Phố Hà Nội, Việt Nam',
-      phone: '0931339343| 1900 633 862',
-      email: '',
-      website: 'https://seajong.com',
-      taxCode: '0111509681',
-      legalRep: 'Lê Công Vụ',
-      ...(company || {}),
+      name: company?.name || 'Công ty cổ phần Seajong Việt Nam',
+      shortName: company?.shortName || 'Seajong VietNam.,JSC',
       logoUrl: company?.logoUrl || '/logo.png',
+      slogan: company?.slogan || 'Tiên phong kiến tạo giá trị thực',
+      industry: extraMeta.industry || 'Kinh doanh thiết bị phòng tắm, nhà bếp',
+      domain: extraMeta.domain || 'seajong.com',
+      address:
+        company?.address ||
+        'Sàn dịch vụ thương mại tầng 1, chung cư CT3, KHu nhà ở Cầu Diễn, Phường Phú Diễn, Thành Phố Hà Nội, Việt Nam',
+      phone: company?.phone || '0931339343| 1900 633 862',
+      email: company?.email || 'contact@seajong.com',
+      website: company?.website || 'https://seajong.com',
+      taxCode: cleanTaxCode || '0111509681',
+      legalRep: company?.legalRep || 'Lê Công Vụ',
     };
     res.json({
       ...info,
       company_name: info.name,
       short_name: info.shortName,
       logo_url: info.logoUrl,
-      tax_code: info.taxCode || '',
-      legal_rep: info.legalRep || '',
+      tax_code: info.taxCode,
+      legal_rep: info.legalRep,
       success: true,
       data: info,
     });
@@ -432,6 +447,130 @@ app.get('/api/company', async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
+const handleSaveCompanyInfo = async (req, res) => {
+  try {
+    const body = req.body || {};
+    const existing = await prisma.companyInfo.findFirst().catch(() => null);
+
+    let resolvedLogoUrl =
+      body.logoUrl || body.logo_url || existing?.logoUrl || '/logo.png';
+
+    // Nếu gửi ảnh dưới dạng Data URL base64 thì lưu ra thư mục /uploads
+    if (typeof resolvedLogoUrl === 'string' && resolvedLogoUrl.startsWith('data:image/')) {
+      const match = resolvedLogoUrl.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,(.+)$/);
+      if (match) {
+        const ext = match[1] === 'jpeg' ? 'jpg' : match[1].replace(/[^a-z0-9]/gi, '') || 'png';
+        const buffer = Buffer.from(match[2], 'base64');
+        const fileName = `company-logo-${Date.now()}.${ext}`;
+        const filePath = path.join(uploadDir, fileName);
+        fs.writeFileSync(filePath, buffer);
+        resolvedLogoUrl = `/uploads/${fileName}`;
+      }
+    }
+
+    const name = String(
+      body.company_name ?? body.name ?? existing?.name ?? 'Công ty cổ phần Seajong Việt Nam'
+    ).trim();
+    const shortName = String(
+      body.short_name ?? body.shortName ?? existing?.shortName ?? 'Seajong VietNam.,JSC'
+    ).trim();
+    const slogan = String(
+      body.slogan ?? existing?.slogan ?? 'Tiên phong kiến tạo giá trị thực'
+    ).trim();
+    const address = String(
+      body.address ??
+        existing?.address ??
+        'Sàn dịch vụ thương mại tầng 1, chung cư CT3, KHu nhà ở Cầu Diễn, Phường Phú Diễn, Thành Phố Hà Nội, Việt Nam'
+    ).trim();
+    const phone = String(body.phone ?? existing?.phone ?? '0931339343| 1900 633 862').trim();
+    const email = String(body.email ?? existing?.email ?? 'contact@seajong.com').trim();
+    const website = String(body.website ?? existing?.website ?? 'https://seajong.com').trim();
+    const taxCode = String(body.tax_code ?? body.taxCode ?? existing?.taxCode ?? '0111509681')
+      .replace(/^'+|'+$/g, '')
+      .trim();
+    const legalRep = String(body.legal_rep ?? body.legalRep ?? existing?.legalRep ?? 'Lê Công Vụ').trim();
+    const industry = String(body.industry ?? 'Kinh doanh thiết bị phòng tắm, nhà bếp').trim();
+    const domain = String(body.domain ?? 'seajong.com').trim();
+
+    let saved;
+    if (existing?.id) {
+      saved = await prisma.companyInfo.update({
+        where: { id: existing.id },
+        data: {
+          name,
+          shortName,
+          logoUrl: resolvedLogoUrl,
+          slogan,
+          address,
+          phone,
+          email,
+          website,
+          taxCode,
+          legalRep,
+        },
+      });
+    } else {
+      saved = await prisma.companyInfo.create({
+        data: {
+          name,
+          shortName,
+          logoUrl: resolvedLogoUrl,
+          slogan,
+          address,
+          phone,
+          email,
+          website,
+          taxCode,
+          legalRep,
+        },
+      });
+    }
+
+    try {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO system_settings (id, key, value, description, updated_at)
+         VALUES ('company_extra_meta', 'company_extra_meta', ?, 'Thông tin mở rộng doanh nghiệp', CURRENT_TIMESTAMP)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+        JSON.stringify({ industry, domain })
+      );
+    } catch {
+      try {
+        await prisma.$executeRawUnsafe(
+          `UPDATE system_settings SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE key = 'company_extra_meta'`,
+          JSON.stringify({ industry, domain })
+        );
+      } catch {
+        // ignore if table not ready
+      }
+    }
+
+    const info = {
+      ...saved,
+      industry,
+      domain,
+      company_name: saved.name,
+      short_name: saved.shortName,
+      logo_url: saved.logoUrl || '/logo.png',
+      tax_code: saved.taxCode || '',
+      legal_rep: saved.legalRep || '',
+    };
+
+    res.json({
+      success: true,
+      logoUrl: info.logo_url,
+      message: 'Đã cập nhật thông tin doanh nghiệp thành công',
+      data: info,
+      ...info,
+    });
+  } catch (error) {
+    console.error('[API /api/company] Error saving company info:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+app.post('/api/company', handleSaveCompanyInfo);
+app.put('/api/company', handleSaveCompanyInfo);
 
 // -------------------------------------------------------------
 // 2. AUTHENTICATION (Login, Me, Logout)
@@ -2978,16 +3117,22 @@ app.get('/api/categories/items', async (req, res) => {
   try {
     const { typeId } = req.query;
     const rawType = typeId ? String(typeId).trim() : '';
+    const typeCandidates = [
+      rawType,
+      rawType.replace(/-/g, '_'),
+      rawType.replace(/_/g, '-'),
+    ];
+    if (
+      rawType === 'trang-thai-thuc-hien' ||
+      rawType === 'trang_thai_thuc_hien' ||
+      rawType === 'trang_th_i_th_c_hi_n'
+    ) {
+      typeCandidates.push('trang_th_i_th_c_hi_n', 'trang-thai-thuc-hien', 'trang_thai_thuc_hien');
+    }
     const where = rawType
       ? {
         type: {
-          in: Array.from(
-            new Set([
-              rawType,
-              rawType.replace(/-/g, '_'),
-              rawType.replace(/_/g, '-'),
-            ])
-          ),
+          in: Array.from(new Set(typeCandidates)),
         },
       }
       : {};
@@ -8428,12 +8573,49 @@ app.get('/api/plan-finance/approvers', async (req, res) => {
 });
 
 // ── GET, POST, DELETE /api/plan-finance/quotations ──────────────────────────
+function matchesTimeFilter(dateVal, timeFilter) {
+  if (!timeFilter || timeFilter === 'all') return true;
+  if (!dateVal) return false;
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return false;
+
+  const now = new Date();
+  const targetDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  if (timeFilter === 'today') {
+    return targetDay.getTime() === todayStart.getTime();
+  }
+  if (timeFilter === 'yesterday') {
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(todayStart.getDate() - 1);
+    return targetDay.getTime() === yesterdayStart.getTime();
+  }
+  if (timeFilter === 'this_week') {
+    const dayOfWeek = todayStart.getDay();
+    const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(todayStart.getDate() + diffToMonday);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    return targetDay >= weekStart && targetDay <= weekEnd;
+  }
+  if (timeFilter === 'this_month') {
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  }
+  if (timeFilter === 'this_year') {
+    return d.getFullYear() === now.getFullYear();
+  }
+  return true;
+}
+
 app.get('/api/plan-finance/quotations', async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const pageSize = Math.min(Math.max(1, parseInt(req.query.pageSize) || 10), 100);
     const search = (req.query.search || '').trim().toLowerCase();
     const trangThai = req.query.trangThai;
+    const timeFilter = (req.query.time || '').trim();
 
     const where = {};
     if (trangThai) where.trangThai = trangThai;
@@ -8452,8 +8634,11 @@ app.get('/api/plan-finance/quotations', async (req, res) => {
     });
 
     let filtered = allQuotations;
+    if (timeFilter) {
+      filtered = filtered.filter((q) => matchesTimeFilter(q.ngayBaoGia || q.createdAt, timeFilter));
+    }
     if (search) {
-      filtered = allQuotations.filter((q) => {
+      filtered = filtered.filter((q) => {
         const matchCode = (q.code || '').toLowerCase().includes(search);
         const matchCust = (q.customer?.name || '').toLowerCase().includes(search);
         const matchCustCode = (q.customer?.code || '').toLowerCase().includes(search);
@@ -8554,9 +8739,117 @@ function parseGuestInfo(ghiChu) {
   return null;
 }
 
+function parseOrderEditedAt(ghiChu) {
+  if (!ghiChu) return null;
+  const match = String(ghiChu).match(/\[OrderEditedAt:(.*?)\]/);
+  return match && match[1] ? match[1].trim() : null;
+}
+
 function cleanGhiChu(ghiChu) {
   if (!ghiChu) return '';
-  return ghiChu.replace(/\[GuestInfo:(.*?)\]\n?/, '').trim();
+  return String(ghiChu)
+    .replace(/\[GuestInfo:(.*?)\]\n?/g, '')
+    .replace(/\[OrderEditedAt:(.*?)\]\n?/g, '')
+    .trim();
+}
+
+async function notifyAccountingDepartmentOfOrder({ order, isUpdate = false }) {
+  try {
+    const [financeEmps, financeAndAdminUsers, salesSender] = await Promise.all([
+      prisma.employee.findMany({
+        where: {
+          departmentCode: 'finance',
+          userId: { not: null },
+        },
+        select: { userId: true },
+      }),
+      prisma.user.findMany({
+        where: {
+          OR: [
+            { deptAccess: { contains: 'finance' } },
+            { role: 'ADMIN' },
+          ],
+        },
+        select: { id: true },
+      }),
+      prisma.user.findFirst({
+        where: {
+          OR: [
+            { employee: { departmentCode: 'sales' } },
+            { email: 'admin@seajong.com' },
+          ],
+        },
+        select: { id: true, name: true },
+      }),
+    ]);
+
+    const recipientSet = new Set();
+    for (const fe of financeEmps) {
+      if (fe.userId) recipientSet.add(fe.userId);
+    }
+    for (const u of financeAndAdminUsers) {
+      if (u.id) recipientSet.add(u.id);
+    }
+
+    const senderId = salesSender?.id || 'cmqwsvbw80003i4p1co4rnp16';
+    const recipientIds = Array.from(recipientSet).filter((uid) => uid && uid !== senderId);
+    if (recipientIds.length === 0 && senderId) {
+      recipientIds.push(senderId);
+    }
+
+    const orderCode = order.code || order.id;
+    const customerName = order.customer?.name || order.nguoiNhan || 'Khách vãng lai';
+    const totalFormatted = Number(order.tongTien || 0).toLocaleString('vi-VN') + ' đ';
+    const itemCount = Array.isArray(order.saleOrderItems) ? order.saleOrderItems.length : 0;
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mi = String(now.getMinutes()).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const yyyy = now.getFullYear();
+    const timeStr = `${hh}:${mi} ${dd}/${mm}/${yyyy}`;
+
+    const title = isUpdate
+      ? `📝 Cập nhật đơn bán hàng: ${orderCode}`
+      : `🛒 Đơn hàng mới cần duyệt: ${orderCode}`;
+    const content = isUpdate
+      ? `Bộ phận Kinh doanh vừa cập nhật thông tin đơn bán hàng **${orderCode}** của khách hàng **${customerName}** lúc ${timeStr} (${itemCount > 0 ? `${itemCount} mặt hàng • ` : ''}Tổng giá trị: **${totalFormatted}**). Đề nghị bộ phận Kế toán kiểm tra lại thông tin và phê duyệt.`
+      : `Đơn bán hàng **${orderCode}** của khách hàng **${customerName}** (Tổng giá trị: **${totalFormatted}**) đã được khởi tạo và đang chờ bộ phận Kế toán phê duyệt.`;
+
+    const attachments = JSON.stringify({
+      link: '/sales/orders',
+      department: 'Phòng Kinh doanh',
+      sender: order.nguoiPhuTrach || 'Phòng Kinh doanh',
+      entityType: 'SALE_ORDER',
+      entityId: order.id,
+      timestamp: now.toISOString(),
+    });
+
+    const notif = await prisma.notification.create({
+      data: {
+        title,
+        content,
+        type: 'info',
+        priority: 'high',
+        audienceType: 'group',
+        audienceValue: JSON.stringify(recipientIds),
+        attachments,
+        createdById: senderId,
+      },
+    });
+
+    await Promise.all(
+      recipientIds.map((uId) =>
+        prisma.notificationRecipient.upsert({
+          where: { notificationId_userId: { notificationId: notif.id, userId: uId } },
+          update: { isRead: false, readAt: null },
+          create: { notificationId: notif.id, userId: uId, isRead: false },
+        })
+      )
+    );
+  } catch (ne) {
+    console.warn('Không thể gửi thông báo cho bộ phận Kế toán:', ne.message);
+  }
 }
 
 app.post('/api/plan-finance/quotations', async (req, res) => {
@@ -8572,6 +8865,31 @@ app.post('/api/plan-finance/quotations', async (req, res) => {
 
     let finalCode = (body.code || '').trim();
     const isDirectOrder = finalCode.startsWith('DH') || finalCode.startsWith('DBH') || finalCode === 'DBH-Tự động tạo' || body.trangThai === 'won';
+
+    // Nếu mã đơn hàng đã tồn tại trên hệ thống, chuyển sang cập nhật đơn hàng đó thay vì tạo đơn mới
+    if (
+      isDirectOrder &&
+      finalCode &&
+      finalCode !== 'Đang tải...' &&
+      finalCode !== 'DBH-Tự động tạo' &&
+      finalCode !== 'BG-Tự động tạo'
+    ) {
+      const existingOrderByCode = await prisma.saleOrder.findFirst({
+        where: { OR: [{ code: finalCode }, { id: finalCode }] },
+        select: { id: true },
+      });
+      if (existingOrderByCode) {
+        req.params = { ...(req.params || {}), id: existingOrderByCode.id };
+        req.body = {
+          ...body,
+          ngayDat: body.ngayBaoGia || body.ngayDat,
+          ngayGiao: body.ngayGiaoHang || body.ngayGiao,
+          tongTien: Number(body.thanhTien) || Number(body.tongTien) || 0,
+          isOrderContentUpdate: true,
+        };
+        return handleUpdateSaleOrder(req, res);
+      }
+    }
 
     // Auto-generate order / quotation code
     if (!finalCode || finalCode === 'Đang tải...' || finalCode === 'DBH-Tự động tạo' || finalCode === 'BG-Tự động tạo') {
@@ -8805,7 +9123,7 @@ app.post('/api/plan-finance/quotations', async (req, res) => {
           daThanhToan: Number(body.daThanhToan) || 0,
           discount: Number(body.discount) || 0,
           vat: Number(body.vat) || 0,
-          trangThai: 'active',
+          trangThai: 'pending',
           keToanDuyet: 'pending',
           trangThaiKho: insufficientItems.length > 0 ? 'out_of_stock' : 'in_stock',
           ghiChu: body.ghiChu || '',
@@ -8877,39 +9195,8 @@ app.post('/api/plan-finance/quotations', async (req, res) => {
         });
       }
 
-      // Notifications for Finance / Accounting (truy xuất theo mã định danh phòng ban departmentCode)
-      try {
-        const financeHeads = await prisma.employee.findMany({
-          where: {
-            departmentCode: 'finance',
-            userId: { not: null }
-          },
-          select: { userId: true }
-        });
-        const customerName = saleOrder.customer?.name || 'Khách vãng lai';
-        for (const fh of financeHeads) {
-          if (fh.userId) {
-            const notif = await prisma.notification.create({
-              data: {
-                title: `🛒 Đơn hàng mới cần duyệt: ${orderCode}`,
-                content: `Đơn bán hàng ${orderCode} của khách hàng ${customerName} đã được khởi tạo và đang chờ kế toán phê duyệt.`,
-                type: 'info',
-                priority: 'high',
-                audienceType: 'individual',
-                audienceValue: fh.userId,
-                createdById: 'system'
-              }
-            });
-            await prisma.notificationRecipient.upsert({
-              where: { notificationId_userId: { notificationId: notif.id, userId: fh.userId } },
-              update: {},
-              create: { notificationId: notif.id, userId: fh.userId }
-            });
-          }
-        }
-      } catch (ne) {
-        console.warn('Không thể gửi thông báo:', ne.message);
-      }
+      // Notifications for Finance / Accounting
+      await notifyAccountingDepartmentOfOrder({ order: saleOrder, isUpdate: false });
     }
 
     res.status(201).json({
@@ -9063,6 +9350,7 @@ app.get('/api/plan-finance/sales', async (req, res) => {
     const pageSize = Math.min(Math.max(1, parseInt(req.query.pageSize) || 10), 100);
     const search = (req.query.search || '').trim().toLowerCase();
     const trangThai = req.query.trangThai;
+    const timeFilter = (req.query.time || '').trim();
 
     const isDealerPortalQuery =
       req.query.orderSource === 'dealer_portal' || req.query.orderSource === 'request_order';
@@ -9073,7 +9361,6 @@ app.get('/api/plan-finance/sales', async (req, res) => {
       (o.code || '').startsWith('KHL-');
 
     const where = {};
-    if (trangThai && !isDealerPortalQuery) where.trangThai = trangThai;
     if (req.query.keToanDuyet) where.keToanDuyet = req.query.keToanDuyet;
 
     const allOrdersRaw = await prisma.saleOrder.findMany({
@@ -9090,12 +9377,36 @@ app.get('/api/plan-finance/sales', async (req, res) => {
     });
     const empMap = new Map(employees.map((e) => [e.id, e.fullName]));
 
+    const resolveOrderExecutionStatus = (o) => {
+      const s = String(o.trangThai || '').trim();
+      const sLower = s.toLowerCase();
+      const kt = String(o.keToanDuyet || '').trim().toLowerCase();
+      if (kt === 'rejected' || ['cancelled', 'canceled', 'rejected', 'huỷ bỏ', 'hủy bỏ'].includes(sLower)) {
+        return 'Huỷ bỏ';
+      }
+      if (['paused', 'tạm dừng'].includes(sLower)) {
+        return 'Tạm dừng';
+      }
+      if (['done', 'completed', 'delivered', 'hoàn thành', 'hoàn tất'].includes(sLower)) {
+        return 'Hoàn thành';
+      }
+      if (kt === 'pending' || ['pending', 'draft', 'pending_approval', 'chưa thực hiện'].includes(sLower)) {
+        return 'Chưa thực hiện';
+      }
+      return 'Đang thực hiện';
+    };
+
     const allOrders = allOrdersRaw.map((o) => ({
       ...o,
+      editedAt: parseOrderEditedAt(o.ghiChu),
+      ghiChu: cleanGhiChu(o.ghiChu),
       nguoiPhuTrach: (o.nguoiPhuTrach && empMap.get(o.nguoiPhuTrach)) || o.nguoiPhuTrach,
     }));
 
     let filtered = allOrders;
+    if (timeFilter) {
+      filtered = filtered.filter((o) => matchesTimeFilter(o.ngayDat || o.createdAt, timeFilter));
+    }
     if (isDealerPortalQuery) {
       filtered = filtered.filter((o) => isRequestOrder(o) && o.trangThai !== 'draft');
       if (trangThai === 'pending') {
@@ -9109,8 +9420,24 @@ app.get('/api/plan-finance/sales', async (req, res) => {
       } else if (trangThai) {
         filtered = filtered.filter((o) => o.trangThai === trangThai);
       }
-    } else if (req.query.orderSource === 'system') {
-      filtered = filtered.filter((o) => !isRequestOrder(o));
+    } else {
+      if (req.query.orderSource === 'system') {
+        filtered = filtered.filter((o) => !isRequestOrder(o));
+      }
+      if (trangThai) {
+        const tNorm = String(trangThai).trim();
+        const tLower = tNorm.toLowerCase();
+        filtered = filtered.filter((o) => {
+          const execLabel = resolveOrderExecutionStatus(o);
+          if (tNorm === execLabel || o.trangThai === tNorm) return true;
+          if ((tLower === 'pending' || tNorm === 'Chưa thực hiện') && execLabel === 'Chưa thực hiện') return true;
+          if ((['active', 'approved', 'in_production', 'processing', 'delivering'].includes(tLower) || tNorm === 'Đang thực hiện') && execLabel === 'Đang thực hiện') return true;
+          if ((tLower === 'paused' || tNorm === 'Tạm dừng') && execLabel === 'Tạm dừng') return true;
+          if ((['done', 'completed', 'delivered'].includes(tLower) || tNorm === 'Hoàn thành') && execLabel === 'Hoàn thành') return true;
+          if ((['cancelled', 'canceled', 'rejected'].includes(tLower) || tNorm === 'Huỷ bỏ' || tNorm === 'Hủy bỏ') && execLabel === 'Huỷ bỏ') return true;
+          return false;
+        });
+      }
     }
     if (search) {
       const searchNorm = removeAccents(search);
@@ -9361,6 +9688,7 @@ app.get('/api/plan-finance/sales/:id', async (req, res) => {
 
     const resolved = {
       ...order,
+      editedAt: parseOrderEditedAt(order.ghiChu),
       ghiChu: cleanGhiChu(order.ghiChu),
       nguoiPhuTrachName: order.nguoiPhuTrach || 'Phạm Quang Việt',
       items: orderItems,
@@ -9467,42 +9795,84 @@ const handleUpdateSaleOrder = async (req, res) => {
       return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
     }
     const targetOrderId = existing.id;
+    const isOrderEdit = Boolean(
+      body.isOrderContentUpdate ||
+      Array.isArray(body.items) ||
+      (!body.keToanDuyet &&
+        (body.tongTien !== undefined ||
+          body.ngayGiao !== undefined ||
+          body.nguoiNhan !== undefined ||
+          body.diaChiGiaoHang !== undefined))
+    );
 
     if (Array.isArray(body.items)) {
       await prisma.saleOrderItem.deleteMany({ where: { saleOrderId: targetOrderId } });
       if (body.items.length > 0) {
+        const itemsToInsert = [];
+        for (const it of body.items) {
+          let ghiChuObj = {};
+          try {
+            ghiChuObj = typeof it.ghiChu === 'string' ? JSON.parse(it.ghiChu) : (it.ghiChu || {});
+          } catch (e) { }
+          let invId = it.inventoryItemId || null;
+          if (!invId && (it.tenHang || ghiChuObj.code)) {
+            const foundInv = await prisma.inventoryItem.findFirst({
+              where: {
+                OR: [
+                  ...(ghiChuObj.code ? [{ code: ghiChuObj.code }] : []),
+                  ...(it.tenHang ? [{ tenHang: it.tenHang }, { code: it.tenHang }] : []),
+                ],
+              },
+              select: { id: true },
+            });
+            if (foundInv) invId = foundInv.id;
+          }
+          itemsToInsert.push({
+            saleOrderId: targetOrderId,
+            inventoryItemId: invId,
+            tenHang: it.tenHang || '',
+            donViTinh: it.donVi || it.donViTinh || 'Bộ',
+            soLuong: Number(it.soLuong) || 1,
+            donGia: Number(it.donGia) || 0,
+            thanhTien: Number(it.thanhTien) || 0,
+            dinhMucId: ghiChuObj.dinhMucId || it.dinhMucId || null,
+            ghiChu: typeof it.ghiChu === 'string' ? it.ghiChu : JSON.stringify(it.ghiChu || {}),
+          });
+        }
         await prisma.saleOrderItem.createMany({
-          data: body.items.map((it) => {
-            let ghiChuObj = {};
-            try {
-              ghiChuObj = typeof it.ghiChu === 'string' ? JSON.parse(it.ghiChu) : (it.ghiChu || {});
-            } catch (e) { }
-            return {
-              saleOrderId: targetOrderId,
-              inventoryItemId: it.inventoryItemId || null,
-              tenHang: it.tenHang || '',
-              soLuong: Number(it.soLuong) || 1,
-              donGia: Number(it.donGia) || 0,
-              thanhTien: Number(it.thanhTien) || 0,
-              dinhMucId: ghiChuObj.dinhMucId || it.dinhMucId || null,
-              ghiChu: typeof it.ghiChu === 'string' ? it.ghiChu : JSON.stringify(it.ghiChu || {}),
-            };
-          }),
+          data: itemsToInsert,
         });
       }
+    }
+
+    const previousEditedAt = parseOrderEditedAt(existing.ghiChu);
+    const nextEditedAt = isOrderEdit ? new Date().toISOString() : previousEditedAt;
+    let nextGhiChu = body.ghiChu !== undefined ? cleanGhiChu(body.ghiChu) : cleanGhiChu(existing.ghiChu);
+    const prevGuestInfo = parseGuestInfo(body.ghiChu !== undefined ? body.ghiChu : existing.ghiChu);
+    if (prevGuestInfo) {
+      nextGhiChu = `[GuestInfo:${JSON.stringify(prevGuestInfo)}]\n` + nextGhiChu;
+    }
+    if (nextEditedAt) {
+      nextGhiChu = `[OrderEditedAt:${nextEditedAt}]\n` + nextGhiChu;
     }
 
     let order = await prisma.saleOrder.update({
       where: { id: targetOrderId },
       data: {
+        ...(body.ngayDat && { ngayDat: new Date(body.ngayDat) }),
         ...(body.ngayGiao && { ngayGiao: new Date(body.ngayGiao) }),
+        ...(body.nguoiNhan !== undefined && { nguoiNhan: body.nguoiNhan }),
+        ...(body.soDienThoai !== undefined && { soDienThoai: body.soDienThoai }),
+        ...(body.diaChiGiaoHang !== undefined && { diaChiGiaoHang: body.diaChiGiaoHang }),
+        ...(body.customerId !== undefined && { customerId: body.customerId || null }),
         ...(body.daThanhToan !== undefined && { daThanhToan: Number(body.daThanhToan) }),
         ...(body.tongTien !== undefined && { tongTien: Number(body.tongTien) }),
         ...(body.discount !== undefined && { discount: Number(body.discount) }),
         ...(body.vat !== undefined && { vat: Number(body.vat) }),
         ...(body.trangThai && { trangThai: body.trangThai }),
+        ...(body.keToanDuyet === 'rejected' && !body.trangThai && { trangThai: 'cancelled' }),
         ...(body.keToanDuyet && { keToanDuyet: body.keToanDuyet }),
-        ...(body.ghiChu !== undefined && { ghiChu: body.ghiChu }),
+        ...((body.ghiChu !== undefined || isOrderEdit) && { ghiChu: nextGhiChu }),
       },
       include: {
         customer: true,
@@ -9518,6 +9888,29 @@ const handleUpdateSaleOrder = async (req, res) => {
         }
       },
     });
+
+    if (body.keToanDuyet === 'rejected' && existing.keToanDuyet !== 'rejected') {
+      // Giải phóng tồn kho giữ chỗ (soLuongGiu) khi kế toán từ chối duyệt
+      for (const item of existing.saleOrderItems || []) {
+        if (!item.inventoryItemId) continue;
+        let remainingToRelease = Number(item.soLuong) || 0;
+        const stocks = await prisma.inventoryStock.findMany({
+          where: { inventoryItemId: item.inventoryItemId, soLuongGiu: { gt: 0 } },
+          orderBy: { soLuongGiu: 'desc' }
+        });
+        for (const stock of stocks) {
+          if (remainingToRelease <= 0) break;
+          const release = Math.min(stock.soLuongGiu || 0, remainingToRelease);
+          if (release > 0) {
+            await prisma.inventoryStock.update({
+              where: { id: stock.id },
+              data: { soLuongGiu: { decrement: release } }
+            });
+            remainingToRelease -= release;
+          }
+        }
+      }
+    }
 
     if (body.daThanhToan !== undefined) {
       const amt = Number(body.daThanhToan);
@@ -9638,8 +10031,8 @@ const handleUpdateSaleOrder = async (req, res) => {
         }
       }
 
-      // 3. Cập nhật trạng thái đơn hàng
-      const nextTrangThai = missingThanhPhamItems.length > 0 ? 'in_production' : (body.trangThai || 'approved');
+      // 3. Cập nhật trạng thái đơn hàng (Kế toán duyệt -> Đang thực hiện)
+      const nextTrangThai = missingThanhPhamItems.length > 0 ? 'in_production' : (body.trangThai || 'active');
       order = await prisma.saleOrder.update({
         where: { id: targetOrderId },
         data: {
@@ -9852,6 +10245,10 @@ const handleUpdateSaleOrder = async (req, res) => {
       }
     }
 
+    if (isOrderEdit && !body.keToanDuyet) {
+      await notifyAccountingDepartmentOfOrder({ order, isUpdate: true });
+    }
+
     // Luôn đồng bộ vào bộ máy kế toán & quản lý công nợ
     try {
       await syncOrderToAccountingAndDebt(order.id);
@@ -9859,10 +10256,16 @@ const handleUpdateSaleOrder = async (req, res) => {
       console.warn('[handleUpdateSaleOrder] Cảnh báo đồng bộ kế toán công nợ:', accErr.message);
     }
 
+    const formattedOrder = {
+      ...order,
+      editedAt: parseOrderEditedAt(order.ghiChu) || nextEditedAt,
+      ghiChu: cleanGhiChu(order.ghiChu),
+    };
+
     res.json({
       success: true,
-      order,
-      ...order,
+      order: formattedOrder,
+      ...formattedOrder,
       createdProductionTask,
       createdExportTicket,
       createdPurchaseRequestCode,
@@ -12467,6 +12870,441 @@ app.post('/api/logistics/batch-packing/assign', async (req, res) => {
   }
 });
 
+// ── LOGISTICS SHIPMENTS (THEO DÕI VẬN ĐƠN) ──────────────────────────────────
+async function ensureLogisticsShipmentTable() {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "LogisticsShipment" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "trackingCode" TEXT NOT NULL UNIQUE,
+      "isByOrder" BOOLEAN NOT NULL DEFAULT true,
+      "saleOrderId" TEXT,
+      "orderCode" TEXT,
+      "customerName" TEXT NOT NULL,
+      "customerPhone" TEXT,
+      "customerAddress" TEXT,
+      "carrierId" TEXT,
+      "carrierName" TEXT,
+      "serviceType" TEXT,
+      "driverName" TEXT,
+      "driverPhone" TEXT,
+      "licensePlate" TEXT,
+      "shippingFee" REAL NOT NULL DEFAULT 0,
+      "codAmount" REAL NOT NULL DEFAULT 0,
+      "orderAmount" REAL NOT NULL DEFAULT 0,
+      "packageCount" INTEGER NOT NULL DEFAULT 1,
+      "weightKg" REAL NOT NULL DEFAULT 0,
+      "status" TEXT NOT NULL DEFAULT 'waiting_pickup',
+      "note" TEXT,
+      "shippedAt" DATETIME,
+      "deliveredAt" DATETIME,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "LogisticsShipment_saleOrderId_fkey" FOREIGN KEY ("saleOrderId") REFERENCES "SaleOrder" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+      CONSTRAINT "LogisticsShipment_carrierId_fkey" FOREIGN KEY ("carrierId") REFERENCES "Carrier" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+    )
+  `);
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "LogisticsShipment_saleOrderId_idx" ON "LogisticsShipment"("saleOrderId")`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "LogisticsShipment_carrierId_idx" ON "LogisticsShipment"("carrierId")`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "LogisticsShipment_status_idx" ON "LogisticsShipment"("status")`
+  );
+}
+
+app.get('/api/logistics/shipments', async (req, res) => {
+  try {
+    await ensureLogisticsShipmentTable();
+    const [rows, carriers, recentOrders] = await Promise.all([
+      prisma.$queryRawUnsafe(`SELECT * FROM "LogisticsShipment" ORDER BY "createdAt" DESC`),
+      prisma.carrier.findMany({
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.saleOrder.findMany({
+        where: {
+          NOT: { code: { startsWith: 'LSX' } },
+          trangThai: { not: 'draft' },
+        },
+        include: {
+          customer: true,
+          saleOrderItems: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+      }),
+    ]);
+
+    const orderMap = new Map(recentOrders.map((o) => [String(o.id), o]));
+    const carrierMap = new Map(carriers.map((c) => [String(c.id), c]));
+
+    const toIsoStringSafe = (val) => {
+      if (!val) return null;
+      if (val instanceof Date) return val.toISOString();
+      const d = new Date(val);
+      return Number.isNaN(d.getTime()) ? String(val) : d.toISOString();
+    };
+
+    const enriched = (rows || []).map((r) => {
+      const linkedOrder = r.saleOrderId ? orderMap.get(String(r.saleOrderId)) : null;
+      const linkedCarrier = r.carrierId ? carrierMap.get(String(r.carrierId)) : null;
+      const isByOrder = r.isByOrder === undefined || r.isByOrder === null ? true : Boolean(r.isByOrder);
+      return {
+        id: r.id,
+        trackingCode: r.trackingCode,
+        isByOrder,
+        saleOrderId: r.saleOrderId || null,
+        orderCode: linkedOrder?.code || r.orderCode || '',
+        customerName: r.customerName || linkedOrder?.customer?.name || linkedOrder?.nguoiNhan || '',
+        customerPhone: r.customerPhone || linkedOrder?.soDienThoai || linkedOrder?.customer?.dienThoai || '',
+        customerAddress: r.customerAddress || linkedOrder?.diaChiGiaoHang || linkedOrder?.customer?.address || '',
+        carrierId: r.carrierId || null,
+        carrierName: linkedCarrier?.name || r.carrierName || '',
+        serviceType: r.serviceType || linkedCarrier?.serviceType || '',
+        driverName: r.driverName || linkedCarrier?.contactName || '',
+        driverPhone: r.driverPhone || linkedCarrier?.phone || '',
+        licensePlate: r.licensePlate || '',
+        shippingFee: Number(r.shippingFee || 0),
+        codAmount: Number(r.codAmount || 0),
+        orderAmount: Number(linkedOrder?.tongTien ?? r.orderAmount ?? 0),
+        packageCount: Number(r.packageCount || 1),
+        weightKg: Number(r.weightKg || 0),
+        status: r.status || 'waiting_pickup',
+        note: r.note || '',
+        shippedAt: toIsoStringSafe(r.shippedAt),
+        deliveredAt: toIsoStringSafe(r.deliveredAt),
+        createdAt: toIsoStringSafe(r.createdAt) || new Date().toISOString(),
+        updatedAt: toIsoStringSafe(r.updatedAt) || new Date().toISOString(),
+        items: linkedOrder?.saleOrderItems || [],
+      };
+    });
+
+    res.json({
+      success: true,
+      items: enriched,
+      carriers,
+      availableOrders: recentOrders.map((o) => ({
+        id: o.id,
+        code: o.code || '',
+        customerName: o.customer?.name || o.nguoiNhan || 'Khách vãng lai',
+        customerPhone: o.soDienThoai || o.customer?.dienThoai || '',
+        customerAddress: o.diaChiGiaoHang || o.customer?.address || '',
+        tongTien: Number(o.tongTien || 0),
+        daThanhToan: Number(o.daThanhToan || 0),
+        itemCount: (o.saleOrderItems || []).length,
+      })),
+    });
+  } catch (error) {
+    console.error('Error GET /api/logistics/shipments:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+async function syncLogisticsShipmentCarrierDebt({
+  shipmentId,
+  trackingCode,
+  orderCode,
+  customerName,
+  customerAddress,
+  carrierId,
+  carrierName,
+  shippingFee,
+  isDeleted = false,
+}) {
+  try {
+    const fee = Math.round(Number(shippingFee) || 0);
+    if (isDeleted || fee <= 0 || (!carrierId && !(carrierName || '').trim())) {
+      await prisma.debt.deleteMany({
+        where: {
+          referenceId: String(trackingCode),
+          type: { in: ['phai-tra', 'PAYABLE'] },
+        },
+      });
+    } else {
+      let resolvedCarrier = null;
+      if (carrierId) {
+        resolvedCarrier = await prisma.carrier.findUnique({ where: { id: String(carrierId) } }).catch(() => null);
+      }
+      if (!resolvedCarrier && (carrierName || '').trim()) {
+        resolvedCarrier = await prisma.carrier
+          .findFirst({
+            where: { name: { equals: String(carrierName).trim() } },
+          })
+          .catch(() => null);
+      }
+      const finalCarrierId = resolvedCarrier?.id || carrierId || null;
+      const finalCarrierName = resolvedCarrier?.name || (carrierName || '').trim() || 'Đơn vị vận chuyển';
+      const custLabel = [customerName, customerAddress ? `Địa chỉ: ${customerAddress}` : '']
+        .filter(Boolean)
+        .join(' — ');
+      const descText = orderCode
+        ? `Chi phí vận chuyển đơn hàng ${orderCode}${custLabel ? ` • Khách hàng: ${custLabel}` : ''}`
+        : `Chi phí vận chuyển ${trackingCode}${custLabel ? ` • Khách hàng: ${custLabel}` : ''}`;
+
+      const existingDebt = await prisma.debt.findFirst({
+        where: {
+          referenceId: String(trackingCode),
+          type: { in: ['phai-tra', 'PAYABLE'] },
+        },
+      });
+      if (existingDebt) {
+        await prisma.debt.update({
+          where: { id: existingDebt.id },
+          data: {
+            carrierId: finalCarrierId,
+            partnerName: finalCarrierName,
+            amount: fee,
+            description: descText,
+          },
+        });
+      } else {
+        await prisma.debt.create({
+          data: {
+            id: shipmentId ? `debt-${shipmentId}` : undefined,
+            type: 'phai-tra',
+            carrierId: finalCarrierId,
+            partnerName: finalCarrierName,
+            amount: fee,
+            paidAmount: 0,
+            dueDate: new Date(),
+            status: 'UNPAID',
+            description: descText,
+            referenceId: String(trackingCode),
+          },
+        });
+      }
+    }
+
+    const dbPath = path.join(__dirname, 'prisma', 'dev.db');
+    const sqliteConn = new sqlite3.Database(dbPath);
+    try {
+      await syncPrismaFinanceToAccountingTables(sqliteConn);
+    } finally {
+      sqliteConn.close();
+    }
+  } catch (err) {
+    console.warn('[syncLogisticsShipmentCarrierDebt error]:', err?.message);
+  }
+}
+
+app.post('/api/logistics/shipments', async (req, res) => {
+  try {
+    await ensureLogisticsShipmentTable();
+    const b = req.body || {};
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const countRows = await prisma.$queryRawUnsafe(`SELECT COUNT(*) as cnt FROM "LogisticsShipment"`);
+    const count = Number(countRows?.[0]?.cnt || 0);
+    const id = `shp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const trackingCode =
+      (b.trackingCode || '').trim() || `VD-${yyyy}${mm}${dd}-${String(count + 1).padStart(3, '0')}`;
+    const isByOrder = b.isByOrder !== false ? 1 : 0;
+    const status = b.status || 'waiting_pickup';
+    const shippedAt = status === 'in_transit' || status === 'delivered' ? nowIso : null;
+    const deliveredAt = status === 'delivered' ? nowIso : null;
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "LogisticsShipment" (
+        "id", "trackingCode", "isByOrder", "saleOrderId", "orderCode",
+        "customerName", "customerPhone", "customerAddress",
+        "carrierId", "carrierName", "serviceType",
+        "driverName", "driverPhone", "licensePlate",
+        "shippingFee", "codAmount", "orderAmount",
+        "packageCount", "weightKg", "status", "note",
+        "shippedAt", "deliveredAt", "createdAt", "updatedAt"
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id,
+      trackingCode,
+      isByOrder,
+      isByOrder && b.saleOrderId ? String(b.saleOrderId) : null,
+      isByOrder ? b.orderCode || '' : '',
+      (b.customerName || '').trim(),
+      b.customerPhone || '',
+      b.customerAddress || '',
+      b.carrierId || null,
+      b.carrierName || '',
+      b.serviceType || '',
+      b.driverName || '',
+      b.driverPhone || '',
+      b.licensePlate || '',
+      Number(b.shippingFee) || 0,
+      Number(b.codAmount) || 0,
+      Number(b.orderAmount) || 0,
+      Math.max(1, Number(b.packageCount) || 1),
+      Number(b.weightKg) || 0,
+      status,
+      b.note || '',
+      shippedAt,
+      deliveredAt,
+      nowIso,
+      nowIso
+    );
+
+    await syncLogisticsShipmentCarrierDebt({
+      shipmentId: id,
+      trackingCode,
+      orderCode: isByOrder ? b.orderCode || '' : '',
+      customerName: (b.customerName || '').trim(),
+      customerAddress: b.customerAddress || '',
+      carrierId: b.carrierId || null,
+      carrierName: b.carrierName || '',
+      shippingFee: Number(b.shippingFee) || 0,
+    });
+
+    res.json({ success: true, id, trackingCode });
+  } catch (error) {
+    console.error('Error POST /api/logistics/shipments:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.patch('/api/logistics/shipments/:id', async (req, res) => {
+  try {
+    await ensureLogisticsShipmentTable();
+    const { id } = req.params;
+    const b = req.body || {};
+    const existingRows = await prisma.$queryRawUnsafe(
+      `SELECT * FROM "LogisticsShipment" WHERE "id" = ? LIMIT 1`,
+      id
+    );
+    const existing = existingRows?.[0];
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Không tìm thấy vận đơn' });
+    }
+
+    const nowIso = new Date().toISOString();
+    const nextStatus = b.status ?? existing.status;
+    const isByOrder =
+      b.isByOrder !== undefined ? (b.isByOrder ? 1 : 0) : existing.isByOrder ? 1 : 0;
+    const shippedAt =
+      (nextStatus === 'in_transit' || nextStatus === 'delivered') && !existing.shippedAt
+        ? nowIso
+        : existing.shippedAt;
+    const deliveredAt =
+      nextStatus === 'delivered' && !existing.deliveredAt ? nowIso : existing.deliveredAt;
+
+    const nextTrackingCode = b.trackingCode ?? existing.trackingCode;
+    const nextOrderCode = isByOrder
+      ? b.orderCode !== undefined
+        ? b.orderCode
+        : existing.orderCode
+      : '';
+    const nextCarrierId = b.carrierId !== undefined ? b.carrierId || null : existing.carrierId;
+    const nextCarrierName = b.carrierName ?? existing.carrierName;
+    const nextCustomerName = b.customerName ?? existing.customerName;
+    const nextCustomerAddress = b.customerAddress ?? existing.customerAddress;
+    const nextShippingFee =
+      b.shippingFee !== undefined ? Number(b.shippingFee) || 0 : existing.shippingFee;
+
+    await prisma.$executeRawUnsafe(
+      `UPDATE "LogisticsShipment"
+       SET "trackingCode" = ?,
+           "isByOrder" = ?,
+           "saleOrderId" = ?,
+           "orderCode" = ?,
+           "carrierId" = ?,
+           "carrierName" = ?,
+           "serviceType" = ?,
+           "driverName" = ?,
+           "driverPhone" = ?,
+           "licensePlate" = ?,
+           "customerName" = ?,
+           "customerPhone" = ?,
+           "customerAddress" = ?,
+           "shippingFee" = ?,
+           "codAmount" = ?,
+           "packageCount" = ?,
+           "weightKg" = ?,
+           "status" = ?,
+           "note" = ?,
+           "shippedAt" = ?,
+           "deliveredAt" = ?,
+           "updatedAt" = ?
+       WHERE "id" = ?`,
+      nextTrackingCode,
+      isByOrder,
+      isByOrder
+        ? b.saleOrderId !== undefined
+          ? b.saleOrderId || null
+          : existing.saleOrderId
+        : null,
+      nextOrderCode,
+      nextCarrierId,
+      nextCarrierName,
+      b.serviceType ?? existing.serviceType,
+      b.driverName ?? existing.driverName,
+      b.driverPhone ?? existing.driverPhone,
+      b.licensePlate ?? existing.licensePlate,
+      nextCustomerName,
+      b.customerPhone ?? existing.customerPhone,
+      nextCustomerAddress,
+      nextShippingFee,
+      b.codAmount !== undefined ? Number(b.codAmount) || 0 : existing.codAmount,
+      b.packageCount !== undefined
+        ? Math.max(1, Number(b.packageCount) || 1)
+        : existing.packageCount,
+      b.weightKg !== undefined ? Number(b.weightKg) || 0 : existing.weightKg,
+      nextStatus,
+      b.note !== undefined ? b.note : existing.note,
+      shippedAt,
+      deliveredAt,
+      nowIso,
+      id
+    );
+
+    if (nextStatus === 'delivered' && existing.saleOrderId) {
+      await prisma.saleOrder.updateMany({
+        where: { id: existing.saleOrderId },
+        data: { trangThai: 'completed' },
+      });
+    }
+
+    await syncLogisticsShipmentCarrierDebt({
+      shipmentId: id,
+      trackingCode: nextTrackingCode,
+      orderCode: nextOrderCode,
+      customerName: nextCustomerName,
+      customerAddress: nextCustomerAddress,
+      carrierId: nextCarrierId,
+      carrierName: nextCarrierName,
+      shippingFee: nextShippingFee,
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error PATCH /api/logistics/shipments/:id:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/logistics/shipments/:id', async (req, res) => {
+  try {
+    await ensureLogisticsShipmentTable();
+    const { id } = req.params;
+    const existingRows = await prisma.$queryRawUnsafe(
+      `SELECT * FROM "LogisticsShipment" WHERE "id" = ? LIMIT 1`,
+      id
+    );
+    const existing = existingRows?.[0];
+    await prisma.$executeRawUnsafe(`DELETE FROM "LogisticsShipment" WHERE "id" = ?`, id);
+    if (existing?.trackingCode) {
+      await syncLogisticsShipmentCarrierDebt({
+        shipmentId: id,
+        trackingCode: existing.trackingCode,
+        isDeleted: true,
+      });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error DELETE /api/logistics/shipments/:id:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ── POST /api/logistics/assign-tickets ──────────────────────────────────────
 app.post('/api/logistics/assign-tickets', async (req, res) => {
   try {
@@ -13430,18 +14268,18 @@ app.patch('/api/production/orders/:id', async (req, res) => {
 
     let newTrangThai = order.trangThai;
     if (trangThai === 'running') newTrangThai = 'in_production';
-    else if (trangThai === 'completed') newTrangThai = 'completed';
+    else if (trangThai === 'completed') newTrangThai = 'active'; // Giữ Đang thực hiện cho tới khi Nhập kho xong -> Hoàn thành
 
     await prisma.$transaction(async (tx) => {
       await tx.saleOrder.update({
         where: { id: order.id },
         data: {
           trangThai: newTrangThai,
-          ...(newTrangThai === 'completed' ? { ngayHoanThanhSanXuat: new Date() } : {}),
+          ...(trangThai === 'completed' ? { ngayHoanThanhSanXuat: new Date() } : {}),
         },
       });
 
-      if (newTrangThai === 'completed') {
+      if (trangThai === 'completed') {
         const taskTitle = `Lệnh sản xuất cho đơn hàng ${order.code || order.id}`;
         await tx.task.updateMany({
           where: { title: taskTitle, status: { not: 'done' } },
@@ -16086,26 +16924,102 @@ app.post('/api/logistics/inventory', async (req, res) => {
   }
 });
 
-app.put('/api/logistics/inventory', async (req, res) => {
+const updateInventoryItemHandler = async (req, res) => {
   try {
     const body = req.body || {};
-    if (!body.id) return res.status(400).json({ error: 'Thiếu ID hàng hoá' });
-    const updated = await prisma.inventoryItem.update({
-      where: { id: body.id },
-      data: {
-        ...(body.tenHang || body.name ? { tenHang: body.tenHang || body.name } : {}),
-        ...(body.code ? { code: body.code } : {}),
-        ...(body.categoryId !== undefined ? { categoryId: body.categoryId || null, erpCategoryId: body.categoryId || null } : {}),
-        ...(body.donVi || body.unit ? { donVi: body.donVi || body.unit } : {}),
-        ...(body.ghiChu !== undefined || body.notes !== undefined ? { ghiChu: body.ghiChu ?? body.notes ?? '' } : {}),
+    const id = req.params?.id || body.id;
+    if (!id) return res.status(400).json({ error: 'Thiếu ID hàng hoá' });
+
+    const updateData = {};
+    if (body.tenHang || body.name) updateData.tenHang = String(body.tenHang || body.name).trim();
+    if (body.code !== undefined && String(body.code).trim()) updateData.code = String(body.code).trim();
+    if (body.maThayThe !== undefined) updateData.maThayThe = body.maThayThe ? String(body.maThayThe).trim() : null;
+    if (body.model !== undefined) updateData.model = body.model ? String(body.model).trim() : null;
+    if (body.chatLieu !== undefined) updateData.chatLieu = body.chatLieu ? String(body.chatLieu).trim() : null;
+    if (body.donVi !== undefined || body.unit !== undefined) updateData.donVi = String(body.donVi || body.unit || 'Cái').trim();
+    if (body.soLuongMin !== undefined) updateData.soLuongMin = Number(body.soLuongMin) || 0;
+    if (body.giaNhap !== undefined) updateData.giaNhap = Number(body.giaNhap) || 0;
+    if (body.giaVon !== undefined) updateData.giaVon = Number(body.giaVon) || 0;
+    if (body.giaBan !== undefined) updateData.giaBan = Number(body.giaBan) || 0;
+    if (body.ghiChu !== undefined || body.notes !== undefined) updateData.ghiChu = body.ghiChu ?? body.notes ?? '';
+    if (body.imageUrl !== undefined) updateData.imageUrl = body.imageUrl ? String(body.imageUrl).trim() : null;
+    if (body.nhaCungCap !== undefined) updateData.nhaCungCap = body.nhaCungCap ? String(body.nhaCungCap).trim() : null;
+    if (body.brand !== undefined) updateData.brand = body.brand ? String(body.brand).trim() : 'Seajong';
+    if (body.thongSoKyThuat !== undefined) updateData.thongSoKyThuat = body.thongSoKyThuat ? String(body.thongSoKyThuat).trim() : null;
+
+    if (body.categoryId !== undefined) {
+      const catId = body.categoryId ? String(body.categoryId).trim() : null;
+      if (!catId) {
+        updateData.categoryId = null;
+        updateData.erpCategoryId = null;
+      } else {
+        const [invCat, erpCat] = await Promise.all([
+          prisma.inventoryCategory.findUnique({ where: { id: catId } }).catch(() => null),
+          prisma.category.findUnique({ where: { id: catId } }).catch(() => null),
+        ]);
+        if (invCat) updateData.categoryId = invCat.id;
+        if (erpCat) updateData.erpCategoryId = erpCat.id;
       }
+    }
+
+    const updated = await prisma.inventoryItem.update({
+      where: { id },
+      data: updateData,
+      include: {
+        category: true,
+        erpCategory: true,
+        stocks: { include: { warehouse: true } },
+      },
     });
-    res.json(updated);
+
+    if (body.warehouseId && body.warehouseId !== 'all') {
+      const whId = String(body.warehouseId).trim();
+      const whExists = await prisma.warehouse.findUnique({ where: { id: whId } }).catch(() => null);
+      if (whExists) {
+        await prisma.inventoryStock.upsert({
+          where: {
+            inventoryItemId_warehouseId: {
+              inventoryItemId: id,
+              warehouseId: whId,
+            },
+          },
+          create: {
+            inventoryItemId: id,
+            warehouseId: whId,
+            soLuong: updated.soLuong || 0,
+            soLuongMin: updated.soLuongMin || 0,
+          },
+          update: {
+            soLuongMin: updated.soLuongMin || 0,
+          },
+        }).catch(() => null);
+      }
+    }
+
+    const refreshed = await prisma.inventoryItem.findUnique({
+      where: { id },
+      include: {
+        category: true,
+        erpCategory: true,
+        stocks: { include: { warehouse: true } },
+      },
+    });
+
+    res.json({
+      success: true,
+      ...(refreshed || updated),
+      giaBanLe: (refreshed || updated).giaBan || 0,
+      categoryName: (refreshed || updated).category?.name || (refreshed || updated).erpCategory?.name || '',
+    });
   } catch (err) {
-    console.error('Lỗi PUT /api/logistics/inventory:', err);
+    console.error('Lỗi cập nhật hàng hoá:', err);
     res.status(500).json({ error: err.message });
   }
-});
+};
+
+app.put('/api/logistics/inventory', updateInventoryItemHandler);
+app.put('/api/logistics/inventory/:id', updateInventoryItemHandler);
+app.put('/api/plan-finance/inventory/:id', updateInventoryItemHandler);
 
 app.delete('/api/logistics/inventory/:id', async (req, res) => {
   try {
@@ -17127,14 +18041,15 @@ app.get('/api/sales/internal-reports/income', async (req, res) => {
       const endDate = new Date(year, month, 0, 23, 59, 59, 999);
 
       const [
+        hrData,
         attendances,
         empRecord,
         payrollRecord,
         insHistory,
         insConfig,
         advanceRequests,
-        empLeaveRequests,
       ] = await Promise.all([
+        computeHrAttendanceAndPayroll(month, year).catch(() => null),
         prisma.attendance.findMany({
           where: {
             employeeId,
@@ -17180,53 +18095,35 @@ app.get('/api/sales/internal-reports/income', async (req, res) => {
             status: { in: ['APPROVED', 'approved', 'COMPLETED', 'completed'] },
           },
         }),
-        prisma.personalRequest.findMany({
-          where: {
-            employeeId,
-          },
-          orderBy: { createdAt: 'asc' },
-        }),
       ]);
 
-      const { leaveMapByDate: incomeLeaveMap } =
-        typeof buildEmployeeLeaveSchedule === 'function'
-          ? buildEmployeeLeaveSchedule(empLeaveRequests)
-          : { leaveMapByDate: new Map() };
-
-      const attByDate = new Map();
-      for (const a of attendances) {
-        const dKey = formatDateYmd(a.date);
-        if (dKey) attByDate.set(dKey, a);
+      let empHr = null;
+      if (hrData && Array.isArray(hrData.departments)) {
+        for (const dept of hrData.departments) {
+          const found = (dept.employees || []).find((e) => e.id === employeeId);
+          if (found) {
+            empHr = found;
+            break;
+          }
+        }
       }
 
-      const allMonthDates = new Set([
-        ...attByDate.keys(),
-        ...Array.from(incomeLeaveMap.keys()).filter((k) =>
-          k.startsWith(`${year}-${String(month).padStart(2, '0')}`)
-        ),
-      ]);
-
-      let totalPayableWorkdays = 0;
-      for (const dStr of allMonthDates) {
-        const a = attByDate.get(dStr);
-        const lv = incomeLeaveMap.get(dStr);
-        const hasMWork = Boolean(a && a.checkInMorning);
-        const hasAWork = Boolean(a && a.checkInAfternoon);
-        const mLeavePaid =
-          lv && lv.status === 'approved' ? Number(lv.morningPaidCredit || 0) : 0;
-        const aLeavePaid =
-          lv && lv.status === 'approved' ? Number(lv.afternoonPaidCredit || 0) : 0;
-        const mCred = hasMWork ? 0.5 : mLeavePaid;
-        const aCred = hasAWork ? 0.5 : aLeavePaid;
-        totalPayableWorkdays += Math.min(1.0, mCred + aCred);
+      if (empHr && Array.isArray(empHr.attendance)) {
+        const totalPayableWorkdays = empHr.attendance.reduce(
+          (acc, a) => acc + (Number(a?.workday) || 0),
+          0
+        );
+        actualWorkingDays = Number(totalPayableWorkdays.toFixed(2));
+        mealCount = empHr.attendance.reduce(
+          (sum, a) => sum + (a?.registeredLunch ? 1 : 0) + (a?.registeredDinner ? 1 : 0),
+          0
+        );
+      } else {
+        mealCount = attendances.reduce(
+          (sum, a) => sum + (a.registeredLunch ? 1 : 0) + (a.registeredDinner ? 1 : 0),
+          0
+        );
       }
-
-      actualWorkingDays = Number(totalPayableWorkdays.toFixed(2));
-
-      mealCount = attendances.reduce(
-        (sum, a) => sum + (a.registeredLunch ? 1 : 0) + (a.registeredDinner ? 1 : 0),
-        0
-      );
 
       // 1. Tính trừ tiền đóng bảo hiểm (Chỉ lấy phần giá trị đóng bảo hiểm do nhân viên đóng, mặc định 10.5%)
       const employeeInsRate = insConfig
@@ -21540,6 +22437,41 @@ async function executeLogisticsRetentionCleanup({
     return eligibleOrders.length;
   }
 
+  // Trường hợp dọn dẹp Đơn bán hàng trên trang Theo dõi đơn hàng (SALES_ORDERS)
+  if (type === 'SALES_ORDERS') {
+    const completedStatuses = ['completed', 'Hoàn thành', 'Hoàn tất', 'done', 'cancelled', 'Huỷ bỏ', 'Hủy bỏ', 'da_huy', 'rejected'];
+    const inProgressStatuses = ['in_production', 'Đang thực hiện', 'processing', 'delivering', 'pending', 'Chưa thực hiện', 'approved'];
+    const statusIn = [
+      ...(applyCompleted ? completedStatuses : []),
+      ...(applyInProgress ? inProgressStatuses : []),
+    ];
+    if (statusIn.length === 0) return 0;
+
+    const eligibleSalesOrders = await prisma.saleOrder.findMany({
+      where: {
+        NOT: { code: { startsWith: 'LSX' } },
+        trangThai: { in: statusIn },
+        createdAt: { lt: cutoffDate },
+      },
+      select: { id: true },
+    });
+    if (eligibleSalesOrders.length === 0) return 0;
+    const soIds = eligibleSalesOrders.map((o) => o.id);
+
+    const linkedTickets = await prisma.logisticsTicket.findMany({
+      where: { saleOrderId: { in: soIds } },
+      select: { id: true },
+    });
+    const linkedTicketIds = linkedTickets.map((t) => t.id);
+    if (linkedTicketIds.length > 0) {
+      await prisma.logisticsTicketItem.deleteMany({ where: { ticketId: { in: linkedTicketIds } } });
+      await prisma.logisticsTicket.deleteMany({ where: { id: { in: linkedTicketIds } } });
+    }
+    await prisma.saleOrderItem.deleteMany({ where: { saleOrderId: { in: soIds } } });
+    const delRes = await prisma.saleOrder.deleteMany({ where: { id: { in: soIds } } });
+    return delRes.count;
+  }
+
   // Trường hợp dọn dẹp Hồ sơ hàng lỗi trên trang Xử lý hàng lỗi (DEFECT_RECORDS)
   if (type === 'DEFECT_RECORDS') {
     const defectOrConditions = [];
@@ -21765,7 +22697,23 @@ app.get('/api/logistics/completed-cleanup-settings', async (req, res) => {
     if (applyCompleted) statusList.push('COMPLETED');
 
     let eligibleTicketsCount = 0;
-    if (type === 'PRODUCTION_ORDERS') {
+    if (type === 'SALES_ORDERS') {
+      const completedStatuses = ['completed', 'Hoàn thành', 'Hoàn tất', 'done', 'cancelled', 'Huỷ bỏ', 'Hủy bỏ', 'da_huy', 'rejected'];
+      const inProgressStatuses = ['in_production', 'Đang thực hiện', 'processing', 'delivering', 'pending', 'Chưa thực hiện', 'approved'];
+      const statusIn = [
+        ...(applyCompleted ? completedStatuses : []),
+        ...(applyInProgress ? inProgressStatuses : []),
+      ];
+      if (statusIn.length > 0) {
+        eligibleTicketsCount = await prisma.saleOrder.count({
+          where: {
+            NOT: { code: { startsWith: 'LSX' } },
+            trangThai: { in: statusIn },
+            createdAt: { lt: cutoffDate },
+          },
+        });
+      }
+    } else if (type === 'PRODUCTION_ORDERS') {
       const prodOrConditions = [];
       if (applyCompleted) {
         prodOrConditions.push({ ngayHoanThanhSanXuat: { not: null, lt: cutoffDate } });
@@ -22073,7 +23021,7 @@ app.get('/api/plan-finance/stock-movements/next-code', async (req, res) => {
 // ── 2. Nhập kho hàng loạt (Lưu vết DB) ─────────────────────────
 app.post('/api/plan-finance/stock-movements/batch', async (req, res) => {
   try {
-    const { toWarehouseId, soChungTu, purchaseOrderId, lyDo, nguoiThucHien, lines = [] } = req.body;
+    const { toWarehouseId, soChungTu, purchaseOrderId, taskId, salesOrderId, lyDo, nguoiThucHien, lines = [] } = req.body;
     if (!lines.length) {
       return res.status(400).json({ error: 'Danh sách mặt hàng nhập kho không được để trống' });
     }
@@ -22155,6 +23103,63 @@ app.post('/api/plan-finance/stock-movements/batch', async (req, res) => {
             ...(line.donGia ? { giaVon: parseFloat(line.donGia) } : {}),
           },
         });
+      }
+
+      // 4. Tự động chuyển trạng thái đơn hàng sang Hoàn thành (done) khi Nhập kho xong
+      try {
+        const textChunks = [lyDo || '', soChungTu || ''];
+        if (taskId) {
+          const linkedTask = await tx.task.findUnique({ where: { id: String(taskId) } }).catch(() => null);
+          if (linkedTask) {
+            textChunks.push(linkedTask.title || '', linkedTask.description || '', linkedTask.actualResult || '');
+          }
+        }
+        if (purchaseOrderId) {
+          const linkedPO = await tx.purchaseOrder.findUnique({ where: { id: String(purchaseOrderId) } }).catch(() => null);
+          if (linkedPO) {
+            textChunks.push(linkedPO.ghiChu || '', linkedPO.code || '');
+            if (linkedPO.purchaseRequestId) {
+              const linkedPR = await tx.purchaseRequest.findUnique({ where: { id: linkedPO.purchaseRequestId } }).catch(() => null);
+              if (linkedPR) {
+                textChunks.push(linkedPR.lyDo || '', linkedPR.ghiChu || '');
+              }
+            }
+          }
+        }
+        const combinedText = textChunks.join(' ');
+        const qcMatches = combinedText.match(/QC-[\w-]+/gi) || [];
+        for (const qcCode of qcMatches) {
+          const qc = await tx.qualityInspection.findFirst({ where: { code: qcCode } }).catch(() => null);
+          if (qc) {
+            textChunks.push(qc.notes || '', qc.metadata || '');
+          }
+        }
+        const fullSearchText = textChunks.join(' ');
+        const rawOrderCodes = fullSearchText.match(/(?:DBH|DHBL|DH|LSX)-\d{6,8}-\w+/gi) || [];
+        const candidateCodes = new Set();
+        for (const raw of rawOrderCodes) {
+          const upper = raw.toUpperCase();
+          candidateCodes.add(upper);
+          if (upper.startsWith('LSX-')) {
+            candidateCodes.add(upper.replace(/^LSX-/, 'DBH-'));
+            candidateCodes.add(upper.replace(/^LSX-/, 'DHBL-'));
+            candidateCodes.add(upper.replace(/^LSX-/, 'DH-'));
+          }
+        }
+        if (salesOrderId) {
+          await tx.saleOrder.updateMany({
+            where: { OR: [{ id: String(salesOrderId) }, { code: String(salesOrderId) }] },
+            data: { trangThai: 'done' },
+          });
+        }
+        if (candidateCodes.size > 0) {
+          await tx.saleOrder.updateMany({
+            where: { code: { in: Array.from(candidateCodes) } },
+            data: { trangThai: 'done' },
+          });
+        }
+      } catch (soSyncErr) {
+        console.warn('[StockMovement Batch] Không thể đồng bộ trạng thái đơn hàng:', soSyncErr.message);
       }
     });
 
@@ -22280,7 +23285,7 @@ app.post('/api/plan-finance/stock-movements/batch-xuat', async (req, res) => {
           if (allTicketsCompleted) {
             await tx.saleOrder.update({
               where: { id: salesOrderId },
-              data: { trangThaiKho: 'exported' }
+              data: { trangThaiKho: 'exported', trangThai: 'done' }
             });
           }
         } catch (_) { }
@@ -23241,8 +24246,6 @@ app.get('/api/my/attendance', async (req, res) => {
         const hasAfternoon = !!(r.checkInAfternoon && r.checkOutAfternoon);
         if (hasMorning) workday += 0.5;
         if (hasAfternoon) workday += 0.5;
-        if (!hasMorning && r.checkInMorning) workday += 0.25;
-        if (!hasAfternoon && r.checkInAfternoon) workday += 0.25;
 
         if (r.checkInMorning) {
           const inM = new Date(r.checkInMorning);
@@ -23981,39 +24984,23 @@ const syncLeaveRequestToAttendance = async (employeeId) => {
       });
       if (!existingPayroll) continue;
 
-      const mStart = new Date(yearNum, monthNum - 1, 1, 0, 0, 0, 0);
-      const mEnd = new Date(yearNum, monthNum, 0, 23, 59, 59, 999);
-      const monthAtts = await prisma.attendance.findMany({
-        where: { employeeId, date: { gte: mStart, lte: mEnd } },
-      });
-
-      const attByDate = new Map();
-      for (const a of monthAtts) {
-        attByDate.set(formatDateYmd(a.date), a);
+      const hrMonthData = await computeHrAttendanceAndPayroll(monthNum, yearNum).catch(() => null);
+      let empHr = null;
+      if (hrMonthData && Array.isArray(hrMonthData.departments)) {
+        for (const dept of hrMonthData.departments) {
+          const found = (dept.employees || []).find((e) => e.id === employeeId);
+          if (found) {
+            empHr = found;
+            break;
+          }
+        }
       }
 
-      const monthPrefix = `${yearNum}-${String(monthNum).padStart(2, '0')}`;
-      const allDates = new Set([
-        ...attByDate.keys(),
-        ...Array.from(leaveMapByDate.keys()).filter((k) => k.startsWith(monthPrefix)),
-      ]);
+      const recalculatedWorkdays = empHr && Array.isArray(empHr.attendance)
+        ? empHr.attendance.reduce((acc, a) => acc + (Number(a?.workday) || 0), 0)
+        : 0;
 
-      let recalculatedWorkdays = 0;
-      for (const dStr of allDates) {
-        const a = attByDate.get(dStr);
-        const lv = leaveMapByDate.get(dStr);
-        const hasM = Boolean(a && a.checkInMorning);
-        const hasA = Boolean(a && a.checkInAfternoon);
-        const mLeave =
-          lv && lv.status === 'approved' ? Number(lv.morningPaidCredit || 0) : 0;
-        const aLeave =
-          lv && lv.status === 'approved' ? Number(lv.afternoonPaidCredit || 0) : 0;
-        const mCred = hasM ? 0.5 : mLeave;
-        const aCred = hasA ? 0.5 : aLeave;
-        recalculatedWorkdays += Math.min(1.0, mCred + aCred);
-      }
-
-      const stdDays = 26;
+      const stdDays = hrMonthData?.stats?.workDays || 26;
       const baseSal = Number(existingPayroll.luongCoBan || 0);
       const allowance = Number(existingPayroll.phuCap || 0);
       const bonus = Number(existingPayroll.thuong || 0);

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useDepartment } from '../../context/DepartmentContext';
 import { useAuth } from '../../context/AuthContext';
 import { isMenuLocked, getMenuLockReason } from '../../lib/permissions';
+import { useCompanyInfo } from '../../hooks/useCompanyInfo';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -263,6 +264,7 @@ const DEPT_SIDEBAR_CONFIGS: Record<string, { deptName: string; sections: NavSect
           { id: 'batch-packing', name: 'Gom hàng và dán nhãn' },
         ],
       },
+      { id: 'shipment-tracking', label: 'Theo dõi vận đơn', icon: 'bi-truck', flat: true },
       {
         id: 'reports',
         label: 'Báo cáo và thống kê',
@@ -542,6 +544,7 @@ const DEPT_SIDEBAR_CONFIGS: Record<string, { deptName: string; sections: NavSect
 export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
   const { activeDeptCode, activeMenuKey, setActiveMenuKey } = useDepartment();
   const { user } = useAuth();
+  const company = useCompanyInfo();
 
   // Tự động đóng ngăn kéo Sidebar trên màn hình di động khi chọn mục menu
   useEffect(() => {
@@ -657,7 +660,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
       <div className="px-4 pt-3.5 pb-4 mb-1 shrink-0 text-center">
         {!collapsed ? (
           <h2 className="text-[12.5px] font-extrabold text-slate-800 uppercase tracking-wider leading-tight font-sans">
-            TIÊN PHONG KIẾN TẠO GIÁ TRỊ THỰC
+            {company.slogan || 'TIÊN PHONG KIẾN TẠO GIÁ TRỊ THỰC'}
           </h2>
         ) : (
           <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 font-bold flex items-center justify-center text-xs mx-auto">

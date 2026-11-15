@@ -6,6 +6,10 @@ import { useToast } from "@/components/ui/Toast";
 import { Input } from "@/components/common/Input";
 import { Select } from "@/components/common/Select";
 import { Button } from "@/components/common/Button";
+import { DatePicker } from "@/components/common/DatePicker";
+import { Toggle } from "@/components/common/Toggle";
+import { PrintPreviewModal as SharedPrintPreviewModal, printStyles } from "@/components/common/PrintPreviewModal";
+import { Printer, FileEarmarkPdf } from "react-bootstrap-icons";
 import { EmployeeSelect, fetchEmployeesFromDb, EmployeeItem } from "@/components/common/EmployeeSelect";
 import { TrangThaiTonKhoBadge } from "@/components/plan-finance/dung_chung/TrangThaiTonKhoBadge";
 import { genDocCode } from "@/lib/genDocCode";
@@ -228,7 +232,13 @@ function NumericInput({
 }
 
 // ── Print Preview Modal ─────────────────────────────────────────────────────
-function PrintPreviewModal({ open, onClose, customer, items, info, initialAction }: any) {
+const SLabel = ({ children }: { children: React.ReactNode }) => (
+  <p style={{ margin: "0 0 4px", fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+    {children}
+  </p>
+);
+
+function PrintPreviewModal({ open, onClose, customer, items, info, initialAction, onUpdateInfo, onUpdateCustomer }: any) {
   const { user } = useAuth();
   const session = { user };
   const toast = useToast();
@@ -237,26 +247,52 @@ function PrintPreviewModal({ open, onClose, customer, items, info, initialAction
   const [pdfUploading, setPdfUploading] = React.useState(false);
   const isSanitary = true;
   const [showStamp, setShowStamp] = React.useState(true);
+  const [showProductImage, setShowProductImage] = React.useState(true);
 
-  // **Blank Print Preview Fix**:
-  // - The previous print CSS hidden all elements on the page except `#print-preview-root` via `body > *:not(#print-preview-root) { display: none !important; }`. However, since the react app root is the parent of the preview element, it was set to `display: none`, making the print dialog blank.
-  // - Replaced it with standard `visibility: hidden` rules on `body` and `visibility: visible` on `#print-preview-root` and its children, placing it absolute-positioned over the page flow. This ensures the quotation document is printed properly with correct styling and multiple page flow.
+  // Editable preview fields in left sidebar
+  const [localSoPhieu, setLocalSoPhieu] = React.useState(info?.soPhieu || "");
+  const [localNgayLap, setLocalNgayLap] = React.useState(info?.ngayLap || "");
+  const [localHieuLuc, setLocalHieuLuc] = React.useState(info?.hieuLuc || "");
+  const [localCustName, setLocalCustName] = React.useState(customer?.name || "");
+  const [localDaiDien, setLocalDaiDien] = React.useState(
+    customer?.daiDien ? `${customer.xungHo ? `${customer.xungHo} ` : ""}${customer.daiDien}`.trim() : ""
+  );
+  const [localDienThoai, setLocalDienThoai] = React.useState(customer?.dienThoai || "");
+  const [localCustAddress, setLocalCustAddress] = React.useState(customer?.address || "");
+  const [localLegalRep, setLocalLegalRep] = React.useState("");
+  const [localGhiChu, setLocalGhiChu] = React.useState(info?.ghiChu || "");
 
   React.useEffect(() => {
     if (!open) return;
-    fetch("/api/company").then(r => r.json()).then(setCompany).catch(() => { });
-  }, [open]);
+    setLocalSoPhieu(info?.soPhieu || "");
+    setLocalNgayLap(info?.ngayLap || "");
+    setLocalHieuLuc(info?.hieuLuc || "");
+    setLocalGhiChu(info?.ghiChu || "");
+    setLocalCustName(customer?.name || "");
+    setLocalDaiDien(
+      customer?.daiDien ? `${customer.xungHo ? `${customer.xungHo} ` : ""}${customer.daiDien}`.trim() : ""
+    );
+    setLocalDienThoai(customer?.dienThoai || "");
+    setLocalCustAddress(customer?.address || "");
+  }, [open, info, customer]);
 
   React.useEffect(() => {
-    if (!open || !initialAction) return;
+    if (!open) return;
+    fetch("/api/company")
+      .then(r => r.json())
+      .then(data => {
+        setCompany(data);
+        setLocalLegalRep(prev => prev || data?.legalRep || (user as any)?.fullName || (user as any)?.name || "");
+      })
+      .catch(() => { });
+  }, [open, user]);
+
+  React.useEffect(() => {
+    if (!open || initialAction !== "pdf") return;
     const timer = setTimeout(() => {
-      if (initialAction === "print") {
-        handlePrint();
-      } else if (initialAction === "pdf") {
-        handleExportPDF().finally(() => {
-          onClose();
-        });
-      }
+      handleExportPDF().finally(() => {
+        onClose();
+      });
     }, 800);
     return () => clearTimeout(timer);
   }, [open, initialAction]);
@@ -264,17 +300,6 @@ function PrintPreviewModal({ open, onClose, customer, items, info, initialAction
   if (!open) return null;
 
   const isCoQuayKe = info.quoteType === "Có quầy kệ" && isSanitary;
-  const uniqueAreas = Array.from(new Set(items.filter((it: any) => it.ten).map((it: any) => {
-    if (it.viTri) return it.viTri;
-    try {
-      if (it.ghiChu) {
-        const parsed = JSON.parse(it.ghiChu);
-        return parsed.viTri || parsed.khuVuc || "Khu vực 1";
-      }
-    } catch (e) { }
-    return "Khu vực 1";
-  })));
-  const hasMultipleAreas = isCoQuayKe && uniqueAreas.length > 1;
   const fmt = (n: number) => n.toLocaleString("vi-VN");
   const thanhTien = (it: any) => isCoQuayKe ? (it.giaDaiLy ?? it.thanhTien ?? 0) : it.soLuong * it.donGia * (1 - it.ckPct / 100);
   const tamTinh = items.reduce((s: any, it: any) => s + thanhTien(it), 0);
@@ -285,12 +310,17 @@ function PrintPreviewModal({ open, onClose, customer, items, info, initialAction
   const tongCong = truocThue + thueTien + (isCoQuayKe ? chiPhiThiCong : 0);
 
   const fmtDate = (iso: string) => {
+    if (!iso) return "—";
     const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
     return `${String(d.getDate()).padStart(2, "0")} tháng ${String(d.getMonth() + 1).padStart(2, "0")} năm ${d.getFullYear()}`;
   };
 
   const paperW = landscape ? 297 : 210;
   const paperH = landscape ? 210 : 297;
+  const displayCompanyAddress = company.address || "";
+  const displayLegalRep = localLegalRep !== "" ? localLegalRep : (company.legalRep || "");
+
   const handlePrint = () => {
     const docEl = document.getElementById("print-paper-doc");
     if (!docEl) { window.print(); return; }
@@ -307,7 +337,7 @@ function PrintPreviewModal({ open, onClose, customer, items, info, initialAction
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Báo giá ${info.soPhieu || ""}</title>
+  <title>Báo giá ${localSoPhieu || info.soPhieu || ""}</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;600;700;800;900&display=swap">
   <style>
     * { 
@@ -322,7 +352,7 @@ function PrintPreviewModal({ open, onClose, customer, items, info, initialAction
     body { 
       margin: 0; padding: 0; 
       font-family: 'Roboto Condensed', Arial Narrow, Arial, sans-serif; 
-      font-size: 10px; color: #111; 
+      font-size: 12.5px; color: #111; 
       background: #fff;
     }
     .print-cover {
@@ -346,11 +376,20 @@ function PrintPreviewModal({ open, onClose, customer, items, info, initialAction
       padding: 20mm 20mm 20mm 30mm !important;
       box-sizing: border-box !important;
     }
+    .print-drawings {
+      width: ${landscape ? "297mm" : "210mm"} !important;
+      height: ${landscape ? "210mm" : "297mm"} !important;
+      page-break-after: always !important;
+      break-after: page !important;
+      background: #fff !important;
+      padding: 20mm 20mm 20mm 30mm !important;
+      box-sizing: border-box !important;
+    }
     .print-details {
       width: ${landscape ? "297mm" : "210mm"} !important;
       min-height: ${landscape ? "210mm" : "297mm"} !important;
       background: #fff !important;
-      padding: 14mm 15mm !important;
+      padding: 15mm 16mm !important;
       box-sizing: border-box !important;
     }
     table {
@@ -379,6 +418,7 @@ function PrintPreviewModal({ open, onClose, customer, items, info, initialAction
       }, 2000);
     }, 600);
   };
+
   const handleExportPDF = async () => {
     if (pdfUploading) return;
     setPdfUploading(true);
@@ -402,9 +442,10 @@ function PrintPreviewModal({ open, onClose, customer, items, info, initialAction
         page.style.boxShadow = "none";
       });
 
+      const docCode = localSoPhieu || info.soPhieu || "Sanitary";
       const opt = {
         margin: 0,
-        filename: `Bao_gia_${info.soPhieu || "Sanitary"}.pdf`,
+        filename: `Bao_gia_${docCode}.pdf`,
         image: { type: "jpeg" as const, quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true, logging: false },
         jsPDF: { unit: "mm" as const, format: "a4" as const, orientation: (landscape ? "landscape" : "portrait") as "landscape" | "portrait" },
@@ -468,14 +509,14 @@ function PrintPreviewModal({ open, onClose, customer, items, info, initialAction
         }
       }
 
-      const fileName = `Bao_gia_${info.soPhieu || "Sanitary"}.pdf`;
+      const fileName = `Bao_gia_${docCode}.pdf`;
       const fileToUpload = new File([pdfBlob], fileName, { type: "application/pdf" });
 
       const fd = new FormData();
       fd.append("file", fileToUpload);
       fd.append("folderId", userFolder.id);
       fd.append("name", fileName);
-      fd.append("description", `Báo giá sản phẩm thiết bị vệ sinh số ${info.soPhieu || ""}`);
+      fd.append("description", `Báo giá sản phẩm thiết bị vệ sinh số ${docCode}`);
       fd.append("type", "template");
       fd.append("channel", "all");
       fd.append("isPublic", "false");
@@ -499,794 +540,874 @@ function PrintPreviewModal({ open, onClose, customer, items, info, initialAction
     }
   };
 
+  const inp = printStyles.sidebarInput;
+
+  const sidebarContent = (
+    <>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingBottom: 12, borderBottom: "1px solid #e2e8f0" }}>
+        <SLabel>Tùy chọn bản in</SLabel>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: "#0f172a" }}>Khổ giấy A4</span>
+          <div style={{ display: "inline-flex", borderRadius: 6, border: "1px solid #cbd5e1", overflow: "hidden", background: "#f8fafc" }}>
+            {(["Dọc", "Ngang"] as const).map((label, i) => {
+              const active = landscape === (i === 1);
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setLandscape(i === 1)}
+                  style={{
+                    padding: "4px 12px",
+                    border: "none",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    background: active ? "var(--color-primary, #0284c7)" : "transparent",
+                    color: active ? "#ffffff" : "#475569",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, alignItems: "center" }}>
+          <Toggle
+            checked={showStamp}
+            onChange={setShowStamp}
+            label="Đóng dấu"
+          />
+          <Toggle
+            checked={showProductImage}
+            onChange={setShowProductImage}
+            label="Hình ảnh"
+          />
+        </div>
+      </div>
+
+      <div>
+        <SLabel>Số báo giá</SLabel>
+        <Input
+          value={localSoPhieu}
+          onChange={e => {
+            const val = e.target.value;
+            setLocalSoPhieu(val);
+            onUpdateInfo?.((prev: any) => ({ ...prev, soPhieu: val }));
+          }}
+          placeholder="Nhập số báo giá..."
+        />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div>
+          <SLabel>Ngày lập</SLabel>
+          <DatePicker
+            value={localNgayLap}
+            onChange={val => {
+              setLocalNgayLap(val);
+              onUpdateInfo?.((prev: any) => ({ ...prev, ngayLap: val }));
+            }}
+          />
+        </div>
+        <div>
+          <SLabel>Hiệu lực đến</SLabel>
+          <DatePicker
+            value={localHieuLuc}
+            onChange={val => {
+              setLocalHieuLuc(val);
+              onUpdateInfo?.((prev: any) => ({ ...prev, hieuLuc: val }));
+            }}
+          />
+        </div>
+      </div>
+
+      <div>
+        <SLabel>Đơn vị / Khách hàng</SLabel>
+        <Input
+          value={localCustName}
+          onChange={e => {
+            const val = e.target.value;
+            setLocalCustName(val);
+            onUpdateCustomer?.((prev: any) => ({ ...prev, name: val }));
+          }}
+          placeholder="Tên đơn vị / khách hàng..."
+        />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div>
+          <SLabel>Người liên hệ</SLabel>
+          <Input
+            value={localDaiDien}
+            onChange={e => setLocalDaiDien(e.target.value)}
+            placeholder="Họ tên người liên hệ..."
+          />
+        </div>
+        <div>
+          <SLabel>Điện thoại</SLabel>
+          <Input
+            value={localDienThoai}
+            onChange={e => {
+              const val = e.target.value;
+              setLocalDienThoai(val);
+              onUpdateCustomer?.((prev: any) => ({ ...prev, dienThoai: val }));
+            }}
+            placeholder="Số điện thoại..."
+          />
+        </div>
+      </div>
+
+      <div>
+        <SLabel>Địa chỉ khách hàng</SLabel>
+        <Input
+          value={localCustAddress}
+          onChange={e => {
+            const val = e.target.value;
+            setLocalCustAddress(val);
+            onUpdateCustomer?.((prev: any) => ({ ...prev, address: val }));
+          }}
+          placeholder="Địa chỉ khách hàng..."
+        />
+      </div>
+
+      <div>
+        <SLabel>Người đại diện ký tên</SLabel>
+        <Input
+          value={localLegalRep}
+          onChange={e => setLocalLegalRep(e.target.value)}
+          placeholder="Họ tên đại diện công ty..."
+        />
+      </div>
+
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 140 }}>
+        <SLabel>Điều khoản & Ghi chú báo giá</SLabel>
+        <textarea
+          value={localGhiChu}
+          onChange={e => {
+            const val = e.target.value;
+            setLocalGhiChu(val);
+            onUpdateInfo?.((prev: any) => ({ ...prev, ghiChu: val }));
+          }}
+          placeholder="Điều khoản thanh toán, hiệu lực báo giá..."
+          style={{ ...inp, flex: 1, minHeight: 110, resize: "none", lineHeight: 1.5 }}
+        />
+      </div>
+    </>
+  );
+
+  const actionsContent = (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        leftIcon={<Printer size={14} />}
+        onClick={handlePrint}
+      >
+        In báo giá
+      </Button>
+      <Button
+        variant="primary"
+        size="sm"
+        leftIcon={<FileEarmarkPdf size={14} />}
+        isLoading={pdfUploading}
+        disabled={pdfUploading}
+        onClick={handleExportPDF}
+      >
+        {pdfUploading ? "Đang xuất..." : "Xuất PDF"}
+      </Button>
+    </>
+  );
+
+  const documentPaperNodes = (
+    <div id="print-paper-doc" style={{ display: "flex", flexDirection: "column", gap: "24px", alignItems: "center", width: "100%" }}>
+      {/* Trang bìa cho báo giá đối tác/đại lý (Có quầy kệ) */}
+      {isCoQuayKe && (
+        <div className="print-paper print-cover pdf-content-page" style={{
+          width: `${paperW}mm`,
+          height: `${paperH}mm`,
+          background: "#fff",
+          padding: "20mm 20mm 20mm 30mm",
+          boxSizing: "border-box",
+          fontSize: 12,
+          lineHeight: 1.5,
+          fontFamily: "'Roboto Condensed', Arial Narrow, Arial, sans-serif",
+          color: "#111",
+          position: "relative",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          pageBreakAfter: "always",
+          breakAfter: "page"
+        }}>
+          {/* Header: Logo & Tên thương hiệu */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {company.logoUrl && <img src={company.logoUrl} alt="Logo" style={{ height: "42px", width: "auto", objectFit: "contain" }} />}
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 13.5, color: "#003087", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                {company.name || "CÔNG TY CỔ PHẦN SEJONG FAUCET VIỆT NAM"}
+              </div>
+              <div style={{ fontSize: 11, color: "#6b7280" }}>
+                Thương hiệu Thiết bị vệ sinh & Nhà bếp cao cấp
+              </div>
+            </div>
+          </div>
+
+          {/* Banner hình ảnh bìa */}
+          <div style={{ width: "100%", textAlign: "center" }}>
+            <img
+              src="/seajong_cover.png"
+              alt="Sejong Cover"
+              style={{
+                width: "100%",
+                height: landscape ? "85mm" : "120mm",
+                objectFit: "cover",
+                borderRadius: 8,
+                boxShadow: "0 4px 20px rgba(0,0,0,0.12)"
+              }}
+            />
+          </div>
+
+          {/* Tiêu đề chính */}
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 26, fontWeight: 900, color: "#003087", letterSpacing: 1, textTransform: "uppercase" }}>
+              HỒ SƠ BÁO GIÁ
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#4b5563", textTransform: "uppercase", marginTop: 4, letterSpacing: 0.5 }}>
+              Dự án quầy kệ trưng bày thiết bị vệ sinh Sejong
+            </div>
+          </div>
+
+          {/* Thông tin đối tác & Báo giá */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 30, borderTop: "2px solid #003087", paddingTop: 15, fontSize: 12.5 }}>
+            <div>
+              <div style={{ color: "#6b7280", fontWeight: 700, fontSize: 10.5, textTransform: "uppercase", marginBottom: 3 }}>
+                Khách hàng / Đối tác
+              </div>
+              <div style={{ fontWeight: 800, color: "#111", fontSize: 14 }}>
+                {localCustName || "—"}
+              </div>
+              {localCustAddress && (
+                <div style={{ color: "#374151", marginTop: 3 }}>
+                  Địa chỉ: {localCustAddress}
+                </div>
+              )}
+              {localDaiDien && (
+                <div style={{ color: "#374151", marginTop: localCustAddress ? 0 : 3 }}>
+                  Đại diện: {localDaiDien}
+                </div>
+              )}
+              {localDienThoai && (
+                <div style={{ color: "#374151" }}>
+                  Điện thoại: {localDienThoai}
+                </div>
+              )}
+            </div>
+            <div>
+              <div style={{ color: "#6b7280", fontWeight: 700, fontSize: 10.5, textTransform: "uppercase", marginBottom: 3 }}>
+                Thông tin hồ sơ
+              </div>
+              <div style={{ fontWeight: 800, color: "#003087", fontSize: 14 }}>
+                Số: {localSoPhieu || info.soPhieu}
+              </div>
+              <div style={{ color: "#374151", marginTop: 3 }}>
+                Ngày lập: {fmtDate(localNgayLap || info.ngayLap)}
+              </div>
+              <div style={{ color: "#374151" }}>
+                Hiệu lực: {fmtDate(localHieuLuc || info.hieuLuc)}
+              </div>
+            </div>
+          </div>
+
+          {/* Footer chân trang */}
+          <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10.5, color: "#9ca3af" }}>
+            <div>Website: www.seajong.com</div>
+            <div>Hotline: {(company.phone || "1900.633.862").replace(/[Hh]otline:\s*/gi, "").trim()}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Page 2: Thư ngỏ cho báo giá đối tác/đại lý (Có quầy kệ) */}
+      {isCoQuayKe && (
+        <div className="print-paper print-letter pdf-content-page" style={{
+          width: `${paperW}mm`,
+          height: `${paperH}mm`,
+          background: "#fff",
+          padding: "20mm 20mm 20mm 30mm",
+          boxSizing: "border-box",
+          fontSize: 12,
+          lineHeight: 1.5,
+          fontFamily: "'Roboto Condensed', Arial Narrow, Arial, sans-serif",
+          color: "#111",
+          position: "relative",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          pageBreakAfter: "always",
+          breakAfter: "page"
+        }}>
+          {/* Top decorative bar */}
+          <div style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "5px",
+            background: "linear-gradient(90deg, #003087 0%, #0056b3 100%)"
+          }} />
+
+          <div>
+            {/* Header: Logo and Brand Info */}
+            <div style={{ display: "flex", gap: "12px", alignItems: "center", borderBottom: "1.5px solid #003087", paddingBottom: "8px", marginBottom: "12px" }}>
+              {company.logoUrl && <img src={company.logoUrl} alt="Logo" style={{ height: "38px", width: "auto", objectFit: "contain" }} />}
+              <div>
+                <div style={{ fontWeight: 800, fontSize: "12.5px", color: "#003087", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  {company.name || "CÔNG TY CỔ PHẦN SEJONG FAUCET VIỆT NAM"}
+                </div>
+                <div style={{ fontSize: "10px", color: "#6b7280" }}>
+                  Thương hiệu Thiết bị vệ sinh & Nhà bếp cao cấp Hàn Quốc
+                </div>
+              </div>
+            </div>
+
+            {/* Title of Letter */}
+            <div style={{ textAlign: "center", margin: "8px 0 12px 0" }}>
+              <div style={{ fontSize: "17px", fontWeight: 800, color: "#003087", letterSpacing: "1px", textTransform: "uppercase" }}>
+                THƯ MỜI HỢP TÁC KINH DOANH
+              </div>
+              <div style={{ fontSize: "11px", color: "#4b5563", fontStyle: "italic", marginTop: "2px" }}>
+                (V/v: Hợp tác Phát triển Đại lý / Nhà phân phối thiết bị vệ sinh Sejong)
+              </div>
+              <div style={{ width: "40px", height: "2px", background: "#003087", margin: "6px auto 0" }} />
+            </div>
+
+            {/* Salutation */}
+            <p style={{ margin: "0 0 8px 0", fontSize: "12px" }}>
+              <strong>Kính gửi: Quý Đối tác / Quý Khách hàng,</strong>
+            </p>
+
+            {/* Body Text */}
+            <div style={{ textAlign: "justify", fontSize: "12px", color: "#374151" }}>
+              <p style={{ margin: "0 0 6px 0" }}>
+                Lời đầu tiên, Ban lãnh đạo cùng toàn thể đội ngũ <strong>{company.name || "Sejong Faucet Việt Nam"}</strong> xin gửi lời chào trân trọng, lời chúc sức khỏe và lời chúc cho hoạt động kinh doanh của Quý đối tác ngày càng phát triển thịnh vượng.
+              </p>
+              <p style={{ margin: "0 0 6px 0" }}>
+                <strong>{company.name || "Sejong Faucet Việt Nam"}</strong> là đơn vị phân phối chính hãng các dòng sản phẩm thiết bị vệ sinh và phòng tắm cao cấp mang thương hiệu Hàn Quốc. Với nhiều năm kinh nghiệm trên thị trường, chúng tôi tự hào mang đến những dòng sản phẩm sở hữu công nghệ đột phá, thiết kế dẫn đầu xu hướng và độ bền vượt trội, đã và đang được hàng triệu người tiêu dùng, chủ thầu tin tưởng lựa chọn.
+              </p>
+              <p style={{ margin: "0 0 6px 0" }}>
+                Với mục tiêu mở rộng mạng lưới phân phối và mang những sản phẩm chất lượng đến gần hơn với khách hàng trên toàn quốc, chúng tôi trân trọng gửi lời mời hợp tác kinh doanh đến Quý đối tác với vai trò là Đại lý chính thức.
+              </p>
+              <p style={{ margin: "0 0 10px 0" }}>
+                Chúng tôi xin gửi kèm theo thư này Bảng báo giá sản phẩm dành riêng cho Đại lý cùng Chính sách chiết khấu thương mại mới nhất năm 2026.
+              </p>
+
+              {/* Bullet Points of Advantages */}
+              <div style={{ fontWeight: 800, fontSize: "12px", color: "#003087", marginBottom: "6px", borderLeft: "3px solid #003087", paddingLeft: "6px" }}>
+                NHỮNG ĐẶC QUYỀN VÀ CHÍNH SÁCH HỖ TRỢ TỐI ƯU DÀNH CHO ĐẠI LÝ:
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "5px", marginBottom: "10px" }}>
+                {[
+                  {
+                    title: "Chính sách giá & Chiết khấu hấp dẫn",
+                    desc: "Mức chiết khấu cao, cạnh tranh bậc nhất thị trường, đảm bảo biên độ lợi nhuận tối ưu và bền vững cho Đại lý. Có thưởng doanh số tháng/quý/năm cực kỳ linh hoạt.",
+                    icon: (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#003087" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "2px" }}><line x1="19" y1="5" x2="5" y2="19"></line><circle cx="6.5" cy="6.5" r="2.5"></circle><circle cx="17.5" cy="17.5" r="2.5"></circle></svg>
+                    )
+                  },
+                  {
+                    title: "Sản phẩm chất lượng – Nguồn hàng ổn định",
+                    desc: "Sản phẩm có đầy đủ chứng nhận chất lượng (CO, CQ, ISO...), mẫu mã đa dạng, đón đầu xu hướng tiêu dùng. Kho hàng lớn, cam kết cung ứng kịp thời, không làm gián đoạn việc kinh doanh của Đại lý.",
+                    icon: (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#003087" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "2px" }}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="m9 11 2 2 4-4"></path></svg>
+                    )
+                  },
+                  {
+                    title: "Hỗ trợ truyền thông và Marketing",
+                    desc: "Được hỗ trợ hình ảnh, video, catalogue, standee, biển bảng và tài liệu kỹ thuật. Công ty hỗ trợ đẩy data khách hàng khu vực trực tiếp về cho Đại lý.",
+                    icon: (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#003087" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "2px" }}><path d="m3 11 18-5v12L3 13v-2z"></path><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>
+                    )
+                  },
+                  {
+                    title: "Hỗ trợ đào tạo & Kỹ thuật",
+                    desc: "Đội ngũ chuyên gia của chúng tôi sẽ đào tạo miễn phí về kiến thức sản phẩm, kỹ năng tư vấn chốt sales và hỗ trợ kỹ thuật lắp đặt 24/7.",
+                    icon: (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#003087" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "2px" }}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+                    )
+                  },
+                  {
+                    title: "Chính sách bảo hành và Hậu mãi dẫn đầu",
+                    desc: "Cam kết bảo hành chính hãng nhanh chóng, thủ tục đổi trả linh hoạt đối với các sản phẩm lỗi từ nhà sản xuất, bảo vệ uy tín tối đa cho Đại lý trước người tiêu dùng.",
+                    icon: (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#003087" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "2px" }}><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
+                    )
+                  }
+                ].map((item, index) => (
+                  <div key={index} style={{
+                    background: "#f8fafc",
+                    padding: "5px 10px",
+                    borderRadius: "4px"
+                  }}>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "flex-start", marginBottom: "2px" }}>
+                      {item.icon}
+                      <div style={{ fontWeight: 700, color: "#003087", fontSize: "12px" }}>
+                        {index + 1}. {item.title}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: "11.5px", color: "#475569", lineHeight: 1.4, paddingLeft: "21px" }}>
+                      {item.desc}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <p style={{ margin: "0 0 6px 0" }}>
+                Chúng tôi tôn trọng triết lý kinh doanh <strong>"Hợp tác cùng phát triển – Chia sẻ thành công"</strong>. Chúng tôi tin tưởng rằng, sự nhạy bén trong kinh doanh của Quý đối tác kết hợp với chất lượng sản phẩm và chính sách vượt trội của chúng tôi sẽ tạo nên một bước bứt phá doanh thu mạnh mẽ cho cả hai bên.
+              </p>
+              <p style={{ margin: "0" }}>
+                Một lần nữa, xin chân thành cảm ơn sự quan tâm của Quý đối tác. Kính chúc mối quan hệ hợp tác của chúng ta sớm được thiết lập và gặt hái nhiều thành công rực rỡ!
+              </p>
+
+              {/* Representative signature block */}
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
+                <div style={{ textAlign: "center", minWidth: "160px" }}>
+                  <p style={{ margin: 0, fontWeight: 700, fontSize: "12px", color: "#374151" }}>Trân trọng,</p>
+                  <div style={{ height: "40px" }} />
+                  <p style={{ margin: 0, fontWeight: 700, fontSize: "12.5px", color: "#003087" }}>{displayLegalRep || "ĐẠI DIỆN SEJONG"}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer with hotline only */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #e5e7eb", paddingTop: "8px", marginTop: "10px" }}>
+            <div style={{ fontSize: "10px", color: "#9ca3af" }}>
+              Website: www.seajong.com | Hotline: {(company.phone || "1900.633.862").replace(/[Hh]otline:\s*/gi, "").trim()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Page 3: Bản vẽ đính kèm */}
+      {(() => {
+        const drawingsList = [
+          { label: "Bản vẽ KV 1", url: info.fileKhuVuc1 },
+          { label: "Bản vẽ KV 2", url: info.fileKhuVuc2 },
+          { label: "Bản vẽ KV 3", url: info.fileKhuVuc3 },
+          { label: "Bản vẽ KV 4", url: info.fileKhuVuc4 },
+          { label: "Bản vẽ KV 5", url: info.fileKhuVuc5 },
+        ].filter(d => d.url);
+
+        if (!isCoQuayKe || drawingsList.length === 0) return null;
+
+        return (
+          <div className="print-paper print-drawings pdf-content-page" style={{
+            width: `${paperW}mm`,
+            height: `${paperH}mm`,
+            background: "#fff",
+            padding: "20mm 20mm 20mm 30mm",
+            boxSizing: "border-box",
+            position: "relative",
+            display: "flex",
+            flexDirection: "column",
+            fontFamily: "'Roboto Condensed', sans-serif"
+          }}>
+            {/* Top decorative bar */}
+            <div style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: "5px",
+              background: "linear-gradient(90deg, #003087 0%, #0056b3 100%)"
+            }} />
+
+            {/* Header: Logo and Brand Info */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1.5px solid #003087", paddingBottom: "8px", marginBottom: "12px" }}>
+              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                {company.logoUrl && <img src={company.logoUrl} alt="Logo" style={{ height: "38px", width: "auto", objectFit: "contain" }} />}
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: "12.5px", color: "#003087", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    {company.name || "CÔNG TY CỔ PHẦN SEJONG FAUCET VIỆT NAM"}
+                  </div>
+                  <div style={{ fontSize: "10px", color: "#6b7280" }}>
+                    Thương hiệu Thiết bị vệ sinh & Nhà bếp cao cấp Hàn Quốc
+                  </div>
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: "15px", fontWeight: 800, color: "#003087", letterSpacing: "1px", textTransform: "uppercase" }}>BẢN VẼ ĐÍNH KÈM</div>
+                <div style={{ fontSize: "11px", color: "#374151", fontStyle: "italic", marginTop: "2px" }}>Số báo giá: {localSoPhieu || info.soPhieu}</div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: "15px", minHeight: 0 }}>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: drawingsList.length === 1 ? "1fr" : "1fr 1fr",
+                gridTemplateRows: `repeat(${drawingsList.length <= 2 ? 1 : (drawingsList.length <= 4 ? 2 : 3)}, 1fr)`,
+                gap: "15px",
+                flex: 1,
+                minHeight: 0,
+                width: "100%"
+              }}>
+                {drawingsList.map((d, i) => {
+                  const spanFull = (drawingsList.length % 2 !== 0 && drawingsList.length > 1 && i === 0);
+                  return (
+                    <div key={d.label} style={{
+                      display: "flex", flexDirection: "column", alignItems: "center",
+                      gridColumn: spanFull ? "1 / -1" : undefined,
+                      minHeight: 0
+                    }}>
+                      <div style={{ fontSize: "11.5px", fontWeight: 700, color: "#003087", marginBottom: "4px", textTransform: "uppercase", flexShrink: 0 }}>{d.label}</div>
+                      <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", width: "100%" }}>
+                        <img src={d.url} alt={d.label} style={{
+                          maxWidth: "100%",
+                          maxHeight: "100%",
+                          objectFit: "contain",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: "4px"
+                        }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "8px", marginTop: "15px", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "10px", color: "#9ca3af" }}>
+              <div>Website: www.seajong.com</div>
+              <div>Hotline: 1900 636 845</div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Page 4: Chi tiết báo giá */}
+      <div className="print-paper print-details pdf-content-page" style={{
+        width: `${paperW}mm`,
+        minHeight: `${paperH}mm`,
+        background: "#fff",
+        padding: "15mm 16mm",
+        boxSizing: "border-box",
+        fontSize: 12.5,
+        lineHeight: 1.5,
+        fontFamily: "'Roboto Condensed', Arial Narrow, Arial, sans-serif",
+        color: "#111",
+        position: "relative"
+      }}>
+        {/* Header: Logo + Thông tin công ty (trái, cho phép xuống dòng địa chỉ) | BẢNG BÁO GIÁ (phải, không bị ép xuống dòng) */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 14, paddingBottom: 10, borderBottom: "2px solid #003087" }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start", position: "relative", flex: 1, minWidth: 0, maxWidth: "62%" }}>
+            {company.logoUrl && (
+              <img
+                src={company.logoUrl}
+                alt="Logo"
+                style={{ height: "46px", width: "auto", objectFit: "contain", flexShrink: 0, marginTop: 2 }}
+              />
+            )}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontWeight: 800, fontSize: 13, color: "#003087", textTransform: "uppercase", lineHeight: 1.35 }}>
+                {company.name ?? "CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM"}
+              </div>
+              {displayCompanyAddress && (
+                <div style={{ fontSize: 11.5, color: "#374151", marginTop: 2, lineHeight: 1.45, wordBreak: "break-word", whiteSpace: "normal" }}>
+                  Địa chỉ: {displayCompanyAddress}
+                </div>
+              )}
+              {(company.phone || company.email) && (
+                <div style={{ fontSize: 11.5, color: "#374151", marginTop: 2, lineHeight: 1.4, display: "flex", flexWrap: "wrap", gap: "2px 12px" }}>
+                  {company.phone && <span>Điện thoại: {company.phone.replace(/[Hh]otline:\s*/gi, "").trim()}</span>}
+                  {company.email && <span>Email: {company.email}</span>}
+                </div>
+              )}
+            </div>
+            {/* Con dấu treo Sejong Faucet */}
+            {showStamp && (
+              <img
+                src="/seajong_stampt.png"
+                alt="Sejong Stamp"
+                style={{
+                  position: "absolute",
+                  left: "22mm",
+                  top: "0mm",
+                  width: "36mm",
+                  height: "36mm",
+                  objectFit: "contain",
+                  opacity: 0.85,
+                  transform: "rotate(-10deg)",
+                  pointerEvents: "none",
+                  zIndex: 10
+                }}
+              />
+            )}
+          </div>
+          <div style={{ textAlign: "right", flexShrink: 0, whiteSpace: "nowrap" }}>
+            <div style={{ fontWeight: 900, fontSize: 22, letterSpacing: 1, color: "#003087", lineHeight: 1.2 }}>BẢNG BÁO GIÁ</div>
+            <div style={{ fontSize: 12, color: "#374151", marginTop: 4 }}>Số: <strong>{localSoPhieu || info.soPhieu}</strong></div>
+            <div style={{ fontSize: 12, color: "#374151", marginTop: 1 }}>Ngày lập: {fmtDate(localNgayLap || info.ngayLap)}</div>
+            <div style={{ fontSize: 12, color: "#374151", marginTop: 1 }}>Hiệu lực đến: {fmtDate(localHieuLuc || info.hieuLuc)}</div>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontWeight: 800, fontSize: 13, textTransform: "uppercase", color: "#003087", borderLeft: "3px solid #003087", paddingLeft: 8, marginBottom: 8 }}>
+            Thông tin khách hàng
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "5px 24px", fontSize: 12.5 }}>
+            <div><strong>Đơn vị:</strong> {localCustName || "—"}</div>
+            <div><strong>Người liên hệ:</strong> {localDaiDien || "—"}</div>
+            <div style={{ wordBreak: "break-word" }}><strong>Địa chỉ:</strong> {localCustAddress || "—"}</div>
+            <div><strong>Điện thoại:</strong> {localDienThoai || "—"}</div>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 12, fontSize: 12.5, color: "#374151", lineHeight: 1.55, textAlign: "justify" }}>
+          Công ty cổ phần Sejong Faucet Việt Nam trân trọng cảm ơn Quý khách hàng đã quan tâm đến sản phẩm của chúng tôi. Sejong xin gửi đến Quý khách hàng bảng báo giá các sản phẩm, thiết bị theo yêu cầu của Quý khách hàng với thông tin chi tiết như sau:
+        </div>
+
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 14, fontSize: 12 }}>
+          <thead>
+            <tr style={{ background: "#003087", color: "#fff" }}>
+              {isCoQuayKe ? (
+                <>
+                  <th style={{ padding: "7px 6px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", width: "42px", textTransform: "uppercase" }}>STT</th>
+                  <th style={{ padding: "7px 8px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", textTransform: "uppercase" }}>Tên hàng hoá</th>
+                  <th style={{ padding: "7px 6px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", width: "58px", textTransform: "uppercase" }}>Vị trí</th>
+                  <th style={{ padding: "7px 6px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", width: "62px", textTransform: "uppercase" }}>Quy cách</th>
+                  <th style={{ padding: "7px 8px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", width: "105px", textTransform: "uppercase" }}>Giá bán (đ)</th>
+                  <th style={{ padding: "7px 8px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", width: "105px", textTransform: "uppercase" }}>Giá đại lý (đ)</th>
+                </>
+              ) : (
+                ["STT", "Tên hàng hoá - Dịch vụ", "ĐVT", "Số lượng", "Đơn giá", "Thành tiền"].map((h) => (
+                  <th key={h} style={{ padding: "7px 8px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", textTransform: "uppercase" }}>{h}</th>
+                ))
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {(() => {
+              let globalIdx = 0;
+
+              if (!isCoQuayKe) {
+                return items.filter((it: any) => it.ten).map((it: any) => {
+                  globalIdx++;
+                  return (
+                    <tr key={it.id} style={{ background: globalIdx % 2 === 0 ? "#fff" : "#eff6ff" }}>
+                      <td style={{ padding: "6px 6px", textAlign: "center", border: "1px solid #dbeafe" }}>{globalIdx}</td>
+                      <td style={{ padding: "6px 8px", border: "1px solid #dbeafe" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          {showProductImage && it.imageUrl && (
+                            <HoverImage
+                              src={it.imageUrl.startsWith("http") ? `/api/image-proxy?url=${encodeURIComponent(it.imageUrl)}` : it.imageUrl}
+                              images={it.images || [it.imageUrl]}
+                              alt={it.ten}
+                              style={{ width: 44, height: 44, objectFit: "contain", borderRadius: 4, border: "1px solid #e5e7eb", background: "#fff", flexShrink: 0 }}
+                            />
+                          )}
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 12 }}>{it.ten}</div>
+                            {getProductCode(it) && (
+                              <div style={{ fontSize: "10.5px", color: "#4b5563", marginTop: "2px", fontFamily: "monospace" }}>
+                                Mã: {getProductCode(it)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: "6px 6px", textAlign: "center", border: "1px solid #dbeafe" }}>{it.dvt}</td>
+                      <td style={{ padding: "6px 6px", textAlign: "center", border: "1px solid #dbeafe" }}>{it.soLuong.toLocaleString("vi-VN")}</td>
+                      <td style={{ padding: "6px 8px", textAlign: "right", border: "1px solid #dbeafe" }}>{fmt(it.donGia)}</td>
+                      <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600, border: "1px solid #dbeafe" }}>{fmt(thanhTien(it))}</td>
+                    </tr>
+                  );
+                });
+              }
+
+              const validItems = items.filter((it: any) => it.ten);
+              const areas = Array.from(new Set(validItems.map((it: any) => it.viTri || "Khu vực 1"))) as string[];
+
+              return areas.map(areaName => {
+                const areaItems = validItems.filter((it: any) => (it.viTri || "Khu vực 1") === areaName);
+                if (areaItems.length === 0) return null;
+
+                return (
+                  <React.Fragment key={areaName}>
+                    <tr style={{ background: "#f8fafc", fontWeight: 800 }}>
+                      <td colSpan={6} style={{ padding: "6px 10px", color: "#003087", textTransform: "uppercase", fontSize: "11.5px", border: "1px solid #bfdbfe", background: "#f1f5f9" }}>
+                        {areaName}
+                      </td>
+                    </tr>
+                    {areaItems.map((it: any) => {
+                      globalIdx++;
+                      let viTriChiTiet = it.viTriChiTiet || "";
+                      try {
+                        if (it.ghiChu) {
+                          const parsed = JSON.parse(it.ghiChu);
+                          if (parsed && typeof parsed === "object") {
+                            viTriChiTiet = parsed.viTriChiTiet || parsed.viTri || "";
+                            if (viTriChiTiet.startsWith("Khu vực")) {
+                              viTriChiTiet = "";
+                            }
+                          }
+                        }
+                      } catch (e) { }
+
+                      return (
+                        <tr key={it.id} style={{ background: globalIdx % 2 === 0 ? "#fff" : "#eff6ff" }}>
+                          <td style={{ padding: "6px 6px", textAlign: "center", border: "1px solid #dbeafe" }}>{globalIdx}</td>
+                          <td style={{ padding: "6px 8px", border: "1px solid #dbeafe" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              {showProductImage && it.imageUrl && (
+                                <HoverImage
+                                  src={it.imageUrl.startsWith("http") ? `/api/image-proxy?url=${encodeURIComponent(it.imageUrl)}` : it.imageUrl}
+                                  images={it.images || [it.imageUrl]}
+                                  alt={it.ten}
+                                  style={{ width: 44, height: 44, objectFit: "contain", borderRadius: 4, border: "1px solid #e5e7eb", background: "#fff", flexShrink: 0 }}
+                                />
+                              )}
+                              <div>
+                                <div style={{ fontWeight: 600, fontSize: 12 }}>{it.ten}</div>
+                                {getProductCode(it) && (
+                                  <div style={{ fontSize: "10.5px", color: "#4b5563", marginTop: "2px", fontFamily: "monospace" }}>
+                                    Mã: {getProductCode(it)}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: "6px 6px", border: "1px solid #dbeafe", textAlign: "center" }}>
+                            {viTriChiTiet}
+                          </td>
+                          <td style={{ padding: "6px 6px", border: "1px solid #dbeafe", textAlign: "center" }}>{it.dvt}</td>
+                          <td style={{ padding: "6px 8px", textAlign: "right", border: "1px solid #dbeafe" }}>{fmt(it.donGia)}</td>
+                          <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600, border: "1px solid #dbeafe" }}>
+                            {fmt(it.giaDaiLy ?? it.thanhTien ?? 0)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </React.Fragment>
+                );
+              });
+            })()}
+          </tbody>
+        </table>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 220px", gap: 36 }}>
+          <div style={{ fontSize: 11.5, lineHeight: 1.5 }}>
+            {localGhiChu && (
+              <div style={{ color: "#374151", display: "flex", flexDirection: "column", gap: 5 }}>
+                {localGhiChu.split("\n").map((line: string, idx: number) => {
+                  const trimmed = line.trim();
+                  if (!trimmed) return null;
+                  if (trimmed.startsWith("-")) {
+                    return (
+                      <div key={idx} style={{ display: "flex", gap: 6, alignItems: "flex-start", textAlign: "justify" }}>
+                        <span style={{ flexShrink: 0 }}>-</span>
+                        <span>{trimmed.substring(1).trim()}</span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={idx} style={{ textAlign: "justify" }}>
+                      {trimmed}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div style={{ fontSize: 12 }}>
+            {[
+              ["Tổng tiền hàng (đ):", fmt(tamTinh)],
+              [`Chiết khấu (${info.chietKhauTong}%):`, fmt(ckTien)],
+              [`Thuế VAT (${info.thue}%):`, fmt(thueTien)],
+              ...(chiPhiThiCong > 0 ? [["Chi phí thi công (đ):", fmt(chiPhiThiCong)]] : [])
+            ].map(([l, v]) => (
+              <div key={l} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: "1px solid #e5e7eb" }}>
+                <span>{l}</span>
+                <strong>{v}</strong>
+              </div>
+            ))}
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderTop: "2px solid #003087", marginTop: 3, fontSize: 13.5 }}>
+              <span style={{ fontWeight: 800 }}>TỔNG CỘNG:</span>
+              <span style={{ fontWeight: 900, color: "#003087" }}>{fmt(tongCong)}</span>
+            </div>
+            <div style={{ fontSize: 11, fontStyle: "italic", textAlign: "right", marginTop: 2 }}>
+              ({numberToVNWords(tongCong)})
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end" }}>
+          <div style={{ textAlign: "center", minWidth: 160, fontSize: 12.5 }}>
+            <div style={{ fontWeight: 700 }}>ĐẠI DIỆN CÔNG TY</div>
+            <div style={{ fontStyle: "italic", fontSize: 11, color: "#6b7280", marginTop: 1 }}>(Ký, ghi rõ họ tên)</div>
+            <div style={{ height: 48 }} />
+            {displayLegalRep && <div style={{ fontWeight: 700, fontSize: 12.5 }}>{displayLegalRep}</div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;600;700;800;900&display=swap');
-        @media print {
-          @page {
-            size: A4 ${landscape ? "landscape" : "portrait"} !important;
-            margin: 0 !important;
-          }
-          * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          html, body {
-            height: auto !important;
-            overflow: visible !important;
-          }
-          #__next, main, div, section {
-            overflow: visible !important;
-            height: auto !important;
-            max-height: none !important;
-          }
-          body {
-            visibility: hidden !important;
-            background: #fff !important;
-          }
-          #print-preview-root, #print-preview-root * {
-            visibility: visible !important;
-          }
-          #print-preview-root {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            height: auto !important;
-            background: #fff !important;
-            display: block !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: visible !important;
-          }
-          .no-print {
-            display: none !important;
-          }
-          .print-paper {
-            box-shadow: none !important;
-            margin: 0 !important;
-            display: block !important;
-            box-sizing: border-box !important;
-            overflow: visible !important;
-          }
-          .print-cover {
-            width: ${landscape ? "297mm" : "210mm"} !important;
-            height: ${landscape ? "210mm" : "297mm"} !important;
-            page-break-after: always !important;
-            break-after: page !important;
-            padding: 20mm 20mm 20mm 30mm !important;
-            box-sizing: border-box !important;
-            background: #fff !important;
-          }
-          .print-letter {
-            width: ${landscape ? "297mm" : "210mm"} !important;
-            height: ${landscape ? "210mm" : "297mm"} !important;
-            page-break-after: always !important;
-            break-after: page !important;
-            padding: 20mm 20mm 20mm 30mm !important;
-            box-sizing: border-box !important;
-            background: #fff !important;
-          }
-          .print-details {
-            width: ${landscape ? "297mm" : "210mm"} !important;
-            min-height: ${landscape ? "210mm" : "297mm"} !important;
-            padding: 14mm 15mm !important;
-            box-sizing: border-box !important;
-            background: #fff !important;
-          }
-          .print-drawings {
-            width: ${landscape ? "297mm" : "210mm"} !important;
-            height: ${landscape ? "210mm" : "297mm"} !important;
-            page-break-after: always !important;
-            break-after: page !important;
-            padding: 20mm 20mm 20mm 30mm !important;
-            box-sizing: border-box !important;
-            background: #fff !important;
-          }
-        }
-        
         /* Force general text to black on simulated A4 paper pages (both on screen and print) */
-        #print-preview-root .print-paper p,
-        #print-preview-root .print-paper td,
-        #print-preview-root .print-paper div,
-        #print-preview-root .print-paper span,
-        #print-preview-root .print-paper strong,
-        #print-preview-root .print-paper a,
-        #print-preview-root .print-paper li {
+        #print-paper-doc .print-paper p,
+        #print-paper-doc .print-paper td,
+        #print-paper-doc .print-paper div,
+        #print-paper-doc .print-paper span,
+        #print-paper-doc .print-paper strong,
+        #print-paper-doc .print-paper a,
+        #print-paper-doc .print-paper li {
           color: #000 !important;
         }
         /* Keep table header text white */
-        #print-preview-root .print-paper th,
-        #print-preview-root .print-paper th * {
+        #print-paper-doc .print-paper th,
+        #print-paper-doc .print-paper th * {
           color: #fff !important;
         }
         /* Keep primary blue branding text */
-        #print-preview-root .print-paper [style*="color: #003087"],
-        #print-preview-root .print-paper [style*="color:#003087"],
-        #print-preview-root .print-paper [style*="color: rgb(0, 48, 135)"],
-        #print-preview-root .print-paper [style*="color:rgb(0,48,135)"],
-        #print-preview-root .print-paper [style*="color: #003087"] *,
-        #print-preview-root .print-paper [style*="color:#003087"] *,
-        #print-preview-root .print-paper [style*="color: rgb(0, 48, 135)"] *,
-        #print-preview-root .print-paper [style*="color:rgb(0,48,135)"] * {
+        #print-paper-doc .print-paper [style*="color: #003087"],
+        #print-paper-doc .print-paper [style*="color:#003087"],
+        #print-paper-doc .print-paper [style*="color: rgb(0, 48, 135)"],
+        #print-paper-doc .print-paper [style*="color:rgb(0,48,135)"],
+        #print-paper-doc .print-paper [style*="color: #003087"] *,
+        #print-paper-doc .print-paper [style*="color:#003087"] *,
+        #print-paper-doc .print-paper [style*="color: rgb(0, 48, 135)"] *,
+        #print-paper-doc .print-paper [style*="color:rgb(0,48,135)"] * {
           color: #003087 !important;
         }
       `}</style>
-      <div id="print-preview-root" style={initialAction === "pdf" ? { position: "absolute", left: "-9999px", top: "-9999px", width: "1000px", height: "auto", overflow: "hidden" } : { position: "fixed", inset: 0, zIndex: 4000, background: "#e8eaed", display: "flex", flexDirection: "column" }}>
-        <div className="no-print" style={{ height: 52, background: "#1f2937", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", flexShrink: 0 }}>
-          <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>Xem trước báo giá</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#d1d5db", fontSize: 13 }}>
-              <span>Khổ giấy:</span>
-              {(["Dọc", "Ngang"] as const).map((label, i) => (
-                <button key={label} onClick={() => setLandscape(i === 1)}
-                  style={{
-                    padding: "4px 12px", border: "1px solid", borderRadius: i === 0 ? "6px 0 0 6px" : "0 6px 6px 0", fontSize: 12, fontWeight: 600, cursor: "pointer",
-                    background: landscape === (i === 1) ? "#003087" : "transparent",
-                    borderColor: "#4b5563", color: landscape === (i === 1) ? "#fff" : "#9ca3af",
-                  }}>{label}</button>
-              ))}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#d1d5db", fontSize: 13, marginLeft: 8, marginRight: 8 }}>
-              <span>Con dấu:</span>
-              <div
-                onClick={() => setShowStamp(!showStamp)}
-                style={{
-                  width: 38,
-                  height: 20,
-                  borderRadius: 10,
-                  background: showStamp ? "#003087" : "#4b5563",
-                  position: "relative",
-                  cursor: "pointer",
-                  transition: "background-color 0.2s"
-                }}
-              >
-                <div
-                  style={{
-                    width: 16,
-                    height: 16,
-                    borderRadius: "50%",
-                    background: "#fff",
-                    position: "absolute",
-                    top: 2,
-                    left: showStamp ? 20 : 2,
-                    transition: "left 0.2s"
-                  }}
-                />
-              </div>
-            </div>
-            <button onClick={onClose} style={{ padding: "6px 16px", border: "1px solid #4b5563", background: "transparent", color: "#d1d5db", fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: "pointer" }}>Đóng</button>
-            <button onClick={handlePrint} style={{ padding: "6px 18px", border: "none", background: "#003087", color: "#fff", fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-              <i className="bi bi-printer" style={{ fontSize: 13 }} /> In
-            </button>
-            <button onClick={handleExportPDF} disabled={pdfUploading} style={{ padding: "6px 18px", border: "none", background: pdfUploading ? "#6b7280" : "#dc2626", color: "#fff", fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: pdfUploading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-              {pdfUploading ? (
-                <>
-                  <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" style={{ width: 13, height: 13, borderWidth: "2px" }} />
-                  <span>Đang xuất...</span>
-                </>
-              ) : (
-                <>
-                  <i className="bi bi-file-earmark-pdf" style={{ fontSize: 13 }} />
-                  <span>Xuất PDF</span>
-                </>
-              )}
-            </button>
-          </div>
+      {initialAction === "pdf" ? (
+        <div id="print-preview-root" style={{ position: "absolute", left: "-9999px", top: "-9999px", width: "1000px", height: "auto", overflow: "hidden" }}>
+          {documentPaperNodes}
         </div>
-        <div className="print-preview-container" style={{ flex: 1, overflowY: "auto", display: "flex", justifyContent: "center", alignItems: "flex-start", padding: "32px 24px" }}>
-          <div id="print-paper-doc" style={{ display: "flex", flexDirection: "column", gap: "24px", alignItems: "center" }}>
-            {/* Trang bìa cho báo giá đối tác/đại lý (Có quầy kệ) */}
-            {isCoQuayKe && (
-              <div className="print-paper print-cover" style={{
-                width: `${paperW}mm`,
-                height: `${paperH}mm`,
-                background: "#fff",
-                boxShadow: "0 4px 32px rgba(0,0,0,0.18)",
-                padding: "20mm 20mm 20mm 30mm",
-                boxSizing: "border-box",
-                fontSize: 10,
-                lineHeight: 1.5,
-                fontFamily: "'Roboto Condensed', Arial Narrow, Arial, sans-serif",
-                color: "#111",
-                position: "relative",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-                pageBreakAfter: "always",
-                breakAfter: "page"
-              }}>
-                {/* Header: Logo & Tên thương hiệu */}
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  {company.logoUrl && <img src={company.logoUrl} alt="Logo" style={{ height: "40px", width: "auto", objectFit: "contain" }} />}
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: 12, color: "#003087", textTransform: "uppercase", letterSpacing: 0.5 }}>
-                      {company.name || "CÔNG TY CỔ PHẦN SEJONG FAUCET VIỆT NAM"}
-                    </div>
-                    <div style={{ fontSize: 9, color: "#6b7280" }}>
-                      Thương hiệu Thiết bị vệ sinh & Nhà bếp cao cấp
-                    </div>
-                  </div>
-                </div>
-
-                {/* Banner hình ảnh bìa */}
-                <div style={{ width: "100%", textAlign: "center" }}>
-                  <img
-                    src="/seajong_cover.png"
-                    alt="Sejong Cover"
-                    style={{
-                      width: "100%",
-                      height: landscape ? "85mm" : "120mm",
-                      objectFit: "cover",
-                      borderRadius: 8,
-                      boxShadow: "0 4px 20px rgba(0,0,0,0.12)"
-                    }}
-                  />
-                </div>
-
-                {/* Tiêu đề chính */}
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ fontSize: 24, fontWeight: 900, color: "#003087", letterSpacing: 1, textTransform: "uppercase" }}>
-                    HỒ SƠ BÁO GIÁ
-                  </div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#4b5563", textTransform: "uppercase", marginTop: 4, letterSpacing: 0.5 }}>
-                    Dự án quầy kệ trưng bày thiết bị vệ sinh Sejong
-                  </div>
-                </div>
-
-                {/* Thông tin đối tác & Báo giá */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 30, borderTop: "2px solid #003087", paddingTop: 15, fontSize: 11 }}>
-                  <div>
-                    <div style={{ color: "#6b7280", fontWeight: 700, fontSize: 9, textTransform: "uppercase", marginBottom: 3 }}>
-                      Khách hàng / Đối tác
-                    </div>
-                    <div style={{ fontWeight: 800, color: "#111", fontSize: 13 }}>
-                      {customer?.name ?? "—"}
-                    </div>
-                    {customer?.address && (
-                      <div style={{ color: "#374151", marginTop: 3 }}>
-                        Địa chỉ: {customer.address}
-                      </div>
-                    )}
-                    {customer?.daiDien && (
-                      <div style={{ color: "#374151", marginTop: customer?.address ? 0 : 3 }}>
-                        Đại diện: {customer.xungHo ?? ""} {customer.daiDien}
-                      </div>
-                    )}
-                    {customer?.dienThoai && (
-                      <div style={{ color: "#374151" }}>
-                        Điện thoại: {customer.dienThoai}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <div style={{ color: "#6b7280", fontWeight: 700, fontSize: 9, textTransform: "uppercase", marginBottom: 3 }}>
-                      Thông tin hồ sơ
-                    </div>
-                    <div style={{ fontWeight: 800, color: "#003087", fontSize: 13 }}>
-                      Số: {info.soPhieu}
-                    </div>
-                    <div style={{ color: "#374151", marginTop: 3 }}>
-                      Ngày lập: {fmtDate(info.ngayLap)}
-                    </div>
-                    <div style={{ color: "#374151" }}>
-                      Hiệu lực: {fmtDate(info.hieuLuc)}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Footer chân trang */}
-                <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 9, color: "#9ca3af" }}>
-                  <div>Website: www.seajong.com</div>
-                  <div>Hotline: {(company.phone || "1900.633.862").replace(/[Hh]otline:\s*/gi, "").trim()}</div>
-                </div>
-              </div>
-            )}
-
-            {/* Page 2: Thư ngỏ cho báo giá đối tác/đại lý (Có quầy kệ) */}
-            {isCoQuayKe && (
-              <div className="print-paper print-letter" style={{
-                width: `${paperW}mm`,
-                height: `${paperH}mm`,
-                background: "#fff",
-                boxShadow: "0 4px 32px rgba(0,0,0,0.18)",
-                padding: "20mm 20mm 20mm 30mm",
-                boxSizing: "border-box",
-                fontSize: 11,
-                lineHeight: 1.45,
-                fontFamily: "'Roboto Condensed', Arial Narrow, Arial, sans-serif",
-                color: "#111",
-                position: "relative",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-                pageBreakAfter: "always",
-                breakAfter: "page"
-              }}>
-                {/* Top decorative bar */}
-                <div style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: "5px",
-                  background: "linear-gradient(90deg, #003087 0%, #0056b3 100%)"
-                }} />
-
-                <div>
-                  {/* Header: Logo and Brand Info */}
-                  <div style={{ display: "flex", gap: "12px", alignItems: "center", borderBottom: "1.5px solid #003087", paddingBottom: "8px", marginBottom: "12px" }}>
-                    {company.logoUrl && <img src={company.logoUrl} alt="Logo" style={{ height: "36px", width: "auto", objectFit: "contain" }} />}
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: "11px", color: "#003087", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                        {company.name || "CÔNG TY CỔ PHẦN SEJONG FAUCET VIỆT NAM"}
-                      </div>
-                      <div style={{ fontSize: "8.5px", color: "#6b7280" }}>
-                        Thương hiệu Thiết bị vệ sinh & Nhà bếp cao cấp Hàn Quốc
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Title of Letter */}
-                  <div style={{ textAlign: "center", margin: "8px 0 12px 0" }}>
-                    <div style={{ fontSize: "15px", fontWeight: 800, color: "#003087", letterSpacing: "1px", textTransform: "uppercase" }}>
-                      THƯ MỜI HỢP TÁC KINH DOANH
-                    </div>
-                    <div style={{ fontSize: "9.5px", color: "#4b5563", fontStyle: "italic", marginTop: "2px" }}>
-                      (V/v: Hợp tác Phát triển Đại lý / Nhà phân phối thiết bị vệ sinh Sejong)
-                    </div>
-                    <div style={{ width: "40px", height: "2px", background: "#003087", margin: "6px auto 0" }} />
-                  </div>
-
-                  {/* Salutation */}
-                  <p style={{ margin: "0 0 8px 0", fontSize: "11px" }}>
-                    <strong>Kính gửi: Quý Đối tác / Quý Khách hàng,</strong>
-                  </p>
-
-                  {/* Body Text */}
-                  <div style={{ textAlign: "justify", fontSize: "11px", color: "#374151" }}>
-                    <p style={{ margin: "0 0 6px 0" }}>
-                      Lời đầu tiên, Ban lãnh đạo cùng toàn thể đội ngũ <strong>{company.name || "Sejong Faucet Việt Nam"}</strong> xin gửi lời chào trân trọng, lời chúc sức khỏe và lời chúc cho hoạt động kinh doanh của Quý đối tác ngày càng phát triển thịnh vượng.
-                    </p>
-                    <p style={{ margin: "0 0 6px 0" }}>
-                      <strong>{company.name || "Sejong Faucet Việt Nam"}</strong> là đơn vị phân phối chính hãng các dòng sản phẩm thiết bị vệ sinh và phòng tắm cao cấp mang thương hiệu Hàn Quốc. Với nhiều năm kinh nghiệm trên thị trường, chúng tôi tự hào mang đến những dòng sản phẩm sở hữu công nghệ đột phá, thiết kế dẫn đầu xu hướng và độ bền vượt trội, đã và đang được hàng triệu người tiêu dùng, chủ thầu tin tưởng lựa chọn.
-                    </p>
-                    <p style={{ margin: "0 0 6px 0" }}>
-                      Với mục tiêu mở rộng mạng lưới phân phối và mang những sản phẩm chất lượng đến gần hơn với khách hàng trên toàn quốc, chúng tôi trân trọng gửi lời mời hợp tác kinh doanh đến Quý đối tác với vai trò là Đại lý chính thức.
-                    </p>
-                    <p style={{ margin: "0 0 10px 0" }}>
-                      Chúng tôi xin gửi kèm theo thư này Bảng báo giá sản phẩm dành riêng cho Đại lý cùng Chính sách chiết khấu thương mại mới nhất năm 2026.
-                    </p>
-
-                    {/* Bullet Points of Advantages (Beautiful Cards layout) */}
-                    <div style={{ fontWeight: 800, fontSize: "11px", color: "#003087", marginBottom: "6px", borderLeft: "3px solid #003087", paddingLeft: "6px" }}>
-                      NHỮNG ĐẶC QUYỀN VÀ CHÍNH SÁCH HỖ TRỢ TỐI ƯU DÀNH CHO ĐẠI LÝ:
-                    </div>
-
-                    <div style={{ display: "flex", flexDirection: "column", gap: "5px", marginBottom: "10px" }}>
-                      {[
-                        {
-                          title: "Chính sách giá & Chiết khấu hấp dẫn",
-                          desc: "Mức chiết khấu cao, cạnh tranh bậc nhất thị trường, đảm bảo biên độ lợi nhuận tối ưu và bền vững cho Đại lý. Có thưởng doanh số tháng/quý/năm cực kỳ linh hoạt.",
-                          icon: (
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#003087" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "2px" }}><line x1="19" y1="5" x2="5" y2="19"></line><circle cx="6.5" cy="6.5" r="2.5"></circle><circle cx="17.5" cy="17.5" r="2.5"></circle></svg>
-                          )
-                        },
-                        {
-                          title: "Sản phẩm chất lượng – Nguồn hàng ổn định",
-                          desc: "Sản phẩm có đầy đủ chứng nhận chất lượng (CO, CQ, ISO...), mẫu mã đa dạng, đón đầu xu hướng tiêu dùng. Kho hàng lớn, cam kết cung ứng kịp thời, không làm gián đoạn việc kinh doanh của Đại lý.",
-                          icon: (
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#003087" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "2px" }}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="m9 11 2 2 4-4"></path></svg>
-                          )
-                        },
-                        {
-                          title: "Hỗ trợ truyền thông và Marketing",
-                          desc: "Được hỗ trợ hình ảnh, video, catalogue, standee, biển bảng và tài liệu kỹ thuật. Công ty hỗ trợ đẩy data khách hàng khu vực trực tiếp về cho Đại lý.",
-                          icon: (
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#003087" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "2px" }}><path d="m3 11 18-5v12L3 13v-2z"></path><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>
-                          )
-                        },
-                        {
-                          title: "Hỗ trợ đào tạo & Kỹ thuật",
-                          desc: "Đội ngũ chuyên gia của chúng tôi sẽ đào tạo miễn phí về kiến thức sản phẩm, kỹ năng tư vấn chốt sales và hỗ trợ kỹ thuật lắp đặt 24/7.",
-                          icon: (
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#003087" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "2px" }}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
-                          )
-                        },
-                        {
-                          title: "Chính sách bảo hành và Hậu mãi dẫn đầu",
-                          desc: "Cam kết bảo hành chính hãng nhanh chóng, thủ tục đổi trả linh hoạt đối với các sản phẩm lỗi từ nhà sản xuất, bảo vệ uy tín tối đa cho Đại lý trước người tiêu dùng.",
-                          icon: (
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#003087" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "2px" }}><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
-                          )
-                        }
-                      ].map((item, index) => (
-                        <div key={index} style={{
-                          background: "#f8fafc",
-                          padding: "5px 10px",
-                          borderRadius: "4px"
-                        }}>
-                          <div style={{ display: "flex", gap: "8px", alignItems: "flex-start", marginBottom: "2px" }}>
-                            {item.icon}
-                            <div style={{ fontWeight: 700, color: "#003087", fontSize: "11px" }}>
-                              {index + 1}. {item.title}
-                            </div>
-                          </div>
-                          <div style={{ fontSize: "11px", color: "#475569", lineHeight: 1.35, paddingLeft: "21px" }}>
-                            {item.desc}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <p style={{ margin: "0 0 6px 0" }}>
-                      Chúng tôi tôn trọng triết lý kinh doanh <strong>"Hợp tác cùng phát triển – Chia sẻ thành công"</strong>. Chúng tôi tin tưởng rằng, sự nhạy bén trong kinh doanh của Quý đối tác kết hợp với chất lượng sản phẩm và chính sách vượt trội của chúng tôi sẽ tạo nên một bước bứt phá doanh thu mạnh mẽ cho cả hai bên.
-                    </p>
-                    <p style={{ margin: "0" }}>
-                      Một lần nữa, xin chân thành cảm ơn sự quan tâm của Quý đối tác. Kính chúc mối quan hệ hợp tác của chúng ta sớm được thiết lập và gặt hái nhiều thành công rực rỡ!
-                    </p>
-
-                    {/* Representative signature block */}
-                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
-                      <div style={{ textAlign: "center", minWidth: "150px" }}>
-                        <p style={{ margin: 0, fontWeight: 700, fontSize: "11px", color: "#374151" }}>Trân trọng,</p>
-                        <div style={{ height: "40px" }} />
-                        <p style={{ margin: 0, fontWeight: 700, fontSize: "11px", color: "#003087" }}>{company.legalRep || "ĐẠI DIỆN SEJONG"}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Footer with hotline only */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #e5e7eb", paddingTop: "8px", marginTop: "10px" }}>
-                  <div style={{ fontSize: "8.5px", color: "#9ca3af" }}>
-                    Website: www.seajong.com | Hotline: {(company.phone || "1900.633.862").replace(/[Hh]otline:\s*/gi, "").trim()}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Page 3: Bản vẽ đính kèm */}
-            {(() => {
-              const drawingsList = [
-                { label: "Bản vẽ KV 1", url: info.fileKhuVuc1 },
-                { label: "Bản vẽ KV 2", url: info.fileKhuVuc2 },
-                { label: "Bản vẽ KV 3", url: info.fileKhuVuc3 },
-                { label: "Bản vẽ KV 4", url: info.fileKhuVuc4 },
-                { label: "Bản vẽ KV 5", url: info.fileKhuVuc5 },
-              ].filter(d => d.url);
-
-              if (!isCoQuayKe || drawingsList.length === 0) return null;
-
-              return (
-                <div className="print-paper print-drawings" style={{
-                  width: `${paperW}mm`,
-                  height: `${paperH}mm`,
-                  background: "#fff",
-                  boxShadow: "0 4px 32px rgba(0,0,0,0.18)",
-                  padding: "20mm 20mm 20mm 30mm",
-                  boxSizing: "border-box",
-                  position: "relative",
-                  display: "flex",
-                  flexDirection: "column",
-                  fontFamily: "'Roboto Condensed', sans-serif"
-                }}>
-                  {/* Top decorative bar */}
-                  <div style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    height: "5px",
-                    background: "linear-gradient(90deg, #003087 0%, #0056b3 100%)"
-                  }} />
-
-                  {/* Header: Logo and Brand Info */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1.5px solid #003087", paddingBottom: "8px", marginBottom: "12px" }}>
-                    <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                      {company.logoUrl && <img src={company.logoUrl} alt="Logo" style={{ height: "36px", width: "auto", objectFit: "contain" }} />}
-                      <div>
-                        <div style={{ fontWeight: 800, fontSize: "11px", color: "#003087", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                          {company.name || "CÔNG TY CỔ PHẦN SEJONG FAUCET VIỆT NAM"}
-                        </div>
-                        <div style={{ fontSize: "8.5px", color: "#6b7280" }}>
-                          Thương hiệu Thiết bị vệ sinh & Nhà bếp cao cấp Hàn Quốc
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontSize: "14px", fontWeight: 800, color: "#003087", letterSpacing: "1px", textTransform: "uppercase" }}>BẢN VẼ ĐÍNH KÈM</div>
-                      <div style={{ fontSize: "9.5px", color: "#374151", fontStyle: "italic", marginTop: "2px" }}>Số báo giá: {info.soPhieu}</div>
-                    </div>
-                  </div>
-
-                  {/* Content */}
-                  <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: "15px", minHeight: 0 }}>
-                    <div style={{
-                      display: "grid",
-                      gridTemplateColumns: drawingsList.length === 1 ? "1fr" : "1fr 1fr",
-                      gridTemplateRows: `repeat(${drawingsList.length <= 2 ? 1 : (drawingsList.length <= 4 ? 2 : 3)}, 1fr)`,
-                      gap: "15px",
-                      flex: 1,
-                      minHeight: 0,
-                      width: "100%"
-                    }}>
-                      {drawingsList.map((d, i) => {
-                        // If odd number of items > 1, make the first one span full width to keep grid balanced
-                        const spanFull = (drawingsList.length % 2 !== 0 && drawingsList.length > 1 && i === 0);
-                        return (
-                          <div key={d.label} style={{
-                            display: "flex", flexDirection: "column", alignItems: "center",
-                            gridColumn: spanFull ? "1 / -1" : undefined,
-                            minHeight: 0
-                          }}>
-                            <div style={{ fontSize: "10px", fontWeight: 700, color: "#003087", marginBottom: "4px", textTransform: "uppercase", flexShrink: 0 }}>{d.label}</div>
-                            <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", width: "100%" }}>
-                              <img src={d.url} alt={d.label} style={{
-                                maxWidth: "100%",
-                                maxHeight: "100%",
-                                objectFit: "contain",
-                                border: "1px solid #e2e8f0",
-                                borderRadius: "4px"
-                              }} />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Footer (same style as cover letter footer) */}
-                  <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "8px", marginTop: "15px", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "8.5px", color: "#9ca3af" }}>
-                    <div>Website: www.seajong.com</div>
-                    <div>Hotline: 1900 636 845</div>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Page 4: Chi tiết báo giá */}
-            <div className="print-paper print-details" style={{
-              width: `${paperW}mm`,
-              minHeight: `${paperH}mm`,
-              background: "#fff",
-              boxShadow: "0 4px 32px rgba(0,0,0,0.18)",
-              padding: "14mm 15mm",
-              boxSizing: "border-box",
-              fontSize: 10,
-              lineHeight: 1.5,
-              fontFamily: "'Roboto Condensed', Arial Narrow, Arial, sans-serif",
-              color: "#111",
-              position: "relative"
-            }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, paddingBottom: 8, borderBottom: "2px solid #003087" }}>
-                <div style={{ display: "flex", gap: 10, alignItems: "center", position: "relative" }}>
-                  {company.logoUrl && <img src={company.logoUrl} alt="Logo" style={{ height: "40px", width: "auto", objectFit: "contain", flexShrink: 0 }} />}
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: 10.5, color: "#003087", textTransform: "uppercase" }}>{company.name ?? "Công ty"}</div>
-                    {company.address && <div style={{ fontSize: 9, color: "#374151", marginTop: 1 }}>Địa chỉ: {company.address}</div>}
-                    {(company.phone || company.email) && <div style={{ fontSize: 9, color: "#374151", display: "flex", gap: 12 }}>{company.phone && <span>Điện thoại: {company.phone.replace(/[Hh]otline:\s*/gi, "").trim()}</span>}{company.email && <span>Email: {company.email}</span>}</div>}
-                  </div>
-                  {/* Con dấu treo Sejong Faucet */}
-                  {showStamp && (
-                    <img
-                      src="/seajong_stampt.png"
-                      alt="Sejong Stamp"
-                      style={{
-                        position: "absolute",
-                        left: "22mm",
-                        top: "0mm",
-                        width: "36mm",
-                        height: "36mm",
-                        objectFit: "contain",
-                        opacity: 0.85,
-                        transform: "rotate(-10deg)",
-                        pointerEvents: "none",
-                        zIndex: 10
-                      }}
-                    />
-                  )}
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontWeight: 900, fontSize: 20, letterSpacing: 1, color: "#003087" }}>BẢNG BÁO GIÁ</div>
-                  <div style={{ fontSize: 11, color: "#374151", marginTop: 3 }}>Số: <strong>{info.soPhieu}</strong></div>
-                  <div style={{ fontSize: 11, color: "#374151" }}>Ngày lập: {fmtDate(info.ngayLap)}</div>
-                  <div style={{ fontSize: 11, color: "#374151" }}>Hiệu lực đến: {fmtDate(info.hieuLuc)}</div>
-                </div>
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontWeight: 800, fontSize: 12, textTransform: "uppercase", color: "#003087", borderLeft: "3px solid #003087", paddingLeft: 6, marginBottom: 6 }}>Thông tin khách hàng</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 20px", fontSize: 11 }}>
-                  <div><strong>Đơn vị:</strong> {customer?.name ?? "—"}</div>
-                  <div><strong>Người liên hệ:</strong> {customer?.daiDien ? `${customer.xungHo ?? ""} ${customer.daiDien}` : "—"}</div>
-                  <div><strong>Địa chỉ:</strong> {customer?.address ?? "—"}</div>
-                  <div><strong>Điện thoại:</strong> {customer?.dienThoai ?? "—"}</div>
-                </div>
-              </div>
-              <div style={{ marginBottom: 12, fontSize: 11, color: "#374151", lineHeight: 1.5, textAlign: "justify" }}>
-                Công ty cổ phần Sejong Faucet Việt Nam trân trọng cảm ơn Quý khách hàng đã quan tâm đến sản phẩm của chúng tôi. Sejong xin gửi đến Quý khách hàng bảng báo giá các sản phẩm, thiết bị theo yêu cầu của Quý khách hàng với thông tin chi tiết như sau:
-              </div>
-              <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 10, fontSize: 9.5 }}>
-                <thead>
-                  <tr style={{ background: "#003087", color: "#fff" }}>
-                    {isCoQuayKe ? (
-                      <>
-                        <th style={{ padding: "5px 6px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", width: "40px", textTransform: "uppercase" }}>STT</th>
-                        <th style={{ padding: "5px 6px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", textTransform: "uppercase" }}>Tên hàng hoá</th>
-                        <th style={{ padding: "5px 6px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", width: "50px", textTransform: "uppercase" }}>Vị trí</th>
-                        <th style={{ padding: "5px 6px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", width: "50px", textTransform: "uppercase" }}>Quy cách</th>
-                        <th style={{ padding: "5px 6px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", width: "95px", textTransform: "uppercase" }}>Giá bán (đ)</th>
-                        <th style={{ padding: "5px 6px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", width: "95px", textTransform: "uppercase" }}>Giá đại lý (đ)</th>
-                      </>
-                    ) : (
-                      ["STT", "Tên hàng hoá - Dịch vụ", "ĐVT", "Số lượng", "Đơn giá", "Thành tiền"].map((h, i) => (
-                        <th key={h} style={{ padding: "5px 6px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", textTransform: "uppercase" }}>{h}</th>
-                      ))
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    let globalIdx = 0;
-
-                    // If not CoQuayKe, we render flat list
-                    if (!isCoQuayKe) {
-                      return items.filter((it: any) => it.ten).map((it: any) => {
-                        globalIdx++;
-                        return (
-                          <tr key={it.id} style={{ background: globalIdx % 2 === 0 ? "#fff" : "#eff6ff" }}>
-                            <td style={{ padding: "4px 6px", textAlign: "center", border: "1px solid #dbeafe" }}>{globalIdx}</td>
-                            <td style={{ padding: "4px 6px", border: "1px solid #dbeafe" }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                {it.imageUrl && (
-                                  <HoverImage
-                                    src={it.imageUrl.startsWith("http") ? `/api/image-proxy?url=${encodeURIComponent(it.imageUrl)}` : it.imageUrl}
-                                    images={it.images || [it.imageUrl]}
-                                    alt={it.ten}
-                                    style={{ width: 42, height: 42, objectFit: "contain", borderRadius: 4, border: "1px solid #e5e7eb", background: "#fff", flexShrink: 0 }}
-                                  />
-                                )}
-                                <div>
-                                  <div style={{ fontWeight: 600 }}>{it.ten}</div>
-                                  {getProductCode(it) && (
-                                    <div style={{ fontSize: "8px", color: "#6b7280", marginTop: "2px", fontFamily: "monospace" }}>
-                                      Mã: {getProductCode(it)}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </td>
-                            <td style={{ padding: "4px 6px", textAlign: "center", border: "1px solid #dbeafe" }}>{it.dvt}</td>
-                            <td style={{ padding: "4px 6px", textAlign: "center", border: "1px solid #dbeafe" }}>{it.soLuong.toLocaleString("vi-VN")}</td>
-                            <td style={{ padding: "4px 6px", textAlign: "right", border: "1px solid #dbeafe" }}>{fmt(it.donGia)}</td>
-                            <td style={{ padding: "4px 6px", textAlign: "right", fontWeight: 600, border: "1px solid #dbeafe" }}>{fmt(thanhTien(it))}</td>
-                          </tr>
-                        );
-                      });
-                    }
-
-                    // If CoQuayKe, group items by Area name (viTri)
-                    const validItems = items.filter((it: any) => it.ten);
-                    const areas = Array.from(new Set(validItems.map((it: any) => it.viTri || "Khu vực 1"))) as string[];
-
-                    return areas.map(areaName => {
-                      const areaItems = validItems.filter((it: any) => (it.viTri || "Khu vực 1") === areaName);
-                      if (areaItems.length === 0) return null;
-
-                      return (
-                        <React.Fragment key={areaName}>
-                          {/* Area Header Row */}
-                          <tr style={{ background: "#f8fafc", fontWeight: 800 }}>
-                            <td colSpan={6} style={{ padding: "6px 10px", color: "#003087", textTransform: "uppercase", fontSize: "10px", border: "1px solid #bfdbfe", background: "#f1f5f9" }}>
-                              {areaName}
-                            </td>
-                          </tr>
-                          {/* Area Items */}
-                          {areaItems.map((it: any) => {
-                            globalIdx++;
-                            let viTriChiTiet = it.viTriChiTiet || "";
-                            try {
-                              if (it.ghiChu) {
-                                const parsed = JSON.parse(it.ghiChu);
-                                if (parsed && typeof parsed === "object") {
-                                  viTriChiTiet = parsed.viTriChiTiet || parsed.viTri || "";
-                                  if (viTriChiTiet.startsWith("Khu vực")) {
-                                    viTriChiTiet = "";
-                                  }
-                                }
-                              }
-                            } catch (e) { }
-
-                            return (
-                              <tr key={it.id} style={{ background: globalIdx % 2 === 0 ? "#fff" : "#eff6ff" }}>
-                                <td style={{ padding: "4px 6px", textAlign: "center", border: "1px solid #dbeafe" }}>{globalIdx}</td>
-                                <td style={{ padding: "4px 6px", border: "1px solid #dbeafe" }}>
-                                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                    {it.imageUrl && (
-                                      <HoverImage
-                                        src={it.imageUrl.startsWith("http") ? `/api/image-proxy?url=${encodeURIComponent(it.imageUrl)}` : it.imageUrl}
-                                        images={it.images || [it.imageUrl]}
-                                        alt={it.ten}
-                                        style={{ width: 42, height: 42, objectFit: "contain", borderRadius: 4, border: "1px solid #e5e7eb", background: "#fff", flexShrink: 0 }}
-                                      />
-                                    )}
-                                    <div>
-                                      <div style={{ fontWeight: 600 }}>{it.ten}</div>
-                                      {getProductCode(it) && (
-                                        <div style={{ fontSize: "8px", color: "#6b7280", marginTop: "2px", fontFamily: "monospace" }}>
-                                          Mã: {getProductCode(it)}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </td>
-                                <td style={{ padding: "4px 6px", border: "1px solid #dbeafe", textAlign: "center" }}>
-                                  {viTriChiTiet}
-                                </td>
-                                <td style={{ padding: "4px 6px", border: "1px solid #dbeafe", textAlign: "center" }}>{it.dvt}</td>
-                                <td style={{ padding: "4px 6px", textAlign: "right", border: "1px solid #dbeafe" }}>{fmt(it.donGia)}</td>
-                                <td style={{ padding: "4px 6px", textAlign: "right", fontWeight: 600, border: "1px solid #dbeafe" }}>
-                                  {fmt(it.giaDaiLy ?? it.thanhTien ?? 0)}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </React.Fragment>
-                      );
-                    });
-                  })()}
-                </tbody>
-              </table>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 180px", gap: 60 }}>
-                <div style={{ fontSize: 9 }}>
-                  {info.ghiChu && (
-                    <div style={{ color: "#374151", display: "flex", flexDirection: "column", gap: 5 }}>
-                      {info.ghiChu.split("\n").map((line: string, idx: number) => {
-                        const trimmed = line.trim();
-                        if (!trimmed) return null;
-                        if (trimmed.startsWith("-")) {
-                          return (
-                            <div key={idx} style={{ display: "flex", gap: 6, alignItems: "flex-start", textAlign: "justify" }}>
-                              <span style={{ flexShrink: 0 }}>-</span>
-                              <span>{trimmed.substring(1).trim()}</span>
-                            </div>
-                          );
-                        }
-                        return (
-                          <div key={idx} style={{ textAlign: "justify" }}>
-                            {trimmed}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-                <div style={{ fontSize: 9.5 }}>
-                  {[
-                    ["Tổng tiền hàng (đ):", fmt(tamTinh)],
-                    [`Chiết khấu (${info.chietKhauTong}%):`, fmt(ckTien)],
-                    [`Thuế VAT (${info.thue}%):`, fmt(thueTien)],
-                    ...(chiPhiThiCong > 0 ? [["Chi phí thi công (đ):", fmt(chiPhiThiCong)]] : [])
-                  ].map(([l, v]) => (
-                    <div key={l} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", borderBottom: "1px solid #e5e7eb" }}><span>{l}</span><strong>{v}</strong></div>
-                  ))}
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderTop: "2px solid #003087", marginTop: 2 }}><span style={{ fontWeight: 800 }}>TỔNG CỘNG:</span><span style={{ fontWeight: 900, color: "#003087" }}>{fmt(tongCong)}</span></div>
-                  <div style={{ fontSize: 8.5, fontStyle: "italic", textAlign: "right" }}>({numberToVNWords(tongCong)})</div>
-                </div>
-              </div>
-              <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end" }}>
-                <div style={{ textAlign: "center", minWidth: 140, fontSize: 9.5 }}>
-                  <div style={{ fontWeight: 700 }}>ĐẠI DIỆN CÔNG TY</div>
-                  <div style={{ fontStyle: "italic", fontSize: 9, color: "#6b7280" }}>(Ký, ghi rõ họ tên)</div>
-                  <div style={{ height: 40 }} />
-                  {company.legalRep && <div style={{ fontWeight: 700 }}>{company.legalRep}</div>}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      ) : (
+        <SharedPrintPreviewModal
+          title="Xem trước Báo giá"
+          subtitle={
+            <>
+              Số: <strong style={{ color: "#0f172a", fontFamily: "monospace" }}>{localSoPhieu || info.soPhieu || "—"}</strong>
+              &nbsp;·&nbsp;Khách hàng: <span style={{ color: "#0284c7", fontWeight: 600 }}>{localCustName || "Khách hàng vãng lai"}</span>
+            </>
+          }
+          actions={actionsContent}
+          sidebar={sidebarContent}
+          document={documentPaperNodes}
+          onClose={onClose}
+          documentId="bao-gia-preview-wrapper"
+          printOrientation={landscape ? "landscape" : "portrait"}
+        />
+      )}
     </>
   );
 }
@@ -1720,6 +1841,25 @@ export function BaoGiaSanitaryModal({ open, onClose, customer, editData, onSaved
         }
         setItems(mappedItems);
         nextId.current = (editData.items.length ?? 0) + 1;
+      } else {
+        setSoKhuVuc(1);
+        setTyLeGiaDaiLy(80);
+        setItems([
+          {
+            id: 1,
+            ten: "",
+            dvt: "",
+            soLuong: 1,
+            donGia: 0,
+            ckPct: 0,
+            soLuongTon: null,
+            trangThaiKho: null,
+            inventoryId: null,
+            giaDaiLy: isCoQuayKeEdit ? 0 : undefined,
+            viTri: isCoQuayKeEdit ? "Khu vực 1" : undefined,
+          },
+        ]);
+        nextId.current = 2;
       }
     } else {
       // Reset về trạng thái mới khi không phải edit
@@ -2799,7 +2939,7 @@ export function BaoGiaSanitaryModal({ open, onClose, customer, editData, onSaved
             size="sm"
             className="sanitary-modal-header-btn sanitary-modal-header-btn-aux"
             disabled={!hasValidItems}
-            onClick={() => { setPrintOpen(true); setPrintAction("print"); }}
+            onClick={() => { setPrintAction(""); setPrintOpen(true); }}
             leftIcon={<i className="bi bi-printer" style={{ fontSize: 13 }} />}
             style={{ padding: "6px 14px", height: 36, borderRadius: 8, fontSize: 13, fontWeight: 600 }}
           >
@@ -3586,29 +3726,28 @@ export function BaoGiaSanitaryModal({ open, onClose, customer, editData, onSaved
                               <tr>
                                 <td colSpan={7} style={{ padding: "8px 12px", borderBottom: "1px solid #e2e8f0" }}>
                                   <button
-                                    disabled={areaItems.some(it => !it.ten.trim())}
+                                    type="button"
                                     onClick={() => {
                                       setItems(r => [...r, { id: nextId.current++, ten: "", dvt: "", soLuong: 1, donGia: 0, ckPct: 0, soLuongTon: null, trangThaiKho: null, inventoryId: null, giaDaiLy: 0, viTri: areaName }]);
                                     }}
                                     style={{
-                                      padding: "5px 12px",
+                                      padding: "6px 14px",
                                       border: "1px dashed var(--color-primary, #0284c7)",
-                                      background: "none",
+                                      background: "rgba(2, 132, 199, 0.03)",
                                       borderRadius: 6,
-                                      cursor: areaItems.some(it => !it.ten.trim()) ? "not-allowed" : "pointer",
-                                      opacity: areaItems.some(it => !it.ten.trim()) ? 0.5 : 1,
+                                      cursor: "pointer",
                                       color: "var(--color-primary, #0284c7)",
-                                      fontSize: 12,
+                                      fontSize: 12.5,
                                       fontWeight: 600,
-                                      display: "flex",
+                                      display: "inline-flex",
                                       alignItems: "center",
-                                      gap: 5,
+                                      gap: 6,
                                       transition: "all 0.15s"
                                     }}
-                                    onMouseEnter={e => { if (!areaItems.some(it => !it.ten.trim())) e.currentTarget.style.background = "rgba(2, 132, 199, 0.05)"; }}
-                                    onMouseLeave={e => { e.currentTarget.style.background = "none"; }}
+                                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(2, 132, 199, 0.08)"; }}
+                                    onMouseLeave={e => { e.currentTarget.style.background = "rgba(2, 132, 199, 0.03)"; }}
                                   >
-                                    <i className="bi bi-plus-lg" /> Thêm dòng vào {areaName}
+                                    <i className="bi bi-plus-lg" /> Thêm hàng hoá vào {areaName}
                                   </button>
                                 </td>
                               </tr>
@@ -3618,7 +3757,60 @@ export function BaoGiaSanitaryModal({ open, onClose, customer, editData, onSaved
                       );
                     })
                   ) : (
-                    items.map((it, idx) => renderQuayKeRow(it, idx))
+                    <>
+                      {items.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} style={{ padding: "20px 12px", textAlign: "center", color: "#64748b" }}>
+                            Chưa có sản phẩm nào. Nhấn <b>+ Thêm hàng hoá</b> bên dưới để bổ sung.
+                          </td>
+                        </tr>
+                      ) : (
+                        items.map((it, idx) => renderQuayKeRow(it, idx))
+                      )}
+                      <tr>
+                        <td colSpan={7} style={{ padding: "10px 12px", borderBottom: "1px solid #e2e8f0" }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setItems(r => [
+                                ...r,
+                                {
+                                  id: nextId.current++,
+                                  ten: "",
+                                  dvt: "",
+                                  soLuong: 1,
+                                  donGia: 0,
+                                  ckPct: 0,
+                                  soLuongTon: null,
+                                  trangThaiKho: null,
+                                  inventoryId: null,
+                                  giaDaiLy: 0,
+                                  viTri: "Khu vực 1",
+                                },
+                              ]);
+                            }}
+                            style={{
+                              padding: "6px 14px",
+                              border: "1px dashed var(--color-primary, #0284c7)",
+                              background: "rgba(2, 132, 199, 0.03)",
+                              borderRadius: 6,
+                              cursor: "pointer",
+                              color: "var(--color-primary, #0284c7)",
+                              fontSize: 12.5,
+                              fontWeight: 600,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              transition: "all 0.15s",
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = "rgba(2, 132, 199, 0.08)"; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = "rgba(2, 132, 199, 0.03)"; }}
+                          >
+                            <i className="bi bi-plus-lg" /> Thêm hàng hoá
+                          </button>
+                        </td>
+                      </tr>
+                    </>
                   )
                 ) : (
                   items.filter(it => it.ten.trim().length > 0).length === 0 ? (
@@ -3647,13 +3839,48 @@ export function BaoGiaSanitaryModal({ open, onClose, customer, editData, onSaved
                             })()}
                           </div>
                         </td>
-                        <td style={{ padding: 6, textAlign: "center", color: "#334155" }}>{it.dvt}</td>
-                        <td style={{ padding: 6, textAlign: "center", color: "#334155" }}>{it.soLuong}</td>
-                        <td style={{ padding: 6, textAlign: "center", color: "#334155" }}>{it.ckPct}</td>
-                        <td style={{ padding: 6, textAlign: "right", color: "#334155" }}>{fmt(it.donGia)}</td>
+                        <td style={{ padding: 6 }}>
+                          <Input
+                            value={it.dvt}
+                            onChange={e => updateRow(it.id, "dvt", e.target.value)}
+                            style={{ height: 34, textAlign: "center" }}
+                          />
+                        </td>
+                        <td style={{ padding: 6 }}>
+                          <Input
+                            type="number"
+                            value={it.soLuong}
+                            hideZero={false}
+                            numberGroup={true}
+                            allowDecimal={false}
+                            onNumericChange={v => updateRow(it.id, "soLuong", Math.max(1, v || 1))}
+                            style={{ height: 34, textAlign: "center" }}
+                          />
+                        </td>
+                        <td style={{ padding: 6 }}>
+                          <Input
+                            type="number"
+                            value={it.ckPct}
+                            hideZero={false}
+                            numberGroup={false}
+                            onNumericChange={v => updateRow(it.id, "ckPct", Math.max(0, Math.min(100, v)))}
+                            style={{ height: 34, textAlign: "center" }}
+                          />
+                        </td>
+                        <td style={{ padding: 6 }}>
+                          <Input
+                            type="number"
+                            value={it.donGia}
+                            numberGroup={true}
+                            allowDecimal={false}
+                            placeholder="0"
+                            onNumericChange={v => updateRow(it.id, "donGia", Math.max(0, v))}
+                            style={{ height: 34, textAlign: "right" }}
+                          />
+                        </td>
                         <td style={{ padding: 6, textAlign: "right", fontWeight: 700, color: "#0f172a" }}>{fmt(thanhTien(it))} đ</td>
                         <td style={{ padding: 6 }}>
-                          <button onClick={() => removeRow(it.id)} style={{ padding: 4, background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}>
+                          <button type="button" onClick={() => removeRow(it.id)} style={{ padding: 4, background: "none", border: "none", color: "#ef4444", cursor: "pointer" }} title="Xoá dòng">
                             <i className="bi bi-trash" />
                           </button>
                         </td>
@@ -3824,7 +4051,16 @@ export function BaoGiaSanitaryModal({ open, onClose, customer, editData, onSaved
           </div>
         </div>
       </div>
-      <PrintPreviewModal open={printOpen} onClose={() => { setPrintOpen(false); setPrintAction(""); }} customer={customer} items={items} info={info} initialAction={printAction} />
+      <PrintPreviewModal
+        open={printOpen}
+        onClose={() => { setPrintOpen(false); setPrintAction(""); }}
+        customer={{ ...customer, ...custInfo }}
+        items={items}
+        info={info}
+        initialAction={printAction}
+        onUpdateInfo={setInfo}
+        onUpdateCustomer={setCustInfo}
+      />
     </div>
   );
 }

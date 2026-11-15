@@ -208,7 +208,10 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
       <div className="flex-1 flex min-h-0 relative overflow-hidden">
         {/* SIDEBAR TÙY CHỌN & CHỮ KÝ */}
         {sidebar && showSidebar && (
-          <aside className="w-80 bg-white border-r border-slate-200 flex flex-col shrink-0 overflow-y-auto p-4 gap-4 shadow-sm z-10 animate-fade-in">
+          <aside
+            className="w-[400px] bg-white border-r border-slate-200 flex flex-col shrink-0 overflow-y-auto p-4 gap-4 shadow-sm z-10 animate-fade-in"
+            style={{ width: 400 }}
+          >
             {sidebar}
           </aside>
         )}

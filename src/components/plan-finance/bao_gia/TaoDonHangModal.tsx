@@ -17,7 +17,9 @@ import {
   Input,
   Select,
   Toggle,
+  DatePicker,
 } from "@/components/common";
+import { PrintPreviewModal as SharedPrintPreviewModal, printStyles } from "@/components/common/PrintPreviewModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export type CustomerRow = {
@@ -146,6 +148,597 @@ const resolveProductBrandType = (item: any): "Seajong" | "OEM" | "" => {
   return "";
 };
 
+const SLabel = ({ children }: { children: React.ReactNode }) => (
+  <p style={{ margin: "0 0 4px", fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+    {children}
+  </p>
+);
+
+function OrderPrintPreviewModal({ open, onClose, customer, custInfo, items, info }: {
+  open: boolean;
+  onClose: () => void;
+  customer: CustomerRow | null;
+  custInfo: any;
+  items: OrderItem[];
+  info: any;
+}) {
+  const { user } = useAuth();
+  const toast = useToast();
+  const [landscape, setLandscape] = React.useState(false);
+  const [company, setCompany] = React.useState<any>({});
+  const [pdfUploading, setPdfUploading] = React.useState(false);
+  const [showStamp, setShowStamp] = React.useState(true);
+  const [showProductImage, setShowProductImage] = React.useState(false);
+
+  const [localSoPhieu, setLocalSoPhieu] = React.useState(info?.soPhieu || "");
+  const [localNgayLap, setLocalNgayLap] = React.useState(info?.ngayLap || "");
+  const [localNgayGiao, setLocalNgayGiao] = React.useState(info?.ngayGiaoHang || "");
+  const [localCustName, setLocalCustName] = React.useState(customer?.name || custInfo?.name || info?.tenNguoiNhan || "");
+  const [localNguoiNhan, setLocalNguoiNhan] = React.useState(info?.tenNguoiNhan || customer?.name || custInfo?.name || "");
+  const [localDienThoai, setLocalDienThoai] = React.useState(info?.sdtNguoiNhan || customer?.dienThoai || custInfo?.dienThoai || "");
+  const [localDiaChiGiao, setLocalDiaChiGiao] = React.useState(info?.diaChiGiaoHang || customer?.address || custInfo?.address || "");
+  const [localLegalRep, setLocalLegalRep] = React.useState("");
+  const [localGhiChu, setLocalGhiChu] = React.useState(info?.ghiChu || "");
+
+  React.useEffect(() => {
+    if (!open) return;
+    setLocalSoPhieu(info?.soPhieu || "");
+    setLocalNgayLap(info?.ngayLap || "");
+    setLocalNgayGiao(info?.ngayGiaoHang || "");
+    setLocalCustName(customer?.name || custInfo?.name || info?.tenNguoiNhan || "");
+    setLocalNguoiNhan(info?.tenNguoiNhan || customer?.name || custInfo?.name || "");
+    setLocalDienThoai(info?.sdtNguoiNhan || customer?.dienThoai || custInfo?.dienThoai || "");
+    setLocalDiaChiGiao(info?.diaChiGiaoHang || customer?.address || custInfo?.address || "");
+    setLocalGhiChu(info?.ghiChu || "");
+  }, [open, info, customer, custInfo]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    fetch("/api/company")
+      .then(r => r.json())
+      .then(data => {
+        setCompany(data);
+        setLocalLegalRep(prev => prev || data?.legalRep || (user as any)?.fullName || (user as any)?.name || "");
+      })
+      .catch(() => { });
+  }, [open, user]);
+
+  if (!open) return null;
+
+  const fmt = (n: number) => Math.round(n || 0).toLocaleString("vi-VN");
+  const thanhTien = (it: OrderItem) => it.soLuong * it.donGia * (1 - (it.ckPct || 0) / 100);
+  const tamTinh = items.reduce((s, it) => s + thanhTien(it), 0);
+  const ckTien = tamTinh * (info?.chietKhauTong || 0) / 100;
+  const truocThue = tamTinh - ckTien;
+  const thueTien = truocThue * (info?.thue || 0) / 100;
+  const chiPhiKhac = Number(info?.chiPhiKhac || 0);
+  const tongCong = truocThue + thueTien + chiPhiKhac;
+  const daThanhToan = Number(info?.daThanhToan || 0);
+  const conLai = Math.max(0, tongCong - daThanhToan);
+
+  const fmtDate = (iso: string) => {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return `${String(d.getDate()).padStart(2, "0")} tháng ${String(d.getMonth() + 1).padStart(2, "0")} năm ${d.getFullYear()}`;
+  };
+
+  const paperW = landscape ? 297 : 210;
+  const paperH = landscape ? 210 : 297;
+  const displayCompanyAddress = company.address || "";
+  const displayLegalRep = localLegalRep !== "" ? localLegalRep : (company.legalRep || "");
+
+  const handlePrint = () => {
+    const docEl = document.getElementById("order-print-paper-doc");
+    if (!docEl) { window.print(); return; }
+
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;opacity:0;";
+    document.body.appendChild(iframe);
+
+    const iDoc = iframe.contentDocument ?? iframe.contentWindow?.document;
+    if (!iDoc) { window.print(); return; }
+
+    iDoc.open();
+    iDoc.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Đơn bán hàng ${localSoPhieu || info?.soPhieu || ""}</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;600;700;800;900&display=swap">
+  <style>
+    * { 
+      box-sizing: border-box; 
+      -webkit-print-color-adjust: exact !important; 
+      print-color-adjust: exact !important; 
+    }
+    @page { 
+      size: A4 ${landscape ? "landscape" : "portrait"}; 
+      margin: 0 !important; 
+    }
+    body { 
+      margin: 0; padding: 0; 
+      font-family: 'Roboto Condensed', Arial Narrow, Arial, sans-serif; 
+      font-size: 12.5px; color: #111; 
+      background: #fff;
+    }
+    .print-details {
+      width: ${landscape ? "297mm" : "210mm"} !important;
+      min-height: ${landscape ? "210mm" : "297mm"} !important;
+      background: #fff !important;
+      padding: 15mm 16mm !important;
+      box-sizing: border-box !important;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th {
+      background-color: #003087 !important;
+      color: #fff !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+  </style>
+</head>
+<body>
+  ${docEl.innerHTML}
+</body>
+</html>`);
+    iDoc.close();
+
+    setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      setTimeout(() => {
+        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+      }, 2000);
+    }, 600);
+  };
+
+  const handleExportPDF = async () => {
+    if (pdfUploading) return;
+    setPdfUploading(true);
+    try {
+      const html2pdf = (await import("html2pdf.js")).default;
+      const element = document.getElementById("order-print-paper-doc") as HTMLElement;
+      if (!element) {
+        toast.error("Lỗi", "Không tìm thấy nội dung đơn hàng");
+        setPdfUploading(false);
+        return;
+      }
+
+      const pages = element.querySelectorAll(".print-paper") as NodeListOf<HTMLElement>;
+      const originalShadows: string[] = [];
+      pages.forEach((page, idx) => {
+        originalShadows[idx] = page.style.boxShadow;
+        page.style.boxShadow = "none";
+      });
+
+      const docCode = localSoPhieu || info?.soPhieu || "SO";
+      const opt = {
+        margin: 0,
+        filename: `Don_hang_${docCode}.pdf`,
+        image: { type: "jpeg" as const, quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: "mm" as const, format: "a4" as const, orientation: (landscape ? "landscape" : "portrait") as "landscape" | "portrait" },
+        pagebreak: { mode: ["avoid-all", "css"] }
+      };
+
+      await html2pdf().set(opt).from(element).save();
+
+      pages.forEach((page, idx) => {
+        page.style.boxShadow = originalShadows[idx];
+      });
+      toast.success("Thành công", `Đã xuất file PDF đơn hàng ${docCode}`);
+    } catch (err: any) {
+      console.error("Lỗi xuất PDF đơn hàng:", err);
+      toast.error("Lỗi", err?.message || "Không thể xuất file PDF");
+    } finally {
+      setPdfUploading(false);
+    }
+  };
+
+  const inp = printStyles.sidebarInput;
+
+  const sidebarContent = (
+    <>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingBottom: 12, borderBottom: "1px solid #e2e8f0" }}>
+        <SLabel>Tùy chọn bản in</SLabel>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: "#0f172a" }}>Khổ giấy A4</span>
+          <div style={{ display: "inline-flex", borderRadius: 6, border: "1px solid #cbd5e1", overflow: "hidden", background: "#f8fafc" }}>
+            {(["Dọc", "Ngang"] as const).map((label, i) => {
+              const active = landscape === (i === 1);
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setLandscape(i === 1)}
+                  style={{
+                    padding: "4px 12px",
+                    border: "none",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    background: active ? "var(--color-primary, #0284c7)" : "transparent",
+                    color: active ? "#ffffff" : "#475569",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, alignItems: "center" }}>
+          <Toggle
+            checked={showStamp}
+            onChange={setShowStamp}
+            label="Đóng dấu"
+          />
+          <Toggle
+            checked={showProductImage}
+            onChange={setShowProductImage}
+            label="Hình ảnh"
+          />
+        </div>
+      </div>
+
+      <div>
+        <SLabel>Số đơn hàng</SLabel>
+        <Input
+          value={localSoPhieu}
+          onChange={e => setLocalSoPhieu(e.target.value)}
+          placeholder="Nhập số đơn hàng..."
+        />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div>
+          <SLabel>Ngày đặt hàng</SLabel>
+          <DatePicker
+            value={localNgayLap}
+            onChange={setLocalNgayLap}
+          />
+        </div>
+        <div>
+          <SLabel>Ngày giao dự kiến</SLabel>
+          <DatePicker
+            value={localNgayGiao}
+            onChange={setLocalNgayGiao}
+          />
+        </div>
+      </div>
+
+      <div>
+        <SLabel>Đơn vị / Khách hàng</SLabel>
+        <Input
+          value={localCustName}
+          onChange={e => setLocalCustName(e.target.value)}
+          placeholder="Tên đơn vị / khách hàng..."
+        />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div>
+          <SLabel>Người nhận hàng</SLabel>
+          <Input
+            value={localNguoiNhan}
+            onChange={e => setLocalNguoiNhan(e.target.value)}
+            placeholder="Họ tên người nhận..."
+          />
+        </div>
+        <div>
+          <SLabel>Điện thoại</SLabel>
+          <Input
+            value={localDienThoai}
+            onChange={e => setLocalDienThoai(e.target.value)}
+            placeholder="Số điện thoại..."
+          />
+        </div>
+      </div>
+
+      <div>
+        <SLabel>Địa chỉ giao hàng</SLabel>
+        <Input
+          value={localDiaChiGiao}
+          onChange={e => setLocalDiaChiGiao(e.target.value)}
+          placeholder="Địa chỉ giao hàng..."
+        />
+      </div>
+
+      <div>
+        <SLabel>Người đại diện ký tên</SLabel>
+        <Input
+          value={localLegalRep}
+          onChange={e => setLocalLegalRep(e.target.value)}
+          placeholder="Họ tên đại diện công ty..."
+        />
+      </div>
+
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 140 }}>
+        <SLabel>Điều khoản & Ghi chú đơn hàng</SLabel>
+        <textarea
+          value={localGhiChu}
+          onChange={e => setLocalGhiChu(e.target.value)}
+          placeholder="Ghi chú giao hàng, điều khoản thanh toán..."
+          style={{ ...inp, flex: 1, minHeight: 110, resize: "none", lineHeight: 1.5 }}
+        />
+      </div>
+    </>
+  );
+
+  const actionsContent = (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        leftIcon={<i className="bi bi-printer" />}
+        onClick={handlePrint}
+      >
+        In đơn hàng
+      </Button>
+      <Button
+        variant="primary"
+        size="sm"
+        leftIcon={<i className="bi bi-file-earmark-pdf" />}
+        isLoading={pdfUploading}
+        disabled={pdfUploading}
+        onClick={handleExportPDF}
+      >
+        {pdfUploading ? "Đang xuất..." : "Xuất PDF"}
+      </Button>
+    </>
+  );
+
+  const documentPaperNodes = (
+    <div id="order-print-paper-doc" style={{ display: "flex", flexDirection: "column", gap: "24px", alignItems: "center", width: "100%" }}>
+      <div className="print-paper print-details pdf-content-page" style={{
+        width: `${paperW}mm`,
+        minHeight: `${paperH}mm`,
+        background: "#fff",
+        padding: "15mm 16mm",
+        boxSizing: "border-box",
+        fontSize: 12.5,
+        lineHeight: 1.5,
+        fontFamily: "'Roboto Condensed', Arial Narrow, Arial, sans-serif",
+        color: "#111",
+        position: "relative"
+      }}>
+        {/* Header: Logo + Thông tin công ty (trái) | ĐƠN BÁN HÀNG (phải) */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 14, paddingBottom: 10, borderBottom: "2px solid #003087" }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start", position: "relative", flex: 1, minWidth: 0, maxWidth: "62%" }}>
+            {company.logoUrl && (
+              <img
+                src={company.logoUrl}
+                alt="Logo"
+                style={{ height: "46px", width: "auto", objectFit: "contain", flexShrink: 0, marginTop: 2 }}
+              />
+            )}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontWeight: 800, fontSize: 13, color: "#003087", textTransform: "uppercase", lineHeight: 1.35 }}>
+                {company.name ?? "CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM"}
+              </div>
+              {displayCompanyAddress && (
+                <div style={{ fontSize: 11.5, color: "#374151", marginTop: 2, lineHeight: 1.45, wordBreak: "break-word", whiteSpace: "normal" }}>
+                  Địa chỉ: {displayCompanyAddress}
+                </div>
+              )}
+              {(company.phone || company.email) && (
+                <div style={{ fontSize: 11.5, color: "#374151", marginTop: 2, lineHeight: 1.4, display: "flex", flexWrap: "wrap", gap: "2px 12px" }}>
+                  {company.phone && <span>Điện thoại: {company.phone.replace(/[Hh]otline:\s*/gi, "").trim()}</span>}
+                  {company.email && <span>Email: {company.email}</span>}
+                </div>
+              )}
+            </div>
+            {showStamp && (
+              <img
+                src="/seajong_stampt.png"
+                alt="Sejong Stamp"
+                style={{
+                  position: "absolute",
+                  left: "22mm",
+                  top: "0mm",
+                  width: "36mm",
+                  height: "36mm",
+                  objectFit: "contain",
+                  opacity: 0.85,
+                  transform: "rotate(-10deg)",
+                  pointerEvents: "none",
+                  zIndex: 10
+                }}
+              />
+            )}
+          </div>
+          <div style={{ textAlign: "right", flexShrink: 0, whiteSpace: "nowrap" }}>
+            <div style={{ fontWeight: 900, fontSize: 22, letterSpacing: 1, color: "#003087", lineHeight: 1.2 }}>ĐƠN BÁN HÀNG</div>
+            <div style={{ fontSize: 12, color: "#374151", marginTop: 4 }}>Số: <strong>{localSoPhieu || info?.soPhieu}</strong></div>
+            <div style={{ fontSize: 12, color: "#374151", marginTop: 1 }}>Ngày đặt: {fmtDate(localNgayLap || info?.ngayLap)}</div>
+            <div style={{ fontSize: 12, color: "#374151", marginTop: 1 }}>Ngày giao: {fmtDate(localNgayGiao || info?.ngayGiaoHang)}</div>
+          </div>
+        </div>
+
+        {/* Thông tin khách hàng */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontWeight: 800, fontSize: 13, textTransform: "uppercase", color: "#003087", borderLeft: "3px solid #003087", paddingLeft: 8, marginBottom: 8 }}>
+            Thông tin khách hàng & Giao nhận
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "5px 24px", fontSize: 12.5 }}>
+            <div><strong>Khách hàng / Đơn vị:</strong> {localCustName || "—"}</div>
+            <div><strong>Người nhận hàng:</strong> {localNguoiNhan || "—"}</div>
+            <div style={{ wordBreak: "break-word" }}><strong>Địa chỉ giao hàng:</strong> {localDiaChiGiao || "—"}</div>
+            <div><strong>Điện thoại:</strong> {localDienThoai || "—"}</div>
+          </div>
+        </div>
+
+        {/* Bảng danh sách sản phẩm */}
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 14, fontSize: 12 }}>
+          <thead>
+            <tr style={{ background: "#003087", color: "#fff" }}>
+              <th style={{ padding: "7px 6px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", width: 40, textTransform: "uppercase" }}>STT</th>
+              <th style={{ padding: "7px 8px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", textTransform: "uppercase" }}>Tên hàng hoá - Dịch vụ</th>
+              <th style={{ padding: "7px 6px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", width: 65, textTransform: "uppercase" }}>ĐVT</th>
+              <th style={{ padding: "7px 6px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", width: 70, textTransform: "uppercase" }}>Số lượng</th>
+              <th style={{ padding: "7px 6px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", width: 65, textTransform: "uppercase" }}>CK (%)</th>
+              <th style={{ padding: "7px 8px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", width: 105, textTransform: "uppercase" }}>Đơn giá</th>
+              <th style={{ padding: "7px 8px", textAlign: "center", fontWeight: 700, border: "1px solid #93c5fd", width: 115, textTransform: "uppercase" }}>Thành tiền</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.filter(it => it.ten).map((it, idx) => {
+              const activeDm = (it.dinhMucs || []).find((dm: any) => dm.id === it.dinhMucId) || (it.dinhMucs && it.dinhMucs.length > 0 ? it.dinhMucs[0] : null);
+              const dmCode = activeDm?.code || it.bomCode || it.code;
+              const moTaDm = it.dinhMucTen || activeDm?.tenDinhMuc;
+              return (
+                <tr key={it.id} style={{ background: (idx + 1) % 2 === 0 ? "#fff" : "#eff6ff" }}>
+                  <td style={{ padding: "6px 6px", textAlign: "center", border: "1px solid #dbeafe" }}>{idx + 1}</td>
+                  <td style={{ padding: "6px 8px", border: "1px solid #dbeafe" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      {showProductImage && it.imageUrl && (
+                        <img
+                          src={it.imageUrl.startsWith("http") ? `/api/image-proxy?url=${encodeURIComponent(it.imageUrl)}` : it.imageUrl}
+                          alt={it.ten}
+                          style={{ width: 40, height: 40, objectFit: "contain", borderRadius: 4, border: "1px solid #e5e7eb", background: "#fff", flexShrink: 0 }}
+                        />
+                      )}
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 12 }}>{it.ten}</div>
+                        {(dmCode || moTaDm) && (
+                          <div style={{ fontSize: 10.5, color: "#4b5563", marginTop: 2 }}>
+                            {dmCode && <span style={{ fontFamily: "monospace", marginRight: 6 }}>Mã: {dmCode}</span>}
+                            {moTaDm && <span style={{ fontStyle: "italic" }}>{moTaDm}</span>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td style={{ padding: "6px 6px", textAlign: "center", border: "1px solid #dbeafe" }}>{it.dvt}</td>
+                  <td style={{ padding: "6px 6px", textAlign: "center", border: "1px solid #dbeafe" }}>{it.soLuong.toLocaleString("vi-VN")}</td>
+                  <td style={{ padding: "6px 6px", textAlign: "center", border: "1px solid #dbeafe" }}>{it.ckPct || 0}%</td>
+                  <td style={{ padding: "6px 8px", textAlign: "right", border: "1px solid #dbeafe" }}>{fmt(it.donGia)}</td>
+                  <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600, border: "1px solid #dbeafe" }}>{fmt(thanhTien(it))}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {/* Ghi chú & Tổng cộng */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 240px", gap: 36 }}>
+          <div style={{ fontSize: 11.5, lineHeight: 1.5 }}>
+            {localGhiChu && (
+              <div style={{ color: "#374151", display: "flex", flexDirection: "column", gap: 5 }}>
+                <div style={{ fontWeight: 700, color: "#0f172a" }}>Ghi chú đơn hàng:</div>
+                {localGhiChu.split("\n").map((line: string, idx: number) => {
+                  const trimmed = line.trim();
+                  if (!trimmed) return null;
+                  return (
+                    <div key={idx} style={{ textAlign: "justify" }}>
+                      {trimmed}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div style={{ fontSize: 12 }}>
+            {[
+              ["Tổng tiền hàng (đ):", fmt(tamTinh)],
+              [`Chiết khấu (${info?.chietKhauTong || 0}%):`, fmt(ckTien)],
+              [`Thuế VAT (${info?.thue || 0}%):`, fmt(thueTien)],
+              ...(chiPhiKhac > 0 ? [["Chi phí khác (đ):", fmt(chiPhiKhac)]] : []),
+            ].map(([l, v]) => (
+              <div key={l} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: "1px solid #e5e7eb" }}>
+                <span>{l}</span>
+                <strong>{v}</strong>
+              </div>
+            ))}
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderTop: "2px solid #003087", marginTop: 3, fontSize: 13.5 }}>
+              <span style={{ fontWeight: 800 }}>TỔNG CỘNG:</span>
+              <span style={{ fontWeight: 900, color: "#003087" }}>{fmt(tongCong)}</span>
+            </div>
+            {daThanhToan > 0 && (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderTop: "1px dashed #e5e7eb" }}>
+                  <span>Đã thanh toán:</span>
+                  <strong>{fmt(daThanhToan)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+                  <span>Còn lại phải thu:</span>
+                  <strong style={{ color: "#dc2626" }}>{fmt(conLai)}</strong>
+                </div>
+              </>
+            )}
+            <div style={{ fontSize: 11, fontStyle: "italic", textAlign: "right", marginTop: 4 }}>
+              ({numberToVNWords(tongCong)})
+            </div>
+          </div>
+        </div>
+
+        {/* Chữ ký */}
+        <div style={{ marginTop: 28, display: "flex", justifyContent: "space-between", padding: "0 24px" }}>
+          <div style={{ textAlign: "center", minWidth: 160, fontSize: 12.5 }}>
+            <div style={{ fontWeight: 700 }}>ĐẠI DIỆN KHÁCH HÀNG</div>
+            <div style={{ fontStyle: "italic", fontSize: 11, color: "#6b7280", marginTop: 1 }}>(Ký, ghi rõ họ tên)</div>
+            <div style={{ height: 48 }} />
+            {localNguoiNhan && <div style={{ fontWeight: 700, fontSize: 12.5 }}>{localNguoiNhan}</div>}
+          </div>
+          <div style={{ textAlign: "center", minWidth: 160, fontSize: 12.5 }}>
+            <div style={{ fontWeight: 700 }}>ĐẠI DIỆN CÔNG TY</div>
+            <div style={{ fontStyle: "italic", fontSize: 11, color: "#6b7280", marginTop: 1 }}>(Ký, ghi rõ họ tên)</div>
+            <div style={{ height: 48 }} />
+            {displayLegalRep && <div style={{ fontWeight: 700, fontSize: 12.5 }}>{displayLegalRep}</div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;600;700;800;900&display=swap');
+        #order-print-paper-doc .print-paper p,
+        #order-print-paper-doc .print-paper td,
+        #order-print-paper-doc .print-paper div,
+        #order-print-paper-doc .print-paper span,
+        #order-print-paper-doc .print-paper strong,
+        #order-print-paper-doc .print-paper a,
+        #order-print-paper-doc .print-paper li {
+          color: #000 !important;
+        }
+        #order-print-paper-doc .print-paper th,
+        #order-print-paper-doc .print-paper th * {
+          color: #fff !important;
+        }
+        #order-print-paper-doc .print-paper [style*="color: #003087"],
+        #order-print-paper-doc .print-paper [style*="color:#003087"],
+        #order-print-paper-doc .print-paper [style*="color: rgb(0, 48, 135)"],
+        #order-print-paper-doc .print-paper [style*="color:rgb(0,48,135)"] {
+          color: #003087 !important;
+        }
+      `}</style>
+      <SharedPrintPreviewModal
+        title="Xem trước Đơn bán hàng"
+        subtitle={
+          <>
+            Số: <strong style={{ color: "#0f172a", fontFamily: "monospace" }}>{localSoPhieu || info?.soPhieu || "—"}</strong>
+            &nbsp;·&nbsp;Khách hàng: <span style={{ color: "#0284c7", fontWeight: 600 }}>{localCustName || "Khách hàng"}</span>
+          </>
+        }
+        actions={actionsContent}
+        sidebar={sidebarContent}
+        document={documentPaperNodes}
+        onClose={onClose}
+        documentId="order-print-preview-wrapper"
+        printOrientation={landscape ? "landscape" : "portrait"}
+      />
+    </>
+  );
+}
+
 // ── Main TaoDonHangModal Component ──────────────────────────────────────────
 export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agency", editOrder, mode = "order" }: {
   open: boolean;
@@ -190,12 +783,41 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
 
   const [showInfoSidebar, setShowInfoSidebar] = React.useState(false);
   const [showBomMenu, setShowBomMenu] = React.useState(false);
+  const [showOrderPrintPreview, setShowOrderPrintPreview] = React.useState(false);
   const [mobileSlide, setMobileSlide] = React.useState<"info" | "items">("info");
   const mobileTouchStartRef = React.useRef<{ x: number; y: number } | null>(null);
+  const latchedEditOrderRef = React.useRef<any>(null);
+
+  if (open && editOrder) {
+    latchedEditOrderRef.current = editOrder;
+  } else if (!open) {
+    latchedEditOrderRef.current = null;
+  }
+  const activeEditOrder = editOrder || (open ? latchedEditOrderRef.current : null);
+
+  const isOrderReadOnly = React.useMemo(() => {
+    if (isQuotation || !activeEditOrder) return false;
+    const sLower = String(activeEditOrder.trangThai || "").trim().toLowerCase();
+    const kt = String(activeEditOrder.keToanDuyet || "").trim().toLowerCase();
+    if (kt === "rejected" || ["cancelled", "canceled", "rejected", "huỷ bỏ", "hủy bỏ"].includes(sLower)) {
+      return false;
+    }
+    if (["paused", "tạm dừng"].includes(sLower)) {
+      return false;
+    }
+    if (["done", "completed", "delivered", "hoàn thành", "hoàn tất"].includes(sLower)) {
+      return true;
+    }
+    if (kt === "pending" || ["pending", "draft", "pending_approval", "chưa thực hiện"].includes(sLower)) {
+      return false;
+    }
+    return true;
+  }, [isQuotation, activeEditOrder]);
 
   React.useEffect(() => {
     if (open) {
       setMobileSlide("info");
+      setShowOrderPrintPreview(false);
     }
   }, [open]);
 
@@ -233,30 +855,10 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
     nguon: customer?.nguon || null,
   });
 
-  // Sync customer details when passed
   React.useEffect(() => {
-    if (customer && !editOrder) {
-      setCustInfo({
-        id: customer.id || "",
-        name: customer.name || "",
-        dienThoai: customer.dienThoai || "",
-        address: customer.address || "",
-        nhom: customer.nhom || "ca-nhan",
-        nguon: customer.nguon || null,
-      });
-      setInfo(prev => ({
-        ...prev,
-        soPhieu: isQuotation ? "BG-Tự động tạo" : "DBH-Tự động tạo",
-        tenNguoiNhan: customer.name || prev.tenNguoiNhan || "",
-        sdtNguoiNhan: customer.dienThoai || prev.sdtNguoiNhan || "",
-        diaChiGiaoHang: customer.address || prev.diaChiGiaoHang || "",
-      }));
-    }
-  }, [customer, editOrder, isQuotation]);
-
-  React.useEffect(() => {
-    if (open && editOrder) {
-      let rawGhiChu = editOrder.ghiChu || "";
+    if (!open) return;
+    if (activeEditOrder) {
+      let rawGhiChu = (activeEditOrder.ghiChu || "").replace(/\[OrderEditedAt:.*?\]\n?/g, "");
       let tenNguoiNhan = "";
       let sdtNguoiNhan = "";
       let diaChiGiaoHang = "";
@@ -275,7 +877,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
       const lines = rawGhiChu.split("\n");
       const remainingLines = [];
       let chiPhiKhac = 0;
-      let parsedDaThanhToan = editOrder.daThanhToan || 0;
+      let parsedDaThanhToan = activeEditOrder.daThanhToan || 0;
       for (const line of lines) {
         if (line.startsWith("Tên khách hàng: ")) { tenNguoiNhan = line.replace("Tên khách hàng: ", ""); continue; }
         if (line.startsWith("Số điện thoại: ")) { sdtNguoiNhan = line.replace("Số điện thoại: ", ""); continue; }
@@ -296,33 +898,33 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
 
       setInfo(prev => ({
         ...prev,
-        soPhieu: editOrder.code || editOrder.id || prev.soPhieu || "DBH-Tự động tạo",
-        ngayLap: editOrder.ngayDat ? new Date(editOrder.ngayDat).toISOString().split("T")[0] : prev.ngayLap,
-        ngayGiaoHang: editOrder.ngayGiao ? new Date(editOrder.ngayGiao).toISOString().split("T")[0] : prev.ngayGiaoHang,
-        ghiChu: rawGhiChu || prev.ghiChu || "",
-        tenNguoiNhan: tenNguoiNhan || editOrder.nguoiNhan || editOrder.customer?.name || prev.tenNguoiNhan || "",
-        sdtNguoiNhan: sdtNguoiNhan || editOrder.soDienThoai || editOrder.customer?.dienThoai || prev.sdtNguoiNhan || "",
-        diaChiGiaoHang: diaChiGiaoHang || editOrder.diaChiGiaoHang || editOrder.customer?.address || prev.diaChiGiaoHang || "",
-        chiPhiKhac: editOrder.chiPhiKhac || chiPhiKhac || 0,
-        chietKhauTong: editOrder.discount || 0,
-        thue: editOrder.vat || 0,
+        soPhieu: activeEditOrder.code || activeEditOrder.id || prev.soPhieu || "DBH-Tự động tạo",
+        ngayLap: activeEditOrder.ngayDat ? new Date(activeEditOrder.ngayDat).toISOString().split("T")[0] : prev.ngayLap,
+        ngayGiaoHang: activeEditOrder.ngayGiao ? new Date(activeEditOrder.ngayGiao).toISOString().split("T")[0] : prev.ngayGiaoHang,
+        ghiChu: rawGhiChu || "",
+        tenNguoiNhan: tenNguoiNhan || activeEditOrder.nguoiNhan || activeEditOrder.customer?.name || "",
+        sdtNguoiNhan: sdtNguoiNhan || activeEditOrder.soDienThoai || activeEditOrder.customer?.dienThoai || "",
+        diaChiGiaoHang: diaChiGiaoHang || activeEditOrder.diaChiGiaoHang || activeEditOrder.customer?.address || "",
+        chiPhiKhac: activeEditOrder.chiPhiKhac || chiPhiKhac || 0,
+        chietKhauTong: activeEditOrder.discount || 0,
+        thue: activeEditOrder.vat || 0,
         daThanhToan: parsedDaThanhToan || 0
       }));
-      if (editOrder.customer) {
+      if (activeEditOrder.customer) {
         setCustInfo({
-          id: editOrder.customer.id || "",
-          name: editOrder.customer.name || "",
-          dienThoai: editOrder.customer.dienThoai || "",
-          address: editOrder.customer.address || "",
-          nhom: editOrder.customer.nhom || "ca-nhan",
-          nguon: editOrder.customer.nguon || null,
+          id: activeEditOrder.customer.id || "",
+          name: activeEditOrder.customer.name || "",
+          dienThoai: activeEditOrder.customer.dienThoai || "",
+          address: activeEditOrder.customer.address || "",
+          nhom: activeEditOrder.customer.nhom || "ca-nhan",
+          nguon: activeEditOrder.customer.nguon || null,
         });
       }
-      if (editOrder.items && editOrder.items.length > 0) {
-        setItems(editOrder.items.map((it: any) => ({
+      if (activeEditOrder.items && activeEditOrder.items.length > 0) {
+        setItems(activeEditOrder.items.map((it: any) => ({
           id: nextId.current++,
           ten: it.tenHang || "",
-          dvt: it.donVi || "cái",
+          dvt: it.donVi || it.donViTinh || "Bộ",
           soLuong: Number(it.soLuong) || 1,
           donGia: Number(it.donGia) || 0,
           ckPct: (() => {
@@ -335,8 +937,10 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
           })(),
           soLuongTon: null,
           trangThaiKho: null,
-          inventoryId: null,
-          code: null,
+          inventoryId: it.inventoryItemId || null,
+          code: (() => {
+            try { return JSON.parse(it.ghiChu || "{}").code || null; } catch { return null; }
+          })(),
           khoTen: (() => {
             try { return JSON.parse(it.ghiChu || "{}").khoTen || ""; } catch { return ""; }
           })(),
@@ -359,9 +963,61 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
             try { return JSON.parse(it.ghiChu || "{}").bomCode || null; } catch { return null; }
           })()
         })));
+      } else {
+        setItems([]);
       }
+    } else {
+      const t = new Date().toISOString().split("T")[0];
+      nextId.current = 1;
+      setItems([]);
+      setFormItem({
+        id: -1,
+        ten: "",
+        khoTen: "",
+        brandType: "",
+        dvt: "cái",
+        soLuong: 1,
+        donGia: 0,
+        ckPct: 0,
+        soLuongTon: null,
+        trangThaiKho: null,
+        inventoryId: null,
+        imageUrl: null,
+        code: null,
+        dinhMucs: [],
+        dinhMucId: null,
+        dinhMucTen: null,
+        source: "",
+        loiNhuanKyVong: 0,
+        phuongPhapTinhLoiNhuan: "revenue",
+        baseGiaBan: 0,
+      });
+      setInfo({
+        soPhieu: isQuotation ? "BG-Tự động tạo" : "DBH-Tự động tạo",
+        ngayLap: t,
+        ngayGiaoHang: t,
+        tenNguoiNhan: customer?.name || "",
+        sdtNguoiNhan: customer?.dienThoai || "",
+        diaChiGiaoHang: customer?.address || "",
+        ghiChu: "",
+        chietKhauTong: 0,
+        thue: 0,
+        chiPhiKhac: 0,
+        daThanhToan: 0,
+        isChuyenKhoan: true,
+      });
+      setCustInfo({
+        id: customer?.id || "",
+        name: customer?.name || "",
+        dienThoai: customer?.dienThoai || "",
+        address: customer?.address || "",
+        nhom: customer?.nhom || "ca-nhan",
+        nguon: customer?.nguon || null,
+      });
+      setSaveError("");
+      setExpandedBOMRows({});
     }
-  }, [open, editOrder]);
+  }, [open, activeEditOrder, customer, isQuotation]);
 
   const [debtInfo, setDebtInfo] = React.useState<{ outstandingDebt: number; creditLimit: number } | null>(null);
   const [isCustomerNew, setIsCustomerNew] = React.useState(true);
@@ -892,10 +1548,12 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
   };
 
   const setInfoField = (k: string) => (e: any) => {
+    if (isOrderReadOnly) return;
     setInfo(f => ({ ...f, [k]: e.target.type === "number" ? Number(e.target.value) : e.target.value }));
   };
 
   const addRow = () => {
+    if (isOrderReadOnly) return;
     if (!formItem.ten.trim()) {
       toast.error("Lỗi", "Vui lòng chọn hoặc nhập tên sản phẩm");
       return;
@@ -909,6 +1567,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
   };
 
   const removeRow = (id: number) => {
+    if (isOrderReadOnly) return;
     setItems(r => r.filter(x => x.id !== id));
     if (formItem.id === id) {
       setFormItem({ id: -1, ten: "", khoTen: "", brandType: "", dvt: "cái", soLuong: 1, donGia: 0, ckPct: 0, soLuongTon: null, trangThaiKho: null, inventoryId: null, imageUrl: null, code: null, dinhMucs: [], dinhMucId: null, dinhMucTen: null, source: "", loiNhuanKyVong: 0, phuongPhapTinhLoiNhuan: "revenue", baseGiaBan: 0 });
@@ -977,6 +1636,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
 
 
   const handleSave = async () => {
+    if (isOrderReadOnly) return;
     if (!info.soPhieu.trim()) {
       setSaveError("Vui lòng nhập số đơn hàng");
       return;
@@ -1046,17 +1706,36 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
         }
       }
 
-      if (editOrder) {
+      const existingOrderId =
+        activeEditOrder?.id ||
+        activeEditOrder?.code ||
+        (!isQuotation &&
+        info.soPhieu &&
+        info.soPhieu.trim() !== "DBH-Tự động tạo" &&
+        info.soPhieu.trim() !== "BG-Tự động tạo" &&
+        info.soPhieu.trim() !== "Đang tải..."
+          ? info.soPhieu.trim()
+          : null);
+
+      if (existingOrderId) {
         const updatePayload = {
+          ngayDat: info.ngayLap,
           ngayGiao: info.ngayGiaoHang,
+          nguoiNhan: info.tenNguoiNhan?.trim() || custInfo.name || "",
+          soDienThoai: info.sdtNguoiNhan?.trim() || custInfo.dienThoai || "",
+          diaChiGiaoHang: info.diaChiGiaoHang?.trim() || custInfo.address || "",
+          customerId: finalCustomerId || undefined,
           ghiChu: finalGhiChu,
           tongTien: tongCong,
           daThanhToan: info.daThanhToan,
           isChuyenKhoan: info.isChuyenKhoan,
           discount: info.chietKhauTong,
           vat: info.thue,
-          items: validItems.map((it, idx) => ({
+          isOrderContentUpdate: true,
+          items: validItems.map((it) => ({
+            inventoryItemId: it.inventoryId || null,
             tenHang: it.ten.trim(),
+            donVi: it.dvt || "Bộ",
             soLuong: it.soLuong,
             donGia: it.donGia,
             thanhTien: thanhTien(it),
@@ -1070,7 +1749,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
             })
           }))
         };
-        const res = await fetch(`/api/plan-finance/sales/${editOrder.id}`, {
+        const res = await fetch(`/api/plan-finance/sales/${encodeURIComponent(existingOrderId)}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(updatePayload),
@@ -1078,7 +1757,10 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
         if (!res.ok) throw new Error((await res.json()).error ?? "Lỗi cập nhật");
         const updatedResult = await res.json().catch(() => ({}));
         const displayCode = updatedResult.code || updatedResult.order?.code || info.soPhieu;
-        toast.success("Cập nhật thành công", `Đơn hàng ${displayCode} đã được lưu.`);
+        toast.success(
+          "Cập nhật đơn hàng thành công",
+          `Đơn hàng ${displayCode} đã được cập nhật và gửi thông báo đến bộ phận Kế toán.`
+        );
       } else {
         const payload = {
           code: info.soPhieu.trim(),
@@ -1690,13 +2372,17 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
             <p className="order-modal-header-title" style={{ margin: 0, fontWeight: 800, fontSize: 16, color: "#0f172a", letterSpacing: "-0.01em", display: "flex", alignItems: "center", gap: 8 }}>
               <span className="hidden sm:inline">
                 {isQuotation
-                  ? editOrder ? "Cập nhật báo giá (BG)" : "Lập báo giá (BG)"
-                  : editOrder ? "Cập nhật đơn bán hàng (SO)" : "Lập đơn bán hàng (SO)"}
+                  ? activeEditOrder ? "Cập nhật báo giá (BG)" : "Lập báo giá (BG)"
+                  : isOrderReadOnly
+                    ? "Chi tiết đơn bán hàng (SO)"
+                    : activeEditOrder ? "Cập nhật đơn bán hàng (SO)" : "Lập đơn bán hàng (SO)"}
               </span>
               <span className="inline sm:hidden">
                 {isQuotation
-                  ? editOrder ? "Cập nhật BG" : "Lập báo giá"
-                  : editOrder ? "Cập nhật đơn" : "Đơn bán hàng"}
+                  ? activeEditOrder ? "Cập nhật BG" : "Lập báo giá"
+                  : isOrderReadOnly
+                    ? "Chi tiết đơn"
+                    : activeEditOrder ? "Cập nhật đơn" : "Đơn bán hàng"}
               </span>
               <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 font-bold border border-sky-200">
                 {type === "retail" ? "BÁN LẺ" : "ĐẠI LÝ"}
@@ -1710,7 +2396,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
               <i className="bi bi-exclamation-circle-fill text-red-500" /> {saveError}
             </span>
           )}
-          {hasAnyMaterialShortage ? (
+          {!isOrderReadOnly && (hasAnyMaterialShortage ? (
             <span style={{ fontSize: 12, color: "#dc2626", background: "rgba(220,38,38,0.08)", padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(220,38,38,0.25)", alignSelf: "center", display: "flex", alignItems: "center", gap: 5, fontWeight: 700 }}>
               <i className="bi bi-exclamation-octagon-fill" /> Không đủ vật tư
             </span>
@@ -1718,25 +2404,38 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
             <span style={{ fontSize: 12, color: "#ea580c", background: "rgba(234,88,12,0.08)", padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(234,88,12,0.25)", alignSelf: "center", display: "flex", alignItems: "center", gap: 5, fontWeight: 700 }}>
               <i className="bi bi-exclamation-triangle-fill" /> Đơn có hàng hóa thiếu
             </span>
-          ))}
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleSave}
-            disabled={saving || (!isQuotation && isOutOfStock)}
-            isLoading={saving}
-            leftIcon={<i className="bi bi-check-circle-fill" />}
-            style={{ padding: "0 18px", fontWeight: 700, fontSize: 13, borderRadius: 8, height: 36 }}
-          >
-            <span className="hidden sm:inline">
-              {isQuotation
-                ? editOrder ? "Cập nhật báo giá" : "Tạo báo giá"
-                : editOrder ? "Cập nhật đơn" : "Tạo đơn hàng"}
-            </span>
-            <span className="inline sm:hidden">
-              {isQuotation ? "Tạo BG" : editOrder ? "Lưu" : "Tạo đơn"}
-            </span>
-          </Button>
+          )))}
+          {isOrderReadOnly ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setShowOrderPrintPreview(true)}
+              leftIcon={<i className="bi bi-printer-fill" />}
+              style={{ padding: "0 18px", fontWeight: 700, fontSize: 13, borderRadius: 8, height: 36 }}
+            >
+              <span className="hidden sm:inline">In đơn hàng</span>
+              <span className="inline sm:hidden">In đơn</span>
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSave}
+              disabled={saving || (!isQuotation && isOutOfStock)}
+              isLoading={saving}
+              leftIcon={<i className="bi bi-check-circle-fill" />}
+              style={{ padding: "0 18px", fontWeight: 700, fontSize: 13, borderRadius: 8, height: 36 }}
+            >
+              <span className="hidden sm:inline">
+                {isQuotation
+                  ? activeEditOrder ? "Cập nhật báo giá" : "Tạo báo giá"
+                  : activeEditOrder ? "Cập nhật đơn" : "Tạo đơn hàng"}
+              </span>
+              <span className="inline sm:hidden">
+                {isQuotation ? "Tạo BG" : activeEditOrder ? "Lưu" : "Tạo đơn"}
+              </span>
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -1799,6 +2498,8 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
             <Input
               label="Số đơn hàng (Tham chiếu)"
               required
+              disabled={Boolean(activeEditOrder) || isOrderReadOnly}
+              readOnly={Boolean(activeEditOrder) || isOrderReadOnly}
               value={info.soPhieu || ""}
               onChange={setInfoField("soPhieu")}
               style={{ fontFamily: "monospace", fontWeight: 700 }}
@@ -1809,6 +2510,8 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                 type="date"
                 label="Ngày đặt hàng"
                 required
+                disabled={isOrderReadOnly}
+                readOnly={isOrderReadOnly}
                 value={info.ngayLap}
                 onChange={setInfoField("ngayLap")}
               />
@@ -1816,6 +2519,8 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                 type="date"
                 label="Ngày giao hàng mong muốn"
                 required
+                disabled={isOrderReadOnly}
+                readOnly={isOrderReadOnly}
                 value={info.ngayGiaoHang}
                 onChange={setInfoField("ngayGiaoHang")}
               />
@@ -1872,8 +2577,11 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                   <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
                     <Input
                       label="Tên khách hàng"
+                      disabled={isOrderReadOnly}
+                      readOnly={isOrderReadOnly}
                       value={custInfo.name}
                       onChange={e => {
+                        if (isOrderReadOnly) return;
                         const val = e.target.value;
                         setCustInfo(prev => ({ ...prev, name: val, id: "" }));
                         setInfo(prev => ({ ...prev, tenNguoiNhan: val }));
@@ -1882,8 +2590,11 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                     />
                     <Input
                       label="Số điện thoại"
+                      disabled={isOrderReadOnly}
+                      readOnly={isOrderReadOnly}
                       value={custInfo.dienThoai}
                       onChange={e => {
+                        if (isOrderReadOnly) return;
                         const val = e.target.value;
                         setCustInfo(prev => ({ ...prev, dienThoai: val }));
                         setInfo(prev => ({ ...prev, sdtNguoiNhan: val }));
@@ -1893,8 +2604,11 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                   </div>
                   <Input
                     label="Địa chỉ"
+                    disabled={isOrderReadOnly}
+                    readOnly={isOrderReadOnly}
                     value={custInfo.address}
                     onChange={e => {
+                      if (isOrderReadOnly) return;
                       const val = e.target.value;
                       setCustInfo(prev => ({ ...prev, address: val }));
                       setInfo(prev => ({ ...prev, diaChiGiaoHang: val }));
@@ -1909,8 +2623,11 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
               <Input
                 label={customer ? "Tên người nhận" : "Tên khách hàng"}
                 required={!custInfo.id}
+                disabled={isOrderReadOnly}
+                readOnly={isOrderReadOnly}
                 value={info.tenNguoiNhan}
                 onChange={e => {
+                  if (isOrderReadOnly) return;
                   const val = e.target.value;
                   setInfo(prev => ({ ...prev, tenNguoiNhan: val }));
                   if (!customer) setCustInfo(prev => ({ ...prev, name: val, id: "" }));
@@ -1920,8 +2637,11 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
               <Input
                 label={customer ? "SĐT người nhận" : "Số điện thoại"}
                 required={!custInfo.id}
+                disabled={isOrderReadOnly}
+                readOnly={isOrderReadOnly}
                 value={info.sdtNguoiNhan}
                 onChange={e => {
+                  if (isOrderReadOnly) return;
                   const val = e.target.value;
                   setInfo(prev => ({ ...prev, sdtNguoiNhan: val }));
                   if (!customer) setCustInfo(prev => ({ ...prev, dienThoai: val }));
@@ -1933,8 +2653,11 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
             <Input
               label="Địa chỉ khách hàng"
               required={!custInfo.id}
+              disabled={isOrderReadOnly}
+              readOnly={isOrderReadOnly}
               value={custInfo.address}
               onChange={e => {
+                if (isOrderReadOnly) return;
                 const val = e.target.value;
                 setCustInfo(prev => ({ ...prev, address: val }));
                 if (!customer) setInfo(prev => ({ ...prev, diaChiGiaoHang: val }));
@@ -1945,8 +2668,11 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
             <Input
               label="Địa chỉ giao hàng"
               required={!custInfo.id}
+              disabled={isOrderReadOnly}
+              readOnly={isOrderReadOnly}
               value={info.diaChiGiaoHang}
               onChange={e => {
+                if (isOrderReadOnly) return;
                 const val = e.target.value;
                 setInfo(prev => ({ ...prev, diaChiGiaoHang: val }));
                 if (!customer) setCustInfo(prev => ({ ...prev, address: val }));
@@ -1961,6 +2687,8 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                 max={100}
                 label="Chiết khấu tổng"
                 suffix="%"
+                disabled={isOrderReadOnly}
+                readOnly={isOrderReadOnly}
                 value={info.chietKhauTong}
                 onChange={setInfoField("chietKhauTong")}
               />
@@ -1970,6 +2698,8 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                 max={100}
                 label="Thuế VAT"
                 suffix="%"
+                disabled={isOrderReadOnly}
+                readOnly={isOrderReadOnly}
                 value={info.thue}
                 onChange={setInfoField("thue")}
               />
@@ -1977,8 +2707,11 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                 type="text"
                 label="Chi phí khác"
                 suffix="₫"
+                disabled={isOrderReadOnly}
+                readOnly={isOrderReadOnly}
                 value={info.chiPhiKhac ? info.chiPhiKhac.toLocaleString("vi-VN") : "0"}
                 onChange={e => {
+                  if (isOrderReadOnly) return;
                   const val = Number(e.target.value.replace(/\D/g, ""));
                   setInfo(prev => ({ ...prev, chiPhiKhac: val }));
                 }}
@@ -1989,7 +2722,12 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
               <FLabel text="Ghi chú nội bộ" />
               <textarea
                 value={info.ghiChu}
-                onChange={e => setInfo(prev => ({ ...prev, ghiChu: e.target.value }))}
+                disabled={isOrderReadOnly}
+                readOnly={isOrderReadOnly}
+                onChange={e => {
+                  if (isOrderReadOnly) return;
+                  setInfo(prev => ({ ...prev, ghiChu: e.target.value }));
+                }}
                 className="form-input"
                 style={{ flex: 1, resize: "none", minHeight: 80, padding: "8px 12px", fontSize: 13 }}
                 placeholder="Nhập ghi chú cho đơn hàng..."
@@ -2147,7 +2885,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
             <div className="order-modal-mobile-slider" data-slide={mobileSlide}>
               <div className="order-modal-slide-info">
                 {/* Form nhập liệu */}
-                <div className="order-modal-add-form" style={{ padding: 8, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end" }}>
+                <div className="order-modal-add-form" style={{ padding: 8, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end", pointerEvents: isOrderReadOnly ? "none" : undefined, opacity: isOrderReadOnly ? 0.6 : 1 }}>
                   <div className="order-modal-mobile-section-title" style={{ display: "none" }}>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                       <i className="bi bi-box-seam text-sky-600" />
@@ -2167,8 +2905,10 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                     <div className="order-modal-field-product" style={{ flex: "2 1 250px", position: "relative" }}>
                       <FLabel text="Sản phẩm / Dịch vụ" required />
                       <SearchInput
+                        disabled={isOrderReadOnly}
                         value={formItem.ten}
                         onChange={v => {
+                          if (isOrderReadOnly) return;
                           updateFormField("ten", v);
                           if (!v) {
                             updateFormField("brandType", "");
@@ -2178,10 +2918,10 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                             fetchSuggest(v, -1);
                           }
                         }}
-                        onFocus={e => { setActiveRowIdSync(-1); fetchSuggest(formItem.ten, -1); }}
+                        onFocus={e => { if (isOrderReadOnly) return; setActiveRowIdSync(-1); fetchSuggest(formItem.ten, -1); }}
                         onBlur={e => { setTimeout(() => { if (activeRowIdRef.current === -1) { setSuggest([]); setActiveRowIdSync(null); } }, 200); }}
                       />
-                      {activeRowId === -1 && suggest.length > 0 && (
+                      {!isOrderReadOnly && activeRowId === -1 && suggest.length > 0 && (
                         <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100, background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", maxHeight: 200, overflowY: "auto", marginTop: 4 }}>
                           {suggest.map(s => (
                             <div key={s.id} onClick={() => applySuggest(-1, s)}
@@ -2206,6 +2946,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                           label="Mã định mức"
                           value={formItem.dinhMucId || ""}
                           onChange={e => {
+                            if (isOrderReadOnly) return;
                             const dmId = e.target.value;
                             const dm = formItem.dinhMucs?.find(x => x.id === dmId || String(x.id) === String(dmId));
                             const newDonGia = calculateBomPrice(dm, (formItem as any).baseGiaBan || formItem.donGia, (formItem as any).loiNhuanKyVong || 0, (formItem as any).phuongPhapTinhLoiNhuan || 'revenue');
@@ -2215,7 +2956,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                               donGia: newDonGia
                             });
                           }}
-                          disabled={formItem.source === "inventory"}
+                          disabled={isOrderReadOnly || formItem.source === "inventory"}
                           style={{ height: 34, fontSize: 13 }}
                         >
                           {formItem.dinhMucs?.map((dm: any) => (
@@ -2229,6 +2970,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                           <Input
                             value={formItem.dinhMucTen || ""}
                             readOnly
+                            disabled={isOrderReadOnly}
                             placeholder="Mô tả định mức"
                             style={{ height: 34, fontSize: 13, backgroundColor: "#f1f5f9" }}
                             className="flex-1"
@@ -2239,7 +2981,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                               variant="outline"
                               size="sm"
                               onClick={() => setShowBomMenu(v => !v)}
-                              disabled={!formItem.dinhMucId}
+                              disabled={isOrderReadOnly || !formItem.dinhMucId}
                               style={{ height: 34, width: 34, padding: 0, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}
                               title="Tuỳ chọn định mức"
                             >
@@ -2299,7 +3041,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                             fontSize: 13,
                             fontWeight: formItem.brandType === "Seajong" ? 700 : 600,
                             color: formItem.brandType === "Seajong" ? "#0284c7" : "#334155",
-                            cursor: "pointer",
+                            cursor: isOrderReadOnly ? "not-allowed" : "pointer",
                             userSelect: "none",
                             margin: 0,
                             whiteSpace: "nowrap",
@@ -2309,9 +3051,10 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                             type="radio"
                             name="order-item-brand-type"
                             value="Seajong"
+                            disabled={isOrderReadOnly}
                             checked={formItem.brandType === "Seajong"}
-                            onChange={() => updateFormField("brandType", "Seajong")}
-                            style={{ accentColor: "#0284c7", width: 15, height: 15, margin: 0, cursor: "pointer" }}
+                            onChange={() => !isOrderReadOnly && updateFormField("brandType", "Seajong")}
+                            style={{ accentColor: "#0284c7", width: 15, height: 15, margin: 0, cursor: isOrderReadOnly ? "not-allowed" : "pointer" }}
                           />
                           Seajong
                         </label>
@@ -2323,7 +3066,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                             fontSize: 13,
                             fontWeight: formItem.brandType === "OEM" ? 700 : 600,
                             color: formItem.brandType === "OEM" ? "#0284c7" : "#334155",
-                            cursor: "pointer",
+                            cursor: isOrderReadOnly ? "not-allowed" : "pointer",
                             userSelect: "none",
                             margin: 0,
                             whiteSpace: "nowrap",
@@ -2333,9 +3076,10 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                             type="radio"
                             name="order-item-brand-type"
                             value="OEM"
+                            disabled={isOrderReadOnly}
                             checked={formItem.brandType === "OEM"}
-                            onChange={() => updateFormField("brandType", "OEM")}
-                            style={{ accentColor: "#0284c7", width: 15, height: 15, margin: 0, cursor: "pointer" }}
+                            onChange={() => !isOrderReadOnly && updateFormField("brandType", "OEM")}
+                            style={{ accentColor: "#0284c7", width: 15, height: 15, margin: 0, cursor: isOrderReadOnly ? "not-allowed" : "pointer" }}
                           />
                           OEM
                         </label>
@@ -2344,8 +3088,10 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                     <div className="order-modal-field-dvt" style={{ flex: "1 1 80px" }}>
                       <Input
                         label="Đơn vị tính"
+                        disabled={isOrderReadOnly}
+                        readOnly={isOrderReadOnly}
                         value={formItem.dvt}
-                        onChange={e => updateFormField("dvt", e.target.value)}
+                        onChange={e => !isOrderReadOnly && updateFormField("dvt", e.target.value)}
                         style={{ height: 34, fontSize: 13, textAlign: "center" }}
                       />
                     </div>
@@ -2358,8 +3104,10 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                         min={1}
                         label="Số lượng"
                         required
+                        disabled={isOrderReadOnly}
+                        readOnly={isOrderReadOnly}
                         value={formItem.soLuong}
-                        onChange={e => updateFormField("soLuong", Math.max(1, Number(e.target.value)))}
+                        onChange={e => !isOrderReadOnly && updateFormField("soLuong", Math.max(1, Number(e.target.value)))}
                         style={{ height: 34, fontSize: 13, textAlign: "right" }}
                       />
                     </div>
@@ -2370,8 +3118,10 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                         max={100}
                         label="Chiết khấu (%)"
                         suffix="%"
+                        disabled={isOrderReadOnly}
+                        readOnly={isOrderReadOnly}
                         value={formItem.ckPct}
-                        onChange={e => updateFormField("ckPct", Math.max(0, Math.min(100, Number(e.target.value))))}
+                        onChange={e => !isOrderReadOnly && updateFormField("ckPct", Math.max(0, Math.min(100, Number(e.target.value))))}
                         style={{ height: 34, fontSize: 13, textAlign: "right" }}
                       />
                     </div>
@@ -2379,9 +3129,9 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                       <label className="form-label" style={{ marginBottom: 4, display: "block" }}>Đơn giá (đ)</label>
                       <CurrencyInput
                         value={formItem.donGia}
-                        onChange={v => !(!isAdmin) && updateFormField("donGia", v)}
-                        readOnly={!isAdmin}
-                        style={{ width: "100%", padding: "0 10px", height: 34, boxSizing: "border-box", border: "1px solid #cbd5e1", borderRadius: 6, background: !isAdmin ? "var(--muted)" : "#fff", outline: "none", textAlign: "right", fontFamily: "inherit", fontSize: 13, color: !isAdmin ? "var(--muted-foreground)" : "var(--foreground)", cursor: !isAdmin ? "not-allowed" : "text" }}
+                        onChange={v => !(!isAdmin || isOrderReadOnly) && updateFormField("donGia", v)}
+                        readOnly={!isAdmin || isOrderReadOnly}
+                        style={{ width: "100%", padding: "0 10px", height: 34, boxSizing: "border-box", border: "1px solid #cbd5e1", borderRadius: 6, background: (!isAdmin || isOrderReadOnly) ? "var(--muted)" : "#fff", outline: "none", textAlign: "right", fontFamily: "inherit", fontSize: 13, color: (!isAdmin || isOrderReadOnly) ? "var(--muted-foreground)" : "var(--foreground)", cursor: (!isAdmin || isOrderReadOnly) ? "not-allowed" : "text" }}
                       />
                     </div>
                   </div>
@@ -2390,13 +3140,14 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                     <Button 
                       variant="primary"
                       size="sm"
+                      disabled={isOrderReadOnly}
                       onClick={addRow} 
                       leftIcon={<i className={formItem.id === -1 ? "bi bi-plus-lg" : "bi bi-check2"} />}
                       style={{ height: 34, padding: "0 14px", fontWeight: 700, fontSize: 13, borderRadius: 6, border: "none" }}
                     >
                       {formItem.id === -1 ? "Thêm" : "Cập nhật"}
                     </Button>
-                    {formItem.id !== -1 && (
+                    {formItem.id !== -1 && !isOrderReadOnly && (
                       <Button 
                         variant="outline"
                         size="sm"
@@ -2486,8 +3237,11 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                       <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: 8 }}>
                         <Input
                           label="Tên khách hàng"
+                          disabled={isOrderReadOnly}
+                          readOnly={isOrderReadOnly}
                           value={custInfo.name}
                           onChange={e => {
+                            if (isOrderReadOnly) return;
                             const val = e.target.value;
                             setCustInfo(prev => ({ ...prev, name: val, id: "" }));
                             setInfo(prev => ({ ...prev, tenNguoiNhan: val }));
@@ -2497,8 +3251,11 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                         />
                         <Input
                           label="Số điện thoại"
+                          disabled={isOrderReadOnly}
+                          readOnly={isOrderReadOnly}
                           value={custInfo.dienThoai}
                           onChange={e => {
+                            if (isOrderReadOnly) return;
                             const val = e.target.value;
                             setCustInfo(prev => ({ ...prev, dienThoai: val }));
                             setInfo(prev => ({ ...prev, sdtNguoiNhan: val }));
@@ -2514,6 +3271,8 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                   <Input
                     label="Số đơn hàng (Tham chiếu)"
                     required
+                    disabled={Boolean(activeEditOrder) || isOrderReadOnly}
+                    readOnly={Boolean(activeEditOrder) || isOrderReadOnly}
                     value={info.soPhieu || ""}
                     onChange={setInfoField("soPhieu")}
                     style={{ height: 34, fontSize: 13, fontFamily: "monospace", fontWeight: 700 }}
@@ -2524,6 +3283,8 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                       type="date"
                       label="Ngày đặt hàng"
                       required
+                      disabled={isOrderReadOnly}
+                      readOnly={isOrderReadOnly}
                       value={info.ngayLap}
                       onChange={setInfoField("ngayLap")}
                       style={{ height: 34, fontSize: 13 }}
@@ -2532,6 +3293,8 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                       type="date"
                       label="Ngày giao hàng"
                       required
+                      disabled={isOrderReadOnly}
+                      readOnly={isOrderReadOnly}
                       value={info.ngayGiaoHang}
                       onChange={setInfoField("ngayGiaoHang")}
                       style={{ height: 34, fontSize: 13 }}
@@ -2543,8 +3306,11 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                     <Input
                       label="Tên người nhận"
                       required={!custInfo.id}
+                      disabled={isOrderReadOnly}
+                      readOnly={isOrderReadOnly}
                       value={info.tenNguoiNhan}
                       onChange={e => {
+                        if (isOrderReadOnly) return;
                         const val = e.target.value;
                         setInfo(prev => ({ ...prev, tenNguoiNhan: val }));
                         if (!customer) setCustInfo(prev => ({ ...prev, name: val, id: "" }));
@@ -2555,8 +3321,11 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                     <Input
                       label="SĐT người nhận"
                       required={!custInfo.id}
+                      disabled={isOrderReadOnly}
+                      readOnly={isOrderReadOnly}
                       value={info.sdtNguoiNhan}
                       onChange={e => {
+                        if (isOrderReadOnly) return;
                         const val = e.target.value;
                         setInfo(prev => ({ ...prev, sdtNguoiNhan: val }));
                         if (!customer) setCustInfo(prev => ({ ...prev, dienThoai: val }));
@@ -2571,8 +3340,11 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                     <Input
                       label="Địa chỉ khách hàng"
                       required={!custInfo.id}
+                      disabled={isOrderReadOnly}
+                      readOnly={isOrderReadOnly}
                       value={custInfo.address}
                       onChange={e => {
+                        if (isOrderReadOnly) return;
                         const val = e.target.value;
                         setCustInfo(prev => ({ ...prev, address: val }));
                         if (!customer) setInfo(prev => ({ ...prev, diaChiGiaoHang: val }));
@@ -2583,8 +3355,11 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                     <Input
                       label="Địa chỉ giao hàng"
                       required={!custInfo.id}
+                      disabled={isOrderReadOnly}
+                      readOnly={isOrderReadOnly}
                       value={info.diaChiGiaoHang}
                       onChange={e => {
+                        if (isOrderReadOnly) return;
                         const val = e.target.value;
                         setInfo(prev => ({ ...prev, diaChiGiaoHang: val }));
                         if (!customer) setCustInfo(prev => ({ ...prev, address: val }));
@@ -2602,6 +3377,8 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                       max={100}
                       label="CK tổng"
                       suffix="%"
+                      disabled={isOrderReadOnly}
+                      readOnly={isOrderReadOnly}
                       value={info.chietKhauTong}
                       onChange={setInfoField("chietKhauTong")}
                       style={{ height: 34, fontSize: 13, textAlign: "right" }}
@@ -2612,6 +3389,8 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                       max={100}
                       label="Thuế VAT"
                       suffix="%"
+                      disabled={isOrderReadOnly}
+                      readOnly={isOrderReadOnly}
                       value={info.thue}
                       onChange={setInfoField("thue")}
                       style={{ height: 34, fontSize: 13, textAlign: "right" }}
@@ -2620,8 +3399,11 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                       type="text"
                       label="Chi phí khác"
                       suffix="₫"
+                      disabled={isOrderReadOnly}
+                      readOnly={isOrderReadOnly}
                       value={info.chiPhiKhac ? info.chiPhiKhac.toLocaleString("vi-VN") : "0"}
                       onChange={e => {
+                        if (isOrderReadOnly) return;
                         const val = Number(e.target.value.replace(/\D/g, ""));
                         setInfo(prev => ({ ...prev, chiPhiKhac: val }));
                       }}
@@ -2634,7 +3416,12 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                     <FLabel text="Ghi chú nội bộ" />
                     <textarea
                       value={info.ghiChu}
-                      onChange={e => setInfo(prev => ({ ...prev, ghiChu: e.target.value }))}
+                      disabled={isOrderReadOnly}
+                      readOnly={isOrderReadOnly}
+                      onChange={e => {
+                        if (isOrderReadOnly) return;
+                        setInfo(prev => ({ ...prev, ghiChu: e.target.value }));
+                      }}
                       className="form-input"
                       style={{ resize: "none", minHeight: 56, padding: "6px 10px", fontSize: 13 }}
                       placeholder="Nhập ghi chú cho đơn hàng..."
@@ -2672,8 +3459,8 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                   return (
                     <React.Fragment key={it.id}>
                       <tr 
-                        onClick={() => setFormItem({ ...it, brandType: it.brandType || resolveProductBrandType(it) })}
-                        style={{ borderBottom: "1px solid var(--border)", cursor: "pointer", background: formItem.id === it.id ? "rgba(0,0,0,0.03)" : "transparent" }}
+                        onClick={() => { if (!isOrderReadOnly) setFormItem({ ...it, brandType: it.brandType || resolveProductBrandType(it) }); }}
+                        style={{ borderBottom: "1px solid var(--border)", cursor: isOrderReadOnly ? "default" : "pointer", background: formItem.id === it.id ? "rgba(0,0,0,0.03)" : "transparent" }}
                       >
                         <td style={{ padding: 10, color: "var(--muted-foreground)" }}>{idx + 1}</td>
                         <td style={{ padding: "6px 10px" }}>
@@ -2825,9 +3612,11 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                         <td style={{ padding: 6, textAlign: "right" }}>{fmt(it.donGia)}</td>
                         <td style={{ padding: 6, textAlign: "right", fontWeight: 600 }}>{fmt(thanhTien(it))} đ</td>
                         <td style={{ padding: 6 }}>
-                          <button onClick={(e) => { e.stopPropagation(); removeRow(it.id); }} style={{ padding: 4, background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}>
-                            <i className="bi bi-trash" />
-                          </button>
+                          {!isOrderReadOnly && (
+                            <button onClick={(e) => { e.stopPropagation(); removeRow(it.id); }} style={{ padding: 4, background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}>
+                              <i className="bi bi-trash" />
+                            </button>
+                          )}
                         </td>
                       </tr>
                       {hasBOM && isExpanded && (
@@ -3030,6 +3819,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                         <div
                           key={it.id}
                           onClick={() => {
+                            if (isOrderReadOnly) return;
                             setFormItem({ ...it, brandType: itemBrand });
                             setMobileSlide("info");
                           }}
@@ -3041,7 +3831,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                             display: "flex",
                             flexDirection: "column",
                             gap: 6,
-                            cursor: "pointer",
+                            cursor: isOrderReadOnly ? "default" : "pointer",
                             boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
                           }}
                         >
@@ -3071,36 +3861,38 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                                     </span>
                                   )}
                                 </div>
-                                {isSelected && (
+                                {isSelected && !isOrderReadOnly && (
                                   <span style={{ fontSize: 10, color: "var(--primary)", fontWeight: 700, display: "inline-block", marginTop: 2 }}>
                                     <i className="bi bi-pencil-square me-1" /> Đang chỉnh sửa
                                   </span>
                                 )}
                               </div>
                             </div>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeRow(it.id);
-                              }}
-                              style={{
-                                border: "none",
-                                background: "rgba(239,68,68,0.08)",
-                                color: "#ef4444",
-                                borderRadius: 6,
-                                width: 28,
-                                height: 28,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                cursor: "pointer",
-                                flexShrink: 0
-                              }}
-                              title="Xoá hàng"
-                            >
-                              <i className="bi bi-trash" style={{ fontSize: 13 }} />
-                            </button>
+                            {!isOrderReadOnly && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeRow(it.id);
+                                }}
+                                style={{
+                                  border: "none",
+                                  background: "rgba(239,68,68,0.08)",
+                                  color: "#ef4444",
+                                  borderRadius: 6,
+                                  width: 28,
+                                  height: 28,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  cursor: "pointer",
+                                  flexShrink: 0
+                                }}
+                                title="Xoá hàng"
+                              >
+                                <i className="bi bi-trash" style={{ fontSize: 13 }} />
+                              </button>
+                            )}
                           </div>
 
                           {/* Row 2: Badges (Icon only) */}
@@ -3236,8 +4028,11 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                   <div className="order-modal-paid-input-wrap" style={{ width: 140 }}>
                     <Input
                       type="text"
+                      disabled={isOrderReadOnly}
+                      readOnly={isOrderReadOnly}
                       value={info.daThanhToan ? info.daThanhToan.toLocaleString("vi-VN") : ""}
                       onChange={(e) => {
+                        if (isOrderReadOnly) return;
                         const val = Number(e.target.value.replace(/\D/g, ""));
                         setInfo(f => ({ ...f, daThanhToan: val }));
                       }}
@@ -3249,8 +4044,12 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                   
                   <div className="order-modal-paid-toggle-wrap" style={{ display: "flex", alignItems: "center", marginLeft: 4 }}>
                     <Toggle 
+                      disabled={isOrderReadOnly}
                       checked={info.isChuyenKhoan} 
-                      onChange={(val) => setInfo(f => ({ ...f, isChuyenKhoan: val }))}
+                      onChange={(val) => {
+                        if (isOrderReadOnly) return;
+                        setInfo(f => ({ ...f, isChuyenKhoan: val }));
+                      }}
                       label="Chuyển khoản"
                     />
                   </div>
@@ -3277,7 +4076,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
         isOpen={showBomDetail}
         onClose={() => { setShowBomDetail(false); setActiveVtMenu(null); setShowAlternative(false); }}
         title="Chi tiết định mức"
-        width="460px"
+        width="400px"
         zIndex={3200}
         icon={<i className="bi bi-diagram-3-fill text-blue-600" style={{ fontSize: 20 }} />}
         bodyStyle={{ padding: 0 }}
@@ -4072,6 +4871,15 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
         onConfirm={handleDeleteMaterial}
         onCancel={() => setTargetDeleteMaterial(null)}
         zIndex={3500}
+      />
+
+      <OrderPrintPreviewModal
+        open={showOrderPrintPreview}
+        onClose={() => setShowOrderPrintPreview(false)}
+        customer={customer}
+        custInfo={custInfo}
+        items={items}
+        info={info}
       />
     </div>
   );

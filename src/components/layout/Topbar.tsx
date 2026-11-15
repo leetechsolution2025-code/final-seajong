@@ -5,8 +5,10 @@ import { CasioCalculator } from '../common/CasioCalculator';
 import { NotificationOffcanvas } from './NotificationOffcanvas';
 import { MessageOffcanvas, type SalesStaffMember } from './MessageOffcanvas';
 import { AccountSettingsModal } from './AccountSettingsModal';
+import { CompanyInfoModal } from './CompanyInfoModal';
 import { getAvatarInitials } from '../../utils/avatar';
 import { canAccessDepartment, hasPermission, isAdminUser } from '../../lib/permissions';
+import { useCompanyInfo } from '../../hooks/useCompanyInfo';
 
 interface TopbarProps {
   collapsed: boolean;
@@ -48,6 +50,7 @@ const DEPT_LABEL: Record<string, string> = {
 export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
   const { user, logout } = useAuth();
   const { activeDeptCode, setActiveDeptCode, setActiveMenuKey, navigateToUserDept } = useDepartment();
+  const company = useCompanyInfo();
 
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [salesPickerOpen, setSalesPickerOpen] = useState(false);
@@ -55,6 +58,7 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
   const [notifOpen, setNotifOpen] = useState(false);
   const [msgOpen, setMsgOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [companyInfoOpen, setCompanyInfoOpen] = useState(false);
   const [calcOpen, setCalcOpen] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [salesStaffList, setSalesStaffList] = useState<SalesStaffMember[]>([]);
@@ -421,18 +425,25 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
             }
           >
             <div className="h-10 w-auto flex items-center justify-center shrink-0">
-              <img src="/logo.png" alt="Seajong" className="h-9 w-auto object-contain" />
+              <img
+                src={company.logo_url || '/logo.png'}
+                alt="Seajong"
+                className="h-9 w-auto object-contain"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = '/logo.png';
+                }}
+              />
             </div>
             <div className="hidden sm:flex flex-col">
               <span className="text-[13.5px] font-black text-slate-900 tracking-tight uppercase leading-tight font-sans">
-                CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM
+                {company.company_name || 'CÔNG TY CỔ PHẦN SEAJONG VIỆT NAM'}
               </span>
               <span className="text-[11px] text-slate-500 font-normal leading-none mt-0.5">
                 {isCustomer
                   ? 'Cổng thông tin Khách hàng & Bảo hành điện tử'
                   : user?.role === 'DEALER'
                   ? 'Hệ thống đại lý và nhà phân phối'
-                  : 'Kinh doanh thiết bị phòng tắm, nhà bếp'}
+                  : company.industry || 'Kinh doanh thiết bị phòng tắm, nhà bếp'}
               </span>
             </div>
           </button>
@@ -886,21 +897,72 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
                     )}
                   </button>
 
-                  {/* Quản trị dữ liệu (Chỉ hiển thị cho tài khoản Admin / Ban Giám đốc) */}
-                  {isAdminAccount && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUserMenuOpen(false);
-                        setActiveDeptCode('board');
-                        setActiveMenuKey('data-management');
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 transition-colors text-left cursor-pointer border-0 bg-transparent"
-                    >
-                      <i className="bi bi-database-lock text-slate-500 text-[14px]" />
+                  {/* Thông tin doanh nghiệp (Chỉ mở khóa đối với tài khoản Admin) */}
+                  <button
+                    type="button"
+                    disabled={!isAdminAccount}
+                    onClick={() => {
+                      if (!isAdminAccount) return;
+                      setUserMenuOpen(false);
+                      setCompanyInfoOpen(true);
+                    }}
+                    className={`w-full flex items-center justify-between gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-colors text-left border-0 bg-transparent ${
+                      !isAdminAccount
+                        ? 'text-slate-400 opacity-60 cursor-not-allowed'
+                        : 'text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 cursor-pointer'
+                    }`}
+                    title={
+                      !isAdminAccount
+                        ? 'Chức năng Thông tin doanh nghiệp chỉ dành cho tài khoản Quản trị viên (Admin)'
+                        : 'Thông tin doanh nghiệp'
+                    }
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <i
+                        className={`bi bi-building-gear text-[14px] ${
+                          !isAdminAccount ? 'text-slate-400' : 'text-slate-500'
+                        }`}
+                      />
+                      <span>Thông tin doanh nghiệp</span>
+                    </span>
+                    {!isAdminAccount && (
+                      <i className="bi bi-lock-fill text-[11px] text-slate-400 shrink-0" />
+                    )}
+                  </button>
+
+                  {/* Quản trị dữ liệu (Chỉ mở khóa đối với tài khoản Admin) */}
+                  <button
+                    type="button"
+                    disabled={!isAdminAccount}
+                    onClick={() => {
+                      if (!isAdminAccount) return;
+                      setUserMenuOpen(false);
+                      setActiveDeptCode('board');
+                      setActiveMenuKey('data-management');
+                    }}
+                    className={`w-full flex items-center justify-between gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-colors text-left border-0 bg-transparent ${
+                      !isAdminAccount
+                        ? 'text-slate-400 opacity-60 cursor-not-allowed'
+                        : 'text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 cursor-pointer'
+                    }`}
+                    title={
+                      !isAdminAccount
+                        ? 'Chức năng Quản trị dữ liệu chỉ dành cho tài khoản Quản trị viên (Admin)'
+                        : 'Quản trị dữ liệu'
+                    }
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <i
+                        className={`bi bi-database-lock text-[14px] ${
+                          !isAdminAccount ? 'text-slate-400' : 'text-slate-500'
+                        }`}
+                      />
                       <span>Quản trị dữ liệu</span>
-                    </button>
-                  )}
+                    </span>
+                    {!isAdminAccount && (
+                      <i className="bi bi-lock-fill text-[11px] text-slate-400 shrink-0" />
+                    )}
+                  </button>
 
                   <div className="h-px bg-slate-100 my-1"></div>
 
@@ -946,6 +1008,9 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, onToggle }) => {
 
       {/* Account Settings Modal */}
       <AccountSettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      {/* Company Info Modal */}
+      <CompanyInfoModal isOpen={companyInfoOpen} onClose={() => setCompanyInfoOpen(false)} />
     </>
   );
 };

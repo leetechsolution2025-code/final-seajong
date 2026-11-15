@@ -99,7 +99,10 @@ export const fetchCompanyInfo = async (): Promise<CompanyInfo> => {
           ...DEFAULT_COMPANY_INFO,
           company_name: raw.name || raw.company_name || DEFAULT_COMPANY_INFO.company_name,
           short_name: raw.shortName || raw.short_name || DEFAULT_COMPANY_INFO.short_name,
-          tax_code: raw.taxCode !== undefined && raw.taxCode !== null ? String(raw.taxCode) : (raw.tax_code || DEFAULT_COMPANY_INFO.tax_code),
+          tax_code:
+            raw.taxCode !== undefined && raw.taxCode !== null
+              ? String(raw.taxCode).replace(/^'+|'+$/g, '')
+              : raw.tax_code || DEFAULT_COMPANY_INFO.tax_code,
           slogan: raw.slogan !== undefined && raw.slogan !== null ? raw.slogan : DEFAULT_COMPANY_INFO.slogan,
           legal_rep: raw.legalRep || raw.legal_rep || DEFAULT_COMPANY_INFO.legal_rep,
           industry: raw.industry || DEFAULT_COMPANY_INFO.industry,
@@ -124,23 +127,28 @@ export const fetchCompanyInfo = async (): Promise<CompanyInfo> => {
  * Lưu thông tin doanh nghiệp lên Backend Server và đồng bộ LocalStorage
  */
 export const saveCompanyInfoToServer = async (
-  formData: FormData,
-  localUpdate: Partial<CompanyInfo>
+  formDataOrPayload: FormData | Partial<CompanyInfo>,
+  localUpdate?: Partial<CompanyInfo>
 ): Promise<{ success: boolean; logoUrl?: string; message?: string }> => {
-  // 1. Lưu ngay vào LocalStorage để đảm bảo không bao giờ bị mất
   const current = getStoredCompanyInfo();
-  const updated: CompanyInfo = { ...current, ...localUpdate };
+  const payloadObj: Partial<CompanyInfo> =
+    localUpdate ||
+    (formDataOrPayload instanceof FormData
+      ? Object.fromEntries(formDataOrPayload.entries())
+      : formDataOrPayload);
+  const updated: CompanyInfo = { ...current, ...payloadObj };
   saveStoredCompanyInfo(updated);
 
-  // 2. Gửi lên Backend để lưu vào SQLite
   try {
     const res = await fetch('/api/company', {
       method: 'POST',
-      body: formData,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
     }).catch(() =>
       fetch('http://localhost:3001/api/company', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
       })
     );
 

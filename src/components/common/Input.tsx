@@ -3,7 +3,7 @@ import { Eye, EyeSlash } from 'react-bootstrap-icons';
 import { DatePicker } from './DatePicker';
 
 export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'prefix'> {
-  label?: string;
+  label?: React.ReactNode;
   error?: string;
   helperText?: string;
   leftIcon?: React.ReactNode;
@@ -315,7 +315,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       }
     }, [value, isNumeric, effectiveHideZero, effectiveNumberGroup, isFocused]);
 
-    const inputId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
+    const inputId = id || (typeof label === 'string' ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
     const actualType = isPasswordToggle
       ? showPassword ? 'text' : 'password'
       : isNumeric ? 'text' : type;
@@ -412,7 +412,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     if (type === 'date' || type === 'datetime-local') {
       return (
         <DatePicker
-          label={label}
+          label={typeof label === 'string' ? label : undefined}
           required={props.required}
           value={value !== undefined && value !== null ? String(value) : ''}
           placeholder={props.placeholder}

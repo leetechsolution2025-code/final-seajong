@@ -4990,12 +4990,16 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                               return entry.status === statusFilter;
                             })
                             .map((entry) => {
+                              const isTransporter =
+                                item.partnerType === 'transporter' ||
+                                item.code?.startsWith('CNVC') ||
+                                item.poCode?.startsWith('VC');
                               const isReconciliation =
                                 (entry as any).isReconciliation ||
                                 (entry as any).type === 'reconciliation' ||
                                 (entry as any).voucherType === 'reconciliation' ||
                                 String(entry.code || '').startsWith('DS-');
-                              const isPayment = !isReconciliation && !entry.code?.startsWith('DH-') && !entry.code?.startsWith('PO-') && (
+                              const isPayment = !isReconciliation && !entry.code?.startsWith('DH-') && !entry.code?.startsWith('PO-') && !entry.code?.startsWith('VD-') && (
                                 entry.code?.startsWith('PC-') ||
                                 entry.code?.startsWith('UNC-') ||
                                 entry.statusLabel === 'Đã chi tiền' ||
@@ -5004,12 +5008,27 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                 String(entry.title || '').toLowerCase().includes('ứng trước') ||
                                 String(entry.title || '').toLowerCase().includes('chi tiền')
                               );
-                              const isPurchaseOrder = !isPayment && !isReconciliation && (
+                              const isOpeningBalance =
+                                String(entry.code || '').toLowerCase().includes('dư nợ đầu kỳ') ||
+                                String(entry.title || '').toLowerCase().includes('nợ cũ chuyển sang');
+                              const isPurchaseOrder = !isPayment && !isReconciliation && !isOpeningBalance && (
+                                isTransporter ||
                                 String(entry.code || '').startsWith('DH-') ||
                                 String(entry.code || '').startsWith('PO-') ||
-                                String(entry.title || '').toLowerCase().includes('đơn mua hàng')
+                                String(entry.code || '').startsWith('VD-') ||
+                                String(entry.code || '').startsWith('DBH-') ||
+                                String(entry.title || '').toLowerCase().includes('đơn mua hàng') ||
+                                String(entry.title || '').toLowerCase().includes('vận chuyển')
                               );
                               const rawPaidVal = Number(entry.paidAmount ?? entry.totalAmount) || 0;
+                              const custName = (entry as any).customerName || '';
+                              const custAddr = (entry as any).customerAddress || '';
+                              const baseEntryTitle = isTransporter
+                                ? String(entry.title || '')
+                                    .replace(/đơn mua hàng/gi, 'đơn hàng')
+                                    .split(' • Khách hàng:')[0]
+                                    .trim()
+                                : entry.title;
 
                               return (
                                 <tr
@@ -5035,7 +5054,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                   onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
                                   onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
                                 >
-                                  {/* Cột Nhà cung cấp: Có badge Phiếu chi / Đối soát / Mua hàng vào đầu dòng */}
+                                  {/* Cột Nhà cung cấp: Có badge Phiếu chi / Đối soát / Mua hàng (hoặc Chuyển hàng) vào đầu dòng */}
                                   <td style={{ padding: '6px 14px 6px 36px' }}>
                                     <div style={{ fontWeight: 500, color: '#334155', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                       {isReconciliation && (
@@ -5080,7 +5099,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                             fontWeight: 700,
                                           }}
                                         >
-                                          Mua hàng
+                                          {isTransporter ? 'Chuyển hàng' : 'Mua hàng'}
                                         </span>
                                       )}
                                       <span
@@ -5101,8 +5120,21 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                         </span>
                                       )}
                                     </div>
-                                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '1px', fontWeight: 400 }}>
-                                      {entry.title}
+                                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', fontWeight: 400, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                      <span>{baseEntryTitle}</span>
+                                      {isTransporter && !isPayment && !isReconciliation && !isOpeningBalance && (custName || custAddr) && (
+                                        <>
+                                          <span style={{ color: '#cbd5e1' }}>•</span>
+                                          <span style={{ color: '#334155', fontWeight: 600 }}>
+                                            Khách hàng: {custName || 'Khách lẻ'}
+                                          </span>
+                                          {custAddr && (
+                                            <span style={{ color: '#64748b' }}>
+                                              — Địa chỉ: {custAddr}
+                                            </span>
+                                          )}
+                                        </>
+                                      )}
                                     </div>
                                   </td>
 

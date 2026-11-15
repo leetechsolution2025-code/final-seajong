@@ -108,46 +108,46 @@ export default function TaoDonMuaHangModal({
   editNgayNhan,
   editGhiChu,
 }: Props) {
-  const [suppliers, setSuppliers]     = React.useState<Supplier[]>([]);
+  const [suppliers, setSuppliers] = React.useState<Supplier[]>([]);
   const [suppLoading, setSuppLoading] = React.useState(true);
-  const [modalItems, setModalItems]   = React.useState<ReqItem[]>(items);
+  const [modalItems, setModalItems] = React.useState<ReqItem[]>(items);
   const [assignments, setAssignments] = React.useState<Assignment[]>(() =>
     items.map(i => ({
-      itemId:     i.id,
+      itemId: i.id,
       supplierId: editSupplierId ?? null,
-      donGia:     (i.inventoryItem?.giaNhap && i.inventoryItem.giaNhap > 0) ? i.inventoryItem.giaNhap : (i.donGiaDK > 0 ? i.donGiaDK : 0),
-      ngayGiao:   i.ngayGiao ? i.ngayGiao.slice(0, 10) : (editNgayNhan ? editNgayNhan.slice(0, 10) : today),
+      donGia: (i.inventoryItem?.giaNhap && i.inventoryItem.giaNhap > 0) ? i.inventoryItem.giaNhap : (i.donGiaDK > 0 ? i.donGiaDK : 0),
+      ngayGiao: i.ngayGiao ? i.ngayGiao.slice(0, 10) : (editNgayNhan ? editNgayNhan.slice(0, 10) : today),
       // Items đã xử lý: đánh dấu skip ngay từ đầu
       skip: !editOrderId && (i.trangThaiXuLy === "da-tao-don" || i.trangThaiXuLy === "bo-qua"),
     }))
   );
-  const [step, setStep]               = React.useState<"assign" | "confirm">("assign");
-  const [submitting, setSubmitting]   = React.useState(false);
-  const [result, setResult]           = React.useState<null | {
+  const [step, setStep] = React.useState<"assign" | "confirm">("assign");
+  const [submitting, setSubmitting] = React.useState(false);
+  const [result, setResult] = React.useState<null | {
     createdOrders: { code: string | null; supplierName: string; soMatHang: number }[];
   }>(null);
   // NCC đang được chọn để tạo đơn (bắt buộc chọn cụ thể)
-  const [activeSupId, setActiveSupId]           = React.useState<string | null>(editSupplierId ?? null);
+  const [activeSupId, setActiveSupId] = React.useState<string | null>(editSupplierId ?? null);
   const [editGhiChuState, setEditGhiChuState] = React.useState<string | null>(editGhiChu ?? null);
   // NCC đã tạo đơn xong
-  const [processedIds, setProcessedIds]         = React.useState<string[]>([]);
+  const [processedIds, setProcessedIds] = React.useState<string[]>([]);
   // Tất cả đơn đã tạo (gộp lại qua nhiều lần submit)
-  const [allCreatedOrders, setAllCreatedOrders]  = React.useState<{ code: string | null; supplierName: string; soMatHang: number }[]>([]);
+  const [allCreatedOrders, setAllCreatedOrders] = React.useState<{ code: string | null; supplierName: string; soMatHang: number }[]>([]);
   // Hiện preview modal
-  const [showPreview, setShowPreview]           = React.useState(false);
-  const [isEditPreview, setIsEditPreview]       = React.useState(false);
-  const [searchQuery, setSearchQuery]           = React.useState("");
-  const [supplierInputs, setSupplierInputs]     = React.useState<Record<string, string>>({});
-  const [defaultInvItems, setDefaultInvItems]   = React.useState<InventorySearchResult[]>([]);
-  const [rowInvItems, setRowInvItems]           = React.useState<Record<string, InventorySearchResult[]>>({});
-  const invSearchTimers                         = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const [showPreview, setShowPreview] = React.useState(false);
+  const [isEditPreview, setIsEditPreview] = React.useState(false);
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [supplierInputs, setSupplierInputs] = React.useState<Record<string, string>>({});
+  const [defaultInvItems, setDefaultInvItems] = React.useState<InventorySearchResult[]>([]);
+  const [rowInvItems, setRowInvItems] = React.useState<Record<string, InventorySearchResult[]>>({});
+  const invSearchTimers = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // Preload default inventory items for quick adding
   React.useEffect(() => {
     fetch("/api/plan-finance/inventory/search?limit=30")
       .then(r => r.json())
       .then(d => setDefaultInvItems(Array.isArray(d) ? d : []))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const searchInventoryForRow = (rowId: string, q: string) => {
@@ -168,7 +168,7 @@ export default function TaoDonMuaHangModal({
             setRowInvItems(prev => ({ ...prev, [rowId]: d }));
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     }, 180);
   };
 
@@ -247,8 +247,8 @@ export default function TaoDonMuaHangModal({
     const defaultSupId = editOrderId
       ? activeSupId
       : activeSupId && !processedIds.includes(activeSupId)
-      ? activeSupId
-      : null;
+        ? activeSupId
+        : null;
     const defaultNgayGiao =
       assignments[0]?.ngayGiao || (editNgayNhan ? editNgayNhan.slice(0, 10) : today);
 
@@ -306,7 +306,7 @@ export default function TaoDonMuaHangModal({
   const suppliersFor = (item: ReqItem): { matched: Supplier[]; others: Supplier[] } => {
     const catId = item.inventoryItem?.categoryId;
     if (!catId) return { matched: [], others: suppliers };
-    const matched    = suppliers.filter(s => s.categories.some(c => c.category.id === catId));
+    const matched = suppliers.filter(s => s.categories.some(c => c.category.id === catId));
     const matchedIds = new Set(matched.map(s => s.id));
     return { matched, others: suppliers.filter(s => !matchedIds.has(s.id)) };
   };
@@ -325,8 +325,8 @@ export default function TaoDonMuaHangModal({
   }, [assignments, suppliers, modalItems]);
 
   // Stats
-  const skippedItems  = assignments.filter(a => a.skip).length;
-  const pendingItems  = assignments.filter(a => !a.skip && !a.supplierId).length;
+  const skippedItems = assignments.filter(a => a.skip).length;
+  const pendingItems = assignments.filter(a => !a.skip && !a.supplierId).length;
   const assignedItems = assignments.filter(a => !a.skip && a.supplierId).length;
 
   // NCC chưa xử lý (chưa tạo đơn) = selected - processed
@@ -402,7 +402,7 @@ export default function TaoDonMuaHangModal({
               inventoryItemId: it?.inventoryItemId,
             };
           });
-        const res  = await fetch(`/api/plan-finance/purchase-requests/${reqId}/create-orders`, {
+        const res = await fetch(`/api/plan-finance/purchase-requests/${reqId}/create-orders`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ assignments: filtered }),
@@ -712,10 +712,10 @@ export default function TaoDonMuaHangModal({
                             backgroundColor: isLocked
                               ? "rgba(16, 185, 129, 0.05)"
                               : isHighlighted
-                              ? "#eff6ff"
-                              : a.supplierId
-                              ? "rgba(16, 185, 129, 0.03)"
-                              : undefined,
+                                ? "#eff6ff"
+                                : a.supplierId
+                                  ? "rgba(16, 185, 129, 0.03)"
+                                  : undefined,
                             transition: "background-color 0.15s ease",
                           }}
                         >
@@ -749,11 +749,11 @@ export default function TaoDonMuaHangModal({
                                           prev.map(it =>
                                             it.id === representative.id
                                               ? {
-                                                  ...it,
-                                                  tenHang: text,
-                                                  inventoryItemId: null,
-                                                  inventoryItem: null,
-                                                }
+                                                ...it,
+                                                tenHang: text,
+                                                inventoryItemId: null,
+                                                inventoryItem: null,
+                                              }
                                               : it
                                           )
                                         );
@@ -766,21 +766,21 @@ export default function TaoDonMuaHangModal({
                                             prev.map(it =>
                                               it.id === representative.id
                                                 ? {
-                                                    ...it,
+                                                  ...it,
+                                                  tenHang: picked.tenHang,
+                                                  donVi: picked.donVi || it.donVi || "Cái",
+                                                  donGiaDK: picked.giaNhap || 0,
+                                                  inventoryItemId: picked.id,
+                                                  inventoryItem: {
+                                                    code: picked.code,
                                                     tenHang: picked.tenHang,
-                                                    donVi: picked.donVi || it.donVi || "Cái",
-                                                    donGiaDK: picked.giaNhap || 0,
-                                                    inventoryItemId: picked.id,
-                                                    inventoryItem: {
-                                                      code: picked.code,
-                                                      tenHang: picked.tenHang,
-                                                      donVi: picked.donVi,
-                                                      categoryId: picked.categoryId || null,
-                                                      thongSoKyThuat: picked.thongSoKyThuat || null,
-                                                      imageUrl: picked.imageUrl || null,
-                                                      giaNhap: picked.giaNhap || 0,
-                                                    },
-                                                  }
+                                                    donVi: picked.donVi,
+                                                    categoryId: picked.categoryId || null,
+                                                    thongSoKyThuat: picked.thongSoKyThuat || null,
+                                                    imageUrl: picked.imageUrl || null,
+                                                    giaNhap: picked.giaNhap || 0,
+                                                  },
+                                                }
                                                 : it
                                             )
                                           );

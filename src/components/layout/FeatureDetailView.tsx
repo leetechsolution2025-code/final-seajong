@@ -468,6 +468,15 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
           desc: 'Đóng thùng carton thương hiệu Seajong, dán tem QR chống hàng giả và đóng pallet',
           badge: 'ĐÓNG GÓI',
         };
+      case 'shipment-tracking':
+        return {
+          title: 'Theo dõi vận đơn',
+          groupName: 'QUẢN LÝ HỆ THỐNG KHO',
+          icon: 'bi-truck',
+          color: 'cyan',
+          desc: 'Theo dõi tiến độ vận chuyển hàng hoá, điều phối nhà xe và đối soát giao nhận',
+          badge: 'VẬN CHUYỂN',
+        };
       case 'bom':
         return {
           title: 'Xây dựng định mức sản phẩm (BOM)',
