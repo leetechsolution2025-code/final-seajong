@@ -77,6 +77,7 @@ export const FinanceDebtsPage: React.FC<FinanceDebtsPageProps> = ({
   user,
 }) => {
   const [currentStep, setCurrentStep] = useState<number>(1);
+  const [tickerNews, setTickerNews] = useState<TickerItem[]>(DEBT_COST_TICKER_ITEMS);
 
   return (
     <div className="finance-debts-page h-full">
@@ -90,13 +91,14 @@ export const FinanceDebtsPage: React.FC<FinanceDebtsPageProps> = ({
         currentStep={currentStep}
         onStepChange={setCurrentStep}
         hideTicker={false}
-        customTickerNews={DEBT_COST_TICKER_ITEMS}
+        customTickerNews={tickerNews}
       >
         <DebtCostManagementView
           key={`debt-step-${currentStep}`}
           currentStep={currentStep}
           onShowToast={onShowToast}
           user={user}
+          onUpdateTickerItems={setTickerNews}
         />
       </StepPage>
     </div>

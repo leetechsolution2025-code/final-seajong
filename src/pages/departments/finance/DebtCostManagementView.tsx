@@ -54,7 +54,7 @@ import { ReceiptVoucherPrintModal, type ReceiptVoucherData } from './ReceiptVouc
 import { DebtAgingConfigOffcanvas, type DebtAgingConfig, DEFAULT_DEBT_AGING_CONFIG } from './DebtAgingConfigOffcanvas';
 import { DebtCostReportPrintModal } from './DebtCostReportPrintModal';
 import { DebtSubEntryDetailOffcanvas } from './DebtSubEntryDetailOffcanvas';
-import type { TickerItem } from '../../../components/common/Ticker';
+import type { TickerItem } from '../../../components/layout/DynamicTicker';
 import { useAuth } from '../../../context/AuthContext';
 
 // Hàm tính toán và xác định trạng thái tuổi nợ khách hàng theo cấu hình
@@ -905,195 +905,135 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
 
   // Tính toán số liệu thống kê realtime cho Ticker chuyên biệt theo từng tab (bước) được chọn
   const debtCostTickerItems = useMemo<TickerItem[]>(() => {
-    // 1. Dữ liệu chuyên biệt Bước 1: Công nợ phải thu
-    if (currentStep === 1) {
-      const totalRecRemaining = receivables.reduce((sum, r) => sum + (Number(r.remainingAmount) || 0), 0);
-      const totalRecPaid = receivables.reduce((sum, r) => sum + (Number(r.paidAmount) || 0), 0);
-      const totalRecContract = receivables.reduce((sum, r) => sum + (Number(r.contractValue) || (Number(r.paidAmount) + Number(r.remainingAmount)) || 0), 0);
-      const recoveryRate = totalRecContract > 0 ? ((totalRecPaid / totalRecContract) * 100).toFixed(1) : '0';
+    // 1. Số liệu tổng hợp Công nợ phải thu (TK 131)
+    const totalRecRemaining = receivables.reduce((sum, r) => sum + (Number(r.remainingAmount) || 0), 0);
+    const totalRecPaid = receivables.reduce((sum, r) => sum + (Number(r.paidAmount) || 0), 0);
+    const totalRecContract = receivables.reduce((sum, r) => sum + (Number(r.contractValue) || (Number(r.paidAmount) + Number(r.remainingAmount)) || 0), 0);
+    const recoveryRate = totalRecContract > 0 ? ((totalRecPaid / totalRecContract) * 100).toFixed(1) : '0';
 
-      const overdueRecItems = receivables.filter((r) => r.status === 'overdue' || (r.entries || []).some((e) => e.status === 'overdue'));
-      const totalRecOverdue = receivables.reduce((sum, r) => {
-        if (r.status === 'overdue') return sum + (Number(r.remainingAmount) || 0);
-        const entrySum = (r.entries || []).filter((e) => e.status === 'overdue').reduce((s, e) => s + (Number(e.remainingAmount) || 0), 0);
-        return sum + entrySum;
-      }, 0);
+    const overdueRecItems = receivables.filter((r) => r.status === 'overdue' || (r.entries || []).some((e) => e.status === 'overdue'));
+    const totalRecOverdue = receivables.reduce((sum, r) => {
+      if (r.status === 'overdue') return sum + (Number(r.remainingAmount) || 0);
+      const entrySum = (r.entries || []).filter((e) => e.status === 'overdue').reduce((s, e) => s + (Number(e.remainingAmount) || 0), 0);
+      return sum + entrySum;
+    }, 0);
 
-      const dueRecItems = receivables.filter((r) => r.status === 'due' || (r.entries || []).some((e) => e.status === 'due'));
-      const totalRecDue = receivables.reduce((sum, r) => {
-        if (r.status === 'due') return sum + (Number(r.remainingAmount) || 0);
-        const entrySum = (r.entries || []).filter((e) => e.status === 'due').reduce((s, e) => s + (Number(e.remainingAmount) || 0), 0);
-        return sum + entrySum;
-      }, 0);
+    // 2. Số liệu tổng hợp Công nợ phải trả (TK 331)
+    const totalPayRemaining = payables.reduce((sum, p) => sum + (Number(p.remainingAmount) || 0), 0);
+    const totalPayPaid = payables.reduce((sum, p) => sum + (Number(p.paidAmount) || 0), 0);
+    const totalPayContract = payables.reduce((sum, p) => sum + (Number(p.totalAmount) || (Number(p.paidAmount) + Number(p.remainingAmount)) || 0), 0);
+    const payRate = totalPayContract > 0 ? ((totalPayPaid / totalPayContract) * 100).toFixed(1) : '0';
 
-      const ontimeRemaining = Math.max(0, totalRecRemaining - totalRecOverdue - totalRecDue);
+    const overduePayItems = payables.filter((p) => p.status === 'overdue' || (p.entries || []).some((e) => e.status === 'overdue'));
+    const totalPayOverdue = payables.reduce((sum, p) => {
+      if (p.status === 'overdue') return sum + (Number(p.remainingAmount) || 0);
+      const entrySum = (p.entries || []).filter((e) => e.status === 'overdue').reduce((s, e) => s + (Number(e.remainingAmount) || 0), 0);
+      return sum + entrySum;
+    }, 0);
 
-      return [
-        {
-          tag: 'CÔNG NỢ PHẢI THU',
-          tagVariant: 'brand' as const,
-          text: `Tổng giá trị hợp đồng: **${formatNumberGroup(totalRecContract)} đ** (${receivables.length} khách hàng) • Còn phải thu: **${formatNumberGroup(totalRecRemaining)} đ**`,
-        },
-        {
-          tag: 'ĐÃ THU HỒI',
-          tagVariant: 'success' as const,
-          text: `Đã thu hồi tiền nợ: **${formatNumberGroup(totalRecPaid)} đ** (Tỷ lệ thu hồi đạt **${recoveryRate}%**)`,
-        },
-        {
-          tag: overdueRecItems.length > 0 ? 'NỢ QUÁ HẠN' : 'TRONG HẠN AN TOÀN',
-          tagVariant: overdueRecItems.length > 0 ? ('danger' as const) : ('success' as const),
-          text: overdueRecItems.length > 0
-            ? `Cảnh báo: Có **${overdueRecItems.length} khoản nợ quá hạn** với tổng số tiền **${formatNumberGroup(totalRecOverdue)} đ**`
-            : `Dư nợ trong hạn an toàn: **${formatNumberGroup(ontimeRemaining || totalRecRemaining)} đ** (100% trong hạn)`,
-        },
-        {
-          tag: 'SẮP ĐẾN HẠN',
-          tagVariant: totalRecDue > 0 ? ('warning' as const) : ('info' as const),
-          text: totalRecDue > 0
-            ? `Có **${dueRecItems.length} khoản nợ sắp đến hạn**: **${formatNumberGroup(totalRecDue)} đ** (cần theo dõi đôn đốc thu)`
-            : `Hiện không có khoản nợ nào sắp đến hạn cần cảnh báo`,
-        },
-        {
-          tag: 'TIẾN ĐỘ THU HỒI',
-          tagVariant: 'brand' as const,
-          text: `Theo dõi đối soát công nợ theo từng mốc nghiệm thu kỹ thuật và lịch thanh toán hợp đồng`,
-        },
-      ];
-    }
+    // 3. Số liệu tổng hợp Nợ vay ngân hàng (TK 341)
+    const totalLoanRemaining = loans.reduce((sum, l) => sum + (Number(l.remainingPrincipal) || 0), 0);
+    const totalLoanLimit = loans.reduce((sum, l) => sum + (Number(l.loanLimit) || 0), 0);
+    const totalLoanPaid = loans.reduce((sum, l) => sum + (Number(l.paidPrincipal) || 0), 0);
+    const totalLoan12m = loans.reduce((sum, l) => sum + (Number(l.dueWithin12m) || 0), 0);
+    const totalLoanInterest = loans.reduce((sum, l) => sum + (Number(l.monthlyInterestEst) || 0), 0);
 
-    // 2. Dữ liệu chuyên biệt Bước 2: Công nợ phải trả
-    if (currentStep === 2) {
-      const totalPayRemaining = payables.reduce((sum, p) => sum + (Number(p.remainingAmount) || 0), 0);
-      const totalPayPaid = payables.reduce((sum, p) => sum + (Number(p.paidAmount) || 0), 0);
-      const totalPayContract = payables.reduce((sum, p) => sum + (Number(p.totalAmount) || (Number(p.paidAmount) + Number(p.remainingAmount)) || 0), 0);
-      const payRate = totalPayContract > 0 ? ((totalPayPaid / totalPayContract) * 100).toFixed(1) : '0';
-
-      const dueSoonPayItems = payables.filter((p) => p.status === 'due_soon' || (p.entries || []).some((e) => e.status === 'due_soon'));
-      const totalPayDueSoon = payables.reduce((sum, p) => {
-        if (p.status === 'due_soon') return sum + (Number(p.remainingAmount) || 0);
-        const entrySum = (p.entries || []).filter((e) => e.status === 'due_soon').reduce((s, e) => s + (Number(e.remainingAmount) || 0), 0);
-        return sum + entrySum;
-      }, 0);
-
-      const overduePayItems = payables.filter((p) => p.status === 'overdue' || (p.entries || []).some((e) => e.status === 'overdue'));
-      const totalPayOverdue = payables.reduce((sum, p) => {
-        if (p.status === 'overdue') return sum + (Number(p.remainingAmount) || 0);
-        const entrySum = (p.entries || []).filter((e) => e.status === 'overdue').reduce((s, e) => s + (Number(e.remainingAmount) || 0), 0);
-        return sum + entrySum;
-      }, 0);
-
-      return [
-        {
-          tag: 'CÔNG NỢ PHẢI TRẢ',
-          tagVariant: 'brand' as const,
-          text: `Tổng nợ phải trả nhà cung cấp: **${formatNumberGroup(totalPayRemaining)} đ** (${payables.length} đối tác) • Tổng giá trị PO: **${formatNumberGroup(totalPayContract)} đ**`,
-        },
-        {
-          tag: 'ĐÃ THANH TOÁN',
-          tagVariant: 'success' as const,
-          text: `Lũy kế tiền hàng đã trả nhà cung cấp: **${formatNumberGroup(totalPayPaid)} đ** (Đạt **${payRate}%**)`,
-        },
-        {
-          tag: totalPayDueSoon > 0 ? 'ĐẾN HẠN THANH TOÁN' : 'HẠN MỨC THANH TOÁN',
-          tagVariant: totalPayDueSoon > 0 ? ('warning' as const) : ('success' as const),
-          text: totalPayDueSoon > 0
-            ? `Có **${dueSoonPayItems.length} đơn hàng PO** đến hạn thanh toán: **${formatNumberGroup(totalPayDueSoon)} đ**`
-            : `100% các khoản phải trả nhà cung cấp đều trong thời hạn thanh toán`,
-        },
-        {
-          tag: totalPayOverdue > 0 ? 'NỢ QUÁ HẠN TRẢ' : 'UY TÍN ĐỐI TÁC',
-          tagVariant: totalPayOverdue > 0 ? ('danger' as const) : ('info' as const),
-          text: totalPayOverdue > 0
-            ? `Cảnh báo: Có **${overduePayItems.length} khoản nợ quá hạn** chưa trả NCC: **${formatNumberGroup(totalPayOverdue)} đ**`
-            : `Đảm bảo uy tín thanh toán đúng hẹn để hưởng chính sách chiết khấu vật tư tốt nhất`,
-        },
-        {
-          tag: 'KẾ HOẠCH DÒNG TIỀN',
-          tagVariant: 'brand' as const,
-          text: `Cân đối dòng tiền chi trả nhà cung cấp thiết bị phòng tắm, nhà bếp, linh kiện sen vòi và dịch vụ vận chuyển`,
-        },
-      ];
-    }
-
-    // 3. Dữ liệu chuyên biệt Bước 3: Nợ vay ngân hàng
-    if (currentStep === 3) {
-      const totalLoanRemaining = loans.reduce((sum, l) => sum + (Number(l.remainingPrincipal) || 0), 0);
-      const totalLoanLimit = loans.reduce((sum, l) => sum + (Number(l.loanLimit) || 0), 0);
-      const totalLoanPaid = loans.reduce((sum, l) => sum + (Number(l.paidPrincipal) || 0), 0);
-      const totalLoan12m = loans.reduce((sum, l) => sum + (Number(l.dueWithin12m) || 0), 0);
-      const totalLoanInterest = loans.reduce((sum, l) => sum + (Number(l.monthlyInterestEst) || 0), 0);
-      const loanDisburseRate = totalLoanLimit > 0 ? ((totalLoanRemaining / totalLoanLimit) * 100).toFixed(1) : '0';
-
-      return [
-        {
-          tag: 'HẠN MỨC TÍN DỤNG',
-          tagVariant: 'brand' as const,
-          text: `Tổng hạn mức tín dụng được cấp: **${formatNumberGroup(totalLoanLimit)} đ** (${loans.length} hợp đồng tín dụng)`,
-        },
-        {
-          tag: 'DƯ NỢ GỐC THỰC TẾ',
-          tagVariant: 'warning' as const,
-          text: `Dư nợ tín dụng thực tế đang vay: **${formatNumberGroup(totalLoanRemaining)} đ** (Tỷ lệ giải ngân: **${loanDisburseRate}%**)`,
-        },
-        {
-          tag: 'ĐÃ TRẢ NỢ GỐC',
-          tagVariant: 'success' as const,
-          text: `Lũy kế nợ gốc đã hoàn trả ngân hàng: **${formatNumberGroup(totalLoanPaid)} đ**`,
-        },
-        {
-          tag: 'GỐC ĐẾN HẠN 12T',
-          tagVariant: 'danger' as const,
-          text: `Nợ gốc ngân hàng đến hạn trả trong 12 tháng tới (Mã 320 B01): **${formatNumberGroup(totalLoan12m)} đ**`,
-        },
-        {
-          tag: 'CHI PHÍ LÃI VAY',
-          tagVariant: 'info' as const,
-          text: totalLoanInterest > 0
-            ? `Ước tính lãi vay phải trả tháng này: **${formatNumberGroup(totalLoanInterest)} đ** (TK 635)`
-            : `Theo dõi sát biến động lãi suất tín dụng và kế hoạch trả nợ định kỳ`,
-        },
-      ];
-    }
-
-    // 4. Dữ liệu chuyên biệt Bước 4: Quản lý chi phí
+    // 4. Số liệu tổng hợp Quản lý chi phí (TK 62-64)
     const totalExpense = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-    const approvedExpense = expenses.filter((e) => e.status === 'approved').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-    const curMonthNum = new Date().getMonth() + 1;
-    const currentMonthExpenses = expenses.filter((e) => {
-      const parts = e.spendDate.split('/');
-      return parts.length >= 3 && parseInt(parts[1], 10) === curMonthNum && parts[2] === selectedYear;
-    });
-    const currentMonthTotal = currentMonthExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-    const curPurchaseTotal = currentMonthExpenses.filter((e) => classifyExpenseItem(e) === 'purchase').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-    const curDebtTotal = currentMonthExpenses.filter((e) => classifyExpenseItem(e) === 'debt_payment').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-    const curOperatingTotal = currentMonthExpenses.filter((e) => classifyExpenseItem(e) === 'operating').reduce((sum, e) => sum + (Number(e.amount) || 0), 0) + fixedAssetDepreciationMonthly.total;
+    const allPurchaseTotal = expenses.filter((e) => classifyExpenseItem(e) === 'purchase').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const allDebtTotal = expenses.filter((e) => classifyExpenseItem(e) === 'debt_payment').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const allOperatingTotal = expenses.filter((e) => classifyExpenseItem(e) === 'operating').reduce((sum, e) => sum + (Number(e.amount) || 0), 0) + fixedAssetDepreciationMonthly.total;
+
+    // Các thẻ Ticker cơ bản theo đúng yêu cầu: Tổng số tiền gốc, Tổng đã thu/trả, Tổng nợ phải thu/trả
+    const tickerRecItem: TickerItem = {
+      badge: 'CÔNG NỢ PHẢI THU',
+      badgeColor: 'bg-sky-50 text-sky-700 border-sky-200',
+      text: `Tổng số tiền gốc: <strong>${formatNumberGroup(totalRecContract)} đ</strong> • Tổng đã thu: <strong style="color: #059669">${formatNumberGroup(totalRecPaid)} đ</strong> (${recoveryRate}%) • Tổng nợ phải thu: <strong style="color: #dc2626">${formatNumberGroup(totalRecRemaining)} đ</strong> (${receivables.length} khách hàng)`,
+    };
+
+    const tickerPayItem: TickerItem = {
+      badge: 'CÔNG NỢ PHẢI TRẢ',
+      badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
+      text: `Tổng số tiền gốc: <strong>${formatNumberGroup(totalPayContract)} đ</strong> • Tổng đã trả: <strong style="color: #059669">${formatNumberGroup(totalPayPaid)} đ</strong> (${payRate}%) • Tổng nợ phải trả: <strong style="color: #dc2626">${formatNumberGroup(totalPayRemaining)} đ</strong> (${payables.length} đối tác)`,
+    };
+
+    const tickerLoanItem: TickerItem = {
+      badge: 'VAY VỐN NGÂN HÀNG',
+      badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
+      text: `Tổng hạn mức vay: <strong>${formatNumberGroup(totalLoanLimit)} đ</strong> • Đã trả nợ gốc: <strong style="color: #059669">${formatNumberGroup(totalLoanPaid)} đ</strong> • Dư nợ còn lại: <strong style="color: #dc2626">${formatNumberGroup(totalLoanRemaining)} đ</strong> (${loans.length} HĐ)`,
+    };
+
+    const tickerExpItem: TickerItem = {
+      badge: 'QUẢN LÝ CHI PHÍ',
+      badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      text: `Tổng chi phí: <strong>${formatNumberGroup(totalExpense)} đ</strong> • Mua hàng: <strong>${formatNumberGroup(allPurchaseTotal)} đ</strong> • Công nợ: <strong>${formatNumberGroup(allDebtTotal)} đ</strong> • Vận hành: <strong>${formatNumberGroup(allOperatingTotal)} đ</strong>`,
+    };
+
+    if (currentStep === 1) {
+      return [
+        tickerRecItem,
+        tickerPayItem,
+        overdueRecItems.length > 0
+          ? {
+              badge: 'NỢ PHẢI THU QUÁ HẠN',
+              badgeColor: 'bg-rose-50 text-rose-700 border-rose-200',
+              text: `Cảnh báo: Có <strong>${overdueRecItems.length} khoản nợ quá hạn</strong> thu hồi: <strong>${formatNumberGroup(totalRecOverdue)} đ</strong>`,
+            }
+          : {
+              badge: 'TRONG HẠN AN TOÀN',
+              badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+              text: `Dư nợ trong hạn an toàn: <strong>${formatNumberGroup(totalRecRemaining)} đ</strong> (100% trong hạn thanh toán)`,
+            },
+        tickerLoanItem,
+        tickerExpItem,
+      ];
+    }
+
+    if (currentStep === 2) {
+      return [
+        tickerPayItem,
+        tickerRecItem,
+        overduePayItems.length > 0
+          ? {
+              badge: 'NỢ PHẢI TRẢ QUÁ HẠN',
+              badgeColor: 'bg-rose-50 text-rose-700 border-rose-200',
+              text: `Cảnh báo: Có <strong>${overduePayItems.length} khoản nợ quá hạn</strong> chưa trả NCC: <strong>${formatNumberGroup(totalPayOverdue)} đ</strong>`,
+            }
+          : {
+              badge: 'TRONG HẠN THANH TOÁN',
+              badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+              text: `100% các khoản phải trả nhà cung cấp và đối tác vận chuyển đều trong thời hạn thanh toán`,
+            },
+        tickerLoanItem,
+        tickerExpItem,
+      ];
+    }
+
+    if (currentStep === 3) {
+      return [
+        tickerLoanItem,
+        tickerRecItem,
+        tickerPayItem,
+        totalLoan12m > 0
+          ? {
+              badge: 'GỐC ĐẾN HẠN 12T',
+              badgeColor: 'bg-rose-50 text-rose-700 border-rose-200',
+              text: `Nợ gốc ngân hàng đến hạn trả trong 12 tháng tới (Mã 320 B01): <strong>${formatNumberGroup(totalLoan12m)} đ</strong>`,
+            }
+          : {
+              badge: 'CHI PHÍ LÃI VAY',
+              badgeColor: 'bg-sky-50 text-sky-700 border-sky-200',
+              text: `Ước tính lãi vay phải trả tháng này: <strong>${formatNumberGroup(totalLoanInterest)} đ</strong>`,
+            },
+        tickerExpItem,
+      ];
+    }
 
     return [
-      {
-        tag: 'QUẢN LÝ CHI PHÍ',
-        tagVariant: 'brand' as const,
-        text: `Tổng chi phí năm ${selectedYear}: **${formatNumberGroup(totalExpense)} đ** (${expenses.length} khoản mục phát sinh)`,
-      },
-      {
-        tag: 'CHI PHÍ THÁNG NÀY',
-        tagVariant: 'warning' as const,
-        text: `Chi phí tháng ${curMonthNum < 10 ? `0${curMonthNum}` : curMonthNum}/${selectedYear}: **${formatNumberGroup(currentMonthTotal)} đ** (Mua hàng: **${formatNumberGroup(curPurchaseTotal)} đ** • Công nợ: **${formatNumberGroup(curDebtTotal)} đ** • Vận hành: **${formatNumberGroup(curOperatingTotal)} đ**)`,
-      },
-      {
-        tag: 'ĐÃ DUYỆT CHI',
-        tagVariant: 'success' as const,
-        text: `Chi phí đã được phê duyệt giải ngân: **${formatNumberGroup(approvedExpense)} đ** (${expenses.filter((e) => e.status === 'approved').length} phiếu)`,
-      },
-      {
-        tag: 'KHẤU HAO TỰ ĐỘNG',
-        tagVariant: 'info' as const,
-        text: `Trích khấu hao TSCĐ tự động định kỳ: **${formatNumberGroup(fixedAssetDepreciationMonthly.total)} đ/tháng** vào Sổ nhật ký chung`,
-      },
-      {
-        tag: '3 NHÓM CHI PHÍ',
-        tagVariant: 'brand' as const,
-        text: `Phân định 3 nhóm chi phí độc lập: Chi phí mua hàng, Thanh toán công nợ và Chi phí vận hành`,
-      },
+      tickerExpItem,
+      tickerRecItem,
+      tickerPayItem,
+      tickerLoanItem,
     ];
   }, [receivables, payables, loans, expenses, currentStep, selectedYear, fixedAssetDepreciationMonthly]);
 
@@ -3138,6 +3078,54 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     return filteredExpenses.slice(startIndex, startIndex + pageSize);
   }, [currentStep, filteredReceivables, filteredPayables, filteredLoans, filteredExpenses, currentPage, pageSize]);
 
+  // Tính tổng số liệu cho dòng Tổng cộng ở các bước (chuẩn như Bước 4):
+  const totalRecContractAll = useMemo(
+    () => filteredReceivables.reduce((sum, r) => sum + (Number(r.contractValue) || 0), 0),
+    [filteredReceivables]
+  );
+  const totalRecPaidAll = useMemo(
+    () => filteredReceivables.reduce((sum, r) => sum + (Number(r.paidAmount) || 0), 0),
+    [filteredReceivables]
+  );
+  const totalRecRemainingAll = useMemo(
+    () => filteredReceivables.reduce((sum, r) => sum + (Number(r.remainingAmount) || 0), 0),
+    [filteredReceivables]
+  );
+
+  const totalPayContractAll = useMemo(
+    () => filteredPayables.reduce((sum, p) => sum + (Number(p.totalAmount) || 0), 0),
+    [filteredPayables]
+  );
+  const totalPayPaidAll = useMemo(
+    () => filteredPayables.reduce((sum, p) => sum + (Number(p.paidAmount) || 0), 0),
+    [filteredPayables]
+  );
+  const totalPayRemainingAll = useMemo(
+    () => filteredPayables.reduce((sum, p) => sum + (Number(p.remainingAmount) || 0), 0),
+    [filteredPayables]
+  );
+
+  const totalLoanLimitAll = useMemo(
+    () => filteredLoans.reduce((sum, l) => sum + (Number(l.loanLimit) || 0), 0),
+    [filteredLoans]
+  );
+  const totalLoanRemainingAll = useMemo(
+    () => filteredLoans.reduce((sum, l) => sum + (Number(l.remainingPrincipal) || 0), 0),
+    [filteredLoans]
+  );
+  const totalLoanPaidAll = useMemo(
+    () => filteredLoans.reduce((sum, l) => sum + (Number(l.paidPrincipal) || 0), 0),
+    [filteredLoans]
+  );
+  const totalLoan12mAll = useMemo(
+    () => filteredLoans.reduce((sum, l) => sum + (Number(l.dueWithin12m) || 0), 0),
+    [filteredLoans]
+  );
+  const totalLoanInterestAll = useMemo(
+    () => filteredLoans.reduce((sum, l) => sum + (Number(l.monthlyInterestEst) || 0), 0),
+    [filteredLoans]
+  );
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', minHeight: 0 }}>
       {/* ── 1. TABLE TOOLBAR TIÊU CHUẨN (GIẢM KHOẢNG CÁCH SÁT BẢNG) ── */}
@@ -3809,14 +3797,224 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                     );
                   })}
                 </>
-              ) : pagedList.length === 0 ? (
-                <tr>
-                  <td colSpan={10} style={{ padding: '40px 16px', textAlign: 'center', color: '#64748b' }}>
-                    Không tìm thấy bản ghi nào phù hợp với bộ lọc tìm kiếm
-                  </td>
-                </tr>
               ) : (
-                pagedList.map((row: any) => {
+                <>
+                  {/* DÒNG TỔNG CỘNG BƯỚC 1: CÔNG NỢ PHẢI THU (STICKY ĐẦU BẢNG NHƯ BƯỚC 4) */}
+                  {currentStep === 1 && (
+                    <tr
+                      style={{
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: 10,
+                        backgroundColor: '#f1f5f9',
+                        borderBottom: '2px solid #cbd5e1',
+                        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+                      }}
+                    >
+                      <td style={{ padding: '7px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#0f172a', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                            Tổng cộng
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <div
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '2px 8px',
+                                backgroundColor: '#eff6ff',
+                                border: '1px solid #bfdbfe',
+                                borderRadius: '6px',
+                                fontSize: '0.75rem',
+                              }}
+                              title="Tổng số lượng khách hàng / đại lý"
+                            >
+                              <span style={{ color: '#0284c7', fontWeight: 600 }}>Khách hàng:</span>
+                              <span style={{ color: '#0369a1', fontWeight: 800 }}>{filteredReceivables.length} đối tác</span>
+                            </div>
+                            <div
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '2px 8px',
+                                backgroundColor: '#ecfdf5',
+                                border: '1px solid #a7f3d0',
+                                borderRadius: '6px',
+                                fontSize: '0.75rem',
+                              }}
+                              title="Tỷ lệ thu hồi nợ"
+                            >
+                              <span style={{ color: '#059669', fontWeight: 600 }}>Tỷ lệ thu hồi:</span>
+                              <span style={{ color: '#047857', fontWeight: 800 }}>
+                                {totalRecContractAll > 0 ? ((totalRecPaidAll / totalRecContractAll) * 100).toFixed(1) : 0}%
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#0f172a', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                        {formatNumberGroup(totalRecContractAll)}
+                      </td>
+                      <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#059669', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                        {formatNumberGroup(totalRecPaidAll)}
+                      </td>
+                      <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
+                        Đã thu {totalRecContractAll > 0 ? ((totalRecPaidAll / totalRecContractAll) * 100).toFixed(1) : 0}%
+                      </td>
+                      <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: totalRecRemainingAll > 0 ? '#dc2626' : '#059669', fontSize: '0.9375rem', whiteSpace: 'nowrap' }}>
+                        {formatNumberGroup(totalRecRemainingAll)}
+                      </td>
+                      <td style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></td>
+                    </tr>
+                  )}
+
+                  {/* DÒNG TỔNG CỘNG BƯỚC 2: CÔNG NỢ PHẢI TRẢ (STICKY ĐẦU BẢNG NHƯ BƯỚC 4) */}
+                  {currentStep === 2 && (
+                    <tr
+                      style={{
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: 10,
+                        backgroundColor: '#f1f5f9',
+                        borderBottom: '2px solid #cbd5e1',
+                        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+                      }}
+                    >
+                      <td style={{ padding: '7px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#0f172a', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                            Tổng cộng
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <div
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '2px 8px',
+                                backgroundColor: '#fffbeb',
+                                border: '1px solid #fde68a',
+                                borderRadius: '6px',
+                                fontSize: '0.75rem',
+                              }}
+                              title="Tổng số lượng nhà cung cấp và đơn vị vận chuyển"
+                            >
+                              <span style={{ color: '#d97706', fontWeight: 600 }}>Đối tác:</span>
+                              <span style={{ color: '#b45309', fontWeight: 800 }}>{filteredPayables.length} đối tác</span>
+                            </div>
+                            <div
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '2px 8px',
+                                backgroundColor: '#ecfdf5',
+                                border: '1px solid #a7f3d0',
+                                borderRadius: '6px',
+                                fontSize: '0.75rem',
+                              }}
+                              title="Tỷ lệ thanh toán"
+                            >
+                              <span style={{ color: '#059669', fontWeight: 600 }}>Tỷ lệ đã trả:</span>
+                              <span style={{ color: '#047857', fontWeight: 800 }}>
+                                {totalPayContractAll > 0 ? ((totalPayPaidAll / totalPayContractAll) * 100).toFixed(1) : 0}%
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#0f172a', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                        {formatNumberGroup(totalPayContractAll)}
+                      </td>
+                      <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#059669', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                        {formatNumberGroup(totalPayPaidAll)}
+                      </td>
+                      <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
+                        Đã trả {totalPayContractAll > 0 ? ((totalPayPaidAll / totalPayContractAll) * 100).toFixed(1) : 0}%
+                      </td>
+                      <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: totalPayRemainingAll > 0 ? '#dc2626' : '#059669', fontSize: '0.9375rem', whiteSpace: 'nowrap' }}>
+                        {formatNumberGroup(totalPayRemainingAll)}
+                      </td>
+                      <td style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></td>
+                    </tr>
+                  )}
+
+                  {/* DÒNG TỔNG CỘNG BƯỚC 3: NỢ VAY NGÂN HÀNG (STICKY ĐẦU BẢNG NHƯ BƯỚC 4) */}
+                  {currentStep === 3 && (
+                    <tr
+                      style={{
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: 10,
+                        backgroundColor: '#f1f5f9',
+                        borderBottom: '2px solid #cbd5e1',
+                        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+                      }}
+                    >
+                      <td style={{ padding: '7px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#0f172a', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                            Tổng cộng
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <div
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '2px 8px',
+                                backgroundColor: '#f5f3ff',
+                                border: '1px solid #ddd6fe',
+                                borderRadius: '6px',
+                                fontSize: '0.75rem',
+                              }}
+                              title="Tổng số hợp đồng vay ngân hàng"
+                            >
+                              <span style={{ color: '#7c3aed', fontWeight: 600 }}>Hợp đồng tín dụng:</span>
+                              <span style={{ color: '#6d28d9', fontWeight: 800 }}>{filteredLoans.length} HĐ</span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="hidden sm:table-cell" style={{ padding: '7px 12px', fontSize: '0.75rem', color: '#64748b' }}>
+                        {totalLoan12mAll > 0 ? (
+                          <span style={{ color: '#dc2626', fontWeight: 700 }}>
+                            Đến hạn 12T: {formatNumberGroup(totalLoan12mAll)}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#059669', fontWeight: 600 }}>Dư nợ trong hạn</span>
+                        )}
+                      </td>
+                      <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.875rem' }}>
+                          {formatNumberGroup(totalLoanRemainingAll)}
+                        </div>
+                        <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>
+                          HM: {formatNumberGroup(totalLoanLimitAll)} • Đã trả: {formatNumberGroup(totalLoanPaidAll)}
+                        </div>
+                      </td>
+                      <td className="hidden sm:table-cell" style={{ padding: '7px 12px', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0284c7' }}>
+                          ~{formatNumberGroup(totalLoanInterestAll)} đ/th
+                        </div>
+                        <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>
+                          Ước tính lãi vay hàng tháng
+                        </div>
+                      </td>
+                      <td style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></td>
+                    </tr>
+                  )}
+
+                  {pagedList.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} style={{ padding: '40px 16px', textAlign: 'center', color: '#64748b' }}>
+                        Không tìm thấy bản ghi nào phù hợp với bộ lọc tìm kiếm
+                      </td>
+                    </tr>
+                  ) : (
+                    pagedList.map((row: any) => {
 
                   // ── DÒNG BƯỚC 1: CÔNG NỢ PHẢI THU (BỎ STT, MỖI THỜI ĐIỂM CHỈ MỞ 1 MỤC LỚN) ──
                   if (currentStep === 1) {
@@ -5512,7 +5710,9 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                   return null;
                 })
               )}
-            </tbody>
+            </>
+          )}
+        </tbody>
           </table>
         </div>
 
