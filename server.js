@@ -15123,6 +15123,152 @@ async function createDepositPaymentOrderOnApprove(approvalReq, approverName, not
   }
 }
 
+async function handleProductionRequestOnApprove(approvalReq, approverName, note) {
+  try {
+    const orderId = approvalReq.entityId;
+    const orderCode = approvalReq.entityCode;
+
+    let order = null;
+    if (orderId) {
+      order = await prisma.saleOrder.findUnique({
+        where: { id: orderId },
+        include: { saleOrderItems: true, customer: true }
+      });
+    }
+    if (!order && orderCode) {
+      order = await prisma.saleOrder.findFirst({
+        where: { code: orderCode },
+        include: { saleOrderItems: true, customer: true }
+      });
+    }
+
+    if (!order) {
+      console.warn(`[handleProductionRequestOnApprove] Không tìm thấy đơn hàng / lệnh sản xuất cho approval ${approvalReq.id}`);
+      return;
+    }
+
+    // 1. Cập nhật trạng thái lệnh sản xuất thành in_production
+    await prisma.saleOrder.update({
+      where: { id: order.id },
+      data: {
+        trangThai: 'in_production',
+        keToanDuyet: 'approved',
+      }
+    });
+
+    // 2. Bóc tách định mức vật tư (BOM) từ các mặt hàng sản xuất
+    const materialMap = new Map();
+    for (const item of (order.saleOrderItems || [])) {
+      let bom = null;
+      if (item.dinhMucId) {
+        bom = await prisma.dinhMuc.findUnique({
+          where: { id: item.dinhMucId },
+          include: { vatTu: { include: { inventoryItem: true } } }
+        });
+      }
+      if (!bom && item.inventoryItemId) {
+        bom = await prisma.dinhMuc.findFirst({
+          where: { inventoryItemId: item.inventoryItemId },
+          include: { vatTu: { include: { inventoryItem: true } } }
+        });
+      }
+      if (!bom && item.tenHang) {
+        const inv = await prisma.inventoryItem.findFirst({
+          where: { OR: [{ tenHang: item.tenHang }, { code: item.tenHang }] },
+          include: { dinhMucs: { include: { vatTu: { include: { inventoryItem: true } } } } }
+        });
+        bom = inv?.dinhMucs?.[0] || null;
+      }
+
+      const targetQty = Number(item.soLuong) || 1;
+      if (bom && Array.isArray(bom.vatTu)) {
+        for (const vt of bom.vatTu) {
+          const invId = vt.inventoryItemId || vt.inventoryItem?.id || vt.id;
+          const totalQty = (Number(vt.soLuong) || 1) * targetQty;
+          if (invId) {
+            if (materialMap.has(invId)) {
+              materialMap.get(invId).requestedQty += totalQty;
+            } else {
+              materialMap.set(invId, {
+                inventoryItemId: invId,
+                requestedQty: totalQty,
+                tenHang: vt.inventoryItem?.tenHang || vt.tenVatTu || 'Vật tư',
+              });
+            }
+          }
+        }
+      }
+    }
+
+    const materialList = Array.from(materialMap.values());
+
+    // 3. Kiểm tra xem đã có LogisticsTicket MATERIAL_PICKING chưa
+    const existingTicket = await prisma.logisticsTicket.findFirst({
+      where: {
+        saleOrderId: order.id,
+        type: 'MATERIAL_PICKING'
+      }
+    });
+
+    if (!existingTicket && materialList.length > 0) {
+      const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
+      const ticketSuffix = order.code ? order.code.replace(/^LSX-/, '') : dateStr;
+      const ticketCode = `LXK-VT-${ticketSuffix}`;
+
+      // Tạo LogisticsTicket loại MATERIAL_PICKING
+      await prisma.logisticsTicket.create({
+        data: {
+          code: ticketCode,
+          type: 'MATERIAL_PICKING',
+          status: 'PENDING',
+          saleOrderId: order.id,
+          items: {
+            create: materialList.map(m => ({
+              inventoryItemId: m.inventoryItemId,
+              requestedQty: m.requestedQty,
+              pickedQty: 0
+            }))
+          }
+        }
+      });
+
+      // Tạo Task cho bộ phận Kho vận
+      await prisma.task.create({
+        data: {
+          title: `Lệnh xuất kho cấp phát vật tư cho lệnh sản xuất ${order.code || order.id}`,
+          description: `Xuất kho ${materialList.length} loại vật tư cấp phát cho lệnh sản xuất ${order.code || order.id}.\nPhê duyệt bởi: ${approverName || 'Ban Giám đốc'}.\nGhi chú: ${note || 'Theo phê duyệt Giám đốc'}.`,
+          deptCode: 'logistics',
+          priority: 'high',
+          status: 'pending',
+          assigneeId: 'logistics-team',
+          creatorId: approverName || 'director',
+          dueDate: order.ngayGiao ? new Date(order.ngayGiao) : new Date(Date.now() + 3 * 86400000),
+          actualResult: JSON.stringify(materialList)
+        }
+      });
+
+      // Gửi thông báo liên phòng ban tới Kho vận
+      try {
+        await sendCrossDeptNotification({
+          title: `📦 Lệnh cấp phát vật tư sản xuất: ${ticketCode}`,
+          content: `Giám đốc đã phê duyệt lệnh sản xuất ${order.code}. Bộ phận kho vận vui lòng chuẩn bị và cấp phát ${materialList.length} loại vật tư theo lệnh ${ticketCode}.`,
+          type: 'info',
+          priority: 'high',
+          sourceDept: 'Ban Giám đốc',
+          targetDept: 'logistics',
+          link: '/logistics/overview',
+          entityType: 'logistics_ticket',
+          entityId: ticketCode
+        });
+      } catch (ne) {
+        console.warn('[handleProductionRequestOnApprove notification error]:', ne.message);
+      }
+    }
+  } catch (err) {
+    console.error('[handleProductionRequestOnApprove error]:', err);
+  }
+}
+
 app.patch('/api/approval-documents/:id/status', async (req, res) => {
   try {
     const { id } = req.params;
@@ -15236,6 +15382,10 @@ app.patch('/api/approval-documents/:id/status', async (req, res) => {
       if (approveDeposit === true) {
         await createDepositPaymentOrderOnApprove(updated, approverName, note);
       }
+    }
+
+    if (status === 'approved' && (String(updated.entityType || '').toUpperCase() === 'PRODUCTION_REQUEST' || String(updated.entityCode || '').startsWith('LSX-'))) {
+      await handleProductionRequestOnApprove(updated, approverName, note);
     }
 
     const entLower = String(updated.entityType || bodyEntityType || '').toLowerCase();
@@ -15818,6 +15968,10 @@ app.patch('/api/approval-requests/:id', async (req, res) => {
 
     if (status === 'approved' && String(updated.entityType || '').toLowerCase() === 'purchase_order') {
       await recordPurchaseOrderDebtOnApprove(updated);
+    }
+
+    if (status === 'approved' && (String(updated.entityType || '').toUpperCase() === 'PRODUCTION_REQUEST' || String(updated.entityCode || '').startsWith('LSX-'))) {
+      await handleProductionRequestOnApprove(updated, approvedById || updated.approvedById, note);
     }
 
     if (status === 'approved' || status === 'rejected') {
