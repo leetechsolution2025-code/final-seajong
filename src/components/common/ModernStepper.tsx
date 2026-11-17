@@ -84,7 +84,7 @@ export const ModernStepper: React.FC<ModernStepperProps> = ({
                   <div
                     className="modern-step-icon"
                     style={{
-                      ...(isActive ? { background: '#003087', color: '#ffffff' } : {}),
+                      ...(isActive ? { background: 'var(--color-primary, #0891b2)', color: '#ffffff' } : {}),
                       ...(isActive && s.color ? { background: s.color } : {}),
                     }}
                   >

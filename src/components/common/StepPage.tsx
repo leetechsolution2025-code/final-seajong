@@ -45,7 +45,7 @@ export const StepPage: React.FC<StepPageProps> = ({
   title,
   description,
   icon = 'bi-grid',
-  color = 'indigo',
+  color = 'cyan',
   badge,
   pageHeader,
   steps,

@@ -452,8 +452,8 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
               width: '36px',
               height: '36px',
               borderRadius: '50%',
-              backgroundColor: '#eff6ff',
-              color: '#4f46e5',
+              backgroundColor: 'rgba(8, 145, 178, 0.1)',
+              color: '#0891b2',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -461,9 +461,9 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
             }}
           >
             {rules.selectedShiftId === 'shift-factory-1' ? (
-              <Tools size={17} color="#4f46e5" />
+              <Tools size={17} color="#0891b2" />
             ) : (
-              <Buildings size={18} color="#4f46e5" />
+              <Buildings size={18} color="#0891b2" />
             )}
           </div>
 
@@ -496,7 +496,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
                   gap: '5px',
                   fontSize: '1.0625rem',
                   fontWeight: 800,
-                  color: '#4f46e5',
+                  color: '#0891b2',
                   lineHeight: 1.2,
                   background: 'transparent',
                   border: 'none',
@@ -508,9 +508,9 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
               >
                 <span className="bom-labor-shift-btn-text">{currentShift?.name || 'Khối hành chính văn phòng'}</span>
                 {isShiftDropdownOpen ? (
-                  <ChevronUp size={13} color="#4f46e5" style={{ flexShrink: 0 }} />
+                  <ChevronUp size={13} color="#0891b2" style={{ flexShrink: 0 }} />
                 ) : (
-                  <ChevronDown size={13} color="#4f46e5" style={{ flexShrink: 0 }} />
+                  <ChevronDown size={13} color="#0891b2" style={{ flexShrink: 0 }} />
                 )}
               </button>
 
@@ -591,7 +591,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
                           padding: '8px 14px',
                           cursor: 'pointer',
                           backgroundColor: isSelected ? '#eff6ff' : '#ffffff',
-                          borderLeft: isSelected ? '3px solid #4f46e5' : '3px solid transparent',
+                          borderLeft: isSelected ? '3px solid #0891b2' : '3px solid transparent',
                           borderBottom: '1px solid #f1f5f9',
                           transition: 'background-color 0.15s ease',
                         }}
@@ -607,12 +607,12 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
                             style={{
                               fontSize: '0.875rem',
                               fontWeight: isSelected ? 800 : 600,
-                              color: isSelected ? '#4f46e5' : '#1e293b',
+                              color: isSelected ? '#0891b2' : '#1e293b',
                             }}
                           >
                             {shift.name}
                           </span>
-                          {isSelected && <Check2 size={16} color="#4f46e5" style={{ flexShrink: 0 }} />}
+                          {isSelected && <Check2 size={16} color="#0891b2" style={{ flexShrink: 0 }} />}
                         </div>
 
                         {shift.departmentScope ? (
@@ -651,15 +651,15 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
             variant="ghost"
             size="sm"
             className="bom-labor-reset-btn"
-            leftIcon={<ArrowCounterclockwise size={13} color="#4f46e5" />}
+            leftIcon={<ArrowCounterclockwise size={13} color="#0891b2" />}
             onClick={handleResetDefaults}
             disabled={isSaving}
             style={{
               fontSize: '0.75rem',
               fontWeight: 700,
-              color: '#4f46e5',
-              backgroundColor: '#eff6ff',
-              border: '1px solid #bfdbfe',
+              color: '#0891b2',
+              backgroundColor: 'rgba(8, 145, 178, 0.08)',
+              border: '1px solid rgba(8, 145, 178, 0.2)',
               borderRadius: '6px',
               padding: '4px 10px',
             }}
@@ -679,14 +679,14 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
             onClick={handleSave}
             disabled={isSaving}
             style={{
-              backgroundColor: '#4f46e5',
-              borderColor: '#4f46e5',
+              backgroundColor: '#0891b2',
+              borderColor: '#0891b2',
               color: '#ffffff',
               fontWeight: 800,
               fontSize: '0.8125rem',
               padding: '6px 14px',
               borderRadius: '6px',
-              boxShadow: '0 2px 5px rgba(79, 70, 229, 0.25)',
+              boxShadow: '0 2px 5px rgba(8, 145, 178, 0.25)',
             }}
           >
             {isSaving ? 'Đang lưu...' : (
@@ -1100,7 +1100,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
                     borderRadius: '4px',
                     border: 'none',
                     cursor: 'pointer',
-                    backgroundColor: rules.violationPenaltyMode !== 'penalty_money' ? '#4f46e5' : 'transparent',
+                    backgroundColor: rules.violationPenaltyMode !== 'penalty_money' ? '#0891b2' : 'transparent',
                     color: rules.violationPenaltyMode !== 'penalty_money' ? '#ffffff' : '#64748b',
                     transition: 'all 0.15s ease',
                   }}
@@ -1120,7 +1120,7 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
                     borderRadius: '4px',
                     border: 'none',
                     cursor: 'pointer',
-                    backgroundColor: rules.violationPenaltyMode === 'penalty_money' ? '#4f46e5' : 'transparent',
+                    backgroundColor: rules.violationPenaltyMode === 'penalty_money' ? '#0891b2' : 'transparent',
                     color: rules.violationPenaltyMode === 'penalty_money' ? '#ffffff' : '#64748b',
                     transition: 'all 0.15s ease',
                   }}
@@ -1328,10 +1328,10 @@ export const LaborRulesView: React.FC<LaborRulesViewProps> = ({ onShowToast }) =
                                 width: '70px',
                                 padding: '3px 6px',
                                 fontSize: '0.75rem',
-                                border: '1.5px solid #4f46e5',
+                                border: '1.5px solid #0891b2',
                                 borderRadius: '4px',
                                 fontWeight: 700,
-                                color: '#4f46e5',
+                                color: '#0891b2',
                               }}
                             />
                             <span style={{ fontSize: '0.7rem', color: '#64748b' }}>công / ca</span>

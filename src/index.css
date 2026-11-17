@@ -11,7 +11,7 @@
   --card-foreground: #0f172a;
   --popover: #ffffff;
   --popover-foreground: #0f172a;
-  --primary: #003087;
+  --primary: #0891b2;
   --primary-foreground: #ffffff;
   --secondary: #f1f5f9;
   --secondary-foreground: #0f172a;
@@ -23,7 +23,7 @@
   --destructive-foreground: #ffffff;
   --border: #e2e8f0;
   --input: #e2e8f0;
-  --ring: #003087;
+  --ring: #0891b2;
   --radius: 0.5rem;
 }
 
@@ -148,8 +148,8 @@
 }
 
 :root {
-  --primary: #0284c7;
-  --primary-hover: #0369a1;
+  --primary: #0891b2;
+  --primary-hover: #0e7490;
   --font-sans: 'Roboto Condensed', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
   font-family: 'Roboto Condensed', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -712,56 +712,28 @@ input[type="number"] {
   transform: scale(1.05);
 }
 
-/* Icon box theme variants */
-.ph-icon-box-rose {
-  background: rgba(244, 63, 94, 0.12);
-  border: 1px solid rgba(244, 63, 94, 0.25);
-  box-shadow: 0 4px 12px rgba(244, 63, 94, 0.1);
-}
-
-.ph-icon-box-indigo {
-  background: rgba(99, 102, 241, 0.12);
-  border: 1px solid rgba(99, 102, 241, 0.25);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
-}
-
-.ph-icon-box-emerald {
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.25);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.1);
-}
-
-.ph-icon-box-amber {
-  background: rgba(245, 158, 11, 0.12);
-  border: 1px solid rgba(245, 158, 11, 0.25);
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.1);
-}
-
-.ph-icon-box-blue {
-  background: rgba(59, 130, 246, 0.12);
-  border: 1px solid rgba(59, 130, 246, 0.25);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
-}
-
-.ph-icon-box-violet {
-  background: rgba(139, 92, 246, 0.12);
-  border: 1px solid rgba(139, 92, 246, 0.25);
-  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.1);
-}
-
+/* Icon box theme variants (Đồng bộ theo bảng màu Cyan chuẩn của Sổ ghi chép cuộc họp) */
+.ph-icon-box-rose,
+.ph-icon-box-indigo,
+.ph-icon-box-emerald,
+.ph-icon-box-amber,
+.ph-icon-box-blue,
+.ph-icon-box-violet,
 .ph-icon-box-cyan {
   background: rgba(6, 182, 212, 0.12);
   border: 1px solid rgba(6, 182, 212, 0.25);
   box-shadow: 0 4px 12px rgba(6, 182, 212, 0.1);
 }
 
-.ph-icon-rose { color: #f43f5e; }
-.ph-icon-indigo { color: #6366f1; }
-.ph-icon-emerald { color: #10b981; }
-.ph-icon-amber { color: #f59e0b; }
-.ph-icon-blue { color: #3b82f6; }
-.ph-icon-violet { color: #8b5cf6; }
-.ph-icon-cyan { color: #06b6d4; }
+.ph-icon-rose,
+.ph-icon-indigo,
+.ph-icon-emerald,
+.ph-icon-amber,
+.ph-icon-blue,
+.ph-icon-violet,
+.ph-icon-cyan {
+  color: #0891b2;
+}
 
 .ph-text {
   display: flex;
@@ -864,12 +836,14 @@ input[type="number"] {
   --border-hover: #94a3b8;
   --border-subtle: #e2e8f0;
   --border-strong: #94a3b8;
-  --border-focus: #0284c7;
+  --border-focus: #0891b2;
   --text-primary: #1e293b;
   --text-secondary: #64748b;
   --text-muted: #94a3b8;
-  --color-primary: #0284c7;
-  --color-primary-glow: rgba(2, 132, 199, 0.15);
+  --color-primary: #0891b2;
+  --color-primary-hover: #0e7490;
+  --color-primary-glow: rgba(8, 145, 178, 0.15);
+  --color-primary-subtle: rgba(8, 145, 178, 0.12);
   --color-danger: #ef4444;
   --color-danger-subtle: rgba(239, 68, 68, 0.15);
   --bg-glass-input: #ffffff;
@@ -1083,8 +1057,8 @@ textarea.form-input {
 }
 
 .pagination-select:focus {
-  border-color: var(--color-primary, #0284c7);
-  box-shadow: 0 0 0 2px var(--color-primary-glow, rgba(2, 132, 199, 0.15));
+  border-color: var(--color-primary, #0891b2);
+  box-shadow: 0 0 0 2px var(--color-primary-glow, rgba(8, 145, 178, 0.15));
 }
 
 .pagination-controls {
@@ -1147,10 +1121,10 @@ textarea.form-input {
 }
 
 .pagination-page-btn.is-active {
-  background-color: var(--color-primary, #0284c7);
+  background-color: var(--color-primary, #0891b2);
   color: #ffffff;
-  border-color: var(--color-primary, #0284c7);
-  box-shadow: 0 0 10px rgba(2, 132, 199, 0.3);
+  border-color: var(--color-primary, #0891b2);
+  box-shadow: 0 0 10px rgba(8, 145, 178, 0.3);
 }
 
 .pagination-ellipsis {
@@ -1303,14 +1277,14 @@ textarea.form-input {
 
 /* Button Variants */
 .btn-primary {
-  background-color: var(--color-primary, #0284c7);
+  background-color: var(--color-primary, #0891b2);
   color: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.1);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background-color: #0369a1;
+  background-color: var(--color-primary-hover, #0e7490);
 }
 
 .btn-secondary {
@@ -1332,8 +1306,8 @@ textarea.form-input {
 
 .btn-outline:hover:not(:disabled) {
   background-color: #f8fafc;
-  color: var(--color-primary, #0284c7);
-  border-color: var(--color-primary, #0284c7);
+  color: var(--color-primary, #0891b2);
+  border-color: var(--color-primary, #0891b2);
 }
 
 .btn-danger {
@@ -1490,13 +1464,13 @@ textarea.form-input {
   height: 42px;
   min-width: 42px;
   border-radius: 10px;
-  background: linear-gradient(135deg, rgba(2, 132, 199, 0.08) 0%, rgba(2, 132, 199, 0.16) 100%);
-  color: var(--color-primary, #0284c7);
+  background: linear-gradient(135deg, rgba(8, 145, 178, 0.08) 0%, rgba(8, 145, 178, 0.16) 100%);
+  color: var(--color-primary, #0891b2);
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(2, 132, 199, 0.2);
-  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.08);
+  border: 1px solid rgba(8, 145, 178, 0.2);
+  box-shadow: 0 1px 3px rgba(8, 145, 178, 0.08);
   flex-shrink: 0;
 }
 
@@ -1662,7 +1636,7 @@ textarea.form-input {
 }
 
 .modern-step-item.is-active .modern-step-title {
-  color: #003087;
+  color: var(--color-primary, #0891b2);
   font-weight: 700;
 }
 
@@ -1692,9 +1666,9 @@ textarea.form-input {
 }
 
 .modern-step-item.is-active .modern-step-icon {
-  background: #003087 !important;
+  background: var(--color-primary, #0891b2) !important;
   color: #ffffff !important;
-  box-shadow: 0 3px 10px rgba(0, 48, 135, 0.28);
+  box-shadow: 0 3px 10px rgba(8, 145, 178, 0.28);
   transform: scale(1.05);
 }
 
@@ -1755,7 +1729,7 @@ textarea.form-input {
 }
 
 .modern-step-item.is-active .modern-step-title {
-  color: var(--color-primary, #0284c7);
+  color: var(--color-primary, #0891b2);
 }
 
 .modern-step-item.is-past .modern-step-title {
@@ -1801,9 +1775,9 @@ textarea.form-input {
 }
 
 .badge-brand {
-  background-color: rgba(2, 132, 199, 0.14);
-  color: var(--color-primary, #0284c7);
-  border: 1px solid rgba(2, 132, 199, 0.24);
+  background-color: rgba(8, 145, 178, 0.14);
+  color: var(--color-primary, #0891b2);
+  border: 1px solid rgba(8, 145, 178, 0.24);
 }
 
 .badge-info {
@@ -3182,7 +3156,7 @@ input[type="checkbox"],
   min-height: 0.875rem !important;
   max-width: 0.875rem !important;
   max-height: 0.875rem !important;
-  accent-color: #003087;
+  accent-color: var(--color-primary, #0891b2);
   border-radius: 3px !important;
   cursor: pointer;
   vertical-align: middle;
@@ -3198,7 +3172,7 @@ input[type="checkbox"]:hover,
 input[type="checkbox"]:focus,
 .form-check-input:focus {
   outline: none;
-  box-shadow: 0 0 0 1.5px rgba(0, 48, 135, 0.25) !important;
+  box-shadow: 0 0 0 1.5px rgba(8, 145, 178, 0.25) !important;
 }
 
 /* Căn các checkbox trong bảng của toàn hệ thống lên top */
@@ -3751,7 +3725,7 @@ table tbody td:has(.form-check-input) .form-check-input {
     border-radius: 8px !important;
     background-color: #ffffff !important;
     border: 1px solid #cbd5e1 !important;
-    color: var(--color-primary, #0284c7) !important;
+    color: var(--color-primary, #0891b2) !important;
     justify-content: center !important;
   }
 
@@ -3816,11 +3790,11 @@ table tbody td:has(.form-check-input) .form-check-input {
   }
 
   .hr-overview-live-charts .hr-range-btn.is-active {
-    background-color: var(--color-primary, #0284c7) !important;
-    border-color: var(--color-primary, #0284c7) !important;
+    background-color: var(--color-primary, #0891b2) !important;
+    border-color: var(--color-primary, #0891b2) !important;
     color: #ffffff !important;
     font-weight: 700 !important;
-    box-shadow: 0 1px 3px rgba(2, 132, 199, 0.25) !important;
+    box-shadow: 0 1px 3px rgba(8, 145, 178, 0.25) !important;
   }
 
   .hr-overview-live-charts .hr-dept-switcher {
@@ -3839,7 +3813,7 @@ table tbody td:has(.form-check-input) .form-check-input {
     border-radius: 5px !important;
     background-color: #ffffff !important;
     border: 1px solid #cbd5e1 !important;
-    color: var(--color-primary, #0284c7) !important;
+    color: var(--color-primary, #0891b2) !important;
   }
 
   .hr-overview-live-charts .hr-tab-group {
@@ -3861,11 +3835,11 @@ table tbody td:has(.form-check-input) .form-check-input {
   }
 
   .hr-overview-live-charts .hr-tab-btn.is-active {
-    background-color: var(--color-primary, #0284c7) !important;
-    border-color: var(--color-primary, #0284c7) !important;
+    background-color: var(--color-primary, #0891b2) !important;
+    border-color: var(--color-primary, #0891b2) !important;
     color: #ffffff !important;
     font-weight: 700 !important;
-    box-shadow: 0 1px 3px rgba(2, 132, 199, 0.25) !important;
+    box-shadow: 0 1px 3px rgba(8, 145, 178, 0.25) !important;
   }
 
   .hr-overview-live-charts .hr-tab-btn.is-active i {
@@ -5320,8 +5294,8 @@ table tbody td:has(.form-check-input) .form-check-input {
   .bom-approval-mobile-val {
     font-size: 0.68rem !important;
     font-weight: 800 !important;
-    color: var(--color-primary, #0284c7) !important;
-    background-color: rgba(2, 132, 199, 0.08) !important;
+    color: var(--color-primary, #0891b2) !important;
+    background-color: rgba(8, 145, 178, 0.08) !important;
     padding: 1px 5px !important;
     border-radius: 4px !important;
     white-space: nowrap !important;
@@ -5594,9 +5568,9 @@ table tbody td:has(.form-check-input) .form-check-input {
   }
 
   .sales-orders-page .modern-step-item.is-active {
-    background-color: #eff6ff !important;
-    border-color: #93c5fd !important;
-    box-shadow: 0 1px 2px rgba(0, 48, 135, 0.06) !important;
+    background-color: #ecfeff !important;
+    border-color: #67e8f9 !important;
+    box-shadow: 0 1px 2px rgba(8, 145, 178, 0.06) !important;
   }
 
   .sales-orders-page .modern-step-icon {
@@ -5785,11 +5759,11 @@ table tbody td:has(.form-check-input) .form-check-input {
   }
 
   .mobile-swipe-btn.is-edit {
-    background-color: #0284c7 !important;
+    background-color: #0891b2 !important;
   }
 
   .mobile-swipe-btn.is-edit:active {
-    background-color: #0369a1 !important;
+    background-color: #0e7490 !important;
   }
 
   .mobile-swipe-btn.is-delete {

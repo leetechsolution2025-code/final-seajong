@@ -451,8 +451,8 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
       id: typeId,
       name: formTypeName.trim(),
       icon: formTypeIcon,
-      iconBg: 'rgba(91, 92, 226, 0.12)',
-      iconColor: '#5b5ce2',
+      iconBg: 'rgba(8, 145, 178, 0.12)',
+      iconColor: '#0891b2',
       sortOrder: categoryTypes.length + 1,
     };
 
@@ -615,11 +615,11 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
   const renderItemIcon = (type?: string) => {
     switch (type) {
       case 'home':
-        return <House size={18} style={{ color: '#4f46e5' }} />;
+        return <House size={18} style={{ color: '#0891b2' }} />;
       case 'building':
-        return <Buildings size={18} style={{ color: '#4f46e5' }} />;
+        return <Buildings size={18} style={{ color: '#0891b2' }} />;
       default:
-        return <Folder size={18} style={{ color: '#4f46e5' }} />;
+        return <Folder size={18} style={{ color: '#0891b2' }} />;
     }
   };
 
@@ -720,14 +720,14 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
             height: '36px',
             borderRadius: 'var(--radius-md)',
             border: 'none',
-            backgroundColor: '#5b5ce2',
+            backgroundColor: '#0891b2',
             color: '#ffffff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
             flexShrink: 0,
-            boxShadow: '0 2px 6px rgba(91, 92, 226, 0.35)',
+            boxShadow: '0 2px 6px rgba(8, 145, 178, 0.35)',
             transition: 'all var(--transition-fast)',
           }}
         >
@@ -765,8 +765,8 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                   padding: '10px 12px',
                   borderRadius: 'var(--radius-md)',
                   cursor: 'pointer',
-                  backgroundColor: isSelected ? 'rgba(91, 92, 226, 0.1)' : 'transparent',
-                  border: isSelected ? '1px solid rgba(91, 92, 226, 0.35)' : '1px solid transparent',
+                  backgroundColor: isSelected ? 'rgba(8, 145, 178, 0.1)' : 'transparent',
+                  border: isSelected ? '1px solid rgba(8, 145, 178, 0.35)' : '1px solid transparent',
                   transition: 'all var(--transition-fast)',
                 }}
               >
@@ -776,8 +776,8 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                       width: '32px',
                       height: '32px',
                       borderRadius: 'var(--radius-md)',
-                      backgroundColor: catType.iconBg || 'rgba(91, 92, 226, 0.12)',
-                      color: catType.iconColor || '#5b5ce2',
+                      backgroundColor: catType.iconBg || 'rgba(8, 145, 178, 0.12)',
+                      color: catType.iconColor || '#0891b2',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -790,7 +790,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                     style={{
                       fontSize: '0.875rem',
                       fontWeight: isSelected ? 600 : 500,
-                      color: isSelected ? '#5b5ce2' : 'var(--text-primary)',
+                      color: isSelected ? '#0891b2' : 'var(--text-primary)',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -806,8 +806,8 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                       style={{
                         fontSize: '0.75rem',
                         fontWeight: 700,
-                        color: '#5b5ce2',
-                        backgroundColor: 'rgba(91, 92, 226, 0.15)',
+                        color: '#0891b2',
+                        backgroundColor: 'rgba(8, 145, 178, 0.15)',
                         padding: '2px 8px',
                         borderRadius: '10px',
                         flexShrink: 0,
@@ -891,7 +891,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
             leftIcon={
               <span
                 style={{
-                  color: selectedType?.iconColor || '#5b5ce2',
+                  color: selectedType?.iconColor || '#0891b2',
                   display: 'inline-flex',
                   alignItems: 'center',
                 }}
@@ -908,7 +908,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
               height: '36px',
               paddingLeft: '36px',
               fontWeight: 700,
-              color: '#4f46e5',
+              color: '#0891b2',
               backgroundColor: 'var(--bg-surface-1)',
             }}
           />
@@ -922,9 +922,9 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
             width: '36px',
             height: '36px',
             borderRadius: 'var(--radius-md)',
-            border: '1px solid rgba(91, 92, 226, 0.35)',
-            backgroundColor: 'rgba(91, 92, 226, 0.1)',
-            color: '#5b5ce2',
+            border: '1px solid rgba(8, 145, 178, 0.35)',
+            backgroundColor: 'rgba(8, 145, 178, 0.1)',
+            color: '#0891b2',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -1004,7 +1004,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
             display: 'inline-flex',
             alignItems: 'center',
             gap: '6px',
-            backgroundColor: selectedType ? '#5b5ce2' : 'var(--text-muted)',
+            backgroundColor: selectedType ? '#0891b2' : 'var(--text-muted)',
             color: '#ffffff',
             border: 'none',
             borderRadius: 'var(--radius-md)',
@@ -1012,7 +1012,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
             fontSize: '0.8125rem',
             fontWeight: 600,
             cursor: selectedType ? 'pointer' : 'not-allowed',
-            boxShadow: selectedType ? '0 2px 6px rgba(91, 92, 226, 0.35)' : 'none',
+            boxShadow: selectedType ? '0 2px 6px rgba(8, 145, 178, 0.35)' : 'none',
             transition: 'all var(--transition-fast)',
             whiteSpace: 'nowrap',
             flexShrink: 0,
@@ -1088,7 +1088,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                     backgroundColor:
                       level > 0
                         ? index % 2 === 0
-                          ? 'rgba(91, 92, 226, 0.02)'
+                          ? 'rgba(8, 145, 178, 0.02)'
                           : 'rgba(0, 0, 0, 0.02)'
                         : index % 2 === 0
                         ? 'transparent'
@@ -1175,8 +1175,8 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                             style={{
                               fontSize: '0.7rem',
                               fontWeight: 600,
-                              color: '#5b5ce2',
-                              backgroundColor: 'rgba(91, 92, 226, 0.12)',
+                              color: '#0891b2',
+                              backgroundColor: 'rgba(8, 145, 178, 0.12)',
                               padding: '1px 6px',
                               borderRadius: '10px',
                               flexShrink: 0,
@@ -1205,9 +1205,9 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                         style={{
                           fontSize: '0.75rem',
                           fontFamily: 'monospace',
-                          color: '#5b5ce2',
-                          backgroundColor: 'rgba(91, 92, 226, 0.08)',
-                          border: '1px solid rgba(91, 92, 226, 0.2)',
+                          color: '#0891b2',
+                          backgroundColor: 'rgba(8, 145, 178, 0.08)',
+                          border: '1px solid rgba(8, 145, 178, 0.2)',
                           padding: '2px 8px',
                           borderRadius: '4px',
                           display: 'inline-block',
@@ -1271,9 +1271,9 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                         width: '28px',
                         height: '28px',
                         borderRadius: 'var(--radius-sm)',
-                        border: '1px solid rgba(91, 92, 226, 0.3)',
-                        backgroundColor: 'rgba(91, 92, 226, 0.08)',
-                        color: '#5b5ce2',
+                        border: '1px solid rgba(8, 145, 178, 0.3)',
+                        backgroundColor: 'rgba(8, 145, 178, 0.08)',
+                        color: '#0891b2',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -1482,7 +1482,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
       style={{
         display: 'grid',
         gridTemplateColumns: '3.2fr 8.8fr',
-        gap: '16px',
+        gap: '8px',
         flex: '1 1 0%',
         minHeight: 0,
         height: '100%',

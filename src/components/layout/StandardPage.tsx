@@ -37,7 +37,7 @@ export const StandardPage: React.FC<StandardPageProps> = ({
   title,
   description,
   icon = 'bi-grid',
-  color = 'indigo',
+  color = 'cyan',
   badge,
   children,
   headerActions,

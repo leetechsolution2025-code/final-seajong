@@ -27,7 +27,7 @@ export const PERMISSION_GROUPS_BY_DEPT: DepartmentPermissionGroup[] = [
     deptName: 'Ban Giám đốc & Điều hành chung',
     deptGroupLabel: 'Ban điều hành',
     icon: 'bi-building',
-    color: '#6366f1',
+    color: '#0891b2',
     permissions: [
       { key: 'approve_request', label: 'Duyệt yêu cầu & tờ trình',     icon: 'bi-check2-circle',  color: '#22c55e' },
       { key: 'plan',            label: 'Lập kế hoạch chiến lược',      icon: 'bi-calendar3',      color: '#f43f5e' },
@@ -140,7 +140,7 @@ export const SYSTEM_PERMISSIONS: PermissionItem[] = PERMISSION_GROUPS_BY_DEPT.fl
 );
 
 const GROUP_COLORS: Record<string, string> = {
-  management: '#6366f1',
+  management: '#0891b2',
   core: '#0ea5e9',
   business: '#10b981',
   support: '#f59e0b',
@@ -159,7 +159,7 @@ const ROLE_OPTIONS = [
     label: 'Nhân viên',
     desc: 'Truy cập theo phân quyền được cấp cụ thể',
     icon: 'bi-person',
-    color: '#6366f1',
+    color: '#0891b2',
   },
   {
     value: 'ADMIN',
@@ -656,12 +656,12 @@ export const UserAuthManagementPage: React.FC = () => {
               onClick={() => setRoleFilter(v as '' | 'ADMIN' | 'USER')}
               className={`flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all cursor-pointer text-center ${
                 isActive
-                  ? 'bg-white text-indigo-700 shadow-2xs'
+                  ? 'bg-white text-cyan-700 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900 bg-transparent'
               }`}
             >
               {label}{' '}
-              <span className={`text-[10px] font-semibold ${isActive ? 'text-indigo-500' : 'opacity-60'}`}>
+              <span className={`text-[10px] font-semibold ${isActive ? 'text-cyan-600' : 'opacity-60'}`}>
                 ({count})
               </span>
             </button>
@@ -673,7 +673,7 @@ export const UserAuthManagementPage: React.FC = () => {
       <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 min-h-0">
         {loading ? (
           <div className="py-12 text-center text-slate-500 text-xs flex flex-col items-center justify-center gap-2">
-            <i className="bi bi-arrow-repeat text-xl text-indigo-600 animate-spin" />
+            <i className="bi bi-arrow-repeat text-xl text-cyan-600 animate-spin" />
             <span>Đang tải danh sách người dùng...</span>
           </div>
         ) : filteredUsers.length === 0 ? (
@@ -694,7 +694,7 @@ export const UserAuthManagementPage: React.FC = () => {
                 onClick={() => handleSelectUser(u)}
                 className={`flex items-center gap-3 p-2.5 rounded-xl cursor-pointer transition-all border ${
                   isSelected
-                    ? 'bg-indigo-50/80 border-indigo-300/80 shadow-2xs'
+                    ? 'bg-cyan-50/80 border-cyan-300/80 shadow-2xs'
                     : 'bg-white border-slate-200/70 hover:bg-slate-50 hover:border-slate-300'
                 }`}
               >
@@ -703,7 +703,7 @@ export const UserAuthManagementPage: React.FC = () => {
                   <div className="flex items-center gap-2 mb-0.5">
                     <span
                       className={`text-xs font-bold truncate ${
-                        isSelected ? 'text-indigo-900' : 'text-slate-800'
+                        isSelected ? 'text-cyan-900' : 'text-slate-800'
                       }`}
                     >
                       {displayName}
@@ -722,7 +722,7 @@ export const UserAuthManagementPage: React.FC = () => {
                 </div>
                 <i
                   className={`bi bi-chevron-right text-xs shrink-0 transition-transform ${
-                    isSelected ? 'text-indigo-600 translate-x-0.5' : 'text-slate-300'
+                    isSelected ? 'text-cyan-600 translate-x-0.5' : 'text-slate-300'
                   }`}
                 />
               </div>
@@ -742,7 +742,7 @@ export const UserAuthManagementPage: React.FC = () => {
   // ── RIGHT PANEL: Permission & Access Editor ─────────────────────────────────
   const rightContent = !selectedUser ? (
     <div className="flex flex-col items-center justify-center h-full p-8 text-slate-400 text-center gap-3">
-      <div className="w-16 h-16 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-500">
+      <div className="w-16 h-16 rounded-full bg-cyan-50 flex items-center justify-center text-cyan-500">
         <i className="bi bi-person-lock text-3xl" />
       </div>
       <div>
@@ -781,7 +781,7 @@ export const UserAuthManagementPage: React.FC = () => {
                     {selectedUser.employee.departmentName}
                   </span>
                   <span className="text-slate-300">·</span>
-                  <span className="text-indigo-600 font-medium">
+                  <span className="text-cyan-600 font-medium">
                     {selectedUser.employee.position}
                   </span>
                 </>
@@ -809,7 +809,7 @@ export const UserAuthManagementPage: React.FC = () => {
             disabled={saving || !dirty}
             className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold text-white transition-all cursor-pointer ${
               dirty
-                ? 'bg-indigo-600 hover:bg-indigo-700 shadow-sm animate-pulse'
+                ? 'bg-cyan-600 hover:bg-cyan-700 shadow-sm animate-pulse'
                 : 'bg-slate-300 text-slate-500 cursor-not-allowed'
             }`}
           >
@@ -841,7 +841,7 @@ export const UserAuthManagementPage: React.FC = () => {
             onClick={() => setActiveTab('perms')}
             className={`pb-2.5 px-3 text-xs font-bold transition-all cursor-pointer border-b-2 flex items-center gap-1.5 ${
               activeTab === 'perms'
-                ? 'border-indigo-600 text-indigo-700'
+                ? 'border-cyan-600 text-cyan-700'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
@@ -857,7 +857,7 @@ export const UserAuthManagementPage: React.FC = () => {
             onClick={() => setActiveTab('dept')}
             className={`pb-2.5 px-3 text-xs font-bold transition-all cursor-pointer border-b-2 flex items-center gap-1.5 ${
               activeTab === 'dept'
-                ? 'border-indigo-600 text-indigo-700'
+                ? 'border-cyan-600 text-cyan-700'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
@@ -904,14 +904,14 @@ export const UserAuthManagementPage: React.FC = () => {
                       }}
                       className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
                         isActive
-                          ? 'border-indigo-600 bg-indigo-50/50 shadow-2xs'
+                          ? 'border-cyan-600 bg-cyan-50/50 shadow-2xs'
                           : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
                       }`}
                     >
                       <div
                         className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
                         style={{
-                          backgroundColor: isActive ? 'rgba(99,102,241,0.15)' : '#f1f5f9',
+                          backgroundColor: isActive ? 'rgba(8,145,178,0.15)' : '#f1f5f9',
                           color: r.color,
                         }}
                       >
@@ -923,7 +923,7 @@ export const UserAuthManagementPage: React.FC = () => {
                             {r.label}
                           </span>
                           {isActive && (
-                            <i className="bi bi-check-circle-fill text-indigo-600 text-sm" />
+                            <i className="bi bi-check-circle-fill text-cyan-600 text-sm" />
                           )}
                         </div>
                         <p className="text-[11px] text-slate-500 mt-1 leading-snug m-0">
@@ -943,7 +943,7 @@ export const UserAuthManagementPage: React.FC = () => {
                   <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                     2. Quyền chức năng nghiệp vụ theo phòng ban
                   </span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-600 border border-cyan-100">
                     {PERMISSION_GROUPS_BY_DEPT.length} nhóm phòng ban
                   </span>
                 </div>
@@ -952,7 +952,7 @@ export const UserAuthManagementPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleSelectAllPerms}
-                      className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer bg-transparent border-none p-0"
+                      className="text-[11px] font-bold text-cyan-600 hover:text-cyan-800 cursor-pointer bg-transparent border-none p-0"
                     >
                       Chọn tất cả ({SYSTEM_PERMISSIONS.length})
                     </button>
@@ -998,7 +998,7 @@ export const UserAuthManagementPage: React.FC = () => {
                         key={group.deptCode}
                         className={`rounded-xl border transition-all overflow-hidden ${
                           isPrimaryDept
-                            ? 'border-indigo-300 bg-indigo-50/20 shadow-2xs'
+                            ? 'border-cyan-300 bg-cyan-50/20 shadow-2xs'
                             : activeCount > 0
                             ? 'border-slate-200/90 bg-white'
                             : 'border-slate-200/70 bg-slate-50/30'
@@ -1008,7 +1008,7 @@ export const UserAuthManagementPage: React.FC = () => {
                         <div
                           className={`px-3.5 py-2.5 border-b flex items-center justify-between gap-2 ${
                             isPrimaryDept
-                              ? 'bg-indigo-50/60 border-indigo-200/70'
+                              ? 'bg-cyan-50/60 border-cyan-200/70'
                               : 'bg-slate-50/80 border-slate-200/70'
                           }`}
                         >
@@ -1027,7 +1027,7 @@ export const UserAuthManagementPage: React.FC = () => {
                                 {group.deptName}
                               </span>
                               {isPrimaryDept && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 border border-indigo-200">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-100 text-cyan-700 border border-cyan-200">
                                   <i className="bi bi-person-badge-fill text-[9px]" />
                                   Phòng ban trực thuộc
                                 </span>
@@ -1050,7 +1050,7 @@ export const UserAuthManagementPage: React.FC = () => {
                             className={`text-[11px] font-bold px-2.5 py-1 rounded-md border transition-all cursor-pointer shrink-0 ${
                               allGroupSelected
                                 ? 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
-                                : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'
+                                : 'bg-white text-cyan-600 border-cyan-200 hover:bg-cyan-50'
                             }`}
                           >
                             {allGroupSelected ? 'Bỏ chọn nhóm' : 'Chọn cả nhóm'}
@@ -1067,7 +1067,7 @@ export const UserAuthManagementPage: React.FC = () => {
                                 onClick={() => handleTogglePerm(p.key)}
                                 className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
                                   isChecked
-                                    ? 'bg-indigo-50/40 border-indigo-200 shadow-2xs'
+                                    ? 'bg-cyan-50/40 border-cyan-200 shadow-2xs'
                                     : 'bg-white border-slate-200/80 hover:border-slate-300'
                                 }`}
                               >

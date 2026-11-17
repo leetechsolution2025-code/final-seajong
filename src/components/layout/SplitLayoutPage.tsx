@@ -114,7 +114,7 @@ export const SplitLayoutPage: React.FC<SplitLayoutPageProps> = ({
               onClick={() => handleSwitchMobileTab('left')}
               className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'left'
-                  ? 'bg-indigo-600 text-white shadow-xs'
+                  ? 'bg-cyan-600 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 bg-transparent'
               }`}
             >
@@ -126,7 +126,7 @@ export const SplitLayoutPage: React.FC<SplitLayoutPageProps> = ({
               onClick={() => handleSwitchMobileTab('right')}
               className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'right'
-                  ? 'bg-indigo-600 text-white shadow-xs'
+                  ? 'bg-cyan-600 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 bg-transparent'
               }`}
             >

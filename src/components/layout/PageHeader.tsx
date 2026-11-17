@@ -28,12 +28,12 @@ const WEEKDAYS = [
 ];
 
 const COLOR_MAP: Record<string, { bg: string; icon: string }> = {
-  rose: { bg: 'ph-icon-box-rose', icon: 'ph-icon-rose' },
-  indigo: { bg: 'ph-icon-box-indigo', icon: 'ph-icon-indigo' },
-  emerald: { bg: 'ph-icon-box-emerald', icon: 'ph-icon-emerald' },
-  amber: { bg: 'ph-icon-box-amber', icon: 'ph-icon-amber' },
-  blue: { bg: 'ph-icon-box-blue', icon: 'ph-icon-blue' },
-  violet: { bg: 'ph-icon-box-violet', icon: 'ph-icon-violet' },
+  rose: { bg: 'ph-icon-box-cyan', icon: 'ph-icon-cyan' },
+  indigo: { bg: 'ph-icon-box-cyan', icon: 'ph-icon-cyan' },
+  emerald: { bg: 'ph-icon-box-cyan', icon: 'ph-icon-cyan' },
+  amber: { bg: 'ph-icon-box-cyan', icon: 'ph-icon-cyan' },
+  blue: { bg: 'ph-icon-box-cyan', icon: 'ph-icon-cyan' },
+  violet: { bg: 'ph-icon-box-cyan', icon: 'ph-icon-cyan' },
   cyan: { bg: 'ph-icon-box-cyan', icon: 'ph-icon-cyan' },
 };
 
@@ -41,7 +41,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   title,
   description,
   icon = 'bi-grid',
-  color = 'indigo',
+  color = 'cyan',
   badge,
 }) => {
   const [now, setNow] = useState<Date>(new Date());

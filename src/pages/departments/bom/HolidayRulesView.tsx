@@ -1362,7 +1362,7 @@ export const HolidayRulesView: React.FC<HolidayRulesViewProps> = ({ onShowToast 
           style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <div style={{ width: '3px', height: '12px', backgroundColor: '#4f46e5', borderRadius: '2px' }} />
+            <div style={{ width: '3px', height: '12px', backgroundColor: '#0891b2', borderRadius: '2px' }} />
             <h6 style={{ margin: 0, fontSize: '0.7813rem', fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
               1. Chế độ nghỉ phép năm (Điều 113 và Điều 114)
             </h6>

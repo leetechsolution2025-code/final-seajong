@@ -663,7 +663,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
             {company.slogan || 'TIÊN PHONG KIẾN TẠO GIÁ TRỊ THỰC'}
           </h2>
         ) : (
-          <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 font-bold flex items-center justify-center text-xs mx-auto">
+          <div className="w-8 h-8 rounded-lg bg-cyan-50 text-cyan-600 font-bold flex items-center justify-center text-xs mx-auto">
             SJ
           </div>
         )}
@@ -678,14 +678,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
             onClick={() => setActiveMenuKey('overview')}
             className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-all cursor-pointer border-0 bg-transparent text-left ${
               isOverview
-                ? 'text-blue-600 font-bold bg-blue-50/50'
+                ? 'text-cyan-600 font-bold bg-cyan-50/50'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-normal'
             } ${collapsed ? 'justify-center px-2' : ''}`}
             title={collapsed ? 'Tổng quan' : undefined}
           >
             <i
               className={`bi bi-speedometer2 text-[16px] shrink-0 ${
-                isOverview ? 'text-blue-600' : 'text-slate-400'
+                isOverview ? 'text-cyan-600' : 'text-slate-400'
               }`}
             />
             {!collapsed && <span>Tổng quan</span>}
@@ -714,7 +714,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                       activeMenuKey === 'meetings' ||
                       activeMenuKey === 'notebook' ||
                       activeMenuKey === 'journal'
-                        ? 'text-blue-600'
+                        ? 'text-cyan-600'
                         : 'text-slate-400'
                     }`}
                   />
@@ -736,14 +736,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                     onClick={() => setActiveMenuKey('documents')}
                     className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-[13px] transition-colors cursor-pointer border-0 bg-transparent text-left ${
                       activeMenuKey === 'documents'
-                        ? 'text-blue-600 font-semibold bg-blue-50/40'
-                        : 'text-slate-500 hover:text-blue-600 hover:bg-slate-50'
+                        ? 'text-cyan-600 font-semibold bg-cyan-50/40'
+                        : 'text-slate-500 hover:text-cyan-600 hover:bg-slate-50'
                     }`}
                   >
                     <span
                       className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                         activeMenuKey === 'documents'
-                          ? 'bg-blue-600 border border-blue-600'
+                          ? 'bg-cyan-600 border border-cyan-600'
                           : 'border border-slate-400'
                       }`}
                     ></span>
@@ -757,8 +757,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                       activeMenuKey === 'meetings' ||
                       activeMenuKey === 'notebook' ||
                       activeMenuKey === 'journal'
-                        ? 'text-blue-600 font-semibold bg-blue-50/40'
-                        : 'text-slate-500 hover:text-blue-600 hover:bg-slate-50'
+                        ? 'text-cyan-600 font-semibold bg-cyan-50/40'
+                        : 'text-slate-500 hover:text-cyan-600 hover:bg-slate-50'
                     }`}
                   >
                     <span
@@ -766,7 +766,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                         activeMenuKey === 'meetings' ||
                         activeMenuKey === 'notebook' ||
                         activeMenuKey === 'journal'
-                          ? 'bg-blue-600 border border-blue-600'
+                          ? 'bg-cyan-600 border border-cyan-600'
                           : 'border border-slate-400'
                       }`}
                     ></span>
@@ -791,7 +791,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                   warehouseLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
                 } ${
                   activeMenuKey === 'inventory'
-                    ? 'text-blue-600 font-bold bg-blue-50/50'
+                    ? 'text-cyan-600 font-bold bg-cyan-50/50'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-normal'
                 } ${collapsed ? 'justify-center px-2' : ''}`}
                 title={
@@ -805,7 +805,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                 <div className="flex items-center gap-2.5">
                   <i
                     className={`bi bi-boxes text-[16px] shrink-0 ${
-                      activeMenuKey === 'inventory' ? 'text-blue-600' : 'text-slate-400'
+                      activeMenuKey === 'inventory' ? 'text-cyan-600' : 'text-slate-400'
                     }`}
                   />
                   {!collapsed && <span>Kho hàng</span>}
@@ -837,7 +837,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                     secLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
                   } ${
                     isSecActive
-                      ? 'text-blue-600 font-bold bg-blue-50/50'
+                      ? 'text-cyan-600 font-bold bg-cyan-50/50'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-normal'
                   } ${collapsed ? 'justify-center px-2' : ''}`}
                   title={
@@ -851,7 +851,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                   <div className="flex items-center gap-2.5">
                     <i
                       className={`bi ${sec.icon} text-[16px] shrink-0 ${
-                        isSecActive ? 'text-blue-600' : 'text-slate-400'
+                        isSecActive ? 'text-cyan-600' : 'text-slate-400'
                       }`}
                     />
                     {!collapsed && <span>{sec.label}</span>}
@@ -886,7 +886,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                   <div className="flex items-center gap-2.5">
                     <i
                       className={`bi ${sec.icon} text-[16px] shrink-0 ${
-                        isAnySubActive ? 'text-blue-600' : 'text-slate-400'
+                        isAnySubActive ? 'text-cyan-600' : 'text-slate-400'
                       }`}
                     />
                     {!collapsed && <span>{sec.label}</span>}
@@ -927,15 +927,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                             subLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
                           } ${
                             isSubActive
-                              ? 'text-blue-600 font-semibold bg-blue-50/40'
-                              : 'text-slate-500 hover:text-blue-600 hover:bg-slate-50'
+                              ? 'text-cyan-600 font-semibold bg-cyan-50/40'
+                              : 'text-slate-500 hover:text-cyan-600 hover:bg-slate-50'
                           }`}
                         >
                           <div className="flex items-center gap-2 truncate">
                             <span
                               className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                                 isSubActive
-                                  ? 'bg-blue-600 border border-blue-600'
+                                  ? 'bg-cyan-600 border border-cyan-600'
                                   : 'border border-slate-400'
                               }`}
                             ></span>
@@ -972,7 +972,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                     <i
                       className={`bi bi-clipboard2-check text-[16px] shrink-0 ${
                         activeMenuKey === 'recruitment_req' || activeMenuKey === 'approvals'
-                          ? 'text-blue-600'
+                          ? 'text-cyan-600'
                           : 'text-slate-400'
                       }`}
                     />
@@ -994,14 +994,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                       onClick={() => setActiveMenuKey('recruitment_req')}
                       className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-[13px] transition-colors cursor-pointer border-0 bg-transparent text-left ${
                         activeMenuKey === 'recruitment_req'
-                          ? 'text-blue-600 font-semibold bg-blue-50/40'
-                          : 'text-slate-500 hover:text-blue-600 hover:bg-slate-50'
+                          ? 'text-cyan-600 font-semibold bg-cyan-50/40'
+                          : 'text-slate-500 hover:text-cyan-600 hover:bg-slate-50'
                       }`}
                     >
                       <span
                         className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                           activeMenuKey === 'recruitment_req'
-                            ? 'bg-blue-600 border border-blue-600'
+                            ? 'bg-cyan-600 border border-cyan-600'
                             : 'border border-slate-400'
                         }`}
                       ></span>
@@ -1023,15 +1023,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                         approvalLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
                       } ${
                         activeMenuKey === 'approvals'
-                          ? 'text-blue-600 font-semibold bg-blue-50/40'
-                          : 'text-slate-500 hover:text-blue-600 hover:bg-slate-50'
+                          ? 'text-cyan-600 font-semibold bg-cyan-50/40'
+                          : 'text-slate-500 hover:text-cyan-600 hover:bg-slate-50'
                       }`}
                     >
                       <div className="flex items-center gap-2 truncate">
                         <span
                           className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                             activeMenuKey === 'approvals'
-                              ? 'bg-blue-600 border border-blue-600'
+                              ? 'bg-cyan-600 border border-cyan-600'
                               : 'border border-slate-400'
                           }`}
                         ></span>
@@ -1066,14 +1066,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                 onClick={() => setActiveMenuKey('my_tasks')}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] font-normal transition-all cursor-pointer border-0 bg-transparent text-left ${
                   activeMenuKey === 'my_tasks'
-                    ? 'text-blue-600 font-semibold bg-blue-50/40'
+                    ? 'text-cyan-600 font-semibold bg-cyan-50/40'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                 } ${collapsed ? 'justify-center px-2' : ''}`}
                 title={collapsed ? 'Danh sách công việc' : undefined}
               >
                 <i
                   className={`bi bi-clipboard2-check text-[17px] shrink-0 ${
-                    activeMenuKey === 'my_tasks' ? 'text-blue-600' : 'text-slate-400'
+                    activeMenuKey === 'my_tasks' ? 'text-cyan-600' : 'text-slate-400'
                   }`}
                 />
                 {!collapsed && <span>Danh sách công việc</span>}
@@ -1085,14 +1085,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                 onClick={() => setActiveMenuKey('my_attendance')}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] font-normal transition-all cursor-pointer border-0 bg-transparent text-left ${
                   activeMenuKey === 'my_attendance'
-                    ? 'text-blue-600 font-semibold bg-blue-50/40'
+                    ? 'text-cyan-600 font-semibold bg-cyan-50/40'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                 } ${collapsed ? 'justify-center px-2' : ''}`}
                 title={collapsed ? 'Chấm công' : undefined}
               >
                 <i
                   className={`bi bi-clock-history text-[16px] shrink-0 ${
-                    activeMenuKey === 'my_attendance' ? 'text-blue-600' : 'text-slate-400'
+                    activeMenuKey === 'my_attendance' ? 'text-cyan-600' : 'text-slate-400'
                   }`}
                 />
                 {!collapsed && <span>Chấm công</span>}
@@ -1104,14 +1104,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                 onClick={() => setActiveMenuKey('my_requests')}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] font-normal transition-all cursor-pointer border-0 bg-transparent text-left ${
                   activeMenuKey === 'my_requests'
-                    ? 'text-blue-600 font-semibold bg-blue-50/40'
+                    ? 'text-cyan-600 font-semibold bg-cyan-50/40'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                 } ${collapsed ? 'justify-center px-2' : ''}`}
                 title={collapsed ? 'Yêu cầu cá nhân' : undefined}
               >
                 <i
                   className={`bi bi-file-earmark-plus text-[16px] shrink-0 ${
-                    activeMenuKey === 'my_requests' ? 'text-blue-600' : 'text-slate-400'
+                    activeMenuKey === 'my_requests' ? 'text-cyan-600' : 'text-slate-400'
                   }`}
                 />
                 {!collapsed && <span>Yêu cầu cá nhân</span>}

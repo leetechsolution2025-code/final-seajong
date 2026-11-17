@@ -52,8 +52,8 @@ function renderMarkdown(text: string) {
                   width: "6px",
                   height: "6px",
                   borderRadius: "50%",
-                  background: isNested ? "transparent" : "#4f46e5",
-                  border: isNested ? "1px solid #4f46e5" : "none"
+                  background: isNested ? "transparent" : "#0891b2",
+                  border: isNested ? "1px solid #0891b2" : "none"
                 }} />
                 {parseInlineMarkdown(item.text)}
               </li>
@@ -2939,14 +2939,14 @@ export default function BoardYearlyPlanPage() {
                         {/* Bộ phận kho */}
                         <div className={`bom-plan-dept-card ${mobileStep2Dept !== "all" && mobileStep2Dept !== "log" ? "bom-plan-mobile-hidden" : ""}`}>
                           <div className="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2 bom-plan-dept-header">
-                            <div className="fw-bold d-flex align-items-center gap-2 text-uppercase bom-plan-dept-title" style={{ fontSize: 13.5, color: "#6366f1" }}>
+                            <div className="fw-bold d-flex align-items-center gap-2 text-uppercase bom-plan-dept-title" style={{ fontSize: 13.5, color: "#0891b2" }}>
                               <i className="bi bi-box-seam"></i> Bộ phận kho
                             </div>
                             <div className="d-flex align-items-center gap-2">
                               {grpLogCost > finalCostLogistics && (
                                 <span className="blinking-red-dot" title="Vượt định mức chi phí" />
                               )}
-                              <span className="badge fw-bold bom-plan-dept-badge" style={{ fontSize: 11, color: grpLogCost > finalCostLogistics ? "#ef4444" : "#6366f1", background: grpLogCost > finalCostLogistics ? "rgba(239, 68, 68, 0.1)" : "rgba(99, 102, 241, 0.1)" }}>
+                              <span className="badge fw-bold bom-plan-dept-badge" style={{ fontSize: 11, color: grpLogCost > finalCostLogistics ? "#ef4444" : "#0891b2", background: grpLogCost > finalCostLogistics ? "rgba(239, 68, 68, 0.1)" : "rgba(8, 145, 178, 0.1)" }}>
                                 <span className="bom-hide-mobile">Tổng: </span>{grpLogCost.toLocaleString("vi-VN")} <span className="bom-hide-mobile">đ </span>/ <span className="bom-hide-mobile">Định mức: </span>{finalCostLogistics.toLocaleString("vi-VN")} đ
                               </span>
                             </div>

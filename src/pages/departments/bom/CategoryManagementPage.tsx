@@ -18,7 +18,7 @@ export const CategoryManagementPage: React.FC<CategoryManagementPageProps> = ({
       icon="bi-folder-symlink"
       color="violet"
       badge="DANH MỤC HỆ THỐNG"
-      tickerContext="categories"
+      hideTicker={true}
       useCard={false}
       className="bom-category-page"
     >

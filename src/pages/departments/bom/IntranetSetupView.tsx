@@ -1180,15 +1180,15 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
               width: '36px',
               height: '36px',
               borderRadius: '50%',
-              backgroundColor: '#eff6ff',
-              color: '#4f46e5',
+              backgroundColor: 'rgba(8, 145, 178, 0.1)',
+              color: '#0891b2',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
             }}
           >
-            <GeoAltFill size={18} color="#4f46e5" />
+            <GeoAltFill size={18} color="#0891b2" />
           </div>
 
           <div ref={locationDropdownRef} style={{ flex: 1, minWidth: 0, position: 'relative' }}>
@@ -1220,7 +1220,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                   gap: '5px',
                   fontSize: '1.0625rem',
                   fontWeight: 800,
-                  color: '#4f46e5',
+                  color: '#0891b2',
                   lineHeight: 1.2,
                   background: 'transparent',
                   border: 'none',
@@ -1232,9 +1232,9 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
               >
                 <span className="bom-labor-shift-btn-text">{currentActiveLocation?.name || 'Chọn nơi làm việc'}</span>
                 {isLocationDropdownOpen ? (
-                  <ChevronUp size={13} color="#4f46e5" style={{ flexShrink: 0 }} />
+                  <ChevronUp size={13} color="#0891b2" style={{ flexShrink: 0 }} />
                 ) : (
-                  <ChevronDown size={13} color="#4f46e5" style={{ flexShrink: 0 }} />
+                  <ChevronDown size={13} color="#0891b2" style={{ flexShrink: 0 }} />
                 )}
               </button>
 
@@ -1315,7 +1315,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                           padding: '8px 14px',
                           cursor: 'pointer',
                           backgroundColor: isSelected ? '#eff6ff' : '#ffffff',
-                          borderLeft: isSelected ? '3px solid #4f46e5' : '3px solid transparent',
+                          borderLeft: isSelected ? '3px solid #0891b2' : '3px solid transparent',
                           borderBottom: '1px solid #f1f5f9',
                           transition: 'background-color 0.15s ease',
                         }}
@@ -1331,12 +1331,12 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
                             style={{
                               fontSize: '0.875rem',
                               fontWeight: isSelected ? 800 : 600,
-                              color: isSelected ? '#4f46e5' : '#1e293b',
+                              color: isSelected ? '#0891b2' : '#1e293b',
                             }}
                           >
                             {loc.name}
                           </span>
-                          {isSelected && <Check2 size={16} color="#4f46e5" style={{ flexShrink: 0 }} />}
+                          {isSelected && <Check2 size={16} color="#0891b2" style={{ flexShrink: 0 }} />}
                         </div>
 
                         {loc.address ? (
@@ -1375,7 +1375,7 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
             variant="ghost"
             size="sm"
             className="bom-labor-reset-btn"
-            leftIcon={<GeoAlt size={13} color="#4f46e5" />}
+            leftIcon={<GeoAlt size={13} color="#0891b2" />}
             onClick={() => {
               if (currentActiveLocation) {
                 setAddressEditForm({
@@ -1391,9 +1391,9 @@ export const IntranetSetupView: React.FC<IntranetSetupViewProps> = ({ onShowToas
             style={{
               fontSize: '0.75rem',
               fontWeight: 700,
-              color: '#4f46e5',
-              backgroundColor: '#eff6ff',
-              border: '1px solid #bfdbfe',
+              color: '#0891b2',
+              backgroundColor: 'rgba(8, 145, 178, 0.08)',
+              border: '1px solid rgba(8, 145, 178, 0.2)',
               borderRadius: '6px',
               padding: '4px 10px',
             }}
