@@ -1392,7 +1392,7 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
                               y={25}
                               width={barWidth * 2 + barGap + 8}
                               height={baselineY - 25}
-                              fill="rgba(2, 132, 199, 0.05)"
+                              fill="rgba(8, 145, 178, 0.05)"
                               rx="6"
                             />
                           )}
@@ -1795,12 +1795,6 @@ export const BomOverviewView: React.FC<BomOverviewViewProps> = ({ onNavigate: _o
               </span>
               {isMobileViewport ? 'Chỉ tiêu' : 'Chỉ tiêu Kế hoạch năm'}
             </span>
-            {!isMobileViewport && (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--color-primary)' }} />
-                Tháng {new Date().getMonth() + 1} hiện hành
-              </span>
-            )}
           </div>
         </div>
 
