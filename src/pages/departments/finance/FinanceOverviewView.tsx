@@ -22,6 +22,7 @@ import { EventOffcanvas } from '../../../components/common/EventOffcanvas';
 import { DepartmentActionMenu, type DepartmentActionMenuItem } from '../../../components/common/DepartmentActionMenu';
 import { useFinanceRealtimeSync, notifyFinanceUpdated } from '../../../services/financeSyncService';
 import { PaymentOrderOffcanvas } from './PaymentOrderOffcanvas';
+import { ReceiptOrderOffcanvas } from './ReceiptOrderOffcanvas';
 import { Button } from '../../../components/common/Button';
 
 export interface FinanceOverviewViewProps {
@@ -1537,7 +1538,7 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                   <div
                     key={item.id}
                     onClick={() => setSelectedNotice(item)}
-                    title={item.type === 'outflow' ? 'Nhấn để xem chi tiết Lệnh chi tiền và thực hiện giải ngân' : 'Nhấn để xem chi tiết khoản thu nợ'}
+                    title={item.type === 'outflow' ? 'Nhấn để xem chi tiết Lệnh chi tiền và thực hiện giải ngân' : 'Nhấn để xác nhận thu nợ và lập phiếu thu'}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -1648,6 +1649,15 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
       {/* ── OFFCANVAS CHI TIẾT LỆNH CHI TIỀN (RỘNG 400PX - COMPONENT TÁCH DÙNG CHUNG) ── */}
       <PaymentOrderOffcanvas
         isOpen={Boolean(selectedNotice && selectedNotice.type === 'outflow')}
+        onClose={() => setSelectedNotice(null)}
+        data={selectedNotice}
+        onShowToast={onShowToast}
+        onSuccess={() => loadRealStats(selectedPeriod, selectedMonth)}
+      />
+
+      {/* ── OFFCANVAS XÁC NHẬN THU NỢ KHÁCH HÀNG (RỘNG 400PX) ── */}
+      <ReceiptOrderOffcanvas
+        isOpen={Boolean(selectedNotice && selectedNotice.type === 'inflow')}
         onClose={() => setSelectedNotice(null)}
         data={selectedNotice}
         onShowToast={onShowToast}

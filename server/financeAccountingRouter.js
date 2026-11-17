@@ -4443,17 +4443,31 @@ router.get('/api/finance/cashflow-notices', (req, res) => {
         [],
         (drErr, drRows) => {
           (drRows || []).forEach((r) => {
+            let parsedEntries = [];
+            try {
+              parsedEntries = r.entries_json ? JSON.parse(r.entries_json) : [];
+            } catch {}
+
             notices.push({
               id: `rec-${r.id}`,
+              receivableId: r.id,
               type: 'inflow', // Thu nợ
               title: `Thu hồi công nợ: ${r.customer_name || 'Khách hàng'}`,
-              partner: `${r.customer_name || 'Khách hàng'} (${r.project_name || r.project || 'Dự án'})`,
+              partner: `${r.customer_name || 'Khách hàng'} (${r.project_name || 'Dự án'})`,
+              customerName: r.customer_name || 'Khách hàng',
+              customerAddress: r.customer_address || '',
+              projectName: r.project_name || '',
               code: r.code || `PT-${r.id}`,
+              contractValue: Number(r.contract_value || 0),
+              paidAmount: Number(r.paid_amount || 0),
+              remainingAmount: Number(r.remaining_amount || 0),
               amount: `+${Number(r.remaining_amount || 0).toLocaleString('vi-VN')} đ`,
               rawAmount: Number(r.remaining_amount || 0),
               dueDate: r.due_date || 'Theo hợp đồng',
               status: 'Chờ thu nợ',
               statusVariant: 'info',
+              entries: parsedEntries,
+              rawReceivable: r,
             });
           });
 
