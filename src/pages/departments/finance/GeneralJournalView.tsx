@@ -111,6 +111,7 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
   const [entries, setEntries] = useState<JournalEntry[]>(INITIAL_ENTRIES);
   const [chartOfAccounts, setChartOfAccounts] = useState(CHART_OF_ACCOUNTS);
   const [, setIsLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const fetchEntries = async () => {
     try {
@@ -124,6 +125,28 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
       console.warn('Không thể kết nối máy chủ API Sổ nhật ký chung, hiển thị dữ liệu bộ nhớ đệm:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSyncAllData = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch('/api/finance/sync-journal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        onShowToast?.('success', 'Đồng bộ thành công', data.message || 'Đã đồng bộ toàn bộ dữ liệu tài chính - kế toán thành công!');
+        await fetchEntries();
+      } else {
+        onShowToast?.('error', 'Lỗi đồng bộ', data.error || 'Lỗi khi đồng bộ dữ liệu Sổ nhật ký chung');
+      }
+    } catch (err: any) {
+      console.error('Error syncing journal:', err);
+      onShowToast?.('error', 'Mất kết nối', err?.message || 'Lỗi kết nối máy chủ khi đồng bộ Sổ nhật ký chung');
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -660,6 +683,27 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
         </div>
       </div>
 
+      {isSyncing && (
+        <div
+          style={{
+            margin: '0 16px 10px',
+            padding: '8px 14px',
+            backgroundColor: '#f0f9ff',
+            border: '1px solid #bae6fd',
+            borderRadius: '8px',
+            color: '#0369a1',
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <div className="spinner-border spinner-border-sm text-primary" role="status" style={{ width: '14px', height: '14px' }} />
+          <span>Hệ thống đang quét và đồng bộ dữ liệu toàn diện từ Bán hàng, Mua hàng, Kho vận, Lương &amp; BHXH, Tạm ứng vào Sổ nhật ký chung...</span>
+        </div>
+      )}
+
       {/* 2. THANH CÔNG CỤ TÌM KIẾM VÀ BỘ LỌC */}
       <TableToolbar
         searchValue={searchQuery}
@@ -669,6 +713,7 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
         }}
         searchPlaceholder="Tìm theo số CT, diễn giải, tài khoản..."
         searchMinWidth="220px"
+        onRefresh={handleSyncAllData}
         filters={[
           {
             id: 'period-filter',

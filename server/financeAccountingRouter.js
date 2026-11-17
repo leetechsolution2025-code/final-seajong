@@ -134,6 +134,63 @@ function getCurrentDefaultPeriod() {
   return String(now.getFullYear()) + '-' + String(now.getMonth() + 1).padStart(2, '0');
 }
 
+export function readVietnameseCurrency(num) {
+  if (!num || isNaN(num) || num <= 0) return 'Không đồng chẵn';
+  const digits = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
+
+  function readThreeDigits(n, isFirst) {
+    const hundred = Math.floor(n / 100);
+    const ten = Math.floor((n % 100) / 10);
+    const unit = n % 10;
+    let res = '';
+
+    if (hundred > 0 || !isFirst) {
+      res += digits[hundred] + ' trăm ';
+    }
+
+    if (ten > 1) {
+      res += digits[ten] + ' mươi ';
+      if (unit === 1) res += 'mốt ';
+      else if (unit === 5) res += 'lăm ';
+      else if (unit > 0) res += digits[unit] + ' ';
+    } else if (ten === 1) {
+      res += 'mười ';
+      if (unit === 5) res += 'lăm ';
+      else if (unit > 0) res += digits[unit] + ' ';
+    } else {
+      if (hundred > 0 || !isFirst) {
+        if (unit > 0) res += 'lẻ ' + digits[unit] + ' ';
+      } else {
+        if (unit > 0) res += digits[unit] + ' ';
+      }
+    }
+    return res;
+  }
+
+  const units = ['', 'nghìn', 'triệu', 'tỷ', 'nghìn tỷ', 'triệu tỷ'];
+  let str = Math.floor(Math.abs(num)).toString();
+  let groups = [];
+  while (str.length > 0) {
+    groups.unshift(parseInt(str.slice(-3), 10));
+    str = str.slice(0, -3);
+  }
+
+  let result = '';
+  for (let i = 0; i < groups.length; i++) {
+    const val = groups[i];
+    const isFirst = i === 0;
+    if (val > 0) {
+      result += readThreeDigits(val, isFirst) + units[groups.length - 1 - i] + ' ';
+    }
+  }
+
+  const trimmed = result.trim();
+  if (!trimmed) return 'Không đồng chẵn';
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1) + ' đồng chẵn';
+}
+
+export const numberToVietnameseWords = readVietnameseCurrency;
+
 router.get('/api/finance/cash-assets', (req, res) => {
   db.all('SELECT * FROM cash_and_bank_assets ORDER BY created_at ASC, id ASC', [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -3456,60 +3513,6 @@ router.get('/api/finance/payment-orders', (req, res) => {
   });
 });
 
-function readVietnameseCurrency(num) {
-  if (!num || isNaN(num) || num <= 0) return 'Không đồng chẵn';
-  const digits = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
-
-  function readThreeDigits(n, isFirst) {
-    const hundred = Math.floor(n / 100);
-    const ten = Math.floor((n % 100) / 10);
-    const unit = n % 10;
-    let res = '';
-
-    if (hundred > 0 || !isFirst) {
-      res += digits[hundred] + ' trăm ';
-    }
-
-    if (ten > 1) {
-      res += digits[ten] + ' mươi ';
-      if (unit === 1) res += 'mốt ';
-      else if (unit === 5) res += 'lăm ';
-      else if (unit > 0) res += digits[unit] + ' ';
-    } else if (ten === 1) {
-      res += 'mười ';
-      if (unit === 5) res += 'lăm ';
-      else if (unit > 0) res += digits[unit] + ' ';
-    } else {
-      if (hundred > 0 || !isFirst) {
-        if (unit > 0) res += 'lẻ ' + digits[unit] + ' ';
-      } else {
-        if (unit > 0) res += digits[unit] + ' ';
-      }
-    }
-    return res;
-  }
-
-  const units = ['', 'nghìn', 'triệu', 'tỷ', 'nghìn tỷ'];
-  let temp = Math.floor(num);
-  const groups = [];
-  while (temp > 0) {
-    groups.push(temp % 1000);
-    temp = Math.floor(temp / 1000);
-  }
-
-  let result = '';
-  for (let i = groups.length - 1; i >= 0; i--) {
-    const val = groups[i];
-    if (val > 0) {
-      const isFirst = i === groups.length - 1;
-      result += readThreeDigits(val, isFirst) + units[i] + ' ';
-    }
-  }
-
-  const trimmed = result.trim();
-  if (!trimmed) return 'Không đồng chẵn';
-  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1) + ' đồng chẵn';
-}
 
 // 2. Tạo mới một lệnh chi tiền thủ công (nếu cần)
 router.post('/api/finance/payment-orders', (req, res) => {
@@ -4461,11 +4464,15 @@ router.get('/api/finance/cashflow-notices', (req, res) => {
   );
 });
 
-// Route đồng bộ thủ công
+// Route đồng bộ thủ công từ toàn bộ các phân hệ (Bán hàng, Mua hàng, Kho vận, Lương & BHXH, Tạm ứng, TSCĐ)
 router.post('/api/finance/sync-journal', async (req, res) => {
   try {
-    await syncAllSubledgersToJournal(db);
-    res.json({ success: true, message: 'Đã đồng bộ toàn bộ công nợ và chi phí vào Sổ nhật ký chung thành công' });
+    const result = await syncAllSubledgersToJournal(db);
+    res.json({
+      success: true,
+      message: `Đã rà soát và đồng bộ thành công ${result?.syncedCount || 'toàn bộ'} bút toán từ các phân hệ vào Sổ nhật ký chung`,
+      syncedCount: result?.syncedCount || 0
+    });
   } catch (err) {
     console.error('Lỗi sync-journal:', err);
     res.status(500).json({ success: false, error: err.message });

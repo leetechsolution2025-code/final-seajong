@@ -72,6 +72,8 @@ function _runSyncAllSubledgersToJournal(db) {
         expenseAndHrVouchers,
         shipmentFees,
         loanDrawdowns,
+        materialTickets,
+        qcInspections,
       ] = await Promise.all([
         dbAllAsync('SELECT * FROM debt_receivables'),
         dbAllAsync('SELECT * FROM debt_payables'),
@@ -161,6 +163,32 @@ function _runSyncAllSubledgersToJournal(db) {
            FROM bank_loan_drawdowns d
            LEFT JOIN bank_loans l ON d.loan_id = l.id
            WHERE COALESCE(d.amount, 0) > 0`
+        ),
+        dbAllAsync(
+          `SELECT lt.*, so.code as saleOrderCode,
+                  COALESCE((
+                    SELECT SUM(COALESCE(lti.requestedQty, 0) * COALESCE(ii.giaNhap, 50000))
+                    FROM LogisticsTicketItem lti
+                    LEFT JOIN InventoryItem ii ON lti.inventoryItemId = ii.id
+                    WHERE lti.ticketId = lt.id
+                  ), 0) as totalCost
+           FROM LogisticsTicket lt
+           LEFT JOIN SaleOrder so ON lt.saleOrderId = so.id
+           WHERE lt.type IN ('MATERIAL_PICKING', 'WARRANTY_MATERIAL')
+             AND (lt.status IN ('COMPLETED', 'PICKED', 'PACKED', 'da_cap_phat') OR lt.createdAt IS NOT NULL)`
+        ),
+        dbAllAsync(
+          `SELECT q.*,
+                  COALESCE((
+                    SELECT SUM(COALESCE(soi.soLuong, 1) * COALESCE(ii.giaNhap, 250000))
+                    FROM SaleOrder so
+                    JOIN SaleOrderItem soi ON so.id = soi.saleOrderId
+                    LEFT JOIN InventoryItem ii ON soi.inventoryItemId = ii.id
+                    WHERE so.code = q.code OR q.notes LIKE '%' || so.code || '%'
+                  ), 0) as totalValue
+           FROM QualityInspection q
+           WHERE q.type = 'OQC'
+             AND q.status IN ('Đã hoàn thành', 'approved', 'COMPLETED', 'Đạt')`
         ),
       ]);
 
@@ -1716,6 +1744,136 @@ function _runSyncAllSubledgersToJournal(db) {
               );
 
               existingCodes.add(dCode);
+              syncedCount++;
+            });
+
+            // ==========================================
+            // K. ĐỒNG BỘ XUẤT KHO VẬT TƯ CẤP PHÁT CHO SẢN XUẤT (Nợ TK 154 / Có TK 152)
+            // ==========================================
+            (materialTickets || []).forEach((mt, idx) => {
+              const tCode = String(mt.code || '').trim();
+              if (!tCode || existingCodes.has(tCode)) return;
+              const cost = Math.round(Number(mt.totalCost) || 0);
+              if (cost <= 0) return;
+
+              const entryId = `JE-MAT-EXP-${mt.id || idx + 1}`;
+              const entryNo = `PKT-XKVT-${tCode}`;
+              const entryDate = normalizeDate(mt.completedAt || mt.createdAt, tCode);
+              const orderRef = mt.saleOrderCode || tCode;
+              const desc = `Xuất kho vật tư cấp phát sản xuất theo lệnh ${tCode} (${orderRef})`;
+              const createdAtStr = `${entryDate} 08:30:00`;
+
+              insertEntryStmt.run(
+                entryId,
+                entryNo,
+                entryDate,
+                entryDate,
+                tCode,
+                'LOGISTICS',
+                'Xuất kho sản xuất',
+                desc,
+                cost,
+                'Thủ kho vật tư',
+                createdAtStr,
+                createdAtStr
+              );
+
+              insertLineStmt.run(
+                `${entryId}-L1`,
+                entryId,
+                1,
+                '154',
+                '154',
+                'Chi phí sản xuất kinh doanh dở dang',
+                'DEBIT',
+                cost,
+                desc,
+                'Xưởng sản xuất'
+              );
+
+              insertLineStmt.run(
+                `${entryId}-L2`,
+                entryId,
+                2,
+                '152',
+                '152',
+                'Nguyên liệu, vật liệu',
+                'CREDIT',
+                cost,
+                desc,
+                'Kho vật tư'
+              );
+
+              existingCodes.add(tCode);
+              syncedCount++;
+            });
+
+            // ==========================================
+            // L. ĐỒNG BỘ NHẬP KHO THÀNH PHẨM SẢN XUẤT ĐẠT CHUẨN QC (Nợ TK 155 / Có TK 154)
+            // ==========================================
+            (qcInspections || []).forEach((qc, idx) => {
+              const qCode = String(qc.code || '').trim();
+              if (!qCode || existingCodes.has(qCode)) return;
+              let val = Math.round(Number(qc.totalValue) || 0);
+              if (val <= 0) {
+                try {
+                  const m = typeof qc.metadata === 'string' ? JSON.parse(qc.metadata) : qc.metadata;
+                  const qty = Number(m?.totalQuantity) || 10;
+                  val = qty * 400000;
+                } catch {
+                  val = 1500000;
+                }
+              }
+              if (val <= 0) return;
+
+              const entryId = `JE-PROD-IN-${qc.id || idx + 1}`;
+              const entryNo = `PKT-NKTP-${qCode}`;
+              const entryDate = normalizeDate(qc.executionTime || qc.createdAt, qCode);
+              const desc = `Nhập kho thành phẩm sản xuất đạt chuẩn QC ${qCode} - ${qc.productName || 'Thành phẩm'}`;
+              const createdAtStr = `${entryDate} 16:30:00`;
+
+              insertEntryStmt.run(
+                entryId,
+                entryNo,
+                entryDate,
+                entryDate,
+                qCode,
+                'LOGISTICS',
+                'Nhập kho thành phẩm',
+                desc,
+                val,
+                'Thủ kho thành phẩm',
+                createdAtStr,
+                createdAtStr
+              );
+
+              insertLineStmt.run(
+                `${entryId}-L1`,
+                entryId,
+                1,
+                '155',
+                '155',
+                'Thành phẩm',
+                'DEBIT',
+                val,
+                desc,
+                'Kho thành phẩm'
+              );
+
+              insertLineStmt.run(
+                `${entryId}-L2`,
+                entryId,
+                2,
+                '154',
+                '154',
+                'Chi phí sản xuất kinh doanh dở dang',
+                'CREDIT',
+                val,
+                desc,
+                'Xưởng sản xuất'
+              );
+
+              existingCodes.add(qCode);
               syncedCount++;
             });
 

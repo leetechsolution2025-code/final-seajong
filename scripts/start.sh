@@ -62,7 +62,7 @@ pm2 save
 # 5. Kiểm tra phản hồi (Health Check)
 log_info "Đang kiểm tra trạng thái phản hồi tại http://localhost:${PORT}/api/health ..."
 sleep 3
-if curl -s "http://localhost:${PORT}/api/health" > /dev/null || curl -s "http://localhost:${PORT}" > /dev/null; then
+if curl -s --max-time 10 "http://localhost:${PORT}/api/health" > /dev/null || curl -s --max-time 10 "http://localhost:${PORT}" > /dev/null; then
     log_ok "Ứng dụng '$APP_NAME' đã chạy thành công tại http://localhost:${PORT}!"
 else
     log_err "Ứng dụng chưa phản hồi trên cổng ${PORT}. Vui lòng kiểm tra log bằng lệnh: pm2 logs ${APP_NAME}"
