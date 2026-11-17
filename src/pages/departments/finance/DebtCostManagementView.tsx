@@ -851,7 +851,7 @@ const getLoggedInUserName = (userProp?: any): string => {
       if (parsed.user?.fullName) return parsed.user.fullName;
       if (parsed.user?.username) return parsed.user.username;
     }
-  } catch {}
+  } catch { }
   return '';
 };
 
@@ -975,15 +975,15 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
         tickerPayItem,
         overdueRecItems.length > 0
           ? {
-              badge: 'NỢ PHẢI THU QUÁ HẠN',
-              badgeColor: 'bg-rose-50 text-rose-700 border-rose-200',
-              text: `Cảnh báo: Có <strong>${overdueRecItems.length} khoản nợ quá hạn</strong> thu hồi: <strong>${formatNumberGroup(totalRecOverdue)} đ</strong>`,
-            }
+            badge: 'NỢ PHẢI THU QUÁ HẠN',
+            badgeColor: 'bg-rose-50 text-rose-700 border-rose-200',
+            text: `Cảnh báo: Có <strong>${overdueRecItems.length} khoản nợ quá hạn</strong> thu hồi: <strong>${formatNumberGroup(totalRecOverdue)} đ</strong>`,
+          }
           : {
-              badge: 'TRONG HẠN AN TOÀN',
-              badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-              text: `Dư nợ trong hạn an toàn: <strong>${formatNumberGroup(totalRecRemaining)} đ</strong> (100% trong hạn thanh toán)`,
-            },
+            badge: 'TRONG HẠN AN TOÀN',
+            badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            text: `Dư nợ trong hạn an toàn: <strong>${formatNumberGroup(totalRecRemaining)} đ</strong> (100% trong hạn thanh toán)`,
+          },
         tickerLoanItem,
         tickerExpItem,
       ];
@@ -995,15 +995,15 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
         tickerRecItem,
         overduePayItems.length > 0
           ? {
-              badge: 'NỢ PHẢI TRẢ QUÁ HẠN',
-              badgeColor: 'bg-rose-50 text-rose-700 border-rose-200',
-              text: `Cảnh báo: Có <strong>${overduePayItems.length} khoản nợ quá hạn</strong> chưa trả NCC: <strong>${formatNumberGroup(totalPayOverdue)} đ</strong>`,
-            }
+            badge: 'NỢ PHẢI TRẢ QUÁ HẠN',
+            badgeColor: 'bg-rose-50 text-rose-700 border-rose-200',
+            text: `Cảnh báo: Có <strong>${overduePayItems.length} khoản nợ quá hạn</strong> chưa trả NCC: <strong>${formatNumberGroup(totalPayOverdue)} đ</strong>`,
+          }
           : {
-              badge: 'TRONG HẠN THANH TOÁN',
-              badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-              text: `100% các khoản phải trả nhà cung cấp và đối tác vận chuyển đều trong thời hạn thanh toán`,
-            },
+            badge: 'TRONG HẠN THANH TOÁN',
+            badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            text: `100% các khoản phải trả nhà cung cấp và đối tác vận chuyển đều trong thời hạn thanh toán`,
+          },
         tickerLoanItem,
         tickerExpItem,
       ];
@@ -1016,15 +1016,15 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
         tickerPayItem,
         totalLoan12m > 0
           ? {
-              badge: 'GỐC ĐẾN HẠN 12T',
-              badgeColor: 'bg-rose-50 text-rose-700 border-rose-200',
-              text: `Nợ gốc ngân hàng đến hạn trả trong 12 tháng tới (Mã 320 B01): <strong>${formatNumberGroup(totalLoan12m)} đ</strong>`,
-            }
+            badge: 'GỐC ĐẾN HẠN 12T',
+            badgeColor: 'bg-rose-50 text-rose-700 border-rose-200',
+            text: `Nợ gốc ngân hàng đến hạn trả trong 12 tháng tới (Mã 320 B01): <strong>${formatNumberGroup(totalLoan12m)} đ</strong>`,
+          }
           : {
-              badge: 'CHI PHÍ LÃI VAY',
-              badgeColor: 'bg-sky-50 text-sky-700 border-sky-200',
-              text: `Ước tính lãi vay phải trả tháng này: <strong>${formatNumberGroup(totalLoanInterest)} đ</strong>`,
-            },
+            badge: 'CHI PHÍ LÃI VAY',
+            badgeColor: 'bg-sky-50 text-sky-700 border-sky-200',
+            text: `Ước tính lãi vay phải trả tháng này: <strong>${formatNumberGroup(totalLoanInterest)} đ</strong>`,
+          },
         tickerExpItem,
       ];
     }
@@ -1047,7 +1047,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     try {
       const cached = localStorage.getItem('seajong_debt_aging_config') || localStorage.getItem('decodoor_debt_aging_config');
       if (cached) return JSON.parse(cached);
-    } catch {}
+    } catch { }
     return DEFAULT_DEBT_AGING_CONFIG;
   });
 
@@ -1060,10 +1060,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
           try {
             localStorage.setItem('seajong_debt_aging_config', JSON.stringify(d));
             localStorage.setItem('decodoor_debt_aging_config', JSON.stringify(d));
-          } catch {}
+          } catch { }
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   // Tải dữ liệu thực tế từ Database kèm tính toán trạng thái theo cấu hình tuổi nợ
@@ -2273,7 +2273,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
         id: 'divider',
         label: '',
         divider: true,
-        onClick: () => {},
+        onClick: () => { },
       },
       {
         id: 'refresh-data',
@@ -2595,9 +2595,9 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     const pendingEntry = initialEntryId
       ? item.entries?.find((e) => e.id === initialEntryId)
       : item.entries?.find((e) => {
-          const rem = e.remainingAmount !== undefined ? e.remainingAmount : (e.totalAmount - (e.paidAmount || 0));
-          return rem > 0;
-        });
+        const rem = e.remainingAmount !== undefined ? e.remainingAmount : (e.totalAmount - (e.paidAmount || 0));
+        return rem > 0;
+      });
 
     const targetAmount = pendingEntry
       ? (pendingEntry.remainingAmount !== undefined ? pendingEntry.remainingAmount : (pendingEntry.totalAmount - (pendingEntry.paidAmount || 0)))
@@ -2742,7 +2742,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
             content: docContent,
           },
         }),
-      }).catch(() => {});
+      }).catch(() => { });
     } catch (err) {
       console.error('Error submitting payment request:', err);
     }
@@ -2785,7 +2785,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
           }
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   };
 
   const handleSendPayablePaymentRequest = (item: PayableItem) => {
@@ -2925,55 +2925,55 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
 
         const loanPayload: LoanItem = editingItem
           ? {
-              ...editingItem,
-              code: formCode || editingItem.code,
-              bankName: formName || 'Ngân hàng TMCP',
-              contractCode: formContractCode || editingItem.contractCode,
-              facilityType: (formFacilityType as any) || 'working_capital',
-              facilityLabel: facilityLabels[formFacilityType] || 'Vay vốn lưu động hạn mức',
-              termType: (formTermType as any) || 'short_term',
-              loanLimit: amountNum,
-              remainingPrincipal: Math.max(0, amountNum - (editingItem.paidPrincipal || 0)),
-              dueWithin12m: due12mNum,
-              interestRate: `${rateValNum}% / năm`,
-              interestRateVal: rateValNum,
-              interestType: (formInterestType as any) || 'floating',
-              interestPaymentDay: Number(formInterestPaymentDay) || 25,
-              monthlyInterestEst: monthlyInt,
-              maturityDate: formDueDate || editingItem.maturityDate,
-              collateralName: formCollateralName,
-              collateralValue: Number(formCollateralValue) || 0,
-              bankAccountNumber: formBankAccountNumber,
-              loanType: formLoanType || editingItem.loanType || 'Vay vốn kinh doanh',
-              notes: formNotes,
-            }
+            ...editingItem,
+            code: formCode || editingItem.code,
+            bankName: formName || 'Ngân hàng TMCP',
+            contractCode: formContractCode || editingItem.contractCode,
+            facilityType: (formFacilityType as any) || 'working_capital',
+            facilityLabel: facilityLabels[formFacilityType] || 'Vay vốn lưu động hạn mức',
+            termType: (formTermType as any) || 'short_term',
+            loanLimit: amountNum,
+            remainingPrincipal: Math.max(0, amountNum - (editingItem.paidPrincipal || 0)),
+            dueWithin12m: due12mNum,
+            interestRate: `${rateValNum}% / năm`,
+            interestRateVal: rateValNum,
+            interestType: (formInterestType as any) || 'floating',
+            interestPaymentDay: Number(formInterestPaymentDay) || 25,
+            monthlyInterestEst: monthlyInt,
+            maturityDate: formDueDate || editingItem.maturityDate,
+            collateralName: formCollateralName,
+            collateralValue: Number(formCollateralValue) || 0,
+            bankAccountNumber: formBankAccountNumber,
+            loanType: formLoanType || editingItem.loanType || 'Vay vốn kinh doanh',
+            notes: formNotes,
+          }
           : {
-              id: `LN-${Date.now()}`,
-              code: formCode || `VAY-${Date.now().toString().slice(-4)}`,
-              bankName: formName || 'Ngân hàng TMCP',
-              contractCode: formContractCode || `HDTD-2026-${Date.now().toString().slice(-4)}`,
-              facilityType: (formFacilityType as any) || 'working_capital',
-              facilityLabel: facilityLabels[formFacilityType] || 'Vay vốn lưu động hạn mức',
-              termType: (formTermType as any) || 'short_term',
-              loanLimit: amountNum,
-              paidPrincipal: 0,
-              remainingPrincipal: amountNum,
-              dueWithin12m: due12mNum,
-              interestRate: `${rateValNum}% / năm`,
-              interestRateVal: rateValNum,
-              interestType: (formInterestType as any) || 'floating',
-              interestPaymentDay: Number(formInterestPaymentDay) || 25,
-              monthlyInterestEst: monthlyInt,
-              startDate: new Date().toLocaleDateString('vi-VN'),
-              maturityDate: formDueDate || '31/12/2026',
-              collateralName: formCollateralName,
-              collateralValue: Number(formCollateralValue) || 0,
-              bankAccountNumber: formBankAccountNumber,
-              status: 'active',
-              statusLabel: 'Dư nợ trong hạn',
-              loanType: formLoanType || 'Vay vốn bổ sung kinh doanh',
-              notes: formNotes,
-            };
+            id: `LN-${Date.now()}`,
+            code: formCode || `VAY-${Date.now().toString().slice(-4)}`,
+            bankName: formName || 'Ngân hàng TMCP',
+            contractCode: formContractCode || `HDTD-2026-${Date.now().toString().slice(-4)}`,
+            facilityType: (formFacilityType as any) || 'working_capital',
+            facilityLabel: facilityLabels[formFacilityType] || 'Vay vốn lưu động hạn mức',
+            termType: (formTermType as any) || 'short_term',
+            loanLimit: amountNum,
+            paidPrincipal: 0,
+            remainingPrincipal: amountNum,
+            dueWithin12m: due12mNum,
+            interestRate: `${rateValNum}% / năm`,
+            interestRateVal: rateValNum,
+            interestType: (formInterestType as any) || 'floating',
+            interestPaymentDay: Number(formInterestPaymentDay) || 25,
+            monthlyInterestEst: monthlyInt,
+            startDate: new Date().toLocaleDateString('vi-VN'),
+            maturityDate: formDueDate || '31/12/2026',
+            collateralName: formCollateralName,
+            collateralValue: Number(formCollateralValue) || 0,
+            bankAccountNumber: formBankAccountNumber,
+            status: 'active',
+            statusLabel: 'Dư nợ trong hạn',
+            loanType: formLoanType || 'Vay vốn bổ sung kinh doanh',
+            notes: formNotes,
+          };
 
         try {
           const res = await fetch('/api/debts/loans', {
@@ -2992,43 +2992,43 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
       } else {
         const expPayload: ExpenseItem = editingItem
           ? {
-              ...editingItem,
-              code: formCode || editingItem.code,
-              title: formName,
-              category: formExpenseCategory,
-              categoryLabel: formExpenseCategoryLabel,
-              amount: amountNum,
-              department: formExpenseDepartment,
-              spendDate: formDueDate,
-              spender: formSpender,
-              proposer: formProposer || formExpenseDepartment,
-              notes: formNotes,
-              debitAccount: formDebitAccount,
-              debitAccountName: formDebitAccountName,
-              creditAccount: formCreditAccount,
-              creditAccountName: formCreditAccountName,
-              operationType: formExpenseOpType,
-            }
+            ...editingItem,
+            code: formCode || editingItem.code,
+            title: formName,
+            category: formExpenseCategory,
+            categoryLabel: formExpenseCategoryLabel,
+            amount: amountNum,
+            department: formExpenseDepartment,
+            spendDate: formDueDate,
+            spender: formSpender,
+            proposer: formProposer || formExpenseDepartment,
+            notes: formNotes,
+            debitAccount: formDebitAccount,
+            debitAccountName: formDebitAccountName,
+            creditAccount: formCreditAccount,
+            creditAccountName: formCreditAccountName,
+            operationType: formExpenseOpType,
+          }
           : {
-              id: `EXP-${Date.now()}`,
-              code: formCode || `PC-${Date.now().toString().slice(-4)}`,
-              title: formName,
-              category: formExpenseCategory,
-              categoryLabel: formExpenseCategoryLabel,
-              amount: amountNum,
-              department: formExpenseDepartment,
-              spendDate: formDueDate || new Date().toLocaleDateString('vi-VN'),
-              spender: formSpender || 'Kế toán trưởng',
-              proposer: formProposer || formExpenseDepartment,
-              status: 'approved',
-              statusLabel: 'Đã chi tiền',
-              notes: formNotes,
-              debitAccount: formDebitAccount,
-              debitAccountName: formDebitAccountName,
-              creditAccount: formCreditAccount,
-              creditAccountName: formCreditAccountName,
-              operationType: formExpenseOpType,
-            };
+            id: `EXP-${Date.now()}`,
+            code: formCode || `PC-${Date.now().toString().slice(-4)}`,
+            title: formName,
+            category: formExpenseCategory,
+            categoryLabel: formExpenseCategoryLabel,
+            amount: amountNum,
+            department: formExpenseDepartment,
+            spendDate: formDueDate || new Date().toLocaleDateString('vi-VN'),
+            spender: formSpender || 'Kế toán trưởng',
+            proposer: formProposer || formExpenseDepartment,
+            status: 'approved',
+            statusLabel: 'Đã chi tiền',
+            notes: formNotes,
+            debitAccount: formDebitAccount,
+            debitAccountName: formDebitAccountName,
+            creditAccount: formCreditAccount,
+            creditAccountName: formCreditAccountName,
+            operationType: formExpenseOpType,
+          };
 
         try {
           const res = await fetch('/api/debts/expenses', {
@@ -3246,561 +3246,77 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
             margin: 0,
           }}
         >
-            <thead
-              style={{
-                backgroundColor: '#f8fafc',
-                borderBottom: '1px solid var(--border-default, #cbd5e1)',
-              }}
-            >
-              {/* BƯỚC 1: HEADER CÔNG NỢ PHẢI THU (ĐÃ BỎ STT) */}
-              {currentStep === 1 && (
-                <tr style={{ color: '#475569', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  <th style={{ padding: '7px 12px' }}>Khách hàng</th>
-                  <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right' }}>Số tiền gốc</th>
-                  <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right' }}>Đã thanh toán</th>
-                  <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center' }}>Hạn thanh toán</th>
-                  <th style={{ padding: '7px 12px', textAlign: 'right' }}>Còn lại</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></th>
-                </tr>
-              )}
+          <thead
+            style={{
+              backgroundColor: '#f8fafc',
+              borderBottom: '1px solid var(--border-default, #cbd5e1)',
+            }}
+          >
+            {/* BƯỚC 1: HEADER CÔNG NỢ PHẢI THU (ĐÃ BỎ STT) */}
+            {currentStep === 1 && (
+              <tr style={{ color: '#475569', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <th style={{ padding: '7px 12px' }}>Khách hàng</th>
+                <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right' }}>Số tiền gốc</th>
+                <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right' }}>Đã thanh toán</th>
+                <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center' }}>Hạn thanh toán</th>
+                <th style={{ padding: '7px 12px', textAlign: 'right' }}>Còn lại</th>
+                <th style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></th>
+              </tr>
+            )}
 
-              {/* BƯỚC 2: HEADER CÔNG NỢ PHẢI TRẢ (ĐỒNG BỘ BƯỚC 1, ĐÃ BỎ STT) */}
-              {currentStep === 2 && (
-                <tr style={{ color: '#475569', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  <th style={{ padding: '7px 12px' }}>Nhà cung cấp / Đơn vị vận chuyển</th>
-                  <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right' }}>Tổng tiền đơn</th>
-                  <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right' }}>Đã thanh toán</th>
-                  <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center' }}>Hạn thanh toán</th>
-                  <th style={{ padding: '7px 12px', textAlign: 'right' }}>Còn lại</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></th>
-                </tr>
-              )}
+            {/* BƯỚC 2: HEADER CÔNG NỢ PHẢI TRẢ (ĐỒNG BỘ BƯỚC 1, ĐÃ BỎ STT) */}
+            {currentStep === 2 && (
+              <tr style={{ color: '#475569', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <th style={{ padding: '7px 12px' }}>Nhà cung cấp / Đơn vị vận chuyển</th>
+                <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right' }}>Tổng tiền đơn</th>
+                <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right' }}>Đã thanh toán</th>
+                <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center' }}>Hạn thanh toán</th>
+                <th style={{ padding: '7px 12px', textAlign: 'right' }}>Còn lại</th>
+                <th style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></th>
+              </tr>
+            )}
 
-              {/* BƯỚC 3: HEADER NỢ VAY - CÁC CỘT QUẢN TRỊ TÍN DỤNG */}
-              {currentStep === 3 && (
-                <tr style={{ color: '#475569', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  <th style={{ padding: '7px 12px' }}>Ngân hàng và Hợp đồng tín dụng</th>
-                  <th className="hidden sm:table-cell" style={{ padding: '7px 12px', width: '160px', whiteSpace: 'nowrap' }}>Kỳ hạn & Trạng thái</th>
-                  <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', width: '200px', whiteSpace: 'nowrap' }}>Hạn mức và Dư nợ gốc</th>
-                  <th className="hidden sm:table-cell" style={{ padding: '7px 12px', width: '220px', whiteSpace: 'nowrap' }}>Lãi suất & Lãi dự kiến</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></th>
-                </tr>
-              )}
+            {/* BƯỚC 3: HEADER NỢ VAY - CÁC CỘT QUẢN TRỊ TÍN DỤNG */}
+            {currentStep === 3 && (
+              <tr style={{ color: '#475569', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <th style={{ padding: '7px 12px' }}>Ngân hàng và Hợp đồng tín dụng</th>
+                <th className="hidden sm:table-cell" style={{ padding: '7px 12px', width: '160px', whiteSpace: 'nowrap' }}>Kỳ hạn & Trạng thái</th>
+                <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', width: '200px', whiteSpace: 'nowrap' }}>Hạn mức và Dư nợ gốc</th>
+                <th className="hidden sm:table-cell" style={{ padding: '7px 12px', width: '220px', whiteSpace: 'nowrap' }}>Lãi suất & Lãi dự kiến</th>
+                <th style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></th>
+              </tr>
+            )}
 
-              {/* BƯỚC 4: HEADER QUẢN LÝ CHI PHÍ - CÁC CỘT: KHOẢN CHI PHÍ, SỐ TIỀN CHI */}
-              {currentStep === 4 && (
-                <tr style={{ color: '#475569', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  <th style={{ padding: '7px 12px' }}>Khoản chi phí</th>
-                  <th style={{ padding: '7px 12px', textAlign: 'right' }}>Số tiền chi</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></th>
-                </tr>
-              )}
-            </thead>
+            {/* BƯỚC 4: HEADER QUẢN LÝ CHI PHÍ - CÁC CỘT: KHOẢN CHI PHÍ, SỐ TIỀN CHI */}
+            {currentStep === 4 && (
+              <tr style={{ color: '#475569', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <th style={{ padding: '7px 12px' }}>Khoản chi phí</th>
+                <th style={{ padding: '7px 12px', textAlign: 'right' }}>Số tiền chi</th>
+                <th style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></th>
+              </tr>
+            )}
+          </thead>
 
-            <tbody key={`debt-tbody-step-${currentStep}`}>
-              {currentStep === 4 ? (
-                <>
-                  {/* DÒNG TỔNG CỘNG GHIM CHẶT VÀO ĐẦU BẢNG (HIỂN THỊ TỔNG 3 NHÓM CHI PHÍ) */}
-                  {(() => {
-                    const allPurchaseTotal = filteredExpenses
-                      .filter((item) => classifyExpenseItem(item) === 'purchase')
-                      .reduce((sum, item) => sum + item.amount, 0);
+          <tbody key={`debt-tbody-step-${currentStep}`}>
+            {currentStep === 4 ? (
+              <>
+                {/* DÒNG TỔNG CỘNG GHIM CHẶT VÀO ĐẦU BẢNG (HIỂN THỊ TỔNG 3 NHÓM CHI PHÍ) */}
+                {(() => {
+                  const allPurchaseTotal = filteredExpenses
+                    .filter((item) => classifyExpenseItem(item) === 'purchase')
+                    .reduce((sum, item) => sum + item.amount, 0);
 
-                    const allDebtTotal = filteredExpenses
-                      .filter((item) => classifyExpenseItem(item) === 'debt_payment')
-                      .reduce((sum, item) => sum + item.amount, 0);
+                  const allDebtTotal = filteredExpenses
+                    .filter((item) => classifyExpenseItem(item) === 'debt_payment')
+                    .reduce((sum, item) => sum + item.amount, 0);
 
-                    const allOperatingTotal = filteredExpenses
-                      .filter((item) => classifyExpenseItem(item) === 'operating')
-                      .reduce((sum, item) => sum + item.amount, 0);
+                  const allOperatingTotal = filteredExpenses
+                    .filter((item) => classifyExpenseItem(item) === 'operating')
+                    .reduce((sum, item) => sum + item.amount, 0);
 
-                    const grandTotal = filteredExpenses.reduce((sum, item) => sum + item.amount, 0);
+                  const grandTotal = filteredExpenses.reduce((sum, item) => sum + item.amount, 0);
 
-                    return (
-                      <tr
-                        style={{
-                          position: 'sticky',
-                          top: 0,
-                          zIndex: 10,
-                          backgroundColor: '#f1f5f9',
-                          borderBottom: '2px solid #cbd5e1',
-                          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
-                        }}
-                      >
-                        <td style={{ padding: '7px 12px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                            <span style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#0f172a', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                              Tổng cộng
-                            </span>
-
-                            {/* TỔNG 3 NHÓM CHI PHÍ */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                              {/* 1. Mua hàng */}
-                              <div
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '5px',
-                                  padding: '2px 8px',
-                                  backgroundColor: '#eff6ff',
-                                  border: '1px solid #bfdbfe',
-                                  borderRadius: '6px',
-                                  fontSize: '0.75rem',
-                                }}
-                                title="Tổng chi phí mua hàng, nguyên vật liệu, phụ kiện"
-                              >
-                                <span style={{ color: '#0284c7', display: 'flex', alignItems: 'center' }}>
-                                  <BagCheck size={12} />
-                                </span>
-                                <span style={{ color: '#475569', fontWeight: 600 }}>Mua hàng:</span>
-                                <span style={{ color: '#0369a1', fontWeight: 800 }}>
-                                  {formatNumberGroup(allPurchaseTotal)}
-                                </span>
-                              </div>
-
-                              {/* 2. Thanh toán công nợ */}
-                              <div
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '5px',
-                                  padding: '2px 8px',
-                                  backgroundColor: '#fffbeb',
-                                  border: '1px solid #fde68a',
-                                  borderRadius: '6px',
-                                  fontSize: '0.75rem',
-                                }}
-                                title="Tổng thanh toán nợ nhà cung cấp, tạm ứng người lao động"
-                              >
-                                <span style={{ color: '#d97706', display: 'flex', alignItems: 'center' }}>
-                                  <CreditCard size={12} />
-                                </span>
-                                <span style={{ color: '#475569', fontWeight: 600 }}>Công nợ:</span>
-                                <span style={{ color: '#b45309', fontWeight: 800 }}>
-                                  {formatNumberGroup(allDebtTotal)}
-                                </span>
-                              </div>
-
-                              {/* 3. Chi phí vận hành */}
-                              <div
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '5px',
-                                  padding: '2px 8px',
-                                  backgroundColor: '#f5f3ff',
-                                  border: '1px solid #ddd6fe',
-                                  borderRadius: '6px',
-                                  fontSize: '0.75rem',
-                                }}
-                                title="Tổng chi phí vận hành: QLDN, bán hàng, sản xuất chung, khấu hao TSCĐ & tài chính"
-                              >
-                                <span style={{ color: '#7c3aed', display: 'flex', alignItems: 'center' }}>
-                                  <Gear size={12} />
-                                </span>
-                                <span style={{ color: '#475569', fontWeight: 600 }}>Vận hành:</span>
-                                <span style={{ color: '#6d28d9', fontWeight: 800 }}>
-                                  {formatNumberGroup(allOperatingTotal)}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#b91c1c', fontSize: '0.9375rem', whiteSpace: 'nowrap' }}>
-                          {formatNumberGroup(grandTotal)}
-                        </td>
-                        <td style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></td>
-                      </tr>
-                    );
-                  })()}
-
-                  {/* CÁC DÒNG THÁNG TRONG NĂM SẮP XẾP NGƯỢC LẠI TỪ THÁNG HIỆN TẠI VỀ THÁNG 1 */}
-                  {(() => {
-                    const currentYearNum = new Date().getFullYear();
-                    const currentMonthNum = new Date().getMonth() + 1;
-                    const maxM = parseInt(selectedYear, 10) === currentYearNum ? currentMonthNum : 12;
-                    const months: number[] = [];
-                    for (let m = maxM; m >= 1; m--) {
-                      months.push(m);
-                    }
-                    return months;
-                  })().map((monthNum) => {
-                    const monthItems = filteredExpenses.filter((item) => {
-                      const parts = item.spendDate.split('/');
-                      return parts.length >= 2 && parseInt(parts[1], 10) === monthNum;
-                    });
-                    const monthTotal = monthItems.reduce((acc, curr) => acc + curr.amount, 0);
-                    const isExpanded = activeExpandedMonth === monthNum;
-
-                    return (
-                      <React.Fragment key={`expense-month-${monthNum}`}>
-                        {/* DÒNG THÁNG */}
-                        <tr
-                          onClick={() => toggleExpandMonth(monthNum)}
-                          style={{
-                            backgroundColor: isExpanded ? '#f8fafc' : '#ffffff',
-                            borderBottom: isExpanded ? 'none' : '1px solid #e2e8f0',
-                            cursor: 'pointer',
-                            transition: 'background-color 0.15s ease',
-                          }}
-                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = isExpanded ? '#f8fafc' : '#ffffff')}
-                          title="Nhấn để ẩn hoặc hiện các khoản mục chi phí của tháng"
-                        >
-                          <td style={{ padding: '7px 12px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ color: '#0284c7', display: 'flex', alignItems: 'center' }}>
-                                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                              </span>
-                              <span style={{ fontWeight: 800, color: '#0284c7', fontSize: '0.8125rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                THÁNG {monthNum < 10 ? `0${monthNum}` : monthNum} NĂM {selectedYear}
-                              </span>
-                              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                                • {monthItems.length} khoản chi phí
-                              </span>
-                            </div>
-                          </td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#0f172a', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                            {formatNumberGroup(monthTotal)}
-                          </td>
-                          <td style={{ padding: '7px 8px', textAlign: 'center' }}></td>
-                        </tr>
-
-                        {/* CÁC KHOẢN MỤC CHI PHÍ BÊN TRONG THÁNG KHI MỞ RỘNG (ĐƯỢC NHÓM THÀNH 3 MỤC: MUA HÀNG, CÔNG NỢ, VẬN HÀNH) */}
-                        {isExpanded && monthItems.length === 0 && (
-                          <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
-                            <td colSpan={3} style={{ padding: '6px 12px 6px 36px', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.75rem' }}>
-                              Chưa có khoản chi phí nào phát sinh trong tháng {monthNum}
-                            </td>
-                          </tr>
-                        )}
-
-                        {isExpanded && monthItems.length > 0 && (() => {
-                          const purchaseItems = monthItems.filter((item) => classifyExpenseItem(item) === 'purchase');
-                          const debtItems = monthItems.filter((item) => classifyExpenseItem(item) === 'debt_payment');
-                          const operatingItems = monthItems.filter((item) => classifyExpenseItem(item) === 'operating');
-
-                          const purchaseTotal = purchaseItems.reduce((acc, curr) => acc + curr.amount, 0);
-                          const debtTotal = debtItems.reduce((acc, curr) => acc + curr.amount, 0);
-                          const operatingTotal = operatingItems.reduce((acc, curr) => acc + curr.amount, 0);
-
-                          const expenseSubGroups = [
-                            {
-                              id: 'purchase',
-                              title: 'Chi phí mua hàng',
-                              desc: 'Đơn mua hàng, mua nguyên vật liệu, phụ kiện, vật tư',
-                              items: purchaseItems,
-                              total: purchaseTotal,
-                              icon: <BagCheck size={14} />,
-                              color: '#0284c7',
-                              bgColor: '#f0f9ff',
-                              borderColor: '#bae6fd',
-                            },
-                            {
-                              id: 'debt_payment',
-                              title: 'Thanh toán công nợ',
-                              desc: 'Thanh toán nợ nhà cung cấp, tạm ứng nhân viên, nợ phải trả',
-                              items: debtItems,
-                              total: debtTotal,
-                              icon: <CreditCard size={14} />,
-                              color: '#d97706',
-                              bgColor: '#fffbeb',
-                              borderColor: '#fde68a',
-                            },
-                            {
-                              id: 'operating',
-                              title: 'Chi phí vận hành',
-                              desc: 'Chi phí QLDN, bán hàng, sản xuất chung, khấu hao TSCĐ & tài chính',
-                              items: operatingItems,
-                              total: operatingTotal,
-                              icon: <Gear size={14} />,
-                              color: '#7c3aed',
-                              bgColor: '#f5f3ff',
-                              borderColor: '#ddd6fe',
-                            },
-                          ];
-
-                          return expenseSubGroups.map((group) => {
-                            const subGroupKey = `${monthNum}-${group.id}`;
-                            const isSubExpanded = Boolean(expandedExpenseSubGroups[subGroupKey]);
-
-                            return (
-                              <React.Fragment key={`month-${monthNum}-subgroup-${group.id}`}>
-                                {/* TIÊU ĐỀ PHÂN NHÓM 1 TRONG 3 MỤC: MUA HÀNG, CÔNG NỢ, VẬN HÀNH (MẶC ĐỊNH ẨN CHI TIẾT) */}
-                                <tr
-                                  onClick={(e) => toggleExpenseSubGroup(monthNum, group.id, e)}
-                                  style={{
-                                    backgroundColor: group.bgColor,
-                                    borderTop: `1px solid ${group.borderColor}`,
-                                    borderBottom: `1px solid ${group.borderColor}`,
-                                    cursor: 'pointer',
-                                    userSelect: 'none',
-                                    transition: 'background-color 0.15s ease',
-                                  }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = group.bgColor)}
-                                  title={`Nhấn để ${isSubExpanded ? 'thu gọn' : 'mở rộng xem'} danh sách ${group.title}`}
-                                >
-                                  <td style={{ padding: '9px 14px 9px 34px' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                      <span style={{ color: group.color, display: 'flex', alignItems: 'center' }}>
-                                        {isSubExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                                      </span>
-                                      <span style={{ color: group.color, display: 'flex', alignItems: 'center' }}>
-                                        {group.icon}
-                                      </span>
-                                      <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8125rem' }}>
-                                        {group.title}
-                                      </span>
-                                      <span
-                                        style={{
-                                          fontSize: '0.6875rem',
-                                          fontWeight: 700,
-                                          color: group.color,
-                                          backgroundColor: '#ffffff',
-                                          border: `1px solid ${group.borderColor}`,
-                                          borderRadius: '9999px',
-                                          padding: '1px 8px',
-                                          whiteSpace: 'nowrap',
-                                        }}
-                                      >
-                                        {group.items.length} khoản
-                                      </span>
-                                      <span className="hidden sm:inline" style={{ fontSize: '0.6875rem', color: '#64748b' }}>
-                                        — {group.desc}
-                                      </span>
-                                    </div>
-                                  </td>
-                                  <td style={{ padding: '9px 14px', textAlign: 'right', fontWeight: 800, color: group.color, fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                    {formatNumberGroup(group.total)}
-                                  </td>
-                                  <td style={{ padding: '9px 8px', textAlign: 'center' }}></td>
-                                </tr>
-
-                                {/* DÒNG KHI NHÓM ĐƯỢC MỞ NHƯNG KHÔNG CÓ KHOẢN CHI NÀO */}
-                                {isSubExpanded && group.items.length === 0 && (
-                                  <tr style={{ backgroundColor: '#ffffff', borderBottom: '1px solid #f1f5f9' }}>
-                                    <td colSpan={3} style={{ padding: '8px 14px 8px 56px', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.75rem' }}>
-                                      Chưa có khoản {group.title.toLowerCase()} phát sinh trong tháng {monthNum}
-                                    </td>
-                                  </tr>
-                                )}
-
-                                {/* DANH SÁCH CÁC KHOẢN CHI THUỘC NHÓM NÀY CHỈ HIỂN THỊ KHI ĐƯỢC BẤM MỞ RỘNG */}
-                                {isSubExpanded &&
-                                  group.items.map((item) => (
-                                    <tr
-                                      key={item.id}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (item.isAutoDepreciation) {
-                                          setSelectedDeprecItem(item);
-                                          setIsDeprecModalOpen(true);
-                                          return;
-                                        }
-                                        setEditingItem(item);
-                                        setIsOffcanvasOpen(true);
-                                      }}
-                                      style={{
-                                        backgroundColor: item.isAutoDepreciation ? '#faf5ff' : '#ffffff',
-                                        borderBottom: '1px solid #f1f5f9',
-                                        cursor: 'pointer',
-                                        transition: 'background-color 0.15s ease',
-                                      }}
-                                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = item.isAutoDepreciation ? '#f3e8ff' : '#f8fafc')}
-                                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = item.isAutoDepreciation ? '#faf5ff' : '#ffffff')}
-                                      title={item.isAutoDepreciation ? `Nhấn để xem bảng phân bổ chi tiết ${dbFixedAssets.length} tài sản cố định` : "Nhấn để xem hoặc chỉnh sửa chi tiết khoản chi phí"}
-                                    >
-                                      <td style={{ padding: '8px 14px 8px 56px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                          <span style={{ fontWeight: 600, color: item.isAutoDepreciation ? '#6b21a8' : '#334155', fontSize: '0.8125rem' }}>
-                                            {item.title}
-                                          </span>
-                                          {item.isAutoDepreciation && (
-                                            <span
-                                              style={{
-                                                fontSize: '0.6875rem',
-                                                fontWeight: 700,
-                                                backgroundColor: '#ede9fe',
-                                                color: '#7c3aed',
-                                                border: '1px solid #ddd6fe',
-                                                borderRadius: '9999px',
-                                                padding: '1px 8px',
-                                                whiteSpace: 'nowrap',
-                                              }}
-                                            >
-                                              Tự động • Khấu hao TSCĐ (Phi tiền mặt)
-                                            </span>
-                                          )}
-                                        </div>
-                                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                          <span style={{ fontWeight: 600, color: item.isAutoDepreciation ? '#7c3aed' : '#475569' }}>{item.code}</span>
-                                          <span style={{ color: '#cbd5e1' }}>•</span>
-                                          <span>Ngày {item.spendDate}</span>
-                                          <span style={{ color: '#cbd5e1' }}>•</span>
-                                          <span>{item.categoryLabel}</span>
-                                          {item.isAutoDepreciation ? (
-                                            <>
-                                              <span style={{ color: '#cbd5e1' }}>•</span>
-                                              <span style={{ color: '#7c3aed', fontWeight: 600 }}>
-                                                Nợ {item.debitAccount} / Có {item.creditAccount || '2141'}
-                                              </span>
-                                              <span style={{ color: '#cbd5e1' }}>•</span>
-                                              <span>{item.department}</span>
-                                            </>
-                                          ) : (
-                                            <>
-                                              {item.debitAccount && (
-                                                <>
-                                                  <span style={{ color: '#cbd5e1' }}>•</span>
-                                                  <span style={{ color: '#0284c7', fontWeight: 600 }}>
-                                                    Nợ {item.debitAccount} / Có {item.creditAccount || '1111'}
-                                                  </span>
-                                                </>
-                                              )}
-                                              <span style={{ color: '#cbd5e1' }}>•</span>
-                                              <span>{item.department}</span>
-                                              <span style={{ color: '#cbd5e1' }}>•</span>
-                                              {(() => {
-                                                const isSupplierPay =
-                                                  item.debitAccount === '331' ||
-                                                  item.title.toLowerCase().includes('ncc') ||
-                                                  item.title.toLowerCase().includes('mua hàng') ||
-                                                  item.title.toLowerCase().includes('tiền điện') ||
-                                                  item.title.toLowerCase().includes('vận chuyển') ||
-                                                  item.title.toLowerCase().includes('kho bãi');
-                                                const isAdvance =
-                                                  item.debitAccount === '141' ||
-                                                  item.title.toLowerCase().includes('tạm ứng');
-
-                                                if (isSupplierPay) {
-                                                  return <span>Đơn vị nhận: <strong className="text-slate-700">{item.spender}</strong></span>;
-                                                }
-                                                if (isAdvance) {
-                                                  return <span>Người nhận: <strong className="text-slate-700">{item.spender}</strong> (Tạm ứng)</span>;
-                                                }
-                                                return <span>Người thực hiện: <strong className="text-slate-700">{item.spender}</strong></span>;
-                                              })()}
-                                            </>
-                                          )}
-                                        </div>
-                                      </td>
-                                      <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: item.isAutoDepreciation ? 700 : 400, color: item.isAutoDepreciation ? '#6b21a8' : '#334155', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                        {formatNumberGroup(item.amount)}
-                                      </td>
-                                      <td style={{ padding: '8px 8px', textAlign: 'center', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
-                                        <button
-                                          type="button"
-                                          title="Tùy chọn thao tác"
-                                          onClick={(e) => handleToggleRowMenu(item.id, e)}
-                                          style={{
-                                            background: activeRowMenuId === item.id ? '#f1f5f9' : 'transparent',
-                                            border: '1px solid',
-                                            borderColor: activeRowMenuId === item.id ? '#cbd5e1' : 'transparent',
-                                            borderRadius: '6px',
-                                            padding: '4px 6px',
-                                            cursor: 'pointer',
-                                            color: '#475569',
-                                          }}
-                                        >
-                                          <ThreeDotsVertical size={14} />
-                                        </button>
-                                        {activeRowMenuId === item.id && (
-                                          <div
-                                            style={{
-                                              position: 'absolute',
-                                              right: 0,
-                                              ...(menuOpenUp ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }),
-                                              minWidth: item.isAutoDepreciation ? '220px' : '160px',
-                                              backgroundColor: '#ffffff',
-                                              borderRadius: '8px',
-                                              border: '1px solid #cbd5e1',
-                                              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
-                                              zIndex: 999,
-                                              overflow: 'hidden',
-                                              display: 'flex',
-                                              flexDirection: 'column',
-                                              textAlign: 'left',
-                                            }}
-                                          >
-                                            {item.isAutoDepreciation ? (
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  setActiveRowMenuId(null);
-                                                  setSelectedDeprecItem(item);
-                                                  setIsDeprecModalOpen(true);
-                                                }}
-                                                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#6b21a8', cursor: 'pointer', width: '100%', textAlign: 'left' }}
-                                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#faf5ff')}
-                                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                                              >
-                                                <FileEarmarkSpreadsheet size={13} style={{ color: '#7c3aed' }} />
-                                                <span>Xem bảng phân bổ 12 TSCĐ</span>
-                                              </button>
-                                            ) : (
-                                              <>
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    setActiveRowMenuId(null);
-                                                    setVoucherToPrint(item);
-                                                    setIsPrintVoucherModalOpen(true);
-                                                  }}
-                                                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#0369a1', cursor: 'pointer', width: '100%', textAlign: 'left' }}
-                                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f0f9ff')}
-                                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                                                >
-                                                  <Printer size={13} style={{ color: '#0284c7' }} />
-                                                  <span>Xem và in phiếu chi A4</span>
-                                                </button>
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    setActiveRowMenuId(null);
-                                                    setEditingItem(item);
-                                                    setIsOffcanvasOpen(true);
-                                                  }}
-                                                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#334155', cursor: 'pointer', width: '100%', textAlign: 'left' }}
-                                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                                                >
-                                                  <Pencil size={13} style={{ color: '#64748b' }} />
-                                                  <span>Chỉnh sửa thông tin</span>
-                                                </button>
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    setActiveRowMenuId(null);
-                                                    setItemToDelete(item);
-                                                    setConfirmDeleteOpen(true);
-                                                  }}
-                                                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#ef4444', cursor: 'pointer', width: '100%', textAlign: 'left' }}
-                                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#fef2f2')}
-                                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                                                >
-                                                  <Trash3 size={13} style={{ color: '#ef4444' }} />
-                                                  <span>Xoá phiếu chi</span>
-                                                </button>
-                                              </>
-                                            )}
-                                          </div>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  ))}
-                              </React.Fragment>
-                            );
-                          });
-                        })()}
-                      </React.Fragment>
-                    );
-                  })}
-                </>
-              ) : (
-                <>
-                  {/* DÒNG TỔNG CỘNG BƯỚC 1: CÔNG NỢ PHẢI THU (STICKY ĐẦU BẢNG NHƯ BƯỚC 4) */}
-                  {currentStep === 1 && (
+                  return (
                     <tr
                       style={{
                         position: 'sticky',
@@ -3816,7 +3332,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                           <span style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#0f172a', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
                             Tổng cộng
                           </span>
+
+                          {/* TỔNG 3 NHÓM CHI PHÍ */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            {/* 1. Mua hàng */}
                             <div
                               style={{
                                 display: 'inline-flex',
@@ -3828,66 +3347,18 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                 borderRadius: '6px',
                                 fontSize: '0.75rem',
                               }}
-                              title="Tổng số lượng khách hàng / đại lý"
+                              title="Tổng chi phí mua hàng, nguyên vật liệu, phụ kiện"
                             >
-                              <span style={{ color: '#0284c7', fontWeight: 600 }}>Khách hàng:</span>
-                              <span style={{ color: '#0369a1', fontWeight: 800 }}>{filteredReceivables.length} đối tác</span>
-                            </div>
-                            <div
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '5px',
-                                padding: '2px 8px',
-                                backgroundColor: '#ecfdf5',
-                                border: '1px solid #a7f3d0',
-                                borderRadius: '6px',
-                                fontSize: '0.75rem',
-                              }}
-                              title="Tỷ lệ thu hồi nợ"
-                            >
-                              <span style={{ color: '#059669', fontWeight: 600 }}>Tỷ lệ thu hồi:</span>
-                              <span style={{ color: '#047857', fontWeight: 800 }}>
-                                {totalRecContractAll > 0 ? ((totalRecPaidAll / totalRecContractAll) * 100).toFixed(1) : 0}%
+                              <span style={{ color: '#0284c7', display: 'flex', alignItems: 'center' }}>
+                                <BagCheck size={12} />
+                              </span>
+                              <span style={{ color: '#475569', fontWeight: 600 }}>Mua hàng:</span>
+                              <span style={{ color: '#0369a1', fontWeight: 800 }}>
+                                {formatNumberGroup(allPurchaseTotal)}
                               </span>
                             </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#0f172a', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
-                        {formatNumberGroup(totalRecContractAll)}
-                      </td>
-                      <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#059669', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
-                        {formatNumberGroup(totalRecPaidAll)}
-                      </td>
-                      <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
-                        Đã thu {totalRecContractAll > 0 ? ((totalRecPaidAll / totalRecContractAll) * 100).toFixed(1) : 0}%
-                      </td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: totalRecRemainingAll > 0 ? '#dc2626' : '#059669', fontSize: '0.9375rem', whiteSpace: 'nowrap' }}>
-                        {formatNumberGroup(totalRecRemainingAll)}
-                      </td>
-                      <td style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></td>
-                    </tr>
-                  )}
 
-                  {/* DÒNG TỔNG CỘNG BƯỚC 2: CÔNG NỢ PHẢI TRẢ (STICKY ĐẦU BẢNG NHƯ BƯỚC 4) */}
-                  {currentStep === 2 && (
-                    <tr
-                      style={{
-                        position: 'sticky',
-                        top: 0,
-                        zIndex: 10,
-                        backgroundColor: '#f1f5f9',
-                        borderBottom: '2px solid #cbd5e1',
-                        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
-                      }}
-                    >
-                      <td style={{ padding: '7px 12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#0f172a', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                            Tổng cộng
-                          </span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            {/* 2. Thanh toán công nợ */}
                             <div
                               style={{
                                 display: 'inline-flex',
@@ -3899,66 +3370,18 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                 borderRadius: '6px',
                                 fontSize: '0.75rem',
                               }}
-                              title="Tổng số lượng nhà cung cấp và đơn vị vận chuyển"
+                              title="Tổng thanh toán nợ nhà cung cấp, tạm ứng người lao động"
                             >
-                              <span style={{ color: '#d97706', fontWeight: 600 }}>Đối tác:</span>
-                              <span style={{ color: '#b45309', fontWeight: 800 }}>{filteredPayables.length} đối tác</span>
-                            </div>
-                            <div
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '5px',
-                                padding: '2px 8px',
-                                backgroundColor: '#ecfdf5',
-                                border: '1px solid #a7f3d0',
-                                borderRadius: '6px',
-                                fontSize: '0.75rem',
-                              }}
-                              title="Tỷ lệ thanh toán"
-                            >
-                              <span style={{ color: '#059669', fontWeight: 600 }}>Tỷ lệ đã trả:</span>
-                              <span style={{ color: '#047857', fontWeight: 800 }}>
-                                {totalPayContractAll > 0 ? ((totalPayPaidAll / totalPayContractAll) * 100).toFixed(1) : 0}%
+                              <span style={{ color: '#d97706', display: 'flex', alignItems: 'center' }}>
+                                <CreditCard size={12} />
+                              </span>
+                              <span style={{ color: '#475569', fontWeight: 600 }}>Công nợ:</span>
+                              <span style={{ color: '#b45309', fontWeight: 800 }}>
+                                {formatNumberGroup(allDebtTotal)}
                               </span>
                             </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#0f172a', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
-                        {formatNumberGroup(totalPayContractAll)}
-                      </td>
-                      <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#059669', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
-                        {formatNumberGroup(totalPayPaidAll)}
-                      </td>
-                      <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
-                        Đã trả {totalPayContractAll > 0 ? ((totalPayPaidAll / totalPayContractAll) * 100).toFixed(1) : 0}%
-                      </td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: totalPayRemainingAll > 0 ? '#dc2626' : '#059669', fontSize: '0.9375rem', whiteSpace: 'nowrap' }}>
-                        {formatNumberGroup(totalPayRemainingAll)}
-                      </td>
-                      <td style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></td>
-                    </tr>
-                  )}
 
-                  {/* DÒNG TỔNG CỘNG BƯỚC 3: NỢ VAY NGÂN HÀNG (STICKY ĐẦU BẢNG NHƯ BƯỚC 4) */}
-                  {currentStep === 3 && (
-                    <tr
-                      style={{
-                        position: 'sticky',
-                        top: 0,
-                        zIndex: 10,
-                        backgroundColor: '#f1f5f9',
-                        borderBottom: '2px solid #cbd5e1',
-                        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
-                      }}
-                    >
-                      <td style={{ padding: '7px 12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#0f172a', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                            Tổng cộng
-                          </span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            {/* 3. Chi phí vận hành */}
                             <div
                               style={{
                                 display: 'inline-flex',
@@ -3970,1188 +3393,2285 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                 borderRadius: '6px',
                                 fontSize: '0.75rem',
                               }}
-                              title="Tổng số hợp đồng vay ngân hàng"
+                              title="Tổng chi phí vận hành: QLDN, bán hàng, sản xuất chung, khấu hao TSCĐ & tài chính"
                             >
-                              <span style={{ color: '#7c3aed', fontWeight: 600 }}>Hợp đồng tín dụng:</span>
-                              <span style={{ color: '#6d28d9', fontWeight: 800 }}>{filteredLoans.length} HĐ</span>
+                              <span style={{ color: '#7c3aed', display: 'flex', alignItems: 'center' }}>
+                                <Gear size={12} />
+                              </span>
+                              <span style={{ color: '#475569', fontWeight: 600 }}>Vận hành:</span>
+                              <span style={{ color: '#6d28d9', fontWeight: 800 }}>
+                                {formatNumberGroup(allOperatingTotal)}
+                              </span>
                             </div>
                           </div>
                         </div>
                       </td>
-                      <td className="hidden sm:table-cell" style={{ padding: '7px 12px', fontSize: '0.75rem', color: '#64748b' }}>
-                        {totalLoan12mAll > 0 ? (
-                          <span style={{ color: '#dc2626', fontWeight: 700 }}>
-                            Đến hạn 12T: {formatNumberGroup(totalLoan12mAll)}
-                          </span>
-                        ) : (
-                          <span style={{ color: '#059669', fontWeight: 600 }}>Dư nợ trong hạn</span>
-                        )}
-                      </td>
-                      <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <div style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.875rem' }}>
-                          {formatNumberGroup(totalLoanRemainingAll)}
-                        </div>
-                        <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>
-                          HM: {formatNumberGroup(totalLoanLimitAll)} • Đã trả: {formatNumberGroup(totalLoanPaidAll)}
-                        </div>
-                      </td>
-                      <td className="hidden sm:table-cell" style={{ padding: '7px 12px', whiteSpace: 'nowrap' }}>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0284c7' }}>
-                          ~{formatNumberGroup(totalLoanInterestAll)} đ/th
-                        </div>
-                        <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>
-                          Ước tính lãi vay hàng tháng
-                        </div>
+                      <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#b91c1c', fontSize: '0.9375rem', whiteSpace: 'nowrap' }}>
+                        {formatNumberGroup(grandTotal)}
                       </td>
                       <td style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></td>
                     </tr>
-                  )}
+                  );
+                })()}
 
-                  {pagedList.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} style={{ padding: '40px 16px', textAlign: 'center', color: '#64748b' }}>
-                        Không tìm thấy bản ghi nào phù hợp với bộ lọc tìm kiếm
-                      </td>
-                    </tr>
-                  ) : (
-                    pagedList.map((row: any) => {
+                {/* CÁC DÒNG THÁNG TRONG NĂM SẮP XẾP NGƯỢC LẠI TỪ THÁNG HIỆN TẠI VỀ THÁNG 1 */}
+                {(() => {
+                  const currentYearNum = new Date().getFullYear();
+                  const currentMonthNum = new Date().getMonth() + 1;
+                  const maxM = parseInt(selectedYear, 10) === currentYearNum ? currentMonthNum : 12;
+                  const months: number[] = [];
+                  for (let m = maxM; m >= 1; m--) {
+                    months.push(m);
+                  }
+                  return months;
+                })().map((monthNum) => {
+                  const monthItems = filteredExpenses.filter((item) => {
+                    const parts = item.spendDate.split('/');
+                    return parts.length >= 2 && parseInt(parts[1], 10) === monthNum;
+                  });
+                  const monthTotal = monthItems.reduce((acc, curr) => acc + curr.amount, 0);
+                  const isExpanded = activeExpandedMonth === monthNum;
 
-                  // ── DÒNG BƯỚC 1: CÔNG NỢ PHẢI THU (BỎ STT, MỖI THỜI ĐIỂM CHỈ MỞ 1 MỤC LỚN) ──
-                  if (currentStep === 1) {
-                    const item = row as ReceivableItem;
-                    const isExpanded = statusFilter !== 'all' ? true : expandedCustomerId === item.id;
-                    return (
-                      <React.Fragment key={`rec-row-${item.id}`}>
-                        <tr
-                          onClick={() => toggleExpandCustomer(item.id)}
-                          style={{
-                            borderBottom: isExpanded ? 'none' : '1px solid #f1f5f9',
-                            transition: 'background-color 0.15s ease',
-                            cursor: 'pointer',
-                            backgroundColor: isExpanded ? '#f8fafc' : 'transparent',
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!isExpanded) e.currentTarget.style.backgroundColor = '#f8fafc';
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!isExpanded) e.currentTarget.style.backgroundColor = 'transparent';
-                          }}
-                        >
-                          {/* Cột 1: Khách hàng (kèm nút toggle mở rộng nếu có đơn con) */}
-                          <td style={{ padding: '7px 12px' }}>
-                            {(() => {
-                              const hasEntries = Boolean(item.entries && item.entries.length > 0);
-                              return (
-                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                                  {hasEntries ? (
-                                    <button
-                                      type="button"
-                                      title={isExpanded ? 'Thu gọn' : 'Xem danh sách đơn hàng'}
-                                      onClick={(e) => toggleExpandCustomer(item.id, e)}
-                                      style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        padding: '2px',
-                                        cursor: 'pointer',
-                                        color: '#64748b',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        borderRadius: '4px',
-                                        marginTop: '2px',
-                                        flexShrink: 0,
-                                      }}
-                                    >
-                                      {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                                    </button>
-                                  ) : (
-                                    <div style={{ width: '18px', height: '18px', flexShrink: 0 }} />
-                                  )}
-                                  <div>
-                                    <div
-                                      style={{
-                                    fontWeight: 800,
-                                    color: '#0284c7',
-                                    fontSize: '0.875rem',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.02em',
-                                  }}
-                                >
-                                  {item.customerName}
-                                </div>
-                                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '3px' }}>
-                                    {item.customerAddress}
-                                  </div>
-                                  <div className="sm:hidden text-[11px] text-slate-500 mt-1">
-                                    Gốc: <span className="font-semibold text-slate-700">{formatNumberGroup(item.contractValue)}</span> • Đã thu: <span className="font-semibold text-emerald-600">{formatNumberGroup(item.paidAmount)}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })()}
+                  return (
+                    <React.Fragment key={`expense-month-${monthNum}`}>
+                      {/* DÒNG THÁNG */}
+                      <tr
+                        onClick={() => toggleExpandMonth(monthNum)}
+                        style={{
+                          backgroundColor: isExpanded ? '#f8fafc' : '#ffffff',
+                          borderBottom: isExpanded ? 'none' : '1px solid #e2e8f0',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = isExpanded ? '#f8fafc' : '#ffffff')}
+                        title="Nhấn để ẩn hoặc hiện các khoản mục chi phí của tháng"
+                      >
+                        <td style={{ padding: '7px 12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ color: '#0284c7', display: 'flex', alignItems: 'center' }}>
+                              {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            </span>
+                            <span style={{ fontWeight: 800, color: '#0284c7', fontSize: '0.8125rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                              THÁNG {monthNum < 10 ? `0${monthNum}` : monthNum} NĂM {selectedYear}
+                            </span>
+                            <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                              • {monthItems.length} khoản chi phí
+                            </span>
+                          </div>
                         </td>
+                        <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#0f172a', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                          {formatNumberGroup(monthTotal)}
+                        </td>
+                        <td style={{ padding: '7px 8px', textAlign: 'center' }}></td>
+                      </tr>
 
-                          {/* Cột 2: Số tiền gốc */}
-                          <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#0f172a', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                            {formatNumberGroup(item.contractValue)}
+                      {/* CÁC KHOẢN MỤC CHI PHÍ BÊN TRONG THÁNG KHI MỞ RỘNG (ĐƯỢC NHÓM THÀNH 3 MỤC: MUA HÀNG, CÔNG NỢ, VẬN HÀNH) */}
+                      {isExpanded && monthItems.length === 0 && (
+                        <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
+                          <td colSpan={3} style={{ padding: '6px 12px 6px 36px', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.75rem' }}>
+                            Chưa có khoản chi phí nào phát sinh trong tháng {monthNum}
                           </td>
+                        </tr>
+                      )}
 
-                          {/* Cột 3: Đã thanh toán */}
-                          <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                            {formatNumberGroup(item.paidAmount)}
-                          </td>
+                      {isExpanded && monthItems.length > 0 && (() => {
+                        const purchaseItems = monthItems.filter((item) => classifyExpenseItem(item) === 'purchase');
+                        const debtItems = monthItems.filter((item) => classifyExpenseItem(item) === 'debt_payment');
+                        const operatingItems = monthItems.filter((item) => classifyExpenseItem(item) === 'operating');
 
-                          {/* Cột 4: Hạn thanh toán */}
-                          <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center', fontSize: '0.75rem', color: '#475569', fontWeight: 500 }}>
-                            {item.dueDate || 'Theo tiến độ HĐ'}
-                          </td>
+                        const purchaseTotal = purchaseItems.reduce((acc, curr) => acc + curr.amount, 0);
+                        const debtTotal = debtItems.reduce((acc, curr) => acc + curr.amount, 0);
+                        const operatingTotal = operatingItems.reduce((acc, curr) => acc + curr.amount, 0);
 
-                          {/* Cột 5: Còn lại */}
-                          <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: item.remainingAmount > 0 ? '#dc2626' : '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                            {formatNumberGroup(item.remainingAmount)}
-                          </td>
+                        const expenseSubGroups = [
+                          {
+                            id: 'purchase',
+                            title: 'Chi phí mua hàng',
+                            desc: 'Đơn mua hàng, mua nguyên vật liệu, phụ kiện, vật tư',
+                            items: purchaseItems,
+                            total: purchaseTotal,
+                            icon: <BagCheck size={14} />,
+                            color: '#0284c7',
+                            bgColor: '#f0f9ff',
+                            borderColor: '#bae6fd',
+                          },
+                          {
+                            id: 'debt_payment',
+                            title: 'Thanh toán công nợ',
+                            desc: 'Thanh toán nợ nhà cung cấp, tạm ứng nhân viên, nợ phải trả',
+                            items: debtItems,
+                            total: debtTotal,
+                            icon: <CreditCard size={14} />,
+                            color: '#d97706',
+                            bgColor: '#fffbeb',
+                            borderColor: '#fde68a',
+                          },
+                          {
+                            id: 'operating',
+                            title: 'Chi phí vận hành',
+                            desc: 'Chi phí QLDN, bán hàng, sản xuất chung, khấu hao TSCĐ & tài chính',
+                            items: operatingItems,
+                            total: operatingTotal,
+                            icon: <Gear size={14} />,
+                            color: '#7c3aed',
+                            bgColor: '#f5f3ff',
+                            borderColor: '#ddd6fe',
+                          },
+                        ];
 
-                          {/* Cột 6: Droplist cuối dòng gồm 5 chức năng */}
-                          <td style={{ padding: '7px 8px', textAlign: 'center', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
-                            {(() => {
-                              const itemRemaining = Number(item.remainingAmount !== undefined ? item.remainingAmount : (item.contractValue - (item.paidAmount || 0))) || 0;
-                              const isReceivableZero = itemRemaining <= 0 || item.status === 'completed';
+                        return expenseSubGroups.map((group) => {
+                          const subGroupKey = `${monthNum}-${group.id}`;
+                          const isSubExpanded = Boolean(expandedExpenseSubGroups[subGroupKey]);
 
-                              return (
-                                <>
-                                  <button
-                                    type="button"
-                                    title="Tùy chọn thao tác"
-                                    onClick={(e) => handleToggleRowMenu(item.id, e)}
-                                    style={{
-                                      background: activeRowMenuId === item.id ? '#f1f5f9' : 'transparent',
-                                      border: '1px solid',
-                                      borderColor: activeRowMenuId === item.id ? '#cbd5e1' : 'transparent',
-                                      borderRadius: '6px',
-                                      width: '28px',
-                                      height: '28px',
-                                      padding: 0,
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      cursor: 'pointer',
-                                      color: '#475569',
-                                    }}
-                                  >
-                                    <ThreeDotsVertical size={14} />
-                                  </button>
-
-                                  {activeRowMenuId === item.id && (
-                                    <div
+                          return (
+                            <React.Fragment key={`month-${monthNum}-subgroup-${group.id}`}>
+                              {/* TIÊU ĐỀ PHÂN NHÓM 1 TRONG 3 MỤC: MUA HÀNG, CÔNG NỢ, VẬN HÀNH (MẶC ĐỊNH ẨN CHI TIẾT) */}
+                              <tr
+                                onClick={(e) => toggleExpenseSubGroup(monthNum, group.id, e)}
+                                style={{
+                                  backgroundColor: group.bgColor,
+                                  borderTop: `1px solid ${group.borderColor}`,
+                                  borderBottom: `1px solid ${group.borderColor}`,
+                                  cursor: 'pointer',
+                                  userSelect: 'none',
+                                  transition: 'background-color 0.15s ease',
+                                }}
+                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = group.bgColor)}
+                                title={`Nhấn để ${isSubExpanded ? 'thu gọn' : 'mở rộng xem'} danh sách ${group.title}`}
+                              >
+                                <td style={{ padding: '9px 14px 9px 34px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ color: group.color, display: 'flex', alignItems: 'center' }}>
+                                      {isSubExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                                    </span>
+                                    <span style={{ color: group.color, display: 'flex', alignItems: 'center' }}>
+                                      {group.icon}
+                                    </span>
+                                    <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8125rem' }}>
+                                      {group.title}
+                                    </span>
+                                    <span
                                       style={{
-                                        position: 'absolute',
-                                        right: 0,
-                                        ...(menuOpenUp ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }),
-                                        minWidth: '190px',
+                                        fontSize: '0.6875rem',
+                                        fontWeight: 700,
+                                        color: group.color,
                                         backgroundColor: '#ffffff',
-                                        borderRadius: '8px',
-                                        border: '1px solid #cbd5e1',
-                                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
-                                        zIndex: 999,
-                                        overflow: 'hidden',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        textAlign: 'left',
+                                        border: `1px solid ${group.borderColor}`,
+                                        borderRadius: '9999px',
+                                        padding: '1px 8px',
+                                        whiteSpace: 'nowrap',
                                       }}
                                     >
-                                      {/* 1. Ghi nhận thanh toán (Khoá khi khách hàng đã hết nợ) */}
+                                      {group.items.length} khoản
+                                    </span>
+                                    <span className="hidden sm:inline" style={{ fontSize: '0.6875rem', color: '#64748b' }}>
+                                      — {group.desc}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td style={{ padding: '9px 14px', textAlign: 'right', fontWeight: 800, color: group.color, fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                  {formatNumberGroup(group.total)}
+                                </td>
+                                <td style={{ padding: '9px 8px', textAlign: 'center' }}></td>
+                              </tr>
+
+                              {/* DÒNG KHI NHÓM ĐƯỢC MỞ NHƯNG KHÔNG CÓ KHOẢN CHI NÀO */}
+                              {isSubExpanded && group.items.length === 0 && (
+                                <tr style={{ backgroundColor: '#ffffff', borderBottom: '1px solid #f1f5f9' }}>
+                                  <td colSpan={3} style={{ padding: '8px 14px 8px 56px', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.75rem' }}>
+                                    Chưa có khoản {group.title.toLowerCase()} phát sinh trong tháng {monthNum}
+                                  </td>
+                                </tr>
+                              )}
+
+                              {/* DANH SÁCH CÁC KHOẢN CHI THUỘC NHÓM NÀY CHỈ HIỂN THỊ KHI ĐƯỢC BẤM MỞ RỘNG */}
+                              {isSubExpanded &&
+                                group.items.map((item) => (
+                                  <tr
+                                    key={item.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (item.isAutoDepreciation) {
+                                        setSelectedDeprecItem(item);
+                                        setIsDeprecModalOpen(true);
+                                        return;
+                                      }
+                                      setEditingItem(item);
+                                      setIsOffcanvasOpen(true);
+                                    }}
+                                    style={{
+                                      backgroundColor: item.isAutoDepreciation ? '#faf5ff' : '#ffffff',
+                                      borderBottom: '1px solid #f1f5f9',
+                                      cursor: 'pointer',
+                                      transition: 'background-color 0.15s ease',
+                                    }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = item.isAutoDepreciation ? '#f3e8ff' : '#f8fafc')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = item.isAutoDepreciation ? '#faf5ff' : '#ffffff')}
+                                    title={item.isAutoDepreciation ? `Nhấn để xem bảng phân bổ chi tiết ${dbFixedAssets.length} tài sản cố định` : "Nhấn để xem hoặc chỉnh sửa chi tiết khoản chi phí"}
+                                  >
+                                    <td style={{ padding: '8px 14px 8px 56px' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ fontWeight: 600, color: item.isAutoDepreciation ? '#6b21a8' : '#334155', fontSize: '0.8125rem' }}>
+                                          {item.title}
+                                        </span>
+                                        {item.isAutoDepreciation && (
+                                          <span
+                                            style={{
+                                              fontSize: '0.6875rem',
+                                              fontWeight: 700,
+                                              backgroundColor: '#ede9fe',
+                                              color: '#7c3aed',
+                                              border: '1px solid #ddd6fe',
+                                              borderRadius: '9999px',
+                                              padding: '1px 8px',
+                                              whiteSpace: 'nowrap',
+                                            }}
+                                          >
+                                            Tự động • Khấu hao TSCĐ (Phi tiền mặt)
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                        <span style={{ fontWeight: 600, color: item.isAutoDepreciation ? '#7c3aed' : '#475569' }}>{item.code}</span>
+                                        <span style={{ color: '#cbd5e1' }}>•</span>
+                                        <span>Ngày {item.spendDate}</span>
+                                        <span style={{ color: '#cbd5e1' }}>•</span>
+                                        <span>{item.categoryLabel}</span>
+                                        {item.isAutoDepreciation ? (
+                                          <>
+                                            <span style={{ color: '#cbd5e1' }}>•</span>
+                                            <span style={{ color: '#7c3aed', fontWeight: 600 }}>
+                                              Nợ {item.debitAccount} / Có {item.creditAccount || '2141'}
+                                            </span>
+                                            <span style={{ color: '#cbd5e1' }}>•</span>
+                                            <span>{item.department}</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            {item.debitAccount && (
+                                              <>
+                                                <span style={{ color: '#cbd5e1' }}>•</span>
+                                                <span style={{ color: '#0284c7', fontWeight: 600 }}>
+                                                  Nợ {item.debitAccount} / Có {item.creditAccount || '1111'}
+                                                </span>
+                                              </>
+                                            )}
+                                            <span style={{ color: '#cbd5e1' }}>•</span>
+                                            <span>{item.department}</span>
+                                            <span style={{ color: '#cbd5e1' }}>•</span>
+                                            {(() => {
+                                              const isSupplierPay =
+                                                item.debitAccount === '331' ||
+                                                item.title.toLowerCase().includes('ncc') ||
+                                                item.title.toLowerCase().includes('mua hàng') ||
+                                                item.title.toLowerCase().includes('tiền điện') ||
+                                                item.title.toLowerCase().includes('vận chuyển') ||
+                                                item.title.toLowerCase().includes('kho bãi');
+                                              const isAdvance =
+                                                item.debitAccount === '141' ||
+                                                item.title.toLowerCase().includes('tạm ứng');
+
+                                              if (isSupplierPay) {
+                                                return <span>Đơn vị nhận: <strong className="text-slate-700">{item.spender}</strong></span>;
+                                              }
+                                              if (isAdvance) {
+                                                return <span>Người nhận: <strong className="text-slate-700">{item.spender}</strong> (Tạm ứng)</span>;
+                                              }
+                                              return <span>Người thực hiện: <strong className="text-slate-700">{item.spender}</strong></span>;
+                                            })()}
+                                          </>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: item.isAutoDepreciation ? 700 : 400, color: item.isAutoDepreciation ? '#6b21a8' : '#334155', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                      {formatNumberGroup(item.amount)}
+                                    </td>
+                                    <td style={{ padding: '8px 8px', textAlign: 'center', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
                                       <button
                                         type="button"
-                                        disabled={isReceivableZero}
-                                        onClick={() => {
-                                          if (isReceivableZero) return;
-                                          setActiveRowMenuId(null);
-                                          handleOpenPaymentModal(item);
-                                        }}
+                                        title="Tùy chọn thao tác"
+                                        onClick={(e) => handleToggleRowMenu(item.id, e)}
                                         style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '10px',
-                                          padding: '9px 14px',
-                                          background: 'none',
-                                          border: 'none',
-                                          fontSize: '0.8125rem',
-                                          fontWeight: 500,
-                                          color: isReceivableZero ? '#94a3b8' : '#334155',
-                                          cursor: isReceivableZero ? 'not-allowed' : 'pointer',
-                                          width: '100%',
-                                          textAlign: 'left',
-                                          opacity: isReceivableZero ? 0.5 : 1,
-                                        }}
-                                        onMouseEnter={(e) => {
-                                          if (!isReceivableZero) e.currentTarget.style.backgroundColor = '#f1f5f9';
-                                        }}
-                                        onMouseLeave={(e) => {
-                                          if (!isReceivableZero) e.currentTarget.style.backgroundColor = 'transparent';
+                                          background: activeRowMenuId === item.id ? '#f1f5f9' : 'transparent',
+                                          border: '1px solid',
+                                          borderColor: activeRowMenuId === item.id ? '#cbd5e1' : 'transparent',
+                                          borderRadius: '6px',
+                                          padding: '4px 6px',
+                                          cursor: 'pointer',
+                                          color: '#475569',
                                         }}
                                       >
-                                        <CashCoin size={14} style={{ color: isReceivableZero ? '#cbd5e1' : '#64748b' }} />
-                                        <span>Ghi nhận thanh toán</span>
+                                        <ThreeDotsVertical size={14} />
                                       </button>
-
-                                {/* 2. Thu tiền ứng trước */}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setActiveRowMenuId(null);
-                                    handleOpenAdvancePaymentModal(item);
-                                  }}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '10px',
-                                    padding: '9px 14px',
-                                    background: 'none',
-                                    border: 'none',
-                                    fontSize: '0.8125rem',
-                                    fontWeight: 500,
-                                    color: '#334155',
-                                    cursor: 'pointer',
-                                    width: '100%',
-                                    textAlign: 'left',
-                                  }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                                >
-                                  <Wallet2 size={14} style={{ color: '#64748b' }} />
-                                  <span>Thu tiền ứng trước</span>
-                                </button>
-
-                                {/* 3. Đối chiếu công nợ */}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setActiveRowMenuId(null);
-                                    handleOpenReconciliation(item);
-                                  }}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '10px',
-                                    padding: '9px 14px',
-                                    background: 'none',
-                                    border: 'none',
-                                    fontSize: '0.8125rem',
-                                    fontWeight: 500,
-                                    color: '#334155',
-                                    cursor: 'pointer',
-                                    width: '100%',
-                                    textAlign: 'left',
-                                  }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                                >
-                                  <FileEarmarkCheck size={14} style={{ color: '#64748b' }} />
-                                  <span>Đối chiếu công nợ</span>
-                                </button>
-
-                                {/* 4. Đề nghị thanh toán */}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setActiveRowMenuId(null);
-                                    handleSendPaymentRequest(item);
-                                  }}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '10px',
-                                    padding: '9px 14px',
-                                    background: 'none',
-                                    border: 'none',
-                                    fontSize: '0.8125rem',
-                                    fontWeight: 500,
-                                    color: '#334155',
-                                    cursor: 'pointer',
-                                    width: '100%',
-                                    textAlign: 'left',
-                                  }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                                >
-                                  <Send size={14} style={{ color: '#64748b' }} />
-                                  <span>Đề nghị thanh toán</span>
-                                </button>
-
-                                {/* Đường phân cách rõ nét phía trên chức năng Chỉnh sửa thông tin */}
-                                <div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: '4px 0' }} />
-
-                                {/* 5. Chỉnh sửa thông tin */}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setActiveRowMenuId(null);
-                                    setEditingItem(item);
-                                    setIsOffcanvasOpen(true);
-                                  }}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '10px',
-                                    padding: '9px 14px',
-                                    background: 'none',
-                                    border: 'none',
-                                    fontSize: '0.8125rem',
-                                    fontWeight: 500,
-                                    color: '#334155',
-                                    cursor: 'pointer',
-                                    width: '100%',
-                                    textAlign: 'left',
-                                  }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                                >
-                                  <Pencil size={13} style={{ color: '#64748b' }} />
-                                  <span>Chỉnh sửa thông tin</span>
-                                </button>
-
-                                {/* 5. Xoá khoản nợ */}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setActiveRowMenuId(null);
-                                    setItemToDelete(item);
-                                    setConfirmDeleteOpen(true);
-                                  }}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '10px',
-                                    padding: '9px 14px',
-                                    background: 'none',
-                                    border: 'none',
-                                    fontSize: '0.8125rem',
-                                    fontWeight: 500,
-                                    color: '#334155',
-                                    cursor: 'pointer',
-                                    width: '100%',
-                                    textAlign: 'left',
-                                  }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                                >
-                                  <Trash3 size={13} style={{ color: '#64748b' }} />
-                                  <span>Xoá khoản nợ</span>
-                                </button>
-                              </div>
-                            )}
-                          </>
-                        );
+                                      {activeRowMenuId === item.id && (
+                                        <div
+                                          style={{
+                                            position: 'absolute',
+                                            right: 0,
+                                            ...(menuOpenUp ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }),
+                                            minWidth: item.isAutoDepreciation ? '220px' : '160px',
+                                            backgroundColor: '#ffffff',
+                                            borderRadius: '8px',
+                                            border: '1px solid #cbd5e1',
+                                            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
+                                            zIndex: 999,
+                                            overflow: 'hidden',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            textAlign: 'left',
+                                          }}
+                                        >
+                                          {item.isAutoDepreciation ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setActiveRowMenuId(null);
+                                                setSelectedDeprecItem(item);
+                                                setIsDeprecModalOpen(true);
+                                              }}
+                                              style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#6b21a8', cursor: 'pointer', width: '100%', textAlign: 'left' }}
+                                              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#faf5ff')}
+                                              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                            >
+                                              <FileEarmarkSpreadsheet size={13} style={{ color: '#7c3aed' }} />
+                                              <span>Xem bảng phân bổ 12 TSCĐ</span>
+                                            </button>
+                                          ) : (
+                                            <>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setActiveRowMenuId(null);
+                                                  setVoucherToPrint(item);
+                                                  setIsPrintVoucherModalOpen(true);
+                                                }}
+                                                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#0369a1', cursor: 'pointer', width: '100%', textAlign: 'left' }}
+                                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f0f9ff')}
+                                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                              >
+                                                <Printer size={13} style={{ color: '#0284c7' }} />
+                                                <span>Xem và in phiếu chi A4</span>
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setActiveRowMenuId(null);
+                                                  setEditingItem(item);
+                                                  setIsOffcanvasOpen(true);
+                                                }}
+                                                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#334155', cursor: 'pointer', width: '100%', textAlign: 'left' }}
+                                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                              >
+                                                <Pencil size={13} style={{ color: '#64748b' }} />
+                                                <span>Chỉnh sửa thông tin</span>
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setActiveRowMenuId(null);
+                                                  setItemToDelete(item);
+                                                  setConfirmDeleteOpen(true);
+                                                }}
+                                                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#ef4444', cursor: 'pointer', width: '100%', textAlign: 'left' }}
+                                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#fef2f2')}
+                                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                              >
+                                                <Trash3 size={13} style={{ color: '#ef4444' }} />
+                                                <span>Xoá phiếu chi</span>
+                                              </button>
+                                            </>
+                                          )}
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                            </React.Fragment>
+                          );
+                        });
                       })()}
+                    </React.Fragment>
+                  );
+                })}
+              </>
+            ) : (
+              <>
+                {/* DÒNG TỔNG CỘNG BƯỚC 1: CÔNG NỢ PHẢI THU (STICKY ĐẦU BẢNG NHƯ BƯỚC 4) */}
+                {currentStep === 1 && (
+                  <tr
+                    style={{
+                      position: 'sticky',
+                      top: 0,
+                      zIndex: 10,
+                      backgroundColor: '#f1f5f9',
+                      borderBottom: '2px solid #cbd5e1',
+                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+                    }}
+                  >
+                    <td style={{ padding: '7px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#0f172a', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                          Tổng cộng
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <div
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '2px 8px',
+                              backgroundColor: '#eff6ff',
+                              border: '1px solid #bfdbfe',
+                              borderRadius: '6px',
+                              fontSize: '0.75rem',
+                            }}
+                            title="Tổng số lượng khách hàng / đại lý"
+                          >
+                            <span style={{ color: '#0284c7', fontWeight: 600 }}>Khách hàng:</span>
+                            <span style={{ color: '#0369a1', fontWeight: 800 }}>{filteredReceivables.length} đối tác</span>
+                          </div>
+                          <div
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '2px 8px',
+                              backgroundColor: '#ecfdf5',
+                              border: '1px solid #a7f3d0',
+                              borderRadius: '6px',
+                              fontSize: '0.75rem',
+                            }}
+                            title="Tỷ lệ thu hồi nợ"
+                          >
+                            <span style={{ color: '#059669', fontWeight: 600 }}>Tỷ lệ thu hồi:</span>
+                            <span style={{ color: '#047857', fontWeight: 800 }}>
+                              {totalRecContractAll > 0 ? ((totalRecPaidAll / totalRecContractAll) * 100).toFixed(1) : 0}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     </td>
-                        </tr>
+                    <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#0f172a', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                      {formatNumberGroup(totalRecContractAll)}
+                    </td>
+                    <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#059669', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                      {formatNumberGroup(totalRecPaidAll)}
+                    </td>
+                    <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
+                      Đã thu {totalRecContractAll > 0 ? ((totalRecPaidAll / totalRecContractAll) * 100).toFixed(1) : 0}%
+                    </td>
+                    <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: totalRecRemainingAll > 0 ? '#dc2626' : '#059669', fontSize: '0.9375rem', whiteSpace: 'nowrap' }}>
+                      {formatNumberGroup(totalRecRemainingAll)}
+                    </td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></td>
+                  </tr>
+                )}
 
-                        {/* Danh sách các đợt phát sinh công nợ con khi mở rộng: Các đơn bán hàng và các phiếu thu đặt cùng cấp */}
-                        {isExpanded && (() => {
-                          // Gom danh sách tất cả các phiếu thu của khách hàng (loại bỏ các khoản giảm trừ hàng trả về)
-                          const customerReceipts: any[] = [];
-                          const seenReceiptCodes = new Set<string>();
+                {/* DÒNG TỔNG CỘNG BƯỚC 2: CÔNG NỢ PHẢI TRẢ (STICKY ĐẦU BẢNG NHƯ BƯỚC 4) */}
+                {currentStep === 2 && (
+                  <tr
+                    style={{
+                      position: 'sticky',
+                      top: 0,
+                      zIndex: 10,
+                      backgroundColor: '#f1f5f9',
+                      borderBottom: '2px solid #cbd5e1',
+                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+                    }}
+                  >
+                    <td style={{ padding: '7px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#0f172a', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                          Tổng cộng
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <div
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '2px 8px',
+                              backgroundColor: '#fffbeb',
+                              border: '1px solid #fde68a',
+                              borderRadius: '6px',
+                              fontSize: '0.75rem',
+                            }}
+                            title="Tổng số lượng nhà cung cấp và đơn vị vận chuyển"
+                          >
+                            <span style={{ color: '#d97706', fontWeight: 600 }}>Đối tác:</span>
+                            <span style={{ color: '#b45309', fontWeight: 800 }}>{filteredPayables.length} đối tác</span>
+                          </div>
+                          <div
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '2px 8px',
+                              backgroundColor: '#ecfdf5',
+                              border: '1px solid #a7f3d0',
+                              borderRadius: '6px',
+                              fontSize: '0.75rem',
+                            }}
+                            title="Tỷ lệ thanh toán"
+                          >
+                            <span style={{ color: '#059669', fontWeight: 600 }}>Tỷ lệ đã trả:</span>
+                            <span style={{ color: '#047857', fontWeight: 800 }}>
+                              {totalPayContractAll > 0 ? ((totalPayPaidAll / totalPayContractAll) * 100).toFixed(1) : 0}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#0f172a', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                      {formatNumberGroup(totalPayContractAll)}
+                    </td>
+                    <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#059669', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                      {formatNumberGroup(totalPayPaidAll)}
+                    </td>
+                    <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
+                      Đã trả {totalPayContractAll > 0 ? ((totalPayPaidAll / totalPayContractAll) * 100).toFixed(1) : 0}%
+                    </td>
+                    <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: totalPayRemainingAll > 0 ? '#dc2626' : '#059669', fontSize: '0.9375rem', whiteSpace: 'nowrap' }}>
+                      {formatNumberGroup(totalPayRemainingAll)}
+                    </td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></td>
+                  </tr>
+                )}
 
-                          (item.entries || []).forEach((ent) => {
-                            (ent.payments || []).forEach((pay: any) => {
-                              const isReturn =
-                                pay.isReturn ||
-                                pay.type === 'return_deduction' ||
-                                String(pay.code || pay.receiptCode || '').startsWith('ERR-') ||
-                                String(pay.title || '').toLowerCase().includes('trả lại') ||
-                                String(pay.note || '').toLowerCase().includes('trả lại') ||
-                                String(pay.title || '').toLowerCase().includes('hàng lỗi');
-                              if (!isReturn) {
-                                const c = pay.code || pay.receiptCode || pay.id;
+                {/* DÒNG TỔNG CỘNG BƯỚC 3: NỢ VAY NGÂN HÀNG (STICKY ĐẦU BẢNG NHƯ BƯỚC 4) */}
+                {currentStep === 3 && (
+                  <tr
+                    style={{
+                      position: 'sticky',
+                      top: 0,
+                      zIndex: 10,
+                      backgroundColor: '#f1f5f9',
+                      borderBottom: '2px solid #cbd5e1',
+                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+                    }}
+                  >
+                    <td style={{ padding: '7px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#0f172a', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                          Tổng cộng
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <div
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '2px 8px',
+                              backgroundColor: '#f5f3ff',
+                              border: '1px solid #ddd6fe',
+                              borderRadius: '6px',
+                              fontSize: '0.75rem',
+                            }}
+                            title="Tổng số hợp đồng vay ngân hàng"
+                          >
+                            <span style={{ color: '#7c3aed', fontWeight: 600 }}>Hợp đồng tín dụng:</span>
+                            <span style={{ color: '#6d28d9', fontWeight: 800 }}>{filteredLoans.length} HĐ</span>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="hidden sm:table-cell" style={{ padding: '7px 12px', fontSize: '0.75rem', color: '#64748b' }}>
+                      {totalLoan12mAll > 0 ? (
+                        <span style={{ color: '#dc2626', fontWeight: 700 }}>
+                          Đến hạn 12T: {formatNumberGroup(totalLoan12mAll)}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#059669', fontWeight: 600 }}>Dư nợ trong hạn</span>
+                      )}
+                    </td>
+                    <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.875rem' }}>
+                        {formatNumberGroup(totalLoanRemainingAll)}
+                      </div>
+                      <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>
+                        HM: {formatNumberGroup(totalLoanLimitAll)} • Đã trả: {formatNumberGroup(totalLoanPaidAll)}
+                      </div>
+                    </td>
+                    <td className="hidden sm:table-cell" style={{ padding: '7px 12px', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0284c7' }}>
+                        ~{formatNumberGroup(totalLoanInterestAll)} đ/th
+                      </div>
+                      <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>
+                        Ước tính lãi vay hàng tháng
+                      </div>
+                    </td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></td>
+                  </tr>
+                )}
+
+                {pagedList.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} style={{ padding: '40px 16px', textAlign: 'center', color: '#64748b' }}>
+                      Không tìm thấy bản ghi nào phù hợp với bộ lọc tìm kiếm
+                    </td>
+                  </tr>
+                ) : (
+                  pagedList.map((row: any) => {
+
+                    // ── DÒNG BƯỚC 1: CÔNG NỢ PHẢI THU (BỎ STT, MỖI THỜI ĐIỂM CHỈ MỞ 1 MỤC LỚN) ──
+                    if (currentStep === 1) {
+                      const item = row as ReceivableItem;
+                      const isExpanded = statusFilter !== 'all' ? true : expandedCustomerId === item.id;
+                      return (
+                        <React.Fragment key={`rec-row-${item.id}`}>
+                          <tr
+                            onClick={() => toggleExpandCustomer(item.id)}
+                            style={{
+                              borderBottom: isExpanded ? 'none' : '1px solid #f1f5f9',
+                              transition: 'background-color 0.15s ease',
+                              cursor: 'pointer',
+                              backgroundColor: isExpanded ? '#f8fafc' : 'transparent',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isExpanded) e.currentTarget.style.backgroundColor = '#f8fafc';
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isExpanded) e.currentTarget.style.backgroundColor = 'transparent';
+                            }}
+                          >
+                            {/* Cột 1: Khách hàng (kèm nút toggle mở rộng nếu có đơn con) */}
+                            <td style={{ padding: '7px 12px' }}>
+                              {(() => {
+                                const hasEntries = Boolean(item.entries && item.entries.length > 0);
+                                return (
+                                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                                    {hasEntries ? (
+                                      <button
+                                        type="button"
+                                        title={isExpanded ? 'Thu gọn' : 'Xem danh sách đơn hàng'}
+                                        onClick={(e) => toggleExpandCustomer(item.id, e)}
+                                        style={{
+                                          background: 'none',
+                                          border: 'none',
+                                          padding: '2px',
+                                          cursor: 'pointer',
+                                          color: '#64748b',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          borderRadius: '4px',
+                                          marginTop: '2px',
+                                          flexShrink: 0,
+                                        }}
+                                      >
+                                        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                      </button>
+                                    ) : (
+                                      <div style={{ width: '18px', height: '18px', flexShrink: 0 }} />
+                                    )}
+                                    <div>
+                                      <div
+                                        style={{
+                                          fontWeight: 800,
+                                          color: '#0284c7',
+                                          fontSize: '0.875rem',
+                                          textTransform: 'uppercase',
+                                          letterSpacing: '0.02em',
+                                        }}
+                                      >
+                                        {item.customerName}
+                                      </div>
+                                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '3px' }}>
+                                        {item.customerAddress}
+                                      </div>
+                                      <div className="sm:hidden text-[11px] text-slate-500 mt-1">
+                                        Gốc: <span className="font-semibold text-slate-700">{formatNumberGroup(item.contractValue)}</span> • Đã thu: <span className="font-semibold text-emerald-600">{formatNumberGroup(item.paidAmount)}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+                            </td>
+
+                            {/* Cột 2: Số tiền gốc */}
+                            <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#0f172a', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                              {formatNumberGroup(item.contractValue)}
+                            </td>
+
+                            {/* Cột 3: Đã thanh toán */}
+                            <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                              {formatNumberGroup(item.paidAmount)}
+                            </td>
+
+                            {/* Cột 4: Hạn thanh toán */}
+                            <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center', fontSize: '0.75rem', color: '#475569', fontWeight: 500 }}>
+                              {item.dueDate || 'Theo tiến độ HĐ'}
+                            </td>
+
+                            {/* Cột 5: Còn lại */}
+                            <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: item.remainingAmount > 0 ? '#dc2626' : '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                              {formatNumberGroup(item.remainingAmount)}
+                            </td>
+
+                            {/* Cột 6: Droplist cuối dòng gồm 5 chức năng */}
+                            <td style={{ padding: '7px 8px', textAlign: 'center', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+                              {(() => {
+                                const itemRemaining = Number(item.remainingAmount !== undefined ? item.remainingAmount : (item.contractValue - (item.paidAmount || 0))) || 0;
+                                const isReceivableZero = itemRemaining <= 0 || item.status === 'completed';
+
+                                return (
+                                  <>
+                                    <button
+                                      type="button"
+                                      title="Tùy chọn thao tác"
+                                      onClick={(e) => handleToggleRowMenu(item.id, e)}
+                                      style={{
+                                        background: activeRowMenuId === item.id ? '#f1f5f9' : 'transparent',
+                                        border: '1px solid',
+                                        borderColor: activeRowMenuId === item.id ? '#cbd5e1' : 'transparent',
+                                        borderRadius: '6px',
+                                        width: '28px',
+                                        height: '28px',
+                                        padding: 0,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        cursor: 'pointer',
+                                        color: '#475569',
+                                      }}
+                                    >
+                                      <ThreeDotsVertical size={14} />
+                                    </button>
+
+                                    {activeRowMenuId === item.id && (
+                                      <div
+                                        style={{
+                                          position: 'absolute',
+                                          right: 0,
+                                          ...(menuOpenUp ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }),
+                                          minWidth: '190px',
+                                          backgroundColor: '#ffffff',
+                                          borderRadius: '8px',
+                                          border: '1px solid #cbd5e1',
+                                          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
+                                          zIndex: 999,
+                                          overflow: 'hidden',
+                                          display: 'flex',
+                                          flexDirection: 'column',
+                                          textAlign: 'left',
+                                        }}
+                                      >
+                                        {/* 1. Ghi nhận thanh toán (Khoá khi khách hàng đã hết nợ) */}
+                                        <button
+                                          type="button"
+                                          disabled={isReceivableZero}
+                                          onClick={() => {
+                                            if (isReceivableZero) return;
+                                            setActiveRowMenuId(null);
+                                            handleOpenPaymentModal(item);
+                                          }}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '10px',
+                                            padding: '9px 14px',
+                                            background: 'none',
+                                            border: 'none',
+                                            fontSize: '0.8125rem',
+                                            fontWeight: 500,
+                                            color: isReceivableZero ? '#94a3b8' : '#334155',
+                                            cursor: isReceivableZero ? 'not-allowed' : 'pointer',
+                                            width: '100%',
+                                            textAlign: 'left',
+                                            opacity: isReceivableZero ? 0.5 : 1,
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            if (!isReceivableZero) e.currentTarget.style.backgroundColor = '#f1f5f9';
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            if (!isReceivableZero) e.currentTarget.style.backgroundColor = 'transparent';
+                                          }}
+                                        >
+                                          <CashCoin size={14} style={{ color: isReceivableZero ? '#cbd5e1' : '#64748b' }} />
+                                          <span>Ghi nhận thanh toán</span>
+                                        </button>
+
+                                        {/* 2. Thu tiền ứng trước */}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveRowMenuId(null);
+                                            handleOpenAdvancePaymentModal(item);
+                                          }}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '10px',
+                                            padding: '9px 14px',
+                                            background: 'none',
+                                            border: 'none',
+                                            fontSize: '0.8125rem',
+                                            fontWeight: 500,
+                                            color: '#334155',
+                                            cursor: 'pointer',
+                                            width: '100%',
+                                            textAlign: 'left',
+                                          }}
+                                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                        >
+                                          <Wallet2 size={14} style={{ color: '#64748b' }} />
+                                          <span>Thu tiền ứng trước</span>
+                                        </button>
+
+                                        {/* 3. Đối chiếu công nợ */}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveRowMenuId(null);
+                                            handleOpenReconciliation(item);
+                                          }}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '10px',
+                                            padding: '9px 14px',
+                                            background: 'none',
+                                            border: 'none',
+                                            fontSize: '0.8125rem',
+                                            fontWeight: 500,
+                                            color: '#334155',
+                                            cursor: 'pointer',
+                                            width: '100%',
+                                            textAlign: 'left',
+                                          }}
+                                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                        >
+                                          <FileEarmarkCheck size={14} style={{ color: '#64748b' }} />
+                                          <span>Đối chiếu công nợ</span>
+                                        </button>
+
+                                        {/* 4. Đề nghị thanh toán */}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveRowMenuId(null);
+                                            handleSendPaymentRequest(item);
+                                          }}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '10px',
+                                            padding: '9px 14px',
+                                            background: 'none',
+                                            border: 'none',
+                                            fontSize: '0.8125rem',
+                                            fontWeight: 500,
+                                            color: '#334155',
+                                            cursor: 'pointer',
+                                            width: '100%',
+                                            textAlign: 'left',
+                                          }}
+                                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                        >
+                                          <Send size={14} style={{ color: '#64748b' }} />
+                                          <span>Đề nghị thanh toán</span>
+                                        </button>
+
+                                        {/* Đường phân cách rõ nét phía trên chức năng Chỉnh sửa thông tin */}
+                                        <div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: '4px 0' }} />
+
+                                        {/* 5. Chỉnh sửa thông tin */}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveRowMenuId(null);
+                                            setEditingItem(item);
+                                            setIsOffcanvasOpen(true);
+                                          }}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '10px',
+                                            padding: '9px 14px',
+                                            background: 'none',
+                                            border: 'none',
+                                            fontSize: '0.8125rem',
+                                            fontWeight: 500,
+                                            color: '#334155',
+                                            cursor: 'pointer',
+                                            width: '100%',
+                                            textAlign: 'left',
+                                          }}
+                                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                        >
+                                          <Pencil size={13} style={{ color: '#64748b' }} />
+                                          <span>Chỉnh sửa thông tin</span>
+                                        </button>
+
+                                        {/* 5. Xoá khoản nợ */}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveRowMenuId(null);
+                                            setItemToDelete(item);
+                                            setConfirmDeleteOpen(true);
+                                          }}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '10px',
+                                            padding: '9px 14px',
+                                            background: 'none',
+                                            border: 'none',
+                                            fontSize: '0.8125rem',
+                                            fontWeight: 500,
+                                            color: '#334155',
+                                            cursor: 'pointer',
+                                            width: '100%',
+                                            textAlign: 'left',
+                                          }}
+                                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                        >
+                                          <Trash3 size={13} style={{ color: '#64748b' }} />
+                                          <span>Xoá khoản nợ</span>
+                                        </button>
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </td>
+                          </tr>
+
+                          {/* Danh sách các đợt phát sinh công nợ con khi mở rộng: Các đơn bán hàng và các phiếu thu đặt cùng cấp */}
+                          {isExpanded && (() => {
+                            // Gom danh sách tất cả các phiếu thu của khách hàng (loại bỏ các khoản giảm trừ hàng trả về)
+                            const customerReceipts: any[] = [];
+                            const seenReceiptCodes = new Set<string>();
+
+                            (item.entries || []).forEach((ent) => {
+                              (ent.payments || []).forEach((pay: any) => {
+                                const isReturn =
+                                  pay.isReturn ||
+                                  pay.type === 'return_deduction' ||
+                                  String(pay.code || pay.receiptCode || '').startsWith('ERR-') ||
+                                  String(pay.title || '').toLowerCase().includes('trả lại') ||
+                                  String(pay.note || '').toLowerCase().includes('trả lại') ||
+                                  String(pay.title || '').toLowerCase().includes('hàng lỗi');
+                                if (!isReturn) {
+                                  const c = pay.code || pay.receiptCode || pay.id;
+                                  if (c && !seenReceiptCodes.has(c)) {
+                                    seenReceiptCodes.add(c);
+                                    customerReceipts.push({ ...pay, parentEntryTitle: ent.title, parentEntryCode: ent.code });
+                                  }
+                                }
+                              });
+                            });
+
+                            (item.entries || []).forEach((ent) => {
+                              if (ent.code?.startsWith('PT-')) {
+                                const c = ent.code || ent.id;
                                 if (c && !seenReceiptCodes.has(c)) {
                                   seenReceiptCodes.add(c);
-                                  customerReceipts.push({ ...pay, parentEntryTitle: ent.title, parentEntryCode: ent.code });
+                                  customerReceipts.push({
+                                    id: ent.id,
+                                    code: ent.code,
+                                    receiptCode: ent.code,
+                                    title: ent.title,
+                                    date: ent.date,
+                                    time: ent.time || '08:30',
+                                    amount: ent.paidAmount || (ent as any).amount || 0,
+                                    method: (ent as any).method || 'Chuyển khoản',
+                                    debitAccount: (ent as any).debitAccount || '1121',
+                                    creditAccount: (ent as any).creditAccount || '131',
+                                  });
                                 }
                               }
                             });
-                          });
 
-                          (item.entries || []).forEach((ent) => {
-                            if (ent.code?.startsWith('PT-')) {
-                              const c = ent.code || ent.id;
+                            const histories = customerPaymentHistories[item.id] || [];
+                            histories.forEach((h) => {
+                              const c = h.code || h.id;
                               if (c && !seenReceiptCodes.has(c)) {
                                 seenReceiptCodes.add(c);
                                 customerReceipts.push({
-                                  id: ent.id,
-                                  code: ent.code,
-                                  receiptCode: ent.code,
-                                  title: ent.title,
-                                  date: ent.date,
-                                  time: ent.time || '08:30',
-                                  amount: ent.paidAmount || (ent as any).amount || 0,
-                                  method: (ent as any).method || 'Chuyển khoản',
-                                  debitAccount: (ent as any).debitAccount || '1121',
-                                  creditAccount: (ent as any).creditAccount || '131',
+                                  id: h.id,
+                                  code: h.code,
+                                  receiptCode: h.code,
+                                  title: h.note || `Thu tiền khách hàng theo phiếu ${h.code}`,
+                                  date: h.dateTime,
+                                  time: h.dateTime.includes(' ') ? h.dateTime.split(' ')[0] : '08:30',
+                                  amount: h.amount,
+                                  method: h.method || 'Chuyển khoản',
+                                  debitAccount: h.debitAccount || '1121',
+                                  creditAccount: h.creditAccount || '131',
+                                  bankAccount: h.bankAccount,
+                                  bankRef: h.bankRef,
+                                  payerName: h.payerName,
+                                  payerAddress: h.payerAddress,
+                                  accountant: h.accountant,
+                                  originalDocsCount: h.originalDocsCount,
+                                  note: h.note,
                                 });
                               }
-                            }
-                          });
-
-                          const histories = customerPaymentHistories[item.id] || [];
-                          histories.forEach((h) => {
-                            const c = h.code || h.id;
-                            if (c && !seenReceiptCodes.has(c)) {
-                              seenReceiptCodes.add(c);
-                              customerReceipts.push({
-                                id: h.id,
-                                code: h.code,
-                                receiptCode: h.code,
-                                title: h.note || `Thu tiền khách hàng theo phiếu ${h.code}`,
-                                date: h.dateTime,
-                                time: h.dateTime.includes(' ') ? h.dateTime.split(' ')[0] : '08:30',
-                                amount: h.amount,
-                                method: h.method || 'Chuyển khoản',
-                                debitAccount: h.debitAccount || '1121',
-                                creditAccount: h.creditAccount || '131',
-                                bankAccount: h.bankAccount,
-                                bankRef: h.bankRef,
-                                payerName: h.payerName,
-                                payerAddress: h.payerAddress,
-                                accountant: h.accountant,
-                                originalDocsCount: h.originalDocsCount,
-                                note: h.note,
-                              });
-                            }
-                          });
-
-                          const visibleEntries = (item.entries || [])
-                            .filter((entry) => !entry.code?.startsWith('PT-'))
-                            .filter((entry) => {
-                              if (statusFilter === 'all') return true;
-                              if (statusFilter === 'completed') {
-                                const isStageDone = (entry.remainingAmount !== undefined ? entry.remainingAmount : (entry.contractValue - (entry.paidAmount || 0))) <= 0;
-                                return isStageDone || entry.status === 'completed';
-                              }
-                              if (statusFilter === 'ontime') {
-                                return entry.status === 'ontime';
-                              }
-                              if (statusFilter === 'due') {
-                                return entry.status === 'due' || entry.status === 'due_soon';
-                              }
-                              if (statusFilter === 'overdue') {
-                                return entry.status === 'overdue';
-                              }
-                              return entry.status === statusFilter;
                             });
 
-                          return (
-                            <React.Fragment>
-                              {/* 1. CÁC ĐƠN BÁN HÀNG: Chỉ hiển thị các khoản hàng trả lại lồng bên trong đơn tương ứng */}
-                              {visibleEntries.map((entry) => {
-                                const stagePayments = entry.payments || [];
-                                // Chỉ giữ các khoản giảm trừ do hàng trả lại bên trong đơn hàng
-                                const returnDeductions = stagePayments.filter((pay: any) => {
-                                  return (
-                                    pay.isReturn ||
-                                    pay.type === 'return_deduction' ||
-                                    String(pay.code || pay.receiptCode || '').startsWith('ERR-') ||
-                                    String(pay.title || '').toLowerCase().includes('trả lại') ||
-                                    String(pay.note || '').toLowerCase().includes('trả lại') ||
-                                    String(pay.title || '').toLowerCase().includes('hàng lỗi')
-                                  );
-                                });
-                                const returnDeductionsTotal = returnDeductions.reduce((sum: number, r: any) => sum + (Number(r.amount) || 0), 0);
-                                const entryDisplayPaid = returnDeductionsTotal > 0 ? returnDeductionsTotal : (entry.paidAmount || 0);
-                                const entryDisplayRemaining = Math.max(0, (entry.contractValue || (entry as any).amount || 0) - entryDisplayPaid);
-                                const isStageDone = entryDisplayRemaining <= 0;
+                            const visibleEntries = (item.entries || [])
+                              .filter((entry) => !entry.code?.startsWith('PT-'))
+                              .filter((entry) => {
+                                if (statusFilter === 'all') return true;
+                                if (statusFilter === 'completed') {
+                                  const isStageDone = (entry.remainingAmount !== undefined ? entry.remainingAmount : (entry.contractValue - (entry.paidAmount || 0))) <= 0;
+                                  return isStageDone || entry.status === 'completed';
+                                }
+                                if (statusFilter === 'ontime') {
+                                  return entry.status === 'ontime';
+                                }
+                                if (statusFilter === 'due') {
+                                  return entry.status === 'due' || entry.status === 'due_soon';
+                                }
+                                if (statusFilter === 'overdue') {
+                                  return entry.status === 'overdue';
+                                }
+                                return entry.status === statusFilter;
+                              });
 
-                                return (
-                                  <React.Fragment key={entry.id}>
+                            return (
+                              <React.Fragment>
+                                {/* 1. CÁC ĐƠN BÁN HÀNG: Chỉ hiển thị các khoản hàng trả lại lồng bên trong đơn tương ứng */}
+                                {visibleEntries.map((entry) => {
+                                  const stagePayments = entry.payments || [];
+                                  // Chỉ giữ các khoản giảm trừ do hàng trả lại bên trong đơn hàng
+                                  const returnDeductions = stagePayments.filter((pay: any) => {
+                                    return (
+                                      pay.isReturn ||
+                                      pay.type === 'return_deduction' ||
+                                      String(pay.code || pay.receiptCode || '').startsWith('ERR-') ||
+                                      String(pay.title || '').toLowerCase().includes('trả lại') ||
+                                      String(pay.note || '').toLowerCase().includes('trả lại') ||
+                                      String(pay.title || '').toLowerCase().includes('hàng lỗi')
+                                    );
+                                  });
+                                  const returnDeductionsTotal = returnDeductions.reduce((sum: number, r: any) => sum + (Number(r.amount) || 0), 0);
+                                  const entryDisplayPaid = returnDeductionsTotal > 0 ? returnDeductionsTotal : (entry.paidAmount || 0);
+                                  const entryDisplayRemaining = Math.max(0, (entry.contractValue || (entry as any).amount || 0) - entryDisplayPaid);
+                                  const isStageDone = entryDisplayRemaining <= 0;
+
+                                  return (
+                                    <React.Fragment key={entry.id}>
+                                      <tr
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedSubEntry({ entry, parent: item, type: 'receivable' });
+                                          setSubEntryDetailOpen(true);
+                                        }}
+                                        title="Nhấn để xem chi tiết khoản nợ"
+                                        style={{
+                                          backgroundColor: '#f8fafc',
+                                          borderBottom: returnDeductions.length > 0 ? '1px dashed #e2e8f0' : '1px solid #f1f5f9',
+                                          cursor: 'pointer',
+                                          transition: 'background-color 0.15s ease',
+                                        }}
+                                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+                                      >
+                                        {/* Cột Khách hàng: Mã phiếu và giờ ngày tháng trên cùng dòng cách nhau | */}
+                                        <td style={{ padding: '8px 14px 8px 36px' }}>
+                                          <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                            <span style={{ color: '#0369a1', fontWeight: 700 }}>{entry.code}</span>
+                                            <span style={{ color: '#cbd5e1' }}>|</span>
+                                            <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 400 }}>
+                                              {entry.time || '08:30'} • {entry.date}
+                                            </span>
+                                            {isStageDone ? (
+                                              <span style={{ fontSize: '0.6875rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#dcfce7', color: '#15803d', fontWeight: 700 }}>
+                                                Đã thu đủ
+                                              </span>
+                                            ) : entryDisplayPaid > 0 ? (
+                                              <span style={{ fontSize: '0.6875rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#fef3c7', color: '#b45309', fontWeight: 700 }}>
+                                                {returnDeductionsTotal > 0 ? 'Giảm trừ một phần' : 'Thu một phần'}
+                                              </span>
+                                            ) : null}
+                                          </div>
+                                          <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '2px', fontWeight: 500 }}>
+                                            {entry.title}
+                                          </div>
+                                        </td>
+
+                                        {/* Cột Số tiền gốc: font thường không đậm */}
+                                        <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 600, color: '#334155', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                          {formatNumberGroup(entry.contractValue || (entry as any).amount || 0)}
+                                        </td>
+
+                                        {/* Cột Đã thanh toán / Giảm trừ: font thường không đậm */}
+                                        <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: entryDisplayPaid > 0 ? (returnDeductionsTotal > 0 ? '#d97706' : '#059669') : '#94a3b8', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                          {formatNumberGroup(entryDisplayPaid)}
+                                        </td>
+
+                                        {/* Cột Hạn thanh toán: font thường không đậm */}
+                                        <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'center', fontWeight: 500, color: '#475569', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                          {entry.dueDate || item.dueDate || 'Theo tiến độ'}
+                                        </td>
+
+                                        {/* Cột Còn lại: font thường không đậm */}
+                                        <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: entryDisplayRemaining > 0 ? '#dc2626' : '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                          {formatNumberGroup(entryDisplayRemaining)}
+                                        </td>
+
+                                        {/* Cột Thao tác */}
+                                        <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                                        </td>
+                                      </tr>
+
+                                      {/* CHỈ CÁC CHỨNG TỪ GIẢM TRỪ CÔNG NỢ DO TRẢ LẠI HÀNG ĐƯỢC ĐẶT TRONG ĐƠN HÀNG NÀY */}
+                                      {returnDeductions.map((pay: any, pIdx: number) => {
+                                        return (
+                                          <tr
+                                            key={pay.id || `return-${pIdx}`}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedSubEntry({
+                                                entry: {
+                                                  ...pay,
+                                                  code: pay.code || pay.receiptCode,
+                                                  contractValue: pay.amount,
+                                                  paidAmount: pay.amount,
+                                                  remainingAmount: 0,
+                                                  isReturn: true,
+                                                },
+                                                parent: item,
+                                                type: 'receivable',
+                                              });
+                                              setSubEntryDetailOpen(true);
+                                            }}
+                                            title="Nhấn để xem chi tiết & đối soát giảm trừ công nợ"
+                                            style={{
+                                              backgroundColor: '#f1f5f9',
+                                              borderBottom: pIdx === returnDeductions.length - 1 ? '1px solid #e2e8f0' : '1px dashed #e2e8f0',
+                                              fontSize: '0.7813rem',
+                                              cursor: 'pointer',
+                                            }}
+                                          >
+                                            {/* Cột Khách hàng: Thụt lề với ký hiệu nhánh ↳ và badge Giảm trừ công nợ */}
+                                            <td style={{ padding: '6px 14px 6px 56px' }}>
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                <span style={{ color: '#d97706', fontWeight: 800 }}>↳</span>
+                                                <span
+                                                  style={{
+                                                    backgroundColor: '#fef3c7',
+                                                    color: '#b45309',
+                                                    border: '1px solid #fde68a',
+                                                    padding: '1px 6px',
+                                                    borderRadius: '4px',
+                                                    fontSize: '0.6875rem',
+                                                    fontWeight: 700,
+                                                  }}
+                                                >
+                                                  Giảm trừ công nợ
+                                                </span>
+                                                <span style={{ fontWeight: 700, color: '#0f172a' }}>{pay.code || pay.receiptCode}</span>
+                                                <span style={{ color: '#cbd5e1' }}>|</span>
+                                                <span style={{ color: '#64748b', fontSize: '0.7188rem' }}>
+                                                  {pay.time || '08:30'} • {pay.date}
+                                                </span>
+                                                <span style={{ color: '#b45309', fontSize: '0.7188rem', fontStyle: 'italic' }}>
+                                                  ({pay.method || 'Cấn trừ hàng trả lại'})
+                                                </span>
+                                              </div>
+                                              <div style={{ fontSize: '0.7188rem', color: '#64748b', marginTop: '2px', paddingLeft: '18px' }}>
+                                                {pay.title || pay.note || `Giảm trừ công nợ do trả lại hàng theo ${pay.code || pay.receiptCode}`}
+                                              </div>
+                                            </td>
+
+                                            {/* Số tiền gốc */}
+                                            <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', color: '#94a3b8' }}>
+                                              —
+                                            </td>
+
+                                            {/* Đã giảm trừ */}
+                                            <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 700, color: '#d97706' }}>
+                                              -{formatNumberGroup(pay.amount)}
+                                            </td>
+
+                                            {/* Trạng thái */}
+                                            <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'center', color: '#d97706', fontWeight: 600, fontSize: '0.75rem' }}>
+                                              Đã giảm trừ
+                                            </td>
+
+                                            {/* Còn lại */}
+                                            <td style={{ padding: '6px 14px', textAlign: 'right', color: '#94a3b8' }}>
+                                              <span className="hidden sm:inline">—</span>
+                                              <span className="sm:hidden font-bold text-amber-600">-{formatNumberGroup(pay.amount)}</span>
+                                            </td>
+
+                                            {/* Nút xem chứng từ giảm trừ */}
+                                            <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                                              <button
+                                                type="button"
+                                                title="Xem chứng từ giảm trừ công nợ A4"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setReceiptToPrint({
+                                                    code: pay.code || pay.receiptCode || 'BBGT-20261109',
+                                                    date: pay.date || item.createdAt || '09/11/2026',
+                                                    customerName: item.customerName,
+                                                    customerAddress: item.customerAddress || '',
+                                                    amount: pay.amount,
+                                                    reason: pay.title || pay.note || `Giảm trừ công nợ do trả lại hàng - ${entry.title}`,
+                                                    contractCode: item.code,
+                                                    stageTitle: entry.title,
+                                                    paymentMethod: pay.method || 'Cấn trừ hàng trả lại',
+                                                    debitAccount: '5212',
+                                                    creditAccount: '131',
+                                                    notes: 'Hồ sơ hàng trả lại (ERR)',
+                                                    creator: getLoggedInUserName(activeUser) || 'Kế toán thanh toán',
+                                                    accountant: 'Kế toán trưởng',
+                                                    cashier: '',
+                                                    director: 'Lê Công Vụ',
+                                                  });
+                                                  setIsPrintReceiptModalOpen(true);
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                  e.currentTarget.style.backgroundColor = '#fef3c7';
+                                                  e.currentTarget.style.borderColor = '#fde68a';
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                  e.currentTarget.style.backgroundColor = '#fffbeb';
+                                                  e.currentTarget.style.borderColor = '#fde68a';
+                                                }}
+                                                style={{
+                                                  width: '24px',
+                                                  height: '24px',
+                                                  borderRadius: '4px',
+                                                  border: '1px solid #fde68a',
+                                                  backgroundColor: '#fffbeb',
+                                                  color: '#d97706',
+                                                  display: 'inline-flex',
+                                                  alignItems: 'center',
+                                                  justifyContent: 'center',
+                                                  cursor: 'pointer',
+                                                  padding: 0,
+                                                  transition: 'all 0.15s ease',
+                                                }}
+                                              >
+                                                <Printer size={12} />
+                                              </button>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </React.Fragment>
+                                  );
+                                })}
+
+                                {/* 2. CÁC PHIẾU THU & CHỨNG TỪ ĐỐI SOÁT ĐƯỢC ĐẶT Ở NGOÀI CÁC ĐƠN HÀNG, CÙNG CẤP VỚI ĐƠN BÁN HÀNG */}
+                                {customerReceipts.map((pay: any, pIdx: number) => {
+                                  const payCode = String(pay.code || pay.receiptCode || '');
+                                  const isRecon =
+                                    pay.isReconciliation ||
+                                    pay.type === 'reconciliation' ||
+                                    payCode.startsWith('DS-');
+                                  const payAmt = Number(pay.amount) || 0;
+                                  const isBankTransfer = (pay.method || '').toLowerCase().includes('khoản') || (pay.method || '').toLowerCase().includes('ngân hàng');
+                                  return (
                                     <tr
+                                      key={pay.id || `cust-receipt-${pIdx}`}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setSelectedSubEntry({ entry, parent: item, type: 'receivable' });
+                                        setSelectedSubEntry({
+                                          entry: {
+                                            ...pay,
+                                            code: payCode,
+                                            contractValue: Math.abs(payAmt),
+                                            paidAmount: payAmt,
+                                            remainingAmount: 0,
+                                            isReceipt: !isRecon,
+                                            isReconciliation: isRecon,
+                                            type: isRecon ? 'reconciliation' : 'receipt',
+                                          },
+                                          parent: item,
+                                          type: 'receivable',
+                                        });
                                         setSubEntryDetailOpen(true);
                                       }}
-                                      title="Nhấn để xem chi tiết khoản nợ"
+                                      title={isRecon ? 'Nhấn để xem chi tiết chứng từ đối soát' : 'Nhấn để xem chi tiết & đối soát phiếu thu'}
                                       style={{
                                         backgroundColor: '#f8fafc',
-                                        borderBottom: returnDeductions.length > 0 ? '1px dashed #e2e8f0' : '1px solid #f1f5f9',
+                                        borderBottom: '1px solid #e2e8f0',
                                         cursor: 'pointer',
                                         transition: 'background-color 0.15s ease',
                                       }}
                                       onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
                                       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
                                     >
-                                      {/* Cột Khách hàng: Mã phiếu và giờ ngày tháng trên cùng dòng cách nhau | */}
+                                      {/* Cột Khách hàng: Thụt lề 36px đúng bằng cấp độ của đơn hàng DBH */}
                                       <td style={{ padding: '8px 14px 8px 36px' }}>
                                         <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                          <span style={{ color: '#0369a1', fontWeight: 700 }}>{entry.code}</span>
+                                          <span
+                                            style={{
+                                              backgroundColor: isRecon ? '#f5f3ff' : '#dcfce7',
+                                              color: isRecon ? '#6d28d9' : '#15803d',
+                                              border: `1px solid ${isRecon ? '#ddd6fe' : '#86efac'}`,
+                                              padding: '1px 6px',
+                                              borderRadius: '4px',
+                                              fontSize: '0.6875rem',
+                                              fontWeight: 700,
+                                            }}
+                                          >
+                                            {isRecon ? 'Đối soát' : 'Phiếu thu'}
+                                          </span>
+                                          <span style={{ color: isRecon ? '#6d28d9' : '#0369a1', fontWeight: 700 }}>{payCode}</span>
                                           <span style={{ color: '#cbd5e1' }}>|</span>
                                           <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 400 }}>
-                                            {entry.time || '08:30'} • {entry.date}
+                                            {pay.time || '08:30'} • {pay.date}
                                           </span>
-                                          {isStageDone ? (
-                                            <span style={{ fontSize: '0.6875rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#dcfce7', color: '#15803d', fontWeight: 700 }}>
-                                              Đã thu đủ
-                                            </span>
-                                          ) : entryDisplayPaid > 0 ? (
-                                            <span style={{ fontSize: '0.6875rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#fef3c7', color: '#b45309', fontWeight: 700 }}>
-                                              {returnDeductionsTotal > 0 ? 'Giảm trừ một phần' : 'Thu một phần'}
-                                            </span>
-                                          ) : null}
+                                          <span style={{ color: '#64748b', fontSize: '0.75rem', fontStyle: 'italic', fontWeight: 400 }}>
+                                            ({pay.method || (isRecon ? 'Đối soát công nợ' : 'Chuyển khoản')})
+                                          </span>
                                         </div>
                                         <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '2px', fontWeight: 500 }}>
-                                          {entry.title}
+                                          {pay.title || pay.note || (isRecon ? `Chứng từ đối soát công nợ ${payCode}` : `Thu tiền khách hàng theo phiếu ${payCode}`)}
                                         </div>
                                       </td>
 
-                                      {/* Cột Số tiền gốc: font thường không đậm */}
-                                      <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 600, color: '#334155', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                        {formatNumberGroup(entry.contractValue || (entry as any).amount || 0)}
+                                      {/* Cột Số tiền gốc: để trống hoặc — */}
+                                      <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'right', color: '#94a3b8' }}>
+                                        —
                                       </td>
 
-                                      {/* Cột Đã thanh toán / Giảm trừ: font thường không đậm */}
-                                      <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: entryDisplayPaid > 0 ? (returnDeductionsTotal > 0 ? '#d97706' : '#059669') : '#94a3b8', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                        {formatNumberGroup(entryDisplayPaid)}
+                                      {/* Cột Đã thanh toán: Hiển thị số tiền đã thu / chênh lệch đối soát */}
+                                      <td
+                                        className="hidden sm:table-cell"
+                                        style={{
+                                          padding: '8px 14px',
+                                          textAlign: 'right',
+                                          fontWeight: 700,
+                                          color: payAmt < 0 ? '#dc2626' : '#059669',
+                                          fontSize: '0.8125rem',
+                                          whiteSpace: 'nowrap',
+                                        }}
+                                      >
+                                        {payAmt >= 0 ? '+' : '-'}{formatNumberGroup(Math.abs(payAmt))}
                                       </td>
 
-                                      {/* Cột Hạn thanh toán: font thường không đậm */}
-                                      <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'center', fontWeight: 500, color: '#475569', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                        {entry.dueDate || item.dueDate || 'Theo tiến độ'}
+                                      {/* Cột Hạn thanh toán / Trạng thái */}
+                                      <td
+                                        className="hidden sm:table-cell"
+                                        style={{
+                                          padding: '8px 14px',
+                                          textAlign: 'center',
+                                          color: isRecon ? '#6d28d9' : '#059669',
+                                          fontWeight: 600,
+                                          fontSize: '0.8125rem',
+                                          whiteSpace: 'nowrap',
+                                        }}
+                                      >
+                                        {isRecon ? 'Đối soát' : 'Đã thu'}
                                       </td>
 
-                                      {/* Cột Còn lại: font thường không đậm */}
-                                      <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: entryDisplayRemaining > 0 ? '#dc2626' : '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                        {formatNumberGroup(entryDisplayRemaining)}
+                                      {/* Cột Còn lại */}
+                                      <td style={{ padding: '8px 14px', textAlign: 'right', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                                        <span className="hidden sm:inline">—</span>
+                                        <span className={`sm:hidden font-bold ${payAmt < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                          {payAmt >= 0 ? '+' : '-'}{formatNumberGroup(Math.abs(payAmt))}
+                                        </span>
                                       </td>
 
-                                      {/* Cột Thao tác */}
-                                      <td style={{ padding: '8px 6px', textAlign: 'center' }}>
-                                      </td>
-                                    </tr>
-
-                                    {/* CHỈ CÁC CHỨNG TỪ GIẢM TRỪ CÔNG NỢ DO TRẢ LẠI HÀNG ĐƯỢC ĐẶT TRONG ĐƠN HÀNG NÀY */}
-                                    {returnDeductions.map((pay: any, pIdx: number) => {
-                                      return (
-                                        <tr
-                                          key={pay.id || `return-${pIdx}`}
+                                      {/* Cột Thao tác: Nút in phiếu thu A4 */}
+                                      <td style={{ padding: '8px 8px', textAlign: 'center' }}>
+                                        <button
+                                          type="button"
+                                          title="Xem và in phiếu thu A4"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            setSelectedSubEntry({
-                                              entry: {
-                                                ...pay,
-                                                code: pay.code || pay.receiptCode,
-                                                contractValue: pay.amount,
-                                                paidAmount: pay.amount,
-                                                remainingAmount: 0,
-                                                isReturn: true,
-                                              },
-                                              parent: item,
-                                              type: 'receivable',
+                                            setReceiptToPrint({
+                                              code: pay.code || pay.receiptCode || 'PT-20261004',
+                                              date: pay.date || item.createdAt || '09/11/2026',
+                                              customerName: item.customerName,
+                                              customerAddress: pay.payerAddress || item.customerAddress || '',
+                                              amount: pay.amount,
+                                              reason: pay.title || pay.note || `Thu tiền khách hàng theo phiếu ${pay.code || pay.receiptCode}`,
+                                              contractCode: item.code,
+                                              stageTitle: pay.parentEntryTitle || item.customerName,
+                                              paymentMethod: pay.method || 'Chuyển khoản',
+                                              debitAccount: pay.debitAccount || (isBankTransfer ? '1121' : '1111'),
+                                              creditAccount: pay.creditAccount || '131',
+                                              notes: [
+                                                pay.bankAccount ? `TK: ${pay.bankAccount}` : '',
+                                                pay.bankRef ? `Số GD/UNC: ${pay.bankRef}` : '',
+                                                pay.originalDocsCount ? `Kèm theo: ${pay.originalDocsCount}` : '',
+                                                pay.note || pay.title,
+                                              ].filter(Boolean).join(' | ') || (isBankTransfer ? 'Giấy báo Có ngân hàng' : '01 Chứng từ gốc'),
+                                              creator: getLoggedInUserName(activeUser) || 'Kế toán thanh toán',
+                                              accountant: pay.accountant || 'Kế toán trưởng',
+                                              cashier: isBankTransfer ? '' : 'Thủ quỹ',
+                                              director: 'Lê Công Vụ',
                                             });
-                                            setSubEntryDetailOpen(true);
+                                            setIsPrintReceiptModalOpen(true);
                                           }}
-                                          title="Nhấn để xem chi tiết & đối soát giảm trừ công nợ"
+                                          onMouseEnter={(e) => {
+                                            e.currentTarget.style.backgroundColor = '#dbeafe';
+                                            e.currentTarget.style.borderColor = '#93c5fd';
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            e.currentTarget.style.backgroundColor = '#eff6ff';
+                                            e.currentTarget.style.borderColor = '#bfdbfe';
+                                          }}
                                           style={{
-                                            backgroundColor: '#f1f5f9',
-                                            borderBottom: pIdx === returnDeductions.length - 1 ? '1px solid #e2e8f0' : '1px dashed #e2e8f0',
-                                            fontSize: '0.7813rem',
+                                            width: '24px',
+                                            height: '24px',
+                                            borderRadius: '4px',
+                                            border: '1px solid #bfdbfe',
+                                            backgroundColor: '#eff6ff',
+                                            color: '#2563eb',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
                                             cursor: 'pointer',
+                                            padding: 0,
+                                            transition: 'all 0.15s ease',
                                           }}
                                         >
-                                          {/* Cột Khách hàng: Thụt lề với ký hiệu nhánh ↳ và badge Giảm trừ công nợ */}
-                                          <td style={{ padding: '6px 14px 6px 56px' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                              <span style={{ color: '#d97706', fontWeight: 800 }}>↳</span>
-                                              <span
-                                                style={{
-                                                  backgroundColor: '#fef3c7',
-                                                  color: '#b45309',
-                                                  border: '1px solid #fde68a',
-                                                  padding: '1px 6px',
-                                                  borderRadius: '4px',
-                                                  fontSize: '0.6875rem',
-                                                  fontWeight: 700,
-                                                }}
-                                              >
-                                                Giảm trừ công nợ
-                                              </span>
-                                              <span style={{ fontWeight: 700, color: '#0f172a' }}>{pay.code || pay.receiptCode}</span>
-                                              <span style={{ color: '#cbd5e1' }}>|</span>
-                                              <span style={{ color: '#64748b', fontSize: '0.7188rem' }}>
-                                                {pay.time || '08:30'} • {pay.date}
-                                              </span>
-                                              <span style={{ color: '#b45309', fontSize: '0.7188rem', fontStyle: 'italic' }}>
-                                                ({pay.method || 'Cấn trừ hàng trả lại'})
-                                              </span>
-                                            </div>
-                                            <div style={{ fontSize: '0.7188rem', color: '#64748b', marginTop: '2px', paddingLeft: '18px' }}>
-                                              {pay.title || pay.note || `Giảm trừ công nợ do trả lại hàng theo ${pay.code || pay.receiptCode}`}
-                                            </div>
-                                          </td>
+                                          <Printer size={12} />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </React.Fragment>
+                            );
+                          })()}
+                        </React.Fragment>
+                      );
+                    }
 
-                                          {/* Số tiền gốc */}
-                                          <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', color: '#94a3b8' }}>
-                                            —
-                                          </td>
-
-                                          {/* Đã giảm trừ */}
-                                          <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 700, color: '#d97706' }}>
-                                            -{formatNumberGroup(pay.amount)}
-                                          </td>
-
-                                          {/* Trạng thái */}
-                                          <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'center', color: '#d97706', fontWeight: 600, fontSize: '0.75rem' }}>
-                                            Đã giảm trừ
-                                          </td>
-
-                                          {/* Còn lại */}
-                                          <td style={{ padding: '6px 14px', textAlign: 'right', color: '#94a3b8' }}>
-                                            <span className="hidden sm:inline">—</span>
-                                            <span className="sm:hidden font-bold text-amber-600">-{formatNumberGroup(pay.amount)}</span>
-                                          </td>
-
-                                          {/* Nút xem chứng từ giảm trừ */}
-                                          <td style={{ padding: '6px 8px', textAlign: 'center' }}>
-                                            <button
-                                              type="button"
-                                              title="Xem chứng từ giảm trừ công nợ A4"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setReceiptToPrint({
-                                                  code: pay.code || pay.receiptCode || 'BBGT-20261109',
-                                                  date: pay.date || item.createdAt || '09/11/2026',
-                                                  customerName: item.customerName,
-                                                  customerAddress: item.customerAddress || '',
-                                                  amount: pay.amount,
-                                                  reason: pay.title || pay.note || `Giảm trừ công nợ do trả lại hàng - ${entry.title}`,
-                                                  contractCode: item.code,
-                                                  stageTitle: entry.title,
-                                                  paymentMethod: pay.method || 'Cấn trừ hàng trả lại',
-                                                  debitAccount: '5212',
-                                                  creditAccount: '131',
-                                                  notes: 'Hồ sơ hàng trả lại (ERR)',
-                                                  creator: getLoggedInUserName(activeUser) || 'Kế toán thanh toán',
-                                                  accountant: 'Kế toán trưởng',
-                                                  cashier: '',
-                                                  director: 'Lê Công Vụ',
-                                                });
-                                                setIsPrintReceiptModalOpen(true);
-                                              }}
-                                              onMouseEnter={(e) => {
-                                                e.currentTarget.style.backgroundColor = '#fef3c7';
-                                                e.currentTarget.style.borderColor = '#fde68a';
-                                              }}
-                                              onMouseLeave={(e) => {
-                                                e.currentTarget.style.backgroundColor = '#fffbeb';
-                                                e.currentTarget.style.borderColor = '#fde68a';
-                                              }}
-                                              style={{
-                                                width: '24px',
-                                                height: '24px',
-                                                borderRadius: '4px',
-                                                border: '1px solid #fde68a',
-                                                backgroundColor: '#fffbeb',
-                                                color: '#d97706',
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                cursor: 'pointer',
-                                                padding: 0,
-                                                transition: 'all 0.15s ease',
-                                              }}
-                                            >
-                                              <Printer size={12} />
-                                            </button>
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </React.Fragment>
+                    // ── DÒNG BƯỚC 2: CÔNG NỢ PHẢI TRẢ (ĐỒNG BỘ CẤU TRÚC BƯỚC 1, TÊN MÀU ĐỎ ĐẬM) ──
+                    if (currentStep === 2) {
+                      const item = row as PayableItem;
+                      const isExpanded = statusFilter !== 'all' ? true : expandedSupplierId === item.id;
+                      return (
+                        <React.Fragment key={`pay-row-${item.id}`}>
+                          <tr
+                            onClick={() => toggleExpandSupplier(item.id)}
+                            style={{
+                              borderBottom: isExpanded ? 'none' : '1px solid #f1f5f9',
+                              transition: 'background-color 0.15s ease',
+                              cursor: 'pointer',
+                              backgroundColor: isExpanded ? '#f8fafc' : 'transparent',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isExpanded) e.currentTarget.style.backgroundColor = '#f8fafc';
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isExpanded) e.currentTarget.style.backgroundColor = 'transparent';
+                            }}
+                          >
+                            {/* Cột 1: Nhà cung cấp / Đơn vị vận chuyển */}
+                            <td style={{ padding: '7px 12px' }}>
+                              {(() => {
+                                const isTransporter = item.partnerType === 'transporter' || item.code?.startsWith('CNVC') || item.poCode?.startsWith('VC');
+                                const hasEntries = Boolean(item.entries && item.entries.length > 0);
+                                return (
+                                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                                    {hasEntries ? (
+                                      <button
+                                        type="button"
+                                        title={isExpanded ? 'Thu gọn' : (isTransporter ? 'Xem danh sách vận đơn' : 'Xem danh sách đơn mua hàng (PO)')}
+                                        onClick={(e) => toggleExpandSupplier(item.id, e)}
+                                        style={{
+                                          background: 'none',
+                                          border: 'none',
+                                          padding: '2px',
+                                          cursor: 'pointer',
+                                          color: '#64748b',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          borderRadius: '4px',
+                                          marginTop: '1px',
+                                          flexShrink: 0,
+                                        }}
+                                      >
+                                        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                      </button>
+                                    ) : (
+                                      <div style={{ width: '18px', height: '18px', flexShrink: 0 }} />
+                                    )}
+                                    <div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                        <span
+                                          style={{
+                                            fontWeight: 800,
+                                            color: isTransporter ? '#1d4ed8' : '#b91c1c',
+                                            fontSize: '0.8125rem',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.02em',
+                                            lineHeight: 1.25,
+                                          }}
+                                        >
+                                          {item.supplierName}
+                                        </span>
+                                        {isTransporter ? (
+                                          <span
+                                            style={{
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '3px',
+                                              fontSize: '0.6563rem',
+                                              fontWeight: 700,
+                                              padding: '1px 6px',
+                                              borderRadius: '4px',
+                                              backgroundColor: '#eff6ff',
+                                              color: '#1d4ed8',
+                                              border: '1px solid #bfdbfe',
+                                            }}
+                                          >
+                                            <Truck size={10} /> ĐV Vận chuyển
+                                          </span>
+                                        ) : (
+                                          <span
+                                            style={{
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '3px',
+                                              fontSize: '0.6563rem',
+                                              fontWeight: 700,
+                                              padding: '1px 6px',
+                                              borderRadius: '4px',
+                                              backgroundColor: '#f8fafc',
+                                              color: '#475569',
+                                              border: '1px solid #e2e8f0',
+                                            }}
+                                          >
+                                            <Building size={10} /> Nhà cung cấp
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '1px' }}>
+                                        {item.supplierAddress}
+                                      </div>
+                                      <div className="sm:hidden text-[11px] text-slate-500 mt-1">
+                                        Tổng: <span className="font-semibold text-slate-700">{formatNumberGroup(item.totalAmount)}</span> • Đã trả: <span className="font-semibold text-emerald-600">{formatNumberGroup(item.paidAmount)}</span>
+                                      </div>
+                                    </div>
+                                  </div>
                                 );
-                              })}
+                              })()}
+                            </td>
 
-                              {/* 2. CÁC PHIẾU THU & CHỨNG TỪ ĐỐI SOÁT ĐƯỢC ĐẶT Ở NGOÀI CÁC ĐƠN HÀNG, CÙNG CẤP VỚI ĐƠN BÁN HÀNG */}
-                              {customerReceipts.map((pay: any, pIdx: number) => {
-                                const payCode = String(pay.code || pay.receiptCode || '');
-                                const isRecon =
-                                  pay.isReconciliation ||
-                                  pay.type === 'reconciliation' ||
-                                  payCode.startsWith('DS-');
-                                const payAmt = Number(pay.amount) || 0;
-                                const isBankTransfer = (pay.method || '').toLowerCase().includes('khoản') || (pay.method || '').toLowerCase().includes('ngân hàng');
+                            {/* Cột 2: Tổng tiền đơn */}
+                            <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#0f172a', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                              {formatNumberGroup(item.totalAmount)}
+                            </td>
+
+                            {/* Cột 3: Đã thanh toán */}
+                            <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                              {formatNumberGroup(item.paidAmount)}
+                            </td>
+
+                            {/* Cột 4: Hạn thanh toán (Không ghi hạn thanh toán ở mục chính) */}
+                            <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center' }}>
+                            </td>
+
+                            {/* Cột 5: Còn lại */}
+                            <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: item.remainingAmount > 0 ? '#dc2626' : '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                              {formatNumberGroup(item.remainingAmount)}
+                            </td>
+
+                            {/* Cột 6: Droplist cuối dòng */}
+                            <td style={{ padding: '7px 8px', textAlign: 'center', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+                              {(() => {
+                                const itemRemaining = Number(item.remainingAmount !== undefined ? item.remainingAmount : (item.totalAmount - (item.paidAmount || 0))) || 0;
+                                const isPayableZero = itemRemaining <= 0 || item.status === 'completed';
+
+                                return (
+                                  <>
+                                    <button
+                                      type="button"
+                                      title="Tùy chọn thao tác"
+                                      onClick={(e) => handleToggleRowMenu(item.id, e)}
+                                      style={{
+                                        background: activeRowMenuId === item.id ? '#f1f5f9' : 'transparent',
+                                        border: '1px solid',
+                                        borderColor: activeRowMenuId === item.id ? '#cbd5e1' : 'transparent',
+                                        borderRadius: '6px',
+                                        width: '28px',
+                                        height: '28px',
+                                        padding: 0,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        cursor: 'pointer',
+                                        color: '#475569',
+                                      }}
+                                    >
+                                      <ThreeDotsVertical size={14} />
+                                    </button>
+
+                                    {activeRowMenuId === item.id && (
+                                      <div
+                                        style={{
+                                          position: 'absolute',
+                                          right: 0,
+                                          ...(menuOpenUp ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }),
+                                          minWidth: '190px',
+                                          backgroundColor: '#ffffff',
+                                          borderRadius: '8px',
+                                          border: '1px solid #cbd5e1',
+                                          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
+                                          zIndex: 999,
+                                          overflow: 'hidden',
+                                          display: 'flex',
+                                          flexDirection: 'column',
+                                          textAlign: 'left',
+                                        }}
+                                      >
+                                        {/* 1. Tạo yêu cầu chi tiền (Khoá khi đã hết nợ) */}
+                                        <button
+                                          type="button"
+                                          disabled={isPayableZero}
+                                          onClick={() => {
+                                            if (isPayableZero) return;
+                                            setActiveRowMenuId(null);
+                                            handleOpenPayablePaymentModal(item);
+                                          }}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '10px',
+                                            padding: '9px 14px',
+                                            background: 'none',
+                                            border: 'none',
+                                            fontSize: '0.8125rem',
+                                            fontWeight: 500,
+                                            color: isPayableZero ? '#94a3b8' : '#334155',
+                                            cursor: isPayableZero ? 'not-allowed' : 'pointer',
+                                            width: '100%',
+                                            textAlign: 'left',
+                                            opacity: isPayableZero ? 0.5 : 1,
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            if (!isPayableZero) e.currentTarget.style.backgroundColor = '#f1f5f9';
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            if (!isPayableZero) e.currentTarget.style.backgroundColor = 'transparent';
+                                          }}
+                                        >
+                                          <CashCoin size={14} style={{ color: isPayableZero ? '#cbd5e1' : '#64748b' }} />
+                                          <span>Tạo yêu cầu chi tiền</span>
+                                        </button>
+
+                                        {/* 2. Chi tiền ứng trước */}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveRowMenuId(null);
+                                            handleOpenPayableAdvanceModal(item);
+                                          }}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '10px',
+                                            padding: '9px 14px',
+                                            background: 'none',
+                                            border: 'none',
+                                            fontSize: '0.8125rem',
+                                            fontWeight: 500,
+                                            color: '#334155',
+                                            cursor: 'pointer',
+                                            width: '100%',
+                                            textAlign: 'left',
+                                          }}
+                                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                        >
+                                          <Wallet2 size={14} style={{ color: '#64748b' }} />
+                                          <span>Tạo yêu cầu ứng trước</span>
+                                        </button>
+
+                                        {/* 2. Đối chiếu công nợ */}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveRowMenuId(null);
+                                            handleOpenPayableReconciliation(item);
+                                          }}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '10px',
+                                            padding: '9px 14px',
+                                            background: 'none',
+                                            border: 'none',
+                                            fontSize: '0.8125rem',
+                                            fontWeight: 500,
+                                            color: '#334155',
+                                            cursor: 'pointer',
+                                            width: '100%',
+                                            textAlign: 'left',
+                                          }}
+                                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                        >
+                                          <FileEarmarkCheck size={14} style={{ color: '#64748b' }} />
+                                          <span>Đối chiếu công nợ</span>
+                                        </button>
+
+                                        {/* 3. Đề nghị thanh toán */}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveRowMenuId(null);
+                                            handleSendPayablePaymentRequest(item);
+                                          }}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '10px',
+                                            padding: '9px 14px',
+                                            background: 'none',
+                                            border: 'none',
+                                            fontSize: '0.8125rem',
+                                            fontWeight: 500,
+                                            color: '#334155',
+                                            cursor: 'pointer',
+                                            width: '100%',
+                                            textAlign: 'left',
+                                          }}
+                                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                        >
+                                          <Send size={14} style={{ color: '#64748b' }} />
+                                          <span>Đề nghị thanh toán</span>
+                                        </button>
+
+                                        {/* Đường phân cách rõ nét phía trên chức năng Chỉnh sửa thông tin */}
+                                        <div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: '4px 0' }} />
+
+                                        {/* 4. Chỉnh sửa thông tin */}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveRowMenuId(null);
+                                            setEditingItem(item);
+                                            setIsOffcanvasOpen(true);
+                                          }}
+                                          style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#334155', cursor: 'pointer', width: '100%', textAlign: 'left' }}
+                                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                        >
+                                          <Pencil size={13} style={{ color: '#64748b' }} />
+                                          <span>Chỉnh sửa thông tin</span>
+                                        </button>
+
+                                        {/* 5. Xoá khoản nợ */}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveRowMenuId(null);
+                                            setItemToDelete(item);
+                                            setConfirmDeleteOpen(true);
+                                          }}
+                                          style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#334155', cursor: 'pointer', width: '100%', textAlign: 'left' }}
+                                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                        >
+                                          <Trash3 size={13} style={{ color: '#64748b' }} />
+                                          <span>Xoá khoản nợ</span>
+                                        </button>
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </td>
+                          </tr>
+
+                          {/* Danh sách các phiếu phát sinh công nợ con khi mở rộng (Đồng bộ Bước 1) */}
+                          {isExpanded &&
+                            (item.entries || [])
+                              .filter((entry) => {
+                                if (statusFilter === 'all') return true;
+                                if (statusFilter === 'completed') {
+                                  const isStageDone = (entry.remainingAmount !== undefined ? entry.remainingAmount : (entry.totalAmount - (entry.paidAmount || 0))) <= 0;
+                                  return isStageDone || entry.status === 'completed';
+                                }
+                                if (statusFilter === 'pending') {
+                                  return entry.status === 'pending';
+                                }
+                                if (statusFilter === 'due_soon') {
+                                  return entry.status === 'due_soon';
+                                }
+                                if (statusFilter === 'overdue') {
+                                  return entry.status === 'overdue';
+                                }
+                                return entry.status === statusFilter;
+                              })
+                              .map((entry) => {
+                                const isTransporter =
+                                  item.partnerType === 'transporter' ||
+                                  item.code?.startsWith('CNVC') ||
+                                  item.poCode?.startsWith('VC');
+                                const isReconciliation =
+                                  (entry as any).isReconciliation ||
+                                  (entry as any).type === 'reconciliation' ||
+                                  (entry as any).voucherType === 'reconciliation' ||
+                                  String(entry.code || '').startsWith('DS-');
+                                const isPayment = !isReconciliation && !entry.code?.startsWith('DH-') && !entry.code?.startsWith('PO-') && !entry.code?.startsWith('VD-') && (
+                                  entry.code?.startsWith('PC-') ||
+                                  entry.code?.startsWith('UNC-') ||
+                                  entry.statusLabel === 'Đã chi tiền' ||
+                                  (entry as any).type === 'payment' ||
+                                  (entry as any).voucherType === 'payment' ||
+                                  String(entry.title || '').toLowerCase().includes('ứng trước') ||
+                                  String(entry.title || '').toLowerCase().includes('chi tiền')
+                                );
+                                const isOpeningBalance =
+                                  String(entry.code || '').toLowerCase().includes('dư nợ đầu kỳ') ||
+                                  String(entry.title || '').toLowerCase().includes('nợ cũ chuyển sang');
+                                const isPurchaseOrder = !isPayment && !isReconciliation && !isOpeningBalance && (
+                                  isTransporter ||
+                                  String(entry.code || '').startsWith('DH-') ||
+                                  String(entry.code || '').startsWith('PO-') ||
+                                  String(entry.code || '').startsWith('VD-') ||
+                                  String(entry.code || '').startsWith('DBH-') ||
+                                  String(entry.title || '').toLowerCase().includes('đơn mua hàng') ||
+                                  String(entry.title || '').toLowerCase().includes('vận chuyển')
+                                );
+                                const rawPaidVal = Number(entry.paidAmount ?? entry.totalAmount) || 0;
+                                const custName = (entry as any).customerName || '';
+                                const custAddr = (entry as any).customerAddress || '';
+                                const baseEntryTitle = isTransporter
+                                  ? String(entry.title || '')
+                                    .replace(/đơn mua hàng/gi, 'đơn hàng')
+                                    .split(' • Khách hàng:')[0]
+                                    .trim()
+                                  : entry.title;
+
                                 return (
                                   <tr
-                                    key={pay.id || `cust-receipt-${pIdx}`}
+                                    key={entry.id}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setSelectedSubEntry({
-                                        entry: {
-                                          ...pay,
-                                          code: payCode,
-                                          contractValue: Math.abs(payAmt),
-                                          paidAmount: payAmt,
-                                          remainingAmount: 0,
-                                          isReceipt: !isRecon,
-                                          isReconciliation: isRecon,
-                                          type: isRecon ? 'reconciliation' : 'receipt',
-                                        },
-                                        parent: item,
-                                        type: 'receivable',
-                                      });
+                                      setSelectedSubEntry({ entry, parent: item, type: 'payable' });
                                       setSubEntryDetailOpen(true);
                                     }}
-                                    title={isRecon ? 'Nhấn để xem chi tiết chứng từ đối soát' : 'Nhấn để xem chi tiết & đối soát phiếu thu'}
+                                    title={
+                                      isReconciliation
+                                        ? 'Nhấn để xem chi tiết chứng từ đối soát'
+                                        : isPayment
+                                          ? 'Nhấn để xem chi tiết phiếu chi'
+                                          : 'Nhấn để xem chi tiết khoản nợ'
+                                    }
                                     style={{
                                       backgroundColor: '#f8fafc',
-                                      borderBottom: '1px solid #e2e8f0',
+                                      borderBottom: '1px solid #f1f5f9',
                                       cursor: 'pointer',
                                       transition: 'background-color 0.15s ease',
                                     }}
                                     onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
                                     onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
                                   >
-                                    {/* Cột Khách hàng: Thụt lề 36px đúng bằng cấp độ của đơn hàng DBH */}
-                                    <td style={{ padding: '8px 14px 8px 36px' }}>
-                                      <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                    {/* Cột Nhà cung cấp: Có badge Phiếu chi / Đối soát / Mua hàng (hoặc Chuyển hàng) vào đầu dòng */}
+                                    <td style={{ padding: '6px 14px 6px 36px' }}>
+                                      <div style={{ fontWeight: 500, color: '#334155', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                        {isReconciliation && (
+                                          <span
+                                            style={{
+                                              backgroundColor: '#f5f3ff',
+                                              color: '#6d28d9',
+                                              border: '1px solid #ddd6fe',
+                                              padding: '1px 6px',
+                                              borderRadius: '4px',
+                                              fontSize: '0.6875rem',
+                                              fontWeight: 700,
+                                            }}
+                                          >
+                                            Đối soát
+                                          </span>
+                                        )}
+                                        {isPayment && (
+                                          <span
+                                            style={{
+                                              backgroundColor: '#dcfce7',
+                                              color: '#15803d',
+                                              border: '1px solid #86efac',
+                                              padding: '1px 6px',
+                                              borderRadius: '4px',
+                                              fontSize: '0.6875rem',
+                                              fontWeight: 700,
+                                            }}
+                                          >
+                                            Phiếu chi
+                                          </span>
+                                        )}
+                                        {isPurchaseOrder && (
+                                          <span
+                                            style={{
+                                              backgroundColor: '#eff6ff',
+                                              color: '#1d4ed8',
+                                              border: '1px solid #bfdbfe',
+                                              padding: '1px 6px',
+                                              borderRadius: '4px',
+                                              fontSize: '0.6875rem',
+                                              fontWeight: 700,
+                                            }}
+                                          >
+                                            {isTransporter ? 'Chuyển hàng' : 'Mua hàng'}
+                                          </span>
+                                        )}
                                         <span
                                           style={{
-                                            backgroundColor: isRecon ? '#f5f3ff' : '#dcfce7',
-                                            color: isRecon ? '#6d28d9' : '#15803d',
-                                            border: `1px solid ${isRecon ? '#ddd6fe' : '#86efac'}`,
-                                            padding: '1px 6px',
-                                            borderRadius: '4px',
-                                            fontSize: '0.6875rem',
-                                            fontWeight: 700,
+                                            color: isReconciliation ? '#6d28d9' : isPayment ? '#0369a1' : '#334155',
+                                            fontWeight: isReconciliation || isPayment ? 700 : 500,
                                           }}
                                         >
-                                          {isRecon ? 'Đối soát' : 'Phiếu thu'}
+                                          {entry.code}
                                         </span>
-                                        <span style={{ color: isRecon ? '#6d28d9' : '#0369a1', fontWeight: 700 }}>{payCode}</span>
                                         <span style={{ color: '#cbd5e1' }}>|</span>
                                         <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 400 }}>
-                                          {pay.time || '08:30'} • {pay.date}
+                                          {entry.time || '09:00'} • {entry.date}
                                         </span>
-                                        <span style={{ color: '#64748b', fontSize: '0.75rem', fontStyle: 'italic', fontWeight: 400 }}>
-                                          ({pay.method || (isRecon ? 'Đối soát công nợ' : 'Chuyển khoản')})
-                                        </span>
+                                        {(isPayment || isReconciliation) && (entry as any).paymentMethod && (
+                                          <span style={{ color: '#64748b', fontSize: '0.75rem', fontStyle: 'italic', fontWeight: 400 }}>
+                                            ({(entry as any).paymentMethod})
+                                          </span>
+                                        )}
                                       </div>
-                                      <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '2px', fontWeight: 500 }}>
-                                        {pay.title || pay.note || (isRecon ? `Chứng từ đối soát công nợ ${payCode}` : `Thu tiền khách hàng theo phiếu ${payCode}`)}
+                                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', fontWeight: 400, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                        <span>{baseEntryTitle}</span>
+                                        {isTransporter && !isPayment && !isReconciliation && !isOpeningBalance && (custName || custAddr) && (
+                                          <>
+                                            <span style={{ color: '#cbd5e1' }}>•</span>
+                                            <span style={{ color: '#334155', fontWeight: 600 }}>
+                                              Khách hàng: {custName || 'Khách lẻ'}
+                                            </span>
+                                            {custAddr && (
+                                              <span style={{ color: '#64748b' }}>
+                                                — Địa chỉ: {custAddr}
+                                              </span>
+                                            )}
+                                          </>
+                                        )}
                                       </div>
                                     </td>
 
-                                    {/* Cột Số tiền gốc: để trống hoặc — */}
-                                    <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'right', color: '#94a3b8' }}>
-                                      —
+                                    {/* Cột Tổng tiền đơn: font thường không đậm */}
+                                    <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 400, color: '#334155', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                      {isPayment || isReconciliation ? '—' : formatNumberGroup(entry.totalAmount)}
                                     </td>
 
-                                    {/* Cột Đã thanh toán: Hiển thị số tiền đã thu / chênh lệch đối soát */}
+                                    {/* Cột Đã thanh toán: font thường không đậm */}
                                     <td
                                       className="hidden sm:table-cell"
                                       style={{
-                                        padding: '8px 14px',
+                                        padding: '6px 14px',
                                         textAlign: 'right',
-                                        fontWeight: 700,
-                                        color: payAmt < 0 ? '#dc2626' : '#059669',
+                                        fontWeight: isPayment || isReconciliation ? 700 : 400,
+                                        color: isReconciliation && rawPaidVal < 0 ? '#dc2626' : '#059669',
                                         fontSize: '0.8125rem',
                                         whiteSpace: 'nowrap',
                                       }}
                                     >
-                                      {payAmt >= 0 ? '+' : '-'}{formatNumberGroup(Math.abs(payAmt))}
+                                      {isReconciliation
+                                        ? `${rawPaidVal >= 0 ? '+' : '-'}${formatNumberGroup(Math.abs(rawPaidVal))}`
+                                        : isPayment
+                                          ? `+${formatNumberGroup(entry.paidAmount || entry.totalAmount)}`
+                                          : formatNumberGroup(entry.paidAmount)}
                                     </td>
 
-                                    {/* Cột Hạn thanh toán / Trạng thái */}
+                                    {/* Cột Hạn thanh toán: font thường không đậm */}
                                     <td
                                       className="hidden sm:table-cell"
                                       style={{
-                                        padding: '8px 14px',
+                                        padding: '6px 14px',
                                         textAlign: 'center',
-                                        color: isRecon ? '#6d28d9' : '#059669',
-                                        fontWeight: 600,
+                                        fontWeight: isPayment || isReconciliation ? 600 : 400,
+                                        color: isReconciliation ? '#6d28d9' : isPayment ? '#059669' : '#475569',
                                         fontSize: '0.8125rem',
                                         whiteSpace: 'nowrap',
                                       }}
                                     >
-                                      {isRecon ? 'Đối soát' : 'Đã thu'}
+                                      {isReconciliation ? 'Đối soát' : isPayment ? 'Đã chi' : (entry.dueDate || '—')}
                                     </td>
 
-                                    {/* Cột Còn lại */}
-                                    <td style={{ padding: '8px 14px', textAlign: 'right', color: '#94a3b8', whiteSpace: 'nowrap' }}>
-                                      <span className="hidden sm:inline">—</span>
-                                      <span className={`sm:hidden font-bold ${payAmt < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                                        {payAmt >= 0 ? '+' : '-'}{formatNumberGroup(Math.abs(payAmt))}
-                                      </span>
+                                    {/* Cột Còn lại: font thường không đậm */}
+                                    <td style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 400, color: isPayment || isReconciliation ? '#94a3b8' : (entry.remainingAmount > 0 ? '#dc2626' : '#059669'), fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                      {isPayment || isReconciliation ? '—' : formatNumberGroup(entry.remainingAmount)}
                                     </td>
 
-                                    {/* Cột Thao tác: Nút in phiếu thu A4 */}
-                                    <td style={{ padding: '8px 8px', textAlign: 'center' }}>
-                                      <button
-                                        type="button"
-                                        title="Xem và in phiếu thu A4"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setReceiptToPrint({
-                                            code: pay.code || pay.receiptCode || 'PT-20261004',
-                                            date: pay.date || item.createdAt || '09/11/2026',
-                                            customerName: item.customerName,
-                                            customerAddress: pay.payerAddress || item.customerAddress || '',
-                                            amount: pay.amount,
-                                            reason: pay.title || pay.note || `Thu tiền khách hàng theo phiếu ${pay.code || pay.receiptCode}`,
-                                            contractCode: item.code,
-                                            stageTitle: pay.parentEntryTitle || item.customerName,
-                                            paymentMethod: pay.method || 'Chuyển khoản',
-                                            debitAccount: pay.debitAccount || (isBankTransfer ? '1121' : '1111'),
-                                            creditAccount: pay.creditAccount || '131',
-                                            notes: [
-                                              pay.bankAccount ? `TK: ${pay.bankAccount}` : '',
-                                              pay.bankRef ? `Số GD/UNC: ${pay.bankRef}` : '',
-                                              pay.originalDocsCount ? `Kèm theo: ${pay.originalDocsCount}` : '',
-                                              pay.note || pay.title,
-                                            ].filter(Boolean).join(' | ') || (isBankTransfer ? 'Giấy báo Có ngân hàng' : '01 Chứng từ gốc'),
-                                            creator: getLoggedInUserName(activeUser) || 'Kế toán thanh toán',
-                                            accountant: pay.accountant || 'Kế toán trưởng',
-                                            cashier: isBankTransfer ? '' : 'Thủ quỹ',
-                                            director: 'Lê Công Vụ',
-                                          });
-                                          setIsPrintReceiptModalOpen(true);
-                                        }}
-                                        onMouseEnter={(e) => {
-                                          e.currentTarget.style.backgroundColor = '#dbeafe';
-                                          e.currentTarget.style.borderColor = '#93c5fd';
-                                        }}
-                                        onMouseLeave={(e) => {
-                                          e.currentTarget.style.backgroundColor = '#eff6ff';
-                                          e.currentTarget.style.borderColor = '#bfdbfe';
-                                        }}
-                                        style={{
-                                          width: '24px',
-                                          height: '24px',
-                                          borderRadius: '4px',
-                                          border: '1px solid #bfdbfe',
-                                          backgroundColor: '#eff6ff',
-                                          color: '#2563eb',
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          cursor: 'pointer',
-                                          padding: 0,
-                                          transition: 'all 0.15s ease',
-                                        }}
-                                      >
-                                        <Printer size={12} />
-                                      </button>
+                                    {/* Cột Thao tác: Nút in phiếu chi A4 (giống như nút in phiếu thu Bước 1) */}
+                                    <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                                      {isPayment ? (
+                                        <button
+                                          type="button"
+                                          title="Xem và in phiếu chi A4"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            const isTransporter = item.partnerType === 'transporter' || item.code?.startsWith('CNVC');
+                                            const generatedExpense: ExpenseItem = {
+                                              id: entry.id || `PC-${Date.now()}`,
+                                              code: entry.code,
+                                              title: entry.title,
+                                              category: isTransporter ? 'sales' : 'production',
+                                              categoryLabel: isTransporter ? 'Chi phí vận chuyển, logistics (TK 641)' : 'Chi thanh toán NCC linh kiện sen vòi (TK 331)',
+                                              amount: entry.paidAmount || entry.totalAmount,
+                                              department: isTransporter ? 'Phòng Kho vận & Logistics' : 'Phòng Mua hàng & Cung ứng',
+                                              spendDate: entry.date,
+                                              spender: (entry as any).receiverName || item.supplierName,
+                                              status: 'approved',
+                                              statusLabel: 'Đã hoàn tất thanh toán',
+                                              notes: `Chứng từ chi tiền đối tác ${item.supplierName}`,
+                                              debitAccount: (entry as any).debitAccount || (isTransporter ? '3312' : '331'),
+                                              debitAccountName: isTransporter ? 'Phải trả ĐV vận chuyển' : 'Phải trả cho người bán',
+                                              creditAccount: (entry as any).creditAccount || ((entry as any).paymentMethod === 'Tiền mặt' ? '1111' : '1121'),
+                                              creditAccountName: (entry as any).paymentMethod === 'Tiền mặt' ? 'Tiền mặt tại quỹ (VND)' : 'Tiền gửi ngân hàng (VND)',
+                                            };
+                                            setVoucherToPrint(generatedExpense);
+                                            setIsPrintVoucherModalOpen(true);
+                                          }}
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            width: '28px',
+                                            height: '28px',
+                                            borderRadius: '6px',
+                                            backgroundColor: '#eff6ff',
+                                            border: '1px solid #bfdbfe',
+                                            color: '#1d4ed8',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.15s ease',
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            e.currentTarget.style.backgroundColor = '#dbeafe';
+                                            e.currentTarget.style.borderColor = '#93c5fd';
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            e.currentTarget.style.backgroundColor = '#eff6ff';
+                                            e.currentTarget.style.borderColor = '#bfdbfe';
+                                          }}
+                                        >
+                                          <Printer size={13} />
+                                        </button>
+                                      ) : null}
                                     </td>
                                   </tr>
                                 );
                               })}
-                            </React.Fragment>
-                          );
-                        })()}
-                      </React.Fragment>
-                    );
-                  }
+                        </React.Fragment>
+                      );
+                    }
 
-                  // ── DÒNG BƯỚC 2: CÔNG NỢ PHẢI TRẢ (ĐỒNG BỘ CẤU TRÚC BƯỚC 1, TÊN MÀU ĐỎ ĐẬM) ──
-                  if (currentStep === 2) {
-                    const item = row as PayableItem;
-                    const isExpanded = statusFilter !== 'all' ? true : expandedSupplierId === item.id;
-                    return (
-                      <React.Fragment key={`pay-row-${item.id}`}>
+                    // ── DÒNG BƯỚC 3: NỢ VAY NGÂN HÀNG & BCTC TT200 ──
+                    if (currentStep === 3) {
+                      const item = row as LoanItem;
+                      const facilityColorMap: Record<string, { bg: string; color: string; border: string }> = {
+                        working_capital: { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
+                        term_loan: { bg: '#f5f3ff', color: '#6d28d9', border: '#ddd6fe' },
+                        guarantee: { bg: '#fffbeb', color: '#b45309', border: '#fde68a' },
+                        letter_of_credit: { bg: '#fef3c7', color: '#92400e', border: '#fcd34d' },
+                        overdraft: { bg: '#fdf2f8', color: '#be185d', border: '#fbcfe8' },
+                      };
+                      const facilityStyle = facilityColorMap[item.facilityType] || facilityColorMap.working_capital;
+
+                      return (
                         <tr
-                          onClick={() => toggleExpandSupplier(item.id)}
+                          key={`loan-row-${item.id}`}
+                          onClick={() => {
+                            setEditingItem(item);
+                            setIsOffcanvasOpen(true);
+                          }}
                           style={{
-                            borderBottom: isExpanded ? 'none' : '1px solid #f1f5f9',
+                            borderBottom: '1px solid #f1f5f9',
                             transition: 'background-color 0.15s ease',
                             cursor: 'pointer',
-                            backgroundColor: isExpanded ? '#f8fafc' : 'transparent',
                           }}
-                          onMouseEnter={(e) => {
-                            if (!isExpanded) e.currentTarget.style.backgroundColor = '#f8fafc';
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!isExpanded) e.currentTarget.style.backgroundColor = 'transparent';
-                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                         >
-                          {/* Cột 1: Nhà cung cấp / Đơn vị vận chuyển */}
+                          {/* Cột 1: Ngân hàng và Hợp đồng tín dụng */}
                           <td style={{ padding: '7px 12px' }}>
-                            {(() => {
-                              const isTransporter = item.partnerType === 'transporter' || item.code?.startsWith('CNVC') || item.poCode?.startsWith('VC');
-                              const hasEntries = Boolean(item.entries && item.entries.length > 0);
-                              return (
-                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                                  {hasEntries ? (
-                                    <button
-                                      type="button"
-                                      title={isExpanded ? 'Thu gọn' : (isTransporter ? 'Xem danh sách vận đơn' : 'Xem danh sách đơn mua hàng (PO)')}
-                                      onClick={(e) => toggleExpandSupplier(item.id, e)}
-                                      style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        padding: '2px',
-                                        cursor: 'pointer',
-                                        color: '#64748b',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        borderRadius: '4px',
-                                        marginTop: '1px',
-                                        flexShrink: 0,
-                                      }}
-                                    >
-                                      {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                                    </button>
-                                  ) : (
-                                    <div style={{ width: '18px', height: '18px', flexShrink: 0 }} />
-                                  )}
-                                  <div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                      <span
-                                        style={{
-                                          fontWeight: 800,
-                                          color: isTransporter ? '#1d4ed8' : '#b91c1c',
-                                          fontSize: '0.8125rem',
-                                          textTransform: 'uppercase',
-                                          letterSpacing: '0.02em',
-                                          lineHeight: 1.25,
-                                        }}
-                                      >
-                                        {item.supplierName}
-                                      </span>
-                                      {isTransporter ? (
-                                        <span
-                                          style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '3px',
-                                            fontSize: '0.6563rem',
-                                            fontWeight: 700,
-                                            padding: '1px 6px',
-                                            borderRadius: '4px',
-                                            backgroundColor: '#eff6ff',
-                                            color: '#1d4ed8',
-                                            border: '1px solid #bfdbfe',
-                                          }}
-                                        >
-                                          <Truck size={10} /> ĐV Vận chuyển
-                                        </span>
-                                      ) : (
-                                        <span
-                                          style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '3px',
-                                            fontSize: '0.6563rem',
-                                            fontWeight: 700,
-                                            padding: '1px 6px',
-                                            borderRadius: '4px',
-                                            backgroundColor: '#f8fafc',
-                                            color: '#475569',
-                                            border: '1px solid #e2e8f0',
-                                          }}
-                                        >
-                                          <Building size={10} /> Nhà cung cấp
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '1px' }}>
-                                      {item.supplierAddress}
-                                    </div>
-                                    <div className="sm:hidden text-[11px] text-slate-500 mt-1">
-                                      Tổng: <span className="font-semibold text-slate-700">{formatNumberGroup(item.totalAmount)}</span> • Đã trả: <span className="font-semibold text-emerald-600">{formatNumberGroup(item.paidAmount)}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })()}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 800, color: '#0369a1', fontSize: '0.8125rem' }}>
+                                {item.bankName}
+                              </span>
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  fontSize: '0.6875rem',
+                                  fontWeight: 700,
+                                  padding: '2px 7px',
+                                  borderRadius: '4px',
+                                  backgroundColor: facilityStyle.bg,
+                                  color: facilityStyle.color,
+                                  border: `1px solid ${facilityStyle.border}`,
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {item.facilityLabel || 'Vay vốn lưu động'}
+                              </span>
+                              {item.bankAccountNumber && (
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    fontSize: '0.6875rem',
+                                    color: '#475569',
+                                    backgroundColor: '#f1f5f9',
+                                    padding: '2px 7px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #e2e8f0',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                  title={`Tài khoản trích nợ: ${item.bankAccountNumber}`}
+                                >
+                                  <span>Tài khoản trích nợ: <strong style={{ color: '#0f172a' }}>{item.bankAccountNumber}</strong></span>
+                                </span>
+                              )}
+                            </div>
+                            {item.loanType && (
+                              <div
+                                title={item.loanType}
+                                style={{
+                                  fontSize: '0.75rem',
+                                  color: '#64748b',
+                                  marginTop: '1px',
+                                  lineHeight: 1.4,
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}
+                              >
+                                {item.loanType}
+                              </div>
+                            )}
+                            {/* Tóm tắt hiển thị trên màn hình điện thoại */}
+                            <div className="sm:hidden mt-1.5 space-y-0.5 text-[11.5px]">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-slate-600">Hạn mức: <strong className="text-slate-900">{formatNumberGroup(item.loanLimit)} đ</strong></span>
+                                <span className="font-bold text-rose-600">Dư nợ: {formatNumberGroup(item.remainingPrincipal)} đ</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-2 text-slate-500">
+                                <span>Lãi: <strong className="text-slate-700">{item.interestRate}</strong> (~{formatNumberGroup(item.monthlyInterestEst)} đ/th)</span>
+                                <span>Đáo hạn: <strong className="text-slate-700">{item.maturityDate}</strong></span>
+                              </div>
+                            </div>
                           </td>
 
-                          {/* Cột 2: Tổng tiền đơn */}
-                          <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#0f172a', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                            {formatNumberGroup(item.totalAmount)}
+                          {/* Cột 2: Kỳ hạn & Trạng thái */}
+                          <td className="hidden sm:table-cell" style={{ padding: '7px 12px', width: '160px', whiteSpace: 'nowrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px', whiteSpace: 'nowrap' }}>
+                              {renderStatusBadge(item.status, item.statusLabel)}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap' }}>
+                              Đáo hạn: <span style={{ fontWeight: 600, color: '#334155' }}>{item.maturityDate}</span>
+                            </div>
                           </td>
 
-                          {/* Cột 3: Đã thanh toán */}
-                          <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                            {formatNumberGroup(item.paidAmount)}
+                          {/* Cột 3: Hạn mức và Dư nợ gốc */}
+                          <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', width: '200px', whiteSpace: 'nowrap' }}>
+                            <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.8125rem' }}>
+                              {formatNumberGroup(item.loanLimit)} đ
+                            </div>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: item.remainingPrincipal > 0 ? '#dc2626' : '#059669', marginTop: '1px' }}>
+                              Dư nợ: {formatNumberGroup(item.remainingPrincipal)} đ
+                            </div>
+                            <div style={{ fontSize: '0.6875rem', color: '#059669', fontWeight: 600, marginTop: '1px' }}>
+                              Đã trả: {formatNumberGroup(item.paidPrincipal)} đ
+                            </div>
                           </td>
 
-                          {/* Cột 4: Hạn thanh toán (Không ghi hạn thanh toán ở mục chính) */}
-                          <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center' }}>
+                          {/* Cột 4: Lãi suất và Lãi dự kiến */}
+                          <td className="hidden sm:table-cell" style={{ padding: '7px 12px', width: '220px', whiteSpace: 'nowrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
+                              <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.8125rem' }}>
+                                {item.interestRate}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: '0.65rem',
+                                  fontWeight: 700,
+                                  padding: '1px 5px',
+                                  borderRadius: '3px',
+                                  backgroundColor: item.interestType === 'fixed' ? '#f1f5f9' : '#ecfdf5',
+                                  color: item.interestType === 'fixed' ? '#475569' : '#047857',
+                                  border: `1px solid ${item.interestType === 'fixed' ? '#e2e8f0' : '#a7f3d0'}`,
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {item.interestType === 'fixed' ? 'Cố định' : 'Thả nổi'}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#334155', fontWeight: 600, marginTop: '2px', whiteSpace: 'nowrap' }}>
+                              Lãi ước tính: <span style={{ color: '#0284c7' }}>~{formatNumberGroup(item.monthlyInterestEst)} đ/th</span>
+                            </div>
+                            <div style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '1px', whiteSpace: 'nowrap' }}>
+                              Chốt lãi ngày {item.interestPaymentDay || 25} hàng tháng
+                            </div>
                           </td>
 
-                          {/* Cột 5: Còn lại */}
-                          <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 800, color: item.remainingAmount > 0 ? '#dc2626' : '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                            {formatNumberGroup(item.remainingAmount)}
-                          </td>
-
-                          {/* Cột 6: Droplist cuối dòng */}
+                          {/* Cột 6: Thao tác */}
                           <td style={{ padding: '7px 8px', textAlign: 'center', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
-                            {(() => {
-                              const itemRemaining = Number(item.remainingAmount !== undefined ? item.remainingAmount : (item.totalAmount - (item.paidAmount || 0))) || 0;
-                              const isPayableZero = itemRemaining <= 0 || item.status === 'completed';
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <button
+                                type="button"
+                                title="Tùy chọn thao tác"
+                                onClick={(e) => handleToggleRowMenu(item.id, e)}
+                                style={{
+                                  background: activeRowMenuId === item.id ? '#f1f5f9' : 'transparent',
+                                  border: '1px solid',
+                                  borderColor: activeRowMenuId === item.id ? '#cbd5e1' : 'transparent',
+                                  borderRadius: '6px',
+                                  width: '28px',
+                                  height: '28px',
+                                  padding: 0,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: 'pointer',
+                                  color: '#475569',
+                                }}
+                              >
+                                <ThreeDotsVertical size={14} />
+                              </button>
+                            </div>
 
-                              return (
-                                <>
-                                  <button
-                                    type="button"
-                                    title="Tùy chọn thao tác"
-                                    onClick={(e) => handleToggleRowMenu(item.id, e)}
-                                    style={{
-                                      background: activeRowMenuId === item.id ? '#f1f5f9' : 'transparent',
-                                      border: '1px solid',
-                                      borderColor: activeRowMenuId === item.id ? '#cbd5e1' : 'transparent',
-                                      borderRadius: '6px',
-                                      width: '28px',
-                                      height: '28px',
-                                      padding: 0,
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      cursor: 'pointer',
-                                      color: '#475569',
-                                    }}
-                                  >
-                                    <ThreeDotsVertical size={14} />
-                                  </button>
-
-                                  {activeRowMenuId === item.id && (
-                                    <div
-                                      style={{
-                                        position: 'absolute',
-                                        right: 0,
-                                        ...(menuOpenUp ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }),
-                                        minWidth: '190px',
-                                        backgroundColor: '#ffffff',
-                                        borderRadius: '8px',
-                                        border: '1px solid #cbd5e1',
-                                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
-                                        zIndex: 999,
-                                        overflow: 'hidden',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        textAlign: 'left',
-                                      }}
-                                    >
-                                      {/* 1. Tạo yêu cầu chi tiền (Khoá khi đã hết nợ) */}
-                                      <button
-                                        type="button"
-                                        disabled={isPayableZero}
-                                        onClick={() => {
-                                          if (isPayableZero) return;
-                                          setActiveRowMenuId(null);
-                                          handleOpenPayablePaymentModal(item);
-                                        }}
-                                        style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '10px',
-                                          padding: '9px 14px',
-                                          background: 'none',
-                                          border: 'none',
-                                          fontSize: '0.8125rem',
-                                          fontWeight: 500,
-                                          color: isPayableZero ? '#94a3b8' : '#334155',
-                                          cursor: isPayableZero ? 'not-allowed' : 'pointer',
-                                          width: '100%',
-                                          textAlign: 'left',
-                                          opacity: isPayableZero ? 0.5 : 1,
-                                        }}
-                                        onMouseEnter={(e) => {
-                                          if (!isPayableZero) e.currentTarget.style.backgroundColor = '#f1f5f9';
-                                        }}
-                                        onMouseLeave={(e) => {
-                                          if (!isPayableZero) e.currentTarget.style.backgroundColor = 'transparent';
-                                        }}
-                                      >
-                                        <CashCoin size={14} style={{ color: isPayableZero ? '#cbd5e1' : '#64748b' }} />
-                                        <span>Tạo yêu cầu chi tiền</span>
-                                      </button>
-
-                                {/* 2. Chi tiền ứng trước */}
+                            {activeRowMenuId === item.id && (
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  right: 0,
+                                  ...(menuOpenUp ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }),
+                                  minWidth: '170px',
+                                  backgroundColor: '#ffffff',
+                                  borderRadius: '8px',
+                                  border: '1px solid #cbd5e1',
+                                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
+                                  zIndex: 999,
+                                  overflow: 'hidden',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  textAlign: 'left',
+                                }}
+                              >
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setActiveRowMenuId(null);
-                                    handleOpenPayableAdvanceModal(item);
+                                    handleOpenDrawdownModal(item);
                                   }}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '10px',
-                                    padding: '9px 14px',
-                                    background: 'none',
-                                    border: 'none',
-                                    fontSize: '0.8125rem',
-                                    fontWeight: 500,
-                                    color: '#334155',
-                                    cursor: 'pointer',
-                                    width: '100%',
-                                    textAlign: 'left',
-                                  }}
+                                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#334155', cursor: 'pointer', width: '100%', textAlign: 'left' }}
                                   onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
                                   onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                                 >
-                                  <Wallet2 size={14} style={{ color: '#64748b' }} />
-                                  <span>Tạo yêu cầu ứng trước</span>
+                                  <Receipt size={13} style={{ color: '#0284c7' }} />
+                                  <span>Khế ước nhận nợ</span>
                                 </button>
-
-                                {/* 2. Đối chiếu công nợ */}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setActiveRowMenuId(null);
-                                    handleOpenPayableReconciliation(item);
-                                  }}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '10px',
-                                    padding: '9px 14px',
-                                    background: 'none',
-                                    border: 'none',
-                                    fontSize: '0.8125rem',
-                                    fontWeight: 500,
-                                    color: '#334155',
-                                    cursor: 'pointer',
-                                    width: '100%',
-                                    textAlign: 'left',
-                                  }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                                >
-                                  <FileEarmarkCheck size={14} style={{ color: '#64748b' }} />
-                                  <span>Đối chiếu công nợ</span>
-                                </button>
-
-                                {/* 3. Đề nghị thanh toán */}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setActiveRowMenuId(null);
-                                    handleSendPayablePaymentRequest(item);
-                                  }}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '10px',
-                                    padding: '9px 14px',
-                                    background: 'none',
-                                    border: 'none',
-                                    fontSize: '0.8125rem',
-                                    fontWeight: 500,
-                                    color: '#334155',
-                                    cursor: 'pointer',
-                                    width: '100%',
-                                    textAlign: 'left',
-                                  }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                                >
-                                  <Send size={14} style={{ color: '#64748b' }} />
-                                  <span>Đề nghị thanh toán</span>
-                                </button>
-
-                                {/* Đường phân cách rõ nét phía trên chức năng Chỉnh sửa thông tin */}
-                                <div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: '4px 0' }} />
-
-                                {/* 4. Chỉnh sửa thông tin */}
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -5166,8 +5686,6 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                   <Pencil size={13} style={{ color: '#64748b' }} />
                                   <span>Chỉnh sửa thông tin</span>
                                 </button>
-
-                                {/* 5. Xoá khoản nợ */}
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -5175,569 +5693,51 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                     setItemToDelete(item);
                                     setConfirmDeleteOpen(true);
                                   }}
-                                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#334155', cursor: 'pointer', width: '100%', textAlign: 'left' }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#dc2626', cursor: 'pointer', width: '100%', textAlign: 'left' }}
+                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#fef2f2')}
                                   onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                                 >
-                                  <Trash3 size={13} style={{ color: '#64748b' }} />
-                                  <span>Xoá khoản nợ</span>
+                                  <Trash3 size={13} style={{ color: '#dc2626' }} />
+                                  <span>Xoá hợp đồng vay</span>
                                 </button>
                               </div>
                             )}
-                          </>
-                        );
-                      })()}
-                    </td>
+                          </td>
                         </tr>
+                      );
+                    }
 
-                        {/* Danh sách các phiếu phát sinh công nợ con khi mở rộng (Đồng bộ Bước 1) */}
-                        {isExpanded &&
-                          (item.entries || [])
-                            .filter((entry) => {
-                              if (statusFilter === 'all') return true;
-                              if (statusFilter === 'completed') {
-                                const isStageDone = (entry.remainingAmount !== undefined ? entry.remainingAmount : (entry.totalAmount - (entry.paidAmount || 0))) <= 0;
-                                return isStageDone || entry.status === 'completed';
-                              }
-                              if (statusFilter === 'pending') {
-                                return entry.status === 'pending';
-                              }
-                              if (statusFilter === 'due_soon') {
-                                return entry.status === 'due_soon';
-                              }
-                              if (statusFilter === 'overdue') {
-                                return entry.status === 'overdue';
-                              }
-                              return entry.status === statusFilter;
-                            })
-                            .map((entry) => {
-                              const isTransporter =
-                                item.partnerType === 'transporter' ||
-                                item.code?.startsWith('CNVC') ||
-                                item.poCode?.startsWith('VC');
-                              const isReconciliation =
-                                (entry as any).isReconciliation ||
-                                (entry as any).type === 'reconciliation' ||
-                                (entry as any).voucherType === 'reconciliation' ||
-                                String(entry.code || '').startsWith('DS-');
-                              const isPayment = !isReconciliation && !entry.code?.startsWith('DH-') && !entry.code?.startsWith('PO-') && !entry.code?.startsWith('VD-') && (
-                                entry.code?.startsWith('PC-') ||
-                                entry.code?.startsWith('UNC-') ||
-                                entry.statusLabel === 'Đã chi tiền' ||
-                                (entry as any).type === 'payment' ||
-                                (entry as any).voucherType === 'payment' ||
-                                String(entry.title || '').toLowerCase().includes('ứng trước') ||
-                                String(entry.title || '').toLowerCase().includes('chi tiền')
-                              );
-                              const isOpeningBalance =
-                                String(entry.code || '').toLowerCase().includes('dư nợ đầu kỳ') ||
-                                String(entry.title || '').toLowerCase().includes('nợ cũ chuyển sang');
-                              const isPurchaseOrder = !isPayment && !isReconciliation && !isOpeningBalance && (
-                                isTransporter ||
-                                String(entry.code || '').startsWith('DH-') ||
-                                String(entry.code || '').startsWith('PO-') ||
-                                String(entry.code || '').startsWith('VD-') ||
-                                String(entry.code || '').startsWith('DBH-') ||
-                                String(entry.title || '').toLowerCase().includes('đơn mua hàng') ||
-                                String(entry.title || '').toLowerCase().includes('vận chuyển')
-                              );
-                              const rawPaidVal = Number(entry.paidAmount ?? entry.totalAmount) || 0;
-                              const custName = (entry as any).customerName || '';
-                              const custAddr = (entry as any).customerAddress || '';
-                              const baseEntryTitle = isTransporter
-                                ? String(entry.title || '')
-                                    .replace(/đơn mua hàng/gi, 'đơn hàng')
-                                    .split(' • Khách hàng:')[0]
-                                    .trim()
-                                : entry.title;
+                    return null;
+                  })
+                )}
+              </>
+            )}
+          </tbody>
+        </table>
+      </div>
 
-                              return (
-                                <tr
-                                  key={entry.id}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedSubEntry({ entry, parent: item, type: 'payable' });
-                                    setSubEntryDetailOpen(true);
-                                  }}
-                                  title={
-                                    isReconciliation
-                                      ? 'Nhấn để xem chi tiết chứng từ đối soát'
-                                      : isPayment
-                                      ? 'Nhấn để xem chi tiết phiếu chi'
-                                      : 'Nhấn để xem chi tiết khoản nợ'
-                                  }
-                                  style={{
-                                    backgroundColor: '#f8fafc',
-                                    borderBottom: '1px solid #f1f5f9',
-                                    cursor: 'pointer',
-                                    transition: 'background-color 0.15s ease',
-                                  }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
-                                >
-                                  {/* Cột Nhà cung cấp: Có badge Phiếu chi / Đối soát / Mua hàng (hoặc Chuyển hàng) vào đầu dòng */}
-                                  <td style={{ padding: '6px 14px 6px 36px' }}>
-                                    <div style={{ fontWeight: 500, color: '#334155', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                      {isReconciliation && (
-                                        <span
-                                          style={{
-                                            backgroundColor: '#f5f3ff',
-                                            color: '#6d28d9',
-                                            border: '1px solid #ddd6fe',
-                                            padding: '1px 6px',
-                                            borderRadius: '4px',
-                                            fontSize: '0.6875rem',
-                                            fontWeight: 700,
-                                          }}
-                                        >
-                                          Đối soát
-                                        </span>
-                                      )}
-                                      {isPayment && (
-                                        <span
-                                          style={{
-                                            backgroundColor: '#dcfce7',
-                                            color: '#15803d',
-                                            border: '1px solid #86efac',
-                                            padding: '1px 6px',
-                                            borderRadius: '4px',
-                                            fontSize: '0.6875rem',
-                                            fontWeight: 700,
-                                          }}
-                                        >
-                                          Phiếu chi
-                                        </span>
-                                      )}
-                                      {isPurchaseOrder && (
-                                        <span
-                                          style={{
-                                            backgroundColor: '#eff6ff',
-                                            color: '#1d4ed8',
-                                            border: '1px solid #bfdbfe',
-                                            padding: '1px 6px',
-                                            borderRadius: '4px',
-                                            fontSize: '0.6875rem',
-                                            fontWeight: 700,
-                                          }}
-                                        >
-                                          {isTransporter ? 'Chuyển hàng' : 'Mua hàng'}
-                                        </span>
-                                      )}
-                                      <span
-                                        style={{
-                                          color: isReconciliation ? '#6d28d9' : isPayment ? '#0369a1' : '#334155',
-                                          fontWeight: isReconciliation || isPayment ? 700 : 500,
-                                        }}
-                                      >
-                                        {entry.code}
-                                      </span>
-                                      <span style={{ color: '#cbd5e1' }}>|</span>
-                                      <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 400 }}>
-                                        {entry.time || '09:00'} • {entry.date}
-                                      </span>
-                                      {(isPayment || isReconciliation) && (entry as any).paymentMethod && (
-                                        <span style={{ color: '#64748b', fontSize: '0.75rem', fontStyle: 'italic', fontWeight: 400 }}>
-                                          ({(entry as any).paymentMethod})
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', fontWeight: 400, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                      <span>{baseEntryTitle}</span>
-                                      {isTransporter && !isPayment && !isReconciliation && !isOpeningBalance && (custName || custAddr) && (
-                                        <>
-                                          <span style={{ color: '#cbd5e1' }}>•</span>
-                                          <span style={{ color: '#334155', fontWeight: 600 }}>
-                                            Khách hàng: {custName || 'Khách lẻ'}
-                                          </span>
-                                          {custAddr && (
-                                            <span style={{ color: '#64748b' }}>
-                                              — Địa chỉ: {custAddr}
-                                            </span>
-                                          )}
-                                        </>
-                                      )}
-                                    </div>
-                                  </td>
-
-                                  {/* Cột Tổng tiền đơn: font thường không đậm */}
-                                  <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 400, color: '#334155', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                    {isPayment || isReconciliation ? '—' : formatNumberGroup(entry.totalAmount)}
-                                  </td>
-
-                                  {/* Cột Đã thanh toán: font thường không đậm */}
-                                  <td
-                                    className="hidden sm:table-cell"
-                                    style={{
-                                      padding: '6px 14px',
-                                      textAlign: 'right',
-                                      fontWeight: isPayment || isReconciliation ? 700 : 400,
-                                      color: isReconciliation && rawPaidVal < 0 ? '#dc2626' : '#059669',
-                                      fontSize: '0.8125rem',
-                                      whiteSpace: 'nowrap',
-                                    }}
-                                  >
-                                    {isReconciliation
-                                      ? `${rawPaidVal >= 0 ? '+' : '-'}${formatNumberGroup(Math.abs(rawPaidVal))}`
-                                      : isPayment
-                                      ? `+${formatNumberGroup(entry.paidAmount || entry.totalAmount)}`
-                                      : formatNumberGroup(entry.paidAmount)}
-                                  </td>
-
-                                  {/* Cột Hạn thanh toán: font thường không đậm */}
-                                  <td
-                                    className="hidden sm:table-cell"
-                                    style={{
-                                      padding: '6px 14px',
-                                      textAlign: 'center',
-                                      fontWeight: isPayment || isReconciliation ? 600 : 400,
-                                      color: isReconciliation ? '#6d28d9' : isPayment ? '#059669' : '#475569',
-                                      fontSize: '0.8125rem',
-                                      whiteSpace: 'nowrap',
-                                    }}
-                                  >
-                                    {isReconciliation ? 'Đối soát' : isPayment ? 'Đã chi' : (entry.dueDate || '—')}
-                                  </td>
-
-                                  {/* Cột Còn lại: font thường không đậm */}
-                                  <td style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 400, color: isPayment || isReconciliation ? '#94a3b8' : (entry.remainingAmount > 0 ? '#dc2626' : '#059669'), fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                    {isPayment || isReconciliation ? '—' : formatNumberGroup(entry.remainingAmount)}
-                                  </td>
-
-                                  {/* Cột Thao tác: Nút in phiếu chi A4 (giống như nút in phiếu thu Bước 1) */}
-                                  <td style={{ padding: '6px 8px', textAlign: 'center' }}>
-                                    {isPayment ? (
-                                      <button
-                                        type="button"
-                                        title="Xem và in phiếu chi A4"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          const isTransporter = item.partnerType === 'transporter' || item.code?.startsWith('CNVC');
-                                          const generatedExpense: ExpenseItem = {
-                                            id: entry.id || `PC-${Date.now()}`,
-                                            code: entry.code,
-                                            title: entry.title,
-                                            category: isTransporter ? 'sales' : 'production',
-                                            categoryLabel: isTransporter ? 'Chi phí vận chuyển, logistics (TK 641)' : 'Chi thanh toán NCC linh kiện sen vòi (TK 331)',
-                                            amount: entry.paidAmount || entry.totalAmount,
-                                            department: isTransporter ? 'Phòng Kho vận & Logistics' : 'Phòng Mua hàng & Cung ứng',
-                                            spendDate: entry.date,
-                                            spender: (entry as any).receiverName || item.supplierName,
-                                            status: 'approved',
-                                            statusLabel: 'Đã hoàn tất thanh toán',
-                                            notes: `Chứng từ chi tiền đối tác ${item.supplierName}`,
-                                            debitAccount: (entry as any).debitAccount || (isTransporter ? '3312' : '331'),
-                                            debitAccountName: isTransporter ? 'Phải trả ĐV vận chuyển' : 'Phải trả cho người bán',
-                                            creditAccount: (entry as any).creditAccount || ((entry as any).paymentMethod === 'Tiền mặt' ? '1111' : '1121'),
-                                            creditAccountName: (entry as any).paymentMethod === 'Tiền mặt' ? 'Tiền mặt tại quỹ (VND)' : 'Tiền gửi ngân hàng (VND)',
-                                          };
-                                          setVoucherToPrint(generatedExpense);
-                                          setIsPrintVoucherModalOpen(true);
-                                        }}
-                                        style={{
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          width: '28px',
-                                          height: '28px',
-                                          borderRadius: '6px',
-                                          backgroundColor: '#eff6ff',
-                                          border: '1px solid #bfdbfe',
-                                          color: '#1d4ed8',
-                                          cursor: 'pointer',
-                                          transition: 'all 0.15s ease',
-                                        }}
-                                        onMouseEnter={(e) => {
-                                          e.currentTarget.style.backgroundColor = '#dbeafe';
-                                          e.currentTarget.style.borderColor = '#93c5fd';
-                                        }}
-                                        onMouseLeave={(e) => {
-                                          e.currentTarget.style.backgroundColor = '#eff6ff';
-                                          e.currentTarget.style.borderColor = '#bfdbfe';
-                                        }}
-                                      >
-                                        <Printer size={13} />
-                                      </button>
-                                    ) : null}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                      </React.Fragment>
-                    );
-                  }
-
-                  // ── DÒNG BƯỚC 3: NỢ VAY NGÂN HÀNG & BCTC TT200 ──
-                  if (currentStep === 3) {
-                    const item = row as LoanItem;
-                    const facilityColorMap: Record<string, { bg: string; color: string; border: string }> = {
-                      working_capital: { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
-                      term_loan: { bg: '#f5f3ff', color: '#6d28d9', border: '#ddd6fe' },
-                      guarantee: { bg: '#fffbeb', color: '#b45309', border: '#fde68a' },
-                      letter_of_credit: { bg: '#fef3c7', color: '#92400e', border: '#fcd34d' },
-                      overdraft: { bg: '#fdf2f8', color: '#be185d', border: '#fbcfe8' },
-                    };
-                    const facilityStyle = facilityColorMap[item.facilityType] || facilityColorMap.working_capital;
-
-                    return (
-                      <tr
-                        key={`loan-row-${item.id}`}
-                        onClick={() => {
-                          setEditingItem(item);
-                          setIsOffcanvasOpen(true);
-                        }}
-                        style={{
-                          borderBottom: '1px solid #f1f5f9',
-                          transition: 'background-color 0.15s ease',
-                          cursor: 'pointer',
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
-                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                      >
-                        {/* Cột 1: Ngân hàng và Hợp đồng tín dụng */}
-                        <td style={{ padding: '7px 12px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <span style={{ fontWeight: 800, color: '#0369a1', fontSize: '0.8125rem' }}>
-                              {item.bankName}
-                            </span>
-                            <span
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                fontSize: '0.6875rem',
-                                fontWeight: 700,
-                                padding: '2px 7px',
-                                borderRadius: '4px',
-                                backgroundColor: facilityStyle.bg,
-                                color: facilityStyle.color,
-                                border: `1px solid ${facilityStyle.border}`,
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              {item.facilityLabel || 'Vay vốn lưu động'}
-                            </span>
-                            {item.bankAccountNumber && (
-                              <span
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  fontSize: '0.6875rem',
-                                  color: '#475569',
-                                  backgroundColor: '#f1f5f9',
-                                  padding: '2px 7px',
-                                  borderRadius: '4px',
-                                  border: '1px solid #e2e8f0',
-                                  whiteSpace: 'nowrap',
-                                }}
-                                title={`Tài khoản trích nợ: ${item.bankAccountNumber}`}
-                              >
-                                <span>Tài khoản trích nợ: <strong style={{ color: '#0f172a' }}>{item.bankAccountNumber}</strong></span>
-                              </span>
-                            )}
-                          </div>
-                          {item.loanType && (
-                            <div
-                              title={item.loanType}
-                              style={{
-                                fontSize: '0.75rem',
-                                color: '#64748b',
-                                marginTop: '1px',
-                                lineHeight: 1.4,
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                              }}
-                            >
-                              {item.loanType}
-                            </div>
-                          )}
-                          {/* Tóm tắt hiển thị trên màn hình điện thoại */}
-                          <div className="sm:hidden mt-1.5 space-y-0.5 text-[11.5px]">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-slate-600">Hạn mức: <strong className="text-slate-900">{formatNumberGroup(item.loanLimit)} đ</strong></span>
-                              <span className="font-bold text-rose-600">Dư nợ: {formatNumberGroup(item.remainingPrincipal)} đ</span>
-                            </div>
-                            <div className="flex items-center justify-between gap-2 text-slate-500">
-                              <span>Lãi: <strong className="text-slate-700">{item.interestRate}</strong> (~{formatNumberGroup(item.monthlyInterestEst)} đ/th)</span>
-                              <span>Đáo hạn: <strong className="text-slate-700">{item.maturityDate}</strong></span>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Cột 2: Kỳ hạn & Trạng thái */}
-                        <td className="hidden sm:table-cell" style={{ padding: '7px 12px', width: '160px', whiteSpace: 'nowrap' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px', whiteSpace: 'nowrap' }}>
-                            {renderStatusBadge(item.status, item.statusLabel)}
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap' }}>
-                            Đáo hạn: <span style={{ fontWeight: 600, color: '#334155' }}>{item.maturityDate}</span>
-                          </div>
-                        </td>
-
-                        {/* Cột 3: Hạn mức và Dư nợ gốc */}
-                        <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right', width: '200px', whiteSpace: 'nowrap' }}>
-                          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.8125rem' }}>
-                            {formatNumberGroup(item.loanLimit)} đ
-                          </div>
-                          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: item.remainingPrincipal > 0 ? '#dc2626' : '#059669', marginTop: '1px' }}>
-                            Dư nợ: {formatNumberGroup(item.remainingPrincipal)} đ
-                          </div>
-                          <div style={{ fontSize: '0.6875rem', color: '#059669', fontWeight: 600, marginTop: '1px' }}>
-                            Đã trả: {formatNumberGroup(item.paidPrincipal)} đ
-                          </div>
-                        </td>
-
-                        {/* Cột 4: Lãi suất và Lãi dự kiến */}
-                        <td className="hidden sm:table-cell" style={{ padding: '7px 12px', width: '220px', whiteSpace: 'nowrap' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
-                            <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.8125rem' }}>
-                              {item.interestRate}
-                            </span>
-                            <span
-                              style={{
-                                fontSize: '0.65rem',
-                                fontWeight: 700,
-                                padding: '1px 5px',
-                                borderRadius: '3px',
-                                backgroundColor: item.interestType === 'fixed' ? '#f1f5f9' : '#ecfdf5',
-                                color: item.interestType === 'fixed' ? '#475569' : '#047857',
-                                border: `1px solid ${item.interestType === 'fixed' ? '#e2e8f0' : '#a7f3d0'}`,
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              {item.interestType === 'fixed' ? 'Cố định' : 'Thả nổi'}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: '#334155', fontWeight: 600, marginTop: '2px', whiteSpace: 'nowrap' }}>
-                            Lãi ước tính: <span style={{ color: '#0284c7' }}>~{formatNumberGroup(item.monthlyInterestEst)} đ/th</span>
-                          </div>
-                          <div style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '1px', whiteSpace: 'nowrap' }}>
-                            Chốt lãi ngày {item.interestPaymentDay || 25} hàng tháng
-                          </div>
-                        </td>
-
-                        {/* Cột 6: Thao tác */}
-                        <td style={{ padding: '7px 8px', textAlign: 'center', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <button
-                              type="button"
-                              title="Tùy chọn thao tác"
-                              onClick={(e) => handleToggleRowMenu(item.id, e)}
-                              style={{
-                                background: activeRowMenuId === item.id ? '#f1f5f9' : 'transparent',
-                                border: '1px solid',
-                                borderColor: activeRowMenuId === item.id ? '#cbd5e1' : 'transparent',
-                                borderRadius: '6px',
-                                width: '28px',
-                                height: '28px',
-                                padding: 0,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                                color: '#475569',
-                              }}
-                            >
-                              <ThreeDotsVertical size={14} />
-                            </button>
-                          </div>
-
-                          {activeRowMenuId === item.id && (
-                            <div
-                              style={{
-                                position: 'absolute',
-                                right: 0,
-                                ...(menuOpenUp ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }),
-                                minWidth: '170px',
-                                backgroundColor: '#ffffff',
-                                borderRadius: '8px',
-                                border: '1px solid #cbd5e1',
-                                boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
-                                zIndex: 999,
-                                overflow: 'hidden',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                textAlign: 'left',
-                              }}
-                            >
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveRowMenuId(null);
-                                  handleOpenDrawdownModal(item);
-                                }}
-                                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#334155', cursor: 'pointer', width: '100%', textAlign: 'left' }}
-                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                              >
-                                <Receipt size={13} style={{ color: '#0284c7' }} />
-                                <span>Khế ước nhận nợ</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveRowMenuId(null);
-                                  setEditingItem(item);
-                                  setIsOffcanvasOpen(true);
-                                }}
-                                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#334155', cursor: 'pointer', width: '100%', textAlign: 'left' }}
-                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                              >
-                                <Pencil size={13} style={{ color: '#64748b' }} />
-                                <span>Chỉnh sửa thông tin</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveRowMenuId(null);
-                                  setItemToDelete(item);
-                                  setConfirmDeleteOpen(true);
-                                }}
-                                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', background: 'none', border: 'none', fontSize: '0.8125rem', fontWeight: 500, color: '#dc2626', cursor: 'pointer', width: '100%', textAlign: 'left' }}
-                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#fef2f2')}
-                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                              >
-                                <Trash3 size={13} style={{ color: '#dc2626' }} />
-                                <span>Xoá hợp đồng vay</span>
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  }
-
-                  return null;
-                })
-              )}
-            </>
-          )}
-        </tbody>
-          </table>
-        </div>
-
-        {/* ── 3. PAGINATION PHÂN TRANG (CHUẨN LIỀN MẠCH, KHÔNG BỌC THẺ CARD THỪA) ── */}
-        <div
-          className="pagination-container"
-          style={{
-            marginTop: 'auto',
-            flexShrink: 0,
-            borderTop: '1px solid var(--border-subtle)',
-            backgroundColor: 'var(--bg-surface-1)',
+      {/* ── 3. PAGINATION PHÂN TRANG (CHUẨN LIỀN MẠCH, KHÔNG BỌC THẺ CARD THỪA) ── */}
+      <div
+        className="pagination-container"
+        style={{
+          marginTop: 'auto',
+          flexShrink: 0,
+          borderTop: '1px solid var(--border-subtle)',
+          backgroundColor: 'var(--bg-surface-1)',
+        }}
+      >
+        <Pagination
+          currentPage={currentPage}
+          totalItems={currentListLength}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(newSize) => {
+            setPageSize(newSize);
+            setCurrentPage(1);
           }}
-        >
-          <Pagination
-            currentPage={currentPage}
-            totalItems={currentListLength}
-            pageSize={pageSize}
-            onPageChange={setCurrentPage}
-            onPageSizeChange={(newSize) => {
-              setPageSize(newSize);
-              setCurrentPage(1);
-            }}
-            pageSizeOptions={[5, 10, 20, 50]}
-          />
-        </div>
+          pageSizeOptions={[5, 10, 20, 50]}
+        />
+      </div>
 
       {/* ── 4. OFFCANVAS THÊM HOẶC CHỈNH SỬA DỮ LIỆU GỌN GÀNG (CHUẨN 400PX) ── */}
       <Offcanvas
@@ -5760,20 +5760,20 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
             ? currentStep === 4
               ? 'Chỉnh sửa phiếu chi'
               : currentStep === 3
-              ? 'Chỉnh sửa hợp đồng vay'
-              : 'Chỉnh sửa thông tin'
+                ? 'Chỉnh sửa hợp đồng vay'
+                : 'Chỉnh sửa thông tin'
             : currentStep === 4
-            ? 'Lập phiếu chi'
-            : createButtonText
+              ? 'Lập phiếu chi'
+              : createButtonText
         }
         description={
           currentStep === 4
             ? 'Khai báo chi phí và ghi sổ kép tự động vào Sổ nhật ký chung'
             : currentStep === 3
-            ? 'Khai báo hạn mức tín dụng, lãi suất và tài sản thế chấp'
-            : currentStep === 1
-            ? 'Theo dõi chi tiết công nợ phải thu của khách hàng'
-            : 'Theo dõi chi tiết công nợ phải trả nhà cung cấp'
+              ? 'Khai báo hạn mức tín dụng, lãi suất và tài sản thế chấp'
+              : currentStep === 1
+                ? 'Theo dõi chi tiết công nợ phải thu của khách hàng'
+                : 'Theo dõi chi tiết công nợ phải trả nhà cung cấp'
         }
         width="400px"
         confirmText={editingItem ? 'Lưu thay đổi' : currentStep === 4 ? 'Lập phiếu chi' : 'Tạo mới'}
@@ -6408,8 +6408,8 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                         {currentStep === 1
                           ? 'Địa chỉ khách hàng:'
                           : formPartnerType === 'transporter'
-                          ? 'Địa chỉ bến bãi / HUB ĐVVC:'
-                          : 'Địa chỉ nhà cung cấp:'}
+                            ? 'Địa chỉ bến bãi / HUB ĐVVC:'
+                            : 'Địa chỉ nhà cung cấp:'}
                       </label>
                       <Input
                         type="text"
@@ -6431,8 +6431,8 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                         {currentStep === 1
                           ? 'Dự án / Hạng mục:'
                           : formPartnerType === 'transporter'
-                          ? 'Mã vận đơn / Hợp đồng vận chuyển:'
-                          : 'Mã đơn mua hàng (PO):'}
+                            ? 'Mã vận đơn / Hợp đồng vận chuyển:'
+                            : 'Mã đơn mua hàng (PO):'}
                       </label>
                       <Input
                         type="text"
@@ -6440,8 +6440,8 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                           currentStep === 1
                             ? 'Tên dự án hoặc gói thầu...'
                             : formPartnerType === 'transporter'
-                            ? 'Ví dụ: VC-2026-018...'
-                            : 'Ví dụ: PO-ANCUONG-01...'
+                              ? 'Ví dụ: VC-2026-018...'
+                              : 'Ví dụ: PO-ANCUONG-01...'
                         }
                         value={formProjectOrPo}
                         onChange={(e) => setFormProjectOrPo(e.target.value)}
@@ -7415,9 +7415,9 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                     onClick={() => {
                       const maxRem = selectedPayableEntryId
                         ? (() => {
-                            const found = selectedPayableForPayment.entries?.find((s) => s.id === selectedPayableEntryId);
-                            return found ? (found.remainingAmount !== undefined ? found.remainingAmount : found.totalAmount - (found.paidAmount || 0)) : selectedPayableForPayment.remainingAmount;
-                          })()
+                          const found = selectedPayableForPayment.entries?.find((s) => s.id === selectedPayableEntryId);
+                          return found ? (found.remainingAmount !== undefined ? found.remainingAmount : found.totalAmount - (found.paidAmount || 0)) : selectedPayableForPayment.remainingAmount;
+                        })()
                         : selectedPayableForPayment.remainingAmount;
                       setPaymentAmountInput(String(maxRem));
                     }}
@@ -7439,9 +7439,9 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                     onClick={() => {
                       const maxRem = selectedPayableEntryId
                         ? (() => {
-                            const found = selectedPayableForPayment.entries?.find((s) => s.id === selectedPayableEntryId);
-                            return found ? (found.remainingAmount !== undefined ? found.remainingAmount : found.totalAmount - (found.paidAmount || 0)) : selectedPayableForPayment.remainingAmount;
-                          })()
+                          const found = selectedPayableForPayment.entries?.find((s) => s.id === selectedPayableEntryId);
+                          return found ? (found.remainingAmount !== undefined ? found.remainingAmount : found.totalAmount - (found.paidAmount || 0)) : selectedPayableForPayment.remainingAmount;
+                        })()
                         : selectedPayableForPayment.remainingAmount;
                       setPaymentAmountInput(String(Math.round(maxRem / 2)));
                     }}
