@@ -120,6 +120,7 @@ export const StepPage: React.FC<StepPageProps> = ({
             onStepChange={onStepChange}
             toolbar={stepperToolbar}
             extraRight={stepperExtraRight}
+            paddingY={6}
             variant="card"
             style={{
               flex: '1 1 0%',
