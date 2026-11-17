@@ -226,53 +226,205 @@ export function NhapKhoModal({
   const [resolvingItems, setResolvingItems] = React.useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false); // Toggles mobile accordion
 
+  // Helper: Mở rộng các dòng bị lưu nhầm tên "Đơn hàng DH-..." thành danh sách hàng hoá thực tế từ PO / Biên bản QC và khớp InventoryItem
+  const resolveRawItemsToStockLines = React.useCallback(
+    async (
+      rawList: any[],
+      qcCodeHint?: string,
+      poIdHint?: string | null,
+      poCodeHint?: string | null
+    ): Promise<StockLine[]> => {
+      let workingList = Array.isArray(rawList) ? [...rawList] : [];
+
+      const hasOrderPlaceholder = workingList.some((it) => {
+        const n = String(it?.name || it?.tenHang || "").trim();
+        return /^Đơn\s+hàng\s+/i.test(n);
+      });
+
+      if (hasOrderPlaceholder || workingList.length === 0) {
+        let detectedPoId = poIdHint || workingList[0]?.purchaseOrderId || null;
+        let detectedPoCode = poCodeHint || workingList[0]?.purchaseOrderCode || null;
+        if (!detectedPoCode) {
+          for (const it of workingList) {
+            const m = String(it?.name || it?.tenHang || "").match(/(DH-\d{6,8}-\d+)/i);
+            if (m) {
+              detectedPoCode = m[1].toUpperCase();
+              break;
+            }
+          }
+        }
+        const effectiveQc = qcCodeHint || workingList[0]?.qcCode || initialSoBienBanQC || "";
+
+        if (!detectedPoId && !detectedPoCode && effectiveQc.startsWith("QC-")) {
+          try {
+            const qcRes = await fetch(`/api/qa/inspections?q=${encodeURIComponent(effectiveQc)}`);
+            const qcData = await qcRes.json();
+            if (Array.isArray(qcData) && qcData.length > 0) {
+              const qcItem = qcData.find((q: any) => q.code === effectiveQc) || qcData[0];
+              const meta =
+                typeof qcItem?.metadata === "string"
+                  ? JSON.parse(qcItem.metadata)
+                  : qcItem?.metadata || {};
+              detectedPoId = meta?.purchaseOrderId || null;
+              detectedPoCode = meta?.purchaseOrderCode || meta?.poNumber || null;
+              if (Array.isArray(meta?.items) && meta.items.length > 0 && !detectedPoId && !detectedPoCode) {
+                const validMetaItems = meta.items.filter(
+                  (mIt: any) => !/^Đơn\s+hàng\s+/i.test(String(mIt?.tenHang || mIt?.productName || ""))
+                );
+                if (validMetaItems.length > 0) {
+                  workingList = validMetaItems.map((mIt: any) => ({
+                    name: mIt.tenHang || mIt.productName,
+                    tenHang: mIt.tenHang || mIt.productName,
+                    qty: Number(mIt.passQuantity ?? mIt.soLuong ?? mIt.quantity ?? 1) || 1,
+                    soLuong: Number(mIt.passQuantity ?? mIt.soLuong ?? mIt.quantity ?? 1) || 1,
+                    unit: mIt.donVi || mIt.unit || "Cái",
+                    donGia: Number(mIt.donGia || 0),
+                    inventoryItemId: mIt.inventoryItemId || null,
+                    code: mIt.productCode || mIt.model || mIt.code || null,
+                    bomCode: mIt.bomCode || mIt.dinhMucCode || null,
+                    dinhMucTen: mIt.dinhMucTen || null,
+                  }));
+                }
+              }
+            }
+          } catch {}
+        }
+
+        if (detectedPoId || detectedPoCode) {
+          try {
+            let poObj: any = null;
+            if (detectedPoId) {
+              const r = await fetch(`/api/plan-finance/purchasing/${detectedPoId}`);
+              if (r.ok) poObj = await r.json();
+            }
+            if ((!poObj || !Array.isArray(poObj.items)) && detectedPoCode) {
+              const r = await fetch(`/api/plan-finance/purchasing?q=${encodeURIComponent(detectedPoCode)}&limit=10`);
+              if (r.ok) {
+                const d = await r.json();
+                const list = Array.isArray(d?.items) ? d.items : Array.isArray(d) ? d : [];
+                const matched = list.find((p: any) => p.code === detectedPoCode) || list[0];
+                if (matched?.id) {
+                  const rFull = await fetch(`/api/plan-finance/purchasing/${matched.id}`);
+                  if (rFull.ok) poObj = await rFull.json();
+                }
+              }
+            }
+            if (poObj && Array.isArray(poObj.items) && poObj.items.length > 0) {
+              if (poObj.shippingFee !== undefined && poObj.shippingFee !== null && Number(poObj.shippingFee) > 0) {
+                setChiPhiVanChuyen(Number(poObj.shippingFee));
+              }
+              workingList = poObj.items.map((poIt: any) => ({
+                name: poIt.tenHang || poIt.inventoryItem?.tenHang,
+                tenHang: poIt.tenHang || poIt.inventoryItem?.tenHang,
+                qty: Number(poIt.soLuong) || 1,
+                soLuong: Number(poIt.soLuong) || 1,
+                unit: poIt.donVi || poIt.inventoryItem?.donVi || "Cái",
+                donGia: Number(poIt.donGia || poIt.inventoryItem?.giaNhap || 0),
+                inventoryItemId: poIt.inventoryItemId || poIt.inventoryItem?.id || null,
+                code: poIt.inventoryItem?.code || null,
+                bomCode: poIt.dinhMuc?.code || null,
+              }));
+            }
+          } catch {}
+        }
+      }
+
+      return Promise.all(
+        workingList.map(async (it) => {
+          const rawName =
+            typeof it.name === "string"
+              ? it.name
+              : typeof it.tenHang === "string"
+              ? it.tenHang
+              : "";
+          const cleanName = rawName
+            .replace(/\s*\(x\d+\)$/, "")
+            .replace(/\s*\(Hàng\s+không\s+đạt\s+QC\)$/i, "")
+            .replace(/\s*\(Hàng\s+lỗi\)$/i, "")
+            .replace(/\s*\(Hàng\s+hỏng\)$/i, "")
+            .trim();
+
+          const rawCode = String(it.code || "").trim();
+          const isValidSku =
+            Boolean(rawCode) &&
+            rawCode !== "TP-QC" &&
+            rawCode !== "LOI-QC" &&
+            rawCode !== "Nhập kho" &&
+            rawCode !== "KVP" &&
+            rawCode !== "KTP";
+
+          let found: ItemSuggestion | null = null;
+          try {
+            if (it.inventoryItemId) {
+              const r = await fetch(`/api/plan-finance/inventory/search?id=${encodeURIComponent(it.inventoryItemId)}`);
+              const d = await r.json();
+              if (Array.isArray(d) && d.length > 0) found = d[0];
+            }
+            if (!found && isValidSku) {
+              const r = await fetch(`/api/plan-finance/inventory/search?code=${encodeURIComponent(rawCode)}`);
+              const d = await r.json();
+              if (Array.isArray(d) && d.length > 0) found = d[0];
+            }
+            if (!found && cleanName && !/^Đơn\s+hàng\s+/i.test(cleanName)) {
+              const r = await fetch(`/api/plan-finance/inventory/search?q=${encodeURIComponent(cleanName)}&limit=1`);
+              const d = await r.json();
+              if (Array.isArray(d) && d.length > 0) found = d[0];
+            }
+          } catch {}
+
+          const qtyVal = Number(it.qty ?? it.soLuong ?? 1) || 1;
+          const unitPrice = Number(it.donGia ?? it.giaNhap ?? found?.giaNhap ?? 0) || 0;
+          const unitLabel = it.unit || it.donVi || found?.donVi || "Cái";
+          const fallbackItem: ItemSuggestion | null =
+            found ||
+            (cleanName && !/^Đơn\s+hàng\s+/i.test(cleanName)
+              ? {
+                  id: it.inventoryItemId || "",
+                  code: isValidSku ? rawCode : null,
+                  tenHang: cleanName,
+                  donVi: unitLabel,
+                  giaNhap: unitPrice,
+                }
+              : null);
+
+          return {
+            id: uid(),
+            item: fallbackItem,
+            itemSearch: found ? found.tenHang : cleanName,
+            suggestions: [],
+            showSugg: false,
+            soLuong: qtyVal,
+            soLuongThucTe: qtyVal,
+            donGia: unitPrice,
+            viTriHang: "",
+            viTriCot: "",
+            viTriTang: "",
+            ghiChu: "",
+            bomCode: it.bomCode || (it as any).dinhMucCode || null,
+            dinhMucTen: it.dinhMucTen || null,
+          } as StockLine;
+        })
+      );
+    },
+    [initialSoBienBanQC]
+  );
+
   // Auto-resolve initialItems to real InventoryItems
   React.useEffect(() => {
     if (initialItems && initialItems.length > 0) {
       setResolvingItems(true);
-      Promise.all(initialItems.map(async (it) => {
-        const rawName = typeof it.name === 'string' ? it.name : (typeof it.tenHang === 'string' ? it.tenHang : "");
-        const cleanName = rawName
-          .replace(/\s*\(x\d+\)$/, "")
-          .replace(/\s*\(Hàng\s+lỗi\)$/i, "")
-          .replace(/\s*\(Hàng\s+hỏng\)$/i, "");
-        try {
-          let url = `/api/plan-finance/inventory/search?q=${encodeURIComponent(cleanName)}&limit=1`;
-          if (it.inventoryItemId) {
-            url = `/api/plan-finance/inventory/search?id=${it.inventoryItemId}`;
-          } else if (it.code) {
-            url = `/api/plan-finance/inventory/search?code=${it.code}`;
-          }
-
-          const res = await fetch(url);
-          const data = await res.json();
-          const found = Array.isArray(data) && data.length > 0 ? data[0] : null;
-          return {
-            id: uid(),
-            item: found ? found : null,
-            itemSearch: found ? found.tenHang : cleanName,
-            suggestions: [],
-            showSugg: false,
-            soLuong: it.qty || it.soLuong || 1,
-            soLuongThucTe: it.qty || it.soLuong || 1,
-            donGia: found ? found.giaNhap : 0,
-            viTriHang: "", viTriCot: "", viTriTang: "", ghiChu: "",
-            bomCode: it.bomCode || (it as any).dinhMucCode || null,
-            dinhMucTen: it.dinhMucTen || null,
-          } as StockLine;
-        } catch (e) {
-          return {
-            id: uid(), item: null, itemSearch: cleanName, suggestions: [], showSugg: false,
-            soLuong: it.qty, soLuongThucTe: it.qty, donGia: 0, viTriHang: "", viTriCot: "", viTriTang: "", ghiChu: "",
-            bomCode: it.bomCode || (it as any).dinhMucCode || null,
-            dinhMucTen: it.dinhMucTen || null,
-          } as StockLine;
-        }
-      })).then(resolved => {
-        setLines(resolved);
-      }).finally(() => setResolvingItems(false));
+      resolveRawItemsToStockLines(
+        initialItems,
+        initialSoBienBanQC,
+        initialPurchaseOrderId,
+        initialPurchaseOrderCode
+      )
+        .then((resolved) => {
+          setLines(resolved);
+        })
+        .finally(() => setResolvingItems(false));
     }
-  }, [initialItems]);
+  }, [initialItems, initialSoBienBanQC, initialPurchaseOrderId, initialPurchaseOrderCode, resolveRawItemsToStockLines]);
 
   // Fetch warehouses
   React.useEffect(() => {
@@ -555,35 +707,12 @@ export function NhapKhoModal({
         const parsed = JSON.parse(task.actualResult);
         if (Array.isArray(parsed) && parsed.length > 0) {
           setResolvingItems(true);
-          const resolved = await Promise.all(parsed.map(async (it: any) => {
-            const rawName = typeof it.name === 'string' ? it.name : (typeof it.tenHang === 'string' ? it.tenHang : "");
-            const cleanName = rawName.replace(/\s*\(x\d+\)$/, "");
-            try {
-              const res = await fetch(`/api/plan-finance/inventory/search?q=${encodeURIComponent(cleanName)}&limit=1`);
-              const data = await res.json();
-              const found = Array.isArray(data) && data.length > 0 ? data[0] : null;
-              return {
-                id: uid(),
-                item: found ? found : null,
-                itemSearch: found ? found.tenHang : cleanName,
-                suggestions: [],
-                showSugg: false,
-                soLuong: it.qty || it.soLuong || 1,
-                soLuongThucTe: it.qty || it.soLuong || 1,
-                donGia: found ? found.giaNhap : 0,
-                viTriHang: "", viTriCot: "", viTriTang: "", ghiChu: "",
-                bomCode: it.bomCode || it.dinhMucCode || null,
-                dinhMucTen: it.dinhMucTen || null,
-              } as StockLine;
-            } catch (e) {
-              return {
-                id: uid(), item: null, itemSearch: cleanName, suggestions: [], showSugg: false,
-                soLuong: it.qty || it.soLuong || 1, soLuongThucTe: it.qty || it.soLuong || 1, donGia: 0, viTriHang: "", viTriCot: "", viTriTang: "", ghiChu: "",
-                bomCode: it.bomCode || it.dinhMucCode || null,
-                dinhMucTen: it.dinhMucTen || null,
-              } as StockLine;
-            }
-          }));
+          const taskQcMatch = String(task.title || "").match(/\(([^)]+)\)/);
+          const taskQcCode = taskQcMatch ? taskQcMatch[1] : undefined;
+          if (taskQcCode && taskQcCode.startsWith("QC-")) {
+            setSoBienBanQC(taskQcCode);
+          }
+          const resolved = await resolveRawItemsToStockLines(parsed, taskQcCode);
           setLines(resolved);
         }
       } catch (e) {
@@ -641,7 +770,11 @@ export function NhapKhoModal({
     setLines(ls => ls.length > 1 ? ls.filter(l => l.id !== lineId) : ls);
 
   // ── Totals ─────────────────────────────────────────────────────────────────
-  const validLines = lines.filter(l => l.item && (l.soLuongThucTe ?? l.soLuong) > 0);
+  const validLines = lines.filter(
+    (l) =>
+      (l.item || (l.itemSearch && l.itemSearch.trim() && !/^Đơn\s+hàng\s+/i.test(l.itemSearch.trim()))) &&
+      (l.soLuongThucTe ?? l.soLuong) > 0
+  );
   const tongSL = validLines.reduce((s, l) => s + (l.soLuongThucTe ?? l.soLuong), 0);
   const tongTien = validLines.reduce((s, l) => s + (l.soLuongThucTe ?? l.soLuong) * l.donGia, 0);
 
@@ -666,7 +799,10 @@ export function NhapKhoModal({
             const giaVonDonVi = soLuong > 0 ? (thanhTien + phanBo) / soLuong : 0;
 
             return {
-              inventoryItemId: l.item!.id,
+              inventoryItemId: l.item?.id || undefined,
+              tenHang: l.item?.tenHang || l.itemSearch.trim(),
+              code: l.item?.code || undefined,
+              donVi: l.item?.donVi || "Cái",
               soLuong: soLuong,
               soLuongCT: l.soLuong,
               donGia: giaVonDonVi || l.donGia || undefined,
@@ -1003,7 +1139,6 @@ export function NhapKhoModal({
             {!success && (() => {
               const canSave = !saving
                 && validLines.length > 0
-                && !(mode === "po" && !selectedPO)
                 && isThuKho;
               return (
                 <Button
@@ -1013,8 +1148,7 @@ export function NhapKhoModal({
                   isLoading={saving}
                   title={
                     !isThuKho ? "Chỉ tài khoản Thủ kho mới có quyền nhập kho" :
-                      mode === "po" && !selectedPO ? "Vui lòng chọn đơn mua hàng" :
-                        validLines.length === 0 ? "Chưa có hàng hoá nào trong bảng" : undefined
+                      validLines.length === 0 ? "Chưa có hàng hoá hợp lệ nào trong bảng" : undefined
                   }
                   leftIcon={<i className="bi bi-check2-all" style={{ fontSize: 14 }} />}
                   style={{
@@ -1370,7 +1504,7 @@ export function NhapKhoModal({
           </Button>
         )}
         {!success && (() => {
-          const canSave = !saving && validLines.length > 0 && !(mode === "po" && !selectedPO) && isThuKho;
+          const canSave = !saving && validLines.length > 0 && isThuKho;
           return (
             <Button
               variant="success"
@@ -1413,9 +1547,9 @@ export function NhapKhoModal({
           lyDo={lyDo || undefined}
           nguoiThucHien={nguoiThucHien || undefined}
           lines={validLines.map(l => ({
-            tenHang: l.item!.tenHang,
-            maSku: l.item!.code,
-            donVi: l.item!.donVi,
+            tenHang: l.item?.tenHang || l.itemSearch,
+            maSku: l.item?.code || null,
+            donVi: l.item?.donVi || "Cái",
             soLuongCT: l.soLuong,
             soLuong: l.soLuongThucTe ?? l.soLuong,
             donGia: l.donGia,

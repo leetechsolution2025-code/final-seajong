@@ -35,7 +35,19 @@ export const SalesInventoryPage: React.FC = () => {
         </div>
       )}
 
-      <WarehouseInventoryView canEdit={isFinanceDept} onExportExcel={handleExportExcel} />
+      <WarehouseInventoryView
+        canEdit={isFinanceDept}
+        canAdd={true}
+        onExportExcel={handleExportExcel}
+        onItemSaved={(savedItem, mode) => {
+          setToastMsg(
+            mode === 'create'
+              ? `Đã thêm mới mặt hàng "${savedItem.tenHang}" (${savedItem.code || 'SKU'}) vào kho thành công!`
+              : `Đã cập nhật thông tin mặt hàng "${savedItem.tenHang}" thành công!`
+          );
+          setTimeout(() => setToastMsg(null), 3500);
+        }}
+      />
     </StandardPage>
   );
 };

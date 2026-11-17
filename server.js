@@ -11151,8 +11151,10 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
 
     const qcProdOrderMap = new Map();
     const qcPoMap = new Map();
+    const qcMetaItemsMap = new Map();
 
     const poIdsToFetch = [];
+    const poCodesToFetch = [];
     qcInspections.forEach(qc => {
       let meta = null;
       try {
@@ -11161,27 +11163,50 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
       if (meta?.productionOrder) {
         qcProdOrderMap.set(qc.code, meta.productionOrder);
       }
+      if (Array.isArray(meta?.items) && meta.items.length > 0) {
+        qcMetaItemsMap.set(qc.code, meta.items);
+      }
       if (meta?.purchaseOrderId) {
         poIdsToFetch.push(meta.purchaseOrderId);
+      }
+      const mPoCode = meta?.purchaseOrderCode || meta?.poNumber;
+      if (mPoCode) {
+        poCodesToFetch.push(mPoCode);
       }
     });
 
     filteredInboundTasks.forEach(t => {
       try {
+        const textPoMatch = `${t.title || ''} ${t.description || ''} ${t.actualResult || ''}`.match(/(DH-\d{6,8}-\d+)/i);
+        if (textPoMatch) {
+          poCodesToFetch.push(textPoMatch[1].toUpperCase());
+        }
         if (t.actualResult) {
           const parsed = JSON.parse(t.actualResult);
-          if (Array.isArray(parsed) && parsed[0]?.purchaseOrderId) {
-            poIdsToFetch.push(parsed[0].purchaseOrderId);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((pItem) => {
+              if (pItem?.purchaseOrderId) poIdsToFetch.push(pItem.purchaseOrderId);
+              if (pItem?.purchaseOrderCode) poCodesToFetch.push(pItem.purchaseOrderCode);
+            });
           }
         }
       } catch (_) { }
     });
 
-    const pos = poIdsToFetch.length > 0 ? await prisma.purchaseOrder.findMany({
-      where: { id: { in: poIdsToFetch } },
-      select: { id: true, code: true, shippingFee: true, supplier: { select: { name: true } } }
+    const pos = (poIdsToFetch.length > 0 || poCodesToFetch.length > 0) ? await prisma.purchaseOrder.findMany({
+      where: {
+        OR: [
+          ...(poIdsToFetch.length > 0 ? [{ id: { in: Array.from(new Set(poIdsToFetch)) } }] : []),
+          ...(poCodesToFetch.length > 0 ? [{ code: { in: Array.from(new Set(poCodesToFetch)) } }] : []),
+        ],
+      },
+      include: {
+        supplier: { select: { name: true } },
+        items: { include: { inventoryItem: true, dinhMuc: true } },
+      }
     }) : [];
     const poMap = new Map(pos.map(p => [p.id, p]));
+    const poByCodeMap = new Map(pos.map(p => [p.code, p]));
 
     qcInspections.forEach(qc => {
       let meta = null;
@@ -11189,13 +11214,15 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
         meta = typeof qc.metadata === 'string' ? JSON.parse(qc.metadata) : qc.metadata;
       } catch (_) { }
       const poId = meta?.purchaseOrderId || null;
-      const po = poId ? poMap.get(poId) : null;
-      if (poId || meta?.purchaseOrderCode || meta?.poNumber || meta?.supplierName) {
+      const poCodeFromMeta = meta?.purchaseOrderCode || meta?.poNumber || null;
+      const po = (poId && poMap.get(poId)) || (poCodeFromMeta && poByCodeMap.get(poCodeFromMeta)) || null;
+      if (po || poId || poCodeFromMeta || meta?.supplierName) {
         qcPoMap.set(qc.code, {
-          purchaseOrderId: poId,
-          purchaseOrderCode: po?.code || meta?.purchaseOrderCode || meta?.poNumber || null,
+          purchaseOrderId: po?.id || poId,
+          purchaseOrderCode: po?.code || poCodeFromMeta || null,
           shippingFee: Number(po?.shippingFee || 0),
-          supplierName: po?.supplier?.name || meta?.supplierName || null
+          supplierName: po?.supplier?.name || meta?.supplierName || null,
+          poItems: po?.items || null,
         });
       }
     });
@@ -11341,7 +11368,100 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
         const code = qcCodeMatch ? qcCodeMatch[1] : 'Nhập kho';
         const prodOrder = qcProdOrderMap.get(code) || null;
 
+        const poInfo = qcPoMap.get(code) || null;
+        const itemPoId = parsedItems[0]?.purchaseOrderId || null;
+        const inlinePoCodeMatch = `${t.title || ''} ${t.description || ''} ${parsedItems[0]?.tenHang || ''} ${parsedItems[0]?.name || ''}`.match(/(DH-\d{6,8}-\d+)/i);
+        const inlinePoCode = inlinePoCodeMatch ? inlinePoCodeMatch[1].toUpperCase() : null;
+        const itemPo =
+          (itemPoId && poMap.get(itemPoId)) ||
+          (parsedItems[0]?.purchaseOrderCode && poByCodeMap.get(parsedItems[0].purchaseOrderCode)) ||
+          (inlinePoCode && poByCodeMap.get(inlinePoCode)) ||
+          null;
+
+        const purchaseOrderId = itemPo?.id || itemPoId || poInfo?.purchaseOrderId || null;
+        const purchaseOrderCode = itemPo?.code || parsedItems[0]?.purchaseOrderCode || poInfo?.purchaseOrderCode || inlinePoCode || null;
+        const shippingFee = parsedItems[0]?.shippingFee !== undefined ? parsedItems[0].shippingFee : (poInfo?.shippingFee ?? Number(itemPo?.shippingFee || 0));
+
+        // Tự động mở rộng danh sách mặt hàng thực tế từ Đơn mua hàng (PO) hoặc Biên bản QC nếu actualResult đang bị lưu tên "Đơn hàng DH-..." hoặc thiếu chi tiết
+        const hasFakeOrderRow =
+          parsedItems.length === 0 ||
+          parsedItems.some((it) => {
+            const n = String(it?.tenHang || it?.name || '').trim();
+            return /^Đơn\s+hàng\s+/i.test(n) || it?.code === 'TP-QC' || it?.code === 'LOI-QC';
+          });
+
+        if (hasFakeOrderRow) {
+          const poRealItems = itemPo?.items || poInfo?.poItems || null;
+          const qcMetaItems = qcMetaItemsMap.get(code) || null;
+          if (Array.isArray(poRealItems) && poRealItems.length > 0) {
+            parsedItems = poRealItems.map((poIt) => ({
+              tenHang: poIt.tenHang || poIt.inventoryItem?.tenHang || 'Vật tư',
+              name: poIt.tenHang || poIt.inventoryItem?.tenHang || 'Vật tư',
+              inventoryItemId: poIt.inventoryItemId || poIt.inventoryItem?.id || null,
+              code: poIt.inventoryItem?.code || '',
+              soLuong: Number(poIt.soLuong) || 1,
+              qty: Number(poIt.soLuong) || 1,
+              donVi: poIt.donVi || poIt.inventoryItem?.donVi || 'Cái',
+              donGia: Number(poIt.donGia || poIt.inventoryItem?.giaNhap || 0),
+              bomCode: poIt.dinhMuc?.code || null,
+              purchaseOrderId,
+              purchaseOrderCode,
+              shippingFee,
+              type: 'Kho Vật Tư Phụ Kiện (KVP)',
+              warehouseCode: 'KVP',
+              loaiNhapKho: 'Nhập mua hàng',
+              qcCode: code,
+              isShortage: false,
+            }));
+            prisma.task.update({ where: { id: t.id }, data: { actualResult: JSON.stringify(parsedItems) } }).catch(() => {});
+          } else if (Array.isArray(qcMetaItems) && qcMetaItems.length > 0) {
+            const isDefectTask = t.title.toLowerCase().includes('lỗi') || t.title.toLowerCase().includes('không đạt');
+            const expandedFromQc = qcMetaItems
+              .map((qIt) => {
+                const rawQty = isDefectTask
+                  ? Number(qIt.failQuantity ?? qIt.failedQuantity ?? qIt.soLuong ?? qIt.quantity ?? 0)
+                  : Number(qIt.passQuantity ?? qIt.passedQuantity ?? qIt.soLuong ?? qIt.quantity ?? 0);
+                const finalQty = rawQty > 0 ? rawQty : (Number(qIt.soLuong ?? qIt.quantity ?? 1) || 1);
+                const cleanCode =
+                  qIt.productCode && qIt.productCode !== 'TP-QC' && qIt.productCode !== 'LOI-QC'
+                    ? qIt.productCode
+                    : qIt.model && qIt.model !== 'TP-QC' && qIt.model !== 'LOI-QC'
+                      ? qIt.model
+                      : '';
+                return {
+                  tenHang: qIt.tenHang || qIt.productName || 'Sản phẩm',
+                  name: qIt.tenHang || qIt.productName || 'Sản phẩm',
+                  inventoryItemId: qIt.inventoryItemId || null,
+                  code: cleanCode,
+                  soLuong: finalQty,
+                  qty: finalQty,
+                  donVi: qIt.donVi || qIt.unit || 'Bộ',
+                  donGia: Number(qIt.donGia || 0),
+                  bomCode: qIt.bomCode || qIt.dinhMucCode || null,
+                  dinhMucTen: qIt.dinhMucTen || null,
+                  purchaseOrderId,
+                  purchaseOrderCode,
+                  shippingFee,
+                  type: isDefectTask ? 'Kho Hàng Lỗi (KHO-LOI)' : (purchaseOrderId ? 'Kho Vật Tư Phụ Kiện (KVP)' : 'Kho Thành Phẩm (KTP)'),
+                  warehouseCode: isDefectTask ? 'KHO-LOI' : (purchaseOrderId ? 'KVP' : 'KTP'),
+                  loaiNhapKho: isDefectTask ? 'Nhập kho hàng lỗi' : (purchaseOrderId ? 'Nhập mua hàng' : 'Nhập kho thành phẩm'),
+                  qcCode: code,
+                  isShortage: false,
+                };
+              })
+              .filter((x) => x.tenHang && !/^Đơn\s+hàng\s+/i.test(x.tenHang));
+            if (expandedFromQc.length > 0) {
+              parsedItems = expandedFromQc;
+              prisma.task.update({ where: { id: t.id }, data: { actualResult: JSON.stringify(parsedItems) } }).catch(() => {});
+            }
+          }
+        }
+
         const titleLower = t.title.toLowerCase();
+        const descSupplier = t.description?.match(/Từ nhà cung cấp:\s*([^\n\r]+)/i)?.[1]?.trim() || null;
+        const supplierName = poInfo?.supplierName || itemPo?.supplier?.name || descSupplier || null;
+        const isPurchaseOrder = !!(purchaseOrderId || purchaseOrderCode || supplierName);
+
         let typeLabel = 'Nhập kho vật tư';
         if (titleLower.includes('hàng trả lại') || titleLower.includes('trả lại')) {
           typeLabel = 'Nhập kho hàng trả lại';
@@ -11349,21 +11469,11 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
           typeLabel = 'Nhập kho thu hồi';
         } else if (titleLower.includes('hàng lỗi') || titleLower.includes('kho-loi') || titleLower.includes('lỗi')) {
           typeLabel = 'Nhập kho hàng lỗi';
+        } else if (isPurchaseOrder) {
+          typeLabel = 'Nhập kho vật tư';
         } else if (titleLower.includes('thành phẩm')) {
           typeLabel = 'Nhập kho thành phẩm';
         }
-
-        const poInfo = qcPoMap.get(code) || null;
-        const itemPoId = parsedItems[0]?.purchaseOrderId || null;
-        const itemPo = itemPoId ? poMap.get(itemPoId) : null;
-
-        const purchaseOrderId = itemPoId || poInfo?.purchaseOrderId || null;
-        const purchaseOrderCode = parsedItems[0]?.purchaseOrderCode || poInfo?.purchaseOrderCode || itemPo?.code || null;
-        const shippingFee = parsedItems[0]?.shippingFee !== undefined ? parsedItems[0].shippingFee : (poInfo?.shippingFee ?? Number(itemPo?.shippingFee || 0));
-
-        const descSupplier = t.description?.match(/Từ nhà cung cấp:\s*([^\n\r]+)/i)?.[1]?.trim() || null;
-        const supplierName = poInfo?.supplierName || itemPo?.supplier?.name || descSupplier || null;
-        const isPurchaseOrder = !!(purchaseOrderId || purchaseOrderCode || supplierName);
 
         return {
           id: t.id,
@@ -11525,9 +11635,122 @@ app.get('/api/logistics/tasks/pending-import', async (_req, res) => {
         ]
       },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, title: true, actualResult: true, createdAt: true }
+      select: { id: true, title: true, description: true, actualResult: true, createdAt: true }
     });
-    res.json({ items: tasks });
+
+    const enrichedTasks = await Promise.all(
+      tasks.map(async (t) => {
+        let parsed = [];
+        try {
+          if (t.actualResult) parsed = JSON.parse(t.actualResult);
+        } catch (_) {}
+
+        const needsExpand =
+          parsed.length === 0 ||
+          parsed.some((it) => {
+            const n = String(it?.tenHang || it?.name || '').trim();
+            return /^Đơn\s+hàng\s+/i.test(n) || it?.code === 'TP-QC' || it?.code === 'LOI-QC';
+          });
+
+        if (!needsExpand) return t;
+
+        const qcMatch = (t.title || '').match(/\(([^)]+)\)/);
+        const qcCode = qcMatch ? qcMatch[1] : null;
+        let qcMeta = null;
+        if (qcCode) {
+          const qc = await prisma.qualityInspection
+            .findFirst({ where: { code: qcCode } })
+            .catch(() => null);
+          if (qc?.metadata) {
+            try {
+              qcMeta = typeof qc.metadata === 'string' ? JSON.parse(qc.metadata) : qc.metadata;
+            } catch (_) {}
+          }
+        }
+
+        const poId = parsed[0]?.purchaseOrderId || qcMeta?.purchaseOrderId || null;
+        const inlinePoMatch = `${t.title || ''} ${t.description || ''} ${parsed[0]?.tenHang || ''} ${parsed[0]?.name || ''}`.match(/(DH-\d{6,8}-\d+)/i);
+        const poCode =
+          parsed[0]?.purchaseOrderCode ||
+          qcMeta?.purchaseOrderCode ||
+          qcMeta?.poNumber ||
+          (inlinePoMatch ? inlinePoMatch[1].toUpperCase() : null);
+
+        if (poId || poCode) {
+          const po = await prisma.purchaseOrder
+            .findFirst({
+              where: poId ? { id: poId } : { code: poCode },
+              include: { items: { include: { inventoryItem: true, dinhMuc: true } } },
+            })
+            .catch(() => null);
+          if (po && Array.isArray(po.items) && po.items.length > 0) {
+            const expanded = po.items.map((poIt) => ({
+              tenHang: poIt.tenHang || poIt.inventoryItem?.tenHang || 'Vật tư',
+              name: poIt.tenHang || poIt.inventoryItem?.tenHang || 'Vật tư',
+              inventoryItemId: poIt.inventoryItemId || poIt.inventoryItem?.id || null,
+              code: poIt.inventoryItem?.code || '',
+              soLuong: Number(poIt.soLuong) || 1,
+              qty: Number(poIt.soLuong) || 1,
+              donVi: poIt.donVi || poIt.inventoryItem?.donVi || 'Cái',
+              donGia: Number(poIt.donGia || poIt.inventoryItem?.giaNhap || 0),
+              bomCode: poIt.dinhMuc?.code || null,
+              purchaseOrderId: po.id,
+              purchaseOrderCode: po.code,
+              shippingFee: Number(po.shippingFee) || 0,
+              type: 'Kho Vật Tư Phụ Kiện (KVP)',
+              warehouseCode: 'KVP',
+              loaiNhapKho: 'Nhập mua hàng',
+              qcCode: qcCode || undefined,
+              isShortage: false,
+            }));
+            const newActual = JSON.stringify(expanded);
+            await prisma.task.update({ where: { id: t.id }, data: { actualResult: newActual } }).catch(() => {});
+            return { ...t, actualResult: newActual };
+          }
+        }
+
+        if (Array.isArray(qcMeta?.items) && qcMeta.items.length > 0) {
+          const isDefectTask = (t.title || '').toLowerCase().includes('lỗi') || (t.title || '').toLowerCase().includes('không đạt');
+          const expanded = qcMeta.items
+            .map((qIt) => {
+              const rawQty = isDefectTask
+                ? Number(qIt.failQuantity ?? qIt.failedQuantity ?? qIt.soLuong ?? qIt.quantity ?? 0)
+                : Number(qIt.passQuantity ?? qIt.passedQuantity ?? qIt.soLuong ?? qIt.quantity ?? 0);
+              const finalQty = rawQty > 0 ? rawQty : (Number(qIt.soLuong ?? qIt.quantity ?? 1) || 1);
+              const cleanCode =
+                qIt.productCode && qIt.productCode !== 'TP-QC' && qIt.productCode !== 'LOI-QC'
+                  ? qIt.productCode
+                  : qIt.model && qIt.model !== 'TP-QC' && qIt.model !== 'LOI-QC'
+                    ? qIt.model
+                    : '';
+              return {
+                tenHang: qIt.tenHang || qIt.productName || 'Sản phẩm',
+                name: qIt.tenHang || qIt.productName || 'Sản phẩm',
+                inventoryItemId: qIt.inventoryItemId || null,
+                code: cleanCode,
+                soLuong: finalQty,
+                qty: finalQty,
+                donVi: qIt.donVi || qIt.unit || 'Bộ',
+                donGia: Number(qIt.donGia || 0),
+                bomCode: qIt.bomCode || qIt.dinhMucCode || null,
+                dinhMucTen: qIt.dinhMucTen || null,
+                qcCode: qcCode || undefined,
+                isShortage: false,
+              };
+            })
+            .filter((x) => x.tenHang && !/^Đơn\s+hàng\s+/i.test(x.tenHang));
+          if (expanded.length > 0) {
+            const newActual = JSON.stringify(expanded);
+            await prisma.task.update({ where: { id: t.id }, data: { actualResult: newActual } }).catch(() => {});
+            return { ...t, actualResult: newActual };
+          }
+        }
+
+        return t;
+      })
+    );
+
+    res.json({ items: enrichedTasks });
   } catch (_) {
     res.json({ items: [] });
   }
@@ -17555,10 +17778,25 @@ app.get('/api/logistics/inventory/generate-code', async (req, res) => {
   try {
     const categoryId = String(req.query.categoryId || '').trim();
     if (!categoryId) return res.json({ code: 'SP-' + Date.now().toString().slice(-6) });
-    const category = await prisma.category.findUnique({ where: { id: categoryId } });
-    if (!category) return res.json({ code: 'SP-' + Date.now().toString().slice(-6) });
-    const count = await prisma.inventoryItem.count({ where: { OR: [{ categoryId }, { erpCategoryId: categoryId }] } });
-    const nextCode = `${category.code}-${String(count + 1).padStart(3, '0')}`;
+    const [invCat, erpCat] = await Promise.all([
+      prisma.inventoryCategory.findUnique({ where: { id: categoryId } }).catch(() => null),
+      prisma.category.findUnique({ where: { id: categoryId } }).catch(() => null),
+    ]);
+    const catObj = invCat || erpCat;
+    if (!catObj) return res.json({ code: 'SP-' + Date.now().toString().slice(-6) });
+    const count = await prisma.inventoryItem.count({
+      where: { OR: [{ categoryId }, { erpCategoryId: categoryId }] },
+    });
+    const prefix =
+      catObj.code ||
+      String(catObj.name || 'SP')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .slice(0, 4)
+        .toUpperCase() ||
+      'SP';
+    const nextCode = `${prefix}-${String(count + 1).padStart(3, '0')}`;
     res.json({ code: nextCode });
   } catch (err) {
     res.json({ code: 'SP-' + Date.now().toString().slice(-6) });
@@ -17574,22 +17812,86 @@ app.post('/api/logistics/inventory', async (req, res) => {
     const dup = await prisma.inventoryItem.findFirst({ where: { code } });
     if (dup) return res.status(400).json({ error: 'Mã định danh đã tồn tại trong hệ thống.' });
 
+    let resolvedCategoryId = null;
+    let resolvedErpCategoryId = null;
+    if (body.categoryId) {
+      const catId = String(body.categoryId).trim();
+      if (catId) {
+        const [invCat, erpCat] = await Promise.all([
+          prisma.inventoryCategory.findUnique({ where: { id: catId } }).catch(() => null),
+          prisma.category.findUnique({ where: { id: catId } }).catch(() => null),
+        ]);
+        if (invCat) resolvedCategoryId = invCat.id;
+        if (erpCat) resolvedErpCategoryId = erpCat.id;
+      }
+    }
+
     const created = await prisma.inventoryItem.create({
       data: {
         tenHang,
         code,
-        categoryId: body.categoryId || null,
-        erpCategoryId: body.categoryId || null,
-        brand: body.brand || 'Seajong',
-        donVi: body.donVi || body.unit || 'bộ',
+        categoryId: resolvedCategoryId,
+        erpCategoryId: resolvedErpCategoryId,
+        maThayThe: body.maThayThe ? String(body.maThayThe).trim() : null,
+        model: body.model ? String(body.model).trim() : null,
+        chatLieu: body.chatLieu ? String(body.chatLieu).trim() : null,
+        brand: body.brand ? String(body.brand).trim() : 'Seajong',
+        donVi: String(body.donVi || body.unit || 'Cái').trim(),
+        soLuong: Number(body.soLuong) || 0,
+        soLuongMin: Number(body.soLuongMin) || 0,
         giaNhap: Number(body.giaNhap) || 0,
         giaVon: Number(body.giaVon) || Number(body.giaNhap) || 0,
         giaBan: Number(body.giaBan) || 0,
-        ghiChu: body.ghiChu || body.notes || '',
+        ghiChu: body.ghiChu ?? body.notes ?? '',
+        imageUrl: body.imageUrl ? String(body.imageUrl).trim() : null,
+        nhaCungCap: body.nhaCungCap ? String(body.nhaCungCap).trim() : null,
+        thongSoKyThuat: body.thongSoKyThuat ? String(body.thongSoKyThuat).trim() : null,
         loai: body.source === 'material' ? 'vat-tu' : 'thanh-pham',
-      }
+      },
     });
-    res.json(created);
+
+    if (body.warehouseId && body.warehouseId !== 'all') {
+      const whId = String(body.warehouseId).trim();
+      const whExists = await prisma.warehouse.findUnique({ where: { id: whId } }).catch(() => null);
+      if (whExists) {
+        await prisma.inventoryStock
+          .upsert({
+            where: {
+              inventoryItemId_warehouseId: {
+                inventoryItemId: created.id,
+                warehouseId: whId,
+              },
+            },
+            create: {
+              inventoryItemId: created.id,
+              warehouseId: whId,
+              soLuong: created.soLuong || 0,
+              soLuongMin: created.soLuongMin || 0,
+            },
+            update: {
+              soLuongMin: created.soLuongMin || 0,
+            },
+          })
+          .catch(() => null);
+      }
+    }
+
+    const refreshed = await prisma.inventoryItem.findUnique({
+      where: { id: created.id },
+      include: {
+        category: true,
+        erpCategory: true,
+        stocks: { include: { warehouse: true } },
+      },
+    });
+
+    res.json({
+      success: true,
+      ...(refreshed || created),
+      giaBanLe: (refreshed || created).giaBan || 0,
+      categoryName:
+        (refreshed || created).category?.name || (refreshed || created).erpCategory?.name || '',
+    });
   } catch (err) {
     console.error('Lỗi POST /api/logistics/inventory:', err);
     res.status(500).json({ error: err.message });
@@ -23784,9 +24086,38 @@ app.post('/api/plan-finance/stock-movements/batch', async (req, res) => {
 
     await prisma.$transaction(async (tx) => {
       for (const line of lines) {
-        const itemId = line.inventoryItemId;
+        let itemId = line.inventoryItemId;
         const qty = parseFloat(line.soLuong) || 0;
         if (qty <= 0) continue;
+
+        if (!itemId) {
+          const lineName = String(line.tenHang || line.itemSearch || '').trim();
+          const lineCode = String(line.code || '').trim();
+          let foundInv = null;
+          if (lineCode) {
+            foundInv = await tx.inventoryItem.findFirst({ where: { code: lineCode } }).catch(() => null);
+          }
+          if (!foundInv && lineName) {
+            foundInv = await tx.inventoryItem.findFirst({ where: { tenHang: lineName } }).catch(() => null);
+          }
+          if (foundInv) {
+            itemId = foundInv.id;
+          } else if (lineName) {
+            const newInv = await tx.inventoryItem.create({
+              data: {
+                tenHang: lineName,
+                code: lineCode || `SP-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 90 + 10)}`,
+                donVi: String(line.donVi || 'Cái').trim(),
+                giaNhap: parseFloat(line.donGia) || 0,
+                giaVon: parseFloat(line.donGia) || 0,
+                soLuong: 0,
+                brand: 'Seajong',
+              },
+            });
+            itemId = newInv.id;
+          }
+        }
+        if (!itemId) continue;
 
         // Lấy tồn kho hiện tại
         let currentStock = null;
@@ -23936,9 +24267,38 @@ app.post('/api/plan-finance/stock-movements/batch-xuat', async (req, res) => {
 
     await prisma.$transaction(async (tx) => {
       for (const line of lines) {
-        const itemId = line.inventoryItemId;
+        let itemId = line.inventoryItemId;
         const qty = parseFloat(line.soLuong) || 0;
         if (qty <= 0) continue;
+
+        if (!itemId) {
+          const lineName = String(line.tenHang || line.itemSearch || '').trim();
+          const lineCode = String(line.code || '').trim();
+          let foundInv = null;
+          if (lineCode) {
+            foundInv = await tx.inventoryItem.findFirst({ where: { code: lineCode } }).catch(() => null);
+          }
+          if (!foundInv && lineName) {
+            foundInv = await tx.inventoryItem.findFirst({ where: { tenHang: lineName } }).catch(() => null);
+          }
+          if (foundInv) {
+            itemId = foundInv.id;
+          } else if (lineName) {
+            const newInv = await tx.inventoryItem.create({
+              data: {
+                tenHang: lineName,
+                code: lineCode || `SP-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 90 + 10)}`,
+                donVi: String(line.donVi || 'Cái').trim(),
+                giaNhap: parseFloat(line.donGia) || 0,
+                giaVon: parseFloat(line.donGia) || 0,
+                soLuong: 0,
+                brand: 'Seajong',
+              },
+            });
+            itemId = newInv.id;
+          }
+        }
+        if (!itemId) continue;
 
         let currentStock = null;
         if (fromWarehouseId) {
@@ -24065,9 +24425,38 @@ app.post('/api/plan-finance/stock-movements/batch-luan-chuyen', async (req, res)
 
     await prisma.$transaction(async (tx) => {
       for (const line of lines) {
-        const itemId = line.inventoryItemId;
+        let itemId = line.inventoryItemId;
         const qty = parseFloat(line.soLuong) || 0;
         if (qty <= 0) continue;
+
+        if (!itemId) {
+          const lineName = String(line.tenHang || line.itemSearch || '').trim();
+          const lineCode = String(line.code || '').trim();
+          let foundInv = null;
+          if (lineCode) {
+            foundInv = await tx.inventoryItem.findFirst({ where: { code: lineCode } }).catch(() => null);
+          }
+          if (!foundInv && lineName) {
+            foundInv = await tx.inventoryItem.findFirst({ where: { tenHang: lineName } }).catch(() => null);
+          }
+          if (foundInv) {
+            itemId = foundInv.id;
+          } else if (lineName) {
+            const newInv = await tx.inventoryItem.create({
+              data: {
+                tenHang: lineName,
+                code: lineCode || `SP-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 90 + 10)}`,
+                donVi: String(line.donVi || 'Cái').trim(),
+                giaNhap: parseFloat(line.donGia) || 0,
+                giaVon: parseFloat(line.donGia) || 0,
+                soLuong: 0,
+                brand: 'Seajong',
+              },
+            });
+            itemId = newInv.id;
+          }
+        }
+        if (!itemId) continue;
 
         let fromStock = null;
         if (fromWarehouseId) {
@@ -27000,29 +27389,146 @@ app.patch('/api/qa/inspections/:id', async (req, res) => {
         fQty = isNaN(fQty) ? 0 : Math.max(0, fQty);
       }
 
-      // 1. Lệnh nhập kho Thành Phẩm (KTP) nếu có hàng đạt
-      if (pQty > 0) {
-        const actualResultPassed = [
-          {
-            tenHang: inspection.productName || oldMeta.productName || 'Thành phẩm đạt chuẩn QC',
-            code: oldMeta.productCode || oldMeta.model || 'TP-QC',
-            soLuong: pQty,
-            qty: pQty,
-            donVi: 'Bộ',
-            type: 'Kho Thành Phẩm (KTP)',
-            warehouseCode: 'KTP',
-            loaiNhapKho: 'Nhập kho thành phẩm',
-            isPassedQc: true,
-            qcCode: inspection.code,
-            defectCode: oldMeta.defectCode,
-            isShortage: false,
-          },
-        ];
+      // Lấy danh sách mặt hàng chi tiết từ newMeta.items / oldMeta.items hoặc Đơn mua hàng (PO) liên kết
+      const metaItemsList = Array.isArray(newMeta.items) && newMeta.items.length > 0
+        ? newMeta.items
+        : Array.isArray(oldMeta.items) && oldMeta.items.length > 0
+          ? oldMeta.items
+          : [];
+      const linkedPoId = newMeta.purchaseOrderId || oldMeta.purchaseOrderId || null;
+      const inlinePoMatch = String(inspection.productName || newMeta.purchaseOrderCode || newMeta.poNumber || '').match(/(DH-\d{6,8}-\d+)/i);
+      const linkedPoCode = newMeta.purchaseOrderCode || newMeta.poNumber || oldMeta.purchaseOrderCode || (inlinePoMatch ? inlinePoMatch[1].toUpperCase() : null);
 
+      let linkedPo = null;
+      if (linkedPoId || linkedPoCode) {
+        linkedPo = await tx.purchaseOrder
+          .findFirst({
+            where: linkedPoId ? { id: linkedPoId } : { code: linkedPoCode },
+            include: { items: { include: { inventoryItem: true, dinhMuc: true } } },
+          })
+          .catch(() => null);
+      }
+
+      const isPoIqc = Boolean(inspection.type === 'IQC' || linkedPo || linkedPoId || linkedPoCode);
+      const poShippingFee = Number(linkedPo?.shippingFee || newMeta.shippingFee || 0);
+
+      // 1. Lệnh nhập kho Thành Phẩm (KTP) hoặc Vật Tư (KVP) nếu có hàng đạt
+      if (pQty > 0) {
+        let actualResultPassed = [];
+
+        if (linkedPo && Array.isArray(linkedPo.items) && linkedPo.items.length > 0) {
+          actualResultPassed = linkedPo.items.map((poIt) => {
+            const matchedMetaIt = metaItemsList.find(
+              (m) =>
+                (m.id && m.id === poIt.id) ||
+                (m.inventoryItemId && m.inventoryItemId === poIt.inventoryItemId) ||
+                (m.productName && m.productName === poIt.tenHang) ||
+                (m.tenHang && m.tenHang === poIt.tenHang)
+            );
+            const itemPassQty =
+              matchedMetaIt && matchedMetaIt.passQuantity !== undefined && matchedMetaIt.passQuantity !== ''
+                ? Number(matchedMetaIt.passQuantity)
+                : Number(poIt.soLuong) || 1;
+            return {
+              tenHang: poIt.tenHang || poIt.inventoryItem?.tenHang || 'Vật tư',
+              name: poIt.tenHang || poIt.inventoryItem?.tenHang || 'Vật tư',
+              inventoryItemId: poIt.inventoryItemId || poIt.inventoryItem?.id || null,
+              code: poIt.inventoryItem?.code || matchedMetaIt?.model || matchedMetaIt?.productCode || '',
+              soLuong: itemPassQty > 0 ? itemPassQty : (Number(poIt.soLuong) || 1),
+              qty: itemPassQty > 0 ? itemPassQty : (Number(poIt.soLuong) || 1),
+              donVi: poIt.donVi || poIt.inventoryItem?.donVi || 'Cái',
+              donGia: Number(poIt.donGia || poIt.inventoryItem?.giaNhap || 0),
+              bomCode: poIt.dinhMuc?.code || null,
+              purchaseOrderId: linkedPo.id,
+              purchaseOrderCode: linkedPo.code,
+              shippingFee: poShippingFee,
+              type: 'Kho Vật Tư Phụ Kiện (KVP)',
+              warehouseCode: 'KVP',
+              loaiNhapKho: 'Nhập mua hàng',
+              isPassedQc: true,
+              qcCode: inspection.code,
+              defectCode: oldMeta.defectCode,
+              isShortage: false,
+            };
+          });
+        } else if (metaItemsList.length > 0) {
+          actualResultPassed = metaItemsList
+            .map((mIt) => {
+              const itemPassQty =
+                mIt.passQuantity !== undefined && mIt.passQuantity !== ''
+                  ? Number(mIt.passQuantity)
+                  : Number(mIt.soLuong ?? mIt.quantity ?? pQty) || 1;
+              if (itemPassQty <= 0 && metaItemsList.length > 1) return null;
+              const cleanCode =
+                mIt.productCode && mIt.productCode !== 'TP-QC' && mIt.productCode !== 'LOI-QC'
+                  ? mIt.productCode
+                  : mIt.model && mIt.model !== 'TP-QC' && mIt.model !== 'LOI-QC'
+                    ? mIt.model
+                    : mIt.code && mIt.code !== 'TP-QC' && mIt.code !== 'LOI-QC'
+                      ? mIt.code
+                      : '';
+              return {
+                tenHang: mIt.tenHang || mIt.productName || inspection.productName || 'Thành phẩm đạt chuẩn QC',
+                name: mIt.tenHang || mIt.productName || inspection.productName || 'Thành phẩm đạt chuẩn QC',
+                inventoryItemId: mIt.inventoryItemId || null,
+                code: cleanCode,
+                soLuong: itemPassQty > 0 ? itemPassQty : pQty,
+                qty: itemPassQty > 0 ? itemPassQty : pQty,
+                donVi: mIt.donVi || mIt.unit || 'Bộ',
+                donGia: Number(mIt.donGia || 0),
+                bomCode: mIt.bomCode || mIt.dinhMucCode || null,
+                dinhMucTen: mIt.dinhMucTen || null,
+                purchaseOrderId: linkedPoId || undefined,
+                purchaseOrderCode: linkedPoCode || undefined,
+                shippingFee: poShippingFee,
+                type: isPoIqc ? 'Kho Vật Tư Phụ Kiện (KVP)' : 'Kho Thành Phẩm (KTP)',
+                warehouseCode: isPoIqc ? 'KVP' : 'KTP',
+                loaiNhapKho: isPoIqc ? 'Nhập mua hàng' : 'Nhập kho thành phẩm',
+                isPassedQc: true,
+                qcCode: inspection.code,
+                defectCode: oldMeta.defectCode,
+                isShortage: false,
+              };
+            })
+            .filter(Boolean);
+        }
+
+        if (actualResultPassed.length === 0) {
+          const cleanFallbackCode =
+            oldMeta.productCode && oldMeta.productCode !== 'TP-QC'
+              ? oldMeta.productCode
+              : oldMeta.model && oldMeta.model !== 'TP-QC'
+                ? oldMeta.model
+                : '';
+          actualResultPassed = [
+            {
+              tenHang: inspection.productName || oldMeta.productName || 'Thành phẩm đạt chuẩn QC',
+              name: inspection.productName || oldMeta.productName || 'Thành phẩm đạt chuẩn QC',
+              code: cleanFallbackCode,
+              soLuong: pQty,
+              qty: pQty,
+              donVi: 'Bộ',
+              purchaseOrderId: linkedPoId || undefined,
+              purchaseOrderCode: linkedPoCode || undefined,
+              shippingFee: poShippingFee,
+              type: isPoIqc ? 'Kho Vật Tư Phụ Kiện (KVP)' : 'Kho Thành Phẩm (KTP)',
+              warehouseCode: isPoIqc ? 'KVP' : 'KTP',
+              loaiNhapKho: isPoIqc ? 'Nhập mua hàng' : 'Nhập kho thành phẩm',
+              isPassedQc: true,
+              qcCode: inspection.code,
+              defectCode: oldMeta.defectCode,
+              isShortage: false,
+            },
+          ];
+        }
+
+        const productNamesSummary = actualResultPassed.map((x) => `${x.tenHang} (${x.soLuong} ${x.donVi || 'cái'})`).join(', ');
         await tx.task.create({
           data: {
-            title: `Lệnh nhập kho thành phẩm đạt chuẩn QC (${inspection.code})`,
-            description: `Bộ phận QA/QC đã kiểm định chất lượng: ĐẠT TIÊU CHUẨN (${pQty} sản phẩm).\nBiên bản kiểm định: ${inspection.code}\nSản phẩm: ${inspection.productName || oldMeta.productName || 'Thành phẩm'}\nSố lượng đạt: ${pQty}\nKho nhập: Kho Thành Phẩm (KTP)\nNgười kiểm định: ${inspectorName || inspection.inspectorName || 'Phòng QA/QC'}`,
+            title: isPoIqc
+              ? `Lệnh nhập kho vật tư đạt chuẩn QC (${inspection.code})`
+              : `Lệnh nhập kho thành phẩm đạt chuẩn QC (${inspection.code})`,
+            description: `Bộ phận QA/QC đã kiểm định chất lượng: ĐẠT TIÊU CHUẨN (${pQty} sản phẩm).\nBiên bản kiểm định: ${inspection.code}\nSản phẩm: ${productNamesSummary || inspection.productName || 'Thành phẩm'}\nSố lượng đạt: ${pQty}\nKho nhập: ${isPoIqc ? 'Kho Vật Tư Phụ Kiện (KVP)' : 'Kho Thành Phẩm (KTP)'}\nNgười kiểm định: ${inspectorName || inspection.inspectorName || 'Phòng QA/QC'}`,
             status: 'pending',
             priority: 'high',
             creatorId: 'system',
@@ -27035,23 +27541,65 @@ app.patch('/api/qa/inspections/:id', async (req, res) => {
 
       // 2. Lệnh nhập kho Hàng Lỗi (KHO-LOI) nếu có hàng không đạt
       if (fQty > 0) {
-        const actualResultFailed = [
-          {
-            tenHang: `${inspection.productName || oldMeta.productName || 'Sản phẩm'} (Hàng không đạt QC)`,
-            code: oldMeta.productCode || oldMeta.model || 'LOI-QC',
-            soLuong: fQty,
-            qty: fQty,
-            donVi: 'Bộ',
-            type: 'Kho Hàng Lỗi (KHO-LOI)',
-            warehouseCode: 'KHO-LOI',
-            loaiNhapKho: 'Nhập kho hàng lỗi',
-            isDefect: true,
-            qcCode: inspection.code,
-            defectCode: oldMeta.defectCode,
-            defectReason: notes || 'Không đạt kiểm định chất lượng',
-            isShortage: false,
-          },
-        ];
+        let actualResultFailed = [];
+        if (metaItemsList.length > 0) {
+          actualResultFailed = metaItemsList
+            .map((mIt) => {
+              const itemFailQty =
+                mIt.failQuantity !== undefined && mIt.failQuantity !== ''
+                  ? Number(mIt.failQuantity)
+                  : metaItemsList.length === 1
+                    ? fQty
+                    : 0;
+              if (itemFailQty <= 0) return null;
+              const cleanCode =
+                mIt.productCode && mIt.productCode !== 'TP-QC' && mIt.productCode !== 'LOI-QC'
+                  ? mIt.productCode
+                  : mIt.model && mIt.model !== 'TP-QC' && mIt.model !== 'LOI-QC'
+                    ? mIt.model
+                    : '';
+              const baseName = mIt.tenHang || mIt.productName || inspection.productName || 'Sản phẩm';
+              return {
+                tenHang: `${baseName} (Hàng không đạt QC)`,
+                name: `${baseName} (Hàng không đạt QC)`,
+                inventoryItemId: mIt.inventoryItemId || null,
+                code: cleanCode,
+                soLuong: itemFailQty,
+                qty: itemFailQty,
+                donVi: mIt.donVi || mIt.unit || 'Bộ',
+                type: 'Kho Hàng Lỗi (KHO-LOI)',
+                warehouseCode: 'KHO-LOI',
+                loaiNhapKho: 'Nhập kho hàng lỗi',
+                isDefect: true,
+                qcCode: inspection.code,
+                defectCode: oldMeta.defectCode,
+                defectReason: notes || 'Không đạt kiểm định chất lượng',
+                isShortage: false,
+              };
+            })
+            .filter(Boolean);
+        }
+
+        if (actualResultFailed.length === 0) {
+          actualResultFailed = [
+            {
+              tenHang: `${inspection.productName || oldMeta.productName || 'Sản phẩm'} (Hàng không đạt QC)`,
+              name: `${inspection.productName || oldMeta.productName || 'Sản phẩm'} (Hàng không đạt QC)`,
+              code: oldMeta.productCode && oldMeta.productCode !== 'LOI-QC' ? oldMeta.productCode : (oldMeta.model || ''),
+              soLuong: fQty,
+              qty: fQty,
+              donVi: 'Bộ',
+              type: 'Kho Hàng Lỗi (KHO-LOI)',
+              warehouseCode: 'KHO-LOI',
+              loaiNhapKho: 'Nhập kho hàng lỗi',
+              isDefect: true,
+              qcCode: inspection.code,
+              defectCode: oldMeta.defectCode,
+              defectReason: notes || 'Không đạt kiểm định chất lượng',
+              isShortage: false,
+            },
+          ];
+        }
 
         await tx.task.create({
           data: {

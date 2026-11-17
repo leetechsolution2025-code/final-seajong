@@ -28,6 +28,8 @@ import {
   InventoryTable,
   InventoryPagination,
   InventoryDetailOffcanvas,
+  InventoryItemFormModal,
+  type InventoryStockItem,
 } from '../../components/common/InventoryTable';
 import { Button } from '../../components/common/Button';
 import { NewBadge } from '../../components/common/NewBadge';
@@ -165,6 +167,8 @@ export const LogisticsOverviewPage: React.FC = () => {
 
   // Modals & Dialogs bổ trợ
   const [selectedDetailItem, setSelectedDetailItem] = useState<any | null>(null);
+  const [editingInventoryItem, setEditingInventoryItem] = useState<InventoryStockItem | null>(null);
+  const [isCreatingInventoryItem, setIsCreatingInventoryItem] = useState<boolean>(false);
 
   const [showToastMsg, setShowToastMsg] = useState<{ type: 'success' | 'info' | 'error'; message: string } | null>(null);
   const [isEventCalendarOpen, setIsEventCalendarOpen] = useState<boolean>(false);
@@ -1094,6 +1098,10 @@ export const LogisticsOverviewPage: React.FC = () => {
               setSearchTerm(val);
               setCurrentPage(1);
             }}
+            onAdd={() => {
+              setEditingInventoryItem(null);
+              setIsCreatingInventoryItem(true);
+            }}
             onExportExcel={handleExportInventoryExcel}
             onImportExcel={handleImportInventoryExcel}
             onRefresh={() => loadStepData()}
@@ -1253,28 +1261,7 @@ export const LogisticsOverviewPage: React.FC = () => {
               >
                 <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
                   <tr className="text-slate-500 text-[11px] sm:text-[11.5px] uppercase tracking-[0.06em] font-bold">
-                    <th className="py-2.5 px-1.5 sm:px-3 w-7 md:w-10 text-center">
-                      <input
-                        type="checkbox"
-                        className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                        disabled={!isThuKho || visiblePageOrders.length === 0}
-                        title={!isThuKho ? 'Chỉ tài khoản Thủ kho mới có quyền chọn' : 'Chọn tất cả trên trang này'}
-                        checked={
-                          visiblePageOrders.length > 0 &&
-                          visiblePageOrders.every((o) => selectedBatchOrders.has(o.id))
-                        }
-                        onChange={(e) => {
-                          if (!isThuKho) return;
-                          const next = new Set(selectedBatchOrders);
-                          if (e.target.checked) {
-                            visiblePageOrders.forEach((o) => next.add(o.id));
-                          } else {
-                            visiblePageOrders.forEach((o) => next.delete(o.id));
-                          }
-                          setSelectedBatchOrders(next);
-                        }}
-                      />
-                    </th>
+                    <th className="py-2.5 px-1.5 sm:px-3 w-7 md:w-10 text-center"></th>
                     <th className="py-2.5 px-2 sm:px-3.5 w-auto md:w-[50%]">Mã lệnh</th>
                     <th className="hidden md:table-cell py-2.5 px-2.5 sm:px-3.5 w-[25%] whitespace-nowrap">Loại</th>
                     <th className="hidden md:table-cell py-2.5 px-3.5 w-[25%] text-center whitespace-nowrap">Trạng thái</th>
@@ -1310,17 +1297,10 @@ export const LogisticsOverviewPage: React.FC = () => {
 
                       const isToggled = collapsedGroups.has(orderCode);
                       const isCollapsed = groupIdx === 0 ? isToggled : !isToggled;
-                      const isGroupAllSelected =
-                        items.length > 0 && items.every((it: any) => selectedBatchOrders.has(it.id));
 
                       const groupHeaderInner = (
                         <div className="flex flex-col justify-center w-full min-w-0">
                           <div className="flex items-center flex-wrap gap-1.5 sm:gap-2">
-                            <i
-                              className={`bi ${
-                                isCollapsed ? 'bi-caret-right-fill' : 'bi-caret-down-fill'
-                              } text-slate-500 text-xs`}
-                            />
                             <span className="font-bold text-slate-800 text-[12px]">
                               <span className="hidden md:inline">
                                 {orderCode.startsWith('QC-')
@@ -1370,7 +1350,7 @@ export const LogisticsOverviewPage: React.FC = () => {
 
                           {/* Dòng thông tin phụ: Nhà cung cấp / Đơn mua hàng / Lệnh sản xuất / Khách hàng */}
                           {isPurchaseOrderGroup ? (
-                            <div className="ml-0 md:ml-5 mt-0.5 flex items-center flex-wrap gap-1 text-slate-500 font-semibold text-[11px]">
+                            <div className="mt-0.5 flex items-center flex-wrap gap-1 text-slate-500 font-semibold text-[11px]">
                               {(supplierName || customerName) && (
                                 <>
                                   <i className="bi bi-person" />
@@ -1397,7 +1377,7 @@ export const LogisticsOverviewPage: React.FC = () => {
                           ) : (
                             <>
                               {isGroupImport && (orderCode.includes('-DH-') || orderCode.startsWith('QC-')) && (
-                                <div className="ml-0 md:ml-5 mt-0.5 text-slate-500 font-semibold text-[11px] flex items-center gap-1">
+                                <div className="mt-0.5 text-slate-500 font-semibold text-[11px] flex items-center gap-1">
                                   <i className="bi bi-file-earmark-text" />
                                   <span>
                                     {orderCode.includes('-DH-')
@@ -1422,7 +1402,7 @@ export const LogisticsOverviewPage: React.FC = () => {
                                   !customerName.startsWith('ERR-');
                                 if (!validCustomer && !customerAddress) return null;
                                 return (
-                                  <div className="ml-0 md:ml-5 mt-0.5 flex items-center flex-wrap gap-1 text-slate-500 font-semibold text-[11px]">
+                                  <div className="mt-0.5 flex items-center flex-wrap gap-1 text-slate-500 font-semibold text-[11px]">
                                     {validCustomer && (
                                       <>
                                         <i className="bi bi-person" />
@@ -1441,7 +1421,7 @@ export const LogisticsOverviewPage: React.FC = () => {
                           )}
 
                           {ghiChu && (
-                            <div className="ml-0 md:ml-5 mt-0.5 text-rose-600 text-[11px] flex items-center gap-1 font-medium">
+                            <div className="mt-0.5 text-rose-600 text-[11px] flex items-center gap-1 font-medium">
                               <i className="bi bi-exclamation-triangle-fill" />
                               <span>{ghiChu}</span>
                             </div>
@@ -1463,26 +1443,14 @@ export const LogisticsOverviewPage: React.FC = () => {
                               });
                             }}
                           >
-                            {/* Checkbox chọn cả nhóm đơn hàng */}
+                            {/* Cột 1: Mũi tên mở/đóng thay cho checkbox */}
                             <td
                               className="py-2 px-1.5 sm:px-3 w-7 sm:w-10 text-center align-middle"
-                              onClick={(e) => e.stopPropagation()}
                             >
-                              <input
-                                type="checkbox"
-                                className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                disabled={!isThuKho}
-                                checked={isGroupAllSelected}
-                                onChange={(e) => {
-                                  if (!isThuKho) return;
-                                  const next = new Set(selectedBatchOrders);
-                                  if (e.target.checked) {
-                                    items.forEach((it: any) => next.add(it.id));
-                                  } else {
-                                    items.forEach((it: any) => next.delete(it.id));
-                                  }
-                                  setSelectedBatchOrders(next);
-                                }}
+                              <i
+                                className={`bi ${
+                                  isCollapsed ? 'bi-caret-right-fill' : 'bi-caret-down-fill'
+                                } text-slate-500 text-xs`}
                               />
                             </td>
 
@@ -2093,6 +2061,37 @@ export const LogisticsOverviewPage: React.FC = () => {
       <InventoryDetailOffcanvas
         item={selectedDetailItem?.itemCategory === 'inventory' ? selectedDetailItem : null}
         onClose={() => setSelectedDetailItem(null)}
+        onEdit={(it) => {
+          setSelectedDetailItem(null);
+          setIsCreatingInventoryItem(false);
+          setEditingInventoryItem(it);
+        }}
+        onUpdated={() => {
+          loadStepData();
+        }}
+      />
+
+      <InventoryItemFormModal
+        isOpen={isCreatingInventoryItem || Boolean(editingInventoryItem)}
+        mode={editingInventoryItem ? 'edit' : 'create'}
+        item={editingInventoryItem}
+        warehouses={warehouses}
+        categories={categories}
+        defaultWarehouseId={filterWarehouse !== 'all' ? filterWarehouse : undefined}
+        defaultCategoryId={filterType !== 'all' ? filterType : undefined}
+        onClose={() => {
+          setIsCreatingInventoryItem(false);
+          setEditingInventoryItem(null);
+        }}
+        onSaved={(savedItem, savedMode) => {
+          loadStepData();
+          showToast(
+            'success',
+            savedMode === 'create'
+              ? `Đã thêm mới mặt hàng "${savedItem.tenHang}" (${savedItem.code || 'SKU'}) vào kho thành công!`
+              : `Đã cập nhật mặt hàng "${savedItem.tenHang}" thành công!`
+          );
+        }}
       />
 
       {/* ── OFFCANVAS HIỂN THỊ DANH SÁCH HÀNG HOÁ ĐÃ XỬ LÝ (STEP 3) ── */}
