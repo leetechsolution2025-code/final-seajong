@@ -4,6 +4,7 @@ import {
   Trash2,
   CheckCircle,
   XCircle,
+  XCircleFill,
   Check2,
   Tag,
   FileEarmarkPdf,
@@ -43,6 +44,7 @@ export interface ApprovalDocument {
   id: string;
   code: string;
   title: string;
+  createdAt?: string;
   docType: 'proposal' | 'contract' | 'procurement' | 'technical' | 'acceptance' | 'advance';
   docTypeName: string;
   department: string;
@@ -88,6 +90,44 @@ export interface DocumentApprovalViewProps {
   user?: any;
   items?: ApprovalDocument[];
   onItemsChange?: (items: ApprovalDocument[]) => void;
+}
+
+// ─── Helper: Kiểm tra văn bản có được tạo trong vòng 24 giờ hay không ────────
+export function isWithin24Hours(dateVal?: string | number | Date): boolean {
+  if (!dateVal) return false;
+  let timeMs = 0;
+  if (typeof dateVal === 'number') {
+    timeMs = dateVal;
+  } else if (typeof dateVal === 'string') {
+    const trimmed = dateVal.trim();
+    if (/^\d+$/.test(trimmed)) {
+      timeMs = Number(trimmed);
+    } else if (trimmed.includes('T')) {
+      timeMs = new Date(trimmed).getTime();
+    } else if (trimmed.includes('/') || trimmed.includes('-')) {
+      const parts = trimmed.split(/[T\s]/)[0].split(/[\/\-]/);
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          // YYYY-MM-DD
+          timeMs = new Date(`${parts[0]}-${parts[1]}-${parts[2]}`).getTime();
+        } else {
+          // DD/MM/YYYY
+          timeMs = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
+        }
+      } else {
+        timeMs = new Date(trimmed).getTime();
+      }
+    } else {
+      timeMs = new Date(trimmed).getTime();
+    }
+  } else if (dateVal instanceof Date) {
+    timeMs = dateVal.getTime();
+  }
+
+  if (!timeMs || isNaN(timeMs)) return false;
+  const now = Date.now();
+  const diffHours = (now - timeMs) / (1000 * 60 * 60);
+  return diffHours >= 0 && diffHours <= 24;
 }
 
 // ─── Helper: Dọn sạch các tệp ảo tự sinh không có thật ───────────────────────
@@ -1539,8 +1579,8 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                               <Tag size={11} style={{ flexShrink: 0 }} />
                               <span className="bom-approval-type-text">{doc.docTypeName}</span>
                             </span>
-                            {/* Huy hiệu MỚI: Chỉ hiển thị khi tờ trình chưa được mở xem (!doc.isRead) */}
-                            <NewBadge show={!doc.isRead} />
+                            {/* Huy hiệu MỚI: Chỉ hiển thị ở bước Chờ phê duyệt (Bước 1), chưa đọc (!doc.isRead) và trong vòng 24h */}
+                            <NewBadge show={currentStep === 1 && !doc.isRead && isWithin24Hours(doc.createdAt || doc.submitDate)} />
 
                             {/* Nút xem tài liệu đính kèm ở tab mới */}
                             {(doc.attachmentName || (doc.attachments && doc.attachments.length > 0)) && (
@@ -1602,11 +1642,44 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                             {doc.title}
                           </div>
 
+                          {/* Dòng hiển thị Lý do từ chối (Chỉ hiển thị ở tab Từ chối: currentStep === 3) */}
+                          {currentStep === 3 && (
+                            <div
+                              className="bom-approval-reject-reason"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                fontSize: '0.75rem',
+                                color: '#dc2626',
+                                backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                                border: '1px dashed rgba(239, 68, 68, 0.35)',
+                                borderRadius: '4px',
+                                padding: '3px 8px',
+                                marginTop: '3px',
+                                maxWidth: '100%',
+                                lineHeight: 1.35,
+                              }}
+                              title={doc.rejectionReason || 'Chưa có lý do từ chối chi tiết'}
+                            >
+                              <XCircleFill size={11} style={{ flexShrink: 0, color: '#ef4444' }} />
+                              <span style={{ fontWeight: 600, color: '#b91c1c', whiteSpace: 'nowrap' }}>Lý do từ chối:</span>
+                              <span style={{ color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {doc.rejectionReason || 'Cần chỉnh sửa, bổ sung thông tin hồ sơ theo quy định'}
+                              </span>
+                            </div>
+                          )}
+
                           {/* Dòng 3 (Chỉ hiển thị trên điện thoại <= 768px): Bộ phận • Người trình + Giá trị & Nút duyệt nhanh */}
                           <div className="bom-approval-mobile-meta md:hidden">
                             <span className="bom-approval-mobile-dept">
                               {doc.department} • {doc.submitter}
                             </span>
+                            {currentStep === 3 && doc.rejectionReason && (
+                              <div style={{ fontSize: '0.6875rem', color: '#dc2626', marginTop: '2px', fontStyle: 'italic' }}>
+                                Lý do: {doc.rejectionReason}
+                              </div>
+                            )}
                             <div className="bom-approval-mobile-sub">
                               {doc.value > 0 ? (
                                 <span className="bom-approval-mobile-val">

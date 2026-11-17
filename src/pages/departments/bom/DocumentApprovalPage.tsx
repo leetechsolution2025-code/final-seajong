@@ -42,6 +42,11 @@ const mapDbApprovalToDocument = (row: any, idx: number): ApprovalDocument => {
   const rawVal = Number(meta?.totalAmount || meta?.soTien || meta?.details?.amount || meta?.amount || 0);
   const valueLabel = rawVal > 0 ? `${rawVal.toLocaleString('vi-VN')} đ` : (meta?.loaiText || 'Hồ sơ nghiệp vụ');
   const createdDate = row.createdAt ? new Date(row.createdAt).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN');
+  const approvedDate = row.approvedAt
+    ? new Date(row.approvedAt).toLocaleDateString('vi-VN')
+    : row.updatedAt
+    ? new Date(row.updatedAt).toLocaleDateString('vi-VN')
+    : createdDate;
   const rawStatus = String(row.status || 'pending').toLowerCase();
   const status: ApprovalDocument['status'] =
     rawStatus === 'approved' || rawStatus === 'completed'
@@ -63,6 +68,11 @@ const mapDbApprovalToDocument = (row: any, idx: number): ApprovalDocument => {
     row.entityTitle ||
     'Hồ sơ trình Ban Giám đốc phê duyệt từ hệ thống CSDL Seajong.';
 
+  const rejectionReason =
+    status === 'rejected'
+      ? String(row.rejectedReason || meta?.rejectedReason || meta?.rejectionReason || row.note || meta?.note || 'Giám đốc từ chối phê duyệt').trim()
+      : undefined;
+
   return {
     id: String(row.id || `APR-${idx + 1}`),
     code: String(row.entityCode || meta?.personalRequestId || `TT-${String(idx + 1).padStart(4, '0')}`),
@@ -73,6 +83,13 @@ const mapDbApprovalToDocument = (row: any, idx: number): ApprovalDocument => {
     submitter: String(row.requestedByName || meta?.employeeName || 'Cán bộ Seajong'),
     submitterRole: String(meta?.position || 'Nhân sự trình duyệt'),
     submitDate: createdDate,
+    createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : undefined,
+    approvalDate: status === 'approved' ? approvedDate : undefined,
+    approvedBy: status === 'approved' ? (row.approvedById || meta?.approvedBy || 'Lê Công Vụ (Giám đốc)') : undefined,
+    approvalNote: status === 'approved' ? (row.note || meta?.note || 'Đồng ý phê duyệt') : undefined,
+    rejectionDate: status === 'rejected' ? approvedDate : undefined,
+    rejectedBy: status === 'rejected' ? (row.approvedById || meta?.rejectedBy || 'Lê Công Vụ (Giám đốc)') : undefined,
+    rejectionReason,
     value: rawVal,
     valueLabel,
     priority,
