@@ -15718,6 +15718,26 @@ app.patch('/api/approval-documents/:id/status', async (req, res) => {
   }
 });
 
+// ── POST /api/approval-documents/batch-delete: Xóa hàng loạt văn bản phê duyệt ──
+app.post('/api/approval-documents/batch-delete', async (req, res) => {
+  try {
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'Danh sách ID không hợp lệ' });
+    }
+    await prisma.approvalComment.deleteMany({
+      where: { requestId: { in: ids } },
+    }).catch(() => {});
+    const delResult = await prisma.approvalRequest.deleteMany({
+      where: { id: { in: ids } },
+    });
+    res.json({ success: true, count: delResult.count });
+  } catch (err) {
+    console.error('[POST /api/approval-documents/batch-delete]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── POST /api/advance-payments/:id/submit-director: Trình Giám đốc phê duyệt yêu cầu tạm ứng vượt định mức ──
 app.post('/api/advance-payments/:id/submit-director', async (req, res) => {
   try {
@@ -23741,6 +23761,43 @@ async function executeLogisticsRetentionCleanup({
     return deletedAuditCount;
   }
 
+  // Trường hợp dọn dẹp Hồ sơ / Tờ trình phê duyệt (APPROVAL_DOCUMENTS)
+  if (type === 'APPROVAL_DOCUMENTS') {
+    const docOrConditions = [];
+    if (applyCompleted) {
+      docOrConditions.push({
+        status: { in: ['approved', 'rejected', 'completed'] },
+        OR: [
+          { approvedAt: { lt: cutoffDate } },
+          { approvedAt: null, updatedAt: { lt: cutoffDate } },
+          { approvedAt: null, createdAt: { lt: cutoffDate } },
+        ],
+      });
+    }
+    if (applyInProgress) {
+      docOrConditions.push({
+        status: { in: ['pending', 'draft', 'in_progress', 'cho_duyet'] },
+        createdAt: { lt: cutoffDate },
+      });
+    }
+    if (docOrConditions.length === 0) return 0;
+
+    const docsToDelete = await prisma.approvalRequest.findMany({
+      where: { OR: docOrConditions },
+      select: { id: true },
+    });
+    const docIds = docsToDelete.map((d) => d.id);
+    if (docIds.length === 0) return 0;
+
+    await prisma.approvalComment.deleteMany({
+      where: { requestId: { in: docIds } },
+    }).catch(() => {});
+    const delResult = await prisma.approvalRequest.deleteMany({
+      where: { id: { in: docIds } },
+    });
+    return delResult.count;
+  }
+
   const statusList = [];
   if (applyInProgress) statusList.push('PENDING', 'PICKING', 'PACKED');
   if (applyCompleted) statusList.push('COMPLETED');
@@ -23980,6 +24037,29 @@ app.get('/api/logistics/completed-cleanup-settings', async (req, res) => {
             trangThai: { in: stockCountStatuses },
             createdAt: { lt: cutoffDate },
           },
+        });
+      }
+    } else if (type === 'APPROVAL_DOCUMENTS') {
+      const docOrConditions = [];
+      if (applyCompleted) {
+        docOrConditions.push({
+          status: { in: ['approved', 'rejected', 'completed'] },
+          OR: [
+            { approvedAt: { lt: cutoffDate } },
+            { approvedAt: null, updatedAt: { lt: cutoffDate } },
+            { approvedAt: null, createdAt: { lt: cutoffDate } },
+          ],
+        });
+      }
+      if (applyInProgress) {
+        docOrConditions.push({
+          status: { in: ['pending', 'draft', 'in_progress', 'cho_duyet'] },
+          createdAt: { lt: cutoffDate },
+        });
+      }
+      if (docOrConditions.length > 0) {
+        eligibleTicketsCount = await prisma.approvalRequest.count({
+          where: { OR: docOrConditions },
         });
       }
     } else if (statusList.length > 0) {

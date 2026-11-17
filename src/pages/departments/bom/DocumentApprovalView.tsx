@@ -8,11 +8,13 @@ import {
   Check2,
   Tag,
   FileEarmarkPdf,
+  ClockHistory,
 } from 'react-bootstrap-icons';
 import { TableToolbar, type TableToolbarFilter } from '../../../components/common/TableToolbar';
 import { Pagination } from '../../../components/common/Pagination';
 import { Button } from '../../../components/common/Button';
 import { Modal } from '../../../components/common/Modal';
+import { DataRetentionOffcanvas } from '../../../components/common/DataRetentionOffcanvas';
 import {
   PendingApprovalOffcanvas,
   ApprovedDocumentOffcanvas,
@@ -369,6 +371,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
     approvedAmount: undefined,
   });
   const [reopenDetailAfterCancel, setReopenDetailAfterCancel] = useState(false);
+  const [isCleanupOffcanvasOpen, setIsCleanupOffcanvasOpen] = useState(false);
 
   // Form tạo mới văn bản trình duyệt
   const [newDocForm, setNewDocForm] = useState<{
@@ -1279,7 +1282,17 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
     >
       {/* ── 1. COMPONENT TABLETOOLBAR ── */}
       <TableToolbar
-        showMenu={false}
+        showMenu={true}
+        onSettingClick={() => setIsCleanupOffcanvasOpen(true)}
+        settingTooltip="Thiết lập thời gian lưu trữ"
+        menuItems={[
+          {
+            id: 'cleanup-settings',
+            label: 'Thiết lập xoá',
+            icon: <ClockHistory size={15} style={{ color: '#d97706' }} />,
+            onClick: () => setIsCleanupOffcanvasOpen(true),
+          },
+        ]}
         searchValue={searchQuery}
         onSearchChange={(val) => {
           setSearchQuery(val);
@@ -1300,8 +1313,8 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
             {currentStep === 1 && selectedIds.length > 0 && (
               <Button
                 variant="success"
-                size="md"
-                leftIcon={<CheckCircle size={16} />}
+                size="sm"
+                leftIcon={<CheckCircle size={14} />}
                 onClick={handleBatchApprove}
                 title="Duyệt nhanh các tờ trình đã chọn"
                 style={{ whiteSpace: 'nowrap' }}
@@ -1312,13 +1325,13 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    minWidth: '20px',
-                    height: '20px',
-                    padding: selectedIds.length >= 10 ? '0 5px' : '0',
+                    minWidth: '18px',
+                    height: '18px',
+                    padding: selectedIds.length >= 10 ? '0 4px' : '0',
                     borderRadius: '9999px',
                     backgroundColor: '#ffffff',
                     color: 'var(--color-success, #10b981)',
-                    fontSize: '0.75rem',
+                    fontSize: '0.6875rem',
                     fontWeight: 700,
                     lineHeight: 1,
                     marginLeft: '4px',
@@ -1332,8 +1345,8 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
             {/* Nút Xoá với huy hiệu số lượng mục đã chọn */}
             <Button
               variant="danger"
-              size="md"
-              leftIcon={<Trash2 size={16} />}
+              size="sm"
+              leftIcon={<Trash2 size={14} />}
               disabled={selectedIds.length === 0}
               onClick={() => setIsDeleteDialogOpen(true)}
               title={
@@ -1344,7 +1357,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: '6px',
                 whiteSpace: 'nowrap',
               }}
             >
@@ -1355,13 +1368,13 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    minWidth: '20px',
-                    height: '20px',
-                    padding: selectedIds.length >= 10 ? '0 5px' : '0',
+                    minWidth: '18px',
+                    height: '18px',
+                    padding: selectedIds.length >= 10 ? '0 4px' : '0',
                     borderRadius: '9999px',
                     backgroundColor: '#ffffff',
                     color: 'var(--color-danger, #e11d48)',
-                    fontSize: '0.75rem',
+                    fontSize: '0.6875rem',
                     fontWeight: 700,
                     lineHeight: 1,
                   }}
@@ -1374,7 +1387,7 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
         }
         style={{
           marginBottom: 0,
-          padding: '10px 20px',
+          padding: '10px 16px',
           flexShrink: 0,
           borderBottom: '1px solid var(--border-subtle)',
         }}
@@ -2304,6 +2317,33 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
           </div>
         </form>
       </Modal>
+
+      {/* ── OFFCANVAS THIẾT LẬP THỜI GIAN LƯU TRỮ VĂN BẢN (CHUẨN 400PX) ── */}
+      <DataRetentionOffcanvas
+        isOpen={isCleanupOffcanvasOpen}
+        onClose={() => setIsCleanupOffcanvasOpen(false)}
+        ticketType="APPROVAL_DOCUMENTS"
+        title="Thiết lập thời gian lưu trữ văn bản"
+        description="Cấu hình tự động dọn dẹp các tờ trình, đề xuất và hồ sơ phê duyệt quá thời hạn lưu trữ"
+        entityLabel="hồ sơ"
+        onCleanedUp={() => {
+          fetch('/api/approval-documents')
+            .then((res) => (res.ok ? res.json() : []))
+            .then((data) => {
+              if (Array.isArray(data)) {
+                const realDocs = data.filter(
+                  (d: any) =>
+                    !d.id?.startsWith('APR-00') &&
+                    d.code !== 'TT-DM-0926' &&
+                    d.code !== 'TT-MM-0926' &&
+                    d.code !== 'TT-NB-0926'
+                );
+                updateItems(realDocs);
+              }
+            })
+            .catch(() => {});
+        }}
+      />
 
       {/* ── DIALOG XÁC NHẬN XOÁ ── */}
       <ConfirmDialog

@@ -5,8 +5,8 @@ import { toast } from 'react-toastify';
 export interface DataRetentionOffcanvasProps {
   isOpen: boolean;
   onClose: () => void;
-  /** Loại dữ liệu: 'MATERIAL_PICKING' | 'BATCH_PACKING' | 'AUDIT_LOGS' | 'PRODUCTION_ORDERS' | 'DEFECT_RECORDS' | 'SALES_ORDERS' | 'ADVANCE_PAYMENTS' | 'ALL' */
-  ticketType?: 'MATERIAL_PICKING' | 'BATCH_PACKING' | 'AUDIT_LOGS' | 'PRODUCTION_ORDERS' | 'DEFECT_RECORDS' | 'SALES_ORDERS' | 'ADVANCE_PAYMENTS' | 'ALL';
+  /** Loại dữ liệu: 'MATERIAL_PICKING' | 'BATCH_PACKING' | 'AUDIT_LOGS' | 'PRODUCTION_ORDERS' | 'DEFECT_RECORDS' | 'SALES_ORDERS' | 'ADVANCE_PAYMENTS' | 'APPROVAL_DOCUMENTS' | 'ALL' */
+  ticketType?: 'MATERIAL_PICKING' | 'BATCH_PACKING' | 'AUDIT_LOGS' | 'PRODUCTION_ORDERS' | 'DEFECT_RECORDS' | 'SALES_ORDERS' | 'ADVANCE_PAYMENTS' | 'APPROVAL_DOCUMENTS' | 'ALL';
   /** Tiêu đề hiển thị trên Offcanvas */
   title?: string;
   /** Mô tả ngắn dưới tiêu đề */
@@ -229,7 +229,7 @@ export const DataRetentionOffcanvas: React.FC<DataRetentionOffcanvasProps> = ({
                 onChange={(e) => handleToggleInProgress(e.target.checked)}
                 className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
               />
-              <span>Đang thực hiện</span>
+              <span>{ticketType === 'APPROVAL_DOCUMENTS' ? 'Chờ phê duyệt' : 'Đang thực hiện'}</span>
             </label>
 
             <label
@@ -245,7 +245,7 @@ export const DataRetentionOffcanvas: React.FC<DataRetentionOffcanvasProps> = ({
                 onChange={(e) => handleToggleCompleted(e.target.checked)}
                 className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
               />
-              <span>Đã hoàn thành</span>
+              <span>{ticketType === 'APPROVAL_DOCUMENTS' ? 'Đã duyệt / Từ chối' : 'Đã hoàn thành'}</span>
             </label>
           </div>
         </div>

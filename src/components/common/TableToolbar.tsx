@@ -50,6 +50,8 @@ export interface TableToolbarProps {
   onPrint?: () => void;
   printLabel?: string;
   menuTooltip?: string;
+  onSettingClick?: () => void;
+  settingTooltip?: string;
 }
 
 export const TableToolbar: React.FC<TableToolbarProps> = ({
@@ -75,6 +77,8 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
   onPrint,
   printLabel,
   menuTooltip = 'Thao tác khác',
+  onSettingClick,
+  settingTooltip,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -257,8 +261,14 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
             />
             <button
               type="button"
-              onClick={() => setIsMenuOpen((prev) => !prev)}
-              title={menuTooltip}
+              onClick={() => {
+                if (onSettingClick) {
+                  onSettingClick();
+                } else {
+                  setIsMenuOpen((prev) => !prev);
+                }
+              }}
+              title={settingTooltip || menuTooltip}
               aria-expanded={isMenuOpen}
               aria-haspopup="true"
               style={{
