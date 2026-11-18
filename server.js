@@ -6794,6 +6794,53 @@ app.get('/api/user-tasks', async (req, res) => {
       console.warn('[GET /api/user-tasks auto-sync warning]:', e?.message);
     });
 
+    const cuidNameMap = {
+      'cmra9q6qi00018oq7nniehh75': { name: 'Lê Công Vụ', dept: 'Ban Giám đốc' },
+      'cmra9to1p00048oq7p8si6x1j': { name: 'Nguyễn Thu Huyền', dept: 'Kinh doanh' },
+      'cmra9v7bw000a8oq7oijv443g': { name: 'Cao Thị Phương', dept: 'Kinh doanh' },
+      'cmra9vxh2000d8oq7eyssxqnm': { name: 'Trần Thị Linh', dept: 'Sản xuất' },
+      'cmra9wwhq000g8oq7pt0vcqn7': { name: 'Lưu Xuân Trung', dept: 'Kho vận' },
+      'cmra9xkfp000j8oq7nf53lib2': { name: 'Hà Thị Bích Ngọc', dept: 'Mua hàng' },
+      'cmrbs33zy0000gr670d0icaru': { name: 'Trần Thị Mai Anh', dept: 'Tài chính - Kế toán' },
+      'cmrub7cs402pu8o8sza1fzyam': { name: 'Lê Anh Vân', dept: 'Đảm bảo chất lượng' },
+      'cmsbm3pm100x1yg9mra8vv265': { name: 'Lưu Xuân Trung', dept: 'Kho vận' },
+      'cmsbm5vtp00x4yg9mc7c5491a': { name: 'Nguyễn Văn Hoạ', dept: 'Sản xuất' },
+      'cmsr8azp603nvyg87pju3sc7n': { name: 'Nguyễn Anh Tuấn', dept: 'Sản xuất' },
+      'cmsr8igwy03o5yg876bc46zu9': { name: 'Nguyễn Văn Chuyển', dept: 'Kho vận' },
+      'production-team': { name: 'Đội ngũ Sản xuất', dept: 'Sản xuất' },
+      'logistics-team': { name: 'Bộ phận Kho vận', dept: 'Kho vận' },
+      'purchase-team': { name: 'Bộ phận Mua hàng', dept: 'Mua hàng' },
+      'qa-team': { name: 'Bộ phận Đảm bảo chất lượng', dept: 'Đảm bảo chất lượng' },
+      'sales-team': { name: 'Phòng Kinh doanh', dept: 'Kinh doanh' },
+      'user-system': { name: 'Hệ thống tự động', dept: '' },
+    };
+    const deptTranslate = {
+      'logistics': 'Kho vận',
+      'production': 'Sản xuất',
+      'purchase': 'Mua hàng',
+      'qa': 'Đảm bảo chất lượng',
+      'sales': 'Kinh doanh',
+      'marketing': 'Marketing',
+      'mkt': 'Marketing',
+      'bom': 'Ban Giám đốc',
+      'board': 'Ban Giám đốc',
+      'director': 'Ban Giám đốc',
+    };
+    const resolveAssignee = (raw) => {
+      if (!raw) return 'Chưa phân công';
+      const t = String(raw).trim();
+      if (cuidNameMap[t]) return cuidNameMap[t].name;
+      if (cuidNameMap[t.toLowerCase()]) return cuidNameMap[t.toLowerCase()].name;
+      return t;
+    };
+    const resolveDept = (rawDept, rawPerson) => {
+      if (rawPerson && cuidNameMap[rawPerson]?.dept) return cuidNameMap[rawPerson].dept;
+      if (!rawDept) return '';
+      const t = String(rawDept).trim().toLowerCase();
+      if (deptTranslate[t]) return deptTranslate[t];
+      return String(rawDept).trim();
+    };
+
     // 1. Lấy các công việc khởi tạo trực tiếp trong bảng Task (chỉ lấy khi không ở chế độ Kế hoạch thi công Showroom, hoặc công việc thuộc hợp đồng thi công Showroom)
     try {
       const dbTasks = await prisma.task.findMany({
@@ -6823,9 +6870,9 @@ app.get('/api/user-tasks', async (req, res) => {
             description: parsed.description ?? row.description ?? '',
             status: parsed.status || row.status || 'not_started',
             priority: parsed.priority || row.priority || 'medium',
-            assignee: parsed.assignee || row.assigneeId || 'Chưa phân công',
-            assigner: parsed.assigner || row.creatorId || 'Ban Giám đốc',
-            department: parsed.department || row.deptCode || 'Phòng Kinh doanh',
+            assignee: resolveAssignee(parsed.assignee || row.assigneeId),
+            assigner: resolveAssignee(parsed.assigner || row.creatorId || 'Ban Giám đốc'),
+            department: resolveDept(parsed.department || row.deptCode, row.assigneeId),
           }
           : {
             id: row.id,
@@ -6835,9 +6882,9 @@ app.get('/api/user-tasks', async (req, res) => {
             contractCode: '',
             customerName: 'Nội bộ công ty',
             customerAddress: '',
-            assignee: row.assigneeId || 'Chưa phân công',
-            assigner: row.creatorId || 'Ban Giám đốc',
-            department: row.deptCode || 'Phòng Kinh doanh',
+            assignee: resolveAssignee(row.assigneeId),
+            assigner: resolveAssignee(row.creatorId || 'Ban Giám đốc'),
+            department: resolveDept(row.deptCode, row.assigneeId),
             priority: row.priority || 'medium',
             priorityLabel:
               row.priority === 'urgent'
@@ -20906,7 +20953,7 @@ app.post('/api/intranet/station-heartbeat', (req, res) => {
 // API Danh sách người dùng hệ thống phục vụ chỉ định máy trạm & chấm công
 app.get('/api/users', async (req, res) => {
   try {
-    const [employees, posCategories, workLocations] = await Promise.all([
+    const [employees, posCategories, workLocations, dbUsers] = await Promise.all([
       prisma.employee.findMany({
         include: {
           user: true,
@@ -20919,6 +20966,7 @@ app.get('/api/users', async (req, res) => {
         where: { type: 'position' },
       }),
       getResolvedWorkLocations(),
+      prisma.user.findMany().catch(() => []),
     ]);
     const posMap = {};
     for (const c of posCategories) {
@@ -20926,6 +20974,8 @@ app.get('/api/users', async (req, res) => {
       if (c.id) posMap[c.id] = c.name;
     }
     const result = [];
+    const seenUserIds = new Set();
+
     for (const e of employees) {
       const matchedLoc = findEmployeeWorkLocation(e, workLocations);
       const isEnrolled = Boolean(
@@ -20934,6 +20984,7 @@ app.get('/api/users', async (req, res) => {
         (e.insuranceSalary && Number(e.insuranceSalary) > 0)
       );
       const validUserId = e.user?.id || e.userId || e.id;
+      seenUserIds.add(String(validUserId));
       result.push({
         id: validUserId,
         employeeId: e.id,
@@ -20964,6 +21015,42 @@ app.get('/api/users', async (req, res) => {
               : 'Đang làm việc',
       });
     }
+
+    const userKnownNames = {
+      'cmra9to1p00048oq7p8si6x1j': { name: 'Nguyễn Thu Huyền', dept: 'Phòng Kinh doanh' },
+      'cmra9v7bw000a8oq7oijv443g': { name: 'Cao Thị Phương', dept: 'Phòng Kinh doanh' },
+      'cmra9vxh2000d8oq7eyssxqnm': { name: 'Trần Thị Linh', dept: 'Xưởng Sản xuất' },
+      'cmra9xkfp000j8oq7nf53lib2': { name: 'Hà Thị Bích Ngọc', dept: 'Phòng Mua hàng' },
+      'cmra9wwhq000g8oq7pt0vcqn7': { name: 'Lưu Xuân Trung', dept: 'Bộ phận Kho vận' },
+      'cmrbs33zy0000gr670d0icaru': { name: 'Trần Thị Mai Anh', dept: 'Phòng Tài chính Kế toán' },
+    };
+
+    for (const u of dbUsers) {
+      if (!u.id || seenUserIds.has(String(u.id))) continue;
+      if (u.id === 'guest-customer') continue;
+      seenUserIds.add(String(u.id));
+
+      const dept = userKnownNames[u.id]?.dept || 'Phòng Kinh doanh';
+      const displayName = userKnownNames[u.id]?.name || u.name || 'Cán bộ nhân viên';
+      result.push({
+        id: u.id,
+        employeeId: u.id,
+        userId: u.id,
+        code: `USER-${u.id.slice(-4).toUpperCase()}`,
+        name: displayName,
+        phone: '',
+        email: u.email || '',
+        position: u.role === 'ADMIN' ? 'Ban Giám đốc' : 'Nhân viên',
+        positionCode: '',
+        department: dept,
+        departmentCode: '',
+        workLocation: 'main',
+        workLocationName: 'Văn phòng công ty',
+        timekeepingConfig: null,
+        status: 'Đang làm việc',
+      });
+    }
+
     res.json(result);
   } catch (err) {
     console.error('Lỗi GET /api/users:', err);

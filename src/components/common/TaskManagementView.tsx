@@ -487,35 +487,87 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
       };
     };
 
+    const cuidNameMap: Record<string, { name: string; dept?: string; pos?: string }> = {
+      'cmra9q6qi00018oq7nniehh75': { name: 'Lê Công Vụ', dept: 'Ban Giám đốc', pos: 'Giám đốc' },
+      'cmra9to1p00048oq7p8si6x1j': { name: 'Nguyễn Thu Huyền', dept: 'Phòng Kinh doanh', pos: 'Chuyên viên kinh doanh' },
+      'cmra9v7bw000a8oq7oijv443g': { name: 'Cao Thị Phương', dept: 'Phòng Kinh doanh', pos: 'Chuyên viên kinh doanh' },
+      'cmra9vxh2000d8oq7eyssxqnm': { name: 'Trần Thị Linh', dept: 'Xưởng Sản xuất', pos: 'Quản lý sản xuất' },
+      'cmra9wwhq000g8oq7pt0vcqn7': { name: 'Lưu Xuân Trung', dept: 'Bộ phận Kho vận', pos: 'Thủ kho' },
+      'cmra9xkfp000j8oq7nf53lib2': { name: 'Hà Thị Bích Ngọc', dept: 'Phòng Mua hàng', pos: 'Chuyên viên mua hàng' },
+      'cmrbs33zy0000gr670d0icaru': { name: 'Trần Thị Mai Anh', dept: 'Phòng Tài chính Kế toán', pos: 'Kế toán viên' },
+      'cmrmb5svc0028gsm0n5uq3p7y': { name: 'Đoàn Thị Yến', dept: 'Ban Giám đốc', pos: 'Phó Giám đốc' },
+      'cmrub7cs402pu8o8sza1fzyam': { name: 'Lê Anh Vân', dept: 'Phòng Đảm bảo chất lượng', pos: 'Trưởng bộ phận QA' },
+      'cms1jsw2j1v288o1uuvu9g8o5': { name: 'Đặng Văn Kháng', dept: 'Bộ phận Kho vận', pos: 'Nhân viên kho' },
+      'cmsbc9bfu00voyg9msjo51cs3': { name: 'Nguyên Văn Thành', dept: 'Phòng Kinh doanh', pos: 'Chuyên viên kinh doanh' },
+      'cmsbluh4u00wbyg9m3gwvafmo': { name: 'Trịnh Văn Tuyến', dept: 'Xưởng Sản xuất', pos: 'Kỹ thuật viên' },
+      'cmsbly5fo00weyg9mwdajjiwh': { name: 'Phạm Xuân Danh', dept: 'Bộ phận Kho vận', pos: 'Nhân viên giao nhận' },
+      'cmsbm3pm100x1yg9mra8vv265': { name: 'Lưu Xuân Trung', dept: 'Bộ phận Kho vận', pos: 'Thủ kho' },
+      'cmsbm5vtp00x4yg9mc7c5491a': { name: 'Nguyễn Văn Hoạ', dept: 'Xưởng Sản xuất', pos: 'Quản đốc xưởng' },
+      'cmsbm9xlx00x7yg9mqnzrzjyl': { name: 'Vũ Hoàng Long', dept: 'Phòng Marketing', pos: 'Chuyên viên Marketing' },
+      'cmsbmcjyn00xayg9m09qq3d9d': { name: 'Lê Vụ', dept: 'Phòng Kinh doanh', pos: 'Trưởng phòng Kinh doanh' },
+      'cmslzqmx603plygwvnfypdw6j': { name: 'Nguyễn Thành Trung', dept: 'Phòng Đảm bảo chất lượng', pos: 'Kỹ thuật viên QC' },
+      'cmsr8azp603nvyg87pju3sc7n': { name: 'Nguyễn Anh Tuấn', dept: 'Xưởng Sản xuất', pos: 'Tổ trưởng sản xuất' },
+      'cmsr8igwy03o5yg876bc46zu9': { name: 'Nguyễn Văn Chuyển', dept: 'Bộ phận Kho vận', pos: 'Nhân viên giao hàng' },
+      'cmuyikzjt0014yg5hxcpt3md5': { name: 'Công Vụ', dept: 'Phòng Marketing', pos: 'Trưởng phòng Marketing' },
+      'cmvv5z1fw0anoyge82m3f6gig': { name: 'Đoàn Thị Yến', dept: 'Ban Giám đốc', pos: 'Ban Giám đốc' },
+      'cmwhrnmfe002hi6xajm2ampni': { name: 'Nguyễn Lê Dũng', dept: 'Phòng ban chung', pos: 'Nhân viên' },
+      'cmwhrnmh8002mi6xau546gloy': { name: 'Vũ Hùng Cường', dept: 'Phòng ban chung', pos: 'Nhân viên' },
+      'production-team': { name: 'Đội ngũ Sản xuất', dept: 'Xưởng Sản xuất', pos: 'Tập thể sản xuất' },
+      'logistics-team': { name: 'Bộ phận Kho vận', dept: 'Bộ phận Kho vận', pos: 'Tập thể kho vận' },
+      'purchase-team': { name: 'Bộ phận Mua hàng', dept: 'Phòng Mua hàng', pos: 'Tập thể mua hàng' },
+      'qa-team': { name: 'Bộ phận Đảm bảo chất lượng', dept: 'Phòng Đảm bảo chất lượng', pos: 'Tập thể QA/QC' },
+      'sales-team': { name: 'Phòng Kinh doanh', dept: 'Phòng Kinh doanh', pos: 'Tập thể kinh doanh' },
+    };
+
+    const resolveDisplayEmpName = (rawName?: string, rawDept?: string, rawPos?: string) => {
+      if (!rawName || !rawName.trim()) return null;
+      const t = rawName.trim();
+      const lower = t.toLowerCase();
+      if (cuidNameMap[t]) return cuidNameMap[t];
+      if (cuidNameMap[lower]) return cuidNameMap[lower];
+      if (/^c[a-z0-9]{20,}$/i.test(t)) {
+        const found = employees.find((e: any) => String(e.id || '').toLowerCase() === lower || String(e.userId || '').toLowerCase() === lower);
+        if (found && found.name && !/^c[a-z0-9]{20,}$/i.test(found.name)) {
+          return { name: cleanEmpName(found.name), dept: found.department || rawDept, pos: found.position || rawPos };
+        }
+        return null;
+      }
+      return { name: cleanEmpName(t), dept: rawDept, pos: rawPos };
+    };
+
     // 1. Toàn bộ nhân viên từ bảng users công ty
     employees.forEach((u) => {
-      if (u.name && u.name.trim()) {
-        const cName = cleanEmpName(u.name);
-        const paren = getParenInfo(u.name);
-        const { dept, pos, subtitle } = resolveDeptAndPos(u.department, paren, u.position);
-        const key = cName.toLowerCase();
-        const avatarText = getEmpAvatarText(cName, u.avatarText);
-        const avatarColor = getEmpAvatarColor(cName, u.avatarColor);
-        map.set(key, { name: cName, department: dept, position: pos, subtitle, avatarText, avatarColor });
+      const resolved = resolveDisplayEmpName(u.name, u.department, u.position);
+      if (resolved && resolved.name && !/^c[a-z0-9]{20,}$/i.test(resolved.name)) {
+        const paren = getParenInfo(u.name || '');
+        const { dept, pos, subtitle } = resolveDeptAndPos(resolved.dept || u.department, paren, resolved.pos || u.position);
+        const key = resolved.name.toLowerCase();
+        const avatarText = getEmpAvatarText(resolved.name, u.avatarText);
+        const avatarColor = getEmpAvatarColor(resolved.name, u.avatarColor);
+        map.set(key, { name: resolved.name, department: dept, position: pos, subtitle, avatarText, avatarColor });
       }
     });
 
     // 2. Bổ sung các người thực hiện đã được giao trong công việc
     tasks.forEach((t) => {
       if (t.assignee && t.assignee.trim()) {
-        const cName = cleanEmpName(t.assignee);
-        const paren = getParenInfo(t.assignee);
-        const key = cName.toLowerCase();
-        if (!map.has(key)) {
-          const { dept, pos, subtitle } = resolveDeptAndPos(t.department, paren, undefined);
-          const avatarText = getEmpAvatarText(cName);
-          const avatarColor = getEmpAvatarColor(cName);
-          map.set(key, { name: cName, department: dept, position: pos, subtitle, avatarText, avatarColor });
+        const resolved = resolveDisplayEmpName(t.assignee, t.department, undefined);
+        if (resolved && resolved.name && !/^c[a-z0-9]{20,}$/i.test(resolved.name)) {
+          const paren = getParenInfo(t.assignee || '');
+          const key = resolved.name.toLowerCase();
+          if (!map.has(key)) {
+            const { dept, pos, subtitle } = resolveDeptAndPos(resolved.dept || t.department, paren, resolved.pos);
+            const avatarText = getEmpAvatarText(resolved.name);
+            const avatarColor = getEmpAvatarColor(resolved.name);
+            map.set(key, { name: resolved.name, department: dept, position: pos, subtitle, avatarText, avatarColor });
+          }
         }
       }
     });
 
-    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+    return Array.from(map.values())
+      .filter((emp) => emp.name && !/^c[a-z0-9]{20,}$/i.test(emp.name))
+      .sort((a, b) => a.name.localeCompare(b.name, 'vi'));
   }, [employees, tasks]);
 
   // Danh sách gợi ý nhân viên đã lọc theo từ khoá nhập trong textbox
@@ -858,16 +910,79 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
     if (!rawAssignee || !rawAssignee.trim()) {
       return { name: 'Ban Giám đốc', dept: '' };
     }
-    const name = rawAssignee.replace(/\s*\(.*?\)/g, '').trim();
+
+    const teamMap: Record<string, string> = {
+      'production-team': 'Đội ngũ Sản xuất',
+      'logistics-team': 'Bộ phận Kho vận',
+      'purchase-team': 'Bộ phận Mua hàng',
+      'qa-team': 'Bộ phận Đảm bảo chất lượng',
+      'sales-team': 'Phòng Kinh doanh',
+      'marketing-team': 'Phòng Marketing',
+      'hr-team': 'Hành chính - Nhân sự',
+      'finance-team': 'Tài chính - Kế toán',
+      'user-system': 'Hệ thống tự động',
+    };
+
+    const deptMap: Record<string, string> = {
+      'logistics': 'Kho vận',
+      'production': 'Sản xuất',
+      'purchase': 'Mua hàng',
+      'qa': 'Đảm bảo chất lượng',
+      'sales': 'Kinh doanh',
+      'marketing': 'Marketing',
+      'mkt': 'Marketing',
+      'hr': 'Hành chính - Nhân sự',
+      'finance': 'Tài chính - Kế toán',
+      'bom': 'Ban Giám đốc',
+      'board': 'Ban Giám đốc',
+      'director': 'Ban Giám đốc',
+    };
+
+    const cuidMap: Record<string, { name: string; dept?: string }> = {
+      'cmra9q6qi00018oq7nniehh75': { name: 'Lê Công Vụ', dept: 'Ban Giám đốc' },
+      'cmra9to1p00048oq7p8si6x1j': { name: 'Nguyễn Thu Huyền', dept: 'Kinh doanh' },
+      'cmra9v7bw000a8oq7oijv443g': { name: 'Cao Thị Phương', dept: 'Kinh doanh' },
+      'cmra9vxh2000d8oq7eyssxqnm': { name: 'Trần Thị Linh', dept: 'Sản xuất' },
+      'cmra9wwhq000g8oq7pt0vcqn7': { name: 'Lưu Xuân Trung', dept: 'Kho vận' },
+      'cmra9xkfp000j8oq7nf53lib2': { name: 'Hà Thị Bích Ngọc', dept: 'Mua hàng' },
+      'cmrbs33zy0000gr670d0icaru': { name: 'Trần Thị Mai Anh', dept: 'Tài chính - Kế toán' },
+      'cmrub7cs402pu8o8sza1fzyam': { name: 'Lê Anh Vân', dept: 'Đảm bảo chất lượng' },
+      'cmsbm3pm100x1yg9mra8vv265': { name: 'Lưu Xuân Trung', dept: 'Kho vận' },
+      'cmsbm5vtp00x4yg9mc7c5491a': { name: 'Nguyễn Văn Hoạ', dept: 'Sản xuất' },
+      'cmsr8azp603nvyg87pju3sc7n': { name: 'Nguyễn Anh Tuấn', dept: 'Sản xuất' },
+      'cmsr8igwy03o5yg876bc46zu9': { name: 'Nguyễn Văn Chuyển', dept: 'Kho vận' },
+    };
+
+    let name = rawAssignee.replace(/\s*\(.*?\)/g, '').trim();
     const paren = rawAssignee.match(/\((.*?)\)/)?.[1]?.trim() || '';
+    const lowerKey = name.toLowerCase();
 
     let dept = paren;
-    if (!dept) {
-      const matchedEmp = allCompanyEmployees.find((e) => e.name.toLowerCase() === name.toLowerCase());
-      dept = matchedEmp?.department || taskDept || '';
+    if (teamMap[lowerKey]) {
+      name = teamMap[lowerKey];
+    } else if (cuidMap[name]) {
+      const u = cuidMap[name];
+      name = u.name;
+      if (!dept && u.dept) dept = u.dept;
+    } else {
+      const matchedEmp = allCompanyEmployees.find((e) => e.name.toLowerCase() === lowerKey);
+      if (matchedEmp) {
+        dept = matchedEmp.department || dept;
+      }
     }
-    // Loại bỏ dấu ngoặc đơn nếu có trong tên phòng ban
+
+    if (!dept) {
+      dept = taskDept || '';
+    }
+    const dLower = dept.toLowerCase().trim();
+    if (deptMap[dLower]) {
+      dept = deptMap[dLower];
+    }
     dept = dept.replace(/[()]/g, '').trim();
+
+    if (dept && (name.toLowerCase().includes(dept.toLowerCase()) || dept.toLowerCase().includes(name.toLowerCase()))) {
+      dept = '';
+    }
 
     return { name, dept };
   };
@@ -2680,7 +2795,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                                       fontSize: '0.78rem',
                                       lineHeight: 1.25,
                                     }}
-                                    title={`${task.title}${task.code ? ` (${task.code})` : ''}`}
+                                    title={task.title}
                                   >
                                     <span
                                       style={{
@@ -2692,19 +2807,6 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                                     >
                                       {task.title}
                                     </span>
-                                    {task.code && (
-                                      <span
-                                        style={{
-                                          fontWeight: 400, // KHÔNG DÙNG FONT CHỮ ĐẬM
-                                          color: '#0284c7',
-                                          fontSize: '0.75rem',
-                                          flexShrink: 0,
-                                          fontFamily: "'Roboto Condensed', sans-serif",
-                                        }}
-                                      >
-                                        ({task.code})
-                                      </span>
-                                    )}
                                   </div>
                                 </div>
                                 <div
@@ -3193,34 +3295,15 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                                       textOverflow: 'ellipsis',
                                       fontSize: '0.78rem',
                                     }}
-                                    title={`${task.title}${task.code ? ` (${task.code})` : ''}`}
+                                    title={task.title}
                                   >
                                     <span>{task.title}</span>
-                                    {task.code && (
-                                      <span style={{ color: '#0284c7', marginLeft: '6px', fontSize: '0.75rem' }}>
-                                        ({task.code})
-                                      </span>
-                                    )}
                                   </div>
 
                                   {/* Giao diện điện thoại (<= 768px) */}
                                   <div className="flex flex-col gap-1 md:hidden" style={{ minWidth: 0 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap' }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                        <span
-                                          style={{
-                                            fontSize: '0.68rem',
-                                            fontWeight: 700,
-                                            color: '#1e40af',
-                                            backgroundColor: '#eff6ff',
-                                            border: '1px solid #bfdbfe',
-                                            padding: '1px 6px',
-                                            borderRadius: '4px',
-                                            whiteSpace: 'nowrap',
-                                          }}
-                                        >
-                                          {task.code}
-                                        </span>
                                         <span
                                           style={{
                                             display: 'inline-flex',
