@@ -6847,8 +6847,10 @@ app.get('/api/user-tasks', async (req, res) => {
                   : row.priority === 'low'
                     ? 'Thấp'
                     : 'Trung bình',
-            startDate: row.createdAt ? row.createdAt.toISOString().slice(0, 10) : '2026-10-04',
-            endDate: row.dueDate ? row.dueDate.toISOString().slice(0, 10) : '2026-10-10',
+            startDate: row.createdAt ? row.createdAt.toISOString().slice(0, 10) : '2026-11-01',
+            endDate: row.dueDate
+              ? row.dueDate.toISOString().slice(0, 10)
+              : (row.createdAt ? new Date(row.createdAt.getTime() + 7 * 86400000).toISOString().slice(0, 10) : '2026-11-07'),
             progress: row.status === 'completed' ? 100 : 0,
             status: row.status || 'not_started',
             statusLabel: row.status === 'completed' ? 'Đã hoàn thành' : 'Chưa thực hiện',
@@ -7016,7 +7018,7 @@ app.get('/api/user-tasks', async (req, res) => {
     }
 
     let filtered = allTasks;
-    if (department) {
+    if (department && department !== 'all' && department !== 'bom' && department !== 'board' && department !== 'director') {
       const deptLower = String(department).toLowerCase();
       filtered = filtered.filter(
         (t) => t.isContractOnly || (t.department || '').toLowerCase().includes(deptLower)

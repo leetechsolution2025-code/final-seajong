@@ -491,7 +491,11 @@ export const DashboardView: React.FC = () => {
     activeMenuKey === 'work-management' ||
     activeMenuKey === 'task'
   ) {
-    return <TaskManagementPage department={activeDeptCode} />;
+    // Ban Giám đốc (BOM / Board / Director) có quyền theo dõi công việc của toàn bộ các phòng ban, xưởng sản xuất
+    const targetDept = (!activeDeptCode || activeDeptCode === 'bom' || activeDeptCode === 'board' || activeDeptCode === 'director')
+      ? 'all'
+      : activeDeptCode;
+    return <TaskManagementPage department={targetDept} />;
   }
 
   // Khi người dùng chọn Danh sách công việc cá nhân (chuẩn client-skydoor với MyTasksView)

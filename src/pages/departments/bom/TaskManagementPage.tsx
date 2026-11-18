@@ -12,8 +12,9 @@ export const TaskManagementPage: React.FC<TaskManagementPageProps> = ({
   onShowToast,
   department = 'all',
 }) => {
-  const isMarketing = department === 'marketing' || department === 'mkt';
-  const isSales = department === 'sales';
+  const effectiveDept = (!department || department === 'bom' || department === 'board' || department === 'director') ? 'all' : department;
+  const isMarketing = effectiveDept === 'marketing' || effectiveDept === 'mkt';
+  const isSales = effectiveDept === 'sales';
 
   return (
     <StandardPage
@@ -35,7 +36,7 @@ export const TaskManagementPage: React.FC<TaskManagementPageProps> = ({
     >
       <TaskManagementView
         hideTitle={true}
-        department={department}
+        department={effectiveDept}
         showCategoryTabs={!isMarketing}
         allowAdd={true}
         onShowToast={onShowToast}

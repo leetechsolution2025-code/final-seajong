@@ -633,17 +633,15 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
   // Bộ lọc dữ liệu tìm kiếm và phân loại
   const filteredTasks = useMemo(() => {
     return myTasksBase.filter((t) => {
-      // 0. Đối với phòng Marketing: lọc theo Kế hoạch tháng (Tháng/Năm hiện đang chọn)
-      if (department === 'marketing' || department === 'mkt') {
-        if (t.startDate || t.endDate) {
-          const s = parseDateParts(t.startDate);
-          const e = parseDateParts(t.endDate);
-          const sMonthNum = s.year * 100 + s.month;
-          const eMonthNum = e.year * 100 + e.month;
-          const curMonthNum = currentYear * 100 + currentMonth;
-          if (curMonthNum < sMonthNum || curMonthNum > eMonthNum) {
-            return false;
-          }
+      // 0. Lọc công việc theo Tháng / Năm hiện đang chọn trên thanh điều hướng (Gantt & Bảng)
+      if (t.startDate || t.endDate) {
+        const s = parseDateParts(t.startDate || t.endDate);
+        const e = parseDateParts(t.endDate || t.startDate);
+        const sMonthNum = s.year * 100 + s.month;
+        const eMonthNum = e.year * 100 + e.month;
+        const curMonthNum = currentYear * 100 + currentMonth;
+        if (curMonthNum < sMonthNum || curMonthNum > eMonthNum) {
+          return false;
         }
       }
       if (t.isContractOnly) {
