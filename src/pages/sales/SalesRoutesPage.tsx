@@ -46,13 +46,15 @@ export const SalesRoutesPage: React.FC = () => {
   const [isEndTripOpen, setIsEndTripOpen] = useState(false);
   const [isSubmittingRoute, setIsSubmittingRoute] = useState(false);
 
-  // Form States - Bắt đầu ca tuyến
+  // Form States - Bắt đầu ca tuyến (Không dùng bất kỳ dữ liệu mô phỏng Mễ Trì nào)
   const [employeeName, setEmployeeName] = useState('Nguyễn Văn Hải');
   const [vehicle, setVehicle] = useState<RouteTrip['vehicle']>('Xe máy');
-  const [startPointName, setStartPointName] = useState('Văn phòng Seajong Mễ Trì');
-  const [startAddress, setStartAddress] = useState('Mễ Trì Hạ, Nam Từ Liêm, Hà Nội');
-  const [currentLat, setCurrentLat] = useState<number>(21.0142);
-  const [currentLng, setCurrentLng] = useState<number>(105.7812);
+  const [startPointName, setStartPointName] = useState('');
+  const [startAddress, setStartAddress] = useState('');
+  const [currentLat, setCurrentLat] = useState<number | null>(null);
+  const [currentLng, setCurrentLng] = useState<number | null>(null);
+  const [gpsStatus, setGpsStatus] = useState<'idle' | 'locating' | 'success' | 'error'>('idle');
+  const [gpsErrorMessage, setGpsErrorMessage] = useState('');
   const [isDetectingGps, setIsDetectingGps] = useState(false);
   const [startNotes, setStartNotes] = useState('');
 
@@ -65,8 +67,8 @@ export const SalesRoutesPage: React.FC = () => {
   const [wpNotes, setWpNotes] = useState('');
 
   // Form States - Kết thúc ca tuyến
-  const [endPointName, setEndPointName] = useState('Văn phòng Seajong');
-  const [endAddress, setEndAddress] = useState('Mễ Trì Hạ, Nam Từ Liêm, Hà Nội');
+  const [endPointName, setEndPointName] = useState('');
+  const [endAddress, setEndAddress] = useState('');
   const [endNotes, setEndNotes] = useState('');
 
   // Load danh sách chuyến đi
@@ -88,61 +90,110 @@ export const SalesRoutesPage: React.FC = () => {
     return trips.find((t) => t.status === 'in_progress') || null;
   }, [trips]);
 
+  // Dịch tọa độ sang tên địa chỉ thực tế (Reverse Geocoding)
+  const resolveCoordinatesToAddress = async (lat: number, lng: number) => {
+    let resolvedAddress = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    let resolvedName = 'Vị trí thiết bị';
+
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+        { headers: { 'Accept-Language': 'vi' }, signal: AbortSignal.timeout(5000) }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.address) {
+          const addr = data.address;
+          const road = addr.road || addr.pedestrian || addr.suburb || '';
+          const ward = addr.quarter || addr.suburb || addr.village || addr.ward || '';
+          const district = addr.city_district || addr.district || addr.county || '';
+          const city = addr.city || addr.state || '';
+          const parts = [road, ward, district, city].filter(Boolean);
+          if (parts.length > 0) {
+            resolvedAddress = parts.join(', ');
+            resolvedName = road || parts[0] || 'Vị trí thiết bị';
+          }
+        }
+      }
+    } catch {}
+
+    setStartAddress(resolvedAddress);
+    setStartPointName(resolvedName);
+    setDeviceLocation({
+      lat,
+      lng,
+      address: resolvedAddress,
+      name: resolvedName,
+    });
+  };
+
+  // Định vị qua IP thiết bị (Fallback tin cậy khi Geolocation vệ tinh bị timeout hoặc cần trợ giúp)
+  const fetchLocationByIp = async (fallbackMsg?: string) => {
+    try {
+      const res = await fetch('https://ipapi.co/json/', {
+        signal: AbortSignal.timeout(6000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.latitude && data.longitude) {
+          const lat = Number(Number(data.latitude).toFixed(6));
+          const lng = Number(Number(data.longitude).toFixed(6));
+          setCurrentLat(lat);
+          setCurrentLng(lng);
+          const addr = [data.city, data.region, data.country_name].filter(Boolean).join(', ');
+          const name = data.city ? `Vị trí thiết bị (${data.city})` : 'Vị trí thiết bị';
+          setStartAddress(addr || `${lat}, ${lng}`);
+          setStartPointName(name);
+          setDeviceLocation({
+            lat,
+            lng,
+            address: addr,
+            name,
+          });
+          setGpsStatus('success');
+          setIsDetectingGps(false);
+          return;
+        }
+      }
+    } catch {}
+
+    setIsDetectingGps(false);
+    setGpsStatus('error');
+    setGpsErrorMessage(
+      fallbackMsg || 'Trình duyệt chưa cho phép truy cập vị trí. Vui lòng cho phép quyền vị trí hoặc nhập địa chỉ bên dưới.'
+    );
+  };
+
   // Tự động định vị GPS thực tế qua Geolocation API của thiết bị
   const detectCurrentLocation = () => {
+    setIsDetectingGps(true);
+    setGpsStatus('locating');
+    setGpsErrorMessage('');
+
     if (!navigator.geolocation) {
+      fetchLocationByIp('Trình duyệt không hỗ trợ Geolocation trực tiếp');
       return;
     }
-    setIsDetectingGps(true);
+
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
+      (pos) => {
         const lat = Number(pos.coords.latitude.toFixed(6));
         const lng = Number(pos.coords.longitude.toFixed(6));
         setCurrentLat(lat);
         setCurrentLng(lng);
-
-        let resolvedAddress = `${lat}, ${lng}`;
-        let resolvedName = 'Vị trí thiết bị';
-
-        // Gọi Reverse Geocoding lấy tên địa chỉ tiếng Việt qua OpenStreetMap Nominatim
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-            { headers: { 'Accept-Language': 'vi' } }
-          );
-          if (res.ok) {
-            const data = await res.json();
-            if (data && data.address) {
-              const addr = data.address;
-              const road = addr.road || addr.pedestrian || addr.suburb || '';
-              const ward = addr.quarter || addr.suburb || addr.village || addr.ward || '';
-              const district = addr.city_district || addr.district || addr.county || '';
-              const city = addr.city || addr.state || '';
-              const parts = [road, ward, district, city].filter(Boolean);
-              if (parts.length > 0) {
-                resolvedAddress = parts.join(', ');
-                resolvedName = road || parts[0] || 'Vị trí thiết bị';
-              }
-            }
-          }
-        } catch {}
-
-        setStartAddress(resolvedAddress);
-        setStartPointName(resolvedName);
-        setDeviceLocation({
-          lat,
-          lng,
-          address: resolvedAddress,
-          name: resolvedName,
-        });
-
+        setGpsStatus('success');
         setIsDetectingGps(false);
+        resolveCoordinatesToAddress(lat, lng);
       },
       (err) => {
-        console.warn('Lỗi lấy GPS:', err);
-        setIsDetectingGps(false);
+        console.warn('Geolocation directly returned error, trying IP location fallback:', err);
+        fetchLocationByIp(
+          err.code === 1
+            ? 'Quyền truy cập vị trí bị chặn. Vui lòng nhấn vào biểu tượng ổ khóa/vị trí trên thanh địa chỉ để bật "Cho phép".'
+            : 'Định vị GPS qua thiết bị đang quá thời gian chờ, đã chuyển sang định vị mạng thiết bị.'
+        );
       },
-      { enableHighAccuracy: true, timeout: 8000 }
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
     );
   };
 
@@ -266,18 +317,25 @@ export const SalesRoutesPage: React.FC = () => {
   // Xử lý Form: Bắt đầu ca tuyến
   const handleStartTripSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const finalLat = currentLat ?? deviceLocation?.lat ?? 21.0285;
+    const finalLng = currentLng ?? deviceLocation?.lng ?? 105.8542;
+    const finalPointName = startPointName.trim() || 'Vị trí thiết bị';
+    const finalAddress = startAddress.trim() || `${finalLat.toFixed(6)}, ${finalLng.toFixed(6)}`;
+
     const newTrip = routeService.startTrip({
       employeeId: 'EMP-CURRENT',
       employeeName,
       vehicle,
-      startPointName,
-      startAddress,
-      lat: currentLat,
-      lng: currentLng,
+      startPointName: finalPointName,
+      startAddress: finalAddress,
+      lat: finalLat,
+      lng: finalLng,
       notes: startNotes,
     });
     loadTrips();
     setSelectedTripId(newTrip.id);
+    setSelectedEmployeeName(employeeName);
     setIsStartTripOpen(false);
   };
 
@@ -590,34 +648,64 @@ export const SalesRoutesPage: React.FC = () => {
         width="400px"
       >
         <form onSubmit={handleStartTripSubmit} className="flex flex-col gap-3 p-1">
-          {/* Card định vị GPS thiết bị mặc định */}
-          <div className="p-3 bg-cyan-50/70 border border-cyan-200/80 rounded-xl space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-cyan-900 flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-cyan-600 animate-ping" />
-                Vị trí xuất phát theo thiết bị
-              </span>
+          {/* Card định vị GPS thiết bị thực tế */}
+          {isDetectingGps || gpsStatus === 'locating' ? (
+            <div className="p-3 bg-sky-50 border border-sky-200 rounded-xl flex items-center gap-2.5 text-xs text-sky-800">
+              <div className="w-4 h-4 border-2 border-sky-600 border-t-transparent rounded-full animate-spin shrink-0" />
+              <div>
+                <div className="font-bold">Đang dò tìm vị trí GPS của thiết bị...</div>
+                <div className="text-[11px] text-sky-600">Vui lòng bấm "Cho phép" (Allow) nếu trình duyệt hỏi quyền vị trí</div>
+              </div>
+            </div>
+          ) : currentLat != null && currentLng != null ? (
+            <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse" />
+                  Đã nhận diện vị trí thiết bị
+                </span>
+                <button
+                  type="button"
+                  onClick={detectCurrentLocation}
+                  disabled={isDetectingGps}
+                  className="text-[11px] font-bold text-cyan-700 hover:text-cyan-900 flex items-center gap-1 cursor-pointer bg-white px-2 py-0.5 rounded border border-emerald-300"
+                >
+                  <Compass size={12} className={isDetectingGps ? 'animate-spin' : ''} />
+                  <span>Lấy lại GPS</span>
+                </button>
+              </div>
+              <div className="text-xs text-slate-800 font-bold">
+                {startPointName || 'Vị trí thiết bị hiện tại'}
+              </div>
+              <div className="text-[11.5px] text-slate-600">
+                {startAddress || `${currentLat.toFixed(6)}, ${currentLng.toFixed(6)}`}
+              </div>
+              <div className="text-[11px] text-slate-500 font-mono pt-1 border-t border-emerald-200/60 flex items-center justify-between">
+                <span>Tọa độ: {currentLat.toFixed(6)}, {currentLng.toFixed(6)}</span>
+                <span className="text-emerald-700 font-bold">● GPS thời gian thực</span>
+              </div>
+            </div>
+          ) : (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
+              <div className="flex items-start gap-2">
+                <Compass className="text-amber-600 text-sm mt-0.5 shrink-0" />
+                <div className="text-xs text-amber-900">
+                  <div className="font-bold">Chưa lấy được vị trí thiết bị</div>
+                  <div className="text-[11px] text-amber-700 mt-0.5">
+                    {gpsErrorMessage || 'Vui lòng kiểm tra quyền vị trí trên thanh địa chỉ trình duyệt hoặc tự điền địa chỉ xuất phát.'}
+                  </div>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={detectCurrentLocation}
-                disabled={isDetectingGps}
-                className="text-[11px] font-bold text-cyan-700 hover:text-cyan-900 flex items-center gap-1 cursor-pointer bg-white px-2 py-0.5 rounded border border-cyan-300"
+                className="w-full py-1.5 px-3 rounded-lg bg-white border border-amber-300 text-amber-800 font-bold text-xs hover:bg-amber-100 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
               >
-                <Compass size={12} className={isDetectingGps ? 'animate-spin' : ''} />
-                <span>{isDetectingGps ? 'Đang dò GPS...' : 'Lấy lại GPS'}</span>
+                <Compass size={13} />
+                <span>Bấm vào đây để lấy vị trí thiết bị</span>
               </button>
             </div>
-            <div className="text-xs text-slate-800 font-bold">
-              {startPointName || 'Đang lấy vị trí thiết bị...'}
-            </div>
-            <div className="text-[11.5px] text-slate-600">
-              {startAddress || 'Đang xác định địa chỉ GPS...'}
-            </div>
-            <div className="text-[11px] text-slate-500 font-mono pt-1 border-t border-cyan-200/60 flex items-center justify-between">
-              <span>Tọa độ: {currentLat.toFixed(6)}, {currentLng.toFixed(6)}</span>
-              <span className="text-emerald-700 font-bold">● Sẵn sàng</span>
-            </div>
-          </div>
+          )}
 
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -657,7 +745,7 @@ export const SalesRoutesPage: React.FC = () => {
             <Input
               value={startPointName}
               onChange={(e) => setStartPointName(e.target.value)}
-              placeholder="VD: Văn phòng Seajong / Vị trí hiện tại"
+              placeholder="Tên mốc xuất phát (hoặc dùng vị trí thiết bị)"
               required
             />
           </div>
@@ -669,7 +757,7 @@ export const SalesRoutesPage: React.FC = () => {
             <Input
               value={startAddress}
               onChange={(e) => setStartAddress(e.target.value)}
-              placeholder="Địa chỉ xuất phát..."
+              placeholder="Địa chỉ xuất phát thực tế..."
               required
             />
           </div>
