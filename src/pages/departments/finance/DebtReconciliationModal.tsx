@@ -484,6 +484,22 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
     if (entries.length > 0) {
       const recordedPaymentCodes = new Set<string>();
 
+      // 1. Tính tổng phát sinh giảm thực tế đã được đại diện bởi các phiếu thu / chi / lệnh chi độc lập trong entries
+      const standalonePaymentsTotal = entries
+        .filter((e: any) => !isOpeningBalanceEntry(e) && (isPaymentEntry(e) || isReturnDeductionEntry(e)))
+        .reduce((sum: number, e: any) => {
+          const val = Number(e.contractValue || e.totalAmount || e.amount || e.paidAmount || 0);
+          return sum + val;
+        }, 0);
+
+      // 2. Thu thập trước toàn bộ mã phiếu thu / chi thực tế trong entries để chống trùng lặp
+      entries.forEach((e: any) => {
+        if (isPaymentEntry(e) || isReturnDeductionEntry(e)) {
+          const c = e.code || e.paymentCode || e.receiptCode;
+          if (c) recordedPaymentCodes.add(String(c).toUpperCase().trim());
+        }
+      });
+
       entries.forEach((entry: any, idx: number) => {
         const entryValue = Number(entry.contractValue || entry.totalAmount || entry.amount || 0);
         const entryPaid = Number(entry.paidAmount || 0);
@@ -633,34 +649,38 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
               stageGroupedList.push(payTx);
             });
           } else if (entryPaid > 0) {
-            // Chỉ tạo phiếu dự phòng nếu khoản thanh toán này CHƯA ĐƯỢC đại diện bởi bất kỳ phiếu thu thực tế nào
+            // Chỉ tạo phiếu dự phòng nếu khoản thanh toán này CHƯA ĐƯỢC đại diện bởi các phiếu thu/chi độc lập thực tế
             const currentTotalDecreased = timelineList.reduce((sum, tx) => sum + (Number(tx.decrease) || 0), 0);
-            if (currentTotalDecreased < paidAmount) {
+            const totalActualDecreased = currentTotalDecreased + standalonePaymentsTotal;
+            if (totalActualDecreased < paidAmount) {
               const pCode = entry.receiptCode || entry.paymentCode || (isReceivable ? `PT-${entry.code || idx + 1}` : `UNC-${entry.code || idx + 1}`);
-              if (!recordedPaymentCodes.has(pCode)) {
-                recordedPaymentCodes.add(pCode);
+              const upperCode = String(pCode).toUpperCase().trim();
+              if (!recordedPaymentCodes.has(upperCode)) {
+                recordedPaymentCodes.add(upperCode);
                 const pIsoDate = parseToIsoDateTime(entry.paidDate || entry.date, entry.paidTime || entry.time || '08:30');
-                const remainingUnrepresented = Math.min(entryPaid, paidAmount - currentTotalDecreased);
-                const payTx = {
-                  id: `ENTRY_PAID_${entry.id || idx}`,
-                  stageId: entry.id || `ent-${idx}`,
-                  stageCode: entry.code || `${debt.code}-D${idx + 1}`,
-                  isStagePayment: true,
-                  parentStageCode: entry.code,
-                  parentStageTitle: entry.title,
-                  date: pIsoDate,
-                  ref: pCode,
-                  type: isReceivable ? 'Phiếu thu' : 'Phiếu chi',
-                  increase: 0,
-                  decrease: remainingUnrepresented,
-                  note: isReceivable
-                    ? `Khách hàng thanh toán ${entry.title || `đợt ${idx + 1}`} qua chuyển khoản NH`
-                    : `Thanh toán tiền hàng cho NCC qua chuyển khoản NH`,
-                  orderIdx: orderSeq++,
-                  rawEntry: entry,
-                };
-                timelineList.push(payTx);
-                stageGroupedList.push(payTx);
+                const remainingUnrepresented = Math.min(entryPaid, paidAmount - totalActualDecreased);
+                if (remainingUnrepresented > 0) {
+                  const payTx = {
+                    id: `ENTRY_PAID_${entry.id || idx}`,
+                    stageId: entry.id || `ent-${idx}`,
+                    stageCode: entry.code || `${debt.code}-D${idx + 1}`,
+                    isStagePayment: true,
+                    parentStageCode: entry.code,
+                    parentStageTitle: entry.title,
+                    date: pIsoDate,
+                    ref: pCode,
+                    type: isReceivable ? 'Phiếu thu' : 'Phiếu chi',
+                    increase: 0,
+                    decrease: remainingUnrepresented,
+                    note: isReceivable
+                      ? `Khách hàng thanh toán ${entry.title || `đợt ${idx + 1}`} qua chuyển khoản NH`
+                      : `Thanh toán tiền hàng cho NCC qua chuyển khoản NH`,
+                    orderIdx: orderSeq++,
+                    rawEntry: entry,
+                  };
+                  timelineList.push(payTx);
+                  stageGroupedList.push(payTx);
+                }
               }
             }
           }
