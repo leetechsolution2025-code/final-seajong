@@ -6,6 +6,7 @@ import type { RouteTrip, RouteWaypoint } from '../../services/routeService';
 interface SalesRouteMapProps {
   trip: RouteTrip | null;
   allTrips?: RouteTrip[];
+  deviceLocation?: { lat: number; lng: number; address?: string } | null;
   className?: string;
   style?: React.CSSProperties;
   onSelectWaypoint?: (wp: RouteWaypoint) => void;
@@ -15,6 +16,7 @@ interface SalesRouteMapProps {
 export const SalesRouteMap: React.FC<SalesRouteMapProps> = ({
   trip,
   allTrips = [],
+  deviceLocation,
   className = '',
   style,
   onSelectWaypoint,
@@ -278,6 +280,43 @@ export const SalesRouteMap: React.FC<SalesRouteMapProps> = ({
       }
     });
 
+    // 5. Marker vị trí GPS thực tế của thiết bị người dùng (Pulse radar)
+    if (deviceLocation && deviceLocation.lat && deviceLocation.lng) {
+      const deviceIcon = L.divIcon({
+        className: 'device-gps-marker',
+        html: `
+          <div style="position: relative; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+            <div style="position: absolute; width: 100%; height: 100%; border-radius: 50%; background: #0284c7; opacity: 0.35; animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
+            <div style="width: 14px; height: 14px; border-radius: 50%; background: #0284c7; border: 2.5px solid #ffffff; box-shadow: 0 0 10px rgba(2,132,199,0.8); z-index: 2;"></div>
+          </div>
+        `,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+        popupAnchor: [0, -16],
+      });
+
+      L.marker([deviceLocation.lat, deviceLocation.lng], { icon: deviceIcon, zIndexOffset: 1000 })
+        .bindPopup(`
+          <div style="font-family: inherit; font-size: 12px; line-height: 1.4; padding: 2px;">
+            <div style="font-weight: 800; color: #0284c7; text-transform: uppercase; font-size: 11px;">
+              📍 Vị trí thiết bị của bạn (GPS)
+            </div>
+            <div style="color: #334155; font-size: 12px; margin-top: 2px; font-weight: 600;">
+              ${deviceLocation.address || 'Vị trí hiện tại'}
+            </div>
+            <div style="font-family: monospace; font-size: 10.5px; color: #64748b; margin-top: 2px;">
+              ${deviceLocation.lat.toFixed(6)}, ${deviceLocation.lng.toFixed(6)}
+            </div>
+          </div>
+        `)
+        .addTo(layerGroup);
+
+      if (tripsToRender.length === 0) {
+        allBoundsCoords.push([deviceLocation.lat, deviceLocation.lng]);
+        map.setView([deviceLocation.lat, deviceLocation.lng], 15);
+      }
+    }
+
     // Tự động thu phóng (fit bounds) vừa khít tuyến đường
     if (allBoundsCoords.length > 0) {
       try {
@@ -287,7 +326,13 @@ export const SalesRouteMap: React.FC<SalesRouteMapProps> = ({
         console.warn('Could not fit map bounds:', err);
       }
     }
-  }, [trip, allTrips, onSelectWaypoint]);
+  }, [trip, allTrips, deviceLocation, onSelectWaypoint]);
+
+  // Bay tới vị trí GPS của thiết bị
+  const handleFlyToDevice = () => {
+    if (!mapInstanceRef.current || !deviceLocation) return;
+    mapInstanceRef.current.flyTo([deviceLocation.lat, deviceLocation.lng], 16, { duration: 1.2 });
+  };
 
   // Căn lại bản đồ vào giữa
   const handleRecenter = () => {
@@ -305,8 +350,8 @@ export const SalesRouteMap: React.FC<SalesRouteMapProps> = ({
     >
       <div ref={mapContainerRef} className="w-full h-full" style={{ minHeight: '450px', zIndex: 1 }} />
 
-      {/* Nút căn giữa nhanh góc trên bên trái */}
-      <div className="absolute top-3 left-3 z-[400]">
+      {/* Cụm nút thao tác nhanh góc trên bên trái */}
+      <div className="absolute top-3 left-3 z-[400] flex items-center gap-2">
         <button
           type="button"
           onClick={handleRecenter}
@@ -316,6 +361,18 @@ export const SalesRouteMap: React.FC<SalesRouteMapProps> = ({
           <i className="bi bi-arrows-fullscreen text-xs" />
           <span>Vừa khung tuyến</span>
         </button>
+
+        {deviceLocation && (
+          <button
+            type="button"
+            onClick={handleFlyToDevice}
+            className="bg-white/95 hover:bg-white text-sky-700 hover:text-sky-800 py-1.5 px-2.5 rounded-lg border border-sky-200 shadow-xs text-xs font-bold flex items-center gap-1.5 backdrop-blur-xs transition-all cursor-pointer"
+            title="Định vị thiết bị của bạn"
+          >
+            <span className="w-2 h-2 rounded-full bg-sky-500 animate-ping" />
+            <span>Vị trí của tôi</span>
+          </button>
+        )}
       </div>
 
       {/* Floating Info Badge góc dưới bên trái */}
@@ -336,6 +393,12 @@ export const SalesRouteMap: React.FC<SalesRouteMapProps> = ({
           <span className="w-4 h-1 rounded-full bg-cyan-600 shrink-0" />
           <span>Lòng đường thực tế</span>
         </div>
+        {deviceLocation && (
+          <div className="hidden md:flex items-center gap-1.5 text-sky-700 font-bold border-l border-slate-200 pl-3">
+            <span className="w-2 h-2 rounded-full bg-sky-500" />
+            <span>Vị trí thiết bị (GPS)</span>
+          </div>
+        )}
       </div>
     </div>
   );

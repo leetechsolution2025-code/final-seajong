@@ -23,12 +23,19 @@ import {
   Clock,
   GeoAlt,
   Shop,
+  PlayFill,
 } from 'react-bootstrap-icons';
 
 export const SalesRoutesPage: React.FC = () => {
   const [trips, setTrips] = useState<RouteTrip[]>([]);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [selectedEmployeeName, setSelectedEmployeeName] = useState<string>('');
+  const [deviceLocation, setDeviceLocation] = useState<{
+    lat: number;
+    lng: number;
+    address: string;
+    name: string;
+  } | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'in_progress' | 'completed'>('all');
   const [dateFilter, setDateFilter] = useState<'today' | 'all'>('all');
@@ -71,10 +78,6 @@ export const SalesRoutesPage: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    loadTrips();
-  }, []);
-
   // Chuyến đi đang được chọn xem chi tiết & vẽ bản đồ
   const selectedTrip = useMemo(() => {
     return trips.find((t) => t.id === selectedTripId) || trips[0] || null;
@@ -88,7 +91,6 @@ export const SalesRoutesPage: React.FC = () => {
   // Tự động định vị GPS thực tế qua Geolocation API của thiết bị
   const detectCurrentLocation = () => {
     if (!navigator.geolocation) {
-      alert('Trình duyệt không hỗ trợ định vị GPS.');
       return;
     }
     setIsDetectingGps(true);
@@ -98,6 +100,9 @@ export const SalesRoutesPage: React.FC = () => {
         const lng = Number(pos.coords.longitude.toFixed(6));
         setCurrentLat(lat);
         setCurrentLng(lng);
+
+        let resolvedAddress = `${lat}, ${lng}`;
+        let resolvedName = 'Vị trí thiết bị';
 
         // Gọi Reverse Geocoding lấy tên địa chỉ tiếng Việt qua OpenStreetMap Nominatim
         try {
@@ -115,12 +120,21 @@ export const SalesRoutesPage: React.FC = () => {
               const city = addr.city || addr.state || '';
               const parts = [road, ward, district, city].filter(Boolean);
               if (parts.length > 0) {
-                setStartAddress(parts.join(', '));
-                setStartPointName(road || 'Vị trí hiện tại');
+                resolvedAddress = parts.join(', ');
+                resolvedName = road || parts[0] || 'Vị trí thiết bị';
               }
             }
           }
         } catch {}
+
+        setStartAddress(resolvedAddress);
+        setStartPointName(resolvedName);
+        setDeviceLocation({
+          lat,
+          lng,
+          address: resolvedAddress,
+          name: resolvedName,
+        });
 
         setIsDetectingGps(false);
       },
@@ -131,6 +145,45 @@ export const SalesRoutesPage: React.FC = () => {
       { enableHighAccuracy: true, timeout: 8000 }
     );
   };
+
+  useEffect(() => {
+    loadTrips();
+    detectCurrentLocation();
+  }, []);
+
+  // Theo dõi GPS thực tế của thiết bị liên tục khi đang có ca đi tuyến (Live GPS tracking)
+  useEffect(() => {
+    if (!activeTrip || !navigator.geolocation) return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const lat = Number(pos.coords.latitude.toFixed(6));
+        const lng = Number(pos.coords.longitude.toFixed(6));
+        setCurrentLat(lat);
+        setCurrentLng(lng);
+        setDeviceLocation((prev) => ({
+          lat,
+          lng,
+          address: prev?.address || `${lat}, ${lng}`,
+          name: prev?.name || 'Vị trí thiết bị',
+        }));
+
+        // Ghi nhận vào lộ trình di chuyển thực tế
+        const updated = routeService.recordLiveLocation(activeTrip.id, lat, lng);
+        if (updated) {
+          setTrips((prevTrips) =>
+            prevTrips.map((t) => (t.id === updated.id ? updated : t))
+          );
+        }
+      },
+      (err) => console.warn('GPS Watch error:', err),
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [activeTrip?.id]);
 
   // Danh sách nhân viên đi tuyến làm nguồn gợi ý sẵn có cho component input
   const routeEmployees = useMemo<EmployeeItem[]>(() => {
@@ -409,18 +462,34 @@ export const SalesRoutesPage: React.FC = () => {
             ]}
             actions={
               <div className="flex items-center gap-1.5 flex-wrap">
-                {activeTrip ? (
+                {/* Nút Bắt đầu ca tuyến luôn hiển thị để xác nhận vị trí xuất phát thiết bị */}
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    detectCurrentLocation();
+                    setIsStartTripOpen(true);
+                  }}
+                  leftIcon={<PlayFill size={15} />}
+                  style={{ backgroundColor: '#0891b2', borderColor: '#0891b2' }}
+                  title="Xác nhận vị trí GPS thiết bị và bắt đầu ca đi tuyến"
+                >
+                  <span>{activeTrip ? 'Bắt đầu ca mới' : 'Bắt đầu ca tuyến'}</span>
+                </Button>
+
+                {activeTrip && (
                   <>
                     <Button
                       type="button"
-                      variant="primary"
+                      variant="outline"
                       size="sm"
                       onClick={() => {
                         detectCurrentLocation();
                         setIsAddWaypointOpen(true);
                       }}
                       leftIcon={<PlusLg size={13} />}
-                      style={{ backgroundColor: '#0891b2', borderColor: '#0891b2' }}
+                      className="text-cyan-700 border-cyan-300 hover:bg-cyan-50"
                     >
                       <span>Ghé đại lý</span>
                     </Button>
@@ -437,20 +506,6 @@ export const SalesRoutesPage: React.FC = () => {
                       <span>Kết thúc ca</span>
                     </Button>
                   </>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="sm"
-                    onClick={() => {
-                      detectCurrentLocation();
-                      setIsStartTripOpen(true);
-                    }}
-                    leftIcon={<PlusLg size={13} />}
-                    style={{ backgroundColor: '#0891b2', borderColor: '#0891b2' }}
-                  >
-                    <span>Bắt đầu ca tuyến</span>
-                  </Button>
                 )}
               </div>
             }
@@ -517,7 +572,11 @@ export const SalesRoutesPage: React.FC = () => {
 
             {/* KHUNG BẢN ĐỒ TOÀN MÀN HÌNH MỞ RỘNG TỐI ĐA */}
             <div className="flex-1 w-full h-full min-h-[500px] overflow-hidden rounded-xl border border-slate-200/60 shadow-2xs">
-              <SalesRouteMap trip={selectedTrip} allTrips={filteredTrips} />
+              <SalesRouteMap
+                trip={selectedTrip}
+                allTrips={filteredTrips}
+                deviceLocation={deviceLocation}
+              />
             </div>
           </div>
         </div>
@@ -527,10 +586,39 @@ export const SalesRoutesPage: React.FC = () => {
       <Offcanvas
         isOpen={isStartTripOpen}
         onClose={() => setIsStartTripOpen(false)}
-        title="Bắt đầu ca đi tuyến"
+        title="Xác nhận vị trí bắt đầu ca tuyến"
         width="400px"
       >
         <form onSubmit={handleStartTripSubmit} className="flex flex-col gap-3 p-1">
+          {/* Card định vị GPS thiết bị mặc định */}
+          <div className="p-3 bg-cyan-50/70 border border-cyan-200/80 rounded-xl space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-cyan-900 flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-cyan-600 animate-ping" />
+                Vị trí xuất phát theo thiết bị
+              </span>
+              <button
+                type="button"
+                onClick={detectCurrentLocation}
+                disabled={isDetectingGps}
+                className="text-[11px] font-bold text-cyan-700 hover:text-cyan-900 flex items-center gap-1 cursor-pointer bg-white px-2 py-0.5 rounded border border-cyan-300"
+              >
+                <Compass size={12} className={isDetectingGps ? 'animate-spin' : ''} />
+                <span>{isDetectingGps ? 'Đang dò GPS...' : 'Lấy lại GPS'}</span>
+              </button>
+            </div>
+            <div className="text-xs text-slate-800 font-bold">
+              {startPointName || 'Đang lấy vị trí thiết bị...'}
+            </div>
+            <div className="text-[11.5px] text-slate-600">
+              {startAddress || 'Đang xác định địa chỉ GPS...'}
+            </div>
+            <div className="text-[11px] text-slate-500 font-mono pt-1 border-t border-cyan-200/60 flex items-center justify-between">
+              <span>Tọa độ: {currentLat.toFixed(6)}, {currentLng.toFixed(6)}</span>
+              <span className="text-emerald-700 font-bold">● Sẵn sàng</span>
+            </div>
+          </div>
+
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
               Nhân viên phụ trách
@@ -563,67 +651,51 @@ export const SalesRoutesPage: React.FC = () => {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-bold text-slate-700">
-                Điểm xuất phát (Tọa độ GPS)
-              </label>
-              <button
-                type="button"
-                onClick={detectCurrentLocation}
-                disabled={isDetectingGps}
-                className="text-[11px] font-bold text-cyan-600 hover:text-cyan-800 flex items-center gap-1 cursor-pointer bg-transparent border-0 p-0"
-              >
-                <Compass size={12} />
-                <span>{isDetectingGps ? 'Đang dò GPS...' : 'Lấy vị trí GPS'}</span>
-              </button>
-            </div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Tên mốc xuất phát
+            </label>
             <Input
               value={startPointName}
               onChange={(e) => setStartPointName(e.target.value)}
-              placeholder="Tên điểm xuất phát (VD: Văn phòng Seajong)"
+              placeholder="VD: Văn phòng Seajong / Vị trí hiện tại"
               required
             />
-            <div className="mt-1">
-              <Input
-                value={startAddress}
-                onChange={(e) => setStartAddress(e.target.value)}
-                placeholder="Địa chỉ cụ thể"
-              />
-            </div>
-            <div className="text-[11px] text-slate-400 font-mono mt-1">
-              Tọa độ: {currentLat}, {currentLng}
-            </div>
           </div>
 
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              Ghi chú ca tuyến
+              Địa chỉ xuất phát
+            </label>
+            <Input
+              value={startAddress}
+              onChange={(e) => setStartAddress(e.target.value)}
+              placeholder="Địa chỉ xuất phát..."
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Ghi chú lộ trình (nếu có)
             </label>
             <textarea
               value={startNotes}
               onChange={(e) => setStartNotes(e.target.value)}
-              placeholder="VD: Tuyến chăm sóc đại lý trục Cầu Giấy - Bắc Từ Liêm..."
+              placeholder="VD: Ca đi tuyến chăm sóc khách hàng ngày..."
               className="w-full text-xs p-2 rounded-lg border border-slate-200 focus:outline-none focus:border-cyan-500"
-              rows={3}
+              rows={2}
             />
           </div>
 
-          <div className="pt-2 flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setIsStartTripOpen(false)}
-            >
-              Hủy bỏ
-            </Button>
+          <div className="pt-2">
             <Button
               type="submit"
               variant="primary"
-              size="sm"
+              className="w-full font-bold flex items-center justify-center gap-2 py-2"
               style={{ backgroundColor: '#0891b2', borderColor: '#0891b2' }}
             >
-              Xuất phát ngay
+              <PlayFill size={16} />
+              <span>Xác nhận vị trí bắt đầu</span>
             </Button>
           </div>
         </form>

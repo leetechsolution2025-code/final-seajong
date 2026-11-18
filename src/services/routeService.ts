@@ -76,7 +76,7 @@ export const calculateTotalPathKm = (coords: [number, number][]): number => {
   return Math.round(total * 10) / 10;
 };
 
-// Hàm định tuyến thực tế theo lòng đường giao thông (OSRM Driving API)
+// Hàm định tuyến thực tế theo lòng đường giao thông (OSRM Driving API có mirror dự phòng)
 export const fetchActualRoadRoute = async (
   points: [number, number][]
 ): Promise<{ coordinates: [number, number][]; distanceKm: number }> => {
@@ -84,28 +84,32 @@ export const fetchActualRoadRoute = async (
     return { coordinates: points, distanceKm: 0 };
   }
 
-  try {
-    const coordsQuery = points.map(([lat, lng]) => `${lng},${lat}`).join(';');
-    const res = await fetch(
-      `https://router.project-osrm.org/route/v1/driving/${coordsQuery}?overview=full&geometries=geojson`,
-      { signal: AbortSignal.timeout(6000) }
-    );
-    if (res.ok) {
-      const data = await res.json();
-      if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
-        const route = data.routes[0];
-        const roadCoords: [number, number][] = route.geometry.coordinates.map(
-          ([lng, lat]: [number, number]) => [Number(lat.toFixed(5)), Number(lng.toFixed(5))]
-        );
-        const distanceKm = Math.round((route.distance / 1000) * 10) / 10;
-        return { coordinates: roadCoords, distanceKm };
+  const coordsQuery = points.map(([lat, lng]) => `${lng},${lat}`).join(';');
+  const endpoints = [
+    `https://router.project-osrm.org/route/v1/driving/${coordsQuery}?overview=full&geometries=geojson`,
+    `https://routing.openstreetmap.de/routed-car/route/v1/driving/${coordsQuery}?overview=full&geometries=geojson`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(7000) });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+          const route = data.routes[0];
+          const roadCoords: [number, number][] = route.geometry.coordinates.map(
+            ([lng, lat]: [number, number]) => [Number(lat.toFixed(6)), Number(lng.toFixed(6))]
+          );
+          const distanceKm = Math.round((route.distance / 1000) * 10) / 10;
+          return { coordinates: roadCoords, distanceKm };
+        }
       }
+    } catch (err) {
+      console.warn(`Routing endpoint failed (${url}):`, err);
     }
-  } catch (err) {
-    console.warn('Could not fetch OSRM route, falling back to direct points:', err);
   }
 
-  // Fallback nếu offline
+  // Fallback nếu offline hoặc không có mạng
   return {
     coordinates: points,
     distanceKm: calculateTotalPathKm(points),
@@ -444,6 +448,28 @@ export const routeService = {
     trip.pathCoordinates = roadResult.coordinates;
     trip.totalDistanceKm = roadResult.distanceKm;
 
+    trips[tripIndex] = trip;
+    this.saveTrips(trips);
+    return trip;
+  },
+
+  // Ghi nhận thêm tọa độ GPS thực tế của thiết bị khi di chuyển thời gian thực
+  recordLiveLocation(tripId: string, lat: number, lng: number): RouteTrip | null {
+    const trips = this.getTrips();
+    const tripIndex = trips.findIndex((t) => t.id === tripId);
+    if (tripIndex === -1) return null;
+    const trip = { ...trips[tripIndex] };
+    if (trip.status !== 'in_progress') return trip;
+
+    const lastCoord = trip.pathCoordinates[trip.pathCoordinates.length - 1];
+    if (lastCoord) {
+      const dist = calculateDistanceKm(lastCoord[0], lastCoord[1], lat, lng);
+      // Chỉ lưu nếu thiết bị di chuyển ít nhất 15m (0.015km) để tránh nhiễu GPS đứng yên
+      if (dist < 0.015) return trip;
+    }
+
+    trip.pathCoordinates = [...trip.pathCoordinates, [lat, lng]];
+    trip.totalDistanceKm = Math.round(calculateTotalPathKm(trip.pathCoordinates) * 10) / 10;
     trips[tripIndex] = trip;
     this.saveTrips(trips);
     return trip;
