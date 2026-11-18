@@ -12234,6 +12234,30 @@ app.put('/api/logistics/tasks/:id/complete', async (req, res) => {
           }
         }
 
+        // Tự động đồng bộ trạng thái đơn hàng khi hoàn tất phiếu kho vận
+        if (ticket.saleOrderId) {
+          try {
+            const relatedTickets = await prisma.logisticsTicket.findMany({
+              where: { saleOrderId: ticket.saleOrderId },
+              select: { id: true, status: true, type: true },
+            });
+            const allTicketsDone = relatedTickets.every(
+              (t) => t.id === id || t.status === 'COMPLETED'
+            );
+            if (allTicketsDone) {
+              await prisma.saleOrder.update({
+                where: { id: ticket.saleOrderId },
+                data: {
+                  trangThai: 'completed',
+                  trangThaiKho: 'exported',
+                },
+              });
+            }
+          } catch (soErr) {
+            console.warn('Lỗi đồng bộ saleOrder khi hoàn thành ticket:', soErr.message);
+          }
+        }
+
         return res.json({ success: true });
       }
     } catch (errTicket) {
@@ -25188,7 +25212,7 @@ app.get('/api/plan-finance/stock-movements/next-code', async (req, res) => {
 // ── 2. Nhập kho hàng loạt (Lưu vết DB) ─────────────────────────
 app.post('/api/plan-finance/stock-movements/batch', async (req, res) => {
   try {
-    const { toWarehouseId, soChungTu, purchaseOrderId, taskId, salesOrderId, lyDo, nguoiThucHien, lines = [] } = req.body;
+    const { toWarehouseId, soChungTu, purchaseOrderId, taskId, salesOrderId, workOrderId, lyDo, nguoiThucHien, lines = [] } = req.body;
     if (!lines.length) {
       return res.status(400).json({ error: 'Danh sách mặt hàng nhập kho không được để trống' });
     }
@@ -25342,16 +25366,31 @@ app.post('/api/plan-finance/stock-movements/batch', async (req, res) => {
             candidateCodes.add(upper.replace(/^LSX-/, 'DH-'));
           }
         }
+        if (workOrderId) {
+          candidateCodes.add(String(workOrderId).toUpperCase());
+          await tx.saleOrder.updateMany({
+            where: {
+              OR: [
+                { id: String(workOrderId) },
+                { code: String(workOrderId) }
+              ]
+            },
+            data: {
+              trangThai: 'completed',
+              ngayHoanThanhSanXuat: new Date()
+            }
+          });
+        }
         if (salesOrderId) {
           await tx.saleOrder.updateMany({
             where: { OR: [{ id: String(salesOrderId) }, { code: String(salesOrderId) }] },
-            data: { trangThai: 'done' },
+            data: { trangThai: 'completed' },
           });
         }
         if (candidateCodes.size > 0) {
           await tx.saleOrder.updateMany({
             where: { code: { in: Array.from(candidateCodes) } },
-            data: { trangThai: 'done' },
+            data: { trangThai: 'completed' },
           });
         }
       } catch (soSyncErr) {
@@ -25481,39 +25520,64 @@ app.post('/api/plan-finance/stock-movements/batch-xuat', async (req, res) => {
             data: { status: 'COMPLETED', completedAt: new Date() }
           });
         } catch (_) { }
-      } else if (salesOrderId || workOrderId) {
-        try {
-          const soCondition = salesOrderId
-            ? { saleOrderId: salesOrderId }
-            : {
-              OR: [
-                { saleOrder: { code: workOrderId.replace('LSX', 'DBH') } },
-                { saleOrderId: workOrderId }
-              ]
-            };
-          await tx.logisticsTicket.updateMany({
-            where: {
-              ...soCondition,
-              type: { in: ['MATERIAL_PICKING', 'WARRANTY_MATERIAL'] }
-            },
-            data: { status: 'COMPLETED', completedAt: new Date() }
-          });
-        } catch (_) { }
       }
 
       if (salesOrderId) {
         try {
-          const checkTickets = await tx.logisticsTicket.findMany({
-            where: { saleOrderId: salesOrderId }
+          // Hoàn thành mọi phiếu kho vận liên kết của đơn bán hàng
+          await tx.logisticsTicket.updateMany({
+            where: { saleOrderId: salesOrderId },
+            data: { status: 'COMPLETED', completedAt: new Date() }
           });
-          const allTicketsCompleted = checkTickets.length > 0 && checkTickets.every(t => t.status === 'COMPLETED');
-          if (allTicketsCompleted) {
-            await tx.saleOrder.update({
-              where: { id: salesOrderId },
-              data: { trangThaiKho: 'exported', trangThai: 'done' }
-            });
-          }
-        } catch (_) { }
+
+          // Tự động chuyển Đơn bán hàng sang Hoàn thành (completed) và đã xuất kho
+          await tx.saleOrder.updateMany({
+            where: {
+              OR: [
+                { id: String(salesOrderId) },
+                { code: String(salesOrderId) }
+              ]
+            },
+            data: {
+              trangThaiKho: 'exported',
+              trangThai: 'completed'
+            }
+          });
+        } catch (soErr) {
+          console.warn('[batch-xuat] Lỗi cập nhật đơn bán hàng:', soErr.message);
+        }
+      }
+
+      if (workOrderId) {
+        try {
+          // Đánh dấu hoàn tất phiếu cấp phát vật tư theo Lệnh sản xuất
+          await tx.logisticsTicket.updateMany({
+            where: {
+              OR: [
+                { saleOrderId: workOrderId },
+                { saleOrder: { code: workOrderId } },
+                { code: workOrderId }
+              ],
+              type: { in: ['MATERIAL_PICKING', 'WARRANTY_MATERIAL'] }
+            },
+            data: { status: 'COMPLETED', completedAt: new Date() }
+          });
+
+          // Lệnh sản xuất chuyển sang đang sản xuất lắp ráp
+          await tx.saleOrder.updateMany({
+            where: {
+              OR: [
+                { id: String(workOrderId) },
+                { code: String(workOrderId) }
+              ]
+            },
+            data: {
+              trangThai: 'in_production'
+            }
+          });
+        } catch (woErr) {
+          console.warn('[batch-xuat] Lỗi cập nhật lệnh sản xuất:', woErr.message);
+        }
       }
     });
 
