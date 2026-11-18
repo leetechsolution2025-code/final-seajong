@@ -8,6 +8,8 @@ import {
   ChevronRight,
   ChevronDown,
   Trash,
+  ArrowRepeat,
+  CheckCircle,
 } from 'react-bootstrap-icons';
 import { Pagination } from './Pagination';
 import { Offcanvas } from './Offcanvas';
@@ -1065,6 +1067,40 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
       });
   };
 
+  // Cơ chế tự động rà soát và thiết lập trạng thái "Đã hoàn thành" theo tiến trình thực tế
+  const [isSyncingAuto, setIsSyncingAuto] = useState<boolean>(false);
+  const handleSyncAutoCompletion = async () => {
+    setIsSyncingAuto(true);
+    try {
+      const res = await fetch('/api/user-tasks/sync-completion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      fetchTasks();
+      if (onShowToast) {
+        if (data && data.updatedCount > 0) {
+          onShowToast(
+            'success',
+            'Tự động đồng bộ tiến độ',
+            `Đã tự động chuyển ${data.updatedCount} công việc sang trạng thái "Đã hoàn thành" dựa trên tiến trình thực tế!`
+          );
+        } else {
+          onShowToast(
+            'info',
+            'Tự động đồng bộ tiến độ',
+            'Tất cả công việc đã khớp hoàn toàn với tiến trình thực tế của hệ thống.'
+          );
+        }
+      }
+    } catch (err: any) {
+      console.error('Lỗi sync completion:', err);
+      fetchTasks();
+    } finally {
+      setIsSyncingAuto(false);
+    }
+  };
+
   // Cập nhật tiến độ công việc
   const handleUpdateProgress = (task: UserTaskItem, newProgress: number) => {
     if (readOnly) return;
@@ -1791,6 +1827,36 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
 
         {/* Cụm phải: Nút thêm việc, Bộ chuyển đổi Bảng / Gantt, Dropdown Trạng thái */}
         <div className="task-mgmt-toolbar-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+          {/* Nút Tự động thiết lập trạng thái hoàn thành theo tiến trình thực tế */}
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={handleSyncAutoCompletion}
+              disabled={isSyncingAuto}
+              className="btn btn-outline-primary"
+              title="Tự động rà soát và chuyển trạng thái Đã hoàn thành theo tiến trình thực tế (Sản xuất, Kho vận, Mua hàng)"
+              aria-label="Tự động đồng bộ tiến độ"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '0 10px',
+                borderRadius: '6px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                height: '32px',
+                cursor: isSyncingAuto ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap',
+                backgroundColor: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                color: '#1d4ed8',
+              }}
+            >
+              <ArrowRepeat size={14} className={isSyncingAuto ? 'animate-spin' : ''} />
+              <span className="hidden md:inline">{isSyncingAuto ? 'Đang đồng bộ...' : 'Tự động hoàn thành'}</span>
+            </button>
+          )}
+
           {allowAdd && !readOnly && (
             <button
               type="button"
@@ -3691,6 +3757,34 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                       backgroundColor: '#2563eb',
                     }}
                   />
+                </div>
+              )}
+
+              {!readOnly && selectedTask.status !== 'completed' && (
+                <div style={{ marginTop: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateStatus(selectedTask, 'completed')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      fontSize: '0.8125rem',
+                      fontWeight: 700,
+                      backgroundColor: '#10b981',
+                      border: 'none',
+                      color: '#ffffff',
+                      cursor: 'pointer',
+                      boxShadow: '0 1px 3px rgba(16, 185, 129, 0.3)',
+                    }}
+                  >
+                    <CheckCircle size={15} />
+                    <span>Xác nhận đã hoàn thành (100%)</span>
+                  </button>
                 </div>
               )}
             </div>

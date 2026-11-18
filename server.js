@@ -23,6 +23,7 @@ import {
   syncAllExistingOrdersToAccounting,
 } from './server/orderAccountingSync.js';
 import { syncPersonalRequestAdvanceToFinance } from './services/advanceAccountingSyncService.js';
+import { syncTasksAutoCompletion } from './server/taskAutoCompletionService.js';
 
 dotenv.config();
 
@@ -6771,11 +6772,27 @@ function parseMarketingPlanTasks(planDataStr, targetYear = 2026) {
   return mktTasks;
 }
 
+app.post('/api/user-tasks/sync-completion', async (req, res) => {
+  try {
+    const { taskId } = req.body || {};
+    const result = await syncTasksAutoCompletion(prisma, taskId || null);
+    res.json(result);
+  } catch (err) {
+    console.error('Lỗi POST /api/user-tasks/sync-completion:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/user-tasks', async (req, res) => {
   try {
     const allTasks = [];
     const seenIds = new Set();
     const isShowroomScope = req.query.scope === 'showroom_construction';
+
+    // Tự động kiểm tra và đồng bộ trạng thái "Đã hoàn thành" cho các công việc liên kết với đơn hàng / phiếu kho / PR đã hoàn tất
+    await syncTasksAutoCompletion(prisma).catch((e) => {
+      console.warn('[GET /api/user-tasks auto-sync warning]:', e?.message);
+    });
 
     // 1. Lấy các công việc khởi tạo trực tiếp trong bảng Task (chỉ lấy khi không ở chế độ Kế hoạch thi công Showroom, hoặc công việc thuộc hợp đồng thi công Showroom)
     try {
@@ -12969,6 +12986,9 @@ app.post('/api/logistics/tickets/:id/quick-pack', async (req, res) => {
         }
       }
     });
+
+    // Tự động kiểm tra và cập nhật trạng thái hoàn thành cho các công việc liên quan
+    syncTasksAutoCompletion(prisma).catch(() => {});
 
     res.json({
       success: true,
