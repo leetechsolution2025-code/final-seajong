@@ -483,6 +483,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
 
     if (entries.length > 0) {
       const recordedPaymentCodes = new Set<string>();
+      let fallbackPaymentsDecreased = 0;
 
       // 1. Tính tổng phát sinh giảm thực tế đã được đại diện bởi các phiếu thu / chi / lệnh chi độc lập trong entries
       const standalonePaymentsTotal = entries
@@ -491,14 +492,6 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
           const val = Number(e.contractValue || e.totalAmount || e.amount || e.paidAmount || 0);
           return sum + val;
         }, 0);
-
-      // 2. Thu thập trước toàn bộ mã phiếu thu / chi thực tế trong entries để chống trùng lặp
-      entries.forEach((e: any) => {
-        if (isPaymentEntry(e) || isReturnDeductionEntry(e)) {
-          const c = e.code || e.paymentCode || e.receiptCode;
-          if (c) recordedPaymentCodes.add(String(c).toUpperCase().trim());
-        }
-      });
 
       entries.forEach((entry: any, idx: number) => {
         const entryValue = Number(entry.contractValue || entry.totalAmount || entry.amount || 0);
@@ -521,8 +514,9 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
             payments.forEach((p: any, pIdx: number) => {
               const pAmount = Number(p.amount) || 0;
               const pCode = p.code || p.receiptCode || p.paymentCode || (isReceivable ? `PT-DK-${idx + 1}` : `UNC-DK-${idx + 1}`);
-              if (recordedPaymentCodes.has(pCode)) return;
-              recordedPaymentCodes.add(pCode);
+              const upperCode = String(pCode).toUpperCase().trim();
+              if (recordedPaymentCodes.has(upperCode)) return;
+              recordedPaymentCodes.add(upperCode);
 
               const pIsoDate = parseToIsoDateTime(p.date || p.dateTime || entry.date, p.time || entry.time || '08:30');
               const isSubReturn = isReturnDeductionEntry(p);
@@ -557,8 +551,9 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
           // ── B. PHIẾU THU / CHI / LỆNH CHI / GIẢM TRỪ CÔNG NỢ ĐỘC LẬP (CHỈ PHÁT SINH GIẢM)
           const pAmount = entryValue > 0 ? entryValue : entryPaid;
           const pCode = entry.code || entry.paymentCode || entry.receiptCode || (isReturn ? `ERR-${idx + 1}` : isReceivable ? `PT-${idx + 1}` : `PC-${idx + 1}`);
-          if (!recordedPaymentCodes.has(pCode)) {
-            recordedPaymentCodes.add(pCode);
+          const upperCode = String(pCode).toUpperCase().trim();
+          if (!recordedPaymentCodes.has(upperCode)) {
+            recordedPaymentCodes.add(upperCode);
 
             const payTx = {
               id: `ENTRY_STANDALONE_${entry.id || idx}`,
@@ -617,8 +612,9 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
             payments.forEach((p: any, pIdx: number) => {
               const pAmount = Number(p.amount) || 0;
               const pCode = p.code || p.receiptCode || p.paymentCode || (isReceivable ? `PT-${entry.code}` : `UNC-${entry.code}`);
-              if (recordedPaymentCodes.has(pCode)) return;
-              recordedPaymentCodes.add(pCode);
+              const upperCode = String(pCode).toUpperCase().trim();
+              if (recordedPaymentCodes.has(upperCode)) return;
+              recordedPaymentCodes.add(upperCode);
 
               const pIsoDate = parseToIsoDateTime(p.date || p.dateTime || entry.date, p.time || entry.time || '08:30');
               const isSubReturn = isReturnDeductionEntry(p);
@@ -649,17 +645,17 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
               stageGroupedList.push(payTx);
             });
           } else if (entryPaid > 0) {
-            // Chỉ tạo phiếu dự phòng nếu khoản thanh toán này CHƯA ĐƯỢC đại diện bởi các phiếu thu/chi độc lập thực tế
-            const currentTotalDecreased = timelineList.reduce((sum, tx) => sum + (Number(tx.decrease) || 0), 0);
-            const totalActualDecreased = currentTotalDecreased + standalonePaymentsTotal;
-            if (totalActualDecreased < paidAmount) {
-              const pCode = entry.receiptCode || entry.paymentCode || (isReceivable ? `PT-${entry.code || idx + 1}` : `UNC-${entry.code || idx + 1}`);
-              const upperCode = String(pCode).toUpperCase().trim();
-              if (!recordedPaymentCodes.has(upperCode)) {
-                recordedPaymentCodes.add(upperCode);
-                const pIsoDate = parseToIsoDateTime(entry.paidDate || entry.date, entry.paidTime || entry.time || '08:30');
-                const remainingUnrepresented = Math.min(entryPaid, paidAmount - totalActualDecreased);
-                if (remainingUnrepresented > 0) {
+            // Chỉ tạo phiếu dự phòng nếu các khoản thanh toán này CHƯA ĐƯỢC đại diện đủ bởi các phiếu thu/chi độc lập thực tế
+            if (standalonePaymentsTotal < paidAmount) {
+              const remainingNeeded = Math.max(0, paidAmount - standalonePaymentsTotal - fallbackPaymentsDecreased);
+              const pDecrease = Math.min(entryPaid, remainingNeeded);
+              if (pDecrease > 0) {
+                const pCode = entry.receiptCode || entry.paymentCode || (isReceivable ? `PT-${entry.code || idx + 1}` : `UNC-${entry.code || idx + 1}`);
+                const upperCode = String(pCode).toUpperCase().trim();
+                if (!recordedPaymentCodes.has(upperCode)) {
+                  recordedPaymentCodes.add(upperCode);
+                  fallbackPaymentsDecreased += pDecrease;
+                  const pIsoDate = parseToIsoDateTime(entry.paidDate || entry.date, entry.paidTime || entry.time || '08:30');
                   const payTx = {
                     id: `ENTRY_PAID_${entry.id || idx}`,
                     stageId: entry.id || `ent-${idx}`,
@@ -671,7 +667,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                     ref: pCode,
                     type: isReceivable ? 'Phiếu thu' : 'Phiếu chi',
                     increase: 0,
-                    decrease: remainingUnrepresented,
+                    decrease: pDecrease,
                     note: isReceivable
                       ? `Khách hàng thanh toán ${entry.title || `đợt ${idx + 1}`} qua chuyển khoản NH`
                       : `Thanh toán tiền hàng cho NCC qua chuyển khoản NH`,
