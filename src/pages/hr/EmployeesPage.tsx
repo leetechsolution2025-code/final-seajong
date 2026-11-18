@@ -613,28 +613,28 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({
     switch (st) {
       case 'active':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
             Đang làm việc
           </span>
         );
       case 'probation':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
             Thử việc
           </span>
         );
       case 'resigned':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
             <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
             Đã nghỉ việc
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
             {st || '—'}
           </span>
         );
@@ -645,25 +645,25 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({
     switch (type) {
       case 'official':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+          <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
             Chính thức
           </span>
         );
       case 'probation':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+          <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
             Thử việc
           </span>
         );
       case 'intern':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">
+          <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
             Thực tập
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-700">
+          <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-slate-100 text-slate-700">
             {type || 'Chính thức'}
           </span>
         );
@@ -767,15 +767,15 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({
 
         {/* ── 2. FullWidthTable từ client-skydoor ── */}
         <FullWidthTable loading={loading} loadingText="Đang tải danh sách nhân sự...">
-          <table className="custom-table">
+          <table className="custom-table w-full text-left border-collapse" style={{ fontSize: '13px' }}>
             <thead>
-              <tr>
-                <th>Nhân viên</th>
-                <th className="hidden md:table-cell">Phòng ban</th>
-                <th className="hidden md:table-cell">Chức vụ</th>
-                <th style={{ width: 130 }} className="hidden md:table-cell">Loại NV</th>
-                <th style={{ width: 130 }} className="hidden md:table-cell">Ngày vào làm</th>
-                <th style={{ width: 140 }} className="text-center hidden md:table-cell">Trạng thái</th>
+              <tr className="text-slate-500 text-[11px] uppercase tracking-[0.06em] font-bold">
+                <th className="py-2.5 px-3.5">Nhân viên</th>
+                <th className="hidden md:table-cell py-2.5 px-3.5">Phòng ban</th>
+                <th className="hidden md:table-cell py-2.5 px-3.5">Chức vụ</th>
+                <th style={{ width: 130 }} className="hidden md:table-cell py-2.5 px-3.5">Loại NV</th>
+                <th style={{ width: 130 }} className="hidden md:table-cell py-2.5 px-3.5">Ngày vào làm</th>
+                <th style={{ width: 140 }} className="text-center hidden md:table-cell py-2.5 px-3.5">Trạng thái</th>
               </tr>
             </thead>
             <tbody>
@@ -810,31 +810,31 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({
                     className="hover:bg-slate-50 cursor-pointer transition-colors"
                     title={`Bấm để xem và chỉnh sửa hồ sơ nhân sự ${emp.fullName}`}
                   >
-                    <td>
+                    <td className="py-2.5 px-3.5">
                       <div className="flex items-start md:items-center gap-2.5">
                         {/* Avatar chuẩn Seajong: chữ cái đầu từ Họ + chữ cái đầu từ Tên */}
                         <Avatar name={emp.fullName} size="md" />
 
                         <div className="flex flex-col min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-bold text-slate-900 text-xs truncate">
+                            <span className="font-bold text-slate-900 text-[13.5px] truncate">
                               {emp.fullName}
                             </span>
                             <span className="md:hidden shrink-0 scale-90 origin-left">
                               {getStatusBadge(emp.status)}
                             </span>
                           </div>
-                          <span className="text-[11px] text-slate-400 truncate">
+                          <span className="text-xs text-slate-500 truncate mt-0.5">
                             {emp.code} • {emp.workEmail || emp.phone || '—'}
                           </span>
-                          <div className="flex md:hidden flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-1 text-[11px] text-slate-500">
+                          <div className="flex md:hidden flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-1 text-xs text-slate-500">
                             <span className="font-semibold text-slate-700">{emp.positionTitle || 'Nhân viên'}</span>
                             <span>•</span>
                             <span>{emp.departmentName || '—'}</span>
                             {emp.startDate && (
                               <>
                                 <span>•</span>
-                                <span className="font-mono text-[10.5px]">
+                                <span className="font-mono text-xs">
                                   {new Date(emp.startDate).toLocaleDateString('vi-VN')}
                                 </span>
                               </>
@@ -843,27 +843,27 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({
                         </div>
                       </div>
                     </td>
-                    <td className="hidden md:table-cell font-medium text-slate-800 text-xs">
+                    <td className="hidden md:table-cell py-2.5 px-3.5 text-[13px] font-medium text-slate-800">
                       <div className="flex flex-col">
                         <span>{emp.departmentName || '—'}</span>
                         {emp.workLocationName && (
-                          <span className="text-[11px] text-slate-400 font-normal flex items-center gap-1 mt-0.5">
-                            <GeoAltFill size={10} className="text-sky-600 shrink-0" />
+                          <span className="text-xs text-slate-500 font-normal flex items-center gap-1 mt-0.5">
+                            <GeoAltFill size={11} className="text-sky-600 shrink-0" />
                             <span className="truncate">{emp.workLocationName}</span>
                           </span>
                         )}
                       </div>
                     </td>
-                    <td className="hidden md:table-cell font-medium text-slate-700 text-xs">
+                    <td className="hidden md:table-cell py-2.5 px-3.5 text-[13px] font-medium text-slate-700">
                       {emp.positionTitle || '—'}
                     </td>
-                    <td className="hidden md:table-cell">
+                    <td className="hidden md:table-cell py-2.5 px-3.5">
                       {getEmployeeTypeBadge(emp.employeeType)}
                     </td>
-                    <td className="hidden md:table-cell text-slate-600 text-xs font-mono">
+                    <td className="hidden md:table-cell py-2.5 px-3.5 text-slate-700 text-[13px] font-mono">
                       {emp.startDate ? new Date(emp.startDate).toLocaleDateString('vi-VN') : '—'}
                     </td>
-                    <td className="text-center hidden md:table-cell">
+                    <td className="text-center hidden md:table-cell py-2.5 px-3.5">
                       {getStatusBadge(emp.status)}
                     </td>
                   </SwipeableTableRow>
