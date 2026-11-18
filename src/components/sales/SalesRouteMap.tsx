@@ -35,7 +35,7 @@ export const SalesRouteMap: React.FC<SalesRouteMapProps> = ({
         zoomControl: false,
       });
 
-      // Thêm lớp bản đồ OpenStreetMap chuẩn tiếng Việt / Quốc tế
+      // Lớp bản đồ OpenStreetMap
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
         maxZoom: 19,
@@ -44,7 +44,7 @@ export const SalesRouteMap: React.FC<SalesRouteMapProps> = ({
       // Đặt zoom control góc trên bên phải
       L.control.zoom({ position: 'topright' }).addTo(map);
 
-      // Group chứa các marker và đường nối
+      // LayerGroup chứa toàn bộ tuyến đường và các ghim
       const layerGroup = L.layerGroup().addTo(map);
       layerGroupRef.current = layerGroup;
       mapInstanceRef.current = map;
@@ -57,6 +57,16 @@ export const SalesRouteMap: React.FC<SalesRouteMapProps> = ({
       }
     };
   }, []);
+
+  // Xử lý resize bản đồ để đảm bảo luôn lấp đầy không gian
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [trip]);
 
   // Cập nhật marker & polyline khi chuyến đi thay đổi
   useEffect(() => {
@@ -74,18 +84,37 @@ export const SalesRouteMap: React.FC<SalesRouteMapProps> = ({
     tripsToRender.forEach((t) => {
       const isSelected = trip?.id === t.id;
       const polyColor = isSelected ? '#0891b2' : '#94a3b8';
-      const polyWeight = isSelected ? 4 : 2.5;
-      const polyOpacity = isSelected ? 0.9 : 0.5;
 
-      // 1. Vẽ Polyline vệt đường di chuyển
+      // 1. Vẽ Polyline vệt đường di chuyển uốn lượn theo mặt đường thực tế
       if (t.pathCoordinates && t.pathCoordinates.length >= 2) {
-        const polyline = L.polyline(t.pathCoordinates, {
-          color: polyColor,
-          weight: polyWeight,
-          opacity: polyOpacity,
-          lineJoin: 'round',
-          dashArray: t.status === 'in_progress' ? '8, 8' : undefined,
-        }).addTo(layerGroup);
+        if (isSelected) {
+          // Lớp viền mờ dưới (Glow effect)
+          L.polyline(t.pathCoordinates, {
+            color: '#0891b2',
+            weight: 9,
+            opacity: 0.2,
+            lineJoin: 'round',
+            lineCap: 'round',
+          }).addTo(layerGroup);
+
+          // Lớp nét đường chính uốn theo lòng đường giao thông
+          L.polyline(t.pathCoordinates, {
+            color: '#0891b2',
+            weight: 4.5,
+            opacity: 0.95,
+            lineJoin: 'round',
+            lineCap: 'round',
+          }).addTo(layerGroup);
+        } else {
+          // Tuyến phụ không chọn
+          L.polyline(t.pathCoordinates, {
+            color: polyColor,
+            weight: 3,
+            opacity: 0.45,
+            lineJoin: 'round',
+            lineCap: 'round',
+          }).addTo(layerGroup);
+        }
 
         t.pathCoordinates.forEach((c) => allBoundsCoords.push(c));
       }
@@ -118,7 +147,7 @@ export const SalesRouteMap: React.FC<SalesRouteMapProps> = ({
           popupAnchor: [0, -18],
         });
 
-        const startMarker = L.marker([t.startPoint.lat, t.startPoint.lng], { icon: startIcon })
+        L.marker([t.startPoint.lat, t.startPoint.lng], { icon: startIcon })
           .bindPopup(`
             <div style="font-family: inherit; font-size: 12px; line-height: 1.4; padding: 2px;">
               <div style="font-weight: 800; color: #10b981; text-transform: uppercase; margin-bottom: 2px; font-size: 11px;">
@@ -147,32 +176,32 @@ export const SalesRouteMap: React.FC<SalesRouteMapProps> = ({
             className: 'custom-route-marker',
             html: `
               <div style="
-                width: 30px;
-                height: 30px;
+                width: 32px;
+                height: 32px;
                 background-color: ${wpColor};
                 color: #ffffff;
-                border: 2px solid #ffffff;
+                border: 2.5px solid #ffffff;
                 border-radius: 50%;
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 font-weight: 800;
-                font-size: 12px;
-                box-shadow: 0 3px 8px rgba(8, 145, 178, 0.4);
+                font-size: 13px;
+                box-shadow: 0 4px 10px rgba(8, 145, 178, 0.45);
                 cursor: pointer;
                 transition: transform 0.15s ease;
               ">
                 ${wpBadge}
               </div>
             `,
-            iconSize: [30, 30],
-            iconAnchor: [15, 15],
-            popupAnchor: [0, -16],
+            iconSize: [32, 32],
+            iconAnchor: [16, 16],
+            popupAnchor: [0, -18],
           });
 
           const wpMarker = L.marker([wp.lat, wp.lng], { icon: wpIcon })
             .bindPopup(`
-              <div style="font-family: inherit; font-size: 12px; line-height: 1.4; padding: 2px; min-width: 190px;">
+              <div style="font-family: inherit; font-size: 12px; line-height: 1.4; padding: 2px; min-width: 200px;">
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 3px;">
                   <span style="font-weight: 800; color: ${wpColor}; font-size: 11px; text-transform: uppercase;">
                     Trạm #${wpBadge} · ${isDone ? 'Đã check-out' : 'Đang ghé thăm'}
@@ -249,23 +278,45 @@ export const SalesRouteMap: React.FC<SalesRouteMapProps> = ({
       }
     });
 
-    // Tự động thu phóng (fit bounds) để nhìn thấy trọn vẹn toàn bộ các điểm
+    // Tự động thu phóng (fit bounds) vừa khít tuyến đường
     if (allBoundsCoords.length > 0) {
       try {
         const bounds = L.latLngBounds(allBoundsCoords);
-        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+        map.fitBounds(bounds, { padding: [45, 45], maxZoom: 16 });
       } catch (err) {
         console.warn('Could not fit map bounds:', err);
       }
     }
   }, [trip, allTrips, onSelectWaypoint]);
 
+  // Căn lại bản đồ vào giữa
+  const handleRecenter = () => {
+    if (!mapInstanceRef.current || !trip) return;
+    if (trip.pathCoordinates && trip.pathCoordinates.length > 0) {
+      const bounds = L.latLngBounds(trip.pathCoordinates);
+      mapInstanceRef.current.fitBounds(bounds, { padding: [45, 45], maxZoom: 16 });
+    }
+  };
+
   return (
     <div
-      className={`relative w-full h-full min-h-[380px] rounded-xl overflow-hidden border border-slate-200 shadow-2xs ${className}`}
+      className={`relative w-full h-full min-h-[450px] rounded-xl overflow-hidden border border-slate-200/90 shadow-2xs ${className}`}
       style={style}
     >
-      <div ref={mapContainerRef} className="w-full h-full" style={{ minHeight: '380px', zIndex: 1 }} />
+      <div ref={mapContainerRef} className="w-full h-full" style={{ minHeight: '450px', zIndex: 1 }} />
+
+      {/* Nút căn giữa nhanh góc trên bên trái */}
+      <div className="absolute top-3 left-3 z-[400]">
+        <button
+          type="button"
+          onClick={handleRecenter}
+          className="bg-white/95 hover:bg-white text-slate-700 hover:text-cyan-700 py-1.5 px-2.5 rounded-lg border border-slate-200/90 shadow-xs text-xs font-bold flex items-center gap-1.5 backdrop-blur-xs transition-all cursor-pointer"
+          title="Thu phóng vừa khít tuyến đường"
+        >
+          <i className="bi bi-arrows-fullscreen text-xs" />
+          <span>Vừa khung tuyến</span>
+        </button>
+      </div>
 
       {/* Floating Info Badge góc dưới bên trái */}
       <div className="absolute bottom-3 left-3 z-[400] bg-white/95 backdrop-blur-xs py-1.5 px-3 rounded-lg border border-slate-200/90 shadow-sm text-[11px] text-slate-700 flex items-center gap-3">
@@ -275,11 +326,15 @@ export const SalesRouteMap: React.FC<SalesRouteMapProps> = ({
         </div>
         <div className="flex items-center gap-1.5 font-bold">
           <span className="w-2.5 h-2.5 rounded-full bg-cyan-600 shrink-0" />
-          <span>Điểm ghé đại lý</span>
+          <span>Điểm ghé đại lý (1, 2, 3...)</span>
         </div>
         <div className="flex items-center gap-1.5 font-bold">
           <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
           <span>Kết thúc</span>
+        </div>
+        <div className="hidden sm:flex items-center gap-1.5 text-cyan-700 font-bold border-l border-slate-200 pl-3">
+          <span className="w-4 h-1 rounded-full bg-cyan-600 shrink-0" />
+          <span>Lòng đường thực tế</span>
         </div>
       </div>
     </div>

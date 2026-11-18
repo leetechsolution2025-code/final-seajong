@@ -1,4 +1,9 @@
 // Service Quản lý đi tuyến thị trường (Sales Route Management Service)
+import {
+  TRIP_1_ROAD_COORDS,
+  TRIP_2_ROAD_COORDS,
+  TRIP_3_ROAD_COORDS,
+} from './routeCoordinatesData';
 
 export interface RouteWaypoint {
   id: string;
@@ -42,7 +47,7 @@ export interface RouteTrip {
     lng: number;
   };
   waypoints: RouteWaypoint[];
-  pathCoordinates: [number, number][]; // [lat, lng][]
+  pathCoordinates: [number, number][]; // [lat, lng][] (Đường cong thực tế theo lòng đường giao thông)
   totalDistanceKm: number;
   totalDurationMinutes: number;
   notes?: string;
@@ -71,9 +76,45 @@ export const calculateTotalPathKm = (coords: [number, number][]): number => {
   return Math.round(total * 10) / 10;
 };
 
-const STORAGE_KEY = 'seajong_sales_route_trips';
+// Hàm định tuyến thực tế theo lòng đường giao thông (OSRM Driving API)
+export const fetchActualRoadRoute = async (
+  points: [number, number][]
+): Promise<{ coordinates: [number, number][]; distanceKm: number }> => {
+  if (points.length < 2) {
+    return { coordinates: points, distanceKm: 0 };
+  }
 
-// Dữ liệu mẫu chuẩn thực tế cho thị trường Hà Nội
+  try {
+    const coordsQuery = points.map(([lat, lng]) => `${lng},${lat}`).join(';');
+    const res = await fetch(
+      `https://router.project-osrm.org/route/v1/driving/${coordsQuery}?overview=full&geometries=geojson`,
+      { signal: AbortSignal.timeout(6000) }
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+        const route = data.routes[0];
+        const roadCoords: [number, number][] = route.geometry.coordinates.map(
+          ([lng, lat]: [number, number]) => [Number(lat.toFixed(5)), Number(lng.toFixed(5))]
+        );
+        const distanceKm = Math.round((route.distance / 1000) * 10) / 10;
+        return { coordinates: roadCoords, distanceKm };
+      }
+    }
+  } catch (err) {
+    console.warn('Could not fetch OSRM route, falling back to direct points:', err);
+  }
+
+  // Fallback nếu offline
+  return {
+    coordinates: points,
+    distanceKm: calculateTotalPathKm(points),
+  };
+};
+
+const STORAGE_KEY = 'seajong_sales_route_trips_v2';
+
+// Dữ liệu mẫu chuẩn thực tế uốn lượn theo đường giao thông Hà Nội
 const DEFAULT_TRIPS: RouteTrip[] = [
   {
     id: 'trip-20261118-01',
@@ -124,15 +165,8 @@ const DEFAULT_TRIPS: RouteTrip[] = [
         status: 'checked_in',
       },
     ],
-    pathCoordinates: [
-      [21.0142, 105.7812],
-      [21.0085, 105.8015],
-      [21.0012, 105.8345],
-      [20.9984, 105.8621],
-      [20.9951, 105.8385],
-      [20.9942, 105.8115],
-    ],
-    totalDistanceKm: 18.6,
+    pathCoordinates: TRIP_1_ROAD_COORDS, // Tuyến đường thực tế theo lòng đường (626 điểm uốn lượn)
+    totalDistanceKm: 20.5,
     totalDurationMinutes: 140,
     notes: 'Tuyến chăm sóc định kỳ trục phía Nam Hà Nội',
     createdAt: '2026-11-18T08:15:00.000Z',
@@ -213,15 +247,8 @@ const DEFAULT_TRIPS: RouteTrip[] = [
         status: 'completed',
       },
     ],
-    pathCoordinates: [
-      [21.0142, 105.7812],
-      [20.9856, 105.7745],
-      [20.9632, 105.7654],
-      [20.9785, 105.7725],
-      [20.9988, 105.7562],
-      [21.0142, 105.7812],
-    ],
-    totalDistanceKm: 34.2,
+    pathCoordinates: TRIP_2_ROAD_COORDS, // Tuyến thực tế theo đường phố Hà Đông - Nam Từ Liêm (546 điểm)
+    totalDistanceKm: 19.4,
     totalDurationMinutes: 495,
     notes: 'Tuyến phát triển đại lý khu vực Hà Đông - Nam Từ Liêm',
     createdAt: '2026-11-17T08:30:00.000Z',
@@ -285,14 +312,8 @@ const DEFAULT_TRIPS: RouteTrip[] = [
         status: 'completed',
       },
     ],
-    pathCoordinates: [
-      [21.0142, 105.7812],
-      [21.0321, 105.7885],
-      [21.0465, 105.7942],
-      [21.0682, 105.7885],
-      [21.0142, 105.7812],
-    ],
-    totalDistanceKm: 26.5,
+    pathCoordinates: TRIP_3_ROAD_COORDS, // Tuyến thực tế theo đường phố Cầu Giấy - Bắc Từ Liêm (578 điểm)
+    totalDistanceKm: 15.7,
     totalDurationMinutes: 435,
     notes: 'Tuyến chăm sóc Cầu Giấy - Bắc Từ Liêm',
     createdAt: '2026-11-16T08:45:00.000Z',
@@ -369,8 +390,8 @@ export const routeService = {
     return newTrip;
   },
 
-  // Thêm điểm ghé thăm khách hàng / đại lý
-  addWaypoint(
+  // Thêm điểm ghé thăm khách hàng / đại lý (tự động cập nhật tuyến đường theo lòng đường thực tế)
+  async addWaypointAsync(
     tripId: string,
     params: {
       customerId?: string;
@@ -383,7 +404,7 @@ export const routeService = {
       orderAmount?: number;
       notes?: string;
     }
-  ): RouteTrip | null {
+  ): Promise<RouteTrip | null> {
     const trips = this.getTrips();
     const tripIndex = trips.findIndex((t) => t.id === tripId);
     if (tripIndex === -1) return null;
@@ -409,12 +430,19 @@ export const routeService = {
     };
 
     const updatedWaypoints = [...trip.waypoints, newWaypoint];
-    const updatedCoordinates: [number, number][] = [...trip.pathCoordinates, [params.lat, params.lng]];
-    const newDistance = calculateTotalPathKm(updatedCoordinates);
+
+    // Thu thập tất cả các mốc (Start -> WP1 -> WP2 -> ... -> WP_new)
+    const keyPoints: [number, number][] = [
+      [trip.startPoint.lat, trip.startPoint.lng],
+      ...updatedWaypoints.map((w): [number, number] => [w.lat, w.lng]),
+    ];
+
+    // Gọi định tuyến thực tế theo lòng đường giao thông
+    const roadResult = await fetchActualRoadRoute(keyPoints);
 
     trip.waypoints = updatedWaypoints;
-    trip.pathCoordinates = updatedCoordinates;
-    trip.totalDistanceKm = newDistance;
+    trip.pathCoordinates = roadResult.coordinates;
+    trip.totalDistanceKm = roadResult.distanceKm;
 
     trips[tripIndex] = trip;
     this.saveTrips(trips);
@@ -467,8 +495,8 @@ export const routeService = {
     return trip;
   },
 
-  // Kết thúc chuyến đi tuyến
-  endTrip(
+  // Kết thúc chuyến đi tuyến (tự động cập nhật tuyến đường theo lòng đường thực tế)
+  async endTripAsync(
     tripId: string,
     params: {
       endPointName?: string;
@@ -477,7 +505,7 @@ export const routeService = {
       lng: number;
       notes?: string;
     }
-  ): RouteTrip | null {
+  ): Promise<RouteTrip | null> {
     const trips = this.getTrips();
     const tripIndex = trips.findIndex((t) => t.id === tripId);
     if (tripIndex === -1) return null;
@@ -486,8 +514,15 @@ export const routeService = {
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    const updatedCoordinates: [number, number][] = [...trip.pathCoordinates, [params.lat, params.lng]];
-    const newDistance = calculateTotalPathKm(updatedCoordinates);
+    // Thu thập tất cả các mốc (Start -> WP1 -> WP2 -> ... -> End)
+    const keyPoints: [number, number][] = [
+      [trip.startPoint.lat, trip.startPoint.lng],
+      ...trip.waypoints.map((w): [number, number] => [w.lat, w.lng]),
+      [params.lat, params.lng],
+    ];
+
+    // Gọi định tuyến thực tế theo lòng đường giao thông
+    const roadResult = await fetchActualRoadRoute(keyPoints);
 
     // Tính tổng thời lượng phút
     let totalMinutes = 0;
@@ -508,8 +543,8 @@ export const routeService = {
       lat: params.lat,
       lng: params.lng,
     };
-    trip.pathCoordinates = updatedCoordinates;
-    trip.totalDistanceKm = newDistance;
+    trip.pathCoordinates = roadResult.coordinates;
+    trip.totalDistanceKm = roadResult.distanceKm;
     trip.totalDurationMinutes = totalMinutes || trip.totalDurationMinutes;
     if (params.notes) {
       trip.notes = trip.notes ? `${trip.notes} • ${params.notes}` : params.notes;

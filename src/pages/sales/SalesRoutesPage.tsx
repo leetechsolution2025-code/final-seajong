@@ -12,21 +12,17 @@ import {
   type RouteWaypoint,
 } from '../../services/routeService';
 import {
-  GeoAltFill,
   PlusLg,
-  CheckCircleFill,
-  ClockHistory,
   Truck,
-  Building,
-  Shop,
-  CashCoin,
   ArrowRepeat,
   Compass,
-  PinMapFill,
   FlagFill,
-  Calendar3,
   PersonFill,
   Trash3,
+  Calendar3,
+  Clock,
+  GeoAlt,
+  Shop,
 } from 'react-bootstrap-icons';
 
 export const SalesRoutesPage: React.FC = () => {
@@ -40,6 +36,7 @@ export const SalesRoutesPage: React.FC = () => {
   const [isStartTripOpen, setIsStartTripOpen] = useState(false);
   const [isAddWaypointOpen, setIsAddWaypointOpen] = useState(false);
   const [isEndTripOpen, setIsEndTripOpen] = useState(false);
+  const [isSubmittingRoute, setIsSubmittingRoute] = useState(false);
 
   // Form States - Bắt đầu ca tuyến
   const [employeeName, setEmployeeName] = useState('Nguyễn Văn Hải');
@@ -134,27 +131,6 @@ export const SalesRoutesPage: React.FC = () => {
     );
   };
 
-  // Thống kê nhanh KPI
-  const stats = useMemo(() => {
-    const total = trips.length;
-    const inProgress = trips.filter((t) => t.status === 'in_progress').length;
-    const totalWp = trips.reduce((acc, t) => acc + (t.waypoints?.length || 0), 0);
-    const totalKm = trips.reduce((acc, t) => acc + (t.totalDistanceKm || 0), 0);
-    const totalRevenue = trips.reduce(
-      (acc, t) =>
-        acc +
-        (t.waypoints?.reduce((wAcc, w) => wAcc + (Number(w.orderAmount) || 0), 0) || 0),
-      0
-    );
-    return {
-      total,
-      inProgress,
-      totalWp,
-      totalKm: Math.round(totalKm * 10) / 10,
-      totalRevenue,
-    };
-  }, [trips]);
-
   // Bộ lọc danh sách chuyến
   const filteredTrips = useMemo(() => {
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -192,48 +168,58 @@ export const SalesRoutesPage: React.FC = () => {
     setIsStartTripOpen(false);
   };
 
-  // Xử lý Form: Thêm trạm ghé
-  const handleAddWaypointSubmit = (e: React.FormEvent) => {
+  // Xử lý Form: Thêm trạm ghé (Định tuyến men theo đường phố thực tế)
+  const handleAddWaypointSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeTrip && !selectedTrip) return;
     const targetTripId = activeTrip ? activeTrip.id : selectedTrip!.id;
 
-    routeService.addWaypoint(targetTripId, {
-      customerName: wpCustomerName,
-      customerAddress: wpAddress,
-      customerPhone: wpPhone,
-      lat: currentLat,
-      lng: currentLng,
-      purpose: wpPurpose,
-      orderAmount: Number(wpOrderAmount) || 0,
-      notes: wpNotes,
-    });
+    setIsSubmittingRoute(true);
+    try {
+      await routeService.addWaypointAsync(targetTripId, {
+        customerName: wpCustomerName,
+        customerAddress: wpAddress,
+        customerPhone: wpPhone,
+        lat: currentLat,
+        lng: currentLng,
+        purpose: wpPurpose,
+        orderAmount: Number(wpOrderAmount) || 0,
+        notes: wpNotes,
+      });
 
-    loadTrips();
-    setWpCustomerName('');
-    setWpAddress('');
-    setWpPhone('');
-    setWpOrderAmount('');
-    setWpNotes('');
-    setIsAddWaypointOpen(false);
+      loadTrips();
+      setWpCustomerName('');
+      setWpAddress('');
+      setWpPhone('');
+      setWpOrderAmount('');
+      setWpNotes('');
+      setIsAddWaypointOpen(false);
+    } finally {
+      setIsSubmittingRoute(false);
+    }
   };
 
-  // Xử lý Form: Kết thúc ca tuyến
-  const handleEndTripSubmit = (e: React.FormEvent) => {
+  // Xử lý Form: Kết thúc ca tuyến (Định tuyến men theo đường phố thực tế)
+  const handleEndTripSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeTrip && !selectedTrip) return;
     const targetTripId = activeTrip ? activeTrip.id : selectedTrip!.id;
 
-    routeService.endTrip(targetTripId, {
-      endPointName,
-      endAddress,
-      lat: currentLat,
-      lng: currentLng,
-      notes: endNotes,
-    });
+    setIsSubmittingRoute(true);
+    try {
+      await routeService.endTripAsync(targetTripId, {
+        endPointName,
+        endAddress,
+        lat: currentLat,
+        lng: currentLng,
+        notes: endNotes,
+      });
 
-    loadTrips();
-    setIsEndTripOpen(false);
+      loadTrips();
+      setIsEndTripOpen(false);
+    } finally {
+      setIsSubmittingRoute(false);
+    }
   };
 
   // Xóa chuyến đi
@@ -248,90 +234,14 @@ export const SalesRoutesPage: React.FC = () => {
   return (
     <StandardPage
       title="Quản lý đi tuyến"
-      description="Giám sát lộ trình di chuyển, check-in điểm đến đại lý và vẽ tuyến đường thực tế trên bản đồ"
+      description="Giám sát lộ trình di chuyển theo đường giao thông thực tế, check-in điểm đến đại lý trên bản đồ"
       icon="bi-geo-alt-fill"
       badge="Phòng Kinh doanh"
       color="cyan"
+      hideTicker={true}
     >
-      {/* ── CARD CHÍNH CỦA TRANG ── */}
-      <div className="flex flex-col gap-2 p-2 h-full min-h-0 bg-transparent">
-        {/* ── HÀNG CHỈ SỐ KPI TỔNG QUAN ── */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 shrink-0">
-          <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
-            <div>
-              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-                Tổng chuyến đi
-              </div>
-              <div className="text-lg font-black text-slate-900 mt-0.5">
-                {stats.total} <span className="text-xs font-normal text-slate-400">chuyến</span>
-              </div>
-            </div>
-            <div className="w-8 h-8 rounded-lg bg-cyan-50 border border-cyan-200/60 text-cyan-600 flex items-center justify-center shrink-0">
-              <Compass size={16} />
-            </div>
-          </div>
-
-          <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
-            <div>
-              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-                Đang di chuyển
-              </div>
-              <div className="text-lg font-black text-emerald-600 mt-0.5 flex items-center gap-1.5">
-                <span>{stats.inProgress}</span>
-                {stats.inProgress > 0 && (
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                )}
-              </div>
-            </div>
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200/60 text-emerald-600 flex items-center justify-center shrink-0">
-              <Truck size={16} />
-            </div>
-          </div>
-
-          <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
-            <div>
-              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-                Đại lý ghé thăm
-              </div>
-              <div className="text-lg font-black text-slate-900 mt-0.5">
-                {stats.totalWp} <span className="text-xs font-normal text-slate-400">điểm</span>
-              </div>
-            </div>
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-200/60 text-indigo-600 flex items-center justify-center shrink-0">
-              <Shop size={16} />
-            </div>
-          </div>
-
-          <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
-            <div>
-              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-                Quãng đường
-              </div>
-              <div className="text-lg font-black text-cyan-700 mt-0.5">
-                {stats.totalKm} <span className="text-xs font-normal text-slate-400">km</span>
-              </div>
-            </div>
-            <div className="w-8 h-8 rounded-lg bg-cyan-50 border border-cyan-200/60 text-cyan-600 flex items-center justify-center shrink-0">
-              <PinMapFill size={16} />
-            </div>
-          </div>
-
-          <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-2xs flex items-center justify-between col-span-2 md:col-span-1">
-            <div>
-              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-                Doanh số phát sinh
-              </div>
-              <div className="text-base font-black text-emerald-600 mt-0.5">
-                {(stats.totalRevenue / 1000000).toFixed(1)} <span className="text-xs font-bold text-slate-400">triệu</span>
-              </div>
-            </div>
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200/60 text-emerald-600 flex items-center justify-center shrink-0">
-              <CashCoin size={17} />
-            </div>
-          </div>
-        </div>
-
-        {/* ── CARD BẢNG VÀ BẢN ĐỒ ── */}
+      {/* ── CARD CHÍNH TOÀN DIỆN: ƯU TIÊN KHÔNG GIAN TỐI ĐA CHO BẢN ĐỒ VÀ TUYẾN ĐƯỜNG ── */}
+      <div className="flex flex-col h-full min-h-0 p-2 bg-transparent">
         <div className="flex-1 bg-white rounded-xl border border-slate-200/80 shadow-2xs flex flex-col min-h-0 overflow-hidden">
           {/* ── THANH CÔNG CỤ TABLE TOOLBAR (TUÂN THỦ AGENTS.MD) ── */}
           <TableToolbar
@@ -369,7 +279,10 @@ export const SalesRoutesPage: React.FC = () => {
                       type="button"
                       variant="primary"
                       size="sm"
-                      onClick={() => setIsAddWaypointOpen(true)}
+                      onClick={() => {
+                        detectCurrentLocation();
+                        setIsAddWaypointOpen(true);
+                      }}
                       leftIcon={<PlusLg size={13} />}
                       style={{ backgroundColor: '#0891b2', borderColor: '#0891b2' }}
                     >
@@ -379,7 +292,10 @@ export const SalesRoutesPage: React.FC = () => {
                       type="button"
                       variant="danger"
                       size="sm"
-                      onClick={() => setIsEndTripOpen(true)}
+                      onClick={() => {
+                        detectCurrentLocation();
+                        setIsEndTripOpen(true);
+                      }}
                       leftIcon={<FlagFill size={13} />}
                     >
                       <span>Kết thúc ca</span>
@@ -414,19 +330,20 @@ export const SalesRoutesPage: React.FC = () => {
             }
           />
 
-          {/* ── BỐ CỤC CHIA ĐÔI: DANH SÁCH CHUYẾN ĐI (TRÁI) & BẢN ĐỒ LEAFLET (PHẢI) ── */}
+          {/* ── BỐ CỤC CHIA KHÔNG GIAN: CỘT TRÁI (32%) & BẢN ĐỒ RỘNG LỚN (68%) ── */}
           <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 min-h-0 overflow-hidden">
-            {/* CỘT TRÁI (5 Cột): Danh sách chuyến đi tuyến */}
-            <div className="lg:col-span-5 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-200/80 min-h-0 bg-slate-50/50">
+            {/* CỘT TRÁI (4/12 Cột): Danh sách ca đi tuyến & Chi tiết điểm dừng */}
+            <div className="lg:col-span-4 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-200/80 min-h-0 bg-slate-50/40">
               <div className="p-2.5 border-b border-slate-200/80 bg-white flex items-center justify-between shrink-0">
-                <span className="text-xs font-bold text-slate-700">
-                  Lịch sử ca tuyến ({filteredTrips.length})
+                <span className="text-xs font-bold text-slate-800">
+                  Danh sách ca tuyến ({filteredTrips.length})
                 </span>
-                <span className="text-[11px] text-slate-400">
-                  Nhấp vào ca để xem chi tiết lộ trình
+                <span className="text-[11px] text-slate-500">
+                  Chọn ca để xem lộ trình
                 </span>
               </div>
 
+              {/* Danh sách các ca */}
               <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-0">
                 {filteredTrips.length === 0 ? (
                   <div className="p-8 text-center text-slate-400 text-xs">
@@ -445,35 +362,35 @@ export const SalesRoutesPage: React.FC = () => {
                       <div
                         key={trip.id}
                         onClick={() => setSelectedTripId(trip.id)}
-                        className={`p-3 rounded-xl border transition-all cursor-pointer ${
+                        className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
                           isSelected
-                            ? 'bg-cyan-50/50 border-cyan-500 shadow-2xs ring-1 ring-cyan-500/30'
+                            ? 'bg-cyan-50/60 border-cyan-500 shadow-2xs ring-1 ring-cyan-500/30'
                             : 'bg-white border-slate-200/80 hover:border-slate-300 hover:bg-slate-50/80'
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-2 mb-1.5">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono font-bold text-xs text-slate-800">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="font-mono font-bold text-xs text-slate-900 truncate">
                               {trip.code}
                             </span>
                             {isRunning ? (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 shrink-0">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                 Đang đi
                               </span>
                             ) : (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 shrink-0">
                                 Hoàn thành
                               </span>
                             )}
                           </div>
-                          <span className="text-[11px] text-slate-400 font-mono">
+                          <span className="text-[10.5px] text-slate-400 font-mono shrink-0">
                             {trip.date}
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between text-xs text-slate-700 mb-2">
-                          <div className="flex items-center gap-1 font-bold">
+                        <div className="flex items-center justify-between text-xs text-slate-700 mb-1.5">
+                          <div className="flex items-center gap-1 font-bold text-slate-800">
                             <PersonFill size={13} className="text-slate-400" />
                             <span>{trip.employeeName}</span>
                           </div>
@@ -483,17 +400,17 @@ export const SalesRoutesPage: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Điểm xuất phát & kết thúc */}
-                        <div className="text-[11.5px] text-slate-600 space-y-1 bg-slate-50/80 p-2 rounded-lg border border-slate-200/60 mb-2">
+                        {/* Mốc tuyến đường */}
+                        <div className="text-[11px] text-slate-600 space-y-1 bg-slate-50 p-1.5 rounded-lg border border-slate-200/60 mb-1.5">
                           <div className="flex items-start gap-1.5 truncate">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 mt-1" />
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 mt-0.5" />
                             <span className="truncate">
                               <b>{trip.startTime}:</b> {trip.startPoint.name}
                             </span>
                           </div>
                           {trip.endPoint && (
                             <div className="flex items-start gap-1.5 truncate">
-                              <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 mt-1" />
+                              <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 mt-0.5" />
                               <span className="truncate">
                                 <b>{trip.endTime}:</b> {trip.endPoint.name}
                               </span>
@@ -503,12 +420,12 @@ export const SalesRoutesPage: React.FC = () => {
 
                         {/* Thống kê trạm & km & doanh số */}
                         <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100">
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2.5">
                             <span>
                               <b>{trip.waypoints?.length || 0}</b> điểm ghé
                             </span>
-                            <span>
-                              <b>{trip.totalDistanceKm}</b> km
+                            <span className="font-bold text-cyan-700">
+                              {trip.totalDistanceKm} km
                             </span>
                           </div>
                           {tripRevenue > 0 && (
@@ -522,59 +439,14 @@ export const SalesRoutesPage: React.FC = () => {
                   })
                 )}
               </div>
-            </div>
 
-            {/* CỘT PHẢI (7 Cột): Bản đồ tương tác & Timeline các trạm ghé */}
-            <div className="lg:col-span-7 flex flex-col min-h-0 bg-white p-2.5 gap-2">
-              {/* Header thông tin tuyến đang chọn */}
-              {selectedTrip ? (
-                <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/80 shrink-0">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-xs text-slate-800">
-                        {selectedTrip.code} · {selectedTrip.employeeName}
-                      </span>
-                      <span className="text-[11px] text-slate-500">
-                        ({selectedTrip.vehicle})
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-slate-500 truncate mt-0.5">
-                      {selectedTrip.startPoint.address}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0 text-right">
-                    <div>
-                      <div className="text-xs font-black text-cyan-700">
-                        {selectedTrip.totalDistanceKm} km
-                      </div>
-                      <div className="text-[10px] text-slate-400">
-                        {selectedTrip.waypoints?.length || 0} trạm ghé
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(e) => handleDeleteTrip(selectedTrip.id, e)}
-                      title="Xóa chuyến đi này"
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                    >
-                      <Trash3 size={13} />
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
-              {/* KHUNG BẢN ĐỒ LEAFLET */}
-              <div className="flex-1 w-full min-h-[300px] overflow-hidden rounded-xl">
-                <SalesRouteMap trip={selectedTrip} allTrips={filteredTrips} />
-              </div>
-
-              {/* TIMELINE CÁC TRẠM GHÉ THĂM (WAYPOINTS) */}
+              {/* Chi tiết các trạm ghé của ca đang chọn đặt ngay ở chân cột trái để không chiếm chỗ bản đồ */}
               {selectedTrip && selectedTrip.waypoints && selectedTrip.waypoints.length > 0 && (
-                <div className="bg-slate-50/80 rounded-xl p-2.5 border border-slate-200/80 shrink-0 max-h-48 overflow-y-auto">
+                <div className="p-2.5 border-t border-slate-200/80 bg-white max-h-52 overflow-y-auto shrink-0">
                   <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center justify-between">
-                    <span>Hành trình các điểm dừng ghé thăm ({selectedTrip.waypoints.length})</span>
-                    <span className="text-cyan-700 font-semibold lowercase">
-                      {selectedTrip.status === 'in_progress' ? 'đang cập nhật trực tiếp' : 'đã hoàn thành'}
+                    <span>Trạm ghé đại lý ({selectedTrip.waypoints.length})</span>
+                    <span className="text-cyan-700 font-bold lowercase text-[10px]">
+                      {selectedTrip.status === 'in_progress' ? '● trực tiếp' : 'xong'}
                     </span>
                   </div>
 
@@ -584,39 +456,26 @@ export const SalesRoutesPage: React.FC = () => {
                       return (
                         <div
                           key={wp.id}
-                          className="flex items-center justify-between gap-2 p-2 bg-white rounded-lg border border-slate-200/70 text-xs shadow-2xs"
+                          className="p-1.5 bg-slate-50 rounded-lg border border-slate-200/70 text-xs flex items-center justify-between gap-1.5"
                         >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="w-5 h-5 rounded-full bg-cyan-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="w-4 h-4 rounded-full bg-cyan-600 text-white font-bold text-[9px] flex items-center justify-center shrink-0">
                               {idx + 1}
                             </span>
                             <div className="min-w-0">
-                              <div className="font-bold text-slate-800 truncate">
+                              <div className="font-bold text-slate-800 truncate text-[11.5px]">
                                 {wp.customerName}
                               </div>
-                              <div className="text-[11px] text-slate-400 truncate">
+                              <div className="text-[10px] text-slate-400 truncate">
                                 {wp.customerAddress}
                               </div>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-3 shrink-0 text-right">
-                            <div>
-                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold">
-                                {wp.checkInTime}
-                                {wp.checkOutTime ? ` - ${wp.checkOutTime}` : ''}
-                              </span>
-                              <div className="text-[10px] text-cyan-600 font-semibold mt-0.5">
-                                {wp.purpose}
-                              </div>
+                          <div className="shrink-0 text-right">
+                            <div className="text-[10px] font-mono text-slate-600 font-bold">
+                              {wp.checkInTime}
                             </div>
-
-                            {wp.orderAmount ? (
-                              <span className="text-[11px] font-bold text-emerald-600">
-                                +{wp.orderAmount.toLocaleString('vi-VN')} đ
-                              </span>
-                            ) : null}
-
                             {!isDone && selectedTrip.status === 'in_progress' && (
                               <button
                                 type="button"
@@ -624,7 +483,7 @@ export const SalesRoutesPage: React.FC = () => {
                                   routeService.checkoutWaypoint(selectedTrip.id, wp.id);
                                   loadTrips();
                                 }}
-                                className="px-2 py-1 rounded text-[11px] font-bold bg-cyan-600 hover:bg-cyan-700 text-white cursor-pointer"
+                                className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-600 hover:bg-cyan-700 text-white cursor-pointer mt-0.5"
                               >
                                 Rời điểm
                               </button>
@@ -636,6 +495,53 @@ export const SalesRoutesPage: React.FC = () => {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* CỘT PHẢI (8/12 Cột): BẢN ĐỒ CHIẾM TRỌN KHÔNG GIAN TOÀN DIỆN */}
+            <div className="lg:col-span-8 flex flex-col min-h-0 bg-white p-2">
+              {/* Header thông tin thanh thoát của ca được chọn */}
+              {selectedTrip && (
+                <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200/70 mb-2 shrink-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-mono font-bold text-xs text-slate-900">
+                      {selectedTrip.code}
+                    </span>
+                    <span className="text-slate-300">·</span>
+                    <span className="font-bold text-xs text-slate-700 truncate">
+                      {selectedTrip.employeeName} ({selectedTrip.vehicle})
+                    </span>
+                    <span className="text-slate-300 hidden sm:inline">·</span>
+                    <span className="text-[11px] text-slate-500 truncate hidden sm:inline">
+                      {selectedTrip.startPoint.name}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="text-right">
+                      <span className="text-xs font-black text-cyan-700">
+                        {selectedTrip.totalDistanceKm} km
+                      </span>
+                      <span className="text-[11px] text-slate-400 ml-1.5">
+                        ({selectedTrip.waypoints?.length || 0} điểm dừng)
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteTrip(selectedTrip.id, e)}
+                      title="Xóa chuyến đi này"
+                      className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                    >
+                      <Trash3 size={13} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* KHUNG BẢN ĐỒ TOÀN MÀN HÌNH MỞ RỘNG TỐI ĐA */}
+              <div className="flex-1 w-full h-full min-h-[500px] overflow-hidden rounded-xl">
+                <SalesRouteMap trip={selectedTrip} allTrips={filteredTrips} />
+              </div>
             </div>
           </div>
         </div>
@@ -842,9 +748,10 @@ export const SalesRoutesPage: React.FC = () => {
               type="submit"
               variant="primary"
               size="sm"
+              disabled={isSubmittingRoute}
               style={{ backgroundColor: '#0891b2', borderColor: '#0891b2' }}
             >
-              Xác nhận check-in
+              {isSubmittingRoute ? 'Đang định tuyến đường...' : 'Xác nhận check-in'}
             </Button>
           </div>
         </form>
@@ -907,8 +814,9 @@ export const SalesRoutesPage: React.FC = () => {
               type="submit"
               variant="danger"
               size="sm"
+              disabled={isSubmittingRoute}
             >
-              Chốt kết thúc ca
+              {isSubmittingRoute ? 'Đang chốt tuyến...' : 'Chốt kết thúc ca'}
             </Button>
           </div>
         </form>
