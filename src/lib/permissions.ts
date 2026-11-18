@@ -401,10 +401,10 @@ export function getRequiredPermissionsForMenu(
       label: 'Quản lý khách hàng (CRM) / Đơn bán hàng',
     };
   }
-  if (key === 'partners' || key === 'customers' || (key === 'dealers' && dept === 'sales')) {
+  if (key === 'partners' || key === 'customers' || key === 'routes' || key === 'sales-routes' || (key === 'dealers' && dept === 'sales')) {
     return {
       keys: ['crm'],
-      label: 'Quản lý khách hàng (CRM)',
+      label: 'Quản lý khách hàng (CRM) & Tuyến thị trường',
     };
   }
   if (key === 'pricing') {

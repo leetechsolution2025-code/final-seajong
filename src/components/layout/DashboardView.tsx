@@ -22,6 +22,7 @@ import { MarketingCompetitorsPage } from '../../pages/marketing/MarketingCompeti
 import { MarketingMarketAnalysisPage } from '../../pages/marketing/MarketingMarketAnalysisPage';
 import { SalesPartnersPage } from '../../pages/sales/SalesPartnersPage';
 import { SalesCustomersPage } from '../../pages/sales/SalesCustomersPage';
+import { SalesRoutesPage } from '../../pages/sales/SalesRoutesPage';
 import { SalesPricingPage } from '../../pages/sales/SalesPricingPage';
 import { SalesPlanPage } from '../../pages/sales/SalesPlanPage';
 import { SalesBusinessResultsPage } from '../../pages/sales/SalesBusinessResultsPage';
@@ -348,6 +349,9 @@ export const DashboardView: React.FC = () => {
   }
   if (activeMenuKey === 'customers') {
     return <SalesCustomersPage />;
+  }
+  if (activeMenuKey === 'routes' || activeMenuKey === 'sales-routes' || activeMenuKey === 'route-management') {
+    return <SalesRoutesPage />;
   }
   if (activeMenuKey === 'dealers') {
     return <MarketingDealersPage />;

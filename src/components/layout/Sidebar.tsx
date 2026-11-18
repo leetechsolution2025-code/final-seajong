@@ -178,6 +178,7 @@ const DEPT_SIDEBAR_CONFIGS: Record<string, { deptName: string; sections: NavSect
         items: [
           { id: 'partners', name: 'Phát triển đại lý' },
           { id: 'customers', name: 'Khách hàng và đại lý' },
+          { id: 'routes', name: 'Quản lý đi tuyến' },
           { id: 'pricing', name: 'Chính sách bán hàng' },
         ],
       },
