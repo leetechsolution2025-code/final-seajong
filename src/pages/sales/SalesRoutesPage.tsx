@@ -5,6 +5,7 @@ import { Button } from '../../components/common/Button';
 import { Offcanvas } from '../../components/common/Offcanvas';
 import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
+import { EmployeeSelect, type EmployeeItem } from '../../components/common/EmployeeSelect';
 import { SalesRouteMap } from '../../components/sales/SalesRouteMap';
 import {
   routeService,
@@ -14,7 +15,6 @@ import {
 import {
   PlusLg,
   Truck,
-  ArrowRepeat,
   Compass,
   FlagFill,
   PersonFill,
@@ -28,6 +28,7 @@ import {
 export const SalesRoutesPage: React.FC = () => {
   const [trips, setTrips] = useState<RouteTrip[]>([]);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
+  const [selectedEmployeeName, setSelectedEmployeeName] = useState<string>('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'in_progress' | 'completed'>('all');
   const [dateFilter, setDateFilter] = useState<'today' | 'all'>('all');
@@ -131,10 +132,57 @@ export const SalesRoutesPage: React.FC = () => {
     );
   };
 
+  // Danh sách nhân viên đi tuyến làm nguồn gợi ý sẵn có cho component input
+  const routeEmployees = useMemo<EmployeeItem[]>(() => {
+    const list: EmployeeItem[] = [
+      {
+        id: 'EMP-01',
+        employeeId: 'EMP-01',
+        name: 'Nguyễn Văn Hải',
+        department: 'Phòng Kinh doanh',
+        position: 'Chuyên viên Kinh doanh thị trường',
+      },
+      {
+        id: 'EMP-02',
+        employeeId: 'EMP-02',
+        name: 'Trần Tuấn Anh',
+        department: 'Phòng Kinh doanh',
+        position: 'Giám sát bán hàng (Sup)',
+      },
+      {
+        id: 'EMP-03',
+        employeeId: 'EMP-03',
+        name: 'Lê Thị Thu Trang',
+        department: 'Phòng Kinh doanh',
+        position: 'Chuyên viên phát triển thị trường',
+      },
+    ];
+
+    // Bổ sung các nhân viên khác có trong danh sách trips
+    trips.forEach((t) => {
+      if (!list.some((e) => e.name.toLowerCase() === t.employeeName.toLowerCase())) {
+        list.push({
+          id: String(t.employeeId || t.employeeName),
+          employeeId: String(t.employeeId || t.employeeName),
+          name: t.employeeName,
+          department: 'Phòng Kinh doanh',
+          position: 'Nhân viên kinh doanh thị trường',
+        });
+      }
+    });
+
+    return list;
+  }, [trips]);
+
   // Bộ lọc danh sách chuyến
   const filteredTrips = useMemo(() => {
     const todayStr = new Date().toISOString().slice(0, 10);
     return trips.filter((t) => {
+      if (selectedEmployeeName && selectedEmployeeName !== 'all') {
+        if (!t.employeeName.toLowerCase().includes(selectedEmployeeName.toLowerCase())) {
+          return false;
+        }
+      }
       if (statusFilter !== 'all' && t.status !== statusFilter) return false;
       if (dateFilter === 'today' && t.date !== todayStr) return false;
       if (search.trim()) {
@@ -148,7 +196,19 @@ export const SalesRoutesPage: React.FC = () => {
       }
       return true;
     });
-  }, [trips, statusFilter, dateFilter, search]);
+  }, [trips, selectedEmployeeName, statusFilter, dateFilter, search]);
+
+  // Tự động chuyển selectedTripId khi lọc nhân viên
+  useEffect(() => {
+    if (filteredTrips.length > 0) {
+      const exists = filteredTrips.some((t) => t.id === selectedTripId);
+      if (!exists) {
+        setSelectedTripId(filteredTrips[0].id);
+      }
+    } else {
+      setSelectedTripId(null);
+    }
+  }, [filteredTrips, selectedTripId]);
 
   // Xử lý Form: Bắt đầu ca tuyến
   const handleStartTripSubmit = (e: React.FormEvent) => {
@@ -243,7 +303,83 @@ export const SalesRoutesPage: React.FC = () => {
       {/* ── CARD CHÍNH TOÀN DIỆN: ƯU TIÊN KHÔNG GIAN TỐI ĐA CHO BẢN ĐỒ VÀ TUYẾN ĐƯỜNG ── */}
       <div className="flex flex-col h-full min-h-0 p-2 bg-transparent">
         <div className="flex-1 bg-white rounded-xl border border-slate-200/80 shadow-2xs flex flex-col min-h-0 overflow-hidden">
-          {/* ── THANH CÔNG CỤ TABLE TOOLBAR (TUÂN THỦ AGENTS.MD) ── */}
+          {/* ── THANH CHỌN NHÂN VIÊN ĐI TUYẾN & CHỌN CA (ĐẶT TRÊN THANH CÔNG CỤ / PHÍA TRÊN HỘP TÌM KIẾM) ── */}
+          <div className="px-3 py-2 bg-slate-50/80 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
+            {/* Bộ chọn nhân viên đi tuyến bằng Input có danh sách gợi ý sẵn có */}
+            <div className="flex items-center gap-2.5 flex-1 min-w-[280px] max-w-md">
+              <span className="text-xs font-bold text-slate-700 whitespace-nowrap flex items-center gap-1.5 shrink-0">
+                <PersonFill className="text-cyan-600" size={14} />
+                Nhân viên đi tuyến:
+              </span>
+              <div className="flex-1 min-w-[200px]">
+                <EmployeeSelect
+                  multiple={false}
+                  value={selectedEmployeeName}
+                  employees={routeEmployees}
+                  departmentFilter="sales"
+                  onChange={(val) => {
+                    const empName = val ? String(val).trim() : '';
+                    setSelectedEmployeeName(empName);
+                    if (empName) {
+                      const matchedTrip = trips.find((t) =>
+                        t.employeeName.toLowerCase().includes(empName.toLowerCase())
+                      );
+                      if (matchedTrip) {
+                        setSelectedTripId(matchedTrip.id);
+                      }
+                    }
+                  }}
+                  placeholder="Chọn nhân viên đi tuyến..."
+                  searchPlaceholder="Tìm kiếm nhân viên đi tuyến..."
+                  showAllOption={true}
+                  allOptionLabel="Tất cả nhân viên đi tuyến"
+                  hidePositionBadge={false}
+                  clearable={true}
+                />
+              </div>
+            </div>
+
+            {/* Danh sách các ca tuyến của nhân viên để chuyển đổi nhanh */}
+            <div className="flex items-center gap-2 flex-wrap text-xs">
+              <span className="text-slate-500 font-medium shrink-0">Ca tuyến:</span>
+              {filteredTrips.length === 0 ? (
+                <span className="text-slate-400 italic">Không có ca tuyến nào</span>
+              ) : (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {filteredTrips.map((t) => {
+                    const isSelected = t.id === selectedTrip?.id;
+                    const isRunning = t.status === 'in_progress';
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setSelectedTripId(t.id)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                          isSelected
+                            ? 'bg-cyan-600 text-white border-cyan-600 shadow-2xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span className="font-mono">{t.code}</span>
+                        {isRunning && (
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              isSelected ? 'bg-white' : 'bg-emerald-500'
+                            } animate-pulse`}
+                          />
+                        )}
+                        <span className={isSelected ? 'text-cyan-100' : 'text-slate-500'}>
+                          ({t.totalDistanceKm} km)
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── THANH CÔNG CỤ TABLE TOOLBAR (BỘ LỌC + HỘP TÌM KIẾM + HÀNH ĐỘNG - BỎ NÚT LÀM MỚI) ── */}
           <TableToolbar
             searchValue={search}
             onSearchChange={setSearch}
@@ -316,232 +452,72 @@ export const SalesRoutesPage: React.FC = () => {
                     <span>Bắt đầu ca tuyến</span>
                   </Button>
                 )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={loadTrips}
-                  title="Tải lại dữ liệu"
-                  leftIcon={<ArrowRepeat size={13} />}
-                >
-                  <span className="hidden sm:inline">Làm mới</span>
-                </Button>
               </div>
             }
           />
 
-          {/* ── BỐ CỤC CHIA KHÔNG GIAN: CỘT TRÁI (32%) & BẢN ĐỒ RỘNG LỚN (68%) ── */}
-          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 min-h-0 overflow-hidden">
-            {/* CỘT TRÁI (4/12 Cột): Danh sách ca đi tuyến & Chi tiết điểm dừng */}
-            <div className="lg:col-span-4 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-200/80 min-h-0 bg-slate-50/40">
-              <div className="p-2.5 border-b border-slate-200/80 bg-white flex items-center justify-between shrink-0">
-                <span className="text-xs font-bold text-slate-800">
-                  Danh sách ca tuyến ({filteredTrips.length})
-                </span>
-                <span className="text-[11px] text-slate-500">
-                  Chọn ca để xem lộ trình
-                </span>
-              </div>
-
-              {/* Danh sách các ca */}
-              <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-0">
-                {filteredTrips.length === 0 ? (
-                  <div className="p-8 text-center text-slate-400 text-xs">
-                    Không tìm thấy chuyến đi tuyến nào phù hợp
-                  </div>
-                ) : (
-                  filteredTrips.map((trip) => {
-                    const isSelected = trip.id === selectedTrip?.id;
-                    const isRunning = trip.status === 'in_progress';
-                    const tripRevenue = trip.waypoints?.reduce(
-                      (acc, w) => acc + (Number(w.orderAmount) || 0),
-                      0
-                    );
-
-                    return (
-                      <div
-                        key={trip.id}
-                        onClick={() => setSelectedTripId(trip.id)}
-                        className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-cyan-50/60 border-cyan-500 shadow-2xs ring-1 ring-cyan-500/30'
-                            : 'bg-white border-slate-200/80 hover:border-slate-300 hover:bg-slate-50/80'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2 mb-1">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="font-mono font-bold text-xs text-slate-900 truncate">
-                              {trip.code}
-                            </span>
-                            {isRunning ? (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 shrink-0">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                Đang đi
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 shrink-0">
-                                Hoàn thành
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[10.5px] text-slate-400 font-mono shrink-0">
-                            {trip.date}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between text-xs text-slate-700 mb-1.5">
-                          <div className="flex items-center gap-1 font-bold text-slate-800">
-                            <PersonFill size={13} className="text-slate-400" />
-                            <span>{trip.employeeName}</span>
-                          </div>
-                          <div className="text-[11px] text-slate-500 flex items-center gap-1">
-                            <Truck size={12} className="text-slate-400" />
-                            <span>{trip.vehicle}</span>
-                          </div>
-                        </div>
-
-                        {/* Mốc tuyến đường */}
-                        <div className="text-[11px] text-slate-600 space-y-1 bg-slate-50 p-1.5 rounded-lg border border-slate-200/60 mb-1.5">
-                          <div className="flex items-start gap-1.5 truncate">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 mt-0.5" />
-                            <span className="truncate">
-                              <b>{trip.startTime}:</b> {trip.startPoint.name}
-                            </span>
-                          </div>
-                          {trip.endPoint && (
-                            <div className="flex items-start gap-1.5 truncate">
-                              <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 mt-0.5" />
-                              <span className="truncate">
-                                <b>{trip.endTime}:</b> {trip.endPoint.name}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Thống kê trạm & km & doanh số */}
-                        <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100">
-                          <div className="flex items-center gap-2.5">
-                            <span>
-                              <b>{trip.waypoints?.length || 0}</b> điểm ghé
-                            </span>
-                            <span className="font-bold text-cyan-700">
-                              {trip.totalDistanceKm} km
-                            </span>
-                          </div>
-                          {tripRevenue > 0 && (
-                            <span className="font-bold text-emerald-600">
-                              +{tripRevenue.toLocaleString('vi-VN')} đ
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {/* Chi tiết các trạm ghé của ca đang chọn đặt ngay ở chân cột trái để không chiếm chỗ bản đồ */}
-              {selectedTrip && selectedTrip.waypoints && selectedTrip.waypoints.length > 0 && (
-                <div className="p-2.5 border-t border-slate-200/80 bg-white max-h-52 overflow-y-auto shrink-0">
-                  <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center justify-between">
-                    <span>Trạm ghé đại lý ({selectedTrip.waypoints.length})</span>
-                    <span className="text-cyan-700 font-bold lowercase text-[10px]">
-                      {selectedTrip.status === 'in_progress' ? '● trực tiếp' : 'xong'}
+          {/* ── BẢN ĐỒ CHIẾM TRỌN 100% TOÀN BỘ KHÔNG GIAN KHẢ DỤNG (ĐÃ BỎ CỘT BÊN TRÁI) ── */}
+          <div className="flex-1 w-full h-full min-h-[550px] flex flex-col min-h-0 bg-white p-2">
+            {/* Header thông tin thanh thoát của ca được chọn */}
+            {selectedTrip && (
+              <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200/70 mb-2 shrink-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-mono font-bold text-xs text-slate-900">
+                    {selectedTrip.code}
+                  </span>
+                  {selectedTrip.status === 'in_progress' ? (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 shrink-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Đang đi
                     </span>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    {selectedTrip.waypoints.map((wp, idx) => {
-                      const isDone = wp.status === 'completed';
-                      return (
-                        <div
-                          key={wp.id}
-                          className="p-1.5 bg-slate-50 rounded-lg border border-slate-200/70 text-xs flex items-center justify-between gap-1.5"
-                        >
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="w-4 h-4 rounded-full bg-cyan-600 text-white font-bold text-[9px] flex items-center justify-center shrink-0">
-                              {idx + 1}
-                            </span>
-                            <div className="min-w-0">
-                              <div className="font-bold text-slate-800 truncate text-[11.5px]">
-                                {wp.customerName}
-                              </div>
-                              <div className="text-[10px] text-slate-400 truncate">
-                                {wp.customerAddress}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="shrink-0 text-right">
-                            <div className="text-[10px] font-mono text-slate-600 font-bold">
-                              {wp.checkInTime}
-                            </div>
-                            {!isDone && selectedTrip.status === 'in_progress' && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  routeService.checkoutWaypoint(selectedTrip.id, wp.id);
-                                  loadTrips();
-                                }}
-                                className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-600 hover:bg-cyan-700 text-white cursor-pointer mt-0.5"
-                              >
-                                Rời điểm
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* CỘT PHẢI (8/12 Cột): BẢN ĐỒ CHIẾM TRỌN KHÔNG GIAN TOÀN DIỆN */}
-            <div className="lg:col-span-8 flex flex-col min-h-0 bg-white p-2">
-              {/* Header thông tin thanh thoát của ca được chọn */}
-              {selectedTrip && (
-                <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200/70 mb-2 shrink-0">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-mono font-bold text-xs text-slate-900">
-                      {selectedTrip.code}
+                  ) : (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 shrink-0">
+                      Hoàn thành
                     </span>
-                    <span className="text-slate-300">·</span>
-                    <span className="font-bold text-xs text-slate-700 truncate">
-                      {selectedTrip.employeeName} ({selectedTrip.vehicle})
-                    </span>
-                    <span className="text-slate-300 hidden sm:inline">·</span>
-                    <span className="text-[11px] text-slate-500 truncate hidden sm:inline">
-                      {selectedTrip.startPoint.name}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-3 shrink-0">
-                    <div className="text-right">
-                      <span className="text-xs font-black text-cyan-700">
-                        {selectedTrip.totalDistanceKm} km
+                  )}
+                  <span className="text-slate-300">·</span>
+                  <span className="font-bold text-xs text-slate-700 truncate">
+                    {selectedTrip.employeeName} ({selectedTrip.vehicle})
+                  </span>
+                  <span className="text-slate-300 hidden sm:inline">·</span>
+                  <span className="text-[11px] text-slate-500 truncate hidden sm:inline">
+                    Xuất phát: {selectedTrip.startPoint.name}
+                  </span>
+                  {selectedTrip.endPoint && (
+                    <>
+                      <span className="text-slate-300 hidden md:inline">→</span>
+                      <span className="text-[11px] text-slate-500 truncate hidden md:inline">
+                        Đích: {selectedTrip.endPoint.name}
                       </span>
-                      <span className="text-[11px] text-slate-400 ml-1.5">
-                        ({selectedTrip.waypoints?.length || 0} điểm dừng)
-                      </span>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={(e) => handleDeleteTrip(selectedTrip.id, e)}
-                      title="Xóa chuyến đi này"
-                      className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                    >
-                      <Trash3 size={13} />
-                    </button>
-                  </div>
+                    </>
+                  )}
                 </div>
-              )}
 
-              {/* KHUNG BẢN ĐỒ TOÀN MÀN HÌNH MỞ RỘNG TỐI ĐA */}
-              <div className="flex-1 w-full h-full min-h-[500px] overflow-hidden rounded-xl">
-                <SalesRouteMap trip={selectedTrip} allTrips={filteredTrips} />
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="text-right">
+                    <span className="text-xs font-black text-cyan-700">
+                      {selectedTrip.totalDistanceKm} km
+                    </span>
+                    <span className="text-[11px] text-slate-400 ml-1.5">
+                      ({selectedTrip.waypoints?.length || 0} điểm dừng)
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={(e) => handleDeleteTrip(selectedTrip.id, e)}
+                    title="Xóa chuyến đi này"
+                    className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                  >
+                    <Trash3 size={13} />
+                  </button>
+                </div>
               </div>
+            )}
+
+            {/* KHUNG BẢN ĐỒ TOÀN MÀN HÌNH MỞ RỘNG TỐI ĐA */}
+            <div className="flex-1 w-full h-full min-h-[500px] overflow-hidden rounded-xl border border-slate-200/60 shadow-2xs">
+              <SalesRouteMap trip={selectedTrip} allTrips={filteredTrips} />
             </div>
           </div>
         </div>
@@ -559,11 +535,15 @@ export const SalesRoutesPage: React.FC = () => {
             <label className="block text-xs font-bold text-slate-700 mb-1">
               Nhân viên phụ trách
             </label>
-            <Input
+            <EmployeeSelect
+              multiple={false}
               value={employeeName}
-              onChange={(e) => setEmployeeName(e.target.value)}
-              placeholder="Họ và tên nhân viên"
-              required
+              employees={routeEmployees}
+              departmentFilter="sales"
+              onChange={(val) => setEmployeeName(val || '')}
+              placeholder="Chọn nhân viên phụ trách..."
+              searchPlaceholder="Tìm kiếm nhân viên..."
+              clearable={false}
             />
           </div>
 
