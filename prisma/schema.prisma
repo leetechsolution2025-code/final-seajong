@@ -3376,3 +3376,64 @@ model LogisticsShipment {
   @@index([carrierId])
   @@index([status])
 }
+
+model RouteTrip {
+  id                   String          @id @default(cuid())
+  code                 String          @unique
+  employeeId           String?
+  employeeName         String
+  employeeAvatar       String?
+  date                 String
+  status               String          @default("in_progress") // "in_progress" | "completed" | "cancelled"
+  startTime            String
+  endTime              String?
+  vehicle              String          @default("Xe máy")
+  startPointName       String
+  startAddress         String
+  startLat             Float
+  startLng             Float
+  endPointName         String?
+  endAddress           String?
+  endLat               Float?
+  endLng               Float?
+  pathCoordinates      String          @default("[]") // JSON string of [ [lat, lng], ... ]
+  plannedPathCoordinates String        @default("[]") // JSON string of planned coordinates [ [lat, lng], ... ]
+  plannedWaypoints     String          @default("[]") // JSON string of planned check-in waypoints
+  plannedDistanceKm    Float           @default(0)
+  totalDistanceKm      Float           @default(0)
+  totalDurationMinutes Int             @default(0)
+  endPhotos            String          @default("[]") // JSON string of end photos
+  notes                String?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  waypoints            RouteWaypoint[]
+
+  @@index([employeeName])
+  @@index([status])
+  @@index([date])
+}
+
+model RouteWaypoint {
+  id                  String    @id @default(cuid())
+  tripId              String
+  trip                RouteTrip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  orderIndex          Int       @default(1)
+  customerId          String?
+  customerName        String
+  customerPhone       String?
+  customerAddress     String
+  lat                 Float
+  lng                 Float
+  checkInTime         String
+  checkOutTime        String?
+  stayDurationMinutes Int?
+  purpose             String    @default("Chăm sóc đại lý")
+  orderAmount         Float     @default(0)
+  notes               String?
+  photos              String?   // JSON string lưu danh sách ảnh chụp đính kèm tại điểm check-in
+  status              String    @default("checked_in") // "checked_in" | "completed"
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([tripId])
+}

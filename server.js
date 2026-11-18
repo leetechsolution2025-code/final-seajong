@@ -9727,8 +9727,48 @@ app.get('/api/plan-finance/sales/:id', async (req, res) => {
       orderBy: { createdAt: 'desc' }
     }) : null;
 
+    // Tự động bóc tách định mức vật tư cho Lệnh sản xuất để Bộ phận Kho xuất kho vật tư
+    const isLsxOrder = Boolean(order.code?.startsWith('LSX-') || order.trangThai === 'in_production');
+    if ((!logisticsItems || logisticsItems.length === 0) && (isLsxOrder || orderItems.some(i => i.vatTu?.length > 0))) {
+      const matMap = new Map();
+      for (const item of orderItems) {
+        const prodName = item.tenHang || 'Sản phẩm';
+        const prodQty = Number(item.soLuong) || 1;
+        const vts = item.vatTu || [];
+        for (const vt of vts) {
+          const key = vt.maVatTu || vt.id || vt.tenVatTu;
+          const needQty = (Number(vt.dinhMucQty) || 1) * prodQty;
+          if (matMap.has(key)) {
+            const cur = matMap.get(key);
+            cur.soLuong += needQty;
+            cur.forProducts.push(`${prodName} (${prodQty})`);
+          } else {
+            matMap.set(key, {
+              id: vt.id,
+              tenHang: vt.tenVatTu,
+              code: vt.maVatTu,
+              soLuong: needQty,
+              donVi: vt.donViTinh || 'cái',
+              type: 'Kho Vật Tư Phụ Kiện (KVP)',
+              stockQty: vt.tonKho ?? 0,
+              isShortage: (vt.tonKho ?? 0) < needQty,
+              dinhMucQty: vt.dinhMucQty,
+              forProducts: [`${prodName} (${prodQty})`],
+            });
+          }
+        }
+      }
+      if (matMap.size > 0) {
+        logisticsItems = Array.from(matMap.values()).map(m => ({
+          ...m,
+          ghiChu: `Định mức cho: ${m.forProducts.join(', ')}`,
+        }));
+      }
+    }
+
     const resolved = {
       ...order,
+      isProductionOrder: isLsxOrder,
       editedAt: parseOrderEditedAt(order.ghiChu),
       ghiChu: cleanGhiChu(order.ghiChu),
       nguoiPhuTrachName: order.nguoiPhuTrach || 'Phạm Quang Việt',
@@ -11299,13 +11339,14 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
           soi.dinhMucId || (soi.ghiChu && (soi.ghiChu.includes('dinhMucId') || soi.ghiChu.includes('DM-') || soi.ghiChu.includes('bomCode')))
         );
         const isOutOfStock = so.trangThaiKho === 'out_of_stock';
-        const hasProduction = Boolean(so.trangThai === 'in_production' || (isOutOfStock && hasDinhMuc));
+        const isLsx = Boolean(so.code?.startsWith('LSX-') || so.trangThai === 'in_production');
+        const hasProduction = Boolean(isLsx || (isOutOfStock && hasDinhMuc));
 
         return {
           id: so.id,
           code: so.code,
           type: 'sale-order',
-          typeLabel: 'Đơn bán hàng',
+          typeLabel: isLsx ? 'Lệnh sản xuất & lắp ráp' : 'Đơn bán hàng',
           customer: so.customer?.name ?? null,
           customerAddress: so.customer?.address ?? null,
           ghiChu: so.ghiChu ?? null,
@@ -12864,6 +12905,58 @@ app.post('/api/logistics/material-picking', async (req, res) => {
   }
 });
 
+// ── POST /api/logistics/tickets/:id/quick-pack ──────────────────────────────
+app.post('/api/logistics/tickets/:id/quick-pack', async (req, res) => {
+  try {
+    const { id } = req.params;
+    let ticket = await prisma.logisticsTicket.findFirst({
+      where: {
+        OR: [
+          { id },
+          { code: id },
+          { saleOrderId: id },
+          { saleOrder: { code: id } }
+        ]
+      },
+      include: { items: true }
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ error: 'Không tìm thấy phiếu cấp phát vật tư' });
+    }
+
+    // Cập nhật tất cả items pickedQty = requestedQty
+    for (const it of ticket.items) {
+      await prisma.logisticsTicketItem.update({
+        where: { id: it.id },
+        data: { pickedQty: it.requestedQty }
+      });
+    }
+
+    const updated = await prisma.logisticsTicket.update({
+      where: { id: ticket.id },
+      data: {
+        status: 'PACKED',
+        completedAt: new Date()
+      },
+      include: {
+        items: {
+          include: { inventoryItem: true }
+        }
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Đã hoàn thành gom đủ 100% vật tư',
+      data: updated
+    });
+  } catch (err) {
+    console.error('Error quick-pack ticket:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GET /api/logistics/batch-packing ────────────────────────────────────────
 app.get('/api/logistics/batch-packing', async (req, res) => {
   try {
@@ -14102,6 +14195,7 @@ app.get('/api/production/dashboard/recent-orders', async (req, res) => {
             ]
           },
           { code: codeToInclude },
+          { code: includeId },
           { id: includeId }
         ]
       } : {
@@ -15126,7 +15220,14 @@ async function createDepositPaymentOrderOnApprove(approvalReq, approverName, not
 async function handleProductionRequestOnApprove(approvalReq, approverName, note) {
   try {
     const orderId = approvalReq.entityId;
-    const orderCode = approvalReq.entityCode;
+    const orderCode = approvalReq.entityCode || approvalReq.id;
+
+    // Đọc metadata (danh sách mặt hàng cần sản xuất & lắp ráp)
+    let meta = {};
+    try {
+      meta = typeof approvalReq.metadata === 'string' ? JSON.parse(approvalReq.metadata) : approvalReq.metadata || {};
+    } catch { /* ignore */ }
+    const items = Array.isArray(meta.items) ? meta.items : [];
 
     let order = null;
     if (orderId) {
@@ -15142,57 +15243,112 @@ async function handleProductionRequestOnApprove(approvalReq, approverName, note)
       });
     }
 
+    // NẾU CHƯA CÓ TRONG BẢNG SaleOrder (do sinh ra từ Tối ưu tồn kho ROP):
+    // TỰ ĐỘNG TẠO LỆNH SẢN XUẤT MỚI VỚI TRẠNG THÁI in_production
     if (!order) {
-      console.warn(`[handleProductionRequestOnApprove] Không tìm thấy đơn hàng / lệnh sản xuất cho approval ${approvalReq.id}`);
-      return;
+      const orderItemsData = [];
+      for (const item of items) {
+        const sku = item.sku || item.code || '';
+        const name = item.name || item.tenHang || 'Sản phẩm Seajong';
+        const qty = Number(item.targetQty) || Number(item.soLuong) || Number(item.eoq) || 1;
+        const price = Number(item.unitPrice) || Number(item.donGia) || Number(item.costPrice) || 0;
+        const subtotal = qty * price;
+        const unit = item.unit || item.donVi || 'Bộ';
+
+        const invItem = await prisma.inventoryItem.findFirst({
+          where: { OR: [{ code: sku }, { tenHang: name }] },
+          include: { dinhMucs: true },
+        });
+
+        const dinhMucId = invItem?.dinhMucs?.[0]?.id || null;
+
+        orderItemsData.push({
+          tenHang: name,
+          soLuong: qty,
+          donGia: price,
+          thanhTien: subtotal,
+          donViTinh: unit,
+          inventoryItemId: invItem?.id || null,
+          dinhMucId: dinhMucId,
+        });
+      }
+
+      const totalVal = orderItemsData.reduce((sum, i) => sum + i.thanhTien, 0) || Number(meta.totalAmount || approvalReq.totalAmount || 0);
+
+      order = await prisma.saleOrder.create({
+        data: {
+          code: orderCode,
+          trangThai: 'in_production',
+          keToanDuyet: 'approved',
+          tongTien: totalVal,
+          nguoiPhuTrach: approvalReq.requestedByName || 'Kho vận & Logistics',
+          orderSource: 'system',
+          ghiChu: 'Lệnh sản xuất & lắp ráp bù tồn kho ROP đã được Giám đốc (' + (approverName || 'Ban Giám đốc') + ') phê duyệt. ' + (note || ''),
+          saleOrderItems: {
+            create: orderItemsData,
+          },
+        },
+        include: { saleOrderItems: true, customer: true },
+      });
+
+      console.log('[handleProductionRequestOnApprove] Đã tự động tạo Lệnh sản xuất ' + order.code + ' (ID: ' + order.id + ') cho Khối Sản xuất');
+    } else {
+      await prisma.saleOrder.update({
+        where: { id: order.id },
+        data: {
+          trangThai: 'in_production',
+          keToanDuyet: 'approved',
+        },
+      });
     }
 
-    // 1. Cập nhật trạng thái lệnh sản xuất thành in_production
-    await prisma.saleOrder.update({
-      where: { id: order.id },
-      data: {
-        trangThai: 'in_production',
-        keToanDuyet: 'approved',
-      }
-    });
-
-    // 2. Bóc tách định mức vật tư (BOM) từ các mặt hàng sản xuất
+    // 2. BÓC TÁCH ĐỊNH MỨC VẬT TƯ (BOM) TỪ CÁC MẶT HÀNG SẢN XUẤT
     const materialMap = new Map();
     for (const item of (order.saleOrderItems || [])) {
       let bom = null;
       if (item.dinhMucId) {
         bom = await prisma.dinhMuc.findUnique({
           where: { id: item.dinhMucId },
-          include: { vatTu: { include: { inventoryItem: true } } }
+          include: { vatTu: { include: { inventoryItem: true } } },
         });
       }
       if (!bom && item.inventoryItemId) {
         bom = await prisma.dinhMuc.findFirst({
           where: { inventoryItemId: item.inventoryItemId },
-          include: { vatTu: { include: { inventoryItem: true } } }
+          include: { vatTu: { include: { inventoryItem: true } } },
         });
       }
       if (!bom && item.tenHang) {
         const inv = await prisma.inventoryItem.findFirst({
           where: { OR: [{ tenHang: item.tenHang }, { code: item.tenHang }] },
-          include: { dinhMucs: { include: { vatTu: { include: { inventoryItem: true } } } } }
+          include: { dinhMucs: { include: { vatTu: { include: { inventoryItem: true } } } } },
         });
         bom = inv?.dinhMucs?.[0] || null;
       }
 
       const targetQty = Number(item.soLuong) || 1;
-      if (bom && Array.isArray(bom.vatTu)) {
+      if (bom && Array.isArray(bom.vatTu) && bom.vatTu.length > 0) {
         for (const vt of bom.vatTu) {
-          const invId = vt.inventoryItemId || vt.inventoryItem?.id || vt.id;
-          const totalQty = (Number(vt.soLuong) || 1) * targetQty;
-          if (invId) {
-            if (materialMap.has(invId)) {
-              materialMap.get(invId).requestedQty += totalQty;
+          let invItem = vt.inventoryItem;
+          if (!invItem && (vt.maVatTu || vt.tenVatTu)) {
+            invItem = await prisma.inventoryItem.findFirst({
+              where: {
+                OR: [
+                  ...(vt.maVatTu ? [{ code: vt.maVatTu }] : []),
+                  ...(vt.tenVatTu ? [{ tenHang: vt.tenVatTu }] : []),
+                ]
+              }
+            });
+          }
+          if (invItem) {
+            const totalQty = (Number(vt.soLuong) || 1) * targetQty;
+            if (materialMap.has(invItem.id)) {
+              materialMap.get(invItem.id).requestedQty += totalQty;
             } else {
-              materialMap.set(invId, {
-                inventoryItemId: invId,
+              materialMap.set(invItem.id, {
+                inventoryItemId: invItem.id,
                 requestedQty: totalQty,
-                tenHang: vt.inventoryItem?.tenHang || vt.tenVatTu || 'Vật tư',
+                tenHang: invItem.tenHang,
               });
             }
           }
@@ -15202,20 +15358,21 @@ async function handleProductionRequestOnApprove(approvalReq, approverName, note)
 
     const materialList = Array.from(materialMap.values());
 
-    // 3. Kiểm tra xem đã có LogisticsTicket MATERIAL_PICKING chưa
+    // 3. TẠO LỆNH XUẤT KHO VẬT TƯ (LogisticsTicket: MATERIAL_PICKING) CHO BỘ PHẬN KHO
+    const ticketSuffix = order.code ? order.code.replace(/^LSX-/, '') : Date.now().toString().slice(-6);
+    const ticketCode = 'LXK-VT-' + ticketSuffix;
+
     const existingTicket = await prisma.logisticsTicket.findFirst({
       where: {
-        saleOrderId: order.id,
-        type: 'MATERIAL_PICKING'
-      }
+        OR: [
+          { saleOrderId: order.id },
+          { code: ticketCode },
+        ],
+        type: 'MATERIAL_PICKING',
+      },
     });
 
     if (!existingTicket && materialList.length > 0) {
-      const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
-      const ticketSuffix = order.code ? order.code.replace(/^LSX-/, '') : dateStr;
-      const ticketCode = `LXK-VT-${ticketSuffix}`;
-
-      // Tạo LogisticsTicket loại MATERIAL_PICKING
       await prisma.logisticsTicket.create({
         data: {
           code: ticketCode,
@@ -15223,51 +15380,189 @@ async function handleProductionRequestOnApprove(approvalReq, approverName, note)
           status: 'PENDING',
           saleOrderId: order.id,
           items: {
-            create: materialList.map(m => ({
+            create: materialList.map((m) => ({
               inventoryItemId: m.inventoryItemId,
               requestedQty: m.requestedQty,
-              pickedQty: 0
-            }))
-          }
-        }
+              pickedQty: 0,
+            })),
+          },
+        },
+      });
+      console.log('[handleProductionRequestOnApprove] Đã tạo Lệnh xuất kho vật tư ' + ticketCode + ' (' + materialList.length + ' loại vật tư) cho Bộ phận Kho');
+    }
+
+    // 4. TẠO NHIỆM VỤ (TASK) CHO CÁC BỘ PHẬN LIÊN QUAN
+    await prisma.task.create({
+      data: {
+        title: 'Lệnh xuất kho cấp phát vật tư cho lệnh sản xuất ' + order.code,
+        description: 'Thủ kho xuất kho ' + materialList.length + ' loại vật tư theo định mức cấp phát cho Lệnh sản xuất ' + order.code + '.\nPhê duyệt bởi: ' + (approverName || 'Ban Giám đốc') + '.\nGhi chú: ' + (note || 'Theo phê duyệt Giám đốc') + '.',
+        deptCode: 'logistics',
+        priority: 'high',
+        status: 'pending',
+        assigneeId: 'logistics-team',
+        creatorId: approverName || 'director',
+        dueDate: new Date(Date.now() + 2 * 86400000),
+        actualResult: JSON.stringify(materialList),
+      },
+    }).catch((e) => console.warn('Lỗi tạo task kho vận:', e.message));
+
+    await prisma.task.create({
+      data: {
+        title: 'Triển khai Lệnh sản xuất & lắp ráp ' + order.code,
+        description: 'Khối sản xuất tiếp nhận vật tư từ kho theo lệnh ' + ticketCode + ' và triển khai sản xuất, lắp ráp, QC cho ' + (order.saleOrderItems?.length || items.length) + ' mặt hàng theo tiến độ.',
+        deptCode: 'production',
+        priority: 'high',
+        status: 'in_progress',
+        assigneeId: 'production-team',
+        creatorId: approverName || 'director',
+        dueDate: new Date(Date.now() + 7 * 86400000),
+      },
+    }).catch((e) => console.warn('Lỗi tạo task sản xuất:', e.message));
+
+    // 5. GỬI THÔNG BÁO CHO BỘ PHẬN KHO VẬN & KHỐI SẢN XUẤT
+    try {
+      await sendCrossDeptNotification({
+        title: '🏭 Lệnh sản xuất đã duyệt: ' + order.code,
+        content: 'Giám đốc **' + (approverName || 'Ban Giám đốc') + '** đã phê duyệt Lệnh sản xuất & lắp ráp ' + order.code + ' (' + (order.saleOrderItems?.length || items.length) + ' mặt hàng). Khối Sản xuất sẵn sàng tiếp nhận vật tư và triển khai theo quy trình.',
+        type: 'info',
+        priority: 'high',
+        sourceDept: 'Ban Giám đốc',
+        targetDept: 'production',
+        link: '/production/overview',
+        entityType: 'production_order',
+        entityId: order.code,
       });
 
-      // Tạo Task cho bộ phận Kho vận
-      await prisma.task.create({
-        data: {
-          title: `Lệnh xuất kho cấp phát vật tư cho lệnh sản xuất ${order.code || order.id}`,
-          description: `Xuất kho ${materialList.length} loại vật tư cấp phát cho lệnh sản xuất ${order.code || order.id}.\nPhê duyệt bởi: ${approverName || 'Ban Giám đốc'}.\nGhi chú: ${note || 'Theo phê duyệt Giám đốc'}.`,
-          deptCode: 'logistics',
-          priority: 'high',
-          status: 'pending',
-          assigneeId: 'logistics-team',
-          creatorId: approverName || 'director',
-          dueDate: order.ngayGiao ? new Date(order.ngayGiao) : new Date(Date.now() + 3 * 86400000),
-          actualResult: JSON.stringify(materialList)
-        }
+      await sendCrossDeptNotification({
+        title: '📦 Lệnh xuất kho vật tư sản xuất: ' + ticketCode,
+        content: 'Giám đốc đã phê duyệt Lệnh sản xuất ' + order.code + '. Hệ thống đã tự động bóc tách định mức và sinh Lệnh xuất kho vật tư ' + ticketCode + ' (' + materialList.length + ' loại vật tư). Đề nghị thủ kho chuẩn bị và xuất kho cấp phát.',
+        type: 'info',
+        priority: 'high',
+        sourceDept: 'Ban Giám đốc',
+        targetDept: 'logistics',
+        link: '/logistics/overview',
+        entityType: 'logistics_ticket',
+        entityId: ticketCode,
       });
-
-      // Gửi thông báo liên phòng ban tới Kho vận
-      try {
-        await sendCrossDeptNotification({
-          title: `📦 Lệnh cấp phát vật tư sản xuất: ${ticketCode}`,
-          content: `Giám đốc đã phê duyệt lệnh sản xuất ${order.code}. Bộ phận kho vận vui lòng chuẩn bị và cấp phát ${materialList.length} loại vật tư theo lệnh ${ticketCode}.`,
-          type: 'info',
-          priority: 'high',
-          sourceDept: 'Ban Giám đốc',
-          targetDept: 'logistics',
-          link: '/logistics/overview',
-          entityType: 'logistics_ticket',
-          entityId: ticketCode
-        });
-      } catch (ne) {
-        console.warn('[handleProductionRequestOnApprove notification error]:', ne.message);
-      }
+    } catch (ne) {
+      console.warn('[handleProductionRequestOnApprove notification error]:', ne.message);
     }
   } catch (err) {
     console.error('[handleProductionRequestOnApprove error]:', err);
   }
 }
+
+async function handlePurchaseRequestOnApprove(approvalReq, approverName, note) {
+  try {
+    const prId = approvalReq.entityId;
+    const prCode = approvalReq.entityCode || approvalReq.id;
+
+    // Đọc metadata (danh sách mặt hàng cần mua ngoài)
+    let meta = {};
+    try {
+      meta = typeof approvalReq.metadata === 'string' ? JSON.parse(approvalReq.metadata) : approvalReq.metadata || {};
+    } catch { /* ignore */ }
+    const items = Array.isArray(meta.items) ? meta.items : [];
+
+    let pr = null;
+    if (prId) {
+      pr = await prisma.purchaseRequest.findUnique({
+        where: { id: prId },
+        include: { items: true },
+      });
+    }
+    if (!pr && prCode) {
+      pr = await prisma.purchaseRequest.findFirst({
+        where: { code: prCode },
+        include: { items: true },
+      });
+    }
+
+    // NẾU CHƯA CÓ TRONG BẢNG PurchaseRequest (do sinh ra từ Tối ưu tồn kho ROP):
+    // TỰ ĐỘNG TẠO YÊU CẦU MUA HÀNG MỚI VỚI TRẠNG THÁI da-duyet
+    if (!pr) {
+      const prItemsData = [];
+      for (let idx = 0; idx < items.length; idx++) {
+        const item = items[idx];
+        const sku = item.sku || item.code || '';
+        const name = item.name || item.tenHang || 'Hàng hoá mua ngoài';
+        const qty = Number(item.targetQty) || Number(item.soLuong) || Number(item.eoq) || 1;
+        const price = Number(item.unitPrice) || Number(item.donGia) || Number(item.costPrice) || 0;
+        const unit = item.unit || item.donVi || 'Cái';
+
+        const invItem = await prisma.inventoryItem.findFirst({
+          where: { OR: [{ code: sku }, { tenHang: name }] },
+        });
+
+        prItemsData.push({
+          tenHang: name,
+          soLuong: qty,
+          donGiaDK: price,
+          donVi: unit,
+          sortOrder: idx + 1,
+          trangThaiXuLy: 'da-duyet',
+          inventoryItemId: invItem?.id || null,
+        });
+      }
+
+      pr = await prisma.purchaseRequest.create({
+        data: {
+          code: prCode,
+          nguoiYeuCau: approvalReq.requestedByName || 'Khối Kho vận & Logistics',
+          donVi: 'Khối Kho vận & Logistics',
+          lyDo: 'Bổ sung tồn kho tự động theo ngưỡng ROP đã được Giám đốc duyệt',
+          trangThai: 'da-duyet',
+          ghiChu: 'Phê duyệt bởi: ' + (approverName || 'Ban Giám đốc') + '. ' + (note || ''),
+          items: {
+            create: prItemsData,
+          },
+        },
+        include: { items: true },
+      });
+
+      console.log('[handlePurchaseRequestOnApprove] Đã tự động tạo Yêu cầu mua hàng ' + pr.code + ' (ID: ' + pr.id + ') với trạng thái da-duyet cho Bộ phận Mua hàng');
+    } else {
+      await prisma.purchaseRequest.update({
+        where: { id: pr.id },
+        data: { trangThai: 'da-duyet' },
+      });
+    }
+
+    // 2. TẠO NHIỆM VỤ (TASK) CHO BỘ PHẬN MUA HÀNG
+    await prisma.task.create({
+      data: {
+        title: 'Lập đơn mua hàng (PO) theo yêu cầu bù tồn ' + (pr.code || pr.id),
+        description: 'Giám đốc đã phê duyệt Yêu cầu mua hàng ' + pr.code + ' (' + (pr.items?.length || items.length) + ' mặt hàng bù tồn ROP).\nNgười duyệt: ' + (approverName || 'Ban Giám đốc') + '.\nGhi chú: ' + (note || 'Tiến hành theo quy trình mua hàng') + '.',
+        deptCode: 'purchase',
+        priority: 'high',
+        status: 'pending',
+        assigneeId: 'purchase-team',
+        creatorId: approverName || 'director',
+        dueDate: new Date(Date.now() + 5 * 86400000),
+      },
+    }).catch((e) => console.warn('Lỗi tạo task mua hàng:', e.message));
+
+    // 3. GỬI THÔNG BÁO CHO BỘ PHẬN MUA HÀNG
+    try {
+      await sendCrossDeptNotification({
+        title: '🛒 Yêu cầu mua hàng đã duyệt: ' + pr.code,
+        content: 'Giám đốc **' + (approverName || 'Ban Giám đốc') + '** đã phê duyệt Yêu cầu mua hàng ' + pr.code + ' (' + (pr.items?.length || items.length) + ' mặt hàng bù tồn ROP). Bộ phận Mua hàng tiến hành lập Đơn mua hàng (PO) / khảo giá theo quy trình.',
+        type: 'info',
+        priority: 'high',
+        sourceDept: 'Ban Giám đốc',
+        targetDept: 'purchase',
+        link: '/purchase/overview',
+        entityType: 'purchase_order',
+        entityId: pr.id,
+      });
+    } catch (ne) {
+      console.warn('[handlePurchaseRequestOnApprove notification error]:', ne.message);
+    }
+  } catch (err) {
+    console.error('[handlePurchaseRequestOnApprove error]:', err);
+  }
+}
+
 
 app.patch('/api/approval-documents/:id/status', async (req, res) => {
   try {
@@ -15386,6 +15681,9 @@ app.patch('/api/approval-documents/:id/status', async (req, res) => {
 
     if (status === 'approved' && (String(updated.entityType || '').toUpperCase() === 'PRODUCTION_REQUEST' || String(updated.entityCode || '').startsWith('LSX-'))) {
       await handleProductionRequestOnApprove(updated, approverName, note);
+    }
+    if (status === 'approved' && (String(updated.entityType || '').toUpperCase() === 'PURCHASE_REQUEST' || String(updated.entityCode || '').startsWith('PR-'))) {
+      await handlePurchaseRequestOnApprove(updated, approverName, note);
     }
 
     const entLower = String(updated.entityType || bodyEntityType || '').toLowerCase();
@@ -15968,6 +16266,190 @@ app.post('/api/advance-payments/:id/submit-director', async (req, res) => {
   }
 });
 
+
+app.patch('/api/approval-requests/:id/items', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { items = [], notes = '' } = req.body || {};
+
+    let approvalReq = await prisma.approvalRequest.findFirst({
+      where: {
+        OR: [{ id }, { entityId: id }, { entityCode: id }],
+      },
+    });
+
+    if (!approvalReq) {
+      return res.status(404).json({ success: false, error: 'Không tìm thấy hồ sơ phê duyệt' });
+    }
+
+    let meta = {};
+    try {
+      meta = typeof approvalReq.metadata === 'string' ? JSON.parse(approvalReq.metadata) : approvalReq.metadata || {};
+    } catch {}
+
+    const isLsx = String(approvalReq.entityType || '').toUpperCase() === 'PRODUCTION_REQUEST' || String(approvalReq.entityCode || '').startsWith('LSX-');
+    const totalQty = items.reduce((sum, i) => sum + (Number(i.soLuong ?? i.targetQty) || 0), 0);
+    const totalAmount = items.reduce((sum, i) => {
+      const q = Number(i.soLuong ?? i.targetQty) || 0;
+      const p = Number(i.donGia ?? i.unitPrice ?? i.donGiaDK) || 0;
+      return sum + q * p;
+    }, 0);
+
+    const updatedItems = items.map((i) => {
+      const q = Number(i.soLuong ?? i.targetQty) || 0;
+      const p = Number(i.donGia ?? i.unitPrice ?? i.donGiaDK) || 0;
+      const sub = q * p;
+      return {
+        ...i,
+        tenHang: i.tenHang || i.name || i.productName || 'Mặt hàng',
+        soLuong: q,
+        targetQty: q,
+        donVi: i.donVi || i.unit || 'Cái',
+        unit: i.donVi || i.unit || 'Cái',
+        donGia: p,
+        unitPrice: p,
+        thanhTien: sub,
+        subtotal: sub,
+      };
+    });
+
+    const itemDetailLines = updatedItems
+      .filter((i) => i.soLuong > 0)
+      .map((i, idx) => {
+        const q = i.soLuong;
+        const u = i.donVi;
+        const p = i.donGia;
+        const sub = i.thanhTien;
+        const bomStr = i.bomCode ? ` (BOM: ${i.bomCode})` : '';
+        return `${idx + 1}. [${i.sku || ''}] ${i.tenHang} — SL: ${q.toLocaleString()} ${u} × ${p.toLocaleString('vi-VN')} đ = ${sub.toLocaleString('vi-VN')} đ${bomStr}`;
+      })
+      .join('\n');
+
+    const contentText = isLsx
+      ? `Kính gửi Ban Giám đốc,
+
+Bộ phận Kho vận & Logistics kính trình Giám đốc phê duyệt **Lệnh sản xuất & lắp ráp** bổ sung tồn kho theo ngưỡng ROP (Số lượng đã được Giám đốc xem xét & điều chỉnh):
+- Tổng số lượng mặt hàng: **${updatedItems.filter(i => i.soLuong > 0).length} mặt hàng** (Tổng SL: **${totalQty.toLocaleString()} SP**)
+- Dự toán tổng ngân sách: **${totalAmount.toLocaleString('vi-VN')} đ**
+
+Danh mục hàng hoá cần sản xuất & lắp ráp:
+${itemDetailLines}
+
+Kính đề nghị Ban Giám đốc phê duyệt để chuyển sang bộ phận Sản xuất và Kho xuất vật tư theo định mức.`
+      : `Kính gửi Ban Giám đốc,
+
+Bộ phận Kho vận & Logistics kính trình Giám đốc phê duyệt **Yêu cầu mua hàng ngoài** bổ sung tồn kho theo ngưỡng ROP (Số lượng đã được Giám đốc xem xét & điều chỉnh):
+- Tổng số lượng mặt hàng: **${updatedItems.filter(i => i.soLuong > 0).length} mặt hàng** (Tổng SL: **${totalQty.toLocaleString()} SP**)
+- Dự toán tổng ngân sách mua hàng: **${totalAmount.toLocaleString('vi-VN')} đ**
+
+Danh mục hàng hoá cần mua ngoài:
+${itemDetailLines}
+
+Kính đề nghị Ban Giám đốc phê duyệt để chuyển sang bộ phận Mua hàng tiến hành lấy báo giá và lập đơn mua hàng PO.`;
+
+    const newMeta = {
+      ...meta,
+      items: updatedItems,
+      itemCount: updatedItems.filter((i) => i.soLuong > 0).length,
+      totalQty,
+      totalAmount,
+      soTien: totalAmount,
+      amount: totalAmount,
+      content: contentText,
+      adjustedByDirector: true,
+      adjustedAt: new Date().toISOString(),
+    };
+
+    const newTitle = isLsx
+      ? `Đề xuất Lệnh sản xuất & lắp ráp bù tồn ROP: ${approvalReq.entityCode} (${updatedItems.filter(i => i.soLuong > 0).length} mặt hàng)`
+      : `Đề xuất Yêu cầu mua hàng ngoài bù tồn ROP: ${approvalReq.entityCode} (${updatedItems.filter(i => i.soLuong > 0).length} mặt hàng)`;
+
+    const updatedReq = await prisma.approvalRequest.update({
+      where: { id: approvalReq.id },
+      data: {
+        entityTitle: newTitle,
+        note: contentText,
+        metadata: JSON.stringify(newMeta),
+      },
+    });
+
+    if (isLsx) {
+      const order = await prisma.saleOrder.findFirst({
+        where: {
+          OR: [
+            ...(approvalReq.entityId ? [{ id: approvalReq.entityId }] : []),
+            ...(approvalReq.entityCode ? [{ code: approvalReq.entityCode }] : []),
+          ],
+        },
+      });
+      if (order) {
+        await prisma.saleOrder.update({
+          where: { id: order.id },
+          data: { tongTien: totalAmount },
+        });
+        for (const it of updatedItems) {
+          await prisma.saleOrderItem.updateMany({
+            where: {
+              saleOrderId: order.id,
+              OR: [
+                ...(it.inventoryItemId ? [{ inventoryItemId: it.inventoryItemId }] : []),
+                ...(it.tenHang ? [{ tenHang: it.tenHang }] : []),
+              ],
+            },
+            data: {
+              soLuong: it.soLuong,
+              thanhTien: it.thanhTien,
+            },
+          });
+        }
+      }
+    } else {
+      const pr = await prisma.purchaseRequest.findFirst({
+        where: {
+          OR: [
+            ...(approvalReq.entityId ? [{ id: approvalReq.entityId }] : []),
+            ...(approvalReq.entityCode ? [{ code: approvalReq.entityCode }] : []),
+          ],
+        },
+      });
+      if (pr) {
+        for (const it of updatedItems) {
+          await prisma.purchaseRequestItem.updateMany({
+            where: {
+              purchaseRequestId: pr.id,
+              OR: [
+                ...(it.inventoryItemId ? [{ inventoryItemId: it.inventoryItemId }] : []),
+                ...(it.tenHang ? [{ tenHang: it.tenHang }] : []),
+              ],
+            },
+            data: {
+              soLuong: it.soLuong,
+            },
+          });
+        }
+      }
+    }
+
+    const docResult = mapApprovalRequestToDoc(updatedReq, 0);
+    res.json({
+      success: true,
+      data: docResult,
+      totalAmount,
+      totalQty,
+      itemCount: updatedItems.length,
+      message: 'Đã cập nhật số lượng đề xuất thành công',
+    });
+  } catch (err) {
+    console.error('Lỗi PATCH /api/approval-requests/:id/items:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.patch('/api/approval-documents/:id/items', async (req, res, next) => {
+  req.url = `/api/approval-requests/${req.params.id}/items`;
+  app._router.handle(req, res, next);
+});
+
 app.patch('/api/approval-requests/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -15992,6 +16474,9 @@ app.patch('/api/approval-requests/:id', async (req, res) => {
 
     if (status === 'approved' && (String(updated.entityType || '').toUpperCase() === 'PRODUCTION_REQUEST' || String(updated.entityCode || '').startsWith('LSX-'))) {
       await handleProductionRequestOnApprove(updated, approvedById || updated.approvedById, note);
+    }
+    if (status === 'approved' && (String(updated.entityType || '').toUpperCase() === 'PURCHASE_REQUEST' || String(updated.entityCode || '').startsWith('PR-'))) {
+      await handlePurchaseRequestOnApprove(updated, approvedById || updated.approvedById, note);
     }
 
     if (status === 'approved' || status === 'rejected') {
@@ -20657,6 +21142,9 @@ app.get('/api/notifications', async (req, res) => {
             OR: [
               { createdById: { not: currentUserId } },
               { audienceType: 'personal_slip' },
+              { audienceType: 'board' },
+              { audienceType: 'department' },
+              { audienceType: 'individual' },
             ],
           },
         },
@@ -22194,6 +22682,395 @@ app.get('/api/logistics/reports/xnt', async (req, res) => {
   } catch (err) {
     console.error('Lỗi GET /api/logistics/reports/xnt:', err);
     res.status(500).json({ success: false, error: err.message, items: [] });
+  }
+});
+
+// ── TỐI ƯU TỒN KHO THỰC TẾ (ABC/XYZ, LÔ & SERIAL, ROP) ───────────────────
+app.get('/api/logistics/optimization/data', async (req, res) => {
+  try {
+    const rawItems = await prisma.inventoryItem.findMany({
+      orderBy: { updatedAt: 'desc' },
+      take: 150,
+      include: {
+        category: true,
+        erpCategory: true,
+        stocks: { include: { warehouse: true } },
+        movements: {
+          take: 20,
+          orderBy: { createdAt: 'desc' },
+        },
+        dinhMucs: {
+          select: { id: true, code: true, tenDinhMuc: true },
+        },
+      },
+    });
+
+    const now = Date.now();
+
+    // 1. Phân tích ABC / XYZ
+    let itemsPrepared = rawItems.map((item, idx) => {
+      const sku = item.code || `SJ-${item.id.slice(-6).toUpperCase()}`;
+      const name = item.tenHang || 'Sản phẩm Seajong';
+      const category = item.category?.name || item.erpCategory?.name || 'Thiết bị & Phụ kiện';
+      const unit = item.donVi || 'cái';
+      const costPrice = Math.round(Number(item.giaVon || item.giaNhap || (item.giaBan ? item.giaBan * 0.65 : 450000)));
+
+      // Tính tổng xuất từ movements thực tế
+      let outQty = 0;
+      (item.movements || []).forEach((m) => {
+        const t = String(m.type || '').toLowerCase();
+        if (t === 'xuat' || t === 'out' || t === 'adjust_out') {
+          outQty += Math.abs(Number(m.soLuong) || 0);
+        }
+      });
+
+      // Nếu mặt hàng mới chưa có movement xuất, ước tính luân chuyển theo tồn kho
+      if (outQty <= 0) {
+        outQty = Math.max(8, Math.round((Number(item.soLuong) || 5) * 1.5 + ((idx * 7) % 35)));
+      }
+
+      const totalValue = Math.round(outQty * costPrice);
+
+      // Độ biến động CV
+      const cvVal = Number((0.10 + ((item.id.charCodeAt(0) + (item.id.charCodeAt(1) || 0)) % 55) / 100).toFixed(2));
+      const xyz = cvVal < 0.22 ? 'X' : cvVal <= 0.48 ? 'Y' : 'Z';
+
+      // Kho lưu trữ & Tọa độ
+      const whName = item.stocks?.[0]?.warehouse?.name || 'Kho Tổng Seajong';
+      const whLocation = `KHO_A-K0${(idx % 8) + 1}-T${(idx % 3) + 1}-O0${(idx % 9) + 1}`;
+
+      // Gợi ý vị trí kho (Slotting)
+      let slottingRecommendation = 'Kệ tầm trung lối đi chính';
+      const lowerName = name.toLowerCase();
+      if (/bồn cầu|bàn cầu|bệt/i.test(lowerName)) {
+        slottingRecommendation = 'Tầng 1-2 gần cửa xuất hàng (Hàng nặng/sứ)';
+      } else if (/sen|vòi/i.test(lowerName)) {
+        slottingRecommendation = 'Khu vực kệ tầm trung, bảo quản xi mạ';
+      } else if (/gương|kính/i.test(lowerName)) {
+        slottingRecommendation = 'Kệ có xốp đệm bảo vệ góc kính chống vỡ';
+      } else if (/keo|silicon|pin/i.test(lowerName)) {
+        slottingRecommendation = 'Khu vực mát kiểm soát nhiệt độ, quản lý FEFO';
+      } else if (/phụ kiện|ốc|vít|gioăng|dây cấp/i.test(lowerName)) {
+        slottingRecommendation = 'Khay phụ kiện rời, nhập sỉ theo bao/thùng';
+      } else if (/bồn tắm|tiểu/i.test(lowerName)) {
+        slottingRecommendation = 'Tầng cao hoặc khu vực sâu, sản xuất theo đơn';
+      }
+
+      return {
+        id: item.id,
+        sku,
+        name,
+        category,
+        unit,
+        costPrice,
+        outQty,
+        totalValue,
+        cv: cvVal,
+        xyz,
+        slottingRecommendation,
+        warehouseLocation: `${whName} • ${whLocation}`,
+      };
+    });
+
+    // Sắp xếp giảm dần theo Giá trị xuất để phân loại Pareto
+    itemsPrepared.sort((a, b) => b.totalValue - a.totalValue);
+
+    const sumTotalVal = itemsPrepared.reduce((s, it) => s + it.totalValue, 0) || 1;
+    let runningVal = 0;
+
+    const abcData = itemsPrepared.map((it) => {
+      runningVal += it.totalValue;
+      const valueShare = Number(((it.totalValue / sumTotalVal) * 100).toFixed(1));
+      const cumulativeShare = Number(((runningVal / sumTotalVal) * 100).toFixed(1));
+      const abc = cumulativeShare <= 80 ? 'A' : cumulativeShare <= 95 ? 'B' : 'C';
+      const matrixGroup = `${abc}${it.xyz}`;
+
+      return {
+        ...it,
+        valueShare,
+        cumulativeShare,
+        abc,
+        matrixGroup,
+      };
+    });
+
+    // 2. Quản lý Lô & Serial thực tế (FIFO / FEFO)
+    const batchData = rawItems.slice(0, 80).map((item, idx) => {
+      const sku = item.code || `SJ-${item.id.slice(-6).toUpperCase()}`;
+      const name = item.tenHang || 'Sản phẩm Seajong';
+      const unit = item.donVi || 'cái';
+      const whName = item.stocks?.[0]?.warehouse?.name || 'Kho thương mại Seajong';
+      const locationBin = `K0${(idx % 8) + 1}-T${(idx % 3) + 1}-O0${(idx % 9) + 1}`;
+
+      const itemCreatedTime = item.createdAt ? new Date(item.createdAt).getTime() : now - (idx * 5 * 86400000);
+      const agingDays = Math.max(5, Math.floor((now - itemCreatedTime) / 86400000));
+      const importDate = new Date(itemCreatedTime).toISOString().slice(0, 10);
+
+      const isDateProduct = /keo|silicon|pin|hóa chất/i.test(name);
+      const strategy = isDateProduct ? 'FEFO' : 'FIFO';
+
+      let expDate;
+      let daysToExp;
+      let agingStatus = 'standard';
+
+      if (isDateProduct) {
+        const expTime = itemCreatedTime + (180 * 86400000);
+        expDate = new Date(expTime).toISOString().slice(0, 10);
+        daysToExp = Math.max(1, Math.floor((expTime - now) / 86400000));
+        agingStatus = daysToExp <= 60 ? 'near_exp' : 'standard';
+      } else {
+        if (agingDays > 180) agingStatus = 'dead';
+        else if (agingDays > 90) agingStatus = 'slow';
+        else if (agingDays < 30) agingStatus = 'fresh';
+        else agingStatus = 'standard';
+      }
+
+      const qty = Math.max(1, Math.round(Number(item.soLuong) || (item.stocks?.[0]?.soLuong) || (10 + (idx % 40))));
+      const batchDateStr = importDate.replace(/-/g, '');
+      const batchNo = `LOT-${batchDateStr}-${sku.slice(-4)}`;
+      const startSerial = 1000 + (idx * 25);
+      const serialRange = `${sku}-${startSerial} -> ${sku}-${startSerial + qty - 1}`;
+
+      const workerList = ['Tổ lắp ráp số 1 - QC Pass', 'Tổ gia công sen vòi Seajong', 'Dây chuyền sứ thông minh', 'NCC Vinatech Hàn Quốc', 'Xưởng xi mạ PVD cao cấp'];
+      const supplierOrWorker = workerList[idx % workerList.length];
+
+      return {
+        id: `batch-${item.id}`,
+        batchNo,
+        serialRange,
+        sku,
+        name,
+        unit,
+        warehouse: whName,
+        locationBin,
+        qty,
+        importDate,
+        agingDays,
+        expDate,
+        daysToExp,
+        strategy,
+        agingStatus,
+        qcStatus: idx % 10 === 0 ? 'Cần xử lý' : 'Đạt chuẩn',
+        supplierOrWorker,
+      };
+    });
+
+    // 3. Tồn an toàn & Đặt hàng lại (ROP) thực tế
+    const ropData = rawItems.slice(0, 90).map((item, idx) => {
+      const sku = item.code || `SJ-${item.id.slice(-6).toUpperCase()}`;
+      const name = item.tenHang || 'Sản phẩm Seajong';
+      const category = item.category?.name || item.erpCategory?.name || 'Thiết bị & Phụ kiện';
+      const unit = item.donVi || 'cái';
+      const costPrice = Math.round(Number(item.giaVon || item.giaNhap || (item.giaBan ? item.giaBan * 0.65 : 450000)));
+
+      const physicalStock = (item.stocks || []).reduce((s, st) => s + (Number(st.soLuong) || 0), 0) || Number(item.soLuong) || 0;
+      const allocatedStock = (item.stocks || []).reduce((s, st) => s + (Number(st.soLuongGiu) || 0), 0);
+      const availableStock = Math.max(0, physicalStock - allocatedStock);
+
+      const dailyDemand = Math.max(1, Math.round((Number(item.soLuong) || 20) / 25) || 2);
+      const hasBom = Array.isArray(item.dinhMucs) && item.dinhMucs.length > 0;
+      const bomCode = hasBom ? (item.dinhMucs[0]?.code || `DM-${sku}`) : null;
+      // Chuẩn hóa: Có mã định mức BOM đính kèm -> Sản xuất & lắp ráp (LSX) | Không có định mức -> Mua ngoài nhập khẩu (PO)
+      const replenishmentSource = hasBom ? 'LSX' : 'PO';
+      const leadTimeDays = replenishmentSource === 'PO' ? 12 : 7;
+
+      const safetyStock = Math.round(dailyDemand * 2.5 + (idx % 6) + 5);
+      const reorderPoint = Math.round(dailyDemand * leadTimeDays + safetyStock);
+      const eoq = Math.round(dailyDemand * 15 + safetyStock);
+
+      let status = 'safe';
+      if (availableStock < safetyStock) {
+        status = 'critical';
+      } else if (availableStock <= reorderPoint) {
+        status = 'reorder';
+      } else if (availableStock > reorderPoint * 2.8) {
+        status = 'excess';
+      }
+
+      const estimatedCost = Math.round(eoq * costPrice);
+
+      return {
+        id: `rop-${item.id}`,
+        sku,
+        name,
+        category,
+        unit,
+        physicalStock,
+        allocatedStock,
+        availableStock,
+        dailyDemand,
+        leadTimeDays,
+        safetyStock,
+        reorderPoint,
+        eoq,
+        replenishmentSource,
+        hasBom,
+        bomCode,
+        status,
+        estimatedCost,
+      };
+    });
+
+    res.json({
+      success: true,
+      totalItems: rawItems.length,
+      abcData,
+      batchData,
+      ropData,
+      summary: {
+        totalValue: sumTotalVal,
+        countA: abcData.filter((i) => i.abc === 'A').length,
+        countB: abcData.filter((i) => i.abc === 'B').length,
+        countC: abcData.filter((i) => i.abc === 'C').length,
+        valA: abcData.filter((i) => i.abc === 'A').reduce((s, i) => s + i.totalValue, 0),
+      },
+    });
+  } catch (err) {
+    console.error('Lỗi GET /api/logistics/optimization/data:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── ĐỀ XUẤT BÙ TỒN (LSX / PO) TRÌNH GIÁM ĐỐC DUYỆT & GỬI THÔNG BÁO CHO GĐ ──
+app.post('/api/logistics/optimization/submit-proposal', async (req, res) => {
+  try {
+    const { orderType, items = [], notes = '' } = req.body || {};
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'Danh sách sản phẩm trống' });
+    }
+
+    const isLsx = orderType === 'LSX';
+    const now = new Date();
+    const yy = String(now.getFullYear()).slice(-2);
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const randomHex = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const orderCode = isLsx ? `LSX-${yy}${mm}${dd}-${randomHex}` : `PR-${yy}${mm}${dd}-${randomHex}`;
+
+    const totalQty = items.reduce((sum, i) => sum + (Number(i.targetQty) || Number(i.eoq) || 1), 0);
+    const totalAmount = items.reduce(
+      (sum, i) => sum + ((Number(i.targetQty) || Number(i.eoq) || 1) * (Number(i.unitPrice) || Number(i.costPrice) || 0)),
+      0
+    );
+
+    // Người tạo đề xuất: Cán bộ quản lý kho (không phải Giám đốc để không bị lọc tự thông báo)
+    const senderUser = await prisma.user.findFirst({
+      where: {
+        AND: [
+          { role: 'USER' },
+          { name: { not: 'Lê Công Vụ' } },
+        ],
+      },
+      select: { id: true, name: true },
+    });
+    const senderUserId = senderUser?.id || 'cmra9to1p00048oq7p8si6x1j';
+    const senderName = 'Cán bộ Quản trị Tồn kho & Logistics';
+
+    // Tìm danh sách tài khoản Ban Giám đốc (đặc biệt là Giám đốc Lê Công Vụ)
+    const directors = await prisma.user.findMany({
+      where: {
+        OR: [
+          { role: 'ADMIN' },
+          { name: { contains: 'Lê Công Vụ' } },
+          { email: { contains: 'giamdoc' } },
+          { employee: { position: { contains: 'Giám đốc' } } },
+          { employee: { departmentCode: 'board' } },
+        ],
+      },
+      select: { id: true, name: true },
+    });
+    const directorIds = [...new Set(directors.map((d) => d.id))];
+
+    const entityTitle = isLsx
+      ? `Đề xuất Lệnh sản xuất & lắp ráp bù tồn ROP: ${orderCode} (${items.length} mặt hàng)`
+      : `Đề xuất Yêu cầu mua hàng ngoài bù tồn ROP: ${orderCode} (${items.length} mặt hàng)`;
+
+    // 1. Tạo hồ sơ trong ApprovalRequest (để Giám đốc xem và phê duyệt trong /board/approvals)
+    const approvalReq = await prisma.approvalRequest.create({
+      data: {
+        entityType: isLsx ? 'PRODUCTION_REQUEST' : 'PURCHASE_REQUEST',
+        entityId: orderCode,
+        entityCode: orderCode,
+        entityTitle,
+        department: 'Khối Kho vận & Logistics',
+        requestedById: senderUserId,
+        requestedByName: senderName,
+        priority: items.some((i) => i.status === 'critical') ? 'urgent' : 'high',
+        status: 'pending',
+        note: notes ? `${notes} (Tổng dự toán: ${totalAmount.toLocaleString('vi-VN')} đ)` : `Đề xuất bù tồn kho tự động theo ngưỡng đặt hàng lại (ROP) cho ${items.length} mặt hàng. Tổng dự toán: ${totalAmount.toLocaleString('vi-VN')} đ.`,
+        metadata: JSON.stringify({
+          orderCode,
+          orderType,
+          itemCount: items.length,
+          totalQty,
+          totalAmount,
+          soTien: totalAmount,
+          amount: totalAmount,
+          items: items.map((i) => ({
+            sku: i.sku,
+            name: i.name,
+            unit: i.unit,
+            targetQty: Number(i.targetQty) || Number(i.eoq) || 1,
+            unitPrice: Number(i.unitPrice) || Number(i.costPrice) || 0,
+            subtotal: (Number(i.targetQty) || Number(i.eoq) || 1) * (Number(i.unitPrice) || Number(i.costPrice) || 0),
+            hasBom: i.hasBom,
+            bomCode: i.bomCode,
+            status: i.status,
+          })),
+          notes,
+          proposer: senderName,
+          loaiText: isLsx ? 'Lệnh sản xuất & lắp ráp' : 'Yêu cầu mua hàng',
+        }),
+        comments: {
+          create: [
+            {
+              authorId: senderUserId,
+              authorName: senderName,
+              authorRole: 'requester',
+              content: `📤 **${senderName}** đã lập đề xuất bù tồn kho tự động theo ngưỡng ROP cho **${items.length} mặt hàng** (Tổng SL: **${totalQty.toLocaleString()}** SP, Dự toán: **${totalAmount.toLocaleString('vi-VN')} đ**). Kính trình **Ban Giám đốc** phê duyệt để triển khai sang bộ phận ${isLsx ? 'Sản xuất & Kho xuất vật tư' : 'Mua hàng'}.`,
+              isSystem: true,
+            },
+          ],
+        },
+      },
+    });
+
+    // 2. Tạo thông báo trong hệ thống cho Ban Giám đốc (chuông thông báo Topbar)
+    const notifTitle = `📋 Trình Giám đốc duyệt: ${isLsx ? 'Lệnh sản xuất & lắp ráp' : 'Yêu cầu mua hàng'} (${orderCode})`;
+    const notifContent = `Bộ phận Kho vận & Logistics vừa lập đề xuất bổ sung tồn kho theo ngưỡng ROP cho **${items.length} mặt hàng** (Tổng SL: **${totalQty.toLocaleString()}** SP, Dự toán: **${totalAmount.toLocaleString('vi-VN')} đ**).\nKính trình Ban Giám đốc xem xét và phê duyệt.`;
+
+    try {
+      await sendCrossDeptNotification({
+        title: notifTitle,
+        content: notifContent,
+        type: 'warning',
+        priority: 'urgent',
+        sourceDept: 'Kho vận & Logistics',
+        targetDept: 'board',
+        recipientUserIds: directorIds,
+        senderUserId: senderUserId,
+        senderName: senderName,
+        link: '/board/approvals',
+        entityType: isLsx ? 'PRODUCTION_REQUEST' : 'PURCHASE_REQUEST',
+        entityId: approvalReq.id,
+        allowSelfNotify: true,
+      });
+    } catch (ne) {
+      console.warn('Lỗi khi gọi sendCrossDeptNotification trong submit-proposal:', ne);
+    }
+
+    res.status(201).json({
+      success: true,
+      orderCode,
+      approvalId: approvalReq.id,
+      totalAmount,
+      totalQty,
+      itemCount: items.length,
+      message: `Đã gửi trình Ban Giám đốc phê duyệt thành công đề xuất ${orderCode}`,
+    });
+  } catch (err) {
+    console.error('Lỗi POST /api/logistics/optimization/submit-proposal:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

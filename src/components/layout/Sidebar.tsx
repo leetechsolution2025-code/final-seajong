@@ -134,6 +134,7 @@ const DEPT_SIDEBAR_CONFIGS: Record<string, { deptName: string; sections: NavSect
           { id: 'inventory', name: 'Hàng hoá trong kho' },
           { id: 'audit-logs', name: 'Nhật ký hoạt động kho' },
           { id: 'inventory-reports', name: 'Báo cáo kho' },
+          { id: 'inventory-optimization', name: 'Tối ưu tồn kho' },
         ],
       },
       {
@@ -272,6 +273,7 @@ const DEPT_SIDEBAR_CONFIGS: Record<string, { deptName: string; sections: NavSect
         icon: 'bi-bar-chart-fill',
         items: [
           { id: 'inventory-reports', name: 'Báo cáo kho' },
+          { id: 'inventory-optimization', name: 'Tối ưu tồn kho' },
           { id: 'audit-logs', name: 'Nhật ký hoạt động kho' },
         ],
       },

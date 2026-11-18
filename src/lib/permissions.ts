@@ -493,11 +493,13 @@ export function getRequiredPermissionsForMenu(
   if (
     key === 'inventory-reports' ||
     key === 'bao-cao-kho' ||
+    key === 'inventory-optimization' ||
+    key === 'toi-uu-ton-kho' ||
     (key === 'reports' && dept === 'logistics')
   ) {
     return {
       keys: ['report', 'logistics_assign', 'logistics_in_out', 'finance_reports'],
-      label: 'Xem báo cáo tổng hợp / Báo cáo kho',
+      label: 'Xem báo cáo tổng hợp / Báo cáo kho & Tối ưu tồn kho',
     };
   }
   if (

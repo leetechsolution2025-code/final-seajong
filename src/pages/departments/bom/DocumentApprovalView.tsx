@@ -1970,6 +1970,10 @@ export const DocumentApprovalView: React.FC<DocumentApprovalViewProps> = ({
               }
               onReject={(doc) => handleOpenRejectModal(doc, undefined, true)}
               onShowToast={onShowToast}
+              onUpdateDocument={(updatedDoc) => {
+                updateItems(items.map((d) => (d.id === updatedDoc.id ? updatedDoc : d)));
+                setSelectedDoc(updatedDoc);
+              }}
             />
 
             {/* ── 2. OFFCANVAS CHO HỒ SƠ ĐÃ PHÊ DUYỆT ── */}

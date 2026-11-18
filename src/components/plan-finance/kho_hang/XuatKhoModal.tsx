@@ -270,20 +270,32 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
             "completed", "done", "cancelled", "canceled", "rejected", "stopped", "huy", "da_huy",
             "pending", "draft", "chua_thuc_hien", "not_started"
           ]);
-          const filtered = d.filter((o: any) => {
-            if (initialWoId && (o.id === initialWoId || o.saleOrderCode === initialWoId)) return true;
+          let filtered = d.filter((o: any) => {
+            if (
+              initialWoId &&
+              (o.id === initialWoId ||
+                o.code === initialWoId ||
+                o.saleOrderCode === initialWoId ||
+                String(o.id || '').includes(initialWoId) ||
+                initialWoId.includes(String(o.id || '')))
+            ) {
+              return true;
+            }
             const st = String(o.status || "").toLowerCase().trim();
             const soSt = String(o.trangThai || "").toLowerCase().trim();
             const matTicketSt = String(o.materialTicketStatus || "").toUpperCase().trim();
             if (excludedWoStatuses.has(st) || excludedWoStatuses.has(soSt)) return false;
-            if (matTicketSt === "COMPLETED" || matTicketSt === "PENDING" || matTicketSt === "CANCELLED") return false;
+            if (matTicketSt === "COMPLETED" || matTicketSt === "CANCELLED") return false;
             return true;
           });
+          if (initialWoId && !filtered.some((o: any) => o.id === initialWoId || o.code === initialWoId)) {
+            filtered = [{ id: initialWoId, code: initialWoId, name: `Lệnh sản xuất ${initialWoId}` }, ...filtered];
+          }
           setWorkOrders(
             filtered.map(o => ({
               id: o.id,
-              code: o.id,
-              tenLenhSX: o.name,
+              code: o.code || o.id,
+              tenLenhSX: o.name || o.tenLenhSX || `Lệnh sản xuất ${o.id}`,
               customerName: o.customerName || null,
               customerAddress: o.customerAddress || null,
               itemsDetail: o.itemsDetail || null,
@@ -293,10 +305,20 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
             }))
           );
         } else {
-          setWorkOrders([]);
+          setWorkOrders(
+            initialWoId
+              ? [{ id: initialWoId, code: initialWoId, tenLenhSX: `Lệnh sản xuất ${initialWoId}`, status: 'running' }]
+              : []
+          );
         }
       })
-      .catch(() => setWorkOrders([]))
+      .catch(() =>
+        setWorkOrders(
+          initialWoId
+            ? [{ id: initialWoId, code: initialWoId, tenLenhSX: `Lệnh sản xuất ${initialWoId}`, status: 'running' }]
+            : []
+        )
+      )
       .finally(() => setListLoading(false));
   }, [mode, initialWoId]);
 
@@ -412,14 +434,44 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
           }
         }
 
-        rawLines = (detail.saleOrderItems ?? []).map((it: { tenHang: string; donGia: number; soLuong: number; inventoryItemId: string | null; inventoryItem?: { id: string; code: string | null; tenHang: string; donVi: string | null; giaNhap: number } | null }) => ({
-          tenHang: it.tenHang,
-          donVi: null, // we don't have unit directly on SaleOrderItem, wait: inventoryItem has it?
-          soLuong: it.soLuong,
-          donGia: it.donGia,
-          inventoryItemId: it.inventoryItemId || it.inventoryItem?.id || null,
-          inventoryItem: it.inventoryItem ?? null,
-        }));
+        const isLsx = Boolean(detail.isProductionOrder || detail.code?.startsWith('LSX-') || so.code?.startsWith('LSX-'));
+        if (isLsx && detail.logisticsItems && detail.logisticsItems.length > 0) {
+          setMode("wo");
+          setLoaiXuatKho("Xuất sản xuất");
+          setLyDo(`Xuất nguyên vật liệu theo lệnh sản xuất ${detail.code || so.code}`);
+          rawLines = detail.logisticsItems.map((it: any) => ({
+            tenHang: it.tenHang,
+            donVi: it.donVi || 'cái',
+            soLuong: it.soLuong,
+            donGia: 0,
+            inventoryItemId: it.id || null,
+          }));
+
+          let whList = warehouses;
+          if (whList.length === 0) {
+            try {
+              const r = await fetch("/api/plan-finance/warehouses");
+              const d = await r.json();
+              if (Array.isArray(d)) {
+                whList = d;
+                setWarehouses(d);
+              }
+            } catch (e) { /* ignore */ }
+          }
+          const kvpWh = whList.find((w: any) => w.code === "KVP" || w.name.toLowerCase().includes("vật tư"));
+          if (kvpWh) {
+            setFromWarehouseId(kvpWh.id);
+          }
+        } else {
+          rawLines = (detail.saleOrderItems ?? []).map((it: { tenHang: string; donGia: number; soLuong: number; inventoryItemId: string | null; inventoryItem?: { id: string; code: string | null; tenHang: string; donVi: string | null; giaNhap: number } | null }) => ({
+            tenHang: it.tenHang,
+            donVi: null, // we don't have unit directly on SaleOrderItem, wait: inventoryItem has it?
+            soLuong: it.soLuong,
+            donGia: it.donGia,
+            inventoryItemId: it.inventoryItemId || it.inventoryItem?.id || null,
+            inventoryItem: it.inventoryItem ?? null,
+          }));
+        }
       }
 
       if (rawLines.length === 0) {
@@ -503,30 +555,54 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
   // Auto-fill khi pick WO
   const onSelectWo = (id: string) => {
     if (!id) { setSelectedWo(null); setLines([emptyLine()]); return; }
-    const wo = workOrders.find(w => w.id === id) ?? null;
-    setSelectedWo(wo);
+    const wo = workOrders.find(w => w.id === id || w.code === id) ?? { id, code: id };
+    setSelectedWo(wo as WorkOrderOption);
     if (wo) {
       setLyDo(`Xuất nguyên vật liệu theo lệnh sản xuất ${wo.code ?? wo.id}`);
       setLoaiXuatKho("Xuất sản xuất");
-      loadItemsFromWorkOrder(wo);
+      loadItemsFromWorkOrder(wo as WorkOrderOption);
     }
   };
 
   const loadItemsFromWorkOrder = async (wo: WorkOrderOption) => {
     try {
+      let materials: any[] = [];
       const res = await fetch(`/api/production/orders/${wo.id}`);
-      if (!res.ok) return;
-      const data = await res.json();
+      if (res.ok) {
+        const data = await res.json();
+        materials = data.materials || [];
+      }
 
-      if (!data.materials || data.materials.length === 0) {
+      // Fallback: nếu chưa có materials từ production orders, thử lấy từ sales orders
+      if (materials.length === 0) {
+        try {
+          const sRes = await fetch(`/api/plan-finance/sales/${wo.id}`);
+          if (sRes.ok) {
+            const sData = await sRes.json();
+            if (sData.logisticsItems && sData.logisticsItems.length > 0) {
+              materials = sData.logisticsItems.map((m: any) => ({
+                tenVatTu: m.tenHang,
+                soLuong: m.soLuong,
+                code: m.code,
+                donGia: 0,
+                ghiChu: m.ghiChu,
+              }));
+            }
+          }
+        } catch (_) { }
+      }
+
+      if (materials.length === 0) {
         setLines([emptyLine()]);
         return;
       }
 
-      const rawLines = data.materials.map((mat: any) => ({
+      const rawLines = materials.map((mat: any) => ({
         tenHang: mat.tenVatTu,
         soLuong: mat.soLuong,
-        donGia: mat.donGia,
+        donGia: mat.donGia || 0,
+        code: mat.code,
+        ghiChu: mat.ghiChu,
       }));
 
       const newLines: StockLine[] = rawLines.map((raw: any) => {
@@ -535,22 +611,27 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
         l.soLuongYC = raw.soLuong;
         l.soLuong = raw.soLuong;
         l.donGia = raw.donGia || 0;
+        l.ghiChu = raw.ghiChu || "";
         return l;
       });
 
       setLines(newLines);
 
-      let currentWhId: string | undefined = fromWarehouseId;
-      if (!currentWhId) {
-        let whList = warehouses;
-        if (whList.length === 0) {
-          try {
-            const r = await fetch("/api/plan-finance/warehouses");
-            const d = await r.json();
-            if (Array.isArray(d)) whList = d;
-          } catch (e) { /* ignore */ }
-        }
-        currentWhId = whList.find((w: any) => w.code === "KVP" || w.name.toLowerCase().includes("vật tư"))?.id;
+      let whList = warehouses;
+      if (whList.length === 0) {
+        try {
+          const r = await fetch("/api/plan-finance/warehouses");
+          const d = await r.json();
+          if (Array.isArray(d)) {
+            whList = d;
+            setWarehouses(d);
+          }
+        } catch (e) { /* ignore */ }
+      }
+      const kvpWh = whList.find((w: any) => w.code === "KVP" || w.name.toLowerCase().includes("vật tư"));
+      let currentWhId: string | undefined = kvpWh?.id || fromWarehouseId;
+      if (kvpWh) {
+        setFromWarehouseId(kvpWh.id);
       }
 
       if (currentWhId) {
@@ -561,7 +642,7 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
             .then(r => r.json())
             .then((searchData) => {
               if (!Array.isArray(searchData) || !searchData.length) return;
-              const found = searchData.find(d => d.tenHang.toLowerCase() === raw.tenHang.toLowerCase()) ?? searchData[0];
+              const found = searchData.find((d: any) => d.tenHang.toLowerCase() === raw.tenHang.toLowerCase()) ?? searchData[0];
               setLines(prev => prev.map((l, i) => {
                 if (i !== idx) return l;
                 return {

@@ -355,6 +355,15 @@ export const FeatureDetailView: React.FC<FeatureDetailViewProps> = ({ menuKey, d
           desc: 'Báo cáo tổng hợp xuất nhập tồn, biến động chi tiết thẻ kho và nhật ký đối soát kiểm kê kho',
           badge: 'BÁO CÁO KHO',
         };
+      case 'inventory-optimization':
+        return {
+          title: 'Tối ưu tồn kho',
+          groupName: 'BÁO CÁO VÀ THỐNG KÊ',
+          icon: 'bi-sliders',
+          color: 'blue',
+          desc: 'Phân tích ma trận ABC/XYZ, kiểm soát tuổi tồn & hạn dùng (FIFO/FEFO), tự động tính toán tồn an toàn và điểm đặt hàng lại (ROP)',
+          badge: 'TỐI ƯU TỒN KHO',
+        };
       case 'journal-entries':
         return {
           title: 'Sổ nhật ký chung',

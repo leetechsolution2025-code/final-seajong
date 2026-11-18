@@ -47,6 +47,7 @@ import { LogisticsBatchPackingPage } from '../../pages/logistics/LogisticsBatchP
 import { LogisticsShipmentTrackingPage } from '../../pages/logistics/LogisticsShipmentTrackingPage';
 import { WarehousesPage } from '../../pages/logistics/WarehousesPage';
 import { LogisticsReportsPage } from '../../pages/logistics/LogisticsReportsPage';
+import { InventoryOptimizationPage } from '../../pages/logistics/InventoryOptimizationPage';
 import { LogisticsAuditLogsPage } from '../../pages/logistics/LogisticsAuditLogsPage';
 import { DocumentApprovalPage } from '../../pages/departments/bom/DocumentApprovalPage';
 import { CategoryManagementPage } from '../../pages/departments/bom/CategoryManagementPage';
@@ -317,6 +318,9 @@ export const DashboardView: React.FC = () => {
   // Khi người dùng chọn chức năng từ menu trực tiếp
   if (activeMenuKey === 'inventory-reports' || activeMenuKey === 'bao-cao-kho') {
     return <LogisticsReportsPage />;
+  }
+  if (activeMenuKey === 'inventory-optimization' || activeMenuKey === 'toi-uu-ton-kho') {
+    return <InventoryOptimizationPage />;
   }
   if (activeMenuKey === 'audit-logs' || activeMenuKey === 'nhat-ky-kho' || activeMenuKey === 'nhat-ky-hoat-dong-kho') {
     return <LogisticsAuditLogsPage />;

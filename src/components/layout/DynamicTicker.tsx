@@ -858,7 +858,7 @@ export function resolveContext(
     if (m === 'insurance') return 'insurance';
     if (m === 'stationery') return 'employees';
     if (m === 'inbound' || m === 'material-picking' || m === 'batch-packing' || m === 'system') return 'logistics';
-    if (m === 'inventory' || m === 'inventory_top' || m === 'inventory-reports' || m === 'audit-logs') return 'inventory';
+    if (m === 'inventory' || m === 'inventory_top' || m === 'inventory-reports' || m === 'inventory-optimization' || m === 'audit-logs') return 'inventory';
     if (m === 'standards') return 'standards';
     if (m === 'defects' || m === 'defects-summary' || m === 'bom') return 'qa';
     if (m === 'fac_crm' || m === 'complaints') return 'crm';

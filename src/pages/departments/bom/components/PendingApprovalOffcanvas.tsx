@@ -15,6 +15,8 @@ import {
   ShieldCheck,
   BoxSeam,
   ChevronRight,
+  Sliders,
+  PencilSquare,
 } from 'react-bootstrap-icons';
 import { Offcanvas } from '../../../../components/common/Offcanvas';
 import { Button } from '../../../../components/common/Button';
@@ -33,6 +35,7 @@ export interface PendingApprovalOffcanvasProps {
   onReject: (doc: ApprovalDocument) => void;
   onShowToast?: (type: 'success' | 'error' | 'warning' | 'info', title: string, message: string) => void;
   initialOpenChat?: boolean;
+  onUpdateDocument?: (doc: ApprovalDocument) => void;
 }
 
 export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> = ({
@@ -43,11 +46,19 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
   onReject,
   onShowToast,
   initialOpenChat = false,
+  onUpdateDocument,
 }) => {
   const [activeSlide, setActiveSlide] = useState<'none' | 'chat' | 'orderDetail'>(initialOpenChat ? 'chat' : 'none');
   const [unreadCount, setUnreadCount] = useState(0);
   const [approveDeposit, setApproveDeposit] = useState(true);
   const [approvedAmountStr, setApprovedAmountStr] = useState<string>('');
+  const [currentDoc, setCurrentDoc] = useState<ApprovalDocument | null>(document);
+
+  useEffect(() => {
+    setCurrentDoc(document);
+  }, [document]);
+
+  const activeDoc = currentDoc || document;
 
   // Mở chat nếu có yêu cầu mở thẳng từ thông báo/toast
   useEffect(() => {
@@ -75,25 +86,40 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
     return unsubscribe;
   }, [document?.id]);
 
-  if (!document) return null;
+  if (!isOpen || (!document && !activeDoc)) return null;
+  const doc = activeDoc || document;
+  if (!doc) return null;
 
   const isPurchaseOrder =
-    String(document.entityType || '').toLowerCase() === 'purchase_order' ||
-    document.docType === 'contract';
+    String(doc.entityType || '').toLowerCase() === 'purchase_order' ||
+    String(doc.entityType || '').toUpperCase() === 'PURCHASE_REQUEST' ||
+    doc.docType === 'contract' ||
+    String(doc.code || '').startsWith('PR-') ||
+    String(doc.title || '').includes('mua hàng');
+  const isProductionRequest =
+    String(doc.entityType || '').toUpperCase() === 'PRODUCTION_REQUEST' ||
+    doc.docType === 'technical' ||
+    String(doc.code || '').startsWith('LSX-') ||
+    String(doc.title || '').includes('Lệnh sản xuất');
   const isAdvanceDoc =
-    document.docType === 'advance' ||
-    String(document.entityType || '').toLowerCase().includes('advance') ||
-    String(document.code || '').startsWith('YC-') ||
-    String(document.code || '').startsWith('YCU-') ||
-    String(document.title || '').toLowerCase().includes('tạm ứng');
-  const meta = document.metadata || {};
+    doc.docType === 'advance' ||
+    String(doc.entityType || '').toLowerCase().includes('advance') ||
+    String(doc.code || '').startsWith('YC-') ||
+    String(doc.code || '').startsWith('YCU-') ||
+    String(doc.title || '').toLowerCase().includes('tạm ứng');
+  const meta = doc.metadata || {};
   const poItemCount = Array.isArray(meta.items) ? meta.items.length : 0;
+  const hasItemDetails =
+    isPurchaseOrder ||
+    isProductionRequest ||
+    poItemCount > 0 ||
+    String(doc.title || '').includes('mặt hàng');
   const datCocPct = Number(meta.datCocPct || 0);
   const tienDatCoc = Number(
-    meta.tienDatCoc || (datCocPct > 0 ? Math.round((document.value * datCocPct) / 100) : 0)
+    meta.tienDatCoc || (datCocPct > 0 ? Math.round((doc.value * datCocPct) / 100) : 0)
   );
   const parsedApprovedAmount =
-    Number(String(approvedAmountStr || '').replace(/[^0-9]/g, '')) || document.value || 0;
+    Number(String(approvedAmountStr || '').replace(/[^0-9]/g, '')) || doc.value || 0;
 
   return (
     <Offcanvas
@@ -101,7 +127,7 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
       onClose={onClose}
       icon={<FileCheck size={22} style={{ color: 'var(--color-primary)' }} />}
       title="Hồ sơ chờ phê duyệt"
-      description={`${document.code} • ${document.docTypeName}`}
+      description={`${doc.code} • ${doc.docTypeName}`}
       width="400px"
       className="bom-approval-offcanvas"
       slidePanel={
@@ -109,13 +135,18 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
           <DocumentChatSlide
             isOpen={true}
             onClose={() => setActiveSlide('none')}
-            document={document}
+            document={doc}
           />
         ) : activeSlide === 'orderDetail' ? (
           <PurchaseOrderDetailSlide
             isOpen={true}
             onClose={() => setActiveSlide('none')}
-            document={document}
+            document={doc}
+            onUpdateDocument={(updated) => {
+              setCurrentDoc(updated);
+              onUpdateDocument?.(updated);
+              onShowToast?.('success', 'Đã cập nhật số lượng', `Đã cập nhật lại dự toán hồ sơ ${updated.code}`);
+            }}
           />
         ) : undefined
       }
@@ -156,7 +187,7 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
                 variant="danger"
                 size="md"
                 leftIcon={<XCircle size={16} />}
-                onClick={() => onReject(document)}
+                onClick={() => onReject(doc)}
               >
                 Từ chối
               </Button>
@@ -166,7 +197,7 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
                 leftIcon={<CheckCircle size={16} />}
                 onClick={() =>
                   onApprove(
-                    document,
+                    doc,
                     isPurchaseOrder && datCocPct > 0 ? approveDeposit : false,
                     isAdvanceDoc ? parsedApprovedAmount : undefined
                   )
@@ -202,7 +233,7 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
                 border: '1px solid var(--border-subtle)',
               }}
             >
-              {document.code}
+              {doc.code}
             </span>
             <Badge variant="warning">Chờ phê duyệt</Badge>
           </div>
@@ -215,22 +246,22 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
               lineHeight: 1.4,
             }}
           >
-            {document.title}
+            {doc.title}
           </h3>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 12px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
               <Buildings size={13} />
-              {document.department}
+              {doc.department}
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
               <Person size={13} />
-              {document.submitter}
+              {doc.submitter}
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
               <CalendarCheck size={13} />
-              Ngày trình: {document.submitDate}
+              Ngày trình: {doc.submitDate}
             </span>
-            {document.approverName && (
+            {doc.approverName && (
               <span
                 style={{
                   display: 'inline-flex',
@@ -244,14 +275,14 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
                 }}
               >
                 <ShieldCheck size={13} />
-                Người duyệt: {document.approverName} {document.approverCode ? `[${document.approverCode}]` : ''}
+                Người duyệt: {doc.approverName} {doc.approverCode ? `[${doc.approverCode}]` : ''}
               </span>
             )}
           </div>
         </div>
 
         {/* Thông tin tài chính và Quy mô đề xuất */}
-        {document.value > 0 && (
+        {doc.value > 0 && (
           <div
             style={{
               backgroundColor: 'rgba(2, 132, 199, 0.05)',
@@ -284,7 +315,7 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
                   {isAdvanceDoc ? 'Số tiền xin tạm ứng' : 'Giá trị dự toán / Hợp đồng'}
                 </div>
                 <div style={{ fontSize: '1.0625rem', fontWeight: 800, color: 'var(--color-primary)' }}>
-                  {document.value.toLocaleString('vi-VN')} VNĐ
+                  {doc.value.toLocaleString('vi-VN')} VNĐ
                 </div>
               </div>
             </div>
@@ -348,8 +379,8 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
           </div>
         )}
 
-        {/* Nút mở Slide chi tiết đơn mua hàng & checkbox duyệt chi đặt cọc */}
-        {isPurchaseOrder && (
+        {/* Nút mở Slide danh mục hàng hoá & điều chỉnh số lượng (cho cả Đơn mua hàng PO/PR và Lệnh sản xuất LSX) */}
+        {hasItemDetails && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <button
               type="button"
@@ -359,26 +390,64 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: '10px 12px',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid #cbd5e1',
-                backgroundColor: '#ffffff',
-                color: '#0f172a',
-                fontSize: '0.8125rem',
-                fontWeight: 600,
+                padding: '12px 14px',
+                borderRadius: '10px',
+                border: '1.5px solid #0284c7',
+                backgroundColor: '#f0f9ff',
+                color: '#0369a1',
                 cursor: 'pointer',
-                transition: 'border-color 0.15s ease, background-color 0.15s ease',
+                transition: 'all 0.15s ease',
+                boxShadow: '0 1px 3px rgba(2, 132, 199, 0.08)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#e0f2fe';
+                e.currentTarget.style.borderColor = '#0369a1';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#f0f9ff';
+                e.currentTarget.style.borderColor = '#0284c7';
               }}
             >
-              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <BoxSeam size={15} style={{ color: '#0284c7' }} />
-                <span>Chi tiết hàng hoá & đơn mua hàng</span>
-                {poItemCount > 0 && <Badge variant="brand">{poItemCount} MH</Badge>}
-              </span>
-              <ChevronRight size={14} style={{ color: '#64748b' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '8px',
+                    backgroundColor: '#0284c7',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Sliders size={18} />
+                </div>
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>
+                      {isProductionRequest
+                        ? 'Danh mục & Điều chỉnh SL sản xuất'
+                        : isPurchaseOrder && String(doc.code || '').startsWith('PR-')
+                        ? 'Danh mục & Điều chỉnh SL mua ngoài'
+                        : 'Danh mục & Điều chỉnh SL hàng hoá'}
+                    </span>
+                    {poItemCount > 0 && (
+                      <span style={{ fontSize: '0.6875rem', fontWeight: 800, padding: '1px 6px', borderRadius: '4px', backgroundColor: '#0284c7', color: '#ffffff' }}>
+                        {poItemCount} MH
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '0.71875rem', color: '#0284c7', fontWeight: 500, marginTop: '2px' }}>
+                    Nhấn để xem chi tiết và tăng / giảm số lượng duyệt
+                  </div>
+                </div>
+              </div>
+              <ChevronRight size={16} style={{ color: '#0284c7', flexShrink: 0 }} />
             </button>
 
-            {datCocPct > 0 && (
+            {isPurchaseOrder && datCocPct > 0 && (
               <label
                 style={{
                   display: 'flex',
@@ -437,7 +506,7 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
               whiteSpace: 'pre-line',
             }}
           >
-            {document.content}
+            {doc.content}
           </div>
         </div>
 
@@ -465,28 +534,28 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
               <Paperclip size={15} />
               <span>
                 Tệp hồ sơ đính kèm{' '}
-                {document.attachments && document.attachments.length > 0
-                  ? `(${document.attachments.length})`
-                  : document.attachmentName
+                {doc.attachments && doc.attachments.length > 0
+                  ? `(${doc.attachments.length})`
+                  : doc.attachmentName
                     ? '(1)'
                     : '(0)'}
               </span>
             </h4>
-            {(document.attachments && document.attachments.length > 0 || document.attachmentName || document.attachmentUrl) && (
+            {(doc.attachments && doc.attachments.length > 0 || doc.attachmentName || doc.attachmentUrl) && (
               <button
                 type="button"
                 onClick={() => {
-                  if (document.attachments && document.attachments.length > 0) {
+                  if (doc.attachments && doc.attachments.length > 0) {
                     onShowToast?.(
                       'info',
                       'Tải tài liệu',
-                      `Đang tải toàn bộ ${document.attachments.length} tệp đính kèm...`
+                      `Đang tải toàn bộ ${doc.attachments.length} tệp đính kèm...`
                     );
                   } else {
                     onShowToast?.(
                       'info',
                       'Tải tài liệu',
-                      `Đang tải ${document.attachmentName || 'hồ sơ đính kèm'}`
+                      `Đang tải ${doc.attachmentName || 'hồ sơ đính kèm'}`
                     );
                   }
                 }}
@@ -505,14 +574,14 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
                 }}
               >
                 <Download size={13} />
-                <span>{document.attachments && document.attachments.length > 1 ? 'Tải tất cả' : 'Tải về'}</span>
+                <span>{doc.attachments && doc.attachments.length > 1 ? 'Tải tất cả' : 'Tải về'}</span>
               </button>
             )}
           </div>
 
-          {document.attachments && document.attachments.length > 0 ? (
+          {doc.attachments && doc.attachments.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {document.attachments.map((att, idx) => (
+              {doc.attachments.map((att, idx) => (
                 <div
                   key={idx}
                   style={{
@@ -531,7 +600,7 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
                       if (att.url) {
                         window.open(att.url, '_blank');
                       } else {
-                        openAttachmentInNewTab(document, att.name, att.url);
+                        openAttachmentInNewTab(doc, att.name, att.url);
                       }
                     }}
                     title={`Nhấn để mở xem "${att.name}" ở tab mới`}
@@ -586,13 +655,13 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
                 </div>
               ))}
             </div>
-          ) : document.attachmentName || document.attachmentUrl ? (
+          ) : doc.attachmentName || doc.attachmentUrl ? (
             <div
               onClick={() => {
-                if (document.attachmentUrl) {
-                  window.open(document.attachmentUrl, '_blank');
+                if (doc.attachmentUrl) {
+                  window.open(doc.attachmentUrl, '_blank');
                 } else {
-                  openAttachmentInNewTab(document, document.attachmentName, document.attachmentUrl);
+                  openAttachmentInNewTab(doc, doc.attachmentName, doc.attachmentUrl);
                 }
               }}
               title="Nhấn để mở xem nội dung tài liệu này ở tab mới"
@@ -630,13 +699,13 @@ export const PendingApprovalOffcanvas: React.FC<PendingApprovalOffcanvasProps> =
                     alignItems: 'center',
                     gap: '6px',
                   }}
-                  title={document.attachmentName}
+                  title={doc.attachmentName}
                 >
-                  <span>{document.attachmentName || 'Tệp đính kèm'}</span>
+                  <span>{doc.attachmentName || 'Tệp đính kèm'}</span>
                   <span style={{ fontSize: '0.6875rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(2, 132, 199, 0.12)', color: '#0284c7', fontWeight: 600 }}>Mở tab mới ↗</span>
                 </div>
                 <div style={{ fontSize: '0.71875rem', color: 'var(--text-muted)' }}>
-                  {document.attachmentSize || 'Tài liệu số'}
+                  {doc.attachmentSize || 'Tài liệu số'}
                 </div>
               </div>
             </div>
