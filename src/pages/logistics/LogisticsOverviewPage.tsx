@@ -255,7 +255,7 @@ export const LogisticsOverviewPage: React.FC = () => {
       .then((data) => {
         if (Array.isArray(data)) setStaffList(data);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -299,7 +299,7 @@ export const LogisticsOverviewPage: React.FC = () => {
       .then((json) => {
         if (Array.isArray(json)) setCategories(json);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const fetchWarehouses = useCallback(() => {
@@ -310,7 +310,7 @@ export const LogisticsOverviewPage: React.FC = () => {
           setWarehouses(json.items.map((w: any) => ({ id: w.id, code: w.code, name: w.name })));
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -521,8 +521,8 @@ export const LogisticsOverviewPage: React.FC = () => {
             ? `Chưa nhập kho ${defectImportType}`
             : 'Chưa nhập kho'
           : isDefectGroup
-          ? 'Chưa cấp phát linh kiện'
-          : 'Chưa xuất kho';
+            ? 'Chưa cấp phát linh kiện'
+            : 'Chưa xuất kho';
         let groupStatusBadgeClass = 'bg-slate-500 text-white';
 
         if (totalTickets > 0) {
@@ -532,8 +532,8 @@ export const LogisticsOverviewPage: React.FC = () => {
                 ? `Đã nhập kho ${defectImportType}`
                 : 'Đã nhập kho'
               : isDefectGroup
-              ? 'Đã cấp phát linh kiện'
-              : 'Đã xuất kho';
+                ? 'Đã cấp phát linh kiện'
+                : 'Đã xuất kho';
             groupStatusBadgeClass = 'bg-emerald-600 text-white';
           } else if (isDefectGroup) {
             if (completedCount > 0) {
@@ -1076,6 +1076,140 @@ export const LogisticsOverviewPage: React.FC = () => {
     ];
   }, [filterType]);
 
+  // Xử lý hành động Xuất kho / Nhập kho / In phiếu từ Offcanvas chi tiết lệnh
+  const handleProcessOrderAction = () => {
+    if (!selectedOrder) return;
+
+    if (isRowCompleted(selectedOrder)) {
+      setPrintVoucherItem({
+        code: selectedOrder.exportCode || selectedOrder.code,
+        type: selectedOrder.type === 'material-import' ? 'INBOUND' : 'OUTBOUND',
+        warehouseName:
+          selectedOrder.ticketType === 'MATERIAL_PICKING' ||
+          selectedOrder.type === 'material-export'
+            ? 'Kho Vật Tư Phụ Kiện (KVP)'
+            : 'Kho Chính Seajong',
+        note: selectedOrder.typeLabel,
+        executor: selectedOrder.assigneeName || 'Lương Xuân Trung',
+        items: orderDetails.map((it: any) => ({
+          itemName: it.name,
+          itemCode: it.code || '',
+          unit: it.unit || 'cái',
+          quantity: Number(it.pickedQty ?? it.qty) || 0,
+          unitPrice: Number(it.giaBan) || 0,
+        })),
+      });
+      return;
+    }
+
+    if (selectedOrder.type === 'material-import') {
+      setNhapKhoTaskId(selectedOrder.id);
+      const isReturn =
+        selectedOrder.typeLabel?.includes('trả lại') ||
+        selectedOrder.typeLabel?.includes('hàng lỗi') ||
+        selectedOrder.code?.startsWith('ERR-');
+      setNhapKhoMode(
+        isReturn
+          ? 'return'
+          : selectedOrder.typeLabel?.toLowerCase().includes('vật tư')
+          ? 'po'
+          : 'production'
+      );
+      setNhapKhoSoBienBanQC(selectedOrder.code?.startsWith('QC-') ? selectedOrder.code : '');
+      setNhapKhoPurchaseOrderId(selectedOrder.purchaseOrderId || null);
+      setNhapKhoPurchaseOrderCode(selectedOrder.purchaseOrderCode || null);
+      setNhapKhoShippingFee(selectedOrder.shippingFee || 0);
+      setShowNhapKhoModal(true);
+      setSelectedOrder(null);
+      return;
+    }
+
+    const isDefect =
+      selectedOrder.ticketType === 'WARRANTY_MATERIAL' ||
+      !!selectedOrder.defectRecordId ||
+      (typeof selectedOrder.saleOrderCode === 'string' &&
+        selectedOrder.saleOrderCode.startsWith('ERR-')) ||
+      (typeof selectedOrder.code === 'string' && selectedOrder.code.startsWith('ERR-'));
+
+    if (isDefect) {
+      setXuatKhoOrderType('defect');
+      setXuatKhoDefectId(
+        selectedOrder.defectRecordId ||
+          selectedOrder.saleOrderCode ||
+          selectedOrder.code ||
+          selectedOrder.id
+      );
+      setXuatKhoTicketId(
+        selectedOrder.type === 'logistics-ticket' ? selectedOrder.id : undefined
+      );
+      setShowXuatKhoModal(true);
+      setSelectedOrder(null);
+      return;
+    }
+
+    const isProduction = Boolean(
+      selectedOrder.code?.startsWith('LSX-') ||
+      selectedOrder.typeLabel?.includes('sản xuất') ||
+      selectedOrder.ticketType === 'MATERIAL_PICKING' ||
+      selectedOrder.hasProduction ||
+      orderDetails.some((it: any) => it.isMaterial)
+    );
+
+    if (isProduction) {
+      setXuatKhoOrderType('wo');
+      setXuatKhoWoId(
+        selectedOrder.code ||
+          (selectedOrder.saleOrderCode
+            ? selectedOrder.saleOrderCode
+                .replace('DBH', 'LSX')
+                .replace('DHBL', 'LSX')
+                .replace('DH', 'LSX')
+            : selectedOrder.id)
+      );
+      setXuatKhoSoId(
+        selectedOrder.saleOrderId ||
+          (selectedOrder.type === 'sale-order' ? selectedOrder.id : undefined)
+      );
+      setXuatKhoTicketId(
+        selectedOrder.type === 'logistics-ticket' ? selectedOrder.id : undefined
+      );
+      setShowXuatKhoModal(true);
+      setSelectedOrder(null);
+      return;
+    }
+
+    let isSo = false;
+    if (selectedOrder.type === 'sale-order') {
+      isSo = true;
+    } else if (selectedOrder.type === 'logistics-ticket') {
+      isSo = selectedOrder.ticketType === 'BATCH_PACKING';
+    }
+
+    setXuatKhoOrderType(isSo ? 'so' : 'wo');
+    setXuatKhoSoId(
+      selectedOrder.saleOrderId ||
+        (selectedOrder.type === 'sale-order' ? selectedOrder.id : undefined)
+    );
+    setXuatKhoWoId(
+      selectedOrder.saleOrderCode
+        ? selectedOrder.saleOrderCode
+            .replace('DBH', 'LSX')
+            .replace('DHBL', 'LSX')
+            .replace('DH', 'LSX')
+        : selectedOrder.type === 'sale-order' && selectedOrder.code
+        ? selectedOrder.code
+            .replace('DBH', 'LSX')
+            .replace('DHBL', 'LSX')
+            .replace('DH', 'LSX')
+        : selectedOrder.id
+    );
+    setXuatKhoTicketId(
+      selectedOrder.type === 'logistics-ticket' ? selectedOrder.id : undefined
+    );
+    setShowXuatKhoModal(true);
+    setSelectedOrder(null);
+  };
+
   return (
     <StepPage
       className="logistics-mobile-page"
@@ -1107,13 +1241,12 @@ export const LogisticsOverviewPage: React.FC = () => {
       {/* Toast thông báo */}
       {showToastMsg && (
         <div
-          className={`fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl shadow-lg border text-xs font-semibold flex items-center gap-2 ${
-            showToastMsg.type === 'success'
-              ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
-              : showToastMsg.type === 'error'
+          className={`fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl shadow-lg border text-xs font-semibold flex items-center gap-2 ${showToastMsg.type === 'success'
+            ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+            : showToastMsg.type === 'error'
               ? 'bg-rose-50 border-rose-300 text-rose-800'
               : 'bg-sky-50 border-sky-300 text-sky-800'
-          }`}
+            }`}
         >
           <span>{showToastMsg.message}</span>
         </div>
@@ -1274,25 +1407,25 @@ export const LogisticsOverviewPage: React.FC = () => {
             menuItems={
               currentStep === 3
                 ? [
-                    {
-                      id: 'cleanup-settings',
-                      label: 'Thiết lập xoá',
-                      icon: <ClockHistory size={15} style={{ color: '#d97706', flexShrink: 0 }} />,
-                      onClick: () => setShowCleanupOffcanvas(true),
-                    },
-                    {
-                      id: 'divider',
-                      label: '',
-                      divider: true,
-                      onClick: () => {},
-                    },
-                    {
-                      id: 'refresh-data',
-                      label: 'Làm mới dữ liệu',
-                      icon: <ArrowRepeat size={15} style={{ color: '#8b5cf6', flexShrink: 0 }} />,
-                      onClick: () => loadStepData(),
-                    },
-                  ]
+                  {
+                    id: 'cleanup-settings',
+                    label: 'Thiết lập xoá',
+                    icon: <ClockHistory size={15} style={{ color: '#d97706', flexShrink: 0 }} />,
+                    onClick: () => setShowCleanupOffcanvas(true),
+                  },
+                  {
+                    id: 'divider',
+                    label: '',
+                    divider: true,
+                    onClick: () => { },
+                  },
+                  {
+                    id: 'refresh-data',
+                    label: 'Làm mới dữ liệu',
+                    icon: <ArrowRepeat size={15} style={{ color: '#8b5cf6', flexShrink: 0 }} />,
+                    onClick: () => loadStepData(),
+                  },
+                ]
                 : undefined
             }
           />
@@ -1301,9 +1434,8 @@ export const LogisticsOverviewPage: React.FC = () => {
           <FullWidthTable loading={loading}>
             {(currentStep === 1 || currentStep === 3) && (
               <table
-                className={`w-full text-left border-collapse logistics-overview-compact-table ${
-                  currentStep === 3 ? 'swipeable-delete-table' : 'keep-mobile-checkbox'
-                }`}
+                className={`w-full text-left border-collapse logistics-overview-compact-table ${currentStep === 3 ? 'swipeable-delete-table' : 'keep-mobile-checkbox'
+                  }`}
                 style={{ fontSize: '13px' }}
               >
                 <thead className="sticky top-0 z-10 bg-white border-t border-slate-200 border-b-2 border-slate-200">
@@ -1353,15 +1485,15 @@ export const LogisticsOverviewPage: React.FC = () => {
                                 {orderCode.startsWith('QC-')
                                   ? 'SỐ HIỆU BIÊN BẢN QC: '
                                   : orderCode.startsWith('ERR-')
-                                  ? 'SỐ HIỆU HỒ SƠ LỖI: '
-                                  : 'SỐ HIỆU ĐƠN HÀNG: '}
+                                    ? 'SỐ HIỆU HỒ SƠ LỖI: '
+                                    : 'SỐ HIỆU ĐƠN HÀNG: '}
                               </span>
                               <span className="inline md:hidden">
                                 {orderCode.startsWith('QC-')
                                   ? 'BIÊN BẢN QC: '
                                   : orderCode.startsWith('ERR-')
-                                  ? 'HỒ SƠ LỖI: '
-                                  : 'ĐƠN HÀNG: '}
+                                    ? 'HỒ SƠ LỖI: '
+                                    : 'ĐƠN HÀNG: '}
                               </span>
                               <span className="text-blue-600 font-mono">{orderCode}</span>
                             </span>
@@ -1430,14 +1562,14 @@ export const LogisticsOverviewPage: React.FC = () => {
                                     {orderCode.includes('-DH-')
                                       ? `Theo đơn mua hàng số: ${orderCode.match(/(DH-\d+(-\d+)?)/)?.[0] || orderCode}`
                                       : (() => {
-                                          const prodOrders = Array.from(
-                                            new Set(items.map((it) => it.productionOrder).filter(Boolean))
-                                          );
-                                          if (prodOrders.length > 0) {
-                                            return `Theo lệnh sản xuất: ${prodOrders.join(', ')}`;
-                                          }
-                                          return `Theo lệnh sản xuất: ${orderCode.replace('QC-', 'LSX-')}`;
-                                        })()}
+                                        const prodOrders = Array.from(
+                                          new Set(items.map((it) => it.productionOrder).filter(Boolean))
+                                        );
+                                        if (prodOrders.length > 0) {
+                                          return `Theo lệnh sản xuất: ${prodOrders.join(', ')}`;
+                                        }
+                                        return `Theo lệnh sản xuất: ${orderCode.replace('QC-', 'LSX-')}`;
+                                      })()}
                                   </span>
                                 </div>
                               )}
@@ -1495,9 +1627,8 @@ export const LogisticsOverviewPage: React.FC = () => {
                               className="py-2 px-1.5 sm:px-3 w-7 sm:w-10 text-center align-middle"
                             >
                               <i
-                                className={`bi ${
-                                  isCollapsed ? 'bi-caret-right-fill' : 'bi-caret-down-fill'
-                                } text-slate-500 text-xs`}
+                                className={`bi ${isCollapsed ? 'bi-caret-right-fill' : 'bi-caret-down-fill'
+                                  } text-slate-500 text-xs`}
                               />
                             </td>
 
@@ -1644,8 +1775,8 @@ export const LogisticsOverviewPage: React.FC = () => {
                                       {row.typeLabel}{' '}
                                       {row.code?.startsWith('QC-') ? row.code : row.saleOrderCode || row.code}{' '}
                                       {row.customer &&
-                                      !String(row.customer).includes('Từ hồ sơ') &&
-                                      !String(row.customer).startsWith('ERR-')
+                                        !String(row.customer).includes('Từ hồ sơ') &&
+                                        !String(row.customer).startsWith('ERR-')
                                         ? `- ${row.customer}`
                                         : ''}
                                     </div>
@@ -1794,15 +1925,15 @@ export const LogisticsOverviewPage: React.FC = () => {
                         ? 'Chưa được cấp quyền In phiếu kho & in tem nhiệt'
                         : undefined
                       : (Boolean(
-                          selectedOrder.type === 'logistics-ticket' ||
-                          selectedOrder.ticketType === 'MATERIAL_PICKING' ||
-                          selectedOrder.ticketType === 'WARRANTY_MATERIAL' ||
-                          selectedOrder.ticketType === 'BATCH_PACKING' ||
-                          selectedOrder.code?.startsWith('LSX-') ||
-                          selectedOrder.exportCode?.startsWith('LXK-VT-') ||
-                          selectedOrder.typeLabel?.includes('sản xuất') ||
-                          orderDetails.some((it: any) => it.isMaterial)
-                        ) &&
+                        selectedOrder.type === 'logistics-ticket' ||
+                        selectedOrder.ticketType === 'MATERIAL_PICKING' ||
+                        selectedOrder.ticketType === 'WARRANTY_MATERIAL' ||
+                        selectedOrder.ticketType === 'BATCH_PACKING' ||
+                        selectedOrder.code?.startsWith('LSX-') ||
+                        selectedOrder.exportCode?.startsWith('LXK-VT-') ||
+                        selectedOrder.typeLabel?.includes('sản xuất') ||
+                        orderDetails.some((it: any) => it.isMaterial)
+                      ) &&
                         !(
                           selectedOrder.trangThai === 'PACKED' ||
                           selectedOrder.trangThai === 'COMPLETED' ||
@@ -1811,24 +1942,24 @@ export const LogisticsOverviewPage: React.FC = () => {
                           (orderDetails.length > 0 &&
                             orderDetails.every((it: any) => (Number(it.pickedQty) || 0) >= (Number(it.qty ?? it.requestedQty) || 1)))
                         ))
-                      ? 'Chưa thể xuất kho: Cần phân công gom hàng và gom đủ 100% vật tư theo định mức trước khi mở khoá xuất kho.'
-                      : !canInOut
-                      ? 'Chưa được cấp quyền Thực hiện xuất / nhập & kiểm kho'
-                      : undefined
+                        ? 'Chưa thể xuất kho: Cần phân công gom hàng và gom đủ 100% vật tư theo định mức trước khi mở khoá xuất kho.'
+                        : !canInOut
+                          ? 'Chưa được cấp quyền Thực hiện xuất / nhập & kiểm kho'
+                          : undefined
                   }
                   disabled={
                     isRowCompleted(selectedOrder)
                       ? !canPrint
                       : (Boolean(
-                          selectedOrder.type === 'logistics-ticket' ||
-                          selectedOrder.ticketType === 'MATERIAL_PICKING' ||
-                          selectedOrder.ticketType === 'WARRANTY_MATERIAL' ||
-                          selectedOrder.ticketType === 'BATCH_PACKING' ||
-                          selectedOrder.code?.startsWith('LSX-') ||
-                          selectedOrder.exportCode?.startsWith('LXK-VT-') ||
-                          selectedOrder.typeLabel?.includes('sản xuất') ||
-                          orderDetails.some((it: any) => it.isMaterial)
-                        ) &&
+                        selectedOrder.type === 'logistics-ticket' ||
+                        selectedOrder.ticketType === 'MATERIAL_PICKING' ||
+                        selectedOrder.ticketType === 'WARRANTY_MATERIAL' ||
+                        selectedOrder.ticketType === 'BATCH_PACKING' ||
+                        selectedOrder.code?.startsWith('LSX-') ||
+                        selectedOrder.exportCode?.startsWith('LXK-VT-') ||
+                        selectedOrder.typeLabel?.includes('sản xuất') ||
+                        orderDetails.some((it: any) => it.isMaterial)
+                      ) &&
                         !(
                           selectedOrder.trangThai === 'PACKED' ||
                           selectedOrder.trangThai === 'COMPLETED' ||
@@ -1837,131 +1968,9 @@ export const LogisticsOverviewPage: React.FC = () => {
                           (orderDetails.length > 0 &&
                             orderDetails.every((it: any) => (Number(it.pickedQty) || 0) >= (Number(it.qty ?? it.requestedQty) || 1)))
                         )) ||
-                        !canInOut
+                      !canInOut
                   }
-                  onClick={() => {
-                    if (isRowCompleted(selectedOrder)) {
-                      setPrintVoucherItem({
-                        code: selectedOrder.exportCode || selectedOrder.code,
-                        type: selectedOrder.type === 'material-import' ? 'INBOUND' : 'OUTBOUND',
-                        warehouseName:
-                          selectedOrder.ticketType === 'MATERIAL_PICKING' ||
-                          selectedOrder.type === 'material-export'
-                            ? 'Kho Vật Tư Phụ Kiện (KVP)'
-                            : 'Kho Chính Seajong',
-                        note: selectedOrder.typeLabel,
-                        executor: selectedOrder.assigneeName || 'Lương Xuân Trung',
-                        items: orderDetails.map((it: any) => ({
-                          itemName: it.name,
-                          itemCode: it.code || '',
-                          unit: it.unit || 'cái',
-                          quantity: Number(it.pickedQty ?? it.qty) || 0,
-                          unitPrice: Number(it.giaBan) || 0,
-                        })),
-                      });
-                      return;
-                    }
-                    if (selectedOrder.type === 'material-import') {
-                      setNhapKhoTaskId(selectedOrder.id);
-                      const isReturn =
-                        selectedOrder.typeLabel?.includes('trả lại') ||
-                        selectedOrder.typeLabel?.includes('hàng lỗi') ||
-                        selectedOrder.code?.startsWith('ERR-');
-                      setNhapKhoMode(
-                        isReturn
-                          ? 'return'
-                          : selectedOrder.typeLabel?.toLowerCase().includes('vật tư')
-                          ? 'po'
-                          : 'production'
-                      );
-                      setNhapKhoSoBienBanQC(selectedOrder.code?.startsWith('QC-') ? selectedOrder.code : '');
-                      setNhapKhoPurchaseOrderId(selectedOrder.purchaseOrderId || null);
-                      setNhapKhoPurchaseOrderCode(selectedOrder.purchaseOrderCode || null);
-                      setNhapKhoShippingFee(selectedOrder.shippingFee || 0);
-                      setShowNhapKhoModal(true);
-                    } else {
-                      const isDefect =
-                        selectedOrder.ticketType === 'WARRANTY_MATERIAL' ||
-                        !!selectedOrder.defectRecordId ||
-                        (typeof selectedOrder.saleOrderCode === 'string' &&
-                          selectedOrder.saleOrderCode.startsWith('ERR-')) ||
-                        (typeof selectedOrder.code === 'string' && selectedOrder.code.startsWith('ERR-'));
-
-                      if (isDefect) {
-                        setXuatKhoOrderType('defect');
-                        setXuatKhoDefectId(
-                          selectedOrder.defectRecordId ||
-                            selectedOrder.saleOrderCode ||
-                            selectedOrder.code ||
-                            selectedOrder.id
-                        );
-                        setXuatKhoTicketId(
-                          selectedOrder.type === 'logistics-ticket' ? selectedOrder.id : undefined
-                        );
-                        setShowXuatKhoModal(true);
-                      } else {
-                        const isProduction = Boolean(
-                          selectedOrder.code?.startsWith('LSX-') ||
-                          selectedOrder.typeLabel?.includes('sản xuất') ||
-                          selectedOrder.ticketType === 'MATERIAL_PICKING' ||
-                          selectedOrder.hasProduction ||
-                          orderDetails.some((it: any) => it.isMaterial)
-                        );
-
-                        if (isProduction) {
-                          setXuatKhoOrderType('wo');
-                          setXuatKhoWoId(
-                            selectedOrder.code ||
-                              (selectedOrder.saleOrderCode
-                                ? selectedOrder.saleOrderCode
-                                    .replace('DBH', 'LSX')
-                                    .replace('DHBL', 'LSX')
-                                    .replace('DH', 'LSX')
-                                : selectedOrder.id)
-                          );
-                          setXuatKhoSoId(
-                            selectedOrder.saleOrderId ||
-                              (selectedOrder.type === 'sale-order' ? selectedOrder.id : undefined)
-                          );
-                          setXuatKhoTicketId(
-                            selectedOrder.type === 'logistics-ticket' ? selectedOrder.id : undefined
-                          );
-                          setShowXuatKhoModal(true);
-                        } else {
-                          let isSo = false;
-                          if (selectedOrder.type === 'sale-order') {
-                            isSo = true;
-                          } else if (selectedOrder.type === 'logistics-ticket') {
-                            isSo = selectedOrder.ticketType === 'BATCH_PACKING';
-                          }
-
-                          setXuatKhoOrderType(isSo ? 'so' : 'wo');
-                          setXuatKhoSoId(
-                            selectedOrder.saleOrderId ||
-                              (selectedOrder.type === 'sale-order' ? selectedOrder.id : undefined)
-                          );
-                          setXuatKhoWoId(
-                            selectedOrder.saleOrderCode
-                              ? selectedOrder.saleOrderCode
-                                  .replace('DBH', 'LSX')
-                                  .replace('DHBL', 'LSX')
-                                  .replace('DH', 'LSX')
-                              : selectedOrder.type === 'sale-order' && selectedOrder.code
-                              ? selectedOrder.code
-                                  .replace('DBH', 'LSX')
-                                  .replace('DHBL', 'LSX')
-                                  .replace('DH', 'LSX')
-                              : selectedOrder.id
-                          );
-                          setXuatKhoTicketId(
-                            selectedOrder.type === 'logistics-ticket' ? selectedOrder.id : undefined
-                          );
-                          setShowXuatKhoModal(true);
-                        }
-                      }
-                    }
-                    setSelectedOrder(null);
-                  }}
+                  onClick={handleProcessOrderAction}
                 >
                   {(() => {
                     if (isRowCompleted(selectedOrder)) {
@@ -2002,7 +2011,7 @@ export const LogisticsOverviewPage: React.FC = () => {
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-2">
               <span className="text-xs font-semibold text-slate-600">
                 {selectedOrder.ticketType === 'WARRANTY_MATERIAL' ||
-                selectedOrder.ticketType === 'MATERIAL_PICKING'
+                  selectedOrder.ticketType === 'MATERIAL_PICKING'
                   ? 'Mã lệnh cấp phát vật tư:'
                   : `Mã lệnh ${selectedOrder.type === 'material-import' ? 'nhập' : 'xuất'} kho:`}
               </span>
@@ -2016,10 +2025,10 @@ export const LogisticsOverviewPage: React.FC = () => {
                 <i className="bi bi-box-seam text-sky-600" />
                 <span>
                   {selectedOrder.ticketType === 'WARRANTY_MATERIAL' ||
-                  selectedOrder.ticketType === 'MATERIAL_PICKING' ||
-                  selectedOrder.code?.startsWith('LSX-') ||
-                  selectedOrder.typeLabel?.includes('sản xuất') ||
-                  orderDetails.some((it: any) => it.isMaterial)
+                    selectedOrder.ticketType === 'MATERIAL_PICKING' ||
+                    selectedOrder.code?.startsWith('LSX-') ||
+                    selectedOrder.typeLabel?.includes('sản xuất') ||
+                    orderDetails.some((it: any) => it.isMaterial)
                     ? 'Danh sách vật tư xuất kho (BOM)'
                     : 'Danh sách hàng hoá'}
                 </span>
@@ -2041,80 +2050,110 @@ export const LogisticsOverviewPage: React.FC = () => {
                   selectedOrder.typeLabel?.includes('sản xuất') ||
                   orderDetails.some((it: any) => it.isMaterial)
                 ) && !isRowCompleted(selectedOrder) && (
-                  <div
-                    className={`p-3 rounded-xl border space-y-2.5 ${
-                      selectedOrder.trangThai === 'PACKED' ||
-                      selectedOrder.trangThai === 'COMPLETED' ||
-                      (orderDetails.length > 0 &&
-                        orderDetails.every(
-                          (it: any) => (Number(it.pickedQty) || 0) >= (Number(it.qty ?? it.requestedQty) || 1)
-                        ))
+                    <div
+                      className={`p-3 rounded-xl border space-y-2.5 ${selectedOrder.trangThai === 'PACKED' ||
+                        selectedOrder.trangThai === 'COMPLETED' ||
+                        (orderDetails.length > 0 &&
+                          orderDetails.every(
+                            (it: any) => (Number(it.pickedQty) || 0) >= (Number(it.qty ?? it.requestedQty) || 1)
+                          ))
                         ? 'bg-emerald-50/70 border-emerald-200'
                         : 'bg-amber-50/70 border-amber-200'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-xs flex items-center gap-1.5 text-slate-800">
-                        <i
-                          className={`bi ${
-                            selectedOrder.trangThai === 'PACKED' ||
+                        }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-xs flex items-center gap-1.5 text-slate-800">
+                          <i
+                            className={`bi ${selectedOrder.trangThai === 'PACKED' ||
+                              selectedOrder.trangThai === 'COMPLETED' ||
+                              (orderDetails.length > 0 &&
+                                orderDetails.every(
+                                  (it: any) =>
+                                    (Number(it.pickedQty) || 0) >= (Number(it.qty ?? it.requestedQty) || 1)
+                                ))
+                              ? 'bi-check-circle-fill text-emerald-600'
+                              : 'bi-boxes text-amber-600'
+                              }`}
+                          />
+                          Tiến độ gom hàng cấp phát:
+                        </span>
+                        <span
+                          className={`text-[11px] font-bold px-2 py-0.5 rounded border ${selectedOrder.trangThai === 'PACKED' ||
                             selectedOrder.trangThai === 'COMPLETED' ||
                             (orderDetails.length > 0 &&
                               orderDetails.every(
                                 (it: any) =>
                                   (Number(it.pickedQty) || 0) >= (Number(it.qty ?? it.requestedQty) || 1)
                               ))
-                              ? 'bi-check-circle-fill text-emerald-600'
-                              : 'bi-boxes text-amber-600'
-                          }`}
-                        />
-                        Tiến độ gom hàng cấp phát:
-                      </span>
-                      <span
-                        className={`text-[11px] font-bold px-2 py-0.5 rounded border ${
-                          selectedOrder.trangThai === 'PACKED' ||
-                          selectedOrder.trangThai === 'COMPLETED' ||
-                          (orderDetails.length > 0 &&
-                            orderDetails.every(
-                              (it: any) =>
-                                (Number(it.pickedQty) || 0) >= (Number(it.qty ?? it.requestedQty) || 1)
-                            ))
                             ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                             : 'bg-amber-100 text-amber-800 border-amber-300'
-                        }`}
-                      >
-                        {selectedOrder.trangThai === 'PACKED' ||
-                        selectedOrder.trangThai === 'COMPLETED' ||
-                        (orderDetails.length > 0 &&
-                          orderDetails.every(
-                            (it: any) =>
-                              (Number(it.pickedQty) || 0) >= (Number(it.qty ?? it.requestedQty) || 1)
-                          ))
-                          ? 'Đã gom đủ 100%'
-                          : `${
-                              orderDetails.filter(
+                            }`}
+                        >
+                          {selectedOrder.trangThai === 'PACKED' ||
+                            selectedOrder.trangThai === 'COMPLETED' ||
+                            (orderDetails.length > 0 &&
+                              orderDetails.every(
                                 (it: any) =>
                                   (Number(it.pickedQty) || 0) >= (Number(it.qty ?? it.requestedQty) || 1)
-                              ).length
-                            }/${orderDetails.length} loại (${
-                              orderDetails.length > 0
-                                ? Math.round(
-                                    (orderDetails.filter(
-                                      (it: any) =>
-                                        (Number(it.pickedQty) || 0) >=
-                                        (Number(it.qty ?? it.requestedQty) || 1)
-                                    ).length /
-                                      orderDetails.length) *
-                                      100
-                                  )
-                                : 0
+                              ))
+                            ? 'Đã gom đủ 100%'
+                            : `${orderDetails.filter(
+                              (it: any) =>
+                                (Number(it.pickedQty) || 0) >= (Number(it.qty ?? it.requestedQty) || 1)
+                            ).length
+                            }/${orderDetails.length} loại (${orderDetails.length > 0
+                              ? Math.round(
+                                (orderDetails.filter(
+                                  (it: any) =>
+                                    (Number(it.pickedQty) || 0) >=
+                                    (Number(it.qty ?? it.requestedQty) || 1)
+                                ).length /
+                                  orderDetails.length) *
+                                100
+                              )
+                              : 0
                             }%)`}
-                      </span>
-                    </div>
+                        </span>
+                      </div>
 
-                    <div className="w-full bg-slate-200/80 h-2 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full transition-all duration-300 ${
+                      <div className="w-full bg-slate-200/80 h-2 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-300 ${selectedOrder.trangThai === 'PACKED' ||
+                            selectedOrder.trangThai === 'COMPLETED' ||
+                            (orderDetails.length > 0 &&
+                              orderDetails.every(
+                                (it: any) =>
+                                  (Number(it.pickedQty) || 0) >= (Number(it.qty ?? it.requestedQty) || 1)
+                              ))
+                            ? 'bg-emerald-500'
+                            : 'bg-amber-500'
+                            }`}
+                          style={{
+                            width: `${orderDetails.length > 0
+                              ? Math.round(
+                                (orderDetails.filter(
+                                  (it: any) =>
+                                    (Number(it.pickedQty) || 0) >=
+                                    (Number(it.qty ?? it.requestedQty) || 1)
+                                ).length /
+                                  orderDetails.length) *
+                                100
+                              )
+                              : 0
+                              }%`,
+                          }}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] text-slate-600 pt-1.5 border-t border-slate-200/60">
+                        <div className="flex items-center gap-1.5 truncate max-w-[200px]">
+                          <span className="text-slate-500">Phụ trách:</span>
+                          <strong className="text-slate-800 font-semibold">
+                            {selectedOrder.assigneeName || 'Chưa giao việc'}
+                          </strong>
+                        </div>
+
+                        {!(
                           selectedOrder.trangThai === 'PACKED' ||
                           selectedOrder.trangThai === 'COMPLETED' ||
                           (orderDetails.length > 0 &&
@@ -2122,60 +2161,23 @@ export const LogisticsOverviewPage: React.FC = () => {
                               (it: any) =>
                                 (Number(it.pickedQty) || 0) >= (Number(it.qty ?? it.requestedQty) || 1)
                             ))
-                            ? 'bg-emerald-500'
-                            : 'bg-amber-500'
-                        }`}
-                        style={{
-                          width: `${
-                            orderDetails.length > 0
-                              ? Math.round(
-                                  (orderDetails.filter(
-                                    (it: any) =>
-                                      (Number(it.pickedQty) || 0) >=
-                                      (Number(it.qty ?? it.requestedQty) || 1)
-                                  ).length /
-                                    orderDetails.length) *
-                                    100
-                                )
-                              : 0
-                          }%`,
-                        }}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between text-[11px] text-slate-600 pt-1.5 border-t border-slate-200/60">
-                      <div className="flex items-center gap-1.5 truncate max-w-[200px]">
-                        <span className="text-slate-500">Phụ trách:</span>
-                        <strong className="text-slate-800 font-semibold">
-                          {selectedOrder.assigneeName || 'Chưa giao việc'}
-                        </strong>
+                        ) &&
+                          isThuKho && (
+                            <button
+                              type="button"
+                              className="text-[11px] font-semibold text-sky-700 hover:text-sky-800 hover:underline flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-sky-200 shadow-sm cursor-pointer"
+                              onClick={handleQuickPack}
+                              title="Xác nhận đã gom đủ toàn bộ vật tư theo định mức để mở khoá xuất kho"
+                            >
+                              <i className="bi bi-check2-all text-sky-600" />
+                              <span>Xác nhận gom đủ</span>
+                            </button>
+                          )}
                       </div>
 
-                      {!(
-                        selectedOrder.trangThai === 'PACKED' ||
-                        selectedOrder.trangThai === 'COMPLETED' ||
-                        (orderDetails.length > 0 &&
-                          orderDetails.every(
-                            (it: any) =>
-                              (Number(it.pickedQty) || 0) >= (Number(it.qty ?? it.requestedQty) || 1)
-                          ))
-                      ) &&
-                        isThuKho && (
-                          <button
-                            type="button"
-                            className="text-[11px] font-semibold text-sky-700 hover:text-sky-800 hover:underline flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-sky-200 shadow-sm cursor-pointer"
-                            onClick={handleQuickPack}
-                            title="Xác nhận đã gom đủ toàn bộ vật tư theo định mức để mở khoá xuất kho"
-                          >
-                            <i className="bi bi-check2-all text-sky-600" />
-                            <span>Xác nhận gom đủ</span>
-                          </button>
-                        )}
+                      {/* Nếu chưa giao việc thì hiển thị thanh giao việc cho nhân viên kho */}
                     </div>
-
-                    {/* Nếu chưa giao việc thì hiển thị thanh giao việc cho nhân viên kho */}
-                  </div>
-                )}
+                  )}
 
                 <div className="border border-slate-200 rounded-xl overflow-hidden">
                   <table className="w-full text-left border-collapse text-xs">
@@ -2183,8 +2185,8 @@ export const LogisticsOverviewPage: React.FC = () => {
                       <tr>
                         <th className="py-2 px-3 w-[65%]">
                           {selectedOrder.code?.startsWith('LSX-') ||
-                          selectedOrder.typeLabel?.includes('sản xuất') ||
-                          orderDetails.some((it: any) => it.isMaterial)
+                            selectedOrder.typeLabel?.includes('sản xuất') ||
+                            orderDetails.some((it: any) => it.isMaterial)
                             ? 'Vật tư / Linh kiện (BOM)'
                             : 'Sản phẩm'}
                         </th>
@@ -2254,11 +2256,10 @@ export const LogisticsOverviewPage: React.FC = () => {
                             ) ? (
                               <div className="flex flex-col items-end">
                                 <span
-                                  className={`font-bold ${
-                                    (Number(row.pickedQty) || 0) < Number(row.qty || 1)
-                                      ? 'text-amber-600'
-                                      : 'text-emerald-600'
-                                  }`}
+                                  className={`font-bold ${(Number(row.pickedQty) || 0) < Number(row.qty || 1)
+                                    ? 'text-amber-600'
+                                    : 'text-emerald-600'
+                                    }`}
                                 >
                                   {row.pickedQty || 0} / {row.qty}
                                   <span className="font-normal text-slate-400 ml-1 text-[11px]">
@@ -2266,11 +2267,10 @@ export const LogisticsOverviewPage: React.FC = () => {
                                   </span>
                                 </span>
                                 <span
-                                  className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded mt-0.5 border ${
-                                    (Number(row.pickedQty) || 0) >= Number(row.qty || 1)
-                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                      : 'bg-amber-50 text-amber-700 border-amber-200'
-                                  }`}
+                                  className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded mt-0.5 border ${(Number(row.pickedQty) || 0) >= Number(row.qty || 1)
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                                    }`}
                                 >
                                   {(Number(row.pickedQty) || 0) >= Number(row.qty || 1)
                                     ? 'Đã gom đủ'
@@ -2418,11 +2418,10 @@ export const LogisticsOverviewPage: React.FC = () => {
                   {selectedDetailItem.code}
                 </span>
                 <span
-                  className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border ${
-                    selectedDetailItem.type === 'INBOUND'
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      : 'bg-blue-50 text-blue-700 border-blue-200'
-                  }`}
+                  className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border ${selectedDetailItem.type === 'INBOUND'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-blue-50 text-blue-700 border-blue-200'
+                    }`}
                 >
                   {selectedDetailItem.typeLabel ||
                     (selectedDetailItem.type === 'INBOUND' ? 'Nhập kho' : 'Xuất kho')}
@@ -2493,11 +2492,10 @@ export const LogisticsOverviewPage: React.FC = () => {
                         <div className="mt-1.5 flex items-center justify-between">
                           <span className="text-[11px] text-slate-400">Số lượng:</span>
                           <span
-                            className={`font-bold text-xs px-2 py-0.5 rounded border ${
-                              selectedDetailItem.type === 'INBOUND'
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : 'bg-blue-50 text-blue-700 border-blue-200'
-                            }`}
+                            className={`font-bold text-xs px-2 py-0.5 rounded border ${selectedDetailItem.type === 'INBOUND'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-blue-50 text-blue-700 border-blue-200'
+                              }`}
                           >
                             {selectedDetailItem.type === 'INBOUND' ? '+' : '-'}
                             {it.quantity} {it.unit || 'cái'}
