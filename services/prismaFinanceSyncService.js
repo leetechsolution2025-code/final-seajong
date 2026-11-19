@@ -188,7 +188,11 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
     prismaCustomers.forEach((c) => customerById.set(c.id, c));
 
     const supplierById = new Map();
-    prismaSuppliers.forEach((s) => supplierById.set(s.id, s));
+    const supplierByName = new Map();
+    prismaSuppliers.forEach((s) => {
+      supplierById.set(s.id, s);
+      if (s.name) supplierByName.set(String(s.name).trim().toLowerCase(), s);
+    });
 
     const carrierById = new Map();
     const carrierByName = new Map();
@@ -255,14 +259,14 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
             updatedAt: createdEpoch,
           });
         } else {
-          existingDebt.amount = fee;
+          if (!existingDebt.amount && fee > 0) existingDebt.amount = fee;
           existingDebt.carrierId = resolvedCarrierId || existingDebt.carrierId;
           existingDebt.partnerName = resolvedCarrierName || existingDebt.partnerName;
-          existingDebt.description = descText;
+          existingDebt.description = existingDebt.description || descText;
           await dbRun(
             db,
             `UPDATE "Debt" SET "amount" = ?, "carrierId" = ?, "partnerName" = ?, "description" = ? WHERE "id" = ?`,
-            [fee, existingDebt.carrierId, existingDebt.partnerName, descText, existingDebt.id]
+            [existingDebt.amount, existingDebt.carrierId, existingDebt.partnerName, existingDebt.description, existingDebt.id]
           );
         }
       }
@@ -735,7 +739,24 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
               reconMeta = JSON.parse(rawDesc.split('[RECON_META]:')[1].trim());
             } catch {}
           }
-          const cleanTitle = rawDesc.split('\n')[0].trim();
+          let descClean = rawDesc.split('[PAYMENT_LOGS]:')[0].split('[RECON_META]:')[0].split('\n')[0].trim();
+          let logInfo = null;
+          if (rawDesc.includes('[PAYMENT_LOGS]:')) {
+            try {
+              const logs = JSON.parse(rawDesc.split('[PAYMENT_LOGS]:')[1].trim());
+              if (Array.isArray(logs) && logs.length > 0) logInfo = logs[0];
+            } catch {}
+          }
+          const cleanTitle =
+            logInfo?.note ||
+            descClean ||
+            (isReconciliation
+              ? `Đối soát công nợ chứng từ ${reconMeta?.refVoucherCode || ref}`
+              : isReturn
+                ? `Giảm trừ công nợ do trả lại hàng theo ${ref}`
+                : isAdvance
+                  ? `Khách hàng trả tiền trước (Ứng trước) - ${g.customerName}`
+                  : `Thu nợ khách hàng ${g.customerName}`);
           const isReturn =
             !isReconciliation &&
             (p.type === 'RETURN' ||
@@ -924,14 +945,38 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
       );
 
       payableDebts.forEach((d) => {
-        const supp = d.supplierId ? supplierById.get(d.supplierId) : null;
-        const carr = d.carrierId ? carrierById.get(d.carrierId) : null;
+        let supp = d.supplierId ? supplierById.get(d.supplierId) : null;
+        let carr = d.carrierId ? carrierById.get(d.carrierId) : null;
         const rawName = supp?.name || carr?.name || d.partnerName || 'Nhà cung cấp';
         const cleanName = rawName
           .split('–')[0]
           .split(' - ')[0]
           .trim();
-        const partnerType = carr || d.carrierId ? 'transporter' : 'supplier';
+
+        let partnerType = carr || d.carrierId ? 'transporter' : 'supplier';
+        if (!carr && !supp) {
+          const matchedCarr = carrierByName.get(cleanName.toLowerCase()) || carrierByName.get(rawName.toLowerCase());
+          const matchedSupp = supplierByName.get(cleanName.toLowerCase()) || supplierByName.get(rawName.toLowerCase());
+          if (matchedCarr && !matchedSupp) {
+            partnerType = 'transporter';
+            carr = matchedCarr;
+          } else if (matchedSupp && !matchedCarr) {
+            partnerType = 'supplier';
+            supp = matchedSupp;
+          }
+        }
+
+        const refIdStr = String(d.referenceId || '');
+        const paid = Number(d.paidAmount) || 0;
+        const amt = Number(d.amount) || 0;
+        const isPayment =
+          (paid > 0 && (amt === 0 || refIdStr.startsWith('PC-'))) ||
+          (paid !== 0 && refIdStr.startsWith('DS-'));
+
+        if (partnerType === 'transporter' && !isPayment && !d.carrierId) {
+          partnerType = 'supplier';
+        }
+
         // Gộp theo tên chuẩn hóa + loại đối tác để không bị tách 2 dòng khi 1 bên có supplierId và 1 bên không có supplierId
         const key = `${partnerType}:${cleanName.toLowerCase()}`;
         if (!payGroups.has(key)) {
@@ -954,19 +999,13 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
         if ((supp?.name || carr?.name) && g.partnerName === g.partnerName.toUpperCase()) {
           g.partnerName = supp?.name || carr?.name;
         }
-        const amt = Number(d.amount) || 0;
-        const paid = Number(d.paidAmount) || 0;
         g.totalAmount += amt;
         g.totalPaid += paid;
         if (d.dueDate && (!g.latestDueDate || d.dueDate > g.latestDueDate)) {
           g.latestDueDate = d.dueDate;
         }
         if (amt > 0) g.bills.push(d);
-        const refIdStr = String(d.referenceId || '');
-        if (
-          (paid > 0 && (amt === 0 || refIdStr.startsWith('PC-'))) ||
-          (paid !== 0 && refIdStr.startsWith('DS-'))
-        ) {
+        if (isPayment) {
           g.payments.push(d);
         }
       });
@@ -992,7 +1031,20 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           unallocatedPaid = Math.max(0, unallocatedPaid - allocPaid);
           const bRemain = Math.max(0, bVal - allocPaid);
           const refCode = b.referenceId || `${code}-PO${idx + 1}`;
-          const descClean = (b.description || '').split('\n\n[PAYMENT_LOGS]')[0].trim();
+          let descClean = (b.description || '').split('\n\n[PAYMENT_LOGS]')[0].split('[PAYMENT_LOGS]:')[0].split('[RECON_META]:')[0].trim();
+          if (!descClean && (b.description || '').includes('[PAYMENT_LOGS]:')) {
+            try {
+              const logs = JSON.parse((b.description || '').split('[PAYMENT_LOGS]:')[1].trim());
+              if (Array.isArray(logs) && logs.length > 0) descClean = logs[0]?.note || '';
+            } catch {}
+          }
+          if (!descClean) {
+            if (String(refCode).startsWith('PC-') || String(refCode).startsWith('UNC-')) {
+              descClean = `Chi trả tiền hàng cho ${g.partnerName || 'nhà cung cấp'}`;
+            } else if (String(refCode).startsWith('PT-')) {
+              descClean = `Thu nợ khách hàng ${g.partnerName || ''}`;
+            }
+          }
           const isOpening =
             String(refCode).toLowerCase().includes('dư nợ đầu kỳ') ||
             descClean.toLowerCase().includes('nợ cũ chuyển sang');
@@ -1031,7 +1083,23 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
                 ? `Chi phí vận chuyển đơn hàng ${orderCode}${custLabel ? ` • Khách hàng: ${custLabel}` : ''}`
                 : `Chi phí vận chuyển ${refCode}${custLabel ? ` • Khách hàng: ${custLabel}` : ''}`;
             } else {
-              // Đối với các vận đơn / phiếu vận chuyển cũ (DH-...-VC), tra cứu khách hàng từ SaleOrder cùng ngày hoặc danh sách KH
+              const poBaseCode = String(refCode).replace(/-VC$/i, '');
+              const linkedPo = purchaseOrderByCode.get(poBaseCode) || purchaseOrderById.get(poBaseCode);
+
+              if (linkedPo) {
+                const supp = linkedPo.supplierId ? supplierById.get(linkedPo.supplierId) : null;
+                const suppName = supp?.name || linkedPo.supplierName || 'Nhà cung cấp';
+                const depotInfo = linkedPo.shippingDepot ? ` • Bến bãi: ${linkedPo.shippingDepot}` : '';
+                entryTitle = `Chi phí vận chuyển đơn mua hàng ${linkedPo.code || refCode} • NCC: ${suppName}${depotInfo}`;
+                orderCode = linkedPo.code || poBaseCode;
+                customerName = suppName;
+                customerAddress = supp?.address || linkedPo.shippingDepot || '';
+                poItems =
+                  purchaseOrderItemsByCode.get(linkedPo.code) ||
+                  purchaseOrderItemsByOrderId.get(linkedPo.id) ||
+                  [];
+              } else {
+                // Đối với các vận đơn / phiếu vận chuyển cũ (DH-...-VC), tra cứu khách hàng từ SaleOrder cùng ngày hoặc danh sách KH
               const dateMatch = String(refCode).match(/(\d{8})/);
               const ymd = dateMatch ? dateMatch[1] : '';
               let matchedSo = null;
@@ -1062,6 +1130,7 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
               entryTitle = custLabel && !baseTitle.includes('Khách hàng:')
                 ? `${baseTitle} • Khách hàng: ${custLabel}`
                 : baseTitle;
+              }
             }
           }
 
@@ -1124,10 +1193,10 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
             refVoucherCode: reconMeta?.refVoucherCode || undefined,
             title:
               logInfo?.note ||
-              descClean ||
+              (descClean && !descClean.includes('[PAYMENT_LOGS]') && !descClean.startsWith('[{') ? descClean : '') ||
               (isReconciliation
                 ? `Đối soát công nợ chứng từ ${reconMeta?.refVoucherCode || refCode}`
-                : `Phiếu chi thanh toán công nợ (${refCode})`),
+                : `Chi trả tiền hàng cho ${g.partnerName || 'nhà cung cấp'} (${refCode})`),
             date: payDate,
             time: payTime,
             totalAmount: isReconciliation ? pVal : Math.abs(pVal),

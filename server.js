@@ -29724,6 +29724,32 @@ app.get('/api/plan-finance/purchasing/:id', async (req, res) => {
       },
     });
     if (!po) return res.status(404).json({ error: 'Không tìm thấy PO' });
+
+    // Lấy công nợ ĐVVC thực tế từ debt_payables
+    if (po.carrier || po.carrierId) {
+      const carrName = (po.carrier?.name || '').trim();
+      if (carrName) {
+        try {
+          const dbPath = path.join(__dirname, 'prisma', 'dev.db');
+          const sqliteConn = new sqlite3.Database(dbPath);
+          const liveRow = await new Promise((resolve) => {
+            sqliteConn.get(
+              `SELECT remaining_amount FROM debt_payables WHERE partner_type = 'transporter' AND (supplier_name = ? OR supplier_name LIKE ? OR code = ?) LIMIT 1`,
+              [carrName, `%${carrName}%`, po.carrier?.code || ''],
+              (err, row) => resolve(row)
+            );
+          });
+          sqliteConn.close();
+          if (liveRow && liveRow.remaining_amount !== undefined) {
+            po.carrierDebt = Number(liveRow.remaining_amount) || 0;
+            if (po.carrier) {
+              po.carrier.hanMucNo = po.carrierDebt;
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
     res.json(po);
   } catch (error) {
     console.error('Error GET /api/plan-finance/purchasing/:id:', error);
@@ -29875,6 +29901,84 @@ app.patch('/api/plan-finance/purchasing/:id', async (req, res) => {
         });
       } catch (qcErr) {
         console.error('Failed to auto-create IQC inspection:', qcErr);
+      }
+    }
+
+    // Tự động ghi nhận công nợ vận chuyển cho ĐVVC khi đơn hàng chuyển sang 'received' hoặc khi đã nhận hàng
+    const isNowReceived = trangThai === 'received' || (!trangThai && oldPo.trangThai === 'received');
+    const finalFee = Math.round(Number(po.shippingFee || shippingFee || 0));
+    const finalCarrierId = po.carrierId || carrierId;
+
+    if (isNowReceived && finalFee > 0 && finalCarrierId) {
+      try {
+        const carr = await prisma.carrier.findUnique({ where: { id: finalCarrierId } });
+        const partnerName = carr?.name || carrierName || 'Đơn vị vận chuyển';
+        const poCode = po.code || id;
+        const refId = `${poCode}-VC`;
+        const descText = `Chi phí vận chuyển đơn mua hàng ${poCode}${po.shippingDepot ? ` (Bến bãi: ${po.shippingDepot})` : (carr?.address ? ` (Bến bãi: ${carr.address})` : '')}`;
+
+        const existingDebt = await prisma.debt.findFirst({
+          where: {
+            type: 'phai-tra',
+            referenceId: refId,
+          },
+        });
+
+        if (existingDebt) {
+          await prisma.debt.update({
+            where: { id: existingDebt.id },
+            data: {
+              carrierId: finalCarrierId,
+              partnerName,
+              amount: finalFee,
+              description: descText,
+              updatedAt: new Date(),
+            },
+          });
+        } else {
+          await prisma.debt.create({
+            data: {
+              type: 'phai-tra',
+              carrierId: finalCarrierId,
+              partnerName,
+              amount: finalFee,
+              paidAmount: 0,
+              dueDate: po.ngayNhan || new Date(),
+              status: 'UNPAID',
+              description: descText,
+              referenceId: refId,
+            },
+          });
+        }
+
+        // Cập nhật lại số dư công nợ tích lũy cho Carrier (hanMucNo)
+        const allCarrierDebts = await prisma.debt.findMany({
+          where: {
+            type: { in: ['phai-tra', 'PAYABLE'] },
+            carrierId: finalCarrierId,
+          },
+        });
+        const totalCarrierDebt = allCarrierDebts.reduce((sum, d) => {
+          const amt = Number(d.amount) || 0;
+          const paid = Number(d.paidAmount) || 0;
+          return sum + Math.max(0, amt - paid);
+        }, 0);
+
+        await prisma.carrier.update({
+          where: { id: finalCarrierId },
+          data: { hanMucNo: totalCarrierDebt },
+        });
+
+        // Đồng bộ tức thời sang hệ thống bảng Kế toán & Công nợ SQLite (debt_payables)
+        const dbPath = path.join(__dirname, 'prisma', 'dev.db');
+        const sqliteConn = new sqlite3.Database(dbPath);
+        try {
+          await syncPrismaFinanceToAccountingTables(sqliteConn);
+        } finally {
+          sqliteConn.close();
+        }
+      } catch (carrierDebtErr) {
+        console.error('Failed to auto-record carrier debt on received PO:', carrierDebtErr);
       }
     }
 
@@ -30318,8 +30422,37 @@ app.get('/api/plan-finance/carriers', async (req, res) => {
       }),
     ]);
 
+    // Lấy công nợ thực tế từ debt_payables
+    let enrichedItems = items;
+    try {
+      const dbPath = path.join(__dirname, 'prisma', 'dev.db');
+      const sqliteConn = new sqlite3.Database(dbPath);
+      const payables = await new Promise((resolve) => {
+        sqliteConn.all(
+          `SELECT supplier_name, remaining_amount, code FROM debt_payables WHERE partner_type = 'transporter'`,
+          (err, rows) => resolve(rows || [])
+        );
+      });
+      sqliteConn.close();
+
+      const debtByName = new Map();
+      payables.forEach((p) => {
+        if (p.supplier_name) {
+          debtByName.set(p.supplier_name.trim().toLowerCase(), Number(p.remaining_amount) || 0);
+        }
+      });
+
+      enrichedItems = items.map((c) => {
+        const liveDebt = debtByName.get((c.name || '').trim().toLowerCase());
+        return {
+          ...c,
+          hanMucNo: liveDebt !== undefined ? liveDebt : (c.hanMucNo ?? 0),
+        };
+      });
+    } catch (_) {}
+
     res.json({
-      items,
+      items: enrichedItems,
       total,
       page,
       totalPages: Math.max(1, Math.ceil(total / limit)),

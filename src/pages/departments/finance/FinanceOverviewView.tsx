@@ -34,6 +34,24 @@ const formatVND = (val: number): string => {
   return (val || 0).toLocaleString('vi-VN') + ' đ';
 };
 
+export function getAdaptiveYScaleMax(maxBillions: number): number {
+  if (!maxBillions || maxBillions <= 0.5) return 0.5;
+  if (maxBillions <= 1) return 1.0;
+  if (maxBillions <= 1.5) return 1.5;
+  if (maxBillions <= 2) return 2.0;
+  if (maxBillions <= 2.5) return 2.5;
+  if (maxBillions <= 3) return 3.0;
+  if (maxBillions <= 3.5) return 3.5;
+  if (maxBillions <= 4) return 4.0;
+  if (maxBillions <= 5) return 5.0;
+  if (maxBillions <= 6) return 6.0;
+  if (maxBillions <= 8) return 8.0;
+  if (maxBillions <= 10) return 10.0;
+  if (maxBillions <= 15) return 15.0;
+  if (maxBillions <= 20) return 20.0;
+  return Math.ceil((maxBillions * 1.15) / 5) * 5;
+}
+
 export interface CashflowMonthData {
   month: string;
   inFlow: number;
@@ -270,8 +288,12 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
               return { ...m, monthNum: mNum, openingBal: openB, closingBal: (inR > 0 || outR > 0 || mNum >= 7) ? runBal : 0, inR, outR };
             });
 
-            // Reconstruct صحیح line points on chart
-            const yMax = Number(d.yScaleMax) || 2;
+            // Reconstruct chính xác line points on chart
+            const rawMax = Math.max(
+              0.5,
+              ...enrichedMonths.flatMap((m) => [(Number(m.inFlowRaw) || 0) / 1e9, (Number(m.outFlowRaw) || 0) / 1e9, (m.closingBal || 0) / 1e9])
+            );
+            const yMax = Number(d.yScaleMax) || getAdaptiveYScaleMax(rawMax);
             const fixedChartMonths = enrichedMonths.map((em) => {
               const netB = +(em.closingBal / 1e9).toFixed(3);
               const cy = netB > 0 ? +(175 - Math.min(yMax, netB) * (150 / yMax)).toFixed(2) : 175;
@@ -1076,13 +1098,13 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                 </filter>
               </defs>
 
-              {/* Lưới ngang tham chiếu (đã bỏ nhãn trục tung theo yêu cầu) */}
+              {/* Lưới ngang tham chiếu, các cột Thu - Chi và đường Line Số dư quỹ */}
               {(() => {
                 const maxDataBillions = Math.max(
-                  2,
+                  0.5,
                   ...cashflowChartData.flatMap((m) => [m.inFlow || 0, m.outFlow || 0, m.netBalance || 0])
                 );
-                const yMax = maxDataBillions <= 2 ? 2 : maxDataBillions <= 5 ? 5 : maxDataBillions <= 10 ? 10 : 20;
+                const yMax = getAdaptiveYScaleMax(maxDataBillions);
                 const gridSteps = [
                   { val: yMax, y: 25 },
                   { val: +(yMax * 0.75).toFixed(2), y: 62.5 },
@@ -1091,8 +1113,20 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                   { val: 0, y: 175 },
                 ];
 
+                // Đồng bộ toạ độ cy của đường Line theo yMax chuẩn xác
+                const pointsWithCy = cashflowChartData.map((pt) => {
+                  const cy = pt.netBalance > 0 ? +(175 - Math.min(yMax, pt.netBalance) * (150 / yMax)).toFixed(2) : 175;
+                  return { ...pt, cy };
+                });
+
+                const linePoints = pointsWithCy.map((pt, idx) => `${idx === 0 ? 'M' : 'L'} ${pt.cx},${pt.cy}`).join(' ');
+                const firstX = pointsWithCy[0]?.cx || 84.6;
+                const lastX = pointsWithCy[pointsWithCy.length - 1]?.cx || 580.4;
+                const areaPath = `${linePoints} L ${lastX},175 L ${firstX},175 Z`;
+
                 return (
                   <>
+                    {/* Lưới ngang tham chiếu */}
                     {gridSteps.map((grid, gIdx) => (
                       <g key={`grid-${gIdx}`}>
                         <line
@@ -1201,19 +1235,8 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                         </g>
                       );
                     })}
-                  </>
-                );
-              })()}
 
-              {/* Vùng bóng mờ gradient dưới đồ thị line Số dư quỹ */}
-              {(() => {
-                const linePoints = cashflowChartData.map((pt, idx) => `${idx === 0 ? 'M' : 'L'} ${pt.cx},${pt.cy}`).join(' ');
-                const firstX = cashflowChartData[0]?.cx || 84.6;
-                const lastX = cashflowChartData[cashflowChartData.length - 1]?.cx || 580.4;
-                const areaPath = `${linePoints} L ${lastX},175 L ${firstX},175 Z`;
-
-                return (
-                  <>
+                    {/* Vùng bóng mờ gradient dưới đồ thị line Số dư quỹ */}
                     <path
                       d={areaPath}
                       fill="url(#fundBalanceAreaGrad)"
@@ -1229,37 +1252,37 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
                       strokeLinejoin="round"
                       filter="url(#fundLineShadow)"
                     />
+
+                    {/* Các điểm nút tròn trên đường Line Số dư quỹ */}
+                    {pointsWithCy.map((pt, pIdx) => (
+                      <circle
+                        key={`pt-${pIdx}`}
+                        cx={pt.cx}
+                        cy={pt.cy}
+                        r={hoveredMonthIdx === pIdx ? '6.5' : '5'}
+                        fill="#0284c7"
+                        stroke="#ffffff"
+                        strokeWidth="2.5"
+                        style={{ cursor: 'pointer', transition: 'r 0.15s ease' }}
+                      />
+                    ))}
+
+                    {/* Vùng bắt sự kiện hover cho từng tháng để hiển thị Tooltip */}
+                    {pointsWithCy.map((pt, pIdx) => (
+                      <rect
+                        key={`hover-${pIdx}`}
+                        x={pt.cx - 42}
+                        y={15}
+                        width="84"
+                        height="190"
+                        fill="transparent"
+                        style={{ cursor: 'pointer' }}
+                        onMouseEnter={() => setHoveredMonthIdx(pIdx)}
+                      />
+                    ))}
                   </>
                 );
               })()}
-
-              {/* Các điểm nút tròn trên đường Line Số dư quỹ */}
-              {cashflowChartData.map((pt, pIdx) => (
-                <circle
-                  key={`pt-${pIdx}`}
-                  cx={pt.cx}
-                  cy={pt.cy}
-                  r={hoveredMonthIdx === pIdx ? '6.5' : '5'}
-                  fill="#0284c7"
-                  stroke="#ffffff"
-                  strokeWidth="2.5"
-                  style={{ cursor: 'pointer', transition: 'r 0.15s ease' }}
-                />
-              ))}
-
-              {/* Vùng bắt sự kiện hover cho từng tháng để hiển thị Tooltip */}
-              {cashflowChartData.map((pt, pIdx) => (
-                <rect
-                  key={`hover-${pIdx}`}
-                  x={pt.cx - 42}
-                  y={15}
-                  width="84"
-                  height="190"
-                  fill="transparent"
-                  style={{ cursor: 'pointer' }}
-                  onMouseEnter={() => setHoveredMonthIdx(pIdx)}
-                />
-              ))}
             </svg>
 
             {/* Tooltip chi tiết khi hover vào từng tháng */}

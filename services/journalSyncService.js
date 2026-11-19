@@ -71,6 +71,7 @@ function _runSyncAllSubledgersToJournal(db) {
         payrollSummaries,
         expenseAndHrVouchers,
         shipmentFees,
+        poShippingFees,
         loanDrawdowns,
         materialTickets,
         qcInspections,
@@ -157,6 +158,14 @@ function _runSyncAllSubledgersToJournal(db) {
            FROM LogisticsShipment s
            LEFT JOIN Carrier c ON s.carrierId = c.id
            WHERE COALESCE(s.shippingFee, 0) > 0`
+        ),
+        dbAllAsync(
+          `SELECT po.*, c.name as resolvedCarrierName, s.name as resolvedSupplierName
+           FROM PurchaseOrder po
+           LEFT JOIN Carrier c ON po.carrierId = c.id
+           LEFT JOIN Supplier s ON po.supplierId = s.id
+           WHERE COALESCE(po.shippingFee, 0) > 0
+             AND po.trangThai IN ('received', 'completed')`
         ),
         dbAllAsync(
           `SELECT d.*, l.bank_name, l.contract_code
@@ -1683,6 +1692,79 @@ function _runSyncAllSubledgersToJournal(db) {
               );
 
               existingCodes.add(tCode);
+              syncedCount++;
+            });
+
+            // ==========================================
+            // I2. ĐỒNG BỘ CHI PHÍ VẬN CHUYỂN HÀNG MUA NHẬP KHO (PurchaseOrder -> Nợ TK 156 / Có TK 331)
+            // ==========================================
+            (poShippingFees || []).forEach((po, idx) => {
+              const poCode = String(po.code || '').trim();
+              const vCode = `${poCode}-VC`;
+              if (!poCode || existingCodes.has(vCode)) return;
+              const fee = Math.round(Number(po.shippingFee) || 0);
+              if (fee <= 0) return;
+
+              const entryId = `JE-PO-SHIP-${po.id || idx + 1}`;
+              const entryNo = `PKT-VC-${poCode}`;
+              const poDate = po.ngayNhan
+                ? (/^\d+$/.test(String(po.ngayNhan))
+                    ? new Date(Number(po.ngayNhan)).toISOString().slice(0, 10)
+                    : normalizeDate(po.ngayNhan, poCode))
+                : (po.createdAt
+                    ? (/^\d+$/.test(String(po.createdAt))
+                        ? new Date(Number(po.createdAt)).toISOString().slice(0, 10)
+                        : normalizeDate(po.createdAt, poCode))
+                    : normalizeDate(null, poCode));
+              const carrierName = po.resolvedCarrierName || 'Đơn vị vận chuyển';
+              const suppPart = po.resolvedSupplierName ? ` (NCC: ${po.resolvedSupplierName})` : '';
+              const depotPart = po.shippingDepot ? ` • Bến bãi: ${po.shippingDepot}` : '';
+              const desc = `Chi phí vận chuyển hàng mua nhập kho đơn ${poCode}${suppPart}${depotPart} - ${carrierName}`;
+              const createdAtStr = `${poDate} 16:20:00`;
+
+              insertEntryStmt.run(
+                entryId,
+                entryNo,
+                poDate,
+                poDate,
+                vCode,
+                'KHO_VAN',
+                'Kho vận',
+                desc,
+                fee,
+                'Kế toán công nợ',
+                createdAtStr,
+                createdAtStr
+              );
+
+              insertLineStmt.run(
+                `${entryId}-L1`,
+                entryId,
+                1,
+                '156',
+                '156',
+                'Hàng hóa (Chi phí thu mua)',
+                'DEBIT',
+                fee,
+                desc,
+                carrierName
+              );
+
+              insertLineStmt.run(
+                `${entryId}-L2`,
+                entryId,
+                2,
+                '331',
+                '331',
+                'Phải trả cho người bán (ĐV vận chuyển)',
+                'CREDIT',
+                fee,
+                desc,
+                carrierName
+              );
+
+              existingCodes.add(vCode);
+              existingCodes.add(entryNo);
               syncedCount++;
             });
 

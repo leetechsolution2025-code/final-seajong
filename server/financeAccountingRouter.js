@@ -134,6 +134,24 @@ function getCurrentDefaultPeriod() {
   return String(now.getFullYear()) + '-' + String(now.getMonth() + 1).padStart(2, '0');
 }
 
+export function getAdaptiveYScaleMax(maxBillions) {
+  if (!maxBillions || maxBillions <= 0.5) return 0.5;
+  if (maxBillions <= 1) return 1.0;
+  if (maxBillions <= 1.5) return 1.5;
+  if (maxBillions <= 2) return 2.0;
+  if (maxBillions <= 2.5) return 2.5;
+  if (maxBillions <= 3) return 3.0;
+  if (maxBillions <= 3.5) return 3.5;
+  if (maxBillions <= 4) return 4.0;
+  if (maxBillions <= 5) return 5.0;
+  if (maxBillions <= 6) return 6.0;
+  if (maxBillions <= 8) return 8.0;
+  if (maxBillions <= 10) return 10.0;
+  if (maxBillions <= 15) return 15.0;
+  if (maxBillions <= 20) return 20.0;
+  return Math.ceil((maxBillions * 1.15) / 5) * 5;
+}
+
 export function readVietnameseCurrency(num) {
   if (!num || isNaN(num) || num <= 0) return 'Không đồng chẵn';
   const digits = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
@@ -1332,22 +1350,35 @@ router.post('/api/debts/payables/:id/payments', (req, res) => {
 
     // Lưu đồng thời vào bảng Prisma Debt để đồng bộ bền vững
     const nowEpoch = Date.now();
-    db.run(
-      `INSERT OR REPLACE INTO "Debt" (
-        "id", "type", "partnerName", "amount", "paidAmount",
-        "dueDate", "status", "description", "referenceId", "createdAt", "updatedAt"
-      ) VALUES (?, 'PAYABLE', ?, 0, ?, ?, 'PAID', ?, ?, ?, ?)`,
-      [
-        `debt-pay-${paymentCode}`,
-        row.supplier_name || receiverName || 'Nhà cung cấp',
-        payAmt,
-        nowEpoch,
-        newPaymentLog.title,
-        paymentCode,
-        nowEpoch,
-        nowEpoch,
-      ],
-      () => {}
+    const isTransporter = row.partner_type === 'transporter' || row.code?.startsWith('CNVC');
+    db.get(
+      isTransporter
+        ? 'SELECT id FROM Carrier WHERE name = ? COLLATE NOCASE'
+        : 'SELECT id FROM Supplier WHERE name = ? COLLATE NOCASE',
+      [row.supplier_name || receiverName],
+      (lookupErr, partnerRow) => {
+        const resolvedCarrierId = isTransporter ? (partnerRow?.id || null) : null;
+        const resolvedSupplierId = !isTransporter ? (partnerRow?.id || null) : null;
+        db.run(
+          `INSERT OR REPLACE INTO "Debt" (
+            "id", "type", "carrierId", "supplierId", "partnerName", "amount", "paidAmount",
+            "dueDate", "status", "description", "referenceId", "createdAt", "updatedAt"
+          ) VALUES (?, 'PAYABLE', ?, ?, ?, 0, ?, ?, 'PAID', ?, ?, ?, ?)`,
+          [
+            `debt-pay-${paymentCode}`,
+            resolvedCarrierId,
+            resolvedSupplierId,
+            row.supplier_name || receiverName || 'Nhà cung cấp',
+            payAmt,
+            nowEpoch,
+            newPaymentLog.title,
+            paymentCode,
+            nowEpoch,
+            nowEpoch,
+          ],
+          () => {}
+        );
+      }
     );
 
     db.run(
@@ -2701,6 +2732,421 @@ router.delete('/api/finance/journal-entries/:id', (req, res) => {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ success: true, message: 'Đã xóa bút toán thành công' });
     });
+  });
+});
+
+// 5. API Cập nhật bút toán
+router.put('/api/finance/journal-entries/:id', (req, res) => {
+  const { id } = req.params;
+  const {
+    entryDate,
+    documentDate,
+    referenceCode,
+    description,
+    sourceModule,
+    sourceLabel,
+    statusLabel,
+    lines,
+  } = req.body;
+
+  if (!description || !entryDate) {
+    return res.status(400).json({ error: 'Bút toán phải có ngày ghi sổ và diễn giải' });
+  }
+
+  const now = new Date();
+  const localTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+  const localUpdatedAt = `${entryDate} ${localTimeStr}`;
+
+  // If lines are provided, validate balance and update
+  if (Array.isArray(lines) && lines.length >= 2) {
+    let debitSum = 0;
+    let creditSum = 0;
+    for (const line of lines) {
+      const amt = Number(line.amount || 0);
+      if (amt <= 0) return res.status(400).json({ error: 'Số tiền định khoản phải lớn hơn 0' });
+      if (line.type === 'DEBIT') debitSum += amt;
+      else if (line.type === 'CREDIT') creditSum += amt;
+      else return res.status(400).json({ error: 'Loại định khoản phải là Nợ hoặc Có' });
+    }
+
+    if (Math.abs(debitSum - creditSum) > 0.01) {
+      return res.status(400).json({
+        error: `Định khoản không cân đối! Tổng Nợ (${debitSum.toLocaleString('vi-VN')} đ) phải bằng Tổng Có (${creditSum.toLocaleString('vi-VN')} đ)`,
+      });
+    }
+
+    db.run(
+      `UPDATE accounting_journal_entries SET
+        entry_date = ?, document_date = ?, reference_code = ?,
+        description = ?, total_amount = ?, source_module = COALESCE(?, source_module),
+        source_label = COALESCE(?, source_label), status_label = COALESCE(?, status_label),
+        updated_at = ?
+      WHERE id = ?`,
+      [
+        entryDate,
+        documentDate || entryDate,
+        referenceCode || null,
+        description.trim(),
+        debitSum,
+        sourceModule || null,
+        sourceLabel || null,
+        statusLabel || null,
+        localUpdatedAt,
+        id,
+      ],
+      function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+
+        db.run('DELETE FROM accounting_journal_lines WHERE entry_id = ?', [id], (delErr) => {
+          if (delErr) return res.status(500).json({ error: delErr.message });
+
+          const insertLineStmt = db.prepare(`
+            INSERT INTO accounting_journal_lines (
+              id, entry_id, line_number, account_id, account_code,
+              account_name, type, amount, description, partner
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `);
+
+          let idx = 1;
+          for (const line of lines) {
+            insertLineStmt.run(
+              'L-' + Date.now() + '-' + idx,
+              id,
+              idx++,
+              line.accountId || line.accountCode,
+              line.accountCode || line.accountId,
+              line.accountName || line.accountCode,
+              line.type,
+              Number(line.amount || 0),
+              line.description ? line.description.trim() : description.trim(),
+              line.partner ? line.partner.trim() : null
+            );
+          }
+
+          insertLineStmt.finalize((finalizeErr) => {
+            if (finalizeErr) return res.status(500).json({ error: finalizeErr.message });
+            res.json({ success: true, message: 'Đã cập nhật bút toán thành công', totalAmount: debitSum });
+          });
+        });
+      }
+    );
+  } else {
+    db.run(
+      `UPDATE accounting_journal_entries SET
+        entry_date = ?, document_date = ?, reference_code = ?,
+        description = ?, source_module = COALESCE(?, source_module),
+        source_label = COALESCE(?, source_label), status_label = COALESCE(?, status_label),
+        updated_at = ?
+      WHERE id = ?`,
+      [
+        entryDate,
+        documentDate || entryDate,
+        referenceCode || null,
+        description.trim(),
+        sourceModule || null,
+        sourceLabel || null,
+        statusLabel || null,
+        localUpdatedAt,
+        id,
+      ],
+      function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true, message: 'Đã cập nhật thông tin chứng từ thành công' });
+      }
+    );
+  }
+});
+
+// 6. API Đối soát chứng từ trong Sổ nhật ký chung (Phương án A: Giữ nguyên chứng từ gốc, tự động tạo chứng từ đối soát DS-...)
+router.post('/api/finance/journal-entries/:id/reconcile', (req, res) => {
+  const { id } = req.params;
+  const { newAmount, note } = req.body;
+
+  const numNew = Number(newAmount);
+  if (isNaN(numNew) || numNew < 0) {
+    return res.status(400).json({ error: 'Số tiền đối soát không hợp lệ (không được âm)' });
+  }
+
+  db.get('SELECT * FROM accounting_journal_entries WHERE id = ?', [id], (err, entry) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!entry) return res.status(404).json({ error: 'Không tìm thấy chứng từ cần đối soát' });
+
+    const origAmount = Number(entry.total_amount || 0);
+    const finalAmount = numNew > 0 ? numNew : origAmount;
+    const finalDelta = finalAmount - origAmount;
+    const targetCode = String(entry.reference_code || entry.entry_number || '').trim();
+
+    // 1. Cập nhật trạng thái đối soát và số tiền trên Sổ nhật ký chung
+    db.run(
+      `UPDATE accounting_journal_entries SET
+        total_amount = ?,
+        status_label = 'Đã đối soát',
+        updated_at = datetime('now', 'localtime')
+      WHERE id = ?`,
+      [finalAmount, id],
+      function (uErr) {
+        if (uErr) return res.status(500).json({ error: uErr.message });
+
+        // Cập nhật dòng định khoản theo tỉ lệ nếu số tiền thay đổi
+        if (origAmount > 0 && Math.abs(finalDelta) > 0.01) {
+          const ratio = finalAmount / origAmount;
+          db.run(
+            `UPDATE accounting_journal_lines SET amount = ROUND(amount * ?, 0) WHERE entry_id = ?`,
+            [ratio, id],
+            (lErr) => {
+              if (lErr) console.warn('Lỗi cập nhật dòng định khoản khi đối soát:', lErr.message);
+            }
+          );
+        }
+
+        // 2. Phương án A: Nếu có chênh lệch (finalDelta !== 0), tự động sinh Phiếu đối soát DS-... liên kết với phiếu gốc
+        if (Math.abs(finalDelta) > 0.01 && targetCode) {
+          const now = new Date();
+          const nowMs = now.getTime();
+          const dd = String(now.getDate()).padStart(2, '0');
+          const mm = String(now.getMonth() + 1).padStart(2, '0');
+          const yyyy = now.getFullYear();
+          const nowDateVN = `${dd}/${mm}/${yyyy}`;
+          const nowTimeVN = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+          const dsCode = `DS-${yyyy}${mm}${dd}-${Math.floor(100 + Math.random() * 900)}`;
+          const defaultTitle = (note && String(note).trim()) || `Đối soát chứng từ ${targetCode}`;
+
+          // Xác định luồng Thu (receivable / inflow) hay Chi (payable / outflow)
+          db.all(
+            `SELECT * FROM accounting_journal_lines WHERE entry_id = ?`,
+            [id],
+            (linesErr, jLines) => {
+              let isPayable = false;
+              let isReceivable = false;
+              let partnerName = '';
+
+              for (const l of jLines || []) {
+                if (l.partner && !partnerName) partnerName = l.partner.trim();
+                if (l.type === 'CREDIT' && (l.account_code?.startsWith('111') || l.account_code?.startsWith('112'))) {
+                  isPayable = true;
+                }
+                if (l.type === 'DEBIT' && (l.account_code?.startsWith('111') || l.account_code?.startsWith('112'))) {
+                  isReceivable = true;
+                }
+              }
+
+              if (targetCode.startsWith('PC-') || targetCode.startsWith('UNC-') || targetCode.startsWith('CHI-') || targetCode.startsWith('LC-')) {
+                isPayable = true;
+              } else if (targetCode.startsWith('PT-') || targetCode.startsWith('THU-')) {
+                isReceivable = true;
+              }
+
+              // Mặc định nếu không xác định được thì dựa vào module
+              if (!isPayable && !isReceivable) {
+                if (entry.source_module === 'PROCUREMENT' || entry.source_module === 'ADVANCE') isPayable = true;
+                else isReceivable = true;
+              }
+
+              const reconMeta = {
+                refVoucherCode: targetCode,
+                originalAmount: origAmount,
+                reconciledAmount: finalAmount,
+                deltaAmount: finalDelta,
+                date: nowDateVN,
+                time: nowTimeVN,
+              };
+              const debtDescription = `${defaultTitle}\n[RECON_META]:${JSON.stringify(reconMeta)}`;
+
+              if (isPayable) {
+                const partnerFinal = partnerName || 'Nhà cung cấp';
+                const dsEntry = {
+                  id: `ENT-DS-${nowMs}`,
+                  code: dsCode,
+                  refVoucherCode: targetCode,
+                  title: defaultTitle,
+                  date: nowDateVN,
+                  time: nowTimeVN,
+                  totalAmount: finalDelta,
+                  paidAmount: finalDelta,
+                  amount: finalDelta,
+                  originalAmount: origAmount,
+                  reconciledAmount: finalAmount,
+                  deltaAmount: finalDelta,
+                  remainingAmount: 0,
+                  status: 'completed',
+                  statusLabel: 'Đã đối soát',
+                  type: 'reconciliation',
+                  voucherType: 'reconciliation',
+                  isReconciliation: true,
+                  paymentMethod: 'Đối soát công nợ',
+                  receiverName: partnerFinal,
+                };
+
+                // Lưu vào bảng Debt chuẩn Prisma
+                db.run(
+                  `INSERT INTO Debt (id, type, partnerName, amount, paidAmount, status, referenceId, description, dueDate, createdAt, updatedAt)
+                   VALUES (?, 'PAYABLE', ?, 0, ?, 'PAID', ?, ?, ?, ?, ?)`,
+                  [dsEntry.id, partnerFinal, finalDelta, dsCode, debtDescription, nowMs, nowMs, nowMs],
+                  () => {
+                    // Cập nhật vào debt_payables nếu có khoản nợ liên quan
+                    db.get(
+                      `SELECT * FROM debt_payables WHERE entries_json LIKE ? OR code = ? LIMIT 1`,
+                      [`%${targetCode}%`, targetCode],
+                      (pErr, pRow) => {
+                        if (pRow) {
+                          let pEntries = [];
+                          try {
+                            pEntries = JSON.parse(pRow.entries_json || '[]');
+                          } catch {}
+                          pEntries.push(dsEntry);
+
+                          let billTotal = 0;
+                          let paymentTotal = 0;
+                          pEntries.forEach((e) => {
+                            const isP =
+                              e.isReconciliation ||
+                              e.type === 'reconciliation' ||
+                              e.type === 'payment' ||
+                              String(e.code || '').startsWith('DS-') ||
+                              String(e.code || '').startsWith('PC-') ||
+                              String(e.code || '').startsWith('UNC-');
+                            if (isP) paymentTotal += Number(e.paidAmount ?? e.totalAmount ?? e.amount) || 0;
+                            else billTotal += Number(e.totalAmount ?? e.amount) || 0;
+                          });
+
+                          const finalTot = billTotal > 0 ? billTotal : Number(pRow.total_amount) || 0;
+                          const finalP = Math.max(0, paymentTotal);
+                          const finalRem = Math.max(0, finalTot - finalP);
+                          const finalSt = finalRem <= 0 ? 'completed' : 'pending';
+                          const finalStLbl = finalRem <= 0 ? 'Đã hoàn tất' : 'Chờ thanh toán';
+
+                          db.run(
+                            `UPDATE debt_payables SET total_amount = ?, paid_amount = ?, remaining_amount = ?, status = ?, status_label = ?, entries_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                            [finalTot, finalP, finalRem, finalSt, finalStLbl, JSON.stringify(pEntries), pRow.id],
+                            () => {
+                              res.json({
+                                success: true,
+                                message: `Đã đối soát thành công chứng từ ${entry.entry_number}. Tự động tạo chứng từ đối soát ${dsCode} liên kết với phiếu ${targetCode}.`,
+                                dsCode,
+                                delta: finalDelta,
+                                newAmount: finalAmount,
+                                statusLabel: 'Đã đối soát',
+                              });
+                            }
+                          );
+                        } else {
+                          res.json({
+                            success: true,
+                            message: `Đã đối soát thành công chứng từ ${entry.entry_number}. Tự động tạo chứng từ đối soát ${dsCode} liên kết với phiếu ${targetCode}.`,
+                            dsCode,
+                            delta: finalDelta,
+                            newAmount: finalAmount,
+                            statusLabel: 'Đã đối soát',
+                          });
+                        }
+                      }
+                    );
+                  }
+                );
+              } else {
+                // Luồng Thu (Phải thu / Receivables)
+                const partnerFinal = partnerName || 'Khách hàng';
+                const dsEntry = {
+                  id: `ENT-DS-${nowMs}`,
+                  code: dsCode,
+                  refVoucherCode: targetCode,
+                  title: defaultTitle,
+                  date: nowDateVN,
+                  time: nowTimeVN,
+                  contractValue: finalDelta,
+                  totalAmount: finalDelta,
+                  paidAmount: finalDelta,
+                  amount: finalDelta,
+                  originalAmount: origAmount,
+                  reconciledAmount: finalAmount,
+                  deltaAmount: finalDelta,
+                  remainingAmount: 0,
+                  status: 'completed',
+                  statusLabel: 'Đã đối soát',
+                  type: 'reconciliation',
+                  voucherType: 'reconciliation',
+                  isReconciliation: true,
+                  paymentMethod: 'Đối soát công nợ',
+                  customerName: partnerFinal,
+                };
+
+                db.run(
+                  `INSERT INTO Debt (id, type, partnerName, amount, paidAmount, status, referenceId, description, dueDate, createdAt, updatedAt)
+                   VALUES (?, 'RECEIVABLE', ?, 0, ?, 'PAID', ?, ?, ?, ?, ?)`,
+                  [dsEntry.id, partnerFinal, finalDelta, dsCode, debtDescription, nowMs, nowMs, nowMs],
+                  () => {
+                    db.get(
+                      `SELECT * FROM debt_receivables WHERE entries_json LIKE ? OR code = ? LIMIT 1`,
+                      [`%${targetCode}%`, targetCode],
+                      (rErr, rRow) => {
+                        if (rRow) {
+                          let rEntries = [];
+                          try {
+                            rEntries = JSON.parse(rRow.entries_json || '[]');
+                          } catch {}
+                          rEntries.push(dsEntry);
+
+                          let billTotal = 0;
+                          let paymentTotal = 0;
+                          rEntries.forEach((e) => {
+                            const isP =
+                              e.isReconciliation ||
+                              e.type === 'reconciliation' ||
+                              e.type === 'payment' ||
+                              String(e.code || '').startsWith('DS-') ||
+                              String(e.code || '').startsWith('PT-');
+                            if (isP) paymentTotal += Number(e.paidAmount ?? e.contractValue ?? e.amount) || 0;
+                            else billTotal += Number(e.contractValue ?? e.totalAmount ?? e.amount) || 0;
+                          });
+
+                          const finalTot = billTotal > 0 ? billTotal : Number(rRow.total_amount) || 0;
+                          const finalP = Math.max(0, paymentTotal);
+                          const finalRem = Math.max(0, finalTot - finalP);
+                          const finalSt = finalRem <= 0 ? 'completed' : 'pending';
+                          const finalStLbl = finalRem <= 0 ? 'Đã thu hồi' : 'Chờ thu';
+
+                          db.run(
+                            `UPDATE debt_receivables SET total_amount = ?, paid_amount = ?, remaining_amount = ?, status = ?, status_label = ?, entries_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                            [finalTot, finalP, finalRem, finalSt, finalStLbl, JSON.stringify(rEntries), rRow.id],
+                            () => {
+                              res.json({
+                                success: true,
+                                message: `Đã đối soát thành công chứng từ ${entry.entry_number}. Tự động tạo chứng từ đối soát ${dsCode} liên kết với phiếu ${targetCode}.`,
+                                dsCode,
+                                delta: finalDelta,
+                                newAmount: finalAmount,
+                                statusLabel: 'Đã đối soát',
+                              });
+                            }
+                          );
+                        } else {
+                          res.json({
+                            success: true,
+                            message: `Đã đối soát thành công chứng từ ${entry.entry_number}. Tự động tạo chứng từ đối soát ${dsCode} liên kết với phiếu ${targetCode}.`,
+                            dsCode,
+                            delta: finalDelta,
+                            newAmount: finalAmount,
+                            statusLabel: 'Đã đối soát',
+                          });
+                        }
+                      }
+                    );
+                  }
+                );
+              }
+            }
+          );
+        } else {
+          // Không có chênh lệch hoặc không có mã phiếu liên kết
+          res.json({
+            success: true,
+            message: `Đã xác nhận đối soát khớp số liệu chứng từ ${entry.entry_number}`,
+            newAmount: finalAmount,
+            statusLabel: 'Đã đối soát',
+          });
+        }
+      }
+    );
   });
 });
 
@@ -4233,11 +4679,10 @@ router.get('/api/finance/cashflow-chart', (req, res) => {
                       }));
 
                     const maxValBillions = Math.max(
-                      2,
+                      0.5,
                       ...rawMonths.flatMap((m) => [m.inFlowRaw / 1e9, m.outFlowRaw / 1e9, m.netBalRaw / 1e9])
                     );
-                    const yScaleMax =
-                      maxValBillions <= 2 ? 2 : maxValBillions <= 5 ? 5 : maxValBillions <= 10 ? 10 : 20;
+                    const yScaleMax = getAdaptiveYScaleMax(maxValBillions);
 
                     const months = rawMonths.map((m) => {
                       const netBal = +(m.netBalRaw / 1e9).toFixed(3);

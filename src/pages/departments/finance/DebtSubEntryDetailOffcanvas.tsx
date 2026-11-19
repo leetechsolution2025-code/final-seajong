@@ -51,6 +51,69 @@ function formatNumberGroup(num?: number | string): string {
   return val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
+export function formatDebtDetailTitle(rawTitle?: string, entry?: any, partnerName?: string): string {
+  let text = String(rawTitle || entry?.title || entry?.note || '').trim();
+
+  // 1. Nếu có chứa [PAYMENT_LOGS]:
+  if (text.includes('[PAYMENT_LOGS]:')) {
+    const parts = text.split('[PAYMENT_LOGS]:');
+    const prefix = parts[0].trim();
+    const jsonPart = parts[1]?.trim() || '';
+    let noteFromLog = '';
+    if (jsonPart) {
+      try {
+        const logs = JSON.parse(jsonPart);
+        if (Array.isArray(logs) && logs.length > 0) {
+          noteFromLog = logs[0]?.note || logs[0]?.reason || '';
+        } else if (logs && typeof logs === 'object') {
+          noteFromLog = logs.note || logs.reason || '';
+        }
+      } catch {}
+    }
+    if (noteFromLog) {
+      text = noteFromLog;
+    } else if (prefix && !prefix.startsWith('[{') && !prefix.startsWith('{')) {
+      text = prefix;
+    }
+  }
+
+  // 2. Xử lý [RECON_META]:
+  if (text.includes('[RECON_META]:')) {
+    text = text.split('[RECON_META]:')[0].trim();
+  }
+
+  // 3. Xử lý trường hợp chuỗi là JSON thô
+  if (text.startsWith('[{') || text.startsWith('{"')) {
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.note) {
+        text = parsed[0].note;
+      } else if (parsed?.note) {
+        text = parsed.note;
+      }
+    } catch {}
+  }
+
+  const code = String(entry?.code || '');
+  if (!text || text.includes('[PAYMENT_LOGS]') || text.startsWith('[{') || text.startsWith('{"')) {
+    if (code.startsWith('PC-') || code.startsWith('UNC-') || code.startsWith('CHI-')) {
+      return `Chi trả tiền hàng cho ${partnerName || 'nhà cung cấp'}`;
+    }
+    if (code.startsWith('PT-') || code.startsWith('THU-')) {
+      return `Thu hồi tiền công nợ từ ${partnerName || 'khách hàng'}`;
+    }
+    if (code.startsWith('DS-')) {
+      return `Chứng từ đối soát công nợ (${code})`;
+    }
+    if (code.startsWith('DH-') || code.startsWith('PO-')) {
+      return `Đơn mua hàng ${code}`;
+    }
+    return partnerName ? `Khoản phát sinh công nợ - ${partnerName}` : 'Khoản phát sinh công nợ';
+  }
+
+  return text;
+}
+
 export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasProps> = ({
   isOpen,
   onClose,
@@ -165,9 +228,7 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
       : `Đơn mua hàng PO ${parent.poCode || parent.code}`
     : entry.code || '---';
 
-  const cleanTitle = (entry.title || entry.note || '')
-    .replace(new RegExp(`\\s*[-–—]\\s*${partnerName}.*$`, 'i'), '')
-    .trim();
+  const cleanTitle = formatDebtDetailTitle(entry.title || entry.note, entry, partnerName);
 
   const openReconcileForEntry = () => {
     const codeStr = String(entry.code || '');

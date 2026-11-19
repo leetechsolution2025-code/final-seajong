@@ -11,6 +11,7 @@ import {
   Trash,
   Check2Circle,
   Layers,
+  Eye,
 } from 'react-bootstrap-icons';
 import { Pagination } from '../../../components/common/Pagination';
 import { Button } from '../../../components/common/Button';
@@ -20,6 +21,7 @@ import { Select } from '../../../components/common/Select';
 import { TableToolbar } from '../../../components/common/TableToolbar';
 import { notifyFinanceUpdated, useFinanceRealtimeSync } from '../../../services/financeSyncService';
 import { getDefaultPeriod, getReportingPeriods, formatPeriodLabel, isDateInPeriod } from '../../../utils/periodUtils';
+import { JournalEntryDetailOffcanvas } from './JournalEntryDetailOffcanvas';
 
 export interface JournalLine {
   id: string;
@@ -201,6 +203,10 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
   // Modal in Sổ nhật ký chung
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const printAreaRef = useRef<HTMLDivElement>(null);
+
+  // Offcanvas Chi tiết chứng từ rộng 400px
+  const [selectedEntryForDetail, setSelectedEntryForDetail] = useState<JournalEntry | null>(null);
+  const [isDetailOffcanvasOpen, setIsDetailOffcanvasOpen] = useState(false);
 
   const toggleExpand = (id: string) => {
     setExpandedRowIds((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -879,6 +885,8 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
               <th className="hidden sm:table-cell" style={{ width: '105px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 10, fontSize: '0.71875rem' }}>
                 Phân hệ
               </th>
+              <th style={{ width: '44px', minWidth: '44px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 10, fontSize: '0.71875rem' }}>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -931,7 +939,16 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
                     {/* Số hiệu chứng từ và Tham chiếu */}
                     <td className="hidden sm:table-cell" style={{ whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', whiteSpace: 'nowrap' }}>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-primary)', whiteSpace: 'nowrap' }}>
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedEntryForDetail(entry);
+                            setIsDetailOffcanvasOpen(true);
+                          }}
+                          className="hover:underline cursor-pointer"
+                          style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-primary)', whiteSpace: 'nowrap' }}
+                          title="Nhấn để xem chi tiết chứng từ"
+                        >
                           {entry.entryNumber}
                         </span>
                         {entry.referenceCode && (
@@ -992,6 +1009,23 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
                     <td className="hidden sm:table-cell" style={{ textAlign: 'center' }}>
                       {getSourceBadge(entry.sourceModule)}
                     </td>
+
+                    {/* Icon eye vào cuối dòng có mã chứng từ */}
+                    <td style={{ textAlign: 'center', verticalAlign: 'middle', whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedEntryForDetail(entry);
+                          setIsDetailOffcanvasOpen(true);
+                        }}
+                        className="inline-flex items-center justify-center w-7 h-7 rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-200 transition-colors cursor-pointer"
+                        title="Xem chi tiết chứng từ"
+                        aria-label="Xem chi tiết chứng từ"
+                      >
+                        <Eye size={15} />
+                      </button>
+                    </td>
                   </tr>
 
                   {/* Các dòng hạch toán chi tiết (khi bung ra) */}
@@ -1027,7 +1061,7 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
                             <div className="sm:hidden flex items-center gap-1.5">
                               <span
                                 style={{
-                                  fontSize: '0.6875rem',
+                                   fontSize: '0.6875rem',
                                   fontWeight: 700,
                                   color: line.type === 'DEBIT' ? '#059669' : '#0284c7',
                                 }}
@@ -1058,6 +1092,7 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
                         <td className="hidden sm:table-cell" style={{ textAlign: 'center', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
                           {line.accountName}
                         </td>
+                        <td></td>
                       </tr>
                     ))}
                 </React.Fragment>
@@ -1067,7 +1102,7 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
             {paginatedEntries.length === 0 && (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={9}
                   style={{
                     textAlign: 'center',
                     padding: '48px 20px',
@@ -1650,6 +1685,18 @@ export const GeneralJournalView: React.FC<GeneralJournalViewProps> = ({ onShowTo
           </div>
         </div>
       )}
+
+      {/* 7. OFFCANVAS CHI TIẾT CHỨNG TỪ RỘNG 400PX */}
+      <JournalEntryDetailOffcanvas
+        isOpen={isDetailOffcanvasOpen}
+        onClose={() => {
+          setIsDetailOffcanvasOpen(false);
+          setSelectedEntryForDetail(null);
+        }}
+        entry={selectedEntryForDetail}
+        onShowToast={onShowToast}
+        onSuccess={fetchEntries}
+      />
     </div>
   );
 };

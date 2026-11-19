@@ -1665,15 +1665,35 @@ function PurchaseOrderDetailOffcanvas({
   const loadOrderDetail = useCallback(
     (orderId: string) => {
       setLoading(true);
-      fetch(`/api/plan-finance/purchasing/${orderId}`)
-        .then((r) => r.json())
-        .then((d) => {
+      Promise.all([
+        fetch(`/api/plan-finance/purchasing/${orderId}`).then((r) => r.json()),
+        fetch('/api/debts/payables').then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      ])
+        .then(([d, payables]) => {
           setDetail(d);
-          setCarrierId(d.carrierId ?? null);
-          setCarrierSearch(d.carrier?.name ?? '');
+          const cId = d.carrierId ?? null;
+          const cName = (d.carrier?.name ?? '').trim();
+          setCarrierId(cId);
+          setCarrierSearch(cName);
           setShippingFee(Number(d.shippingFee) || 0);
           setShippingDepot(d.shippingDepot ?? d.carrier?.address ?? '');
-          setCarrierDebt(Number(d.carrierDebt ?? d.carrier?.hanMucNo) || 0);
+
+          // Tra cứu công nợ thực tế từ debt_payables để luôn đồng bộ 100% với Sổ kế toán
+          const carrPayable = Array.isArray(payables)
+            ? payables.find(
+                (p: any) =>
+                  p.partnerType === 'transporter' &&
+                  cName &&
+                  (p.supplierName?.toLowerCase().includes(cName.toLowerCase()) ||
+                    cName.toLowerCase().includes(p.supplierName?.toLowerCase()))
+              )
+            : null;
+
+          const liveDebt = carrPayable
+            ? Number(carrPayable.remainingAmount)
+            : Number(d.carrierDebt ?? d.carrier?.hanMucNo) || 0;
+
+          setCarrierDebt(liveDebt);
         })
         .catch(() => setDetail(null))
         .finally(() => setLoading(false));
@@ -1740,7 +1760,14 @@ function PurchaseOrderDetailOffcanvas({
       const res = await fetch(`/api/plan-finance/purchasing/${order.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trangThai: status }),
+        body: JSON.stringify({
+          trangThai: status,
+          carrierId: carrierId,
+          carrierName: carrierSearch,
+          shippingFee: shippingFee,
+          shippingDepot: shippingDepot,
+          carrierDebt: carrierDebt,
+        }),
       });
       if (res.ok) {
         const updated = await res.json();

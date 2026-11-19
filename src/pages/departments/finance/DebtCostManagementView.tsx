@@ -53,7 +53,7 @@ import { PaymentVoucherPrintModal } from './PaymentVoucherPrintModal';
 import { ReceiptVoucherPrintModal, type ReceiptVoucherData } from './ReceiptVoucherPrintModal';
 import { DebtAgingConfigOffcanvas, type DebtAgingConfig, DEFAULT_DEBT_AGING_CONFIG } from './DebtAgingConfigOffcanvas';
 import { DebtCostReportPrintModal } from './DebtCostReportPrintModal';
-import { DebtSubEntryDetailOffcanvas } from './DebtSubEntryDetailOffcanvas';
+import { DebtSubEntryDetailOffcanvas, formatDebtDetailTitle } from './DebtSubEntryDetailOffcanvas';
 import type { TickerItem } from '../../../components/layout/DynamicTicker';
 import { useAuth } from '../../../context/AuthContext';
 
@@ -4497,7 +4497,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                             ) : null}
                                           </div>
                                           <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '2px', fontWeight: 500 }}>
-                                            {entry.title}
+                                            {formatDebtDetailTitle(entry.title || (entry as any).note, entry, item.customerName)}
                                           </div>
                                         </td>
 
@@ -5244,12 +5244,13 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                 const rawPaidVal = Number(entry.paidAmount ?? entry.totalAmount) || 0;
                                 const custName = (entry as any).customerName || '';
                                 const custAddr = (entry as any).customerAddress || '';
+                                const rawTitleClean = formatDebtDetailTitle(entry.title || (entry as any).note, entry, item.supplierName);
                                 const baseEntryTitle = isTransporter
-                                  ? String(entry.title || '')
+                                  ? rawTitleClean
                                     .replace(/đơn mua hàng/gi, 'đơn hàng')
                                     .split(' • Khách hàng:')[0]
                                     .trim()
-                                  : entry.title;
+                                  : rawTitleClean;
 
                                 return (
                                   <tr
