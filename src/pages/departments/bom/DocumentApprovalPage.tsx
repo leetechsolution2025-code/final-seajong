@@ -9,6 +9,91 @@ export interface DocumentApprovalPageProps {
   onShowToast?: (type: 'success' | 'error' | 'warning' | 'info', title: string, message: string) => void;
 }
 
+const normalizeDepartmentName = (rawDept?: string, entityType = '', entityCode = ''): string => {
+  const d = String(rawDept || '').trim().toLowerCase();
+  const ent = String(entityType || '').toLowerCase();
+  const code = String(entityCode || '').toUpperCase();
+
+  if (d.includes('kho') || d.includes('vận') || d.includes('logistics')) {
+    return 'Phòng Kho vận & Logistics';
+  }
+  if (d.includes('sản xuất') || d.includes('production')) {
+    return 'Phòng Sản xuất';
+  }
+  if (d.includes('kỹ thuật') || d.includes('r&d')) {
+    return 'Phòng Kỹ thuật & R&D';
+  }
+  if (d.includes('mua') || d.includes('cung ứng') || d.includes('vật tư') || d.includes('purchase')) {
+    return 'Phòng Mua hàng & Cung ứng';
+  }
+  if (d.includes('kế toán') || d.includes('tài chính') || d.includes('finance') || d.includes('thu chi')) {
+    return 'Phòng Tài chính – Kế toán';
+  }
+  if (d.includes('kinh doanh') || d.includes('sales') || d.includes('thị trường') || d.includes('bán hàng')) {
+    return 'Phòng Kinh doanh';
+  }
+  if (d.includes('marketing') || d.includes('mkt') || d.includes('truyền thông')) {
+    return 'Phòng Marketing';
+  }
+  if (d.includes('nhân sự') || d.includes('hành chính') || d.includes('hr') || d.includes('nội vụ')) {
+    return 'Phòng Hành chính – Nhân sự';
+  }
+  if (d.includes('chất lượng') || d.includes('qa') || d.includes('qc')) {
+    return 'Phòng Đảm bảo chất lượng (QA/QC)';
+  }
+  if (d.includes('giám đốc') || d.includes('ban lãnh đạo') || d.includes('board')) {
+    return 'Ban Giám đốc';
+  }
+
+  if (ent.includes('purchase') || code.startsWith('DH-') || code.startsWith('PO-') || code.startsWith('YCMH-')) {
+    return 'Phòng Mua hàng & Cung ứng';
+  }
+  if (ent.includes('production') || code.startsWith('LSX-')) {
+    return 'Phòng Sản xuất';
+  }
+  if (ent.includes('marketing') || code.startsWith('DX-MKT-')) {
+    return 'Phòng Marketing';
+  }
+  if (ent.includes('expense') || ent.includes('payable') || ent.includes('chi') || ent.includes('payment')) {
+    return 'Phòng Tài chính – Kế toán';
+  }
+
+  if (rawDept && !rawDept.includes('Phòng ban Seajong') && rawDept !== 'None' && rawDept !== 'null') {
+    return rawDept.startsWith('Phòng') ? rawDept : `Phòng ${rawDept}`;
+  }
+
+  return 'Phòng Hành chính – Nhân sự';
+};
+
+const normalizeSubmitterName = (rawName?: string, meta: any = {}, entityType = '', entityCode = ''): string => {
+  let name = String(rawName || '').trim();
+  name = name.replace(/\s*\([^)]*\)$/, '').trim();
+
+  const metaName = meta?.employeeName || meta?.fullName || meta?.applicantName || meta?.proposer || meta?.bankAccountName;
+  if (metaName && typeof metaName === 'string' && metaName.trim()) {
+    const cleanMeta = metaName.replace(/\s*\([^)]*\)$/, '').trim();
+    if (cleanMeta && cleanMeta !== 'Cán bộ Seajong' && cleanMeta !== 'Lê Công Vụ') {
+      name = cleanMeta;
+    }
+  }
+
+  const ent = String(entityType || '').toLowerCase();
+  const code = String(entityCode || '').toUpperCase();
+  if (ent.includes('purchase') || code.startsWith('DH-') || code.startsWith('PO-')) {
+    if (!name || name === 'Cán bộ Seajong' || name === 'Lê Công Vụ') {
+      name = meta?.creatorName || meta?.nguoiYeuCau || 'Nguyễn Thu Huyền (Phụ trách Mua hàng)';
+    }
+  }
+
+  if (!name || name === 'Cán bộ Seajong') {
+    if (meta?.bankAccountName) return meta.bankAccountName;
+    if (meta?.employeeName) return meta.employeeName;
+    return 'Cán bộ phụ trách nghiệp vụ';
+  }
+
+  return name;
+};
+
 const mapDbApprovalToDocument = (row: any, idx: number): ApprovalDocument => {
   let meta: any = {};
   try {
@@ -73,14 +158,26 @@ const mapDbApprovalToDocument = (row: any, idx: number): ApprovalDocument => {
       ? String(row.rejectedReason || meta?.rejectedReason || meta?.rejectionReason || row.note || meta?.note || 'Giám đốc từ chối phê duyệt').trim()
       : undefined;
 
+  const stdDepartment = normalizeDepartmentName(
+    row.department || meta?.departmentName || meta?.department,
+    entityType,
+    row.entityCode || row.id
+  );
+  const stdSubmitter = normalizeSubmitterName(
+    row.requestedByName,
+    meta,
+    entityType,
+    row.entityCode || row.id
+  );
+
   return {
     id: String(row.id || `APR-${idx + 1}`),
     code: String(row.entityCode || meta?.personalRequestId || `TT-${String(idx + 1).padStart(4, '0')}`),
     title: String(row.entityTitle || 'Tờ trình phê duyệt hồ sơ'),
     docType,
     docTypeName,
-    department: String(row.department || meta?.departmentName || (entityType.includes('purchase') ? 'Phòng Mua hàng' : entityType.includes('expense') || entityType.includes('payment') ? 'Phòng Tài chính – Kế toán' : 'Phòng ban Seajong')),
-    submitter: String(row.requestedByName || meta?.employeeName || 'Cán bộ Seajong'),
+    department: stdDepartment,
+    submitter: stdSubmitter,
     submitterRole: String(meta?.position || 'Nhân sự trình duyệt'),
     submitDate: createdDate,
     createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : undefined,

@@ -14906,6 +14906,93 @@ app.get('/api/production/products', async (req, res) => {
 });
 
 // ── GET & PATCH /api/approval-requests & /api/approval-documents (Trung tâm phê duyệt) ──
+const normalizeDepartmentName = (rawDept, entityType = '', entityCode = '') => {
+  const d = String(rawDept || '').trim().toLowerCase();
+  const ent = String(entityType || '').toLowerCase();
+  const code = String(entityCode || '').toUpperCase();
+
+  if (d.includes('kho') || d.includes('vận') || d.includes('logistics')) {
+    return 'Phòng Kho vận & Logistics';
+  }
+  if (d.includes('sản xuất') || d.includes('production')) {
+    return 'Phòng Sản xuất';
+  }
+  if (d.includes('kỹ thuật') || d.includes('r&d')) {
+    return 'Phòng Kỹ thuật & R&D';
+  }
+  if (d.includes('mua') || d.includes('cung ứng') || d.includes('vật tư') || d.includes('purchase')) {
+    return 'Phòng Mua hàng & Cung ứng';
+  }
+  if (d.includes('kế toán') || d.includes('tài chính') || d.includes('finance') || d.includes('thu chi')) {
+    return 'Phòng Tài chính – Kế toán';
+  }
+  if (d.includes('kinh doanh') || d.includes('sales') || d.includes('thị trường') || d.includes('bán hàng')) {
+    return 'Phòng Kinh doanh';
+  }
+  if (d.includes('marketing') || d.includes('mkt') || d.includes('truyền thông')) {
+    return 'Phòng Marketing';
+  }
+  if (d.includes('nhân sự') || d.includes('hành chính') || d.includes('hr') || d.includes('nội vụ')) {
+    return 'Phòng Hành chính – Nhân sự';
+  }
+  if (d.includes('chất lượng') || d.includes('qa') || d.includes('qc')) {
+    return 'Phòng Đảm bảo chất lượng (QA/QC)';
+  }
+  if (d.includes('giám đốc') || d.includes('ban lãnh đạo') || d.includes('board')) {
+    return 'Ban Giám đốc';
+  }
+
+  // Suy luận từ entityType / entityCode nếu rawDept không xác định hoặc generic
+  if (ent.includes('purchase') || code.startsWith('DH-') || code.startsWith('PO-') || code.startsWith('YCMH-')) {
+    return 'Phòng Mua hàng & Cung ứng';
+  }
+  if (ent.includes('production') || code.startsWith('LSX-')) {
+    return 'Phòng Sản xuất';
+  }
+  if (ent.includes('marketing') || code.startsWith('DX-MKT-')) {
+    return 'Phòng Marketing';
+  }
+  if (ent.includes('expense') || ent.includes('payable') || ent.includes('chi') || ent.includes('payment')) {
+    return 'Phòng Tài chính – Kế toán';
+  }
+
+  if (rawDept && !rawDept.includes('Phòng ban Seajong') && rawDept !== 'None' && rawDept !== 'null') {
+    return rawDept.startsWith('Phòng') ? rawDept : `Phòng ${rawDept}`;
+  }
+
+  return 'Phòng Hành chính – Nhân sự';
+};
+
+const normalizeSubmitterName = (rawName, meta = {}, entityType = '', entityCode = '') => {
+  let name = String(rawName || '').trim();
+  // Loại bỏ các đoạn thừa như "(Phòng Nhân sự)", "(Trình bởi: ...)"
+  name = name.replace(/\s*\([^)]*\)$/, '').trim();
+
+  const metaName = meta?.employeeName || meta?.fullName || meta?.applicantName || meta?.proposer || meta?.bankAccountName;
+  if (metaName && typeof metaName === 'string' && metaName.trim()) {
+    const cleanMeta = metaName.replace(/\s*\([^)]*\)$/, '').trim();
+    if (cleanMeta && cleanMeta !== 'Cán bộ Seajong' && cleanMeta !== 'Lê Công Vụ') {
+      name = cleanMeta;
+    }
+  }
+
+  const ent = String(entityType || '').toLowerCase();
+  const code = String(entityCode || '').toUpperCase();
+  if (ent.includes('purchase') || code.startsWith('DH-') || code.startsWith('PO-')) {
+    if (!name || name === 'Cán bộ Seajong' || name === 'Lê Công Vụ') {
+      name = meta?.creatorName || meta?.nguoiYeuCau || 'Nguyễn Thu Huyền (Phụ trách Mua hàng)';
+    }
+  }
+
+  if (!name || name === 'Cán bộ Seajong') {
+    if (meta?.bankAccountName) return meta.bankAccountName;
+    if (meta?.employeeName) return meta.employeeName;
+    return 'Cán bộ phụ trách nghiệp vụ';
+  }
+
+  return name;
+};
+
 const mapApprovalRequestToDoc = (row, idx = 0) => {
   let meta = {};
   try {
@@ -14957,22 +15044,26 @@ const mapApprovalRequestToDoc = (row, idx = 0) => {
     row.entityTitle ||
     'Hồ sơ trình Ban Giám đốc phê duyệt từ hệ thống CSDL Seajong.';
 
+  const stdDepartment = normalizeDepartmentName(
+    row.department || meta?.departmentName || meta?.department,
+    entityType,
+    row.entityCode || row.id
+  );
+  const stdSubmitter = normalizeSubmitterName(
+    row.requestedByName,
+    meta,
+    entityType,
+    row.entityCode || row.id
+  );
+
   return {
     id: String(row.id || `APR-${idx + 1}`),
     code: String(row.entityCode || meta?.personalRequestId || `TT-${String(idx + 1).padStart(4, '0')}`),
     title: String(row.entityTitle || 'Tờ trình phê duyệt hồ sơ'),
     docType,
     docTypeName,
-    department: String(
-      row.department ||
-      meta?.departmentName ||
-      (entityType.includes('purchase')
-        ? 'Phòng Mua hàng'
-        : entityType.includes('expense') || entityType.includes('payment')
-          ? 'Phòng Tài chính – Kế toán'
-          : 'Phòng ban Seajong')
-    ),
-    submitter: String(row.requestedByName || meta?.employeeName || 'Cán bộ Seajong'),
+    department: stdDepartment,
+    submitter: stdSubmitter,
     submitterRole: String(meta?.position || 'Kế toán viên'),
     submitDate: createdDate,
     value: rawVal,
@@ -15040,6 +15131,13 @@ app.get('/api/approval-requests', async (req, res) => {
       const advAmt = Number(details.advanceAmount || details.amount || 0);
       const approvedAmt = Number(details.approvedAmount || advAmt || 0);
       const prStatus = String(pr.status || 'pending').toLowerCase();
+
+      const rawEmpName = pr.employee?.fullName || pr.employee?.name || details.applicantName || details.proposer || details.bankAccountName || '';
+      const rawDeptName = pr.employee?.departmentName || pr.employee?.department || details.department || details.departmentName || '';
+
+      const stdDept = normalizeDepartmentName(rawDeptName, 'advance_payment', prCode);
+      const stdSubmitter = normalizeSubmitterName(rawEmpName, details, 'advance_payment', prCode);
+
       const mappedPr = {
         id: pr.id,
         entityType: 'advance_payment',
@@ -15049,9 +15147,9 @@ app.get('/api/approval-requests', async (req, res) => {
         status: prStatus === 'approved' ? 'approved' : prStatus === 'rejected' ? 'rejected' : 'pending',
         priority: details.priority === 'urgent' ? 'urgent' : details.priority === 'high' ? 'high' : 'normal',
         dueDate: details.advanceDueDate || details.deadlineRefund || '',
-        department: pr.employee?.department || details.department || 'Phòng ban Seajong',
+        department: stdDept,
         requestedById: pr.employeeId || '',
-        requestedByName: pr.employee?.name || details.applicantName || 'Cán bộ Seajong',
+        requestedByName: stdSubmitter,
         approverId: details.approver || 'Lãnh đạo phê duyệt',
         createdAt: pr.createdAt,
         updatedAt: pr.updatedAt,
@@ -15063,8 +15161,9 @@ app.get('/api/approval-requests', async (req, res) => {
           amount: advAmt,
           approvedAmount: prStatus === 'approved' ? approvedAmt : undefined,
           loaiText: 'Yêu cầu tạm ứng nhân viên',
-          proposer: pr.employee?.name || details.applicantName || 'Cán bộ Seajong',
-          departmentName: pr.employee?.department || details.department || 'Phòng ban Seajong',
+          employeeName: stdSubmitter,
+          proposer: stdSubmitter,
+          departmentName: stdDept,
           reason: details.advancePurpose || details.content || pr.reason,
           paymentMethod: details.paymentMethod || 'bank_transfer',
           bankName: details.bankName,
@@ -15090,7 +15189,9 @@ app.post(['/api/approval-requests', '/api/approval-documents'], async (req, res)
     const entityType = b.entityType || 'PAYMENT_REQUEST';
     const entityCode = b.entityCode || b.code || `YCCHI-${Date.now().toString().slice(-6)}`;
     const entityTitle = b.entityTitle || b.title || 'Yêu cầu chi tiền thanh toán';
-    const department = b.department || 'Phòng Tài chính – Kế toán';
+    const amount = Number(b.amount || b.value || 0);
+    const meta = typeof b.metadata === 'object' ? b.metadata : (b.metadata ? JSON.parse(b.metadata) : {});
+    const department = normalizeDepartmentName(b.department, entityType, entityCode);
     let requestedByName = b.requestedByName || b.submitter || '';
     if (!requestedByName) {
       const authUid = await resolveCurrentAuthUserId(req);
@@ -15099,9 +15200,7 @@ app.post(['/api/approval-requests', '/api/approval-documents'], async (req, res)
         if (authUser?.name) requestedByName = authUser.name;
       }
     }
-    if (!requestedByName) requestedByName = 'Kế toán thanh toán';
-    const amount = Number(b.amount || b.value || 0);
-    const meta = typeof b.metadata === 'object' ? b.metadata : (b.metadata ? JSON.parse(b.metadata) : {});
+    requestedByName = normalizeSubmitterName(requestedByName, meta, entityType, entityCode);
 
     // Tìm một user kế toán/nhân viên (không phải Giám đốc) để làm người tạo tờ trình, đảm bảo Giám đốc luôn nhận được thông báo
     const senderUser = await prisma.user.findFirst({
