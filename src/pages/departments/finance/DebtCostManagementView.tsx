@@ -31,6 +31,7 @@ import {
   BagCheck,
   CreditCard,
   Gear,
+  LockFill,
 } from 'react-bootstrap-icons';
 import {
   TableToolbar,
@@ -2573,13 +2574,13 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     setReconcileModalOpen(true);
   };
 
-  // 3. Đề nghị thanh toán
-  const handleSendPaymentRequest = (item: ReceivableItem) => {
+  // 3. Đề nghị thanh toán (Đã khóa chức năng)
+  const handleSendPaymentRequest = (_item: ReceivableItem) => {
     if (onShowToast) {
       onShowToast(
-        'success',
-        'Đề nghị thanh toán',
-        `Đã phát hành và gửi giấy đề nghị thanh toán số ${item.code} đến ${item.customerName}`
+        'warning',
+        'Chức năng đã khóa',
+        'Chức năng Đề nghị thanh toán hiện đang tạm khóa theo quy chế quản trị tài chính.'
       );
     }
   };
@@ -2792,12 +2793,12 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
       .catch(() => { });
   };
 
-  const handleSendPayablePaymentRequest = (item: PayableItem) => {
+  const handleSendPayablePaymentRequest = (_item: PayableItem) => {
     if (onShowToast) {
       onShowToast(
-        'success',
-        'Đề xuất duyệt chi',
-        `Đã tạo phiếu đề xuất duyệt chi cho đơn hàng ${item.poCode} của ${item.supplierName}`
+        'warning',
+        'Chức năng đã khóa',
+        'Chức năng Đề nghị thanh toán hiện đang tạm khóa theo quy chế quản trị tài chính.'
       );
     }
   };
@@ -4253,32 +4254,35 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                           <span>Đối chiếu công nợ</span>
                                         </button>
 
-                                        {/* 4. Đề nghị thanh toán */}
+                                        {/* 4. Đề nghị thanh toán (Đã khóa chức năng) */}
                                         <button
                                           type="button"
-                                          onClick={() => {
-                                            setActiveRowMenuId(null);
-                                            handleSendPaymentRequest(item);
-                                          }}
+                                          disabled
+                                          title="Chức năng Đề nghị thanh toán hiện đang tạm khóa"
                                           style={{
                                             display: 'flex',
                                             alignItems: 'center',
+                                            justifyContent: 'space-between',
                                             gap: '10px',
                                             padding: '9px 14px',
                                             background: 'none',
                                             border: 'none',
                                             fontSize: '0.8125rem',
                                             fontWeight: 500,
-                                            color: '#334155',
-                                            cursor: 'pointer',
+                                            color: '#94a3b8',
+                                            cursor: 'not-allowed',
                                             width: '100%',
                                             textAlign: 'left',
+                                            opacity: 0.65,
                                           }}
-                                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                                         >
-                                          <Send size={14} style={{ color: '#64748b' }} />
-                                          <span>Đề nghị thanh toán</span>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <LockFill size={13} style={{ color: '#94a3b8' }} />
+                                            <span>Đề nghị thanh toán</span>
+                                          </div>
+                                          <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#64748b', backgroundColor: '#f1f5f9', border: '1px solid #e2e8f0', padding: '1px 5px', borderRadius: '4px' }}>
+                                            Đã khóa
+                                          </span>
                                         </button>
 
                                         {/* Đường phân cách rõ nét phía trên chức năng Chỉnh sửa thông tin */}
@@ -5122,32 +5126,35 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                           <span>Đối chiếu công nợ</span>
                                         </button>
 
-                                        {/* 3. Đề nghị thanh toán */}
+                                        {/* 3. Đề nghị thanh toán (Đã khóa chức năng) */}
                                         <button
                                           type="button"
-                                          onClick={() => {
-                                            setActiveRowMenuId(null);
-                                            handleSendPayablePaymentRequest(item);
-                                          }}
+                                          disabled
+                                          title="Chức năng Đề nghị thanh toán hiện đang tạm khóa"
                                           style={{
                                             display: 'flex',
                                             alignItems: 'center',
+                                            justifyContent: 'space-between',
                                             gap: '10px',
                                             padding: '9px 14px',
                                             background: 'none',
                                             border: 'none',
                                             fontSize: '0.8125rem',
                                             fontWeight: 500,
-                                            color: '#334155',
-                                            cursor: 'pointer',
+                                            color: '#94a3b8',
+                                            cursor: 'not-allowed',
                                             width: '100%',
                                             textAlign: 'left',
+                                            opacity: 0.65,
                                           }}
-                                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                                         >
-                                          <Send size={14} style={{ color: '#64748b' }} />
-                                          <span>Đề nghị thanh toán</span>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <LockFill size={13} style={{ color: '#94a3b8' }} />
+                                            <span>Đề nghị thanh toán</span>
+                                          </div>
+                                          <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#64748b', backgroundColor: '#f1f5f9', border: '1px solid #e2e8f0', padding: '1px 5px', borderRadius: '4px' }}>
+                                            Đã khóa
+                                          </span>
                                         </button>
 
                                         {/* Đường phân cách rõ nét phía trên chức năng Chỉnh sửa thông tin */}
