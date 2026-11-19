@@ -535,6 +535,11 @@ export const DataManagementPage: React.FC = () => {
           body: file,
         }
       );
+      if (res.status === 413) {
+        setRestoreDrawerOpen(false);
+        error('File quá lớn', 'Dung lượng file (.db) vượt quá giới hạn tải lên của máy chủ');
+        return;
+      }
       const data = await res.json().catch(() => ({}));
       if (res.ok && Array.isArray(data.tables)) {
         const tbls: DbTableItem[] = data.tables;
@@ -548,11 +553,11 @@ export const DataManagementPage: React.FC = () => {
         setSelectedTables(new Set(tbls.map((t) => t.name)));
       } else {
         setRestoreDrawerOpen(false);
-        error('Lỗi tải file', data.error || 'Không thể đọc cấu trúc bảng của file .db');
+        error('Lỗi tải file', data.error || `Không thể đọc cấu trúc bảng của file .db (Mã phản hồi: ${res.status})`);
       }
     } catch {
       setRestoreDrawerOpen(false);
-      error('Lỗi hệ thống', 'Không thể tải file .db lên máy chủ');
+      error('Lỗi hệ thống', 'Không thể kết nối máy chủ để tải file .db');
     } finally {
       setInspectingTables(false);
     }
@@ -567,6 +572,7 @@ export const DataManagementPage: React.FC = () => {
     }
     setRestoreDrawerOpen(false);
     setRestoreTarget(null);
+    setInspectingTables(false);
   };
 
   const executeRestoreSelectedTables = async () => {

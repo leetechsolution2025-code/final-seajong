@@ -156,7 +156,8 @@ server {
     listen 80;
     server_name ${DOMAIN};
 
-    client_max_body_size 50M;
+    client_max_body_size 500M;
+    client_body_timeout 300s;
 
     location / {
         proxy_pass http://127.0.0.1:${PORT};
