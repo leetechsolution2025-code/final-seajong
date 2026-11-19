@@ -157,7 +157,10 @@ server {
     server_name ${DOMAIN};
 
     client_max_body_size 500M;
-    client_body_timeout 300s;
+    client_body_timeout 600s;
+    client_header_timeout 600s;
+    keepalive_timeout 600s;
+    send_timeout 600s;
 
     location / {
         proxy_pass http://127.0.0.1:${PORT};
@@ -169,7 +172,8 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_cache_bypass \$http_upgrade;
-        proxy_read_timeout 300s;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
         proxy_connect_timeout 75s;
     }
 }

@@ -33400,16 +33400,23 @@ async function inspectSqliteDatabaseTables(sourceDbPath) {
     );
 
     const tables = [];
-    for (const row of rawTables) {
-      const tblName = String(row.name);
-      const safeTbl = tblName.replace(/"/g, '""');
-      const countRow = await getSql(`SELECT COUNT(*) AS cnt FROM "${safeTbl}"`).catch(() => ({ cnt: 0 }));
-      const isReady = mainTableSet.has(tblName) || READY_SYSTEM_TABLES.has(tblName);
-      tables.push({
-        name: tblName,
-        rowCount: Number(countRow?.cnt || 0),
-        isReady,
-      });
+    const BATCH_SIZE = 15;
+    for (let i = 0; i < rawTables.length; i += BATCH_SIZE) {
+      const chunk = rawTables.slice(i, i + BATCH_SIZE);
+      const chunkResults = await Promise.all(
+        chunk.map(async (row) => {
+          const tblName = String(row.name);
+          const safeTbl = tblName.replace(/"/g, '""');
+          const countRow = await getSql(`SELECT COUNT(*) AS cnt FROM "${safeTbl}"`).catch(() => ({ cnt: 0 }));
+          const isReady = mainTableSet.has(tblName) || READY_SYSTEM_TABLES.has(tblName);
+          return {
+            name: tblName,
+            rowCount: Number(countRow?.cnt || 0),
+            isReady,
+          };
+        })
+      );
+      tables.push(...chunkResults);
     }
 
     // Sắp xếp các bảng có dữ liệu lên trước, sau đó theo bảng chữ cái
@@ -33810,12 +33817,28 @@ app.post('/api/board/data/inspect-upload', async (req, res) => {
       : uploadedFilename;
     const uploadedFilePath = path.join(BACKUP_DIR, finalFileName);
 
+    console.log(`[Data Backup] Bắt đầu nhận tải file: ${cleanOrig} (Lưu thành: ${finalFileName})...`);
+    const startTime = Date.now();
+
     await new Promise((resolve, reject) => {
       const writeStream = fs.createWriteStream(uploadedFilePath);
       req.pipe(writeStream);
       writeStream.on('finish', resolve);
-      writeStream.on('error', reject);
-      req.on('error', reject);
+      writeStream.on('error', (err) => {
+        writeStream.destroy();
+        if (fs.existsSync(uploadedFilePath)) fs.unlinkSync(uploadedFilePath);
+        reject(err);
+      });
+      req.on('error', (err) => {
+        writeStream.destroy();
+        if (fs.existsSync(uploadedFilePath)) fs.unlinkSync(uploadedFilePath);
+        reject(err);
+      });
+      req.on('aborted', () => {
+        writeStream.destroy();
+        if (fs.existsSync(uploadedFilePath)) fs.unlinkSync(uploadedFilePath);
+        reject(new Error('Người dùng đã hủy quá trình tải file'));
+      });
     });
 
     if (!verifySqliteHeader(uploadedFilePath)) {
@@ -33826,7 +33849,11 @@ app.post('/api/board/data/inspect-upload', async (req, res) => {
     }
 
     const stats = fs.statSync(uploadedFilePath);
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[Data Backup] Đã lưu xong file ${finalFileName} (${formatFileSizeBytes(stats.size)}) sau ${duration}s. Đang phân tích danh sách bảng...`);
+
     const tables = await inspectSqliteDatabaseTables(uploadedFilePath);
+    console.log(`[Data Backup] Phân tích hoàn tất: tìm thấy ${tables.length} bảng.`);
 
     res.json({
       success: true,

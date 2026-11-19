@@ -291,6 +291,15 @@ export const DataManagementPage: React.FC = () => {
   const [tableSearchQuery, setTableSearchQuery] = useState<string>('');
   const [onlyNonEmptyTables, setOnlyNonEmptyTables] = useState<boolean>(false);
 
+  // Tiến độ tải lên file .db (Progress Bar thời gian thực)
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [uploadSpeed, setUploadSpeed] = useState<string>('');
+  const [uploadLoadedBytes, setUploadLoadedBytes] = useState<number>(0);
+  const [uploadTotalBytes, setUploadTotalBytes] = useState<number>(0);
+  const [uploadPhase, setUploadPhase] = useState<'uploading' | 'inspecting' | 'idle'>('idle');
+  const uploadXhrRef = useRef<XMLHttpRequest | null>(null);
+  const uploadStartTimeRef = useRef<number>(0);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
@@ -505,8 +514,8 @@ export const DataManagementPage: React.FC = () => {
     fileInputRef.current?.click();
   };
 
-  // Khi người dùng chọn file .db từ máy: Tải file lên & mở ngay Offcanvas 400px chọn bảng cần thay thế
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Khi người dùng chọn file .db từ máy: Tải file lên với thanh tiến độ thời gian thực & mở ngay Offcanvas 400px
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
@@ -517,54 +526,120 @@ export const DataManagementPage: React.FC = () => {
       return;
     }
 
-    try {
-      setRestoreDrawerOpen(true);
-      setInspectingTables(true);
-      setTableSearchQuery('');
-      setOnlyNonEmptyTables(false);
-      setRestoreTarget(null);
+    // Hủy kết nối upload cũ nếu có
+    if (uploadXhrRef.current) {
+      uploadXhrRef.current.abort();
+      uploadXhrRef.current = null;
+    }
 
-      const res = await fetch(
-        `/api/board/data/inspect-upload?filename=${encodeURIComponent(file.name)}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/octet-stream',
-            'X-File-Name': encodeURIComponent(file.name),
-          },
-          body: file,
+    setRestoreDrawerOpen(true);
+    setInspectingTables(true);
+    setUploadPhase('uploading');
+    setUploadProgress(0);
+    setUploadSpeed('Đang bắt đầu...');
+    setUploadLoadedBytes(0);
+    setUploadTotalBytes(file.size);
+    setTableSearchQuery('');
+    setOnlyNonEmptyTables(false);
+    setRestoreTarget(null);
+
+    uploadStartTimeRef.current = Date.now();
+
+    const xhr = new XMLHttpRequest();
+    uploadXhrRef.current = xhr;
+
+    xhr.upload.onprogress = (evt) => {
+      if (evt.lengthComputable) {
+        const percent = Math.min(100, Math.round((evt.loaded / evt.total) * 100));
+        setUploadProgress(percent);
+        setUploadLoadedBytes(evt.loaded);
+        setUploadTotalBytes(evt.total);
+
+        const elapsedSec = (Date.now() - uploadStartTimeRef.current) / 1000;
+        if (elapsedSec > 0.4) {
+          const speedBytesPerSec = evt.loaded / elapsedSec;
+          const speedMB = (speedBytesPerSec / (1024 * 1024)).toFixed(2);
+          const remainingSec = Math.max(0, Math.round((evt.total - evt.loaded) / speedBytesPerSec));
+          setUploadSpeed(`${speedMB} MB/s (Còn ~${remainingSec}s)`);
         }
-      );
-      if (res.status === 413) {
-        setRestoreDrawerOpen(false);
-        error('File quá lớn', 'Dung lượng file (.db) vượt quá giới hạn tải lên của máy chủ');
-        return;
+
+        if (percent >= 100) {
+          setUploadPhase('inspecting');
+        }
       }
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && Array.isArray(data.tables)) {
-        const tbls: DbTableItem[] = data.tables;
-        setRestoreTarget({
-          filename: data.filename || file.name,
-          displayFilename: data.displayFilename || file.name,
-          isStaged: true,
-          size: data.size || `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-          tables: tbls,
-        });
-        setSelectedTables(new Set(tbls.map((t) => t.name)));
+    };
+
+    xhr.onload = async () => {
+      uploadXhrRef.current = null;
+      if (xhr.status === 200) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (Array.isArray(data.tables)) {
+            const tbls: DbTableItem[] = data.tables;
+            setRestoreTarget({
+              filename: data.filename || file.name,
+              displayFilename: data.displayFilename || file.name,
+              isStaged: true,
+              size: data.size || `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+              tables: tbls,
+            });
+            setSelectedTables(new Set(tbls.map((t) => t.name)));
+            setUploadPhase('idle');
+            setInspectingTables(false);
+            // Tự động làm mới danh sách sao lưu
+            fetchBackups(true);
+            return;
+          }
+        } catch {}
+        setRestoreDrawerOpen(false);
+        setInspectingTables(false);
+        setUploadPhase('idle');
+        error('Lỗi định dạng', 'Không thể đọc danh sách bảng từ phản hồi máy chủ');
+      } else if (xhr.status === 413) {
+        setRestoreDrawerOpen(false);
+        setInspectingTables(false);
+        setUploadPhase('idle');
+        error('File quá lớn', 'Dung lượng file (.db) vượt quá giới hạn cấu hình của máy chủ');
       } else {
         setRestoreDrawerOpen(false);
-        error('Lỗi tải file', data.error || `Không thể đọc cấu trúc bảng của file .db (Mã phản hồi: ${res.status})`);
+        setInspectingTables(false);
+        setUploadPhase('idle');
+        let errMsg = `Không thể tải file lên máy chủ (Mã phản hồi: ${xhr.status})`;
+        try {
+          const errData = JSON.parse(xhr.responseText);
+          if (errData.error) errMsg = errData.error;
+        } catch {}
+        error('Lỗi tải file', errMsg);
       }
-    } catch {
+    };
+
+    xhr.onerror = () => {
+      uploadXhrRef.current = null;
       setRestoreDrawerOpen(false);
-      error('Lỗi hệ thống', 'Không thể kết nối máy chủ để tải file .db');
-    } finally {
       setInspectingTables(false);
-    }
+      setUploadPhase('idle');
+      error('Lỗi kết nối', 'Không thể kết nối máy chủ để tải file .db');
+    };
+
+    xhr.onabort = () => {
+      uploadXhrRef.current = null;
+      setInspectingTables(false);
+      setUploadPhase('idle');
+    };
+
+    const targetUrl = `/api/board/data/inspect-upload?filename=${encodeURIComponent(file.name)}`;
+    xhr.open('POST', targetUrl, true);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.setRequestHeader('X-File-Name', encodeURIComponent(file.name));
+    xhr.send(file);
   };
 
   const handleCancelRestoreDrawer = () => {
     if (busy) return;
+    if (uploadXhrRef.current) {
+      uploadXhrRef.current.abort();
+      uploadXhrRef.current = null;
+    }
     if (restoreTarget?.isStaged && restoreTarget.filename) {
       fetch(`/api/board/data/staging?filename=${encodeURIComponent(restoreTarget.filename)}`, {
         method: 'DELETE',
@@ -573,6 +648,8 @@ export const DataManagementPage: React.FC = () => {
     setRestoreDrawerOpen(false);
     setRestoreTarget(null);
     setInspectingTables(false);
+    setUploadPhase('idle');
+    setUploadProgress(0);
   };
 
   const executeRestoreSelectedTables = async () => {
@@ -1011,11 +1088,70 @@ export const DataManagementPage: React.FC = () => {
         confirmDisabled={busy || inspectingTables || selectedTables.size === 0}
       >
         {inspectingTables ? (
-          <div className="py-12 flex flex-col items-center justify-center text-center gap-2.5">
-            <div className="w-8 h-8 rounded-full border-2 border-indigo-600 border-t-transparent animate-spin" />
-            <div className="text-xs font-semibold text-slate-700">
-              Đang phân tích danh sách bảng trong file (.db)...
-            </div>
+          <div className="py-8 px-2 flex flex-col items-center justify-center text-center">
+            {uploadPhase === 'uploading' ? (
+              <div className="w-full space-y-3.5">
+                <div className="w-12 h-12 mx-auto rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 text-xl shadow-xs">
+                  <i className="bi bi-cloud-arrow-up-fill animate-pulse" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-slate-800">
+                    Đang tải file sao lưu lên máy chủ
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 font-mono">
+                    {(uploadLoadedBytes / (1024 * 1024)).toFixed(1)} MB / {(uploadTotalBytes / (1024 * 1024)).toFixed(1)} MB
+                  </div>
+                </div>
+
+                {/* Thanh tiến độ trực quan */}
+                <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200">
+                  <div
+                    className="bg-indigo-600 h-3 rounded-full transition-all duration-150 ease-out"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono px-0.5">
+                  <span className="font-bold text-indigo-600">{uploadProgress}% hoàn tất</span>
+                  <span>{uploadSpeed}</span>
+                </div>
+
+                <div className="pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    leftIcon={<i className="bi bi-x-circle" />}
+                    onClick={handleCancelRestoreDrawer}
+                  >
+                    Hủy tải lên
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="w-full space-y-3">
+                <div className="w-10 h-10 mx-auto rounded-full border-2 border-indigo-600 border-t-transparent animate-spin" />
+                <div>
+                  <div className="text-xs font-bold text-slate-800">
+                    {uploadPhase === 'inspecting' ? 'Đã nhận file hoàn tất (100%)' : 'Đang đọc file sao lưu'}
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">
+                    Đang phân tích danh sách bảng trong file (.db)...
+                  </div>
+                </div>
+                <div className="pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    leftIcon={<i className="bi bi-x-circle" />}
+                    onClick={handleCancelRestoreDrawer}
+                  >
+                    Hủy bỏ
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         ) : restoreTarget ? (
           <div className="flex flex-col gap-3 text-xs">
