@@ -151,7 +151,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
           const parsed = JSON.parse(saved);
           if (parsed.user?.name) u = parsed.user;
         }
-      } catch {}
+      } catch { }
     }
     return {
       id: u?.id,
@@ -163,27 +163,36 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
     };
   }, [propUser, authUser]);
 
-  // Kiểm tra công việc có được giao cho người dùng hiện tại thực hiện hay không
-  const isAssignedToCurrentUser = (taskAssignee?: string, currentUserName?: string): boolean => {
-    if (!currentUserName || !currentUserName.trim()) return false;
+  // Kiểm tra công việc có được giao cho người dùng hiện tại thực hiện hay không (hỗ trợ cả Tên, Mã nhân viên và User ID)
+  const isAssignedToCurrentUser = (
+    taskAssignee?: string,
+    currentUserName?: string,
+    currentUserId?: string,
+    currentUserCode?: string
+  ): boolean => {
     if (!taskAssignee || !taskAssignee.trim()) return false;
+    const rawAssignee = taskAssignee.trim();
+    const cleanAssignee = rawAssignee.toLowerCase();
 
-    const cleanAssignee = taskAssignee
+    if (currentUserId && cleanAssignee === currentUserId.toLowerCase().trim()) return true;
+    if (currentUserCode && cleanAssignee === currentUserCode.toLowerCase().trim()) return true;
+
+    if (!currentUserName || !currentUserName.trim()) return false;
+
+    const normAssignee = cleanAssignee
+      .replace(/\s*\(.*?\)/g, '')
+      .replace(/[-•|/].*$/, '')
+      .trim();
+    const normCurrent = currentUserName
       .replace(/\s*\(.*?\)/g, '')
       .replace(/[-•|/].*$/, '')
       .toLowerCase()
       .trim();
-    const cleanCurrent = currentUserName
-      .replace(/\s*\(.*?\)/g, '')
-      .replace(/[-•|/].*$/, '')
-      .toLowerCase()
-      .trim();
 
-    return (
-      cleanAssignee === cleanCurrent ||
-      cleanAssignee.includes(cleanCurrent) ||
-      cleanCurrent.includes(cleanAssignee)
-    );
+    if (normAssignee === normCurrent) return true;
+    if (normAssignee.replace(/\s+/g, ' ') === normCurrent.replace(/\s+/g, ' ')) return true;
+    if (normAssignee.includes(normCurrent)) return true;
+    return false;
   };
 
   // Chế độ xem: Gantt mặc định trên máy tính, tự động chuyển sang Bảng trên màn hình điện thoại (<= 768px)
@@ -636,16 +645,15 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
     };
   }, [propTasks, department, assignee, userId, scope]);
 
-  // Danh sách công việc cơ sở: Nếu ở chế độ "Công việc của tôi", lấy các công việc được giao cho hoặc giao bởi cá nhân người dùng
+  // Danh sách công việc cơ sở: Nếu ở chế độ "Công việc của tôi", chỉ lấy các công việc do cá nhân người dùng phụ trách thực hiện (không lấy việc của người khác kể cả khi mình là người giao việc)
   const myTasksBase = useMemo(() => {
     if (!isOnlyMyTasks) return tasks;
-    if (!currentLoggedInUser.name) return tasks;
+    if (!currentLoggedInUser.name && !currentLoggedInUser.id) return tasks;
     return tasks.filter(
       (t) =>
-        isAssignedToCurrentUser(t.assignee, currentLoggedInUser.name) ||
-        isAssignedToCurrentUser(t.assigner, currentLoggedInUser.name)
+        isAssignedToCurrentUser(t.assignee, currentLoggedInUser.name, currentLoggedInUser.id, currentLoggedInUser.code)
     );
-  }, [tasks, isOnlyMyTasks, currentLoggedInUser.name]);
+  }, [tasks, isOnlyMyTasks, currentLoggedInUser.name, currentLoggedInUser.id, currentLoggedInUser.code]);
 
   // Đếm số lượng công việc theo từng phân loại nghiệp vụ
   const categoryCounts = useMemo(() => {
@@ -1406,7 +1414,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
 
     const taskAssignee = newTaskAssignee.trim() || assignee || currentLoggedInUser.name || (
       newTaskCategory === 'bidding' ? 'Phòng Kinh doanh và Đấu thầu' :
-      newTaskCategory === 'production' ? 'Xưởng Sản xuất Mộc 1' : 'Khác'
+        newTaskCategory === 'production' ? 'Xưởng Sản xuất Mộc 1' : 'Khác'
     );
     const taskDept = newTaskAssigneeDept || department || currentLoggedInUser.department || 'Phòng Kinh doanh';
     const taskAssigner = currentLoggedInUser.name || 'Ban Giám đốc';
@@ -1540,560 +1548,560 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
           ======================================================== */}
       {!hideHeader && (
         <div
-        className="task-mgmt-toolbar"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '10px 20px',
-          backgroundColor: '#ffffff',
-          borderBottom: '1px solid var(--border-subtle, #e2e8f0)',
-          flexShrink: 0,
-          gap: '12px',
-          flexWrap: 'wrap',
-        }}
-      >
-        {/* Cụm trái: Icon, Tiêu đề, Badge số lượng, Điều hướng tháng, Lọc người thực hiện, Hộp tìm kiếm */}
-        <div className="task-mgmt-toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 0%', minWidth: 0, flexWrap: 'wrap' }}>
-          {!hideTitle && title && (
-            <div className="task-mgmt-title-block" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <ListTask size={18} style={{ color: '#6366f1', flexShrink: 0 }} />
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '0.975rem', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>
-                    {title}
-                  </span>
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '2px 8px',
-                      borderRadius: '9999px',
-                      backgroundColor: '#e0e7ff',
-                      color: '#4338ca',
-                      fontSize: '0.72rem',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {filteredTasks.length}
-                  </span>
-                </div>
-                {subtitle && (
-                  <span style={{ fontSize: '0.6875rem', color: '#64748b', fontWeight: 500, lineHeight: 1.2, marginTop: '1px' }}>
-                    {subtitle}
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Icon next, prev chuyển đổi các tháng */}
-          <div
-            className="task-mgmt-month-nav"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              backgroundColor: '#f1f5f9',
-              border: '1px solid #cbd5e1',
-              borderRadius: '7px',
-              padding: '2px',
-              height: '32px',
-              boxSizing: 'border-box',
-              gap: '2px',
-            }}
-          >
-            <button
-              type="button"
-              onClick={handlePrevMonth}
-              title="Tháng trước"
-              style={{
-                border: 'none',
-                backgroundColor: '#ffffff',
-                color: '#334155',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '24px',
-                height: '24px',
-                borderRadius: '5px',
-                cursor: 'pointer',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <ChevronLeft size={13} />
-            </button>
-            <span
-              style={{
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                color: '#0f172a',
-                padding: '0 8px',
-                whiteSpace: 'nowrap',
-                minWidth: '92px',
-                textAlign: 'center',
-              }}
-            >
-              Tháng {currentMonth}/{currentYear}
-            </span>
-            <button
-              type="button"
-              onClick={handleNextMonth}
-              title="Tháng tiếp theo"
-              style={{
-                border: 'none',
-                backgroundColor: '#ffffff',
-                color: '#334155',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '24px',
-                height: '24px',
-                borderRadius: '5px',
-                cursor: 'pointer',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <ChevronRight size={13} />
-            </button>
-          </div>
-
-          {!isCurrentMonthActive && (
-            <button
-              type="button"
-              className="task-mgmt-today-btn"
-              onClick={() => {
-                setCurrentYear(realCurrentYear);
-                setCurrentMonth(realCurrentMonth);
-              }}
-              title="Về tháng hiện tại"
-              style={{
-                border: '1px solid #cbd5e1',
-                backgroundColor: '#ffffff',
-                color: '#2563eb',
-                fontSize: '0.72rem',
-                fontWeight: 700,
-                borderRadius: '6px',
-                padding: '0 8px',
-                height: '32px',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              Hôm nay
-            </button>
-          )}
-
-          {/* Hộp nhập Người thực hiện kèm gợi ý toàn bộ nhân viên công ty (chỉ hiển thị ở chế độ Quản trị công việc chung, ẩn ở Công việc của tôi) */}
-          {!isOnlyMyTasks && !hideAssigneeFilter && (
-            <div
-              ref={assigneeDropdownRef}
-              className="task-mgmt-assignee-filter"
-            style={{
-              position: 'relative',
-              width: '185px',
-              minWidth: '150px',
-              flexShrink: 0,
-            }}
-          >
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <input
-                type="text"
-                placeholder="Người thực hiện..."
-                value={assigneeSearch}
-                onFocus={() => setIsAssigneeDropdownOpen(true)}
-                onChange={(e) => {
-                  setAssigneeSearch(e.target.value);
-                  setIsAssigneeDropdownOpen(true);
-                  setCurrentPage(1);
-                }}
-                style={{
-                  width: '100%',
-                  padding: assigneeSearch ? '6px 24px 6px 10px' : '6px 10px',
-                  backgroundColor: '#ffffff',
-                  border: assigneeSearch.trim() ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
-                  borderRadius: '7px',
-                  fontSize: '0.78rem',
-                  fontFamily: "'Roboto Condensed', sans-serif",
-                  color: assigneeSearch.trim() ? '#1d4ed8' : '#1e293b',
-                  fontWeight: assigneeSearch.trim() ? 700 : 500,
-                  outline: 'none',
-                  boxSizing: 'border-box',
-                  height: '32px',
-                  boxShadow: isAssigneeDropdownOpen ? '0 0 0 2px rgba(37,99,235,0.15)' : 'none',
-                  transition: 'all 0.15s ease',
-                }}
-              />
-              {assigneeSearch && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAssigneeSearch('');
-                    setCurrentPage(1);
-                  }}
-                  title="Xoá lọc người thực hiện"
-                  style={{
-                    position: 'absolute',
-                    right: '6px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    border: 'none',
-                    backgroundColor: 'transparent',
-                    color: '#94a3b8',
-                    cursor: 'pointer',
-                    fontSize: '0.75rem',
-                    padding: '2px 4px',
-                    borderRadius: '4px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.color = '#ef4444';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.color = '#94a3b8';
-                  }}
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-
-            {/* Menu danh sách gợi ý toàn bộ nhân viên công ty */}
-            {isAssigneeDropdownOpen && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 'calc(100% + 4px)',
-                  left: 0,
-                  width: '320px',
-                  maxWidth: 'calc(100vw - 24px)',
-                  maxHeight: '280px',
-                  overflowY: 'auto',
-                  backgroundColor: '#ffffff',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '8px',
-                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-                  zIndex: 999,
-                  fontFamily: "'Roboto Condensed', sans-serif",
-                }}
-                className="custom-scrollbar"
-              >
-                <div
-                  style={{
-                    padding: '6px 10px',
-                    fontSize: '0.68rem',
-                    color: '#64748b',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    backgroundColor: '#f8fafc',
-                    borderBottom: '1px solid #e2e8f0',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <span>Gợi ý nhân viên ({filteredEmployeeSuggestions.length})</span>
-                  {assigneeSearch && (
+          className="task-mgmt-toolbar"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '10px 20px',
+            backgroundColor: '#ffffff',
+            borderBottom: '1px solid var(--border-subtle, #e2e8f0)',
+            flexShrink: 0,
+            gap: '12px',
+            flexWrap: 'wrap',
+          }}
+        >
+          {/* Cụm trái: Icon, Tiêu đề, Badge số lượng, Điều hướng tháng, Lọc người thực hiện, Hộp tìm kiếm */}
+          <div className="task-mgmt-toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 0%', minWidth: 0, flexWrap: 'wrap' }}>
+            {!hideTitle && title && (
+              <div className="task-mgmt-title-block" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <ListTask size={18} style={{ color: '#6366f1', flexShrink: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '0.975rem', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>
+                      {title}
+                    </span>
                     <span
-                      onClick={() => {
-                        setAssigneeSearch('');
-                        setIsAssigneeDropdownOpen(false);
-                        setCurrentPage(1);
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '2px 8px',
+                        borderRadius: '9999px',
+                        backgroundColor: '#e0e7ff',
+                        color: '#4338ca',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
                       }}
-                      style={{ color: '#2563eb', cursor: 'pointer', textTransform: 'none', fontSize: '0.7rem' }}
                     >
-                      Xoá lọc
+                      {filteredTasks.length}
+                    </span>
+                  </div>
+                  {subtitle && (
+                    <span style={{ fontSize: '0.6875rem', color: '#64748b', fontWeight: 500, lineHeight: 1.2, marginTop: '1px' }}>
+                      {subtitle}
                     </span>
                   )}
                 </div>
-
-                {filteredEmployeeSuggestions.length === 0 ? (
-                  <div style={{ padding: '12px 10px', fontSize: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>
-                    Không tìm thấy nhân viên phù hợp
-                  </div>
-                ) : (
-                  filteredEmployeeSuggestions.map((emp) => {
-                    const isSelected = assigneeSearch.trim().toLowerCase() === emp.name.toLowerCase();
-                    return (
-                      <div
-                        key={emp.name}
-                        onClick={() => {
-                          setAssigneeSearch(emp.name);
-                          setIsAssigneeDropdownOpen(false);
-                          setCurrentPage(1);
-                        }}
-                        style={{
-                          padding: '8px 10px',
-                          cursor: 'pointer',
-                          backgroundColor: isSelected ? '#eff6ff' : 'transparent',
-                          borderBottom: '1px solid #f1f5f9',
-                          transition: 'background-color 0.12s ease',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '10px',
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isSelected) e.currentTarget.style.backgroundColor = '#f8fafc';
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
-                        }}
-                      >
-                        {/* Avatar tròn với chữ cái viết tắt */}
-                        <div
-                          style={{
-                            width: '32px',
-                            height: '32px',
-                            minWidth: '32px',
-                            borderRadius: '50%',
-                            backgroundColor: emp.avatarColor,
-                            color: '#ffffff',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '0.72rem',
-                            fontWeight: 700,
-                            flexShrink: 0,
-                            letterSpacing: '0.5px',
-                            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)',
-                          }}
-                        >
-                          {emp.avatarText}
-                        </div>
-
-                        {/* Họ tên và Phòng ban | Chức vụ */}
-                        <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                          <div
-                            style={{
-                              fontSize: '0.78rem',
-                              fontWeight: isSelected ? 700 : 600,
-                              color: isSelected ? '#1d4ed8' : '#0f172a',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                            }}
-                          >
-                            {emp.name}
-                          </div>
-                          {emp.subtitle && (
-                            <div
-                              style={{
-                                fontSize: '0.68rem',
-                                color: '#64748b',
-                                marginTop: '1px',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                              }}
-                            >
-                              {emp.subtitle}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
               </div>
             )}
-          </div>
-          )}
 
-          {/* Hộp tìm kiếm bo góc gọn gàng dãn full dòng */}
-          <div className="task-mgmt-search-box" style={{ position: 'relative', flex: '1 1 200px', minWidth: '150px' }}>
-            <Search
-              size={13}
+            {/* Icon next, prev chuyển đổi các tháng */}
+            <div
+              className="task-mgmt-month-nav"
               style={{
-                position: 'absolute',
-                left: '10px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: '#94a3b8',
-                pointerEvents: 'none',
-              }}
-            />
-            <input
-              type="text"
-              placeholder={searchPlaceholder || "Tìm công việc..."}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '6px 10px 6px 30px',
-                backgroundColor: '#ffffff',
+                display: 'inline-flex',
+                alignItems: 'center',
+                backgroundColor: '#f1f5f9',
                 border: '1px solid #cbd5e1',
                 borderRadius: '7px',
-                fontSize: '0.78rem',
-                fontFamily: "'Roboto Condensed', sans-serif",
-                color: '#1e293b',
-                outline: 'none',
-                boxSizing: 'border-box',
-                height: '32px',
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Cụm phải: Nút thêm việc, Bộ chuyển đổi Bảng / Gantt, Dropdown Trạng thái */}
-        <div className="task-mgmt-toolbar-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-          {/* Nút Tự động thiết lập trạng thái hoàn thành theo tiến trình thực tế */}
-          {!readOnly && (
-            <button
-              type="button"
-              onClick={handleSyncAutoCompletion}
-              disabled={isSyncingAuto}
-              className="btn btn-outline-primary"
-              title="Tự động rà soát và chuyển trạng thái Đã hoàn thành theo tiến trình thực tế (Sản xuất, Kho vận, Mua hàng)"
-              aria-label="Tự động đồng bộ tiến độ"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-                padding: '0 10px',
-                borderRadius: '6px',
-                fontSize: '0.78rem',
-                fontWeight: 600,
-                height: '32px',
-                cursor: isSyncingAuto ? 'not-allowed' : 'pointer',
-                whiteSpace: 'nowrap',
-                backgroundColor: '#eff6ff',
-                border: '1px solid #bfdbfe',
-                color: '#1d4ed8',
-              }}
-            >
-              <ArrowRepeat size={14} className={isSyncingAuto ? 'animate-spin' : ''} />
-              <span className="hidden md:inline">{isSyncingAuto ? 'Đang đồng bộ...' : 'Tự động hoàn thành'}</span>
-            </button>
-          )}
-
-          {allowAdd && !readOnly && (
-            <button
-              type="button"
-              onClick={() => setIsAddModalOpen(true)}
-              className="btn btn-primary task-mgmt-add-btn"
-              title="Thêm việc"
-              aria-label="Thêm việc"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '0 10px',
-                borderRadius: '6px',
-                fontSize: '0.78rem',
-                fontWeight: 600,
-                height: '32px',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <Plus size={16} />
-              <span className="hidden md:inline">Thêm việc</span>
-            </button>
-          )}
-
-          {/* Segmented control: Bảng hoặc Gantt */}
-          {!hideViewModeSwitcher && (
-            <div
-              className="task-mgmt-view-switcher !hidden md:!inline-flex"
-              style={{
-                display: 'inline-flex',
                 padding: '2px',
-                backgroundColor: '#e2e8f0',
-                borderRadius: '7px',
-                alignItems: 'center',
                 height: '32px',
                 boxSizing: 'border-box',
+                gap: '2px',
               }}
             >
               <button
                 type="button"
-                onClick={() => {
-                  setViewMode('list');
-                  if (onViewModeChange) onViewModeChange('list');
+                onClick={handlePrevMonth}
+                title="Tháng trước"
+                style={{
+                  border: 'none',
+                  backgroundColor: '#ffffff',
+                  color: '#334155',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '5px',
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+                  transition: 'all 0.15s ease',
                 }}
+              >
+                <ChevronLeft size={13} />
+              </button>
+              <span
+                style={{
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  color: '#0f172a',
+                  padding: '0 8px',
+                  whiteSpace: 'nowrap',
+                  minWidth: '92px',
+                  textAlign: 'center',
+                }}
+              >
+                Tháng {currentMonth}/{currentYear}
+              </span>
+              <button
+                type="button"
+                onClick={handleNextMonth}
+                title="Tháng tiếp theo"
+                style={{
+                  border: 'none',
+                  backgroundColor: '#ffffff',
+                  color: '#334155',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '5px',
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <ChevronRight size={13} />
+              </button>
+            </div>
+
+            {!isCurrentMonthActive && (
+              <button
+                type="button"
+                className="task-mgmt-today-btn"
+                onClick={() => {
+                  setCurrentYear(realCurrentYear);
+                  setCurrentMonth(realCurrentMonth);
+                }}
+                title="Về tháng hiện tại"
+                style={{
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: '#ffffff',
+                  color: '#2563eb',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  borderRadius: '6px',
+                  padding: '0 8px',
+                  height: '32px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Hôm nay
+              </button>
+            )}
+
+            {/* Hộp nhập Người thực hiện kèm gợi ý toàn bộ nhân viên công ty (chỉ hiển thị ở chế độ Quản trị công việc chung, ẩn ở Công việc của tôi) */}
+            {!isOnlyMyTasks && !hideAssigneeFilter && (
+              <div
+                ref={assigneeDropdownRef}
+                className="task-mgmt-assignee-filter"
+                style={{
+                  position: 'relative',
+                  width: '185px',
+                  minWidth: '150px',
+                  flexShrink: 0,
+                }}
+              >
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    placeholder="Người thực hiện..."
+                    value={assigneeSearch}
+                    onFocus={() => setIsAssigneeDropdownOpen(true)}
+                    onChange={(e) => {
+                      setAssigneeSearch(e.target.value);
+                      setIsAssigneeDropdownOpen(true);
+                      setCurrentPage(1);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: assigneeSearch ? '6px 24px 6px 10px' : '6px 10px',
+                      backgroundColor: '#ffffff',
+                      border: assigneeSearch.trim() ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                      borderRadius: '7px',
+                      fontSize: '0.78rem',
+                      fontFamily: "'Roboto Condensed', sans-serif",
+                      color: assigneeSearch.trim() ? '#1d4ed8' : '#1e293b',
+                      fontWeight: assigneeSearch.trim() ? 700 : 500,
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                      height: '32px',
+                      boxShadow: isAssigneeDropdownOpen ? '0 0 0 2px rgba(37,99,235,0.15)' : 'none',
+                      transition: 'all 0.15s ease',
+                    }}
+                  />
+                  {assigneeSearch && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAssigneeSearch('');
+                        setCurrentPage(1);
+                      }}
+                      title="Xoá lọc người thực hiện"
+                      style={{
+                        position: 'absolute',
+                        right: '6px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        border: 'none',
+                        backgroundColor: 'transparent',
+                        color: '#94a3b8',
+                        cursor: 'pointer',
+                        fontSize: '0.75rem',
+                        padding: '2px 4px',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = '#ef4444';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = '#94a3b8';
+                      }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Menu danh sách gợi ý toàn bộ nhân viên công ty */}
+                {isAssigneeDropdownOpen && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 4px)',
+                      left: 0,
+                      width: '320px',
+                      maxWidth: 'calc(100vw - 24px)',
+                      maxHeight: '280px',
+                      overflowY: 'auto',
+                      backgroundColor: '#ffffff',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '8px',
+                      boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                      zIndex: 999,
+                      fontFamily: "'Roboto Condensed', sans-serif",
+                    }}
+                    className="custom-scrollbar"
+                  >
+                    <div
+                      style={{
+                        padding: '6px 10px',
+                        fontSize: '0.68rem',
+                        color: '#64748b',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        backgroundColor: '#f8fafc',
+                        borderBottom: '1px solid #e2e8f0',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <span>Gợi ý nhân viên ({filteredEmployeeSuggestions.length})</span>
+                      {assigneeSearch && (
+                        <span
+                          onClick={() => {
+                            setAssigneeSearch('');
+                            setIsAssigneeDropdownOpen(false);
+                            setCurrentPage(1);
+                          }}
+                          style={{ color: '#2563eb', cursor: 'pointer', textTransform: 'none', fontSize: '0.7rem' }}
+                        >
+                          Xoá lọc
+                        </span>
+                      )}
+                    </div>
+
+                    {filteredEmployeeSuggestions.length === 0 ? (
+                      <div style={{ padding: '12px 10px', fontSize: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>
+                        Không tìm thấy nhân viên phù hợp
+                      </div>
+                    ) : (
+                      filteredEmployeeSuggestions.map((emp) => {
+                        const isSelected = assigneeSearch.trim().toLowerCase() === emp.name.toLowerCase();
+                        return (
+                          <div
+                            key={emp.name}
+                            onClick={() => {
+                              setAssigneeSearch(emp.name);
+                              setIsAssigneeDropdownOpen(false);
+                              setCurrentPage(1);
+                            }}
+                            style={{
+                              padding: '8px 10px',
+                              cursor: 'pointer',
+                              backgroundColor: isSelected ? '#eff6ff' : 'transparent',
+                              borderBottom: '1px solid #f1f5f9',
+                              transition: 'background-color 0.12s ease',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isSelected) e.currentTarget.style.backgroundColor = '#f8fafc';
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+                            }}
+                          >
+                            {/* Avatar tròn với chữ cái viết tắt */}
+                            <div
+                              style={{
+                                width: '32px',
+                                height: '32px',
+                                minWidth: '32px',
+                                borderRadius: '50%',
+                                backgroundColor: emp.avatarColor,
+                                color: '#ffffff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                flexShrink: 0,
+                                letterSpacing: '0.5px',
+                                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)',
+                              }}
+                            >
+                              {emp.avatarText}
+                            </div>
+
+                            {/* Họ tên và Phòng ban | Chức vụ */}
+                            <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                              <div
+                                style={{
+                                  fontSize: '0.78rem',
+                                  fontWeight: isSelected ? 700 : 600,
+                                  color: isSelected ? '#1d4ed8' : '#0f172a',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}
+                              >
+                                {emp.name}
+                              </div>
+                              {emp.subtitle && (
+                                <div
+                                  style={{
+                                    fontSize: '0.68rem',
+                                    color: '#64748b',
+                                    marginTop: '1px',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                  }}
+                                >
+                                  {emp.subtitle}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Hộp tìm kiếm bo góc gọn gàng dãn full dòng */}
+            <div className="task-mgmt-search-box" style={{ position: 'relative', flex: '1 1 200px', minWidth: '150px' }}>
+              <Search
+                size={13}
+                style={{
+                  position: 'absolute',
+                  left: '10px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: '#94a3b8',
+                  pointerEvents: 'none',
+                }}
+              />
+              <input
+                type="text"
+                placeholder={searchPlaceholder || "Tìm công việc..."}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '6px 10px 6px 30px',
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '7px',
+                  fontSize: '0.78rem',
+                  fontFamily: "'Roboto Condensed', sans-serif",
+                  color: '#1e293b',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  height: '32px',
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Cụm phải: Nút thêm việc, Bộ chuyển đổi Bảng / Gantt, Dropdown Trạng thái */}
+          <div className="task-mgmt-toolbar-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+            {/* Nút Tự động thiết lập trạng thái hoàn thành theo tiến trình thực tế */}
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={handleSyncAutoCompletion}
+                disabled={isSyncingAuto}
+                className="btn btn-outline-primary"
+                title="Tự động rà soát và chuyển trạng thái Đã hoàn thành theo tiến trình thực tế (Sản xuất, Kho vận, Mua hàng)"
+                aria-label="Tự động đồng bộ tiến độ"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '5px',
                   padding: '0 10px',
-                  height: '26px',
-                  borderRadius: '5px',
-                  border: 'none',
-                  backgroundColor: viewMode === 'list' ? '#ffffff' : 'transparent',
-                  color: viewMode === 'list' ? '#1e293b' : '#64748b',
-                  fontWeight: viewMode === 'list' ? 700 : 500,
+                  borderRadius: '6px',
                   fontSize: '0.78rem',
-                  cursor: 'pointer',
-                  boxShadow: viewMode === 'list' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
-                  fontFamily: "'Roboto Condensed', sans-serif",
-                  transition: 'all 0.15s ease',
+                  fontWeight: 600,
+                  height: '32px',
+                  cursor: isSyncingAuto ? 'not-allowed' : 'pointer',
+                  whiteSpace: 'nowrap',
+                  backgroundColor: '#eff6ff',
+                  border: '1px solid #bfdbfe',
+                  color: '#1d4ed8',
                 }}
               >
-                <ListTask size={13} />
-                <span>Bảng</span>
+                <ArrowRepeat size={14} className={isSyncingAuto ? 'animate-spin' : ''} />
+                <span className="hidden md:inline">{isSyncingAuto ? 'Đang đồng bộ...' : 'Tự động hoàn thành'}</span>
               </button>
+            )}
 
+            {allowAdd && !readOnly && (
               <button
                 type="button"
-                onClick={() => {
-                  setViewMode('gantt');
-                  if (onViewModeChange) onViewModeChange('gantt');
-                }}
+                onClick={() => setIsAddModalOpen(true)}
+                className="btn btn-primary task-mgmt-add-btn"
+                title="Thêm việc"
+                aria-label="Thêm việc"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '5px',
-                  padding: '0 12px',
-                  height: '26px',
-                  borderRadius: '5px',
-                  border: 'none',
-                  backgroundColor: viewMode === 'gantt' ? '#ffffff' : 'transparent',
-                  color: viewMode === 'gantt' ? '#2563eb' : '#64748b',
-                  fontWeight: viewMode === 'gantt' ? 700 : 500,
+                  gap: '4px',
+                  padding: '0 10px',
+                  borderRadius: '6px',
                   fontSize: '0.78rem',
+                  fontWeight: 600,
+                  height: '32px',
                   cursor: 'pointer',
-                  boxShadow: viewMode === 'gantt' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
-                  fontFamily: "'Roboto Condensed', sans-serif",
-                  transition: 'all 0.15s ease',
+                  whiteSpace: 'nowrap',
                 }}
               >
-                <span>Gantt</span>
+                <Plus size={16} />
+                <span className="hidden md:inline">Thêm việc</span>
               </button>
+            )}
+
+            {/* Segmented control: Bảng hoặc Gantt */}
+            {!hideViewModeSwitcher && (
+              <div
+                className="task-mgmt-view-switcher !hidden md:!inline-flex"
+                style={{
+                  display: 'inline-flex',
+                  padding: '2px',
+                  backgroundColor: '#e2e8f0',
+                  borderRadius: '7px',
+                  alignItems: 'center',
+                  height: '32px',
+                  boxSizing: 'border-box',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewMode('list');
+                    if (onViewModeChange) onViewModeChange('list');
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '0 10px',
+                    height: '26px',
+                    borderRadius: '5px',
+                    border: 'none',
+                    backgroundColor: viewMode === 'list' ? '#ffffff' : 'transparent',
+                    color: viewMode === 'list' ? '#1e293b' : '#64748b',
+                    fontWeight: viewMode === 'list' ? 700 : 500,
+                    fontSize: '0.78rem',
+                    cursor: 'pointer',
+                    boxShadow: viewMode === 'list' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                    fontFamily: "'Roboto Condensed', sans-serif",
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <ListTask size={13} />
+                  <span>Bảng</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewMode('gantt');
+                    if (onViewModeChange) onViewModeChange('gantt');
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '0 12px',
+                    height: '26px',
+                    borderRadius: '5px',
+                    border: 'none',
+                    backgroundColor: viewMode === 'gantt' ? '#ffffff' : 'transparent',
+                    color: viewMode === 'gantt' ? '#2563eb' : '#64748b',
+                    fontWeight: viewMode === 'gantt' ? 700 : 500,
+                    fontSize: '0.78rem',
+                    cursor: 'pointer',
+                    boxShadow: viewMode === 'gantt' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                    fontFamily: "'Roboto Condensed', sans-serif",
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <span>Gantt</span>
+                </button>
+              </div>
+            )}
+
+            {/* Dropdown Bộ lọc tiến độ chuẩn component Select: Tất cả, Quá hạn, Chậm tiến độ, Đúng tiến độ */}
+            <div className="task-mgmt-status-select" style={{ width: '145px', flexShrink: 0 }}>
+              <Select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                style={{
+                  height: '32px',
+                  minHeight: '32px',
+                  padding: '0 28px 0 10px',
+                  borderRadius: '7px',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                }}
+                options={[
+                  { value: 'all', label: 'Tất cả' },
+                  { value: 'overdue', label: 'Quá hạn' },
+                  { value: 'delayed', label: 'Chậm tiến độ' },
+                  { value: 'on_track', label: 'Đúng tiến độ' },
+                ]}
+              />
             </div>
-          )}
 
-          {/* Dropdown Bộ lọc tiến độ chuẩn component Select: Tất cả, Quá hạn, Chậm tiến độ, Đúng tiến độ */}
-          <div className="task-mgmt-status-select" style={{ width: '145px', flexShrink: 0 }}>
-            <Select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              style={{
-                height: '32px',
-                minHeight: '32px',
-                padding: '0 28px 0 10px',
-                borderRadius: '7px',
-                fontSize: '0.78rem',
-                fontWeight: 600,
-              }}
-              options={[
-                { value: 'all', label: 'Tất cả' },
-                { value: 'overdue', label: 'Quá hạn' },
-                { value: 'delayed', label: 'Chậm tiến độ' },
-                { value: 'on_track', label: 'Đúng tiến độ' },
-              ]}
-            />
+            {extraActions}
           </div>
-
-          {extraActions}
         </div>
-      </div>
       )}
 
       {/* ========================================================
@@ -3027,8 +3035,8 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                                         task.progress === 100
                                           ? '#10b981'
                                           : task.progress > 0
-                                          ? '#3b82f6'
-                                          : '#cbd5e1',
+                                            ? '#3b82f6'
+                                            : '#cbd5e1',
                                     }}
                                   />
                                 </div>
@@ -3068,469 +3076,469 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
             }}
           >
             <SwipeableTableProvider>
-            <table
-              className="data-table task-mgmt-data-table"
-              style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                fontSize: '0.8125rem',
-                backgroundColor: '#ffffff',
-                fontFamily: "'Roboto Condensed', sans-serif",
-              }}
-            >
-              <thead>
-                <tr
-                  style={{
-                    backgroundColor: '#f8fafc',
-                    borderBottom: '2px solid #cbd5e1',
-                    color: '#64748b',
-                    fontSize: '0.6875rem',
-                    fontWeight: 700,
-                    letterSpacing: '0.02em',
-                    position: 'sticky',
-                    top: 0,
-                    zIndex: 2,
-                  }}
-                >
-                  <th className="hidden md:table-cell" style={{ padding: '8px 10px', width: '45px', textAlign: 'center' }}>STT</th>
-                  <th className="hidden md:table-cell" style={{ padding: '8px 10px', width: '120px', whiteSpace: 'nowrap' }}>MÃ VIỆC</th>
-                  <th style={{ padding: '8px 10px' }}>CÔNG VIỆC VÀ DỰ ÁN</th>
-                  <th className="hidden md:table-cell" style={{ padding: '8px 10px', width: '170px' }}>
-                    {isScheduleStatusMode ? 'TÌNH TRẠNG TIẾN ĐỘ' : 'ĐƠN VỊ PHỤ TRÁCH'}
-                  </th>
-                  <th className="hidden md:table-cell" style={{ padding: '8px 10px', width: '125px' }}>TIẾN ĐỘ</th>
-                  <th className="hidden md:table-cell" style={{ padding: '8px 10px', width: '95px' }}>HẠN CHÓT</th>
-                  <th className="hidden md:table-cell" style={{ padding: '8px 10px', width: '130px' }}>TRẠNG THÁI</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={isMobileView ? 1 : 7} style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>
-                      Đang nạp dữ liệu công việc...
-                    </td>
+              <table
+                className="data-table task-mgmt-data-table"
+                style={{
+                  width: '100%',
+                  borderCollapse: 'collapse',
+                  fontSize: '0.8125rem',
+                  backgroundColor: '#ffffff',
+                  fontFamily: "'Roboto Condensed', sans-serif",
+                }}
+              >
+                <thead>
+                  <tr
+                    style={{
+                      backgroundColor: '#f8fafc',
+                      borderBottom: '2px solid #cbd5e1',
+                      color: '#64748b',
+                      fontSize: '0.6875rem',
+                      fontWeight: 700,
+                      letterSpacing: '0.02em',
+                      position: 'sticky',
+                      top: 0,
+                      zIndex: 2,
+                    }}
+                  >
+                    <th className="hidden md:table-cell" style={{ padding: '8px 10px', width: '45px', textAlign: 'center' }}>STT</th>
+                    <th className="hidden md:table-cell" style={{ padding: '8px 10px', width: '120px', whiteSpace: 'nowrap' }}>MÃ VIỆC</th>
+                    <th style={{ padding: '8px 10px' }}>CÔNG VIỆC VÀ DỰ ÁN</th>
+                    <th className="hidden md:table-cell" style={{ padding: '8px 10px', width: '170px' }}>
+                      {isScheduleStatusMode ? 'TÌNH TRẠNG TIẾN ĐỘ' : 'ĐƠN VỊ PHỤ TRÁCH'}
+                    </th>
+                    <th className="hidden md:table-cell" style={{ padding: '8px 10px', width: '125px' }}>TIẾN ĐỘ</th>
+                    <th className="hidden md:table-cell" style={{ padding: '8px 10px', width: '95px' }}>HẠN CHÓT</th>
+                    <th className="hidden md:table-cell" style={{ padding: '8px 10px', width: '130px' }}>TRẠNG THÁI</th>
                   </tr>
-                ) : paginatedContractGroups.length === 0 ? (
-                  <tr>
-                    <td colSpan={isMobileView ? 1 : 7} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748b' }}>
-                      <ListTask size={48} style={{ color: '#cbd5e1', margin: '0 auto 14px auto', display: 'block' }} />
-                      <div style={{ fontSize: '1rem', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>
-                        {scope === 'showroom_construction'
-                          ? 'Chưa có hợp đồng thiết kế quầy kệ nào đang triển khai thi công'
-                          : 'Chưa có công việc nào trong cơ sở dữ liệu'}
-                      </div>
-                      <div style={{ fontSize: '0.825rem', color: '#64748b', maxWidth: '480px', margin: '0 auto 16px auto', lineHeight: 1.5, whiteSpace: 'normal' }}>
-                        {scope === 'showroom_construction'
-                          ? 'Khi ký kết hợp đồng đại lý có thiết kế quầy kệ ở Bước 3, danh sách hợp đồng cùng 6 công việc con (Khảo sát mặt bằng, Thiết kế chi tiết, Chốt hồ sơ, Sản xuất tại xưởng, Thi công lắp đặt, Nghiệm thu và bàn giao) sẽ tự động hiển thị tại đây.'
-                          : 'Dữ liệu công việc thực tế sẽ được lưu trữ và hiển thị tại đây. Bấm nút bên dưới để khởi tạo công việc đầu tiên.'}
-                      </div>
-                      {allowAdd && !readOnly && (
-                        <button
-                          type="button"
-                          onClick={() => setIsAddModalOpen(true)}
-                          style={{
-                            padding: '8px 18px',
-                            backgroundColor: '#2563eb',
-                            color: '#ffffff',
-                            border: 'none',
-                            borderRadius: '6px',
-                            fontWeight: 600,
-                            fontSize: '0.8125rem',
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            boxShadow: '0 2px 4px rgba(37, 99, 235, 0.25)',
-                          }}
-                        >
-                          <Plus size={16} />
-                          <span>Thêm việc mới</span>
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ) : (
-                  paginatedContractGroups.map((group) => {
-                    const isCollapsed = !!collapsedContracts[group.contractCode];
-                    const groupPrefix = group.groupPrefix;
-                    const displayCode = group.displayCode;
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={isMobileView ? 1 : 7} style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>
+                        Đang nạp dữ liệu công việc...
+                      </td>
+                    </tr>
+                  ) : paginatedContractGroups.length === 0 ? (
+                    <tr>
+                      <td colSpan={isMobileView ? 1 : 7} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748b' }}>
+                        <ListTask size={48} style={{ color: '#cbd5e1', margin: '0 auto 14px auto', display: 'block' }} />
+                        <div style={{ fontSize: '1rem', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>
+                          {scope === 'showroom_construction'
+                            ? 'Chưa có hợp đồng thiết kế quầy kệ nào đang triển khai thi công'
+                            : 'Chưa có công việc nào trong cơ sở dữ liệu'}
+                        </div>
+                        <div style={{ fontSize: '0.825rem', color: '#64748b', maxWidth: '480px', margin: '0 auto 16px auto', lineHeight: 1.5, whiteSpace: 'normal' }}>
+                          {scope === 'showroom_construction'
+                            ? 'Khi ký kết hợp đồng đại lý có thiết kế quầy kệ ở Bước 3, danh sách hợp đồng cùng 6 công việc con (Khảo sát mặt bằng, Thiết kế chi tiết, Chốt hồ sơ, Sản xuất tại xưởng, Thi công lắp đặt, Nghiệm thu và bàn giao) sẽ tự động hiển thị tại đây.'
+                            : 'Dữ liệu công việc thực tế sẽ được lưu trữ và hiển thị tại đây. Bấm nút bên dưới để khởi tạo công việc đầu tiên.'}
+                        </div>
+                        {allowAdd && !readOnly && (
+                          <button
+                            type="button"
+                            onClick={() => setIsAddModalOpen(true)}
+                            style={{
+                              padding: '8px 18px',
+                              backgroundColor: '#2563eb',
+                              color: '#ffffff',
+                              border: 'none',
+                              borderRadius: '6px',
+                              fontWeight: 600,
+                              fontSize: '0.8125rem',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              boxShadow: '0 2px 4px rgba(37, 99, 235, 0.25)',
+                            }}
+                          >
+                            <Plus size={16} />
+                            <span>Thêm việc mới</span>
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedContractGroups.map((group) => {
+                      const isCollapsed = !!collapsedContracts[group.contractCode];
+                      const groupPrefix = group.groupPrefix;
+                      const displayCode = group.displayCode;
 
-                    return (
-                      <React.Fragment key={group.contractCode}>
-                        {/* Hàng Tiêu đề Danh mục chính Hợp đồng / Gói thầu */}
-                        <tr
-                          onClick={() => {
-                            setSelectedContractGroup(group);
-                            setIsContractDrawerOpen(true);
-                          }}
-                          style={{
-                            backgroundColor: '#f1f5f9',
-                            borderTop: '2px solid #cbd5e1',
-                            borderBottom: '1px solid #cbd5e1',
-                            cursor: 'pointer',
-                          }}
-                          title={`Nhấn để xem chi tiết ${groupPrefix ? `${groupPrefix.toLowerCase()} ` : ''}${displayCode}`}
-                        >
-                          <td colSpan={isMobileView ? 1 : 7} style={{ padding: '8px 12px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minWidth: 0 }}>
-                              <div style={{ minWidth: 0, width: '100%' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                  <span
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      toggleContractCollapse(group.contractCode);
-                                    }}
-                                    title={isCollapsed ? 'Mở rộng' : 'Thu gọn'}
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
-                                      transition: 'transform 0.2s',
-                                      padding: '2px',
-                                      borderRadius: '4px',
-                                      flexShrink: 0,
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.08)';
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      e.currentTarget.style.backgroundColor = 'transparent';
-                                    }}
-                                  >
-                                    <ChevronDown size={13} />
-                                  </span>
-                                  <span
-                                    className="text-uppercase"
-                                    style={{
-                                      fontWeight: 800,
-                                      fontSize: '0.8125rem',
-                                      color: '#0f172a',
-                                      letterSpacing: '0.02em',
-                                      wordBreak: 'break-word',
-                                    }}
-                                  >
-                                    {groupPrefix ? `${groupPrefix}: ${displayCode}` : displayCode}
-                                  </span>
-                                  <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                                    ({group.tasks.length} công việc con)
-                                  </span>
-                                </div>
-                                <div style={{ fontSize: '0.7rem', color: '#475569', marginTop: '2px', paddingLeft: '21px', whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                                  <span style={{ fontWeight: 400, color: '#475569' }}>{group.customerName}</span>
-                                  {group.customerAddress && (
-                                    <>
-                                      <span style={{ margin: '0 5px', color: '#94a3b8' }}>|</span>
-                                      <span>{group.customerAddress}</span>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-
-                        {/* Các dòng công việc con */}
-                        {!isCollapsed &&
-                          group.tasks.map((task, idx) => {
-                            const dueInfo = getDueInfo(task);
-                            const scheduleStatus = getTaskScheduleStatus(task);
-                            const statusDisplay = getStatusDisplay(task);
-
-                            // Phân giải tên và phòng ban người thực hiện
-                            const assigneeInfo = formatAssigneeDisplay(task.assignee, task.department);
-
-                            return (
-                              <SwipeableTableRow
-                                key={task.id}
-                                rowId={`task-${task.id}`}
-                                deleteConfirmTitle="Xác nhận xoá công việc"
-                                deleteConfirmMessage={`Bạn có chắc chắn muốn xoá công việc "${task.title}" (${task.code}) khỏi hệ thống? Thao tác này không thể hoàn tác.`}
-                                onEdit={() => {
-                                  setSelectedTask(task);
-                                  setUpdatingProgress(task.progress);
-                                  setIsDrawerOpen(true);
-                                }}
-                                onDelete={!readOnly ? () => handleDeleteSingleTask(task, true) : undefined}
-                                onClick={() => {
-                                  setSelectedTask(task);
-                                  setUpdatingProgress(task.progress);
-                                  setIsDrawerOpen(true);
-                                }}
-                                style={{
-                                  borderBottom: '1px solid #f1f5f9',
-                                  transition: 'background-color 0.15s ease',
-                                  cursor: 'pointer',
-                                }}
-                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
-                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                              >
-                                {/* Cột 1: STT */}
-                                <td className="hidden md:table-cell" style={{ padding: '8px 10px', textAlign: 'center', color: '#94a3b8' }}>
-                                  {idx + 1}
-                                </td>
-
-                                {/* Cột 2: MÃ VIỆC (không xuống dòng) và Ngày bắt đầu ở dưới */}
-                                <td className="hidden md:table-cell" style={{ padding: '8px 10px', minWidth: '120px', whiteSpace: 'nowrap' }}>
-                                  <div style={{ fontWeight: 700, color: '#1e40af', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
-                                    {task.code}
-                                  </div>
-                                  {task.startDate && (
-                                    <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 500, marginTop: '2px', whiteSpace: 'nowrap' }}>
-                                      {task.startDate}
-                                    </div>
-                                  )}
-                                </td>
-
-                                {/* Cột 4: CÔNG VIỆC VÀ DỰ ÁN */}
-                                <td className="task-mgmt-col-work" style={{ padding: '8px 10px', maxWidth: isMobileView ? 'none' : '320px' }}>
-                                  {/* Giao diện máy tính (giữ nguyên) */}
-                                  <div
-                                    className="hidden md:block"
-                                    style={{
-                                      color: '#1e293b',
-                                      fontWeight: 400,
-                                      lineHeight: 1.3,
-                                      whiteSpace: 'nowrap',
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
-                                      fontSize: '0.78rem',
-                                    }}
-                                    title={task.title}
-                                  >
-                                    <span>{task.title}</span>
-                                  </div>
-
-                                  {/* Giao diện điện thoại (<= 768px) */}
-                                  <div className="flex flex-col gap-1 md:hidden" style={{ minWidth: 0 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap' }}>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                        <span
-                                          style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '4px',
-                                            fontSize: '0.65rem',
-                                            fontWeight: 700,
-                                            color: statusDisplay.dotColor,
-                                          }}
-                                        >
-                                          <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: statusDisplay.dotColor }} />
-                                          {statusDisplay.label}
-                                        </span>
-                                      </div>
-
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        {scheduleStatus === 'overdue' && (
-                                          <span
-                                            style={{
-                                              fontSize: '0.65rem',
-                                              fontWeight: 700,
-                                              color: '#dc2626',
-                                              backgroundColor: '#fef2f2',
-                                              border: '1px solid #fecaca',
-                                              padding: '1px 6px',
-                                              borderRadius: '4px',
-                                              whiteSpace: 'nowrap',
-                                            }}
-                                          >
-                                            Quá hạn
-                                          </span>
-                                        )}
-                                        {scheduleStatus === 'delayed' && (
-                                          <span
-                                            style={{
-                                              fontSize: '0.65rem',
-                                              fontWeight: 700,
-                                              color: '#c2410c',
-                                              backgroundColor: '#fff7ed',
-                                              border: '1px solid #fed7aa',
-                                              padding: '1px 6px',
-                                              borderRadius: '4px',
-                                              whiteSpace: 'nowrap',
-                                            }}
-                                          >
-                                            Chậm tiến độ
-                                          </span>
-                                        )}
-                                        <span
-                                          style={{
-                                            fontSize: '0.72rem',
-                                            fontWeight: 800,
-                                            color: task.progress === 100 ? '#10b981' : '#2563eb',
-                                          }}
-                                        >
-                                          {task.progress}%
-                                        </span>
-                                      </div>
-                                    </div>
-
-                                    <div
+                      return (
+                        <React.Fragment key={group.contractCode}>
+                          {/* Hàng Tiêu đề Danh mục chính Hợp đồng / Gói thầu */}
+                          <tr
+                            onClick={() => {
+                              setSelectedContractGroup(group);
+                              setIsContractDrawerOpen(true);
+                            }}
+                            style={{
+                              backgroundColor: '#f1f5f9',
+                              borderTop: '2px solid #cbd5e1',
+                              borderBottom: '1px solid #cbd5e1',
+                              cursor: 'pointer',
+                            }}
+                            title={`Nhấn để xem chi tiết ${groupPrefix ? `${groupPrefix.toLowerCase()} ` : ''}${displayCode}`}
+                          >
+                            <td colSpan={isMobileView ? 1 : 7} style={{ padding: '8px 12px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minWidth: 0 }}>
+                                <div style={{ minWidth: 0, width: '100%' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <span
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleContractCollapse(group.contractCode);
+                                      }}
+                                      title={isCollapsed ? 'Mở rộng' : 'Thu gọn'}
                                       style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+                                        transition: 'transform 0.2s',
+                                        padding: '2px',
+                                        borderRadius: '4px',
+                                        flexShrink: 0,
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.08)';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.backgroundColor = 'transparent';
+                                      }}
+                                    >
+                                      <ChevronDown size={13} />
+                                    </span>
+                                    <span
+                                      className="text-uppercase"
+                                      style={{
+                                        fontWeight: 800,
+                                        fontSize: '0.8125rem',
                                         color: '#0f172a',
-                                        fontWeight: 700,
-                                        fontSize: '0.8rem',
-                                        lineHeight: 1.35,
-                                        whiteSpace: 'normal',
+                                        letterSpacing: '0.02em',
                                         wordBreak: 'break-word',
                                       }}
                                     >
-                                      {task.title}
-                                    </div>
-
-                                    <div
-                                      style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '6px',
-                                        flexWrap: 'wrap',
-                                        fontSize: '0.68rem',
-                                        color: '#64748b',
-                                      }}
-                                    >
-                                      <span>
-                                        Hạn: <strong style={{ color: dueInfo.color }}>{dueInfo.dueLabel}</strong> ({dueInfo.subText})
-                                      </span>
-                                      <span>•</span>
-                                      <span>
-                                        Phụ trách: <strong style={{ color: '#334155' }}>{assigneeInfo.name}</strong>
-                                      </span>
-                                    </div>
+                                      {groupPrefix ? `${groupPrefix}: ${displayCode}` : displayCode}
+                                    </span>
+                                    <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                      ({group.tasks.length} công việc con)
+                                    </span>
                                   </div>
-                                </td>
+                                  <div style={{ fontSize: '0.7rem', color: '#475569', marginTop: '2px', paddingLeft: '21px', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                    <span style={{ fontWeight: 400, color: '#475569' }}>{group.customerName}</span>
+                                    {group.customerAddress && (
+                                      <>
+                                        <span style={{ margin: '0 5px', color: '#94a3b8' }}>|</span>
+                                        <span>{group.customerAddress}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
 
-                                {/* Cột 5: ĐƠN VỊ PHỤ TRÁCH HOẶC TÌNH TRẠNG TIẾN ĐỘ */}
-                                <td className="hidden md:table-cell" style={{ padding: '8px 10px', minWidth: '160px' }}>
-                                  {isScheduleStatusMode ? (
-                                    <div>
-                                      {scheduleStatus === 'overdue' && (
-                                        <span style={{ fontWeight: 600, color: '#dc2626', fontSize: '0.78rem' }}>
-                                          Đã quá hạn
-                                        </span>
-                                      )}
-                                      {scheduleStatus === 'delayed' && (
-                                        <span style={{ fontWeight: 600, color: '#d97706', fontSize: '0.78rem' }}>
-                                          Chậm tiến độ
-                                        </span>
-                                      )}
-                                      {scheduleStatus === 'on_track' && (
-                                        <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>—</span>
-                                      )}
+                          {/* Các dòng công việc con */}
+                          {!isCollapsed &&
+                            group.tasks.map((task, idx) => {
+                              const dueInfo = getDueInfo(task);
+                              const scheduleStatus = getTaskScheduleStatus(task);
+                              const statusDisplay = getStatusDisplay(task);
+
+                              // Phân giải tên và phòng ban người thực hiện
+                              const assigneeInfo = formatAssigneeDisplay(task.assignee, task.department);
+
+                              return (
+                                <SwipeableTableRow
+                                  key={task.id}
+                                  rowId={`task-${task.id}`}
+                                  deleteConfirmTitle="Xác nhận xoá công việc"
+                                  deleteConfirmMessage={`Bạn có chắc chắn muốn xoá công việc "${task.title}" (${task.code}) khỏi hệ thống? Thao tác này không thể hoàn tác.`}
+                                  onEdit={() => {
+                                    setSelectedTask(task);
+                                    setUpdatingProgress(task.progress);
+                                    setIsDrawerOpen(true);
+                                  }}
+                                  onDelete={!readOnly ? () => handleDeleteSingleTask(task, true) : undefined}
+                                  onClick={() => {
+                                    setSelectedTask(task);
+                                    setUpdatingProgress(task.progress);
+                                    setIsDrawerOpen(true);
+                                  }}
+                                  style={{
+                                    borderBottom: '1px solid #f1f5f9',
+                                    transition: 'background-color 0.15s ease',
+                                    cursor: 'pointer',
+                                  }}
+                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                >
+                                  {/* Cột 1: STT */}
+                                  <td className="hidden md:table-cell" style={{ padding: '8px 10px', textAlign: 'center', color: '#94a3b8' }}>
+                                    {idx + 1}
+                                  </td>
+
+                                  {/* Cột 2: MÃ VIỆC (không xuống dòng) và Ngày bắt đầu ở dưới */}
+                                  <td className="hidden md:table-cell" style={{ padding: '8px 10px', minWidth: '120px', whiteSpace: 'nowrap' }}>
+                                    <div style={{ fontWeight: 700, color: '#1e40af', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
+                                      {task.code}
                                     </div>
-                                  ) : (
-                                    <>
-                                      <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>
-                                        {assigneeInfo.name}
+                                    {task.startDate && (
+                                      <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 500, marginTop: '2px', whiteSpace: 'nowrap' }}>
+                                        {task.startDate}
                                       </div>
-                                      {assigneeInfo.dept && (
-                                        <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '1px', whiteSpace: 'nowrap' }}>
-                                          {assigneeInfo.dept}
-                                        </div>
-                                      )}
-                                    </>
-                                  )}
-                                </td>
+                                    )}
+                                  </td>
 
-                                {/* Cột 6: TIẾN ĐỘ */}
-                                <td className="hidden md:table-cell" style={{ padding: '8px 10px' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  {/* Cột 4: CÔNG VIỆC VÀ DỰ ÁN */}
+                                  <td className="task-mgmt-col-work" style={{ padding: '8px 10px', maxWidth: isMobileView ? 'none' : '320px' }}>
+                                    {/* Giao diện máy tính (giữ nguyên) */}
                                     <div
+                                      className="hidden md:block"
                                       style={{
-                                        flex: 1,
-                                        height: '5px',
-                                        backgroundColor: '#f1f5f9',
-                                        borderRadius: '9999px',
+                                        color: '#1e293b',
+                                        fontWeight: 400,
+                                        lineHeight: 1.3,
+                                        whiteSpace: 'nowrap',
                                         overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        fontSize: '0.78rem',
                                       }}
+                                      title={task.title}
                                     >
+                                      <span>{task.title}</span>
+                                    </div>
+
+                                    {/* Giao diện điện thoại (<= 768px) */}
+                                    <div className="flex flex-col gap-1 md:hidden" style={{ minWidth: 0 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                          <span
+                                            style={{
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                              fontSize: '0.65rem',
+                                              fontWeight: 700,
+                                              color: statusDisplay.dotColor,
+                                            }}
+                                          >
+                                            <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: statusDisplay.dotColor }} />
+                                            {statusDisplay.label}
+                                          </span>
+                                        </div>
+
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                          {scheduleStatus === 'overdue' && (
+                                            <span
+                                              style={{
+                                                fontSize: '0.65rem',
+                                                fontWeight: 700,
+                                                color: '#dc2626',
+                                                backgroundColor: '#fef2f2',
+                                                border: '1px solid #fecaca',
+                                                padding: '1px 6px',
+                                                borderRadius: '4px',
+                                                whiteSpace: 'nowrap',
+                                              }}
+                                            >
+                                              Quá hạn
+                                            </span>
+                                          )}
+                                          {scheduleStatus === 'delayed' && (
+                                            <span
+                                              style={{
+                                                fontSize: '0.65rem',
+                                                fontWeight: 700,
+                                                color: '#c2410c',
+                                                backgroundColor: '#fff7ed',
+                                                border: '1px solid #fed7aa',
+                                                padding: '1px 6px',
+                                                borderRadius: '4px',
+                                                whiteSpace: 'nowrap',
+                                              }}
+                                            >
+                                              Chậm tiến độ
+                                            </span>
+                                          )}
+                                          <span
+                                            style={{
+                                              fontSize: '0.72rem',
+                                              fontWeight: 800,
+                                              color: task.progress === 100 ? '#10b981' : '#2563eb',
+                                            }}
+                                          >
+                                            {task.progress}%
+                                          </span>
+                                        </div>
+                                      </div>
+
                                       <div
                                         style={{
-                                          width: `${task.progress}%`,
-                                          height: '100%',
-                                          backgroundColor:
-                                            task.progress === 100
-                                              ? '#10b981'
-                                              : task.progress > 0
-                                              ? '#3b82f6'
-                                              : '#cbd5e1',
-                                          borderRadius: '9999px',
+                                          color: '#0f172a',
+                                          fontWeight: 700,
+                                          fontSize: '0.8rem',
+                                          lineHeight: 1.35,
+                                          whiteSpace: 'normal',
+                                          wordBreak: 'break-word',
                                         }}
-                                      />
+                                      >
+                                        {task.title}
+                                      </div>
+
+                                      <div
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '6px',
+                                          flexWrap: 'wrap',
+                                          fontSize: '0.68rem',
+                                          color: '#64748b',
+                                        }}
+                                      >
+                                        <span>
+                                          Hạn: <strong style={{ color: dueInfo.color }}>{dueInfo.dueLabel}</strong> ({dueInfo.subText})
+                                        </span>
+                                        <span>•</span>
+                                        <span>
+                                          Phụ trách: <strong style={{ color: '#334155' }}>{assigneeInfo.name}</strong>
+                                        </span>
+                                      </div>
                                     </div>
-                                    <span
-                                      style={{
-                                        fontSize: '0.72rem',
-                                        fontWeight: 700,
-                                        color: task.progress === 100 ? '#10b981' : '#334155',
-                                        minWidth: '30px',
-                                        textAlign: 'right',
-                                      }}
-                                    >
-                                      {task.progress}%
-                                    </span>
-                                  </div>
-                                </td>
+                                  </td>
 
-                                {/* Cột 7: HẠN CHÓT */}
-                                <td className="hidden md:table-cell" style={{ padding: '8px 10px' }}>
-                                  <div style={{ fontWeight: 700, color: dueInfo.color, fontSize: '0.75rem' }}>
-                                    {dueInfo.dueLabel}
-                                  </div>
-                                  <div style={{ fontSize: '0.625rem', color: '#64748b' }}>
-                                    {dueInfo.subText}
-                                  </div>
-                                </td>
+                                  {/* Cột 5: ĐƠN VỊ PHỤ TRÁCH HOẶC TÌNH TRẠNG TIẾN ĐỘ */}
+                                  <td className="hidden md:table-cell" style={{ padding: '8px 10px', minWidth: '160px' }}>
+                                    {isScheduleStatusMode ? (
+                                      <div>
+                                        {scheduleStatus === 'overdue' && (
+                                          <span style={{ fontWeight: 600, color: '#dc2626', fontSize: '0.78rem' }}>
+                                            Đã quá hạn
+                                          </span>
+                                        )}
+                                        {scheduleStatus === 'delayed' && (
+                                          <span style={{ fontWeight: 600, color: '#d97706', fontSize: '0.78rem' }}>
+                                            Chậm tiến độ
+                                          </span>
+                                        )}
+                                        {scheduleStatus === 'on_track' && (
+                                          <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>—</span>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>
+                                          {assigneeInfo.name}
+                                        </div>
+                                        {assigneeInfo.dept && (
+                                          <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '1px', whiteSpace: 'nowrap' }}>
+                                            {assigneeInfo.dept}
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+                                  </td>
 
-                                {/* Cột 8: TRẠNG THÁI (Chỉ hiển thị Quá hạn, Chậm tiến độ. Đúng tiến độ không cần hiển thị) */}
-                                <td className="hidden md:table-cell" style={{ padding: '8px 10px', minWidth: '125px' }}>
-                                  {scheduleStatus === 'overdue' ? (
-                                    <span
-                                      style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '4px',
-                                        fontSize: '0.72rem',
-                                        fontWeight: 700,
-                                        color: '#dc2626',
-                                        backgroundColor: '#fef2f2',
-                                        border: '1px solid #fecaca',
-                                        padding: '2px 8px',
-                                        borderRadius: '4px',
-                                        whiteSpace: 'nowrap',
-                                      }}
-                                    >
-                                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#ef4444' }} />
-                                      Quá hạn
-                                    </span>
-                                  ) : scheduleStatus === 'delayed' ? (
-                                    <span
-                                      style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '4px',
-                                        fontSize: '0.72rem',
-                                        fontWeight: 700,
-                                        color: '#c2410c',
-                                        backgroundColor: '#fff7ed',
-                                        border: '1px solid #fed7aa',
-                                        padding: '2px 8px',
-                                        borderRadius: '4px',
-                                        whiteSpace: 'nowrap',
-                                      }}
-                                    >
-                                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#f97316' }} />
-                                      Chậm tiến độ
-                                    </span>
-                                  ) : null}
-                                </td>
-                              </SwipeableTableRow>
-                            );
-                          })}
-                      </React.Fragment>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                                  {/* Cột 6: TIẾN ĐỘ */}
+                                  <td className="hidden md:table-cell" style={{ padding: '8px 10px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <div
+                                        style={{
+                                          flex: 1,
+                                          height: '5px',
+                                          backgroundColor: '#f1f5f9',
+                                          borderRadius: '9999px',
+                                          overflow: 'hidden',
+                                        }}
+                                      >
+                                        <div
+                                          style={{
+                                            width: `${task.progress}%`,
+                                            height: '100%',
+                                            backgroundColor:
+                                              task.progress === 100
+                                                ? '#10b981'
+                                                : task.progress > 0
+                                                  ? '#3b82f6'
+                                                  : '#cbd5e1',
+                                            borderRadius: '9999px',
+                                          }}
+                                        />
+                                      </div>
+                                      <span
+                                        style={{
+                                          fontSize: '0.72rem',
+                                          fontWeight: 700,
+                                          color: task.progress === 100 ? '#10b981' : '#334155',
+                                          minWidth: '30px',
+                                          textAlign: 'right',
+                                        }}
+                                      >
+                                        {task.progress}%
+                                      </span>
+                                    </div>
+                                  </td>
+
+                                  {/* Cột 7: HẠN CHÓT */}
+                                  <td className="hidden md:table-cell" style={{ padding: '8px 10px' }}>
+                                    <div style={{ fontWeight: 700, color: dueInfo.color, fontSize: '0.75rem' }}>
+                                      {dueInfo.dueLabel}
+                                    </div>
+                                    <div style={{ fontSize: '0.625rem', color: '#64748b' }}>
+                                      {dueInfo.subText}
+                                    </div>
+                                  </td>
+
+                                  {/* Cột 8: TRẠNG THÁI (Chỉ hiển thị Quá hạn, Chậm tiến độ. Đúng tiến độ không cần hiển thị) */}
+                                  <td className="hidden md:table-cell" style={{ padding: '8px 10px', minWidth: '125px' }}>
+                                    {scheduleStatus === 'overdue' ? (
+                                      <span
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          fontSize: '0.72rem',
+                                          fontWeight: 700,
+                                          color: '#dc2626',
+                                          backgroundColor: '#fef2f2',
+                                          border: '1px solid #fecaca',
+                                          padding: '2px 8px',
+                                          borderRadius: '4px',
+                                          whiteSpace: 'nowrap',
+                                        }}
+                                      >
+                                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#ef4444' }} />
+                                        Quá hạn
+                                      </span>
+                                    ) : scheduleStatus === 'delayed' ? (
+                                      <span
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          fontSize: '0.72rem',
+                                          fontWeight: 700,
+                                          color: '#c2410c',
+                                          backgroundColor: '#fff7ed',
+                                          border: '1px solid #fed7aa',
+                                          padding: '2px 8px',
+                                          borderRadius: '4px',
+                                          whiteSpace: 'nowrap',
+                                        }}
+                                      >
+                                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#f97316' }} />
+                                        Chậm tiến độ
+                                      </span>
+                                    ) : null}
+                                  </td>
+                                </SwipeableTableRow>
+                              );
+                            })}
+                        </React.Fragment>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             </SwipeableTableProvider>
           </div>
 
@@ -4118,8 +4126,8 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                         selectedContractGroup.avgProgress === 100
                           ? '#10b981'
                           : selectedContractGroup.avgProgress > 50
-                          ? '#2563eb'
-                          : '#f59e0b',
+                            ? '#2563eb'
+                            : '#f59e0b',
                       borderRadius: '999px',
                       transition: 'width 0.3s ease',
                     }}

@@ -6814,6 +6814,33 @@ app.get('/api/user-tasks', async (req, res) => {
       'sales-team': { name: 'Phòng Kinh doanh', dept: 'Kinh doanh' },
       'user-system': { name: 'Hệ thống tự động', dept: '' },
     };
+
+    try {
+      const [allDbUsers, allDbEmployees] = await Promise.all([
+        prisma.user.findMany({ select: { id: true, name: true } }).catch(() => []),
+        prisma.employee
+          .findMany({ select: { id: true, fullName: true, departmentName: true, userId: true } })
+          .catch(() => []),
+      ]);
+
+      (allDbUsers || []).forEach((u) => {
+        if (u.id && u.name) {
+          cuidNameMap[u.id] = { name: u.name, dept: cuidNameMap[u.id]?.dept || '' };
+        }
+      });
+      (allDbEmployees || []).forEach((e) => {
+        if (e.id && e.fullName) {
+          cuidNameMap[e.id] = { name: e.fullName, dept: e.departmentName || '' };
+        }
+        if (e.userId && e.fullName) {
+          cuidNameMap[e.userId] = {
+            name: e.fullName,
+            dept: e.departmentName || cuidNameMap[e.userId]?.dept || '',
+          };
+        }
+      });
+    } catch (_loadErr) {}
+
     const deptTranslate = {
       'logistics': 'Kho vận',
       'production': 'Sản xuất',
@@ -6862,6 +6889,13 @@ app.get('/api/user-tasks', async (req, res) => {
             continue;
           }
         }
+
+        const sDate = row.createdAt ? new Date(row.createdAt) : new Date();
+        const eDate = row.dueDate ? new Date(row.dueDate) : new Date(sDate.getTime() + 7 * 86400000);
+        const startIso = !isNaN(sDate.getTime()) ? sDate.toISOString().slice(0, 10) : '2026-11-01';
+        const endIso = !isNaN(eDate.getTime()) ? eDate.toISOString().slice(0, 10) : startIso;
+        const validEndIso = endIso < startIso ? startIso : endIso;
+
         const taskItem = parsed
           ? {
             ...parsed,
@@ -6873,6 +6907,8 @@ app.get('/api/user-tasks', async (req, res) => {
             assignee: resolveAssignee(parsed.assignee || row.assigneeId),
             assigner: resolveAssignee(parsed.assigner || row.creatorId || 'Ban Giám đốc'),
             department: resolveDept(parsed.department || row.deptCode, row.assigneeId),
+            startDate: parsed.startDate || startIso,
+            endDate: parsed.endDate || validEndIso,
           }
           : {
             id: row.id,
@@ -6894,13 +6930,11 @@ app.get('/api/user-tasks', async (req, res) => {
                   : row.priority === 'low'
                     ? 'Thấp'
                     : 'Trung bình',
-            startDate: row.createdAt ? row.createdAt.toISOString().slice(0, 10) : '2026-11-01',
-            endDate: row.dueDate
-              ? row.dueDate.toISOString().slice(0, 10)
-              : (row.createdAt ? new Date(row.createdAt.getTime() + 7 * 86400000).toISOString().slice(0, 10) : '2026-11-07'),
-            progress: row.status === 'completed' ? 100 : 0,
+            startDate: startIso,
+            endDate: validEndIso,
+            progress: row.status === 'completed' || row.status === 'done' ? 100 : 0,
             status: row.status || 'not_started',
-            statusLabel: row.status === 'completed' ? 'Đã hoàn thành' : 'Chưa thực hiện',
+            statusLabel: row.status === 'completed' || row.status === 'done' ? 'Đã hoàn thành' : 'Chưa thực hiện',
             description: row.description || '',
             category: 'production',
           };

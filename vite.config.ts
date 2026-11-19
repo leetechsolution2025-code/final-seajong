@@ -548,9 +548,43 @@ function autoBackendPlugin(): Plugin {
 
               // 1. Lấy các công việc khởi tạo trực tiếp trong bảng Task
               try {
-                const dbTasks = await vitePrisma.task.findMany({
-                  orderBy: { createdAt: 'desc' },
+                const [dbTasks, dbUsers, dbEmployees] = await Promise.all([
+                  vitePrisma.task.findMany({
+                    orderBy: { createdAt: 'desc' },
+                  }),
+                  vitePrisma.user.findMany({ select: { id: true, name: true } }).catch(() => []),
+                  vitePrisma.employee
+                    .findMany({ select: { id: true, fullName: true, departmentName: true, userId: true } })
+                    .catch(() => []),
+                ])
+
+                const userNameMap = new Map<string, string>()
+                const userDeptMap = new Map<string, string>()
+                dbUsers.forEach((u: any) => {
+                  if (u.id && u.name) userNameMap.set(u.id, u.name)
                 })
+                dbEmployees.forEach((e: any) => {
+                  if (e.id && e.fullName) userNameMap.set(e.id, e.fullName)
+                  if (e.userId && e.fullName) userNameMap.set(e.userId, e.fullName)
+                  if (e.id && e.departmentName) userDeptMap.set(e.id, e.departmentName)
+                  if (e.userId && e.departmentName) userDeptMap.set(e.userId, e.departmentName)
+                })
+
+                const resolveUserName = (raw: any, defaultVal = 'Chưa phân công') => {
+                  if (!raw) return defaultVal
+                  const str = String(raw).trim()
+                  if (userNameMap.has(str)) return userNameMap.get(str)!
+                  return str
+                }
+
+                const resolveUserDept = (deptRaw: any, personRaw: any, defaultVal = 'Phòng Kinh doanh') => {
+                  if (personRaw && userDeptMap.has(String(personRaw).trim())) {
+                    return userDeptMap.get(String(personRaw).trim())!
+                  }
+                  if (deptRaw) return String(deptRaw).trim()
+                  return defaultVal
+                }
+
                 for (const row of dbTasks) {
                   let parsed: any = null
                   if (row.actualResult) {
@@ -561,6 +595,13 @@ function autoBackendPlugin(): Plugin {
                       }
                     } catch {}
                   }
+
+                  const sDate = row.createdAt ? new Date(row.createdAt) : new Date()
+                  const eDate = row.dueDate ? new Date(row.dueDate) : new Date(sDate.getTime() + 7 * 86400000)
+                  const startIso = !isNaN(sDate.getTime()) ? sDate.toISOString().slice(0, 10) : '2026-11-01'
+                  const endIso = !isNaN(eDate.getTime()) ? eDate.toISOString().slice(0, 10) : startIso
+                  const validEndIso = endIso < startIso ? startIso : endIso
+
                   const taskItem = parsed
                     ? {
                         ...parsed,
@@ -569,9 +610,11 @@ function autoBackendPlugin(): Plugin {
                         description: parsed.description ?? row.description ?? '',
                         status: parsed.status || row.status || 'not_started',
                         priority: parsed.priority || row.priority || 'medium',
-                        assignee: parsed.assignee || row.assigneeId || 'Chưa phân công',
-                        assigner: parsed.assigner || row.creatorId || 'Ban Giám đốc',
-                        department: parsed.department || row.deptCode || 'Phòng Kinh doanh',
+                        assignee: resolveUserName(parsed.assignee || row.assigneeId, 'Chưa phân công'),
+                        assigner: resolveUserName(parsed.assigner || row.creatorId, 'Ban Giám đốc'),
+                        department: resolveUserDept(parsed.department || row.deptCode, row.assigneeId, 'Phòng Kinh doanh'),
+                        startDate: parsed.startDate || startIso,
+                        endDate: parsed.endDate || validEndIso,
                       }
                     : {
                         id: row.id,
@@ -581,9 +624,9 @@ function autoBackendPlugin(): Plugin {
                         contractCode: '',
                         customerName: 'Nội bộ công ty',
                         customerAddress: '',
-                        assignee: row.assigneeId || 'Chưa phân công',
-                        assigner: row.creatorId || 'Ban Giám đốc',
-                        department: row.deptCode || 'Phòng Kinh doanh',
+                        assignee: resolveUserName(row.assigneeId, 'Chưa phân công'),
+                        assigner: resolveUserName(row.creatorId, 'Ban Giám đốc'),
+                        department: resolveUserDept(row.deptCode, row.assigneeId, 'Phòng Kinh doanh'),
                         priority: row.priority || 'medium',
                         priorityLabel:
                           row.priority === 'urgent'
@@ -593,11 +636,12 @@ function autoBackendPlugin(): Plugin {
                               : row.priority === 'low'
                                 ? 'Thấp'
                                 : 'Trung bình',
-                        startDate: row.createdAt ? row.createdAt.toISOString().slice(0, 10) : '2026-10-04',
-                        endDate: row.dueDate ? row.dueDate.toISOString().slice(0, 10) : '2026-10-10',
-                        progress: row.status === 'completed' ? 100 : 0,
+                        startDate: startIso,
+                        endDate: validEndIso,
+                        progress: row.status === 'completed' || row.status === 'done' ? 100 : 0,
                         status: row.status || 'not_started',
-                        statusLabel: row.status === 'completed' ? 'Đã hoàn thành' : 'Chưa thực hiện',
+                        statusLabel:
+                          row.status === 'completed' || row.status === 'done' ? 'Đã hoàn thành' : 'Chưa thực hiện',
                         description: row.description || '',
                         category: 'production',
                       }
