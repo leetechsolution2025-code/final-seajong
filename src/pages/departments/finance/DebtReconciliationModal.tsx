@@ -160,10 +160,21 @@ export function cleanTransactionNote(
   cleaned = cleaned.replace(/\[\s*\{[\s\S]*?"id":\s*"DC-[\s\S]*?\}\s*\]/gi, '');
 
   // 2. Chuẩn hóa câu chữ hệ thống sang văn phong kế toán chuẩn
-  cleaned = cleaned.replace(/Khách hàng thanh toán\s+Công nợ tự động phát sinh từ đơn hàng\s+/gi, 'Khách hàng thanh toán cho đơn hàng ');
+  // Bán hàng (Phải thu - TK 131)
+  cleaned = cleaned.replace(/Khách hàng thanh toán\s+Công nợ tự động phát sinh từ đơn hàng\s+/gi, 'Khách hàng thanh toán đơn hàng ');
+  cleaned = cleaned.replace(/Khách hàng thanh toán\s+Công nợ tự động phát sinh từ đơn bán hàng\s+/gi, 'Khách hàng thanh toán đơn hàng ');
   cleaned = cleaned.replace(/Thanh toán\s+Công nợ tự động phát sinh từ đơn hàng\s+/gi, 'Thanh toán tiền hàng cho đơn hàng ');
   cleaned = cleaned.replace(/Công nợ tự động phát sinh từ đơn hàng\s+/gi, 'Xuất bán hàng theo đơn hàng ');
+  cleaned = cleaned.replace(/Công nợ tự động phát sinh từ đơn bán hàng\s+/gi, 'Xuất bán hàng theo đơn hàng ');
   cleaned = cleaned.replace(/Phát sinh công nợ từ đơn hàng\s+/gi, 'Xuất bán hàng theo đơn hàng ');
+  cleaned = cleaned.replace(/Công nợ phát sinh từ đơn hàng\s+/gi, 'Xuất bán hàng theo đơn hàng ');
+
+  // Mua hàng (Phải trả - TK 331)
+  cleaned = cleaned.replace(/Công nợ từ đơn mua hàng\s+/gi, 'Nhập mua hàng theo đơn mua hàng ');
+  cleaned = cleaned.replace(/Công nợ tự động phát sinh từ đơn mua hàng\s+/gi, 'Nhập mua hàng theo đơn mua hàng ');
+  cleaned = cleaned.replace(/Công nợ phát sinh từ đơn mua hàng\s+/gi, 'Nhập mua hàng theo đơn mua hàng ');
+  cleaned = cleaned.replace(/Đơn mua hàng Dư nợ đầu kỳ/gi, 'Dư nợ đầu kỳ');
+  cleaned = cleaned.replace(/^nợ cũ chuyển sang$/gi, 'Dư nợ đầu kỳ kết chuyển');
 
   // 3. Xóa tên đối tác nếu xuất hiện ở đầu câu hoặc bị lặp lại sau gạch nối
   if (customerName) {

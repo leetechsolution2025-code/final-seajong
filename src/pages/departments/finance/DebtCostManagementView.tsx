@@ -48,7 +48,7 @@ import { ConfirmDialog } from '../../../components/common/ConfirmDialog';
 import { EmployeeSelect } from '../../../components/common/EmployeeSelect';
 import { SuggestionInput, type SuggestionItem } from '../../../components/common/SuggestionInput';
 import { notifyFinanceUpdated, useFinanceRealtimeSync } from '../../../services/financeSyncService';
-import { DebtReconciliationModal } from './DebtReconciliationModal';
+import { DebtReconciliationModal, formatFullPartnerName } from './DebtReconciliationModal';
 import { PaymentVoucherPrintModal } from './PaymentVoucherPrintModal';
 import { ReceiptVoucherPrintModal, type ReceiptVoucherData } from './ReceiptVoucherPrintModal';
 import { DebtAgingConfigOffcanvas, type DebtAgingConfig, DEFAULT_DEBT_AGING_CONFIG } from './DebtAgingConfigOffcanvas';
@@ -4077,11 +4077,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                           fontWeight: 800,
                                           color: '#0284c7',
                                           fontSize: '0.875rem',
-                                          textTransform: 'uppercase',
-                                          letterSpacing: '0.02em',
+                                          letterSpacing: '0.01em',
                                         }}
                                       >
-                                        {item.customerName}
+                                        {formatFullPartnerName(item.customerName)}
                                       </div>
                                       <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '3px' }}>
                                         {item.customerAddress}
@@ -4911,12 +4910,11 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                             fontWeight: 800,
                                             color: isTransporter ? '#1d4ed8' : '#b91c1c',
                                             fontSize: '0.8125rem',
-                                            textTransform: 'uppercase',
-                                            letterSpacing: '0.02em',
+                                            letterSpacing: '0.01em',
                                             lineHeight: 1.25,
                                           }}
                                         >
-                                          {item.supplierName}
+                                          {formatFullPartnerName(item.supplierName)}
                                         </span>
                                         {isTransporter ? (
                                           <span

@@ -54,7 +54,17 @@ function formatNumberGroup(num?: number | string): string {
 export function formatDebtDetailTitle(rawTitle?: string, entry?: any, partnerName?: string): string {
   let text = String(rawTitle || entry?.title || entry?.note || '').trim();
 
-  // 1. Nếu có chứa [PAYMENT_LOGS]:
+  // 1. Loại bỏ hoàn toàn các thẻ log kỹ thuật và metadata ngầm
+  const technicalTags = [
+    '[RECONCILIATION_LOGS]',
+    '[PAYMENT_LOGS]',
+    '[RECON_META]',
+    '[AUDIT_LOGS]',
+    '[RECONCILIATION_HISTORY]',
+    '[LOGS]',
+  ];
+
+  // Trích xuất note từ [PAYMENT_LOGS] nếu có
   if (text.includes('[PAYMENT_LOGS]:')) {
     const parts = text.split('[PAYMENT_LOGS]:');
     const prefix = parts[0].trim();
@@ -77,25 +87,53 @@ export function formatDebtDetailTitle(rawTitle?: string, entry?: any, partnerNam
     }
   }
 
-  // 2. Xử lý [RECON_META]:
-  if (text.includes('[RECON_META]:')) {
-    text = text.split('[RECON_META]:')[0].trim();
+  // Cắt bỏ bất kỳ tag kỹ thuật nào khác
+  for (const tag of technicalTags) {
+    if (text.includes(tag)) {
+      text = text.split(tag)[0].trim();
+    }
   }
 
-  // 3. Xử lý trường hợp chuỗi là JSON thô
-  if (text.startsWith('[{') || text.startsWith('{"')) {
-    try {
-      const parsed = JSON.parse(text);
-      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.note) {
-        text = parsed[0].note;
-      } else if (parsed?.note) {
-        text = parsed.note;
-      }
-    } catch {}
-  }
+  // 2. Loại bỏ các chuỗi JSON thô: [{"id": ...}] hoặc {"id": ...} nếu còn sót lại ở bất kỳ đâu
+  text = text.replace(/\[\s*\{[\s\S]*?\}\s*\]/g, '').trim();
+  text = text.replace(/\{\s*"[\s\S]*?"\s*:\s*[\s\S]*?\}\s*/g, '').trim();
 
-  const code = String(entry?.code || '');
-  if (!text || text.includes('[PAYMENT_LOGS]') || text.startsWith('[{') || text.startsWith('{"')) {
+  // 3. Chuẩn hóa các câu chữ hệ thống sinh tự động thành ngôn ngữ kế toán chuẩn mực
+  // Đơn bán hàng (Phải thu - TK 131)
+  text = text.replace(/^Khách hàng thanh toán\s+Công nợ tự động phát sinh từ đơn hàng\s+/i, 'Khách hàng thanh toán đơn hàng ');
+  text = text.replace(/^Khách hàng thanh toán\s+Công nợ tự động phát sinh từ đơn bán hàng\s+/i, 'Khách hàng thanh toán đơn hàng ');
+  text = text.replace(/^Thanh toán\s+Công nợ tự động phát sinh từ đơn hàng\s+/i, 'Thanh toán cho đơn hàng ');
+  text = text.replace(/^Công nợ tự động phát sinh từ đơn hàng\s+/i, 'Xuất bán hàng theo đơn hàng ');
+  text = text.replace(/^Công nợ tự động phát sinh từ đơn bán hàng\s+/i, 'Xuất bán hàng theo đơn hàng ');
+  text = text.replace(/^Công nợ phát sinh từ đơn hàng\s+/i, 'Xuất bán hàng theo đơn hàng ');
+  text = text.replace(/^Công nợ phát sinh từ đơn bán hàng\s+/i, 'Xuất bán hàng theo đơn hàng ');
+  text = text.replace(/^Phát sinh công nợ từ đơn hàng\s+/i, 'Xuất bán hàng theo đơn hàng ');
+  text = text.replace(/^Công nợ tự động phát sinh từ hợp đồng\s+/i, 'Xuất bán theo hợp đồng ');
+
+  // Đơn mua hàng (Phải trả - TK 331)
+  text = text.replace(/^Công nợ từ đơn mua hàng\s+/i, 'Nhập mua hàng theo đơn mua hàng ');
+  text = text.replace(/^Công nợ tự động phát sinh từ đơn mua hàng\s+/i, 'Nhập mua hàng theo đơn mua hàng ');
+  text = text.replace(/^Công nợ phát sinh từ đơn mua hàng\s+/i, 'Nhập mua hàng theo đơn mua hàng ');
+  text = text.replace(/^Đơn mua hàng Dư nợ đầu kỳ$/i, 'Dư nợ đầu kỳ');
+  text = text.replace(/^nợ cũ chuyển sang$/i, 'Dư nợ đầu kỳ kết chuyển');
+
+  // Chuẩn hóa phiếu thu vắn tắt / sao kê: "Anh Ngọc ck 20tr" -> "Chuyển khoản 20 triệu đồng"
+  text = text.replace(/^(.*?)\s*ck\s*(\d+)\s*(tr|triệu|k|nghìn)?/i, (_match, _prefix, num, unit) => {
+    const unitStr = unit?.toLowerCase() === 'k' || unit?.toLowerCase() === 'nghìn' ? 'nghìn' : 'triệu';
+    return `Chuyển khoản ${num} ${unitStr} đồng`;
+  });
+
+  // Chuẩn hóa từ viết tắt giao dịch ngân hàng
+  text = text.replace(/\bck\b/gi, 'chuyển khoản');
+  text = text.replace(/(\d+)\s*tr\b/gi, '$1 triệu đồng');
+  text = text.replace(/(\d+)\s*k\b/gi, '$1.000 đồng');
+
+  // Xóa các gạch nối lẻ loi ở đầu hoặc cuối
+  text = text.replace(/^\s*[-–—:]+\s*/, '').replace(/\s*[-–—:]+\s*$/, '').trim();
+
+  // 4. Fallback trường hợp text rỗng hoặc vô nghĩa
+  const code = String(entry?.code || '').trim();
+  if (!text || text.length < 3 || text.toLowerCase() === 'chuyển khoản') {
     if (code.startsWith('PC-') || code.startsWith('UNC-') || code.startsWith('CHI-')) {
       return `Chi trả tiền hàng cho ${partnerName || 'nhà cung cấp'}`;
     }
@@ -106,10 +144,22 @@ export function formatDebtDetailTitle(rawTitle?: string, entry?: any, partnerNam
       return `Chứng từ đối soát công nợ (${code})`;
     }
     if (code.startsWith('DH-') || code.startsWith('PO-')) {
-      return `Đơn mua hàng ${code}`;
+      return `Nhập mua hàng theo đơn hàng ${code}`;
+    }
+    if (code.startsWith('DBH-')) {
+      return `Xuất bán hàng theo đơn hàng ${code}`;
+    }
+    if (code.toLowerCase().includes('dư nợ') || code.toLowerCase().includes('đầu kỳ') || code === 'DK') {
+      return 'Dư nợ đầu kỳ';
+    }
+    if (code.startsWith('ERR-') || code.startsWith('BBGT-')) {
+      return 'Giảm trừ công nợ do trả lại hàng';
     }
     return partnerName ? `Khoản phát sinh công nợ - ${partnerName}` : 'Khoản phát sinh công nợ';
   }
+
+  // Viết hoa chữ cái đầu tiên
+  text = text.charAt(0).toUpperCase() + text.slice(1);
 
   return text;
 }

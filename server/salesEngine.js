@@ -438,7 +438,7 @@ export const SalesEngine = {
           status: existing.daThanhToan === 0 ? 'UNPAID' : 'PARTIAL',
           dueDate: existing.ngayGiao ? new Date(existing.ngayGiao) : new Date(Date.now() + 30 * 86400000),
           referenceId: existing.code || existing.id,
-          description: `Công nợ tự động phát sinh từ đơn bán hàng ${existing.code || existing.id}${note ? ' - ' + note : ''}`,
+          description: `Xuất bán hàng theo đơn hàng ${existing.code || existing.id}${note ? ' - ' + note : ''}`,
         }
       });
     }
