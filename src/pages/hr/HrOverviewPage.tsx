@@ -27,6 +27,7 @@ interface MonthlyHrPoint {
   newHires: number;
   signedContracts: number;
   insuredCount: number; // Số người tham gia đóng bảo hiểm BHXH
+  isFuture?: boolean;
 }
 
 interface PersonalRequestItem {
@@ -294,10 +295,32 @@ export const HrOverviewPage: React.FC = () => {
       : null;
 
   // Build 12-month headcount data for 2026 directly from real DB employees (startDate || createdAt)
+  // Lưu ý: Chỉ chốt số liệu thực tế đến tháng hiện tại (Tháng 11/2026), các tháng tương lai (Tháng 12) chưa phát sinh dữ liệu
   const monthlyChartData: MonthlyHrPoint[] = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = currentYear === 2026 ? now.getMonth() + 1 : 11;
+
     return Array.from({ length: 12 }, (_, idx) => {
       const m = idx + 1;
       const mStr = String(m).padStart(2, '0');
+      const isFuture = m > currentMonth;
+
+      if (isFuture) {
+        return {
+          monthIndex: m,
+          monthLabel: `T${m}`,
+          fullLabel: `Tháng ${mStr}/2026 (Chưa tới kỳ)`,
+          totalHeadcount: 0,
+          officialCount: 0,
+          probationCount: 0,
+          newHires: 0,
+          signedContracts: 0,
+          insuredCount: 0,
+          isFuture: true,
+        };
+      }
+
       const endOfMonth = new Date(2026, m, 0, 23, 59, 59, 999);
 
       const activeInMonth = employees.filter((emp) => {
@@ -331,6 +354,7 @@ export const HrOverviewPage: React.FC = () => {
         newHires: hiresInMonth.length,
         signedContracts: signed,
         insuredCount: insured,
+        isFuture: false,
       };
     });
   }, [employees]);
@@ -394,17 +418,19 @@ export const HrOverviewPage: React.FC = () => {
     topPct: (getY(d.totalHeadcount) / height) * 100,
   }));
 
-  let pathD = chartPoints.length > 0 ? `M ${chartPoints[0].x} ${chartPoints[0].y}` : '';
-  for (let i = 0; i < chartPoints.length - 1; i++) {
-    const curr = chartPoints[i];
-    const next = chartPoints[i + 1];
+  const recordedPoints = chartPoints.filter((p) => !p.data.isFuture);
+
+  let pathD = recordedPoints.length > 0 ? `M ${recordedPoints[0].x} ${recordedPoints[0].y}` : '';
+  for (let i = 0; i < recordedPoints.length - 1; i++) {
+    const curr = recordedPoints[i];
+    const next = recordedPoints[i + 1];
     const cpX = (curr.x + next.x) / 2;
     pathD += ` C ${cpX} ${curr.y}, ${cpX} ${next.y}, ${next.x} ${next.y}`;
   }
 
   const areaD =
-    chartPoints.length > 0
-      ? `${pathD} L ${chartPoints[chartPoints.length - 1].x} ${height - paddingBottom} L ${chartPoints[0].x} ${height - paddingBottom} Z`
+    recordedPoints.length > 0
+      ? `${pathD} L ${recordedPoints[recordedPoints.length - 1].x} ${height - paddingBottom} L ${recordedPoints[0].x} ${height - paddingBottom} Z`
       : '';
 
   const activePoint =
@@ -722,14 +748,22 @@ export const HrOverviewPage: React.FC = () => {
                 <div className="flex md:hidden items-center justify-between gap-1.5 px-2.5 py-1 mb-1.5 rounded-lg bg-white border border-emerald-200/90 shadow-2xs text-[10px] shrink-0">
                   <span className="font-extrabold text-slate-800 whitespace-nowrap">
                     {activePoint.data.fullLabel}:{' '}
-                    <span className="text-emerald-700 font-mono">
-                      {activePoint.data.totalHeadcount} NS
-                    </span>
+                    {!activePoint.data.isFuture && (
+                      <span className="text-emerald-700 font-mono">
+                        {activePoint.data.totalHeadcount} NS
+                      </span>
+                    )}
                   </span>
                   <span className="text-slate-600 font-semibold truncate">
-                    HĐLĐ: <b className="font-mono text-indigo-700">{activePoint.data.signedContracts}</b> • BHXH:{' '}
-                    <b className="font-mono text-sky-700">{activePoint.data.insuredCount}</b> • CT:{' '}
-                    <b className="font-mono text-slate-900">{activePoint.data.officialCount}</b>
+                    {activePoint.data.isFuture ? (
+                      <span className="text-amber-700 font-medium">Chưa tới kỳ báo cáo</span>
+                    ) : (
+                      <>
+                        HĐLĐ: <b className="font-mono text-indigo-700">{activePoint.data.signedContracts}</b> • BHXH:{' '}
+                        <b className="font-mono text-sky-700">{activePoint.data.insuredCount}</b> • CT:{' '}
+                        <b className="font-mono text-slate-900">{activePoint.data.officialCount}</b>
+                      </>
+                    )}
                   </span>
                 </div>
               )}
@@ -791,6 +825,39 @@ export const HrOverviewPage: React.FC = () => {
                     {/* ĐỒ THỊ DẠNG CỘT: Số người đã ký HĐLĐ (Indigo) và Số người đóng BHXH (Sky Blue) */}
                     {(chartViewMode === 'combo' || chartViewMode === 'bar') &&
                       chartPoints.map((pt, idx) => {
+                        if (pt.data.isFuture) {
+                          // Tháng tương lai chưa tới kỳ: hiển thị khung mờ nét đứt ở chân biểu đồ
+                          const x = pt.x;
+                          const bar1X = x - barWidth - barGap / 2;
+                          const bar2X = x + barGap / 2;
+                          const baseH = 6;
+                          const baseY = height - paddingBottom - baseH;
+                          return (
+                            <g key={`bars-future-${pt.data.monthIndex}`} opacity="0.35">
+                              <rect
+                                x={bar1X}
+                                y={baseY}
+                                width={barWidth}
+                                height={baseH}
+                                rx={2}
+                                fill="none"
+                                stroke="#94a3b8"
+                                strokeDasharray="2 2"
+                              />
+                              <rect
+                                x={bar2X}
+                                y={baseY}
+                                width={barWidth}
+                                height={baseH}
+                                rx={2}
+                                fill="none"
+                                stroke="#94a3b8"
+                                strokeDasharray="2 2"
+                              />
+                            </g>
+                          );
+                        }
+
                         const isHovered = hoverMonthIdx === idx;
                         const x = pt.x;
                         const h1 = Math.max(0, height - paddingBottom - getY(pt.data.signedContracts));
@@ -915,7 +982,7 @@ export const HrOverviewPage: React.FC = () => {
                       const isHovered = hoverMonthIdx === idx;
                       return (
                         <React.Fragment key={pt.data.monthIndex}>
-                          {(chartViewMode === 'combo' || chartViewMode === 'line') && (
+                          {(chartViewMode === 'combo' || chartViewMode === 'line') && !pt.data.isFuture && (
                             <div
                               className="absolute -translate-x-1/2 -translate-y-1/2 flex items-center justify-center transition-all duration-150"
                               style={{
@@ -939,7 +1006,11 @@ export const HrOverviewPage: React.FC = () => {
                           {/* Month label along bottom */}
                           <div
                             className={`absolute -translate-x-1/2 bottom-0.5 text-[10px] font-bold transition-colors ${
-                              isHovered ? 'text-emerald-700 font-extrabold' : 'text-slate-400'
+                              isHovered
+                                ? 'text-emerald-700 font-extrabold'
+                                : pt.data.isFuture
+                                ? 'text-slate-300 italic'
+                                : 'text-slate-400'
                             }`}
                             style={{ left: `${pt.leftPct}%` }}
                           >
@@ -979,58 +1050,72 @@ export const HrOverviewPage: React.FC = () => {
                             <i className="bi bi-calendar3 text-slate-400" />
                             {activePoint.data.fullLabel}
                           </span>
-                          <span className="text-[11px] font-mono font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80 shadow-2xs">
-                            {activePoint.data.totalHeadcount} nhân sự
-                          </span>
+                          {activePoint.data.isFuture ? (
+                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                              Chưa tới kỳ
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-mono font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80 shadow-2xs">
+                              {activePoint.data.totalHeadcount} nhân sự
+                            </span>
+                          )}
                         </div>
 
-                        <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
-                          <div>
-                            <span className="text-[10px] text-indigo-600 font-semibold flex items-center gap-1 mb-0.5">
-                              <i className="bi bi-file-earmark-check-fill text-indigo-500" />
-                              Đã ký HĐLĐ
-                            </span>
-                            <span className="font-bold text-indigo-800 font-mono">
-                              {activePoint.data.signedContracts} người{' '}
-                              <span className="text-[9.5px] text-slate-400 font-normal">
-                                ({Math.round((activePoint.data.signedContracts / (activePoint.data.totalHeadcount || 1)) * 100)}%)
+                        {activePoint.data.isFuture ? (
+                          <div className="py-1 text-center">
+                            <p className="text-[11px] text-slate-500 m-0">
+                              Kỳ báo cáo Tháng 12/2026 chưa diễn ra. Dữ liệu thực tế sẽ được tự động chốt khi đến kỳ.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+                            <div>
+                              <span className="text-[10px] text-indigo-600 font-semibold flex items-center gap-1 mb-0.5">
+                                <i className="bi bi-file-earmark-check-fill text-indigo-500" />
+                                Đã ký HĐLĐ
                               </span>
-                            </span>
-                          </div>
-
-                          <div>
-                            <span className="text-[10px] text-sky-600 font-semibold flex items-center gap-1 mb-0.5">
-                              <i className="bi bi-shield-check text-sky-500" />
-                              Đóng BHXH
-                            </span>
-                            <span className="font-bold text-sky-800 font-mono">
-                              {activePoint.data.insuredCount} người{' '}
-                              <span className="text-[9.5px] text-slate-400 font-normal">
-                                ({Math.round((activePoint.data.insuredCount / (activePoint.data.totalHeadcount || 1)) * 100)}%)
+                              <span className="font-bold text-indigo-800 font-mono">
+                                {activePoint.data.signedContracts} người{' '}
+                                <span className="text-[9.5px] text-slate-400 font-normal">
+                                  ({Math.round((activePoint.data.signedContracts / (activePoint.data.totalHeadcount || 1)) * 100)}%)
+                                </span>
                               </span>
-                            </span>
-                          </div>
+                            </div>
 
-                          <div>
-                            <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1 mb-0.5">
-                              <i className="bi bi-person-check-fill text-emerald-500" />
-                              Chính thức
-                            </span>
-                            <span className="font-bold text-slate-800 font-mono">
-                              {activePoint.data.officialCount} người
-                            </span>
-                          </div>
+                            <div>
+                              <span className="text-[10px] text-sky-600 font-semibold flex items-center gap-1 mb-0.5">
+                                <i className="bi bi-shield-check text-sky-500" />
+                                Đóng BHXH
+                              </span>
+                              <span className="font-bold text-sky-800 font-mono">
+                                {activePoint.data.insuredCount} người{' '}
+                                <span className="text-[9.5px] text-slate-400 font-normal">
+                                  ({Math.round((activePoint.data.insuredCount / (activePoint.data.totalHeadcount || 1)) * 100)}%)
+                                </span>
+                              </span>
+                            </div>
 
-                          <div>
-                            <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1 mb-0.5">
-                              <i className="bi bi-person-plus-fill text-teal-500" />
-                              Tuyển mới trong tháng:
-                            </span>
-                            <span className="font-bold text-teal-600 font-mono text-[11px]">
-                              +{activePoint.data.newHires} nhân sự
-                            </span>
+                            <div>
+                              <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1 mb-0.5">
+                                <i className="bi bi-person-check-fill text-emerald-500" />
+                                Chính thức
+                              </span>
+                              <span className="font-bold text-slate-800 font-mono">
+                                {activePoint.data.officialCount} người
+                              </span>
+                            </div>
+
+                            <div>
+                              <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1 mb-0.5">
+                                <i className="bi bi-person-plus-fill text-teal-500" />
+                                Tuyển mới trong tháng:
+                              </span>
+                              <span className="font-bold text-teal-600 font-mono text-[11px]">
+                                +{activePoint.data.newHires} nhân sự
+                              </span>
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     </div>
                   )}
