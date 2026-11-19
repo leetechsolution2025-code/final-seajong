@@ -1,5 +1,5 @@
 {
-  "version": "1.0.20261119.2037",
-  "buildTime": "2026-11-19T13:37:00Z",
-  "notes": "Khoá chức năng Đề nghị thanh toán trong Công nợ phải thu và Công nợ phải trả"
+  "version": "1.0.20261119.2041",
+  "buildTime": "2026-11-19T13:41:00Z",
+  "notes": "Chuẩn hóa menu: bỏ nhãn thừa ở nút Đề nghị thanh toán"
 }

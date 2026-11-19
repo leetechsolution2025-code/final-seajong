@@ -31,7 +31,6 @@ import {
   BagCheck,
   CreditCard,
   Gear,
-  LockFill,
 } from 'react-bootstrap-icons';
 import {
   TableToolbar,
@@ -4254,15 +4253,13 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                           <span>Đối chiếu công nợ</span>
                                         </button>
 
-                                        {/* 4. Đề nghị thanh toán (Đã khóa chức năng) */}
+                                        {/* 4. Đề nghị thanh toán (Đã khóa) */}
                                         <button
                                           type="button"
                                           disabled
-                                          title="Chức năng Đề nghị thanh toán hiện đang tạm khóa"
                                           style={{
                                             display: 'flex',
                                             alignItems: 'center',
-                                            justifyContent: 'space-between',
                                             gap: '10px',
                                             padding: '9px 14px',
                                             background: 'none',
@@ -4273,16 +4270,11 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                             cursor: 'not-allowed',
                                             width: '100%',
                                             textAlign: 'left',
-                                            opacity: 0.65,
+                                            opacity: 0.5,
                                           }}
                                         >
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                            <LockFill size={13} style={{ color: '#94a3b8' }} />
-                                            <span>Đề nghị thanh toán</span>
-                                          </div>
-                                          <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#64748b', backgroundColor: '#f1f5f9', border: '1px solid #e2e8f0', padding: '1px 5px', borderRadius: '4px' }}>
-                                            Đã khóa
-                                          </span>
+                                          <Send size={14} style={{ color: '#94a3b8' }} />
+                                          <span>Đề nghị thanh toán</span>
                                         </button>
 
                                         {/* Đường phân cách rõ nét phía trên chức năng Chỉnh sửa thông tin */}
@@ -5127,14 +5119,13 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                         </button>
 
                                         {/* 3. Đề nghị thanh toán (Đã khóa chức năng) */}
+                                        {/* 3. Đề nghị thanh toán (Đã khóa) */}
                                         <button
                                           type="button"
                                           disabled
-                                          title="Chức năng Đề nghị thanh toán hiện đang tạm khóa"
                                           style={{
                                             display: 'flex',
                                             alignItems: 'center',
-                                            justifyContent: 'space-between',
                                             gap: '10px',
                                             padding: '9px 14px',
                                             background: 'none',
@@ -5145,16 +5136,11 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                             cursor: 'not-allowed',
                                             width: '100%',
                                             textAlign: 'left',
-                                            opacity: 0.65,
+                                            opacity: 0.5,
                                           }}
                                         >
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                            <LockFill size={13} style={{ color: '#94a3b8' }} />
-                                            <span>Đề nghị thanh toán</span>
-                                          </div>
-                                          <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#64748b', backgroundColor: '#f1f5f9', border: '1px solid #e2e8f0', padding: '1px 5px', borderRadius: '4px' }}>
-                                            Đã khóa
-                                          </span>
+                                          <Send size={14} style={{ color: '#94a3b8' }} />
+                                          <span>Đề nghị thanh toán</span>
                                         </button>
 
                                         {/* Đường phân cách rõ nét phía trên chức năng Chỉnh sửa thông tin */}
