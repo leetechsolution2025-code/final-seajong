@@ -1,5 +1,5 @@
 {
-  "version": "1.0.20261119.1215",
-  "buildTime": "2026-11-19T05:15:07Z",
-  "notes": "Cập nhật tính năng và tối ưu hóa hệ thống Seajong"
+  "version": "1.0.20261119.1310",
+  "buildTime": "2026-11-19T06:10:00Z",
+  "notes": "Cho phép nhập giá trị 0 vào Số tiền đối soát để trừ hết số tiền gốc công nợ phải thu và phải trả"
 }

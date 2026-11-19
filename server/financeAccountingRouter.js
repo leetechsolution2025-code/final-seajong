@@ -1484,13 +1484,25 @@ router.post('/api/debts/reconcile-entry', (req, res) => {
     note,
   } = req.body || {};
 
-  const reconciledVal = Math.max(0, Math.round(Number(newAmount) || 0));
+  const numNew = Number(newAmount);
+  if (isNaN(numNew) || numNew < 0) {
+    return res.status(400).json({
+      error: 'Số tiền sau đối soát không hợp lệ (không được âm)',
+    });
+  }
+
+  const reconciledVal = Math.max(0, Math.round(numNew));
   const origVal = Math.max(0, Math.round(Number(originalAmount) || 0));
   const delta = reconciledVal - origVal;
 
-  if (reconciledVal <= 0 || (origVal > 0 && delta === 0)) {
+  if (origVal > 0 && delta === 0) {
     return res.status(400).json({
-      error: 'Số tiền sau đối soát phải lớn hơn 0 và khác với số tiền đã thu/chi của chứng từ gốc',
+      error: 'Số tiền sau đối soát trùng với số tiền của chứng từ gốc',
+    });
+  }
+  if (origVal === 0 && reconciledVal === 0) {
+    return res.status(400).json({
+      error: 'Số tiền sau đối soát và số tiền gốc đều bằng 0',
     });
   }
 

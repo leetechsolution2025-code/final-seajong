@@ -83,7 +83,7 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
   const [localExecuted, setLocalExecuted] = useState<boolean>(false);
   const [isReconciling, setIsReconciling] = useState<boolean>(false);
-  const [reconcileAmount, setReconcileAmount] = useState<number>(0);
+  const [reconcileAmount, setReconcileAmount] = useState<number | string>(0);
   const [reconcileNote, setReconcileNote] = useState<string>('');
   const [reconcilingSaving, setReconcilingSaving] = useState<boolean>(false);
   const [localAmountOverride, setLocalAmountOverride] = useState<number | null>(null);
@@ -175,9 +175,10 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
   };
 
   const handleSaveReconcile = async () => {
+    if (reconcileAmount === '' || reconcileAmount === undefined || reconcileAmount === null) return;
     const nextVal = Math.max(0, Math.round(Number(reconcileAmount) || 0));
-    if (nextVal <= 0) {
-      onShowToast?.('warning', 'Giá trị không hợp lệ', 'Vui lòng nhập số tiền đối soát lớn hơn 0');
+    if (nextVal < 0) {
+      onShowToast?.('warning', 'Giá trị không hợp lệ', 'Số tiền đối soát không được âm');
       return;
     }
     setReconcilingSaving(true);
@@ -239,9 +240,12 @@ export const PaymentOrderOffcanvas: React.FC<PaymentOrderOffcanvasProps> = ({
                   isLoading={reconcilingSaving}
                   disabled={
                     reconcilingSaving ||
-                    !reconcileAmount ||
-                    Math.round(Number(reconcileAmount) || 0) <= 0 ||
-                    Math.round(Number(reconcileAmount) || 0) === Math.round(Number(rawAmount) || 0)
+                    reconcileAmount === '' ||
+                    reconcileAmount === undefined ||
+                    reconcileAmount === null ||
+                    isNaN(Number(reconcileAmount)) ||
+                    Number(reconcileAmount) < 0 ||
+                    Math.round(Number(reconcileAmount)) === Math.round(Number(rawAmount) || 0)
                   }
                   leftIcon={<CheckCircle size={14} />}
                   onClick={handleSaveReconcile}

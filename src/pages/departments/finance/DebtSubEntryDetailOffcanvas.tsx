@@ -70,7 +70,7 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
   const [reconcileTargetId, setReconcileTargetId] = useState<string>('');
   const [reconcileTargetCode, setReconcileTargetCode] = useState<string>('');
   const [reconcileOriginalAmount, setReconcileOriginalAmount] = useState<number>(0);
-  const [reconcileAmount, setReconcileAmount] = useState<number>(0);
+  const [reconcileAmount, setReconcileAmount] = useState<number | string>(0);
   const [reconcileNote, setReconcileNote] = useState<string>('');
   const [reconcilingSaving, setReconcilingSaving] = useState<boolean>(false);
   const [localReconciliationEntries, setLocalReconciliationEntries] = useState<any[]>([]);
@@ -197,14 +197,18 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
 
   const isReconcileSaveDisabled =
     reconcilingSaving ||
-    !reconcileAmount ||
-    Math.round(Number(reconcileAmount) || 0) <= 0 ||
-    Math.round(Number(reconcileAmount) || 0) === Math.round(Number(reconcileOriginalAmount) || 0);
+    reconcileAmount === '' ||
+    reconcileAmount === undefined ||
+    reconcileAmount === null ||
+    isNaN(Number(reconcileAmount)) ||
+    Number(reconcileAmount) < 0 ||
+    Math.round(Number(reconcileAmount)) === Math.round(Number(reconcileOriginalAmount) || 0);
 
   const handleSaveReconcile = async () => {
+    if (reconcileAmount === '' || reconcileAmount === undefined || reconcileAmount === null) return;
     const nextVal = Math.max(0, Math.round(Number(reconcileAmount) || 0));
     const origVal = Math.max(0, Math.round(Number(reconcileOriginalAmount) || 0));
-    if (nextVal <= 0 || nextVal === origVal) {
+    if (nextVal < 0 || nextVal === origVal) {
       return;
     }
 

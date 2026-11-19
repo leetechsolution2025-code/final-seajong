@@ -3432,14 +3432,16 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                       isLoading={reconcileCashflowSaving}
                       disabled={
                         reconcileCashflowSaving ||
-                        !reconcileCashflowAmount ||
-                        Math.round(Number(reconcileCashflowAmount) || 0) <= 0 ||
-                        Math.round(Number(reconcileCashflowAmount) || 0) === Math.round(Number(selectedOutflow.amount) || 0)
+                        reconcileCashflowAmount === undefined ||
+                        reconcileCashflowAmount === null ||
+                        isNaN(Number(reconcileCashflowAmount)) ||
+                        Number(reconcileCashflowAmount) < 0 ||
+                        Math.round(Number(reconcileCashflowAmount)) === Math.round(Number(selectedOutflow.amount) || 0)
                       }
                       leftIcon={<CheckCircle size={13} />}
                       onClick={async () => {
                         const nextVal = Math.max(0, Math.round(Number(reconcileCashflowAmount) || 0));
-                        if (nextVal <= 0 || nextVal === Math.round(Number(selectedOutflow.amount) || 0)) {
+                        if (nextVal < 0 || nextVal === Math.round(Number(selectedOutflow.amount) || 0)) {
                           return;
                         }
                         setReconcileCashflowSaving(true);
@@ -3853,14 +3855,16 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                       isLoading={reconcileCashflowSaving}
                       disabled={
                         reconcileCashflowSaving ||
-                        !reconcileCashflowAmount ||
-                        Math.round(Number(reconcileCashflowAmount) || 0) <= 0 ||
-                        Math.round(Number(reconcileCashflowAmount) || 0) === Math.round(Number(selectedInflow.amount) || 0)
+                        reconcileCashflowAmount === undefined ||
+                        reconcileCashflowAmount === null ||
+                        isNaN(Number(reconcileCashflowAmount)) ||
+                        Number(reconcileCashflowAmount) < 0 ||
+                        Math.round(Number(reconcileCashflowAmount)) === Math.round(Number(selectedInflow.amount) || 0)
                       }
                       leftIcon={<CheckCircle size={13} />}
                       onClick={async () => {
                         const nextVal = Math.max(0, Math.round(Number(reconcileCashflowAmount) || 0));
-                        if (nextVal <= 0 || nextVal === Math.round(Number(selectedInflow.amount) || 0)) {
+                        if (nextVal < 0 || nextVal === Math.round(Number(selectedInflow.amount) || 0)) {
                           return;
                         }
                         setReconcileCashflowSaving(true);
