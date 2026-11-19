@@ -536,6 +536,8 @@ router.get('/api/debts/receivables', (req, res) => {
       COALESCE(c.address, d.customer_address) as customer_address,
       COALESCE(c.code, '') as customer_code,
       COALESCE(c.phone, '') as customer_phone,
+      COALESCE(cust.daiDien, '') as representative_name,
+      COALESCE(cust.chucVu, '') as representative_role,
       d.project_name,
       d.contract_value,
       d.paid_amount,
@@ -548,6 +550,7 @@ router.get('/api/debts/receivables', (req, res) => {
       d.entries_json
     FROM debt_receivables d
     LEFT JOIN customers c ON d.customer_id = c.id
+    LEFT JOIN Customer cust ON (d.customer_id = cust.id OR cust.name = d.customer_name)
     GROUP BY d.id
     ORDER BY d.created_at DESC
   `;
@@ -597,6 +600,8 @@ router.get('/api/debts/receivables', (req, res) => {
         customerAddress: r.customer_address || '',
         customerCode: r.customer_code || '',
         customerPhone: r.customer_phone || '',
+        representativeName: r.representative_name || '',
+        representativeRole: r.representative_role || '',
         projectName: r.project_name || '',
         contractValue: Number(r.contract_value) || 0,
         paidAmount: Number(r.paid_amount) || 0,

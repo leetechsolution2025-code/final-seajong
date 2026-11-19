@@ -1663,6 +1663,8 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
         type: 'RECEIVABLE' as const,
         amount: selectedReceivableForReconcile.contractValue,
         paymentHistory: customerPaymentHistories[selectedReceivableForReconcile.id] || [],
+        representativeName: (selectedReceivableForReconcile as any).representativeName,
+        representativeRole: (selectedReceivableForReconcile as any).representativeRole,
       };
     }
     if (selectedPayableForReconcile) {
@@ -1672,6 +1674,8 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
         address: selectedPayableForReconcile.supplierAddress,
         type: 'PAYABLE' as const,
         amount: selectedPayableForReconcile.totalAmount,
+        representativeName: (selectedPayableForReconcile as any).representativeName,
+        representativeRole: (selectedPayableForReconcile as any).representativeRole,
       };
     }
     return null;

@@ -102,30 +102,111 @@ export function stripParentheses(text?: string): string {
   return text.replace(/\s*\([^)]*\)/g, '').trim();
 }
 
-// ─── LÀM SẠCH GHI CHÚ GIAO DỊCH, BỎ HẬU TỐ TÊN KHÁCH & SĐT ─────────────
-export function cleanTransactionNote(text?: string, customerName?: string, customerPhone?: string): string {
-  if (!text) return '';
+// ─── CHUẨN HÓA TÊN ĐỐI TÁC HIỂN THỊ ĐẦY ĐỦ ──────────────────────────────
+export function formatFullPartnerName(rawName?: string): string {
+  if (!rawName) return 'Đối tác';
+  let name = String(rawName).trim();
+  // Chuẩn hóa dấu gạch nối: "Anh Ngọc-Gia Lâm" -> "Anh Ngọc - Gia Lâm"
+  name = name.replace(/\s*[-–—]\s*/g, ' - ');
+  return name;
+}
+
+// ─── TRÍCH XUẤT HỌ TÊN NGƯỜI ĐẠI DIỆN ĐẦY ĐỦ ─────────────────────────────
+export function extractRepresentativeName(rawName?: string, explicitRepresentative?: string): string {
+  if (explicitRepresentative && String(explicitRepresentative).trim()) {
+    let rep = String(explicitRepresentative).trim();
+    // Bỏ hậu tố địa danh sau gạch nối hoặc dấu phẩy: "Anh Ngọc - Gia Lâm" -> "Anh Ngọc"
+    rep = rep.replace(/\s*[-–—,]\s*.*$/, '').trim();
+    if (rep && rep.length >= 2) return rep;
+  }
+  if (!rawName) return 'Đại diện đối tác';
+  let clean = String(rawName).trim();
+  if (clean.includes('-') || clean.includes('–') || clean.includes('—')) {
+    const parts = clean.split(/[-–—]/);
+    if (parts[0] && parts[0].trim().length >= 2) {
+      return parts[0].trim();
+    }
+  }
+  if (clean.includes(',')) {
+    const parts = clean.split(',');
+    if (parts[0] && parts[0].trim().length >= 2) {
+      return parts[0].trim();
+    }
+  }
+  return clean;
+}
+
+// ─── LÀM SẠCH VÀ CHUẨN HÓA GHI CHÚ GIAO DỊCH CHUẨN VĂN BẢN ĐỐI CHIẾU ──────
+export function cleanTransactionNote(
+  text?: string,
+  customerName?: string,
+  customerPhone?: string,
+  txType?: string
+): string {
+  if (!text) {
+    if (txType?.includes('Bán hàng') || txType?.includes('Mua hàng')) return 'Giao dịch phát sinh đơn hàng';
+    if (txType?.includes('thu') || txType?.includes('receipt')) return 'Khách hàng chuyển khoản thanh toán tiền hàng';
+    if (txType?.includes('chi') || txType?.includes('payment')) return 'Thanh toán tiền hàng cho đối tác';
+    if (txType?.includes('Giảm trừ')) return 'Giảm trừ công nợ do trả lại hàng / hàng lỗi';
+    return 'Giao dịch phát sinh công nợ';
+  }
+
   let cleaned = String(text);
 
-  // Xóa tên khách hàng nếu xuất hiện sau gạch nối hoặc dấu cách
+  // 1. Loại bỏ triệt để chuỗi kỹ thuật [RECONCILIATION_LOGS]: [...] hoặc bất kỳ JSON log / metadata
+  cleaned = cleaned.replace(/\[RECONCILIATION_LOGS\][\s\S]*$/i, '');
+  cleaned = cleaned.replace(/\[RECONCILIATION_LOGS\]:?\s*\[[\s\S]*?\]/gi, '');
+  cleaned = cleaned.replace(/\[LOGS?\]:?\s*\[[\s\S]*?\]/gi, '');
+  cleaned = cleaned.replace(/\[\s*\{[\s\S]*?"id":\s*"DC-[\s\S]*?\}\s*\]/gi, '');
+
+  // 2. Chuẩn hóa câu chữ hệ thống sang văn phong kế toán chuẩn
+  cleaned = cleaned.replace(/Khách hàng thanh toán\s+Công nợ tự động phát sinh từ đơn hàng\s+/gi, 'Khách hàng thanh toán cho đơn hàng ');
+  cleaned = cleaned.replace(/Thanh toán\s+Công nợ tự động phát sinh từ đơn hàng\s+/gi, 'Thanh toán tiền hàng cho đơn hàng ');
+  cleaned = cleaned.replace(/Công nợ tự động phát sinh từ đơn hàng\s+/gi, 'Xuất bán hàng theo đơn hàng ');
+  cleaned = cleaned.replace(/Phát sinh công nợ từ đơn hàng\s+/gi, 'Xuất bán hàng theo đơn hàng ');
+
+  // 3. Xóa tên đối tác nếu xuất hiện ở đầu câu hoặc bị lặp lại sau gạch nối
   if (customerName) {
-    const escapedName = customerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    cleaned = cleaned.replace(new RegExp(`\\s*[-–—:]\\s*${escapedName}`, 'gi'), '');
+    const rawClean = customerName.replace(/\s*[-–—]\s*/g, '[-–—\\s]*');
+    const firstPart = customerName.split(/[-–—]/)[0].trim();
+    if (firstPart && firstPart.length >= 2) {
+      cleaned = cleaned.replace(new RegExp(`^${firstPart}\\s*[-–—:]*\\s*`, 'gi'), '');
+      cleaned = cleaned.replace(new RegExp(`\\s*[-–—:]\\s*${firstPart}\\b`, 'gi'), '');
+    }
   }
-  // Xóa số điện thoại khách hàng nếu xuất hiện
+
+  // 4. Xóa số điện thoại khách hàng nếu xuất hiện
   if (customerPhone) {
     const escapedPhone = customerPhone.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     cleaned = cleaned.replace(new RegExp(`\\s*[-–—:]\\s*${escapedPhone}`, 'gi'), '');
   }
 
-  // Xóa các mẫu thường gặp: "- Cửa hàng..." hoặc "- Đại lý..." hoặc "- 0988..."
+  // 5. Chuẩn hóa các từ viết tắt giao dịch ngân hàng / kế toán
+  cleaned = cleaned.replace(/\bck\b/gi, 'chuyển khoản');
+  cleaned = cleaned.replace(/(\d+)\s*tr\b/gi, '$1 triệu đồng');
+  cleaned = cleaned.replace(/(\d+)\s*k\b/gi, '$1.000 đồng');
+  cleaned = cleaned.replace(/\bnhân tiền\b/gi, 'nhận tiền');
+
+  // 6. Xóa các mẫu thường gặp: "- Cửa hàng..." hoặc "- Đại lý..." hoặc "- 0988..."
   cleaned = cleaned.replace(/\s*[-–—]\s*(Cửa hàng|Đại lý|Khách hàng|Công ty)[^-–—\n]+(?=[-–—]|$)/gi, '');
   cleaned = cleaned.replace(/\s*[-–—]\s*(\+?84|0)[\d\.\s]{8,15}/g, '');
 
-  // Xóa gạch nối lẻ loi ở cuối
-  cleaned = cleaned.replace(/\s*[-–—]\s*$/, '').trim();
+  // Xóa gạch nối lẻ loi ở đầu hoặc cuối
+  cleaned = cleaned.replace(/^\s*[-–—:]+\s*/, '').replace(/\s*[-–—:]+\s*$/, '').trim();
 
-  return stripParentheses(cleaned);
+  // 7. Nếu sau khi làm sạch chuỗi quá ngắn hoặc chỉ còn chữ 'chuyển khoản' hoặc vô nghĩa:
+  if (!cleaned || cleaned.toLowerCase() === 'chuyển khoản' || cleaned.length < 3) {
+    if (txType?.includes('thu') || txType?.includes('receipt')) return 'Khách hàng chuyển khoản thanh toán tiền hàng';
+    if (txType?.includes('chi') || txType?.includes('payment')) return 'Chuyển khoản thanh toán tiền hàng cho đối tác';
+    if (txType?.includes('Bán hàng')) return 'Xuất bán hàng theo đơn hàng';
+    if (txType?.includes('Mua hàng')) return 'Nhập mua hàng theo hóa đơn';
+    return 'Giao dịch phát sinh công nợ';
+  }
+
+  // Viết hoa chữ cái đầu
+  cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+
+  return cleaned;
 }
 
 // ─── KIỂM TRA ĐỢT / CHỨNG TỪ CÓ PHẢI LÀ NỢ ĐẦU KỲ KẾT CHUYỂN HAY KHÔNG ───
@@ -1117,7 +1198,10 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
   const rawCurrentRemaining = totals.openingBalance + totals.increase - totals.decrease;
   // Nếu trên bảng chính đối tác đã tất toán (remainingAmount = 0), dư nợ cuối kỳ toàn kỳ không bị âm
   const currentRemaining = (partnerRemaining === 0 && rawCurrentRemaining <= 0) ? 0 : rawCurrentRemaining;
-  const partnerDisplayName = debt.partnerName || debt.customerName || debt.supplierName || 'Đối tác';
+  const rawPartnerName = debt.partnerName || debt.customerName || debt.supplierName || 'Đối tác';
+  const partnerDisplayName = formatFullPartnerName(rawPartnerName);
+  const defaultRepresentative = extractRepresentativeName(rawPartnerName, debt.representativeName || debt.daiDien);
+  const defaultRole = debt.representativeRole || debt.chucVu || (isReceivable ? 'Chủ Đại lý' : 'Giám đốc / Đại diện Nhà cung cấp');
 
   return createPortal(
     <div
@@ -1704,7 +1788,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                         if (isStageMain) {
                           const hasPayments = tx.paymentCount > 0;
                           const isCollapsed = collapsedStages[tx.stageCode];
-                          const cleanedNote = cleanTransactionNote(tx.note, partnerDisplayName, debt.customerPhone || debt.phone);
+                          const cleanedNote = cleanTransactionNote(tx.note, partnerDisplayName, debt.customerPhone || debt.phone, tx.type);
                           const itemsCount = (Array.isArray(tx.rawEntry?.items) && tx.rawEntry.items.length > 0 ? tx.rawEntry.items.length : 0) || orderItemsMap[tx.ref]?.length || 0;
 
                           return (
@@ -1828,7 +1912,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                         }
 
                         if (isStagePayment) {
-                          const cleanedNote = cleanTransactionNote(tx.note, partnerDisplayName, debt.customerPhone || debt.phone);
+                          const cleanedNote = cleanTransactionNote(tx.note, partnerDisplayName, debt.customerPhone || debt.phone, tx.type);
                           const itemsCount = (Array.isArray(tx.rawPayment?.items) && tx.rawPayment.items.length > 0 ? tx.rawPayment.items.length : 0) || (Array.isArray(tx.rawEntry?.items) && tx.rawEntry.items.length > 0 ? tx.rawEntry.items.length : 0) || orderItemsMap[tx.ref]?.length || 0;
 
                           return (
@@ -1941,7 +2025,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
 
                       // ── CHẾ ĐỘ 2: THEO TRÌNH TỰ THỜI GIAN (TIMELINE) HOẶC DÒNG ĐẦU KỲ ──
                       const isMain = tx.type.includes('Bán hàng') || tx.type.includes('Mua hàng');
-                      const cleanedNote = cleanTransactionNote(tx.note, partnerDisplayName, debt.customerPhone || debt.phone);
+                      const cleanedNote = cleanTransactionNote(tx.note, partnerDisplayName, debt.customerPhone || debt.phone, tx.type);
                       const itemsCount = (Array.isArray(tx.rawEntry?.items) && tx.rawEntry.items.length > 0 ? tx.rawEntry.items.length : 0) || (Array.isArray(tx.rawPayment?.items) && tx.rawPayment.items.length > 0 ? tx.rawPayment.items.length : 0) || orderItemsMap[tx.ref]?.length || 0;
 
                       return (
@@ -2098,8 +2182,8 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
           author="Lê Công Vụ"
           performerName="Lê Công Vụ"
           performerRole="Giám đốc / Đại diện tài chính"
-          supervisorName={partnerDisplayName}
-          supervisorRole={isReceivable ? 'Đại diện Khách hàng' : 'Đại diện Nhà cung cấp'}
+          supervisorName={defaultRepresentative}
+          supervisorRole={defaultRole}
           customerName={partnerDisplayName}
           customerAddress={debt.customerAddress || debt.supplierAddress || debt.address || 'Khu vực hoạt động kinh doanh'}
           projectName={debt.projectName || debt.code}
@@ -2470,10 +2554,10 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1fr)', gap: '8px', fontSize: '0.78rem', marginTop: '3px', lineHeight: '1.4' }}>
                     <div style={{ wordBreak: 'break-word' }}>
-                      Đại diện: <strong>{meta.supervisorName || partnerDisplayName}</strong>
+                      Đại diện: <strong>{meta.supervisorName || defaultRepresentative}</strong>
                     </div>
                     <div style={{ wordBreak: 'break-word' }}>
-                      Chức vụ: <strong>{meta.supervisorRole || (isReceivable ? 'Đại diện Khách hàng' : 'Đại diện Đối tác')}</strong>
+                      Chức vụ: <strong>{meta.supervisorRole || defaultRole}</strong>
                     </div>
                   </div>
                 </div>
@@ -2533,7 +2617,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                     {allDisplayTransactions
                       .filter((tx: any) => tx.id !== 'OPENING_BALANCE')
                       .map((tx: any, idx: number) => {
-                        const cleanNote = cleanTransactionNote(tx.note, partnerDisplayName, debt.customerPhone || debt.phone);
+                        const cleanNote = cleanTransactionNote(tx.note, partnerDisplayName, debt.customerPhone || debt.phone, tx.type);
                         const cleanType = stripParentheses(tx.type);
                         const refCode = tx.ref || tx.code || '---';
                         const displayDate = tx.date ? new Date(tx.date).toLocaleDateString('vi-VN') : '---';

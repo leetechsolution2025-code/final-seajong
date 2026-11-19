@@ -599,9 +599,8 @@ export const PurchaseOverviewPage: React.FC = () => {
                         deleteConfirmTitle="Xác nhận xóa yêu cầu mua hàng"
                         deleteConfirmMessage={`Bạn có chắc chắn muốn xóa phiếu yêu cầu "${req.code || req.id}"? Hành động này không thể hoàn tác.`}
                         onClick={() => setSelectedReq(req)}
-                        className={`cursor-pointer transition-colors hover:bg-sky-50/40 group ${
-                          isChecked ? 'bg-blue-50/60' : ''
-                        }`}
+                        className={`cursor-pointer transition-colors hover:bg-sky-50/40 group ${isChecked ? 'bg-blue-50/60' : ''
+                          }`}
                       >
                         <td
                           className="py-2.5 sm:py-3 px-2 sm:px-4 w-9 sm:w-11 text-center align-middle"
@@ -822,9 +821,8 @@ export const PurchaseOverviewPage: React.FC = () => {
                         deleteConfirmTitle="Xác nhận xóa đơn mua hàng"
                         deleteConfirmMessage={`Bạn có chắc chắn muốn xóa đơn mua hàng "${ord.code || ord.id}"? Hành động này không thể hoàn tác.`}
                         onClick={() => setSelectedOrder(ord)}
-                        className={`cursor-pointer transition-colors hover:bg-sky-50/40 group ${
-                          isChecked ? 'bg-blue-50/60' : ''
-                        }`}
+                        className={`cursor-pointer transition-colors hover:bg-sky-50/40 group ${isChecked ? 'bg-blue-50/60' : ''
+                          }`}
                       >
                         <td
                           className="py-2.5 sm:py-3 px-2 sm:px-4 w-9 sm:w-11 text-center align-middle"
@@ -1053,11 +1051,10 @@ export const PurchaseOverviewPage: React.FC = () => {
                             {it.code}
                           </span>
                           <span
-                            className={`sm:hidden inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border whitespace-nowrap ${
-                              it.itemType === 'order'
+                            className={`sm:hidden inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border whitespace-nowrap ${it.itemType === 'order'
                                 ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
                                 : 'bg-amber-50 text-amber-700 border-amber-200'
-                            }`}
+                              }`}
                           >
                             {it.itemType === 'order' ? 'Đơn hàng' : 'Yêu cầu'}
                           </span>
@@ -1070,11 +1067,10 @@ export const PurchaseOverviewPage: React.FC = () => {
                       </td>
                       <td className="hidden sm:table-cell py-3 px-4 align-middle">
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold border whitespace-nowrap ${
-                            it.itemType === 'order'
+                          className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold border whitespace-nowrap ${it.itemType === 'order'
                               ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
                               : 'bg-amber-50 text-amber-700 border-amber-200'
-                          }`}
+                            }`}
                         >
                           {it.itemType === 'order' ? 'Đơn mua hàng' : 'Yêu cầu mua hàng'}
                         </span>
@@ -1137,186 +1133,186 @@ export const PurchaseOverviewPage: React.FC = () => {
           </div>
         )}
 
-      {/* ════════════════════════════════════════════════════════════════════
+        {/* ════════════════════════════════════════════════════════════════════
           OFFCANVAS CHI TIẾT YÊU CẦU MUA HÀNG (400px)
           ════════════════════════════════════════════════════════════════════ */}
-      <PurchaseReqDetailOffcanvas
-        req={selectedReq}
-        onClose={() => setSelectedReq(null)}
-        onChanged={fetchRequests}
-        onCreateOrder={(reqId, reqCode, items) => {
-          setSelectedReq(null);
-          setCreateOrderData({ reqId, reqCode, items });
-        }}
-      />
+        <PurchaseReqDetailOffcanvas
+          req={selectedReq}
+          onClose={() => setSelectedReq(null)}
+          onChanged={fetchRequests}
+          onCreateOrder={(reqId, reqCode, items) => {
+            setSelectedReq(null);
+            setCreateOrderData({ reqId, reqCode, items });
+          }}
+        />
 
-      {/* ════════════════════════════════════════════════════════════════════
+        {/* ════════════════════════════════════════════════════════════════════
           OFFCANVAS CHI TIẾT ĐƠN MUA HÀNG (400px)
           ════════════════════════════════════════════════════════════════════ */}
-      <PurchaseOrderDetailOffcanvas
-        order={selectedOrder}
-        onClose={() => setSelectedOrder(null)}
-        onChanged={fetchOrders}
-        onEditOrder={(orderId, orderCode, supplierId, ngayNhan, ghiChu, items) => {
-          setSelectedOrder(null);
-          const mappedItems = items.map((it: any) => ({
-            id: it.id,
-            tenHang: it.tenHang,
-            donVi: it.donVi,
-            soLuong: it.soLuong,
-            donGiaDK: it.donGia,
-            inventoryItemId: it.inventoryItemId,
-            inventoryItem: it.inventoryItem ?? null,
-          }));
-          setEditOrderData({
-            orderId,
-            orderCode,
-            supplierId,
-            ngayNhan,
-            ghiChu,
-            items: mappedItems,
-          });
-        }}
-        onPrintOrder={(orderId, orderCode, supplierId, supplierName, items) => {
-          const mappedItems = items.map((it: any) => ({
-            id: it.id,
-            tenHang: it.tenHang,
-            donVi: it.donVi,
-            soLuong: it.soLuong,
-            donGiaDK: it.donGia,
-            inventoryItemId: it.inventoryItemId,
-            inventoryItem: it.inventoryItem ?? null,
-          }));
-          const assignments = items.map((it: any) => ({
-            itemId: it.id,
-            supplierId,
-            donGia: it.donGia,
-            ngayGiao: it.ngayGiao
-              ? new Date(it.ngayGiao).toISOString().slice(0, 10)
-              : new Date().toISOString().slice(0, 10),
-            skip: false,
-          }));
-          setPrintOrderData({
-            orderId,
-            orderCode,
-            supplierId,
-            supplierName,
-            items: mappedItems,
-            assignments,
-          });
-        }}
-      />
-
-      {/* ── MODALS ── */}
-      {taoYeuCauOpen && (
-        <TaoYeuCauMuaHangModal
-          onClose={() => setTaoYeuCauOpen(false)}
-          onSaved={() => {
-            setTaoYeuCauOpen(false);
-            fetchRequests();
+        <PurchaseOrderDetailOffcanvas
+          order={selectedOrder}
+          onClose={() => setSelectedOrder(null)}
+          onChanged={fetchOrders}
+          onEditOrder={(orderId, orderCode, supplierId, ngayNhan, ghiChu, items) => {
+            setSelectedOrder(null);
+            const mappedItems = items.map((it: any) => ({
+              id: it.id,
+              tenHang: it.tenHang,
+              donVi: it.donVi,
+              soLuong: it.soLuong,
+              donGiaDK: it.donGia,
+              inventoryItemId: it.inventoryItemId,
+              inventoryItem: it.inventoryItem ?? null,
+            }));
+            setEditOrderData({
+              orderId,
+              orderCode,
+              supplierId,
+              ngayNhan,
+              ghiChu,
+              items: mappedItems,
+            });
+          }}
+          onPrintOrder={(orderId, orderCode, supplierId, supplierName, items) => {
+            const mappedItems = items.map((it: any) => ({
+              id: it.id,
+              tenHang: it.tenHang,
+              donVi: it.donVi,
+              soLuong: it.soLuong,
+              donGiaDK: it.donGia,
+              inventoryItemId: it.inventoryItemId,
+              inventoryItem: it.inventoryItem ?? null,
+            }));
+            const assignments = items.map((it: any) => ({
+              itemId: it.id,
+              supplierId,
+              donGia: it.donGia,
+              ngayGiao: it.ngayGiao
+                ? new Date(it.ngayGiao).toISOString().slice(0, 10)
+                : new Date().toISOString().slice(0, 10),
+              skip: false,
+            }));
+            setPrintOrderData({
+              orderId,
+              orderCode,
+              supplierId,
+              supplierName,
+              items: mappedItems,
+              assignments,
+            });
           }}
         />
-      )}
 
-      {taoDonTrucTiepOpen && (
-        <TaoDonMuaHangTrucTiepModal
-          onClose={() => setTaoDonTrucTiepOpen(false)}
-          onSaved={() => {
-            setTaoDonTrucTiepOpen(false);
-            setOrdPage(1);
-            fetchOrders();
-          }}
+        {/* ── MODALS ── */}
+        {taoYeuCauOpen && (
+          <TaoYeuCauMuaHangModal
+            onClose={() => setTaoYeuCauOpen(false)}
+            onSaved={() => {
+              setTaoYeuCauOpen(false);
+              fetchRequests();
+            }}
+          />
+        )}
+
+        {taoDonTrucTiepOpen && (
+          <TaoDonMuaHangTrucTiepModal
+            onClose={() => setTaoDonTrucTiepOpen(false)}
+            onSaved={() => {
+              setTaoDonTrucTiepOpen(false);
+              setOrdPage(1);
+              fetchOrders();
+            }}
+          />
+        )}
+
+        {createOrderData && (
+          <TaoDonMuaHangModal
+            reqId={createOrderData.reqId}
+            reqCode={createOrderData.reqCode}
+            items={createOrderData.items}
+            onClose={() => setCreateOrderData(null)}
+            onCreated={() => {
+              setCreateOrderData(null);
+              setSelectedReqIds(new Set());
+              fetchRequests();
+              setCurrentStep(2);
+              setOrdPage(1);
+              fetchOrders();
+            }}
+          />
+        )}
+
+        {editOrderData && (
+          <TaoDonMuaHangModal
+            editOrderId={editOrderData.orderId}
+            reqCode={editOrderData.orderCode}
+            editSupplierId={editOrderData.supplierId}
+            editNgayNhan={editOrderData.ngayNhan}
+            editGhiChu={editOrderData.ghiChu}
+            items={editOrderData.items}
+            onClose={() => setEditOrderData(null)}
+            onCreated={() => {
+              setEditOrderData(null);
+              fetchOrders();
+            }}
+          />
+        )}
+
+        {printOrderData && (
+          <XemTruocDonMuaHangModal
+            supplierId={printOrderData.supplierId}
+            supplierName={printOrderData.supplierName}
+            assignments={printOrderData.assignments}
+            items={printOrderData.items}
+            onClose={() => setPrintOrderData(null)}
+            onCreated={() => setPrintOrderData(null)}
+            isEdit={true}
+            editOrderId={printOrderData.orderId}
+            editOrderCode={printOrderData.orderCode}
+          />
+        )}
+
+        {/* ── CONFIRM DIALOGS ── */}
+        <ConfirmDialog
+          isOpen={bulkDeleteReqConfirmOpen}
+          title="Xoá phiếu yêu cầu mua hàng"
+          message={`Bạn có chắc chắn muốn xoá ${selectedReqIds.size} phiếu yêu cầu đã chọn? Thao tác này không thể hoàn tác.`}
+          confirmText="Xoá tất cả"
+          cancelText="Huỷ"
+          type="danger"
+          isLoading={bulkDeletingReq}
+          onConfirm={handleBulkDeleteRequests}
+          onCancel={() => setBulkDeleteReqConfirmOpen(false)}
         />
-      )}
 
-      {createOrderData && (
-        <TaoDonMuaHangModal
-          reqId={createOrderData.reqId}
-          reqCode={createOrderData.reqCode}
-          items={createOrderData.items}
-          onClose={() => setCreateOrderData(null)}
-          onCreated={() => {
-            setCreateOrderData(null);
-            setSelectedReqIds(new Set());
-            fetchRequests();
-            setCurrentStep(2);
-            setOrdPage(1);
-            fetchOrders();
-          }}
+        <ConfirmDialog
+          isOpen={bulkDeleteOrdConfirmOpen}
+          title="Xoá đơn mua hàng"
+          message={`Bạn có chắc chắn muốn xoá ${selectedOrderIds.size} đơn mua hàng đã chọn? Thao tác này không thể hoàn tác.`}
+          confirmText="Xoá tất cả"
+          cancelText="Huỷ"
+          type="danger"
+          isLoading={bulkDeletingOrd}
+          onConfirm={handleBulkDeleteOrders}
+          onCancel={() => setBulkDeleteOrdConfirmOpen(false)}
         />
-      )}
 
-      {editOrderData && (
-        <TaoDonMuaHangModal
-          editOrderId={editOrderData.orderId}
-          reqCode={editOrderData.orderCode}
-          editSupplierId={editOrderData.supplierId}
-          editNgayNhan={editOrderData.ngayNhan}
-          editGhiChu={editOrderData.ghiChu}
-          items={editOrderData.items}
-          onClose={() => setEditOrderData(null)}
-          onCreated={() => {
-            setEditOrderData(null);
-            fetchOrders();
-          }}
+        <ConfirmDialog
+          isOpen={!!confirmDeleteCancelledItem}
+          title="Xoá vĩnh viễn chứng từ"
+          message={`Bạn có chắc chắn muốn xoá vĩnh viễn "${confirmDeleteCancelledItem?.code}" khỏi hệ thống?`}
+          confirmText="Xoá vĩnh viễn"
+          cancelText="Huỷ"
+          type="danger"
+          isLoading={deletingCancelledItem}
+          onConfirm={handleConfirmDeleteCancelled}
+          onCancel={() => setConfirmDeleteCancelledItem(null)}
         />
-      )}
 
-      {printOrderData && (
-        <XemTruocDonMuaHangModal
-          supplierId={printOrderData.supplierId}
-          supplierName={printOrderData.supplierName}
-          assignments={printOrderData.assignments}
-          items={printOrderData.items}
-          onClose={() => setPrintOrderData(null)}
-          onCreated={() => setPrintOrderData(null)}
-          isEdit={true}
-          editOrderId={printOrderData.orderId}
-          editOrderCode={printOrderData.orderCode}
+        <EventOffcanvas
+          isOpen={isEventCalendarOpen}
+          onClose={() => setIsEventCalendarOpen(false)}
         />
-      )}
-
-      {/* ── CONFIRM DIALOGS ── */}
-      <ConfirmDialog
-        isOpen={bulkDeleteReqConfirmOpen}
-        title="Xoá phiếu yêu cầu mua hàng"
-        message={`Bạn có chắc chắn muốn xoá ${selectedReqIds.size} phiếu yêu cầu đã chọn? Thao tác này không thể hoàn tác.`}
-        confirmText="Xoá tất cả"
-        cancelText="Huỷ"
-        type="danger"
-        isLoading={bulkDeletingReq}
-        onConfirm={handleBulkDeleteRequests}
-        onCancel={() => setBulkDeleteReqConfirmOpen(false)}
-      />
-
-      <ConfirmDialog
-        isOpen={bulkDeleteOrdConfirmOpen}
-        title="Xoá đơn mua hàng"
-        message={`Bạn có chắc chắn muốn xoá ${selectedOrderIds.size} đơn mua hàng đã chọn? Thao tác này không thể hoàn tác.`}
-        confirmText="Xoá tất cả"
-        cancelText="Huỷ"
-        type="danger"
-        isLoading={bulkDeletingOrd}
-        onConfirm={handleBulkDeleteOrders}
-        onCancel={() => setBulkDeleteOrdConfirmOpen(false)}
-      />
-
-      <ConfirmDialog
-        isOpen={!!confirmDeleteCancelledItem}
-        title="Xoá vĩnh viễn chứng từ"
-        message={`Bạn có chắc chắn muốn xoá vĩnh viễn "${confirmDeleteCancelledItem?.code}" khỏi hệ thống?`}
-        confirmText="Xoá vĩnh viễn"
-        cancelText="Huỷ"
-        type="danger"
-        isLoading={deletingCancelledItem}
-        onConfirm={handleConfirmDeleteCancelled}
-        onCancel={() => setConfirmDeleteCancelledItem(null)}
-      />
-
-      <EventOffcanvas
-        isOpen={isEventCalendarOpen}
-        onClose={() => setIsEventCalendarOpen(false)}
-      />
       </StepPage>
     </div>
   );
@@ -1550,11 +1546,10 @@ function PurchaseReqDetailOffcanvas({
                   return (
                     <div
                       key={item.id || idx}
-                      className={`p-2.5 rounded-lg border ${
-                        isDone
+                      className={`p-2.5 rounded-lg border ${isDone
                           ? 'border-emerald-200 bg-emerald-50/40'
                           : 'border-slate-200 bg-slate-50/50'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="font-bold text-xs text-slate-800">
@@ -1649,7 +1644,7 @@ function PurchaseOrderDetailOffcanvas({
       .then((d) => {
         if (d && Array.isArray(d.items)) setCarrierList(d.items);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -1681,12 +1676,12 @@ function PurchaseOrderDetailOffcanvas({
           // Tra cứu công nợ thực tế từ debt_payables để luôn đồng bộ 100% với Sổ kế toán
           const carrPayable = Array.isArray(payables)
             ? payables.find(
-                (p: any) =>
-                  p.partnerType === 'transporter' &&
-                  cName &&
-                  (p.supplierName?.toLowerCase().includes(cName.toLowerCase()) ||
-                    cName.toLowerCase().includes(p.supplierName?.toLowerCase()))
-              )
+              (p: any) =>
+                p.partnerType === 'transporter' &&
+                cName &&
+                (p.supplierName?.toLowerCase().includes(cName.toLowerCase()) ||
+                  cName.toLowerCase().includes(p.supplierName?.toLowerCase()))
+            )
             : null;
 
           const liveDebt = carrPayable
@@ -1999,11 +1994,10 @@ function PurchaseOrderDetailOffcanvas({
                 </span>
               </div>
               <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                  isOrdered
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isOrdered
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                     : 'bg-slate-100 text-slate-500 border-slate-200'
-                }`}
+                  }`}
               >
                 {isOrdered ? 'Mở khoá nhập liệu' : 'Chỉ mở khi Đã đặt hàng'}
               </span>
