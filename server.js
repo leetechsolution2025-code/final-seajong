@@ -9554,17 +9554,23 @@ app.get('/api/plan-finance/sales', async (req, res) => {
         const matchCustCode = removeAccents(o.customer?.code).includes(searchNorm);
         const matchRecipient = removeAccents(o.nguoiNhan).includes(searchNorm);
         const matchCreator = removeAccents(o.nguoiDatHang).includes(searchNorm);
+        const matchManager = removeAccents(o.nguoiPhuTrach).includes(searchNorm);
         const matchPhone =
           (o.customer?.dienThoai || '').includes(search) || (o.soDienThoai || '').includes(search);
         const matchGhiChu = removeAccents(o.ghiChu).includes(searchNorm);
+        const matchItems = Array.isArray(o.saleOrderItems) && o.saleOrderItems.some((it) =>
+          removeAccents(it.tenHang || it.productName || it.sku || '').includes(searchNorm)
+        );
         return (
           matchCode ||
           matchCust ||
           matchCustCode ||
           matchRecipient ||
           matchCreator ||
+          matchManager ||
           matchPhone ||
-          matchGhiChu
+          matchGhiChu ||
+          matchItems
         );
       });
     }

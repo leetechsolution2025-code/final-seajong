@@ -314,7 +314,7 @@ export const DataManagementPage: React.FC = () => {
     message: '',
     variant: 'info',
     confirmText: 'Xác nhận',
-    onConfirm: () => {},
+    onConfirm: () => { },
   });
 
   const fetchBackups = useCallback(
@@ -590,7 +590,7 @@ export const DataManagementPage: React.FC = () => {
             fetchBackups(true);
             return;
           }
-        } catch {}
+        } catch { }
         setRestoreDrawerOpen(false);
         setInspectingTables(false);
         setUploadPhase('idle');
@@ -608,7 +608,7 @@ export const DataManagementPage: React.FC = () => {
         try {
           const errData = JSON.parse(xhr.responseText);
           if (errData.error) errMsg = errData.error;
-        } catch {}
+        } catch { }
         error('Lỗi tải file', errMsg);
       }
     };
@@ -643,7 +643,7 @@ export const DataManagementPage: React.FC = () => {
     if (restoreTarget?.isStaged && restoreTarget.filename) {
       fetch(`/api/board/data/staging?filename=${encodeURIComponent(restoreTarget.filename)}`, {
         method: 'DELETE',
-      }).catch(() => {});
+      }).catch(() => { });
     }
     setRestoreDrawerOpen(false);
     setRestoreTarget(null);
@@ -686,7 +686,7 @@ export const DataManagementPage: React.FC = () => {
         ].forEach((k) => {
           try {
             localStorage.removeItem(k);
-          } catch {}
+          } catch { }
         });
         setRestoreDrawerOpen(false);
         setRestoreTarget(null);
@@ -952,9 +952,8 @@ export const DataManagementPage: React.FC = () => {
                     deleteConfirmTitle="Xác nhận xóa bản sao lưu"
                     deleteConfirmMessage={`Bạn có chắc chắn muốn xóa file sao lưu "${item.name}" khỏi máy chủ?`}
                     onClick={() => setSelectedBackup(item)}
-                    className={`border-b border-slate-100 transition-colors cursor-pointer ${
-                      isSelected ? 'bg-indigo-50/70' : 'hover:bg-slate-50/90'
-                    }`}
+                    className={`border-b border-slate-100 transition-colors cursor-pointer ${isSelected ? 'bg-indigo-50/70' : 'hover:bg-slate-50/90'
+                      }`}
                     title="Nhấn vào dòng để xem chi tiết hoặc phục hồi bản sao lưu"
                   >
                     <td
@@ -1217,9 +1216,8 @@ export const DataManagementPage: React.FC = () => {
                   return (
                     <label
                       key={tbl.name}
-                      className={`flex items-center justify-between gap-2.5 px-3 py-2 cursor-pointer transition-colors select-none ${
-                        isChecked ? 'bg-indigo-50/40 hover:bg-indigo-50/70' : 'hover:bg-slate-50'
-                      }`}
+                      className={`flex items-center justify-between gap-2.5 px-3 py-2 cursor-pointer transition-colors select-none ${isChecked ? 'bg-indigo-50/40 hover:bg-indigo-50/70' : 'hover:bg-slate-50'
+                        }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <input
@@ -1243,11 +1241,10 @@ export const DataManagementPage: React.FC = () => {
                       </div>
 
                       <span
-                        className={`font-mono text-[11px] px-2 py-0.5 rounded-full border shrink-0 ${
-                          tbl.rowCount > 0
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold'
-                            : 'bg-slate-50 text-slate-400 border-slate-200'
-                        }`}
+                        className={`font-mono text-[11px] px-2 py-0.5 rounded-full border shrink-0 ${tbl.rowCount > 0
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold'
+                          : 'bg-slate-50 text-slate-400 border-slate-200'
+                          }`}
                       >
                         {tbl.rowCount.toLocaleString('vi-VN')} dòng
                       </span>
@@ -1444,8 +1441,8 @@ export const DataManagementPage: React.FC = () => {
         onConfirm={
           selectedBackup
             ? () => {
-                handleRestoreClick(selectedBackup.name);
-              }
+              handleRestoreClick(selectedBackup.name);
+            }
             : undefined
         }
         confirmDisabled={busy || inspectingTables}
