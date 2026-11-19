@@ -26,6 +26,7 @@ interface MonthlyHrPoint {
   probationCount: number;
   newHires: number;
   signedContracts: number;
+  insuredCount: number; // Số người tham gia đóng bảo hiểm BHXH
 }
 
 interface PersonalRequestItem {
@@ -71,6 +72,8 @@ interface HrEmployeeRecord {
   startDate?: string | null;
   createdAt?: string | null;
   socialInsuranceNumber?: string | null;
+  isInsuranceEnrolled?: boolean | number;
+  insuranceSalary?: number;
   baseSalary?: number;
   workEmail?: string;
   phone?: string;
@@ -149,12 +152,24 @@ const isEmployeeSignedContract = (emp: HrEmployeeRecord): boolean => {
   return label !== 'Chưa ký hợp đồng';
 };
 
+const isEmployeeInsured = (emp: HrEmployeeRecord): boolean => {
+  return Boolean(
+    emp.isInsuranceEnrolled === true ||
+    emp.isInsuranceEnrolled === 1 ||
+    (emp.socialInsuranceNumber &&
+      String(emp.socialInsuranceNumber).trim() &&
+      String(emp.socialInsuranceNumber).trim() !== '-' &&
+      String(emp.socialInsuranceNumber).trim().toLowerCase() !== 'none')
+  );
+};
+
 export const HrOverviewPage: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [activeListTab, setActiveListTab] = useState<'pending_requests' | 'labor_contracts'>('pending_requests');
   const [mobileSlide, setMobileSlide] = useState<'overview' | 'pending_requests' | 'labor_contracts'>('overview');
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const [chartRange, setChartRange] = useState<'H1' | 'H2' | 'YEAR'>('YEAR');
+  const [chartViewMode, setChartViewMode] = useState<'combo' | 'bar' | 'line'>('combo');
   const [hoverMonthIdx, setHoverMonthIdx] = useState<number | null>(null);
   const [activeDeptIndex, setActiveDeptIndex] = useState<number>(-1);
   const [isEventCalendarOpen, setIsEventCalendarOpen] = useState<boolean>(false);
@@ -304,6 +319,7 @@ export const HrOverviewPage: React.FC = () => {
       const probation = activeInMonth.filter((e) => isEmployeeProbation(e)).length;
       const official = Math.max(0, total - probation);
       const signed = activeInMonth.filter((e) => isEmployeeSignedContract(e)).length;
+      const insured = activeInMonth.filter((e) => isEmployeeInsured(e)).length;
 
       return {
         monthIndex: m,
@@ -314,6 +330,7 @@ export const HrOverviewPage: React.FC = () => {
         probationCount: probation,
         newHires: hiresInMonth.length,
         signedContracts: signed,
+        insuredCount: insured,
       };
     });
   }, [employees]);
@@ -364,6 +381,10 @@ export const HrOverviewPage: React.FC = () => {
     const ratio = (val - minVal) / (maxVal - minVal);
     return height - paddingBottom - ratio * (height - paddingTop - paddingBottom);
   };
+
+  const barStep = visibleMonths.length > 1 ? (width - paddingX * 2) / (visibleMonths.length - 1) : 40;
+  const barWidth = Math.min(10, Math.max(6, barStep * 0.22));
+  const barGap = 2;
 
   const chartPoints = visibleMonths.map((d, i) => ({
     x: getX(i),
@@ -441,6 +462,8 @@ export const HrOverviewPage: React.FC = () => {
   const officialEmployeesCount = Math.max(0, totalEmployeesCount - probationEmployeesCount);
   const signedContractsCount = activeEmployees.filter((e) => isEmployeeSignedContract(e)).length;
   const unsignedContractsCount = Math.max(0, totalEmployeesCount - signedContractsCount);
+  const insuredEmployeesCount = activeEmployees.filter((e) => isEmployeeInsured(e)).length;
+  const uninsuredEmployeesCount = Math.max(0, totalEmployeesCount - insuredEmployeesCount);
   const indefiniteContractsCount = activeEmployees.filter(
     (e) => formatContractTypeLabel(e.contractType) === 'Không xác định thời hạn'
   ).length;
@@ -473,7 +496,12 @@ export const HrOverviewPage: React.FC = () => {
       {
         badge: 'HỢP ĐỒNG LAO ĐỘNG',
         badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold',
-        text: `Đã ký kết <strong>${signedContractsCount}/${totalEmployeesCount} hợp đồng lao động</strong> (Không xác định thời hạn: <strong>${indefiniteContractsCount} HĐ</strong> • Có xác định thời hạn: <strong>${definiteContractsCount} HĐ</strong> • Chưa ký HĐ: <strong>${unsignedContractsCount} nhân sự</strong>)`,
+        text: `Đã ký kết <strong>${signedContractsCount}/${totalEmployeesCount} hợp đồng lao động</strong> (${Math.round((signedContractsCount / (totalEmployeesCount || 1)) * 100)}% định biên) — Không xác định thời hạn: <strong>${indefiniteContractsCount} HĐ</strong> • Có xác định thời hạn: <strong>${definiteContractsCount} HĐ</strong>`,
+      },
+      {
+        badge: 'BẢO HIỂM XÃ HỘI',
+        badgeColor: 'bg-sky-50 text-sky-700 border-sky-200 font-bold',
+        text: `Đã tham gia BHXH cho <strong>${insuredEmployeesCount}/${totalEmployeesCount} nhân sự</strong> (${Math.round((insuredEmployeesCount / (totalEmployeesCount || 1)) * 100)}% định biên) • Chưa tham gia: <strong>${uninsuredEmployeesCount} nhân sự</strong>`,
       },
       {
         badge: 'TUYỂN DỤNG & ĐÀO TẠO',
@@ -488,6 +516,8 @@ export const HrOverviewPage: React.FC = () => {
     probationEmployeesCount,
     pendingRequests,
     signedContractsCount,
+    insuredEmployeesCount,
+    uninsuredEmployeesCount,
     indefiniteContractsCount,
     definiteContractsCount,
     unsignedContractsCount,
@@ -566,21 +596,66 @@ export const HrOverviewPage: React.FC = () => {
             } flex-col h-full min-h-0 pr-0 lg:pr-3 overflow-y-auto md:overflow-hidden overflow-x-hidden`}
           >
             {/* Header Card */}
-            <div className="mkt-chart-header shrink-0">
+            <div className="mkt-chart-header shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2 border-b border-slate-100">
               <div className="min-w-0 pr-0 md:pr-2 flex-1">
-                <h2 className="mkt-chart-title">
-                  <i className="bi bi-graph-up-arrow text-emerald-500 shrink-0" />
-                  <span className="truncate">
-                    Biểu đồ nhân sự các tháng trong năm 2026
-                  </span>
-                </h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="mkt-chart-title !mb-0">
+                    <i className="bi bi-graph-up-arrow text-emerald-500 shrink-0" />
+                    <span className="truncate">
+                      Biểu đồ nhân sự các tháng trong năm 2026
+                    </span>
+                  </h2>
+                </div>
                 <p className="text-xs text-slate-500 mt-0.5 mb-0 truncate hidden sm:block">
-                  Quy mô định biên nhân sự, tỷ lệ nhân viên chính thức và biến động tuyển mới theo tháng.
+                  Quy mô định biên, số người đã ký hợp đồng lao động và số người đóng bảo hiểm theo tháng.
                 </p>
               </div>
 
-              {/* Action Buttons (Ẩn trên màn hình điện thoại để không che/cắt tiêu đề biểu đồ) */}
-              <div className="mkt-chart-actions hidden md:flex shrink-0">
+              {/* Action Buttons & View Mode Controls */}
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                {/* Chuyển đổi dạng biểu đồ (Combo / Đồ thị cột / Đường diện tích) */}
+                <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200/80">
+                  <button
+                    type="button"
+                    onClick={() => setChartViewMode('combo')}
+                    className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      chartViewMode === 'combo'
+                        ? 'bg-white text-emerald-700 shadow-2xs font-extrabold'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                    title="Biểu đồ kết hợp cột và đường quy mô"
+                  >
+                    <i className="bi bi-bar-chart-steps text-[11px]" />
+                    <span className="hidden sm:inline">Kết hợp</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartViewMode('bar')}
+                    className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      chartViewMode === 'bar'
+                        ? 'bg-white text-indigo-700 shadow-2xs font-extrabold'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                    title="Đồ thị cột hiển thị số người ký HĐLĐ và đóng bảo hiểm"
+                  >
+                    <i className="bi bi-bar-chart-line-fill text-[11px]" />
+                    <span>Đồ thị cột</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartViewMode('line')}
+                    className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      chartViewMode === 'line'
+                        ? 'bg-white text-emerald-700 shadow-2xs font-extrabold'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                    title="Biểu đồ đường quy mô định biên"
+                  >
+                    <i className="bi bi-graph-up text-[11px]" />
+                    <span className="hidden sm:inline">Đường</span>
+                  </button>
+                </div>
+
                 <Button
                   variant="outline"
                   size="sm"
@@ -596,11 +671,47 @@ export const HrOverviewPage: React.FC = () => {
                   size="sm"
                   onClick={() => setOpenAddEmpTrigger((prev) => prev + 1)}
                   leftIcon={<i className="bi bi-plus-lg" />}
-                  className="px-2.5 sm:px-3.5 py-1.5 rounded-xl border-0 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+                  className="hidden md:flex px-2.5 sm:px-3.5 py-1.5 rounded-xl border-0 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-xs font-bold transition-all shadow-xs items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
                 >
-                  <span className="sm:hidden">Thêm mới</span>
-                  <span className="hidden sm:inline">Thêm nhân sự mới</span>
+                  <span>Thêm nhân sự mới</span>
                 </Button>
+              </div>
+            </div>
+
+            {/* Quick KPI Strip & Legend chú giải */}
+            <div className="flex flex-wrap items-center justify-between gap-2 py-1.5 px-2 bg-slate-100/60 rounded-xl border border-slate-200/60 my-2 shrink-0 text-xs">
+              {/* Chỉ số nhanh */}
+              <div className="flex items-center gap-2 sm:gap-4 flex-wrap font-mono">
+                <span className="inline-flex items-center gap-1.5 font-bold text-slate-700">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                  Định biên: <b className="text-slate-900 font-extrabold">{totalEmployeesCount}</b> NS
+                </span>
+                <span className="inline-flex items-center gap-1.5 font-bold text-indigo-700">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-indigo-600 shrink-0" />
+                  Đã ký HĐLĐ: <b className="text-indigo-900 font-extrabold">{signedContractsCount}</b>/
+                  {totalEmployeesCount} ({Math.round((signedContractsCount / (totalEmployeesCount || 1)) * 100)}%)
+                </span>
+                <span className="inline-flex items-center gap-1.5 font-bold text-sky-700">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-sky-500 shrink-0" />
+                  Đóng BHXH: <b className="text-sky-900 font-extrabold">{insuredEmployeesCount}</b>/
+                  {totalEmployeesCount} ({Math.round((insuredEmployeesCount / (totalEmployeesCount || 1)) * 100)}%)
+                </span>
+              </div>
+
+              {/* Chú giải dạng màu */}
+              <div className="hidden lg:flex items-center gap-3 text-[11px] text-slate-500 font-semibold">
+                <span className="flex items-center gap-1">
+                  <span className="w-3.5 h-0.5 bg-emerald-500 inline-block rounded-full" />
+                  Định biên
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-xs bg-indigo-600 inline-block" />
+                  Cột HĐLĐ đã ký
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-xs bg-sky-500 inline-block" />
+                  Cột Đóng BHXH
+                </span>
               </div>
             </div>
 
@@ -616,9 +727,9 @@ export const HrOverviewPage: React.FC = () => {
                     </span>
                   </span>
                   <span className="text-slate-600 font-semibold truncate">
-                    CT: <b className="font-mono text-slate-900">{activePoint.data.officialCount}</b> • HĐLĐ:{' '}
-                    <b className="font-mono text-slate-900">{activePoint.data.signedContracts}</b> • Mới:{' '}
-                    <b className="font-mono text-emerald-600">+{activePoint.data.newHires}</b>
+                    HĐLĐ: <b className="font-mono text-indigo-700">{activePoint.data.signedContracts}</b> • BHXH:{' '}
+                    <b className="font-mono text-sky-700">{activePoint.data.insuredCount}</b> • CT:{' '}
+                    <b className="font-mono text-slate-900">{activePoint.data.officialCount}</b>
                   </span>
                 </div>
               )}
@@ -640,6 +751,14 @@ export const HrOverviewPage: React.FC = () => {
                         <stop offset="0%" stopColor="#059669" />
                         <stop offset="50%" stopColor="#10b981" />
                         <stop offset="100%" stopColor="#34d399" />
+                      </linearGradient>
+                      <linearGradient id="hrContractBarGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#6366f1" />
+                        <stop offset="100%" stopColor="#4338ca" />
+                      </linearGradient>
+                      <linearGradient id="hrInsuranceBarGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#38bdf8" />
+                        <stop offset="100%" stopColor="#0284c7" />
                       </linearGradient>
                       <filter id="hrGlow" x="-20%" y="-20%" width="140%" height="140%">
                         <feDropShadow
@@ -669,11 +788,86 @@ export const HrOverviewPage: React.FC = () => {
                       );
                     })}
 
-                    {/* Area Fill */}
-                    {areaD && <path d={areaD} fill="url(#hrEmeraldGrad)" />}
+                    {/* ĐỒ THỊ DẠNG CỘT: Số người đã ký HĐLĐ (Indigo) và Số người đóng BHXH (Sky Blue) */}
+                    {(chartViewMode === 'combo' || chartViewMode === 'bar') &&
+                      chartPoints.map((pt, idx) => {
+                        const isHovered = hoverMonthIdx === idx;
+                        const x = pt.x;
+                        const h1 = Math.max(0, height - paddingBottom - getY(pt.data.signedContracts));
+                        const y1 = height - paddingBottom - h1;
+                        const h2 = Math.max(0, height - paddingBottom - getY(pt.data.insuredCount));
+                        const y2 = height - paddingBottom - h2;
+                        const bar1X = x - barWidth - barGap / 2;
+                        const bar2X = x + barGap / 2;
 
-                    {/* Spline Stroke */}
-                    {pathD && (
+                        return (
+                          <g key={`bars-${pt.data.monthIndex}`} className="transition-all duration-150">
+                            {/* Cột 1: Đã ký hợp đồng lao động */}
+                            <rect
+                              x={bar1X}
+                              y={y1}
+                              width={barWidth}
+                              height={h1}
+                              rx={2.5}
+                              fill="url(#hrContractBarGrad)"
+                              opacity={isHovered ? 1 : 0.88}
+                            />
+
+                            {/* Cột 2: Tham gia đóng bảo hiểm BHXH */}
+                            <rect
+                              x={bar2X}
+                              y={y2}
+                              width={barWidth}
+                              height={h2}
+                              rx={2.5}
+                              fill="url(#hrInsuranceBarGrad)"
+                              opacity={isHovered ? 1 : 0.88}
+                            />
+
+                            {/* Nhãn số trên đỉnh cột ở chế độ cột bar hoặc khi hover */}
+                            {(chartViewMode === 'bar' || isHovered) && (
+                              <>
+                                {h1 > 10 && (
+                                  <text
+                                    x={bar1X + barWidth / 2}
+                                    y={Math.max(paddingTop + 6, y1 - 3)}
+                                    textAnchor="middle"
+                                    fontSize="7.5"
+                                    fontWeight="bold"
+                                    fill="#4338ca"
+                                  >
+                                    {pt.data.signedContracts}
+                                  </text>
+                                )}
+                                {h2 > 10 && (
+                                  <text
+                                    x={bar2X + barWidth / 2}
+                                    y={Math.max(paddingTop + 6, y2 - 3)}
+                                    textAnchor="middle"
+                                    fontSize="7.5"
+                                    fontWeight="bold"
+                                    fill="#0284c7"
+                                  >
+                                    {pt.data.insuredCount}
+                                  </text>
+                                )}
+                              </>
+                            )}
+                          </g>
+                        );
+                      })}
+
+                    {/* Area Fill quy mô định biên */}
+                    {(chartViewMode === 'combo' || chartViewMode === 'line') && areaD && (
+                      <path
+                        d={areaD}
+                        fill="url(#hrEmeraldGrad)"
+                        opacity={chartViewMode === 'combo' ? 0.35 : 1}
+                      />
+                    )}
+
+                    {/* Spline Stroke quy mô định biên */}
+                    {(chartViewMode === 'combo' || chartViewMode === 'line') && pathD && (
                       <path
                         d={pathD}
                         fill="none"
@@ -721,24 +915,26 @@ export const HrOverviewPage: React.FC = () => {
                       const isHovered = hoverMonthIdx === idx;
                       return (
                         <React.Fragment key={pt.data.monthIndex}>
-                          <div
-                            className="absolute -translate-x-1/2 -translate-y-1/2 flex items-center justify-center transition-all duration-150"
-                            style={{
-                              left: `${pt.leftPct}%`,
-                              top: `${pt.topPct}%`,
-                              width: isHovered ? 16 : 9,
-                              height: isHovered ? 16 : 9,
-                            }}
-                          >
+                          {(chartViewMode === 'combo' || chartViewMode === 'line') && (
                             <div
-                              className={`w-full h-full rounded-full transition-all duration-200 ${
-                                isHovered
-                                  ? 'bg-emerald-500 ring-4 ring-emerald-500/25 shadow-md scale-110'
-                                  : 'bg-white border-2 border-emerald-500 shadow-2xs'
-                              }`}
-                              style={{ aspectRatio: '1 / 1' }}
-                            />
-                          </div>
+                              className="absolute -translate-x-1/2 -translate-y-1/2 flex items-center justify-center transition-all duration-150"
+                              style={{
+                                left: `${pt.leftPct}%`,
+                                top: `${pt.topPct}%`,
+                                width: isHovered ? 16 : 9,
+                                height: isHovered ? 16 : 9,
+                              }}
+                            >
+                              <div
+                                className={`w-full h-full rounded-full transition-all duration-200 ${
+                                  isHovered
+                                    ? 'bg-emerald-500 ring-4 ring-emerald-500/25 shadow-md scale-110'
+                                    : 'bg-white border-2 border-emerald-500 shadow-2xs'
+                                }`}
+                                style={{ aspectRatio: '1 / 1' }}
+                              />
+                            </div>
+                          )}
 
                           {/* Month label along bottom */}
                           <div
@@ -766,7 +962,7 @@ export const HrOverviewPage: React.FC = () => {
                           ? `calc(${activePoint.topPct}% + 18px)`
                           : `calc(${activePoint.topPct}% - 14px)`,
                         transform: isNearTop ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
-                        minWidth: 215,
+                        minWidth: 240,
                       }}
                     >
                       <div className="relative bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/90 p-3 text-slate-800">
@@ -790,8 +986,34 @@ export const HrOverviewPage: React.FC = () => {
 
                         <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
                           <div>
+                            <span className="text-[10px] text-indigo-600 font-semibold flex items-center gap-1 mb-0.5">
+                              <i className="bi bi-file-earmark-check-fill text-indigo-500" />
+                              Đã ký HĐLĐ
+                            </span>
+                            <span className="font-bold text-indigo-800 font-mono">
+                              {activePoint.data.signedContracts} người{' '}
+                              <span className="text-[9.5px] text-slate-400 font-normal">
+                                ({Math.round((activePoint.data.signedContracts / (activePoint.data.totalHeadcount || 1)) * 100)}%)
+                              </span>
+                            </span>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] text-sky-600 font-semibold flex items-center gap-1 mb-0.5">
+                              <i className="bi bi-shield-check text-sky-500" />
+                              Đóng BHXH
+                            </span>
+                            <span className="font-bold text-sky-800 font-mono">
+                              {activePoint.data.insuredCount} người{' '}
+                              <span className="text-[9.5px] text-slate-400 font-normal">
+                                ({Math.round((activePoint.data.insuredCount / (activePoint.data.totalHeadcount || 1)) * 100)}%)
+                              </span>
+                            </span>
+                          </div>
+
+                          <div>
                             <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1 mb-0.5">
-                              <i className="bi bi-person-check-fill text-blue-500" />
+                              <i className="bi bi-person-check-fill text-emerald-500" />
                               Chính thức
                             </span>
                             <span className="font-bold text-slate-800 font-mono">
@@ -801,20 +1023,10 @@ export const HrOverviewPage: React.FC = () => {
 
                           <div>
                             <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1 mb-0.5">
-                              <i className="bi bi-file-earmark-check-fill text-indigo-500" />
-                              Đã ký HĐLĐ
-                            </span>
-                            <span className="font-bold text-slate-800 font-mono">
-                              {activePoint.data.signedContracts} người
-                            </span>
-                          </div>
-
-                          <div className="col-span-2 pt-1 border-t border-slate-100/80 flex items-center justify-between">
-                            <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
-                              <i className="bi bi-person-plus-fill text-emerald-500" />
+                              <i className="bi bi-person-plus-fill text-teal-500" />
                               Tuyển mới trong tháng:
                             </span>
-                            <span className="font-bold text-emerald-600 font-mono text-[11px]">
+                            <span className="font-bold text-teal-600 font-mono text-[11px]">
                               +{activePoint.data.newHires} nhân sự
                             </span>
                           </div>
