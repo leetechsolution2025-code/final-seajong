@@ -72,22 +72,50 @@ export const PurchaseOrderDetailSlide: React.FC<PurchaseOrderDetailSlideProps> =
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
-    const initialList = rawItems.map((it) => {
-      const q = Number(it.soLuong ?? it.targetQty ?? it.quantity ?? 1);
-      const p = Number(it.donGia ?? it.unitPrice ?? it.donGiaDK ?? 0);
-      return {
-        ...it,
-        tenHang: it.tenHang || it.name || it.productName || 'Mặt hàng',
-        soLuong: q,
-        originalQty: q,
-        donVi: it.donVi || it.unit || it.donViTinh || 'Cái',
-        donGia: p,
-        thanhTien: q * p,
-        sku: it.sku || it.productCode || '',
-        bomCode: it.bomCode || it.dinhMucId || '',
-      };
-    });
-    setItems(initialList);
+    if (rawItems.length > 0) {
+      const initialList = rawItems.map((it) => {
+        const q = Number(it.soLuong ?? it.targetQty ?? it.quantity ?? 1);
+        const p = Number(it.donGia ?? it.unitPrice ?? it.donGiaDK ?? 0);
+        return {
+          ...it,
+          tenHang: it.tenHang || it.name || it.productName || 'Mặt hàng',
+          soLuong: q,
+          originalQty: q,
+          donVi: it.donVi || it.unit || it.donViTinh || 'Cái',
+          donGia: p,
+          thanhTien: q * p,
+          sku: it.sku || it.productCode || '',
+          bomCode: it.bomCode || it.dinhMucId || '',
+        };
+      });
+      setItems(initialList);
+    } else if (document.id) {
+      // Tự động tải danh mục mặt hàng từ CSDL nếu chưa có sẵn trong metadata
+      fetch(`/api/approval-requests/${document.id}/items`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((json) => {
+          const fetchedItems = Array.isArray(json?.items) ? json.items : [];
+          if (fetchedItems.length > 0) {
+            const mapped = fetchedItems.map((it: any) => {
+              const q = Number(it.soLuong ?? it.targetQty ?? it.quantity ?? 1);
+              const p = Number(it.donGia ?? it.unitPrice ?? it.donGiaDK ?? 0);
+              return {
+                ...it,
+                tenHang: it.tenHang || it.name || it.productName || 'Mặt hàng',
+                soLuong: q,
+                originalQty: q,
+                donVi: it.donVi || it.unit || it.donViTinh || 'Cái',
+                donGia: p,
+                thanhTien: q * p,
+                sku: it.sku || it.productCode || '',
+                bomCode: it.bomCode || it.dinhMucId || '',
+              };
+            });
+            setItems(mapped);
+          }
+        })
+        .catch(() => {});
+    }
   }, [document.id, rawItems.length]);
 
   // Xử lý thay đổi số lượng trực tiếp

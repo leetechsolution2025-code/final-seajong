@@ -16400,6 +16400,96 @@ app.post('/api/advance-payments/:id/submit-director', async (req, res) => {
 });
 
 
+// ── GET /api/approval-requests/:id/items: Lấy danh mục hàng hoá của hồ sơ trình duyệt ──
+app.get(['/api/approval-requests/:id/items', '/api/approval-documents/:id/items'], async (req, res) => {
+  try {
+    const { id } = req.params;
+    const approvalReq = await prisma.approvalRequest.findFirst({
+      where: {
+        OR: [{ id }, { entityId: id }, { entityCode: id }],
+      },
+    });
+
+    if (!approvalReq) {
+      return res.status(404).json({ success: false, error: 'Không tìm thấy hồ sơ phê duyệt' });
+    }
+
+    let meta = {};
+    try {
+      meta = typeof approvalReq.metadata === 'string' ? JSON.parse(approvalReq.metadata) : approvalReq.metadata || {};
+    } catch {}
+
+    if (Array.isArray(meta.items) && meta.items.length > 0) {
+      return res.json({ success: true, items: meta.items });
+    }
+
+    // 1. Nếu là Đơn mua hàng (PO)
+    const isPo =
+      String(approvalReq.entityType || '').toLowerCase() === 'purchase_order' ||
+      String(approvalReq.entityCode || '').startsWith('DH-') ||
+      String(approvalReq.entityCode || '').startsWith('PO-');
+    if (isPo) {
+      const po = await prisma.purchaseOrder.findFirst({
+        where: {
+          OR: [
+            ...(approvalReq.entityId ? [{ id: approvalReq.entityId }] : []),
+            ...(approvalReq.entityCode ? [{ code: approvalReq.entityCode }] : []),
+          ],
+        },
+        include: { items: true },
+      });
+      if (po && Array.isArray(po.items) && po.items.length > 0) {
+        const enrichedItems = po.items.map((it) => ({
+          id: it.id,
+          tenHang: it.tenHang,
+          name: it.tenHang,
+          donVi: it.donVi || 'Cái',
+          unit: it.donVi || 'Cái',
+          soLuong: it.soLuong || 1,
+          quantity: it.soLuong || 1,
+          donGia: it.donGia || 0,
+          unitPrice: it.donGia || 0,
+          thanhTien: it.thanhTien || ((it.soLuong || 1) * (it.donGia || 0)),
+          subtotal: it.thanhTien || ((it.soLuong || 1) * (it.donGia || 0)),
+        }));
+        return res.json({ success: true, items: enrichedItems });
+      }
+    }
+
+    // 2. Nếu là Yêu cầu mua hàng (PR)
+    const pr = await prisma.purchaseRequest.findFirst({
+      where: {
+        OR: [
+          ...(approvalReq.entityId ? [{ id: approvalReq.entityId }] : []),
+          ...(approvalReq.entityCode ? [{ code: approvalReq.entityCode }] : []),
+        ],
+      },
+      include: { items: true },
+    });
+    if (pr && Array.isArray(pr.items) && pr.items.length > 0) {
+      const enrichedItems = pr.items.map((it) => ({
+        id: it.id,
+        tenHang: it.tenHang,
+        name: it.tenHang,
+        donVi: it.donVi || 'Cái',
+        unit: it.donVi || 'Cái',
+        soLuong: it.soLuong || 1,
+        quantity: it.soLuong || 1,
+        donGia: it.donGia || 0,
+        unitPrice: it.donGia || 0,
+        thanhTien: (it.soLuong || 1) * (it.donGia || 0),
+        subtotal: (it.soLuong || 1) * (it.donGia || 0),
+      }));
+      return res.json({ success: true, items: enrichedItems });
+    }
+
+    return res.json({ success: true, items: [] });
+  } catch (err) {
+    console.error('[GET /api/approval-requests/:id/items]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.patch('/api/approval-requests/:id/items', async (req, res) => {
   try {
     const { id } = req.params;
@@ -16493,8 +16583,15 @@ Kính đề nghị Ban Giám đốc phê duyệt để chuyển sang bộ phận
       adjustedAt: new Date().toISOString(),
     };
 
+    const isPurchaseOrder =
+      String(approvalReq.entityType || '').toLowerCase() === 'purchase_order' ||
+      String(approvalReq.entityCode || '').startsWith('DH-') ||
+      String(approvalReq.entityCode || '').startsWith('PO-');
+
     const newTitle = isLsx
       ? `Đề xuất Lệnh sản xuất & lắp ráp bù tồn ROP: ${approvalReq.entityCode} (${updatedItems.filter(i => i.soLuong > 0).length} mặt hàng)`
+      : isPurchaseOrder
+      ? (approvalReq.entityTitle || `Đơn mua hàng ${approvalReq.entityCode} - ${meta.supplierName || 'NCC'}`)
       : `Đề xuất Yêu cầu mua hàng ngoài bù tồn ROP: ${approvalReq.entityCode} (${updatedItems.filter(i => i.soLuong > 0).length} mặt hàng)`;
 
     const updatedReq = await prisma.approvalRequest.update({
@@ -16525,6 +16622,37 @@ Kính đề nghị Ban Giám đốc phê duyệt để chuyển sang bộ phận
             where: {
               saleOrderId: order.id,
               OR: [
+                ...(it.inventoryItemId ? [{ inventoryItemId: it.inventoryItemId }] : []),
+                ...(it.tenHang ? [{ tenHang: it.tenHang }] : []),
+              ],
+            },
+            data: {
+              soLuong: it.soLuong,
+              thanhTien: it.thanhTien,
+            },
+          });
+        }
+      }
+    } else if (isPurchaseOrder) {
+      const po = await prisma.purchaseOrder.findFirst({
+        where: {
+          OR: [
+            ...(approvalReq.entityId ? [{ id: approvalReq.entityId }] : []),
+            ...(approvalReq.entityCode ? [{ code: approvalReq.entityCode }] : []),
+          ],
+        },
+      });
+      if (po) {
+        await prisma.purchaseOrder.update({
+          where: { id: po.id },
+          data: { tongTien: totalAmount },
+        });
+        for (const it of updatedItems) {
+          await prisma.purchaseOrderItem.updateMany({
+            where: {
+              purchaseOrderId: po.id,
+              OR: [
+                ...(it.id ? [{ id: it.id }] : []),
                 ...(it.inventoryItemId ? [{ inventoryItemId: it.inventoryItemId }] : []),
                 ...(it.tenHang ? [{ tenHang: it.tenHang }] : []),
               ],
