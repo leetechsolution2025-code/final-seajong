@@ -718,87 +718,8 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
         collectPayment(h, hIdx, undefined, 'history');
       });
 
-      // 5. Kiểm tra tổng phát sinh giảm thực tế đã thu thập
+      // 5. Kiểm tra tổng phát sinh giảm thực tế đã thu thập (Chỉ ghi nhận chứng từ thanh toán thực tế, không tự sinh chứng từ ma)
       const totalActualDecrease = timelineList.reduce((sum, tx) => sum + (tx.decrease || 0), 0);
-
-      // 6. Xử lý tạo phiếu dự phòng CHỈ KHI tổng phát sinh giảm thực tế còn thiếu so với paidAmount
-      if (totalActualDecrease < paidAmount) {
-        let missingPaid = paidAmount - totalActualDecrease;
-
-        // Ưu tiên bù cho openingEntries nếu nợ đầu kỳ có paidAmount nhưng thiếu phiếu
-        openingEntries.forEach((op: any, opIdx: number) => {
-          if (missingPaid <= 0) return;
-          const opPaid = Number(op.paidAmount || 0);
-          const opPaymentsSum = Array.isArray(op.payments)
-            ? op.payments.reduce((s: number, p: any) => s + Math.abs(Number(p.amount || 0)), 0)
-            : 0;
-          const opDiff = Math.max(0, opPaid - opPaymentsSum);
-          if (opDiff > 0) {
-            const alloc = Math.min(opDiff, missingPaid);
-            const pCode = isReceivable ? `PT-DK-${opIdx + 1}` : `UNC-DK-${opIdx + 1}`;
-            if (!recordedPaymentCodes.has(pCode.toUpperCase())) {
-              recordedPaymentCodes.add(pCode.toUpperCase());
-              missingPaid -= alloc;
-              const pIsoDate = parseToIsoDateTime(op.date || '2026-01-01', '08:30');
-              const payTx = {
-                id: `FALLBACK_OP_${op.id || opIdx}`,
-                stageId: op.id,
-                stageCode: op.code || 'DK',
-                isStagePayment: true,
-                parentStageCode: op.code || 'DK',
-                parentStageTitle: op.title || 'Dư nợ đầu kỳ',
-                date: pIsoDate,
-                ref: pCode,
-                type: isReceivable ? 'Phiếu thu' : 'Phiếu chi',
-                increase: 0,
-                decrease: alloc,
-                note: isReceivable ? 'Khách hàng thanh toán nợ cũ chuyển sang' : 'Thanh toán nợ cũ chuyển sang cho NCC',
-                orderIdx: orderSeq++,
-                rawEntry: op,
-              };
-              timelineList.push(payTx);
-              stageGroupedList.push(payTx);
-            }
-          }
-        });
-
-        // Phân bổ tiếp cho regularEntries
-        regularEntries.forEach((entry: any, idx: number) => {
-          if (missingPaid <= 0) return;
-          const entryPaid = Number(entry.paidAmount || 0);
-          const entryPaymentsSum = Array.isArray(entry.payments)
-            ? entry.payments.reduce((s: number, p: any) => s + Math.abs(Number(p.amount || 0)), 0)
-            : 0;
-          const entryDiff = Math.max(0, entryPaid - entryPaymentsSum);
-          if (entryDiff > 0) {
-            const alloc = Math.min(entryDiff, missingPaid);
-            const pCode = entry.receiptCode || entry.paymentCode || (isReceivable ? `PT-${entry.code || idx + 1}` : `UNC-${entry.code || idx + 1}`);
-            if (!recordedPaymentCodes.has(pCode.toUpperCase())) {
-              recordedPaymentCodes.add(pCode.toUpperCase());
-              missingPaid -= alloc;
-              const pIsoDate = parseToIsoDateTime(entry.paidDate || entry.date, entry.paidTime || entry.time || '08:30');
-              const payTx = {
-                id: `FALLBACK_STAGE_${entry.id || idx}`,
-                stageId: entry.id,
-                stageCode: entry.code || `${debt.code}-D${idx + 1}`,
-                isStagePayment: true,
-                parentStageCode: entry.code,
-                parentStageTitle: entry.title,
-                date: pIsoDate,
-                ref: pCode,
-                type: isReceivable ? 'Phiếu thu' : 'Phiếu chi',
-                increase: 0,
-                decrease: alloc,
-                note: isReceivable ? `Khách hàng thanh toán ${entry.title || `đợt ${idx + 1}`}` : `Thanh toán tiền hàng cho NCC`,
-                orderIdx: orderSeq++,
-                rawEntry: entry,
-              };
-              timelineList.push(payTx);
-              stageGroupedList.push(payTx);
-            }
-          }
-        });
-      }
     } else {
       // Trường hợp không có entries con: kiểm tra xem chính debt có phải nợ đầu kỳ kết chuyển hay không
       const isRootOpening = isOpeningBalanceEntry(debt);
@@ -1924,7 +1845,10 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
 
                         if (isStagePayment) {
                           const cleanedNote = cleanTransactionNote(tx.note, partnerDisplayName, debt.customerPhone || debt.phone, tx.type);
-                          const itemsCount = (Array.isArray(tx.rawPayment?.items) && tx.rawPayment.items.length > 0 ? tx.rawPayment.items.length : 0) || (Array.isArray(tx.rawEntry?.items) && tx.rawEntry.items.length > 0 ? tx.rawEntry.items.length : 0) || orderItemsMap[tx.ref]?.length || 0;
+                          const isReturnDeduction = tx.isReturn || tx.type === 'Giảm trừ nợ' || String(tx.type || '').includes('Giảm trừ');
+                          const itemsCount = isReturnDeduction
+                            ? ((Array.isArray(tx.rawPayment?.items) && tx.rawPayment.items.length > 0 ? tx.rawPayment.items.length : 0) || orderItemsMap[tx.ref]?.length || 0)
+                            : 0;
 
                           return (
                             <tr
@@ -1997,7 +1921,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                       );
                                     })()}
                                     <span style={{ color: (tx.isReturn || String(tx.type || '').includes('Giảm trừ')) ? '#b45309' : '#166534', fontSize: '0.78rem', fontWeight: 600 }}>{cleanedNote}</span>
-                                    {itemsCount > 0 && (
+                                    {itemsCount > 0 && isReturnDeduction && (
                                       <span
                                         style={{
                                           padding: '1px 6px',
@@ -2036,8 +1960,13 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
 
                       // ── CHẾ ĐỘ 2: THEO TRÌNH TỰ THỜI GIAN (TIMELINE) HOẶC DÒNG ĐẦU KỲ ──
                       const isMain = tx.type.includes('Bán hàng') || tx.type.includes('Mua hàng');
+                      const isReturnDeduction = tx.isReturn || tx.type === 'Giảm trừ nợ' || String(tx.type || '').includes('Giảm trừ');
                       const cleanedNote = cleanTransactionNote(tx.note, partnerDisplayName, debt.customerPhone || debt.phone, tx.type);
-                      const itemsCount = (Array.isArray(tx.rawEntry?.items) && tx.rawEntry.items.length > 0 ? tx.rawEntry.items.length : 0) || (Array.isArray(tx.rawPayment?.items) && tx.rawPayment.items.length > 0 ? tx.rawPayment.items.length : 0) || orderItemsMap[tx.ref]?.length || 0;
+                      const itemsCount = isMain
+                        ? ((Array.isArray(tx.rawEntry?.items) && tx.rawEntry.items.length > 0 ? tx.rawEntry.items.length : 0) || orderItemsMap[tx.ref]?.length || 0)
+                        : isReturnDeduction
+                        ? ((Array.isArray(tx.rawPayment?.items) && tx.rawPayment.items.length > 0 ? tx.rawPayment.items.length : 0) || orderItemsMap[tx.ref]?.length || 0)
+                        : 0;
 
                       return (
                         <tr
@@ -2117,7 +2046,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                 );
                               })()}
                               <span style={{ color: '#334155', fontSize: '0.78rem', fontWeight: 500 }}>{cleanedNote}</span>
-                              {itemsCount > 0 && (
+                              {itemsCount > 0 && (isMain || isReturnDeduction) && (
                                 <span
                                   style={{
                                     padding: '1px 6px',

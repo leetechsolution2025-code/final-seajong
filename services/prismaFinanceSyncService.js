@@ -105,6 +105,13 @@ export async function syncPrismaFinanceToAccountingTables(db) {
 }
 
 async function _runSyncPrismaFinanceToAccountingTables(db) {
+  let createdDb = false;
+  if (!db) {
+    const sqlite3Module = await import('sqlite3');
+    const sqlite3 = sqlite3Module.default.verbose();
+    db = new sqlite3.Database(process.env.DATABASE_URL?.replace('file:', '') || 'prisma/dev.db');
+    createdDb = true;
+  }
   try {
     await dbRun(db, 'PRAGMA journal_mode = WAL');
     await dbRun(db, 'PRAGMA synchronous = NORMAL');
@@ -627,8 +634,11 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
         if (!g.customerAddress && cust?.address) {
           g.customerAddress = cust.address;
         }
+        const refIdStr = String(d.referenceId || '');
+        const isOpeningEntry = refIdStr.toLowerCase().includes('dư nợ') || refIdStr.toLowerCase().includes('đầu kỳ');
         const amt = Number(d.amount) || 0;
-        const paid = Number(d.paidAmount) || 0;
+        // Dư nợ đầu kỳ là nợ gốc ban đầu, các lần thanh toán phải được phản ánh qua phiếu thu PT-... cụ thể, tránh cộng trùng
+        const paid = isOpeningEntry ? 0 : (Number(d.paidAmount) || 0);
         g.totalContract += amt;
         g.totalPaid += paid;
         if (d.dueDate && (!g.latestDueDate || d.dueDate > g.latestDueDate)) {
@@ -638,7 +648,6 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
         if (amt > 0) {
           g.invoices.push(d);
         }
-        const refIdStr = String(d.referenceId || '');
         if (
           (paid > 0 && (amt === 0 || refIdStr.startsWith('PT-'))) ||
           (paid !== 0 && refIdStr.startsWith('DS-'))
@@ -651,18 +660,20 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
               (matchedOrder && pn.saleOrderId === matchedOrder.id) ||
               (g.customerId && pn.customerId === g.customerId && Math.round(Number(pn.amount) || 0) === Math.round(paid))
           );
-          const ptCode = matchedNotif?.code || `PT-${refIdStr}`;
-          if (!g.payments.some((existingP) => String(existingP.referenceId || '') === ptCode)) {
-            g.payments.push({
-              id: matchedNotif?.id || `PREP-${d.id}`,
-              referenceId: ptCode,
-              paidAmount: paid,
-              amount: 0,
-              createdAt: matchedNotif?.createdAt || d.createdAt,
-              dueDate: d.dueDate,
-              isAdvance: true,
-              description: `Khách hàng trả tiền trước / đặt cọc đơn hàng ${refIdStr} - ${g.customerName}`,
-            });
+          if (matchedNotif && matchedNotif.code) {
+            const ptCode = matchedNotif.code;
+            if (!g.payments.some((existingP) => String(existingP.referenceId || '') === ptCode)) {
+              g.payments.push({
+                id: matchedNotif.id,
+                referenceId: ptCode,
+                paidAmount: paid,
+                amount: 0,
+                createdAt: matchedNotif.createdAt || d.createdAt,
+                dueDate: d.dueDate,
+                isAdvance: true,
+                description: `Khách hàng trả tiền trước / đặt cọc đơn hàng ${refIdStr} - ${g.customerName}`,
+              });
+            }
           }
         }
       });
@@ -2464,5 +2475,11 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
   } catch (err) {
     console.error('[syncPrismaFinanceToAccountingTables] Error:', err);
     return { success: false, error: err.message };
+  } finally {
+    if (createdDb && db) {
+      try {
+        db.close();
+      } catch {}
+    }
   }
 }
