@@ -33329,6 +33329,9 @@ app.post('/api/hr/attendance/lunch-notification', async (req, res) => {
 // QUẢN TRỊ DỮ LIỆU HỆ THỐNG (SAO LƯU, TẢI LÊN & THAY THẾ DATABASE SQLITE)
 // ══════════════════════════════════════════════════════════════════════════════
 import sqlite3 from 'sqlite3';
+import { exec } from 'node:child_process';
+import util from 'node:util';
+const execPromise = util.promisify(exec);
 
 const BACKUP_DIR = path.join(__dirname, 'backup_data');
 const BACKUP_CONFIG_FILE = path.join(BACKUP_DIR, 'backup_config.json');
@@ -33421,7 +33424,7 @@ function runBackupRetentionCleanup(customConfig = null) {
   return deletedCount;
 }
 
-function checkAndRunAutoBackup(customConfig = null) {
+async function checkAndRunAutoBackup(customConfig = null) {
   try {
     const cfg = customConfig || readBackupConfig();
     if (cfg.autoCleanupEnabled) {
@@ -33498,7 +33501,7 @@ function checkAndRunAutoBackup(customConfig = null) {
       const timestamp = getBackupTimestamp();
       const autoFileName = `auto_backup_${timestamp}.db`;
       const autoPath = path.join(BACKUP_DIR, autoFileName);
-      fs.copyFileSync(ACTIVE_DB_FILE, autoPath);
+      await safeBackupSqliteDatabase(autoPath);
       saveBackupConfig({ lastAutoBackupSlot: slotKey });
       runBackupRetentionCleanup();
       return autoFileName;
@@ -33514,10 +33517,10 @@ if (globalThis.__seajongAutoBackupTimer) {
   clearInterval(globalThis.__seajongAutoBackupTimer);
 }
 setTimeout(() => {
-  checkAndRunAutoBackup();
+  checkAndRunAutoBackup().catch(() => {});
 }, 500);
 globalThis.__seajongAutoBackupTimer = setInterval(() => {
-  checkAndRunAutoBackup();
+  checkAndRunAutoBackup().catch(() => {});
 }, 15 * 1000);
 
 function formatFileSizeBytes(bytes, decimals = 2) {
@@ -33547,6 +33550,112 @@ function verifySqliteHeader(filePath) {
   } finally {
     fs.closeSync(fd);
   }
+}
+
+async function checkSqliteFileIntegrity(filePath) {
+  if (!fs.existsSync(filePath)) return { ok: false, error: 'File không tồn tại' };
+  return new Promise((resolve) => {
+    let conn;
+    try {
+      conn = new sqlite3.Database(filePath, sqlite3.OPEN_READONLY, (err) => {
+        if (err) return resolve({ ok: false, error: err.message });
+        conn.get('PRAGMA integrity_check(1);', (chkErr, row) => {
+          conn.close(() => {});
+          if (chkErr) return resolve({ ok: false, error: chkErr.message });
+          const val = row ? Object.values(row)[0] : '';
+          if (val === 'ok') return resolve({ ok: true });
+          return resolve({ ok: false, error: String(val || 'Lỗi kiểm tra tính toàn vẹn') });
+        });
+      });
+    } catch (e) {
+      if (conn) try { conn.close(() => {}); } catch {}
+      resolve({ ok: false, error: e.message });
+    }
+  });
+}
+
+async function repairSqliteFile(filePath) {
+  if (!fs.existsSync(filePath)) return false;
+  const tempRepaired = filePath + `_repaired_${Date.now()}.tmp`;
+  try {
+    if (fs.existsSync(tempRepaired)) {
+      try { fs.unlinkSync(tempRepaired); } catch {}
+    }
+    const escapedSrc = filePath.replace(/"/g, '\\"');
+    const escapedTmp = tempRepaired.replace(/"/g, '\\"');
+    const cmd = `sqlite3 "${escapedSrc}" ".recover" | sqlite3 "${escapedTmp}"`;
+    await execPromise(cmd, { timeout: 120000 });
+
+    if (fs.existsSync(tempRepaired) && fs.statSync(tempRepaired).size > 1024) {
+      const chk = await checkSqliteFileIntegrity(tempRepaired);
+      if (chk.ok) {
+        fs.renameSync(tempRepaired, filePath);
+        console.log(`[repairSqliteFile] Đã phục hồi thành công file: ${filePath}`);
+        return true;
+      }
+    }
+  } catch (err) {
+    console.warn(`[repairSqliteFile] Thử recover thất bại (${filePath}):`, err.message);
+  } finally {
+    if (fs.existsSync(tempRepaired)) {
+      try { fs.unlinkSync(tempRepaired); } catch {}
+    }
+  }
+  return false;
+}
+
+async function ensureValidSqliteDatabase(filePath) {
+  if (!fs.existsSync(filePath)) return false;
+  const chk = await checkSqliteFileIntegrity(filePath);
+  if (chk.ok) return true;
+  console.warn(`[ensureValidSqliteDatabase] File ${filePath} gặp lỗi (${chk.error}). Đang tự động sửa chữa...`);
+  return await repairSqliteFile(filePath);
+}
+
+async function safeBackupSqliteDatabase(targetPath) {
+  if (!fs.existsSync(ACTIVE_DB_FILE)) {
+    throw new Error('Không tìm thấy cơ sở dữ liệu hệ thống');
+  }
+
+  const targetDir = path.dirname(targetPath);
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
+  }
+
+  if (fs.existsSync(targetPath)) {
+    try { fs.unlinkSync(targetPath); } catch {}
+  }
+
+  let vacuumSuccess = false;
+  const conn = new sqlite3.Database(ACTIVE_DB_FILE);
+  const runSql = (sql) =>
+    new Promise((resolve, reject) => {
+      conn.run(sql, (err) => (err ? reject(err) : resolve()));
+    });
+
+  try {
+    await runSql('PRAGMA busy_timeout = 30000;');
+    await runSql('PRAGMA wal_checkpoint(TRUNCATE);');
+    const escapedTarget = targetPath.replace(/'/g, "''");
+    await runSql(`VACUUM INTO '${escapedTarget}';`);
+    vacuumSuccess = true;
+  } catch (err) {
+    console.warn('[safeBackupSqliteDatabase] VACUUM INTO thất bại, fallback checkpoint & copy:', err.message);
+  } finally {
+    await new Promise((resolve) => conn.close(resolve));
+  }
+
+  if (!vacuumSuccess || !fs.existsSync(targetPath)) {
+    const cpConn = new sqlite3.Database(ACTIVE_DB_FILE);
+    try {
+      await new Promise((res) => cpConn.run('PRAGMA wal_checkpoint(TRUNCATE);', res));
+    } catch {}
+    await new Promise((res) => cpConn.close(res));
+    fs.copyFileSync(ACTIVE_DB_FILE, targetPath);
+  }
+
+  // Đảm bảo file backup đích hoàn toàn lành lặn và hợp lệ
+  await ensureValidSqliteDatabase(targetPath);
 }
 
 const READY_SYSTEM_TABLES = new Set([
@@ -33755,6 +33864,7 @@ async function inspectSqliteDatabaseTables(sourceDbPath) {
   if (!verifySqliteHeader(sourceDbPath)) {
     throw new Error('File không đúng định dạng cơ sở dữ liệu SQLite 3 (.db)');
   }
+  await ensureValidSqliteDatabase(sourceDbPath);
 
   // Lấy danh sách bảng hiện có trong DB hệ thống
   let mainTableSet = new Set();
@@ -33837,6 +33947,7 @@ async function restoreSqliteDatabaseFromBackup(sourceDbPath, selectedTables = nu
   if (!verifySqliteHeader(sourceDbPath)) {
     throw new Error('File không đúng định dạng cơ sở dữ liệu SQLite 3 (.db)');
   }
+  await ensureValidSqliteDatabase(sourceDbPath);
 
   const filterSet =
     Array.isArray(selectedTables) && selectedTables.length > 0
@@ -33908,27 +34019,31 @@ async function restoreSqliteDatabaseFromBackup(sourceDbPath, selectedTables = nu
         continue;
       }
       const safeTbl = tblName.replace(/"/g, '""');
-      if (!mainTableSet.has(tblName)) {
-        if (tbl.sql) {
-          await runSql(tbl.sql);
-          await runSql(`INSERT OR REPLACE INTO main."${safeTbl}" SELECT * FROM restore_src."${safeTbl}";`);
-          mainTableSet.add(tblName);
+      try {
+        if (!mainTableSet.has(tblName)) {
+          if (tbl.sql) {
+            await runSql(tbl.sql);
+            await runSql(`INSERT OR REPLACE INTO main."${safeTbl}" SELECT * FROM restore_src."${safeTbl}";`);
+            mainTableSet.add(tblName);
+            restoredTables++;
+          }
+        } else {
+          const mainCols = await allSql(`PRAGMA main.table_info("${safeTbl}");`);
+          const srcCols = await allSql(`PRAGMA restore_src.table_info("${safeTbl}");`);
+          const srcColSet = new Set(srcCols.map((c) => String(c.name)));
+          const commonCols = mainCols.filter((c) => srcColSet.has(String(c.name))).map((c) => String(c.name));
+          // Luôn xóa sạch 100% dữ liệu hiện tại của bảng được chọn (kể cả khi bảng nguồn có 0 dòng)
+          await runSql(`DELETE FROM main."${safeTbl}";`);
+          if (commonCols.length > 0) {
+            const colListSql = commonCols.map((c) => `"${c.replace(/"/g, '""')}"`).join(', ');
+            await runSql(
+              `INSERT OR REPLACE INTO main."${safeTbl}" (${colListSql}) SELECT ${colListSql} FROM restore_src."${safeTbl}";`
+            );
+          }
           restoredTables++;
         }
-      } else {
-        const mainCols = await allSql(`PRAGMA main.table_info("${safeTbl}");`);
-        const srcCols = await allSql(`PRAGMA restore_src.table_info("${safeTbl}");`);
-        const srcColSet = new Set(srcCols.map((c) => String(c.name)));
-        const commonCols = mainCols.filter((c) => srcColSet.has(String(c.name))).map((c) => String(c.name));
-        // Luôn xóa sạch 100% dữ liệu hiện tại của bảng được chọn (kể cả khi bảng nguồn có 0 dòng)
-        await runSql(`DELETE FROM main."${safeTbl}";`);
-        if (commonCols.length > 0) {
-          const colListSql = commonCols.map((c) => `"${c.replace(/"/g, '""')}"`).join(', ');
-          await runSql(
-            `INSERT OR REPLACE INTO main."${safeTbl}" (${colListSql}) SELECT ${colListSql} FROM restore_src."${safeTbl}";`
-          );
-        }
-        restoredTables++;
+      } catch (tblErr) {
+        console.warn(`[Restore] Bỏ qua hoặc gặp lỗi tại bảng ${tblName}:`, tblErr.message);
       }
     }
 
@@ -34029,7 +34144,13 @@ app.get('/api/board/data', async (req, res) => {
           return res.status(404).json({ error: 'Không tìm thấy cơ sở dữ liệu hiện tại' });
         }
         const downloadName = `seajong_active_${getBackupTimestamp()}.db`;
-        return res.download(ACTIVE_DB_FILE, downloadName);
+        const tempDownloadPath = path.join(BACKUP_DIR, `temp_download_${Date.now()}.db`);
+        await safeBackupSqliteDatabase(tempDownloadPath);
+        return res.download(tempDownloadPath, downloadName, () => {
+          if (fs.existsSync(tempDownloadPath)) {
+            try { fs.unlinkSync(tempDownloadPath); } catch {}
+          }
+        });
       }
       const safeFilename = path.basename(downloadFile);
       const filePath = path.join(BACKUP_DIR, safeFilename);
@@ -34040,7 +34161,7 @@ app.get('/api/board/data', async (req, res) => {
     }
 
     // Kiểm tra và thực thi sao lưu tự động nếu đã đến hoặc qua giờ hẹn của chu kỳ hiện tại
-    checkAndRunAutoBackup();
+    checkAndRunAutoBackup().catch(() => {});
 
     const files = fs.readdirSync(BACKUP_DIR).filter((f) => f.endsWith('.db'));
     const backups = files
@@ -34147,7 +34268,7 @@ app.post('/api/board/data', async (req, res) => {
     const backupFilename = `manual_backup_${timestamp}.db`;
     const backupPath = path.join(BACKUP_DIR, backupFilename);
 
-    fs.copyFileSync(ACTIVE_DB_FILE, backupPath);
+    await safeBackupSqliteDatabase(backupPath);
 
     res.json({
       success: true,
@@ -34292,7 +34413,7 @@ app.put('/api/board/data', async (req, res) => {
     const timestamp = getBackupTimestamp();
     const emergencyBackupPath = path.join(BACKUP_DIR, `before_restore_${timestamp}.db`);
     if (fs.existsSync(ACTIVE_DB_FILE)) {
-      fs.copyFileSync(ACTIVE_DB_FILE, emergencyBackupPath);
+      await safeBackupSqliteDatabase(emergencyBackupPath);
     }
 
     // 2. Thay thế dữ liệu các bảng được chọn (hoặc toàn bộ bảng) từ file sao lưu
@@ -34356,7 +34477,7 @@ app.post('/api/board/data/upload', async (req, res) => {
     // 1. Tạo bản sao lưu khẩn cấp trước khi thay thế (before_restore)
     const emergencyBackupPath = path.join(BACKUP_DIR, `before_restore_${timestamp}.db`);
     if (fs.existsSync(ACTIVE_DB_FILE)) {
-      fs.copyFileSync(ACTIVE_DB_FILE, emergencyBackupPath);
+      await safeBackupSqliteDatabase(emergencyBackupPath);
     }
 
     // 2. Thay thế toàn bộ dữ liệu trong hệ thống bằng dữ liệu từ file vừa tải lên
