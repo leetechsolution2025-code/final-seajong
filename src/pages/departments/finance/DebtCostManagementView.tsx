@@ -7885,6 +7885,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
           fetchReceivables();
           fetchPayables();
         }}
+        onDeleteReceiptSuccess={() => {
+          fetchReceivables();
+          fetchPayables();
+        }}
         onShowToast={onShowToast}
         userName={getLoggedInUserName(activeUser) || "Lê Công Vụ"}
       />

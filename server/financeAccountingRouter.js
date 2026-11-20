@@ -1117,6 +1117,195 @@ router.post('/api/debts/receivables/:id/payments', (req, res) => {
   });
 });
 
+// Xóa chi tiết phiếu thu khách hàng (Hoàn tác công nợ, xóa voucher, xóa Debt và chuẩn hóa bộ máy kế toán)
+router.delete('/api/debts/receipts/:code', async (req, res) => {
+  try {
+    const rawCode = decodeURIComponent(String(req.params.code || '')).trim();
+    const { parentId, parentCode, entryId } = req.body || {};
+    const targetCode = rawCode;
+    const targetId = String(entryId || '').trim();
+
+    if (!targetCode && !targetId) {
+      return res.status(400).json({ error: 'Thiếu mã hoặc ID phiếu thu cần xóa' });
+    }
+
+    // 1. Tìm bản ghi debt_receivables chứa phiếu thu này
+    let findQuery = `SELECT * FROM debt_receivables WHERE entries_json LIKE ? LIMIT 1`;
+    let findParams = [`%${targetCode}%`];
+
+    if (parentId || parentCode) {
+      findQuery = `SELECT * FROM debt_receivables WHERE (id != '' AND id = ?) OR (code != '' AND code = ?) OR entries_json LIKE ? LIMIT 1`;
+      findParams = [parentId || '', parentCode || '', `%${targetCode}%`];
+    }
+
+    db.get(findQuery, findParams, async (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+
+      let updatedParent = null;
+      let removedReceiptAmount = 0;
+
+      if (row) {
+        let entries = [];
+        try {
+          entries = JSON.parse(row.entries_json || '[]');
+        } catch {}
+
+        // Duyệt các entries và các sub-payments để tìm và xóa phiếu thu
+        let foundAndRemoved = false;
+
+        // Trường hợp 1: Nằm trong payments của một entry
+        entries.forEach((entryItem) => {
+          if (Array.isArray(entryItem.payments)) {
+            const beforeCount = entryItem.payments.length;
+            const keptPayments = [];
+            entryItem.payments.forEach((p) => {
+              const pCode = String(p.code || p.receiptCode || '').trim();
+              const pId = String(p.id || '').trim();
+              if ((targetCode && pCode === targetCode) || (targetId && pId === targetId)) {
+                removedReceiptAmount += Number(p.amount ?? p.paidAmount) || 0;
+                foundAndRemoved = true;
+              } else {
+                keptPayments.push(p);
+              }
+            });
+
+            if (keptPayments.length !== beforeCount) {
+              entryItem.payments = keptPayments;
+              // Tính lại paidAmount của đợt này
+              const stagePaid = keptPayments.reduce((acc, p) => acc + (Number(p.amount ?? p.paidAmount) || 0), 0);
+              entryItem.paidAmount = stagePaid;
+              const stageVal = Number(entryItem.contractValue !== undefined ? entryItem.contractValue : (entryItem.amount || 0));
+              entryItem.remainingAmount = Math.max(0, stageVal - stagePaid);
+              entryItem.status = entryItem.remainingAmount <= 0 ? 'completed' : stagePaid > 0 ? 'partial' : 'ontime';
+              entryItem.statusLabel = entryItem.remainingAmount <= 0 ? 'Đã thu đủ' : stagePaid > 0 ? 'Thu một phần' : 'Chờ thanh toán';
+            }
+          }
+        });
+
+        // Trường hợp 2: Bản thân entry là một phiếu thu độc lập
+        if (!foundAndRemoved) {
+          const beforeEntriesCount = entries.length;
+          const keptEntries = [];
+          entries.forEach((e) => {
+            const eCode = String(e.code || e.receiptCode || '').trim();
+            const eId = String(e.id || '').trim();
+            if ((targetCode && eCode === targetCode) || (targetId && eId === targetId)) {
+              removedReceiptAmount += Number(e.amount ?? e.paidAmount ?? e.contractValue) || 0;
+              foundAndRemoved = true;
+            } else {
+              keptEntries.push(e);
+            }
+          });
+          if (keptEntries.length !== beforeEntriesCount) {
+            entries = keptEntries;
+          }
+        }
+
+        // Tính lại tổng tiền của hồ sơ debt_receivables
+        let totalReceiptsSum = 0;
+        entries.forEach((e) => {
+          if (Array.isArray(e.payments)) {
+            e.payments.forEach((p) => {
+              totalReceiptsSum += Number(p.amount ?? p.paidAmount) || 0;
+            });
+          } else if (e.type === 'receipt' || String(e.code || '').startsWith('PT-')) {
+            totalReceiptsSum += Number(e.amount ?? e.paidAmount) || 0;
+          }
+        });
+
+        const contractVal = Number(row.contract_value) || 0;
+        const newPaid = totalReceiptsSum;
+        const newRemaining = Math.max(0, contractVal - newPaid);
+        const newStatus = newRemaining <= 0 ? 'completed' : newPaid > 0 ? 'ontime' : 'due';
+        const newStatusLabel = newRemaining <= 0 ? 'Đã thu đủ' : newPaid > 0 ? 'Đang thu hồi nợ' : 'Trong hạn thanh toán';
+
+        await new Promise((resolve) => {
+          db.run(
+            `UPDATE debt_receivables
+             SET paid_amount = ?, remaining_amount = ?, status = ?, status_label = ?, entries_json = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+            [newPaid, newRemaining, newStatus, newStatusLabel, JSON.stringify(entries), row.id],
+            () => resolve()
+          );
+        });
+
+        updatedParent = {
+          id: row.id,
+          code: row.code,
+          customerId: row.customer_id,
+          customerName: row.customer_name,
+          customerAddress: row.customer_address || '',
+          projectName: row.project_name || '',
+          contractValue: contractVal,
+          paidAmount: newPaid,
+          remainingAmount: newRemaining,
+          dueDate: row.due_date || '',
+          status: newStatus,
+          statusLabel: newStatusLabel,
+          managerName: row.manager_name || '',
+          notes: row.notes || '',
+          entries,
+        };
+      }
+
+      // 2. Xóa khỏi financial_vouchers
+      await new Promise((resolve) => {
+        db.run(
+          `DELETE FROM financial_vouchers
+           WHERE (voucher_code != '' AND voucher_code = ?)
+              OR (id != '' AND id = ?)
+              OR (reference_code != '' AND reference_code = ?)`,
+          [targetCode, targetId, targetCode],
+          () => resolve()
+        );
+      });
+
+      // 3. Xóa khỏi bảng Debt (Prisma)
+      await new Promise((resolve) => {
+        db.run(
+          `DELETE FROM Debt
+           WHERE (referenceId != '' AND referenceId = ?)
+              OR (id != '' AND id = ?)
+              OR (id != '' AND id = ?)
+              OR (id != '' AND id LIKE ?)`,
+          [targetCode, targetId, `debt-rec-${targetCode}`, `%${targetCode}%`],
+          () => resolve()
+        );
+      });
+
+      // 4. Xóa các phát sinh đối ứng trong cash_and_bank_assets nếu có
+      await new Promise((resolve) => {
+        db.run(
+          `DELETE FROM cash_and_bank_assets
+           WHERE (ref_voucher_code != '' AND ref_voucher_code = ?)
+              OR (reference_code != '' AND reference_code = ?)`,
+          [targetCode, targetCode],
+          () => resolve()
+        );
+      });
+
+      // 5. Chuẩn hóa & cân đối lại toàn bộ Sổ cái kế toán qua syncAllSubledgersToJournal
+      try {
+        await syncAllSubledgersToJournal(db);
+        await syncPrismaFinanceToAccountingTables(db);
+      } catch (syncErr) {
+        console.warn('[Delete Receipt] Lỗi đồng bộ sổ cái kế toán:', syncErr.message);
+      }
+
+      return res.json({
+        success: true,
+        message: `Đã xóa phiếu thu ${targetCode} và chuẩn hóa bộ máy kế toán thành công`,
+        deletedCode: targetCode,
+        removedAmount: removedReceiptAmount,
+        updatedParent,
+      });
+    });
+  } catch (error) {
+    console.error('[Delete Receipt Error]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Xóa công nợ phải thu (Tự động xóa cascade các phiếu thu liên quan, hoàn tác dòng tiền & cập nhật sổ cái)
 router.delete('/api/debts/receivables/:id', (req, res) => {
   const targetId = req.params.id;

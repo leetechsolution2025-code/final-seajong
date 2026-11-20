@@ -4,12 +4,14 @@ import { Button } from '../../../components/common/Button';
 import { Badge } from '../../../components/common/Badge';
 import { NumberInput } from '../../../components/common/NumberInput';
 import { Input } from '../../../components/common/Input';
+import { ConfirmDialog } from '../../../components/common/ConfirmDialog';
 import {
   CheckCircle,
   Printer,
   BoxSeam,
   FileText,
   PencilSquare,
+  Trash,
 } from 'react-bootstrap-icons';
 
 export interface DebtSubEntryItem {
@@ -41,6 +43,7 @@ export interface DebtSubEntryDetailOffcanvasProps {
   onConfirmPayment?: (parent: any, entry: any) => void;
   onPrintReceipt?: (receiptData: any) => void;
   onReconcileSuccess?: (updatedParent: any, newAmount: number, targetCode: string) => void;
+  onDeleteReceiptSuccess?: (deletedCode: string, updatedParent?: any) => void;
   onShowToast?: (type: 'success' | 'error' | 'warning' | 'info', title: string, message: string) => void;
   userName?: string;
 }
@@ -171,6 +174,7 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
   onConfirmPayment,
   onPrintReceipt,
   onReconcileSuccess,
+  onDeleteReceiptSuccess,
   onShowToast,
   userName = 'Lê Công Vụ',
 }) => {
@@ -188,17 +192,25 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
   const [reconcilingSaving, setReconcilingSaving] = useState<boolean>(false);
   const [localReconciliationEntries, setLocalReconciliationEntries] = useState<any[]>([]);
 
+  // State cho chức năng Xóa chi tiết phiếu thu
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+
   useEffect(() => {
     if (!isOpen || !selectedSubEntry) {
       setActiveTab('info');
       setItems([]);
       setIsReconciling(false);
       setLocalReconciliationEntries([]);
+      setConfirmDeleteOpen(false);
+      setIsDeleting(false);
       return;
     }
 
     setIsReconciling(false);
     setLocalReconciliationEntries([]);
+    setConfirmDeleteOpen(false);
+    setIsDeleting(false);
 
     const entry = selectedSubEntry.entry;
     if (entry?.items && Array.isArray(entry.items) && entry.items.length > 0) {
@@ -252,6 +264,16 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
       String(entry.code || '').startsWith('PC-') ||
       String(entry.code || '').startsWith('UNC-') ||
       String(entry.code || '').startsWith('CHI-'));
+
+  const isReceiptVoucher =
+    isRec &&
+    !isReturn &&
+    !isReconciliationVoucher &&
+    (entry.isReceipt ||
+      entry.type === 'receipt' ||
+      entry.voucherType === 'receipt' ||
+      String(entry.code || '').startsWith('PT-') ||
+      String(entry.code || '').startsWith('THU-'));
 
   const origAmount = Number(
     isRec ? (entry.contractValue ?? entry.amount ?? 0) : (entry.totalAmount ?? entry.amount ?? 0)
@@ -385,88 +407,142 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
     }
   };
 
-  return (
-    <Offcanvas
-      isOpen={isOpen}
-      onClose={onClose}
-      closeOnBackdropClick={false}
-      title={
-        isReconciliationVoucher
-          ? 'Chi tiết chứng từ đối soát'
-          : isReturn
-          ? 'Chi tiết giảm trừ công nợ'
-          : isPaymentVoucher
-          ? isRec
-            ? 'Chi tiết phiếu thu'
-            : 'Chi tiết phiếu chi'
-          : 'Chi tiết khoản nợ'
+  const handleDeleteReceipt = async () => {
+    const receiptCode = String(entry.code || entry.receiptCode || '').trim();
+    if (!receiptCode && !entry.id) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/debts/receipts/${encodeURIComponent(receiptCode || entry.id)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          parentId: parent.id,
+          parentCode: parent.code,
+          entryId: entry.id,
+          receiptCode: receiptCode,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.success === false) {
+        onShowToast?.('error', 'Lỗi xóa phiếu thu', data?.error || 'Không thể xóa phiếu thu này');
+        return;
       }
-      description={`Phiếu phát sinh mã ${entry.code || '---'}`}
-      width="400px"
-      position="right"
-      footer={
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', width: '100%' }}>
-          <Button type="button" variant="secondary" size="sm" onClick={onClose}>
-            Đóng
-          </Button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {isReconciling ? (
-              <>
+
+      setConfirmDeleteOpen(false);
+      onShowToast?.(
+        'success',
+        'Đã xóa phiếu thu',
+        data.message || `Đã xóa phiếu thu ${receiptCode} và chuẩn hóa bộ máy kế toán thành công`
+      );
+      window.dispatchEvent(new CustomEvent('seajong_finance_updated'));
+      onReconcileSuccess?.(data.updatedParent || null, 0, receiptCode);
+      onDeleteReceiptSuccess?.(receiptCode, data.updatedParent);
+      onClose();
+    } catch (err: any) {
+      onShowToast?.('error', 'Lỗi kết nối', err?.message || 'Không thể kết nối máy chủ để xóa phiếu thu');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <>
+      <Offcanvas
+        isOpen={isOpen}
+        onClose={onClose}
+        closeOnBackdropClick={false}
+        title={
+          isReconciliationVoucher
+            ? 'Chi tiết chứng từ đối soát'
+            : isReturn
+            ? 'Chi tiết giảm trừ công nợ'
+            : isPaymentVoucher
+            ? isRec
+              ? 'Chi tiết phiếu thu'
+              : 'Chi tiết phiếu chi'
+            : 'Chi tiết khoản nợ'
+        }
+        description={`Phiếu phát sinh mã ${entry.code || '---'}`}
+        width="400px"
+        position="right"
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Button type="button" variant="secondary" size="sm" onClick={onClose} disabled={isDeleting}>
+                Đóng
+              </Button>
+              {isReceiptVoucher && !isReconciling && (
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="danger"
                   size="sm"
-                  onClick={() => setIsReconciling(false)}
-                  disabled={reconcilingSaving}
+                  onClick={() => setConfirmDeleteOpen(true)}
+                  disabled={isDeleting}
+                  isLoading={isDeleting}
+                  leftIcon={<Trash size={13} />}
                 >
-                  Huỷ
+                  Xoá
                 </Button>
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="sm"
-                  isLoading={reconcilingSaving}
-                  disabled={isReconcileSaveDisabled}
-                  onClick={handleSaveReconcile}
-                  leftIcon={<CheckCircle size={14} />}
-                >
-                  Lưu đối soát
-                </Button>
-              </>
-            ) : (
-              <>
-                {!isReconciliationVoucher && (
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {isReconciling ? (
+                <>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={openReconcileForEntry}
-                    leftIcon={<PencilSquare size={13} />}
+                    onClick={() => setIsReconciling(false)}
+                    disabled={reconcilingSaving}
                   >
-                    Đối soát
+                    Huỷ
                   </Button>
-                )}
-                {!isReturn && !isPaymentVoucher && !isReconciliationVoucher && remainingAmount > 0 && onConfirmPayment && (
                   <Button
                     type="button"
                     variant="primary"
                     size="sm"
-                    onClick={() => {
-                      onClose();
-                      onConfirmPayment(parent, entry);
-                    }}
+                    isLoading={reconcilingSaving}
+                    disabled={isReconcileSaveDisabled}
+                    onClick={handleSaveReconcile}
                     leftIcon={<CheckCircle size={14} />}
-                    style={{ fontWeight: 700 }}
                   >
-                    Xác nhận thanh toán
+                    Lưu đối soát
                   </Button>
-                )}
-              </>
-            )}
+                </>
+              ) : (
+                <>
+                  {!isReconciliationVoucher && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={openReconcileForEntry}
+                      leftIcon={<PencilSquare size={13} />}
+                    >
+                      Đối soát
+                    </Button>
+                  )}
+                  {!isReturn && !isPaymentVoucher && !isReconciliationVoucher && remainingAmount > 0 && onConfirmPayment && (
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={() => {
+                        onClose();
+                        onConfirmPayment(parent, entry);
+                      }}
+                      leftIcon={<CheckCircle size={14} />}
+                      style={{ fontWeight: 700 }}
+                    >
+                      Xác nhận thanh toán
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
           </div>
-        </div>
-      }
-    >
+        }
+      >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.8125rem' }}>
         {/* Bộ chuyển Slide: Thông tin khoản nợ vs Danh sách hàng hoá */}
         <div
@@ -1052,6 +1128,26 @@ export const DebtSubEntryDetailOffcanvas: React.FC<DebtSubEntryDetailOffcanvasPr
         )}
       </div>
     </Offcanvas>
+
+    <ConfirmDialog
+      isOpen={confirmDeleteOpen}
+      variant="danger"
+      title="Xác nhận xóa phiếu thu"
+      message={
+        <div>
+          Bạn có chắc chắn muốn xóa phiếu thu <strong>{entry.code || 'này'}</strong> (Số tiền: <strong>{formatNumberGroup(origAmount || paidAmount)} đ</strong>)?
+          <div style={{ marginTop: '6px', fontSize: '0.8125rem', color: '#64748b' }}>
+            Hệ thống sẽ hoàn tác khoản tiền này, cập nhật lại số dư công nợ khách hàng và tự động chuẩn hóa Sổ cái kế toán để đảm bảo tính cân đối.
+          </div>
+        </div>
+      }
+      confirmText="Xác nhận xoá"
+      cancelText="Hủy bỏ"
+      isLoading={isDeleting}
+      onCancel={() => setConfirmDeleteOpen(false)}
+      onConfirm={handleDeleteReceipt}
+    />
+  </>
   );
 };
 export default DebtSubEntryDetailOffcanvas;
