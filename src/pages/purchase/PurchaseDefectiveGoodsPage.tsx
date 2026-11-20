@@ -176,6 +176,7 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
   interface SupplierGroup {
     supplierKey: string;
     supplierName: string;
+    supplierAddress: string;
     supplierPhone: string;
     records: DefectiveGoodsRecord[];
     totalDamage: number;
@@ -192,6 +193,7 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
         map.set(key, {
           supplierKey: key,
           supplierName: rec.supplierName || 'Chưa rõ nhà cung cấp',
+          supplierAddress: rec.supplierAddress || '',
           supplierPhone: rec.supplierPhone || '',
           records: [],
           totalDamage: 0,
@@ -200,6 +202,12 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
         });
       }
       const grp = map.get(key)!;
+      if (!grp.supplierAddress && rec.supplierAddress) {
+        grp.supplierAddress = rec.supplierAddress;
+      }
+      if (!grp.supplierPhone && rec.supplierPhone) {
+        grp.supplierPhone = rec.supplierPhone;
+      }
       grp.records.push(rec);
       grp.totalDamage += rec.totalFailedAmount || 0;
       grp.totalFailedQty += rec.totalFailedQty || 0;
@@ -423,10 +431,10 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
               <table className="w-full text-left border-collapse" style={{ minWidth: '850px' }}>
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 text-[11.5px] font-bold uppercase tracking-wider sticky top-0 z-10 select-none shadow-sm">
                   <tr>
-                    <th style={{ padding: '9px 12px', width: '28%' }}>Tên nhà cung cấp</th>
-                    <th style={{ padding: '9px 12px', width: '24%' }}>Đơn mua hàng</th>
+                    <th style={{ padding: '9px 12px', width: '36%' }}>Nhà cung cấp & Đơn mua hàng</th>
                     <th style={{ padding: '9px 12px', width: '26%' }}>Biên bản QC</th>
-                    <th style={{ padding: '9px 12px', width: '22%', textAlign: 'right' }}>Tổng thiệt hại</th>
+                    <th style={{ padding: '9px 12px', width: '18%', textAlign: 'center' }}>Trạng thái</th>
+                    <th style={{ padding: '9px 12px', width: '20%', textAlign: 'right' }}>Tổng thiệt hại</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white text-xs text-slate-700">
@@ -452,39 +460,63 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
                             className="bg-slate-100/90 hover:bg-slate-200/70 cursor-pointer select-none transition-colors border-y border-slate-200"
                             title="Nhấn để ẩn/hiện danh sách biên bản của nhà cung cấp này"
                           >
-                            {/* Cột 1: Tên nhà cung cấp */}
+                            {/* Cột 1: Tên nhà cung cấp + Địa chỉ dưới tên + Badge */}
                             <td style={{ padding: '8px 12px' }}>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-start gap-2">
                                 <button
                                   type="button"
-                                  className="p-1 rounded hover:bg-slate-300/60 text-slate-600 transition-colors"
+                                  className="p-1 mt-0.5 rounded hover:bg-slate-300/60 text-slate-600 transition-colors"
                                   onClick={(e) => toggleGroup(group.supplierKey, e)}
                                 >
                                   {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                                 </button>
-                                <span className="font-bold text-slate-900 text-[13px]">{group.supplierName}</span>
-                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
-                                  {group.records.length} biên bản
-                                </span>
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-slate-900 text-[13px]">{group.supplierName}</span>
+                                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                                      {group.records.length} biên bản
+                                    </span>
+                                  </div>
+                                  {/* Địa chỉ nhà cung cấp dưới tên nhà cung cấp */}
+                                  {group.supplierAddress ? (
+                                    <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5 font-normal">
+                                      <GeoAlt size={10} className="text-slate-400 shrink-0" />
+                                      <span>{group.supplierAddress}</span>
+                                      {group.supplierPhone && (
+                                        <>
+                                          <span className="text-slate-300">•</span>
+                                          <span>{group.supplierPhone}</span>
+                                        </>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    group.supplierPhone && (
+                                      <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5 font-normal">
+                                        <Telephone size={10} className="text-slate-400 shrink-0" />
+                                        <span>{group.supplierPhone}</span>
+                                      </div>
+                                    )
+                                  )}
+                                </div>
                               </div>
                             </td>
 
-                            {/* Cột 2: Đơn mua hàng (Tóm tắt số đơn) */}
-                            <td style={{ padding: '8px 12px' }}>
-                              <span className="text-slate-600 font-medium text-[12px]">
-                                {group.uniquePOCodes.length} đơn mua (PO)
-                              </span>
-                            </td>
-
-                            {/* Cột 3: Biên bản QC (Tóm tắt) */}
-                            <td style={{ padding: '8px 12px' }}>
+                            {/* Cột 2: Biên bản QC (Tóm tắt số đợt kiểm tra) */}
+                            <td style={{ padding: '8px 12px', verticalAlign: 'middle' }}>
                               <span className="text-slate-500 text-[11.5px]">
                                 {group.records.length} đợt kiểm tra IQC
                               </span>
                             </td>
 
+                            {/* Cột 3: Trạng thái (Tóm tắt) */}
+                            <td style={{ padding: '8px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
+                              <span className="text-slate-500 text-[11px]">
+                                {currentStep === 1 ? 'Chờ xử lý' : 'Đã chốt'}
+                              </span>
+                            </td>
+
                             {/* Cột 4: Tổng thiệt hại (Tổng của nhóm NCC) */}
-                            <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                            <td style={{ padding: '8px 12px', verticalAlign: 'middle', textAlign: 'right' }}>
                               <div className="font-extrabold text-red-600 text-[13px]">
                                 {group.totalDamage > 0 ? formatCurrency(group.totalDamage) : 'Chưa có giá'}
                               </div>
@@ -503,32 +535,20 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
                                 className="hover:bg-amber-50/50 cursor-pointer transition-colors bg-white border-b border-slate-100 group select-none"
                                 title="Nhấn vào dòng để mở chi tiết & Xử lý hàng lỗi với NCC"
                               >
-                                {/* Cột 1: Thụt lề và liên hệ */}
-                                <td style={{ padding: '9px 12px', paddingLeft: '34px', verticalAlign: 'top' }}>
-                                  <div className="flex items-center gap-1.5 text-slate-400 text-[11.5px]">
+                                {/* Cột 1: Thông tin Đơn mua hàng đưa vào cột 1, bên trong tên nhà cung cấp */}
+                                <td style={{ padding: '9px 12px', paddingLeft: '32px', verticalAlign: 'top' }}>
+                                  <div className="flex items-center gap-1.5">
                                     <span className="text-slate-300 font-mono">└─</span>
-                                    {rec.supplierPhone ? (
-                                      <span className="text-slate-600 text-[11px] flex items-center gap-1 font-medium">
-                                        <Telephone size={10} className="text-slate-400" />
-                                        {rec.supplierPhone}
-                                      </span>
-                                    ) : (
-                                      <span className="text-slate-400 text-[11px] italic">Chi tiết biên bản</span>
-                                    )}
+                                    <div className="font-bold text-sky-700 text-[12.5px] group-hover:underline">
+                                      {rec.purchaseOrderCode}
+                                    </div>
                                   </div>
-                                </td>
-
-                                {/* Cột 2: Đơn mua hàng PO */}
-                                <td style={{ padding: '9px 12px', verticalAlign: 'top' }}>
-                                  <div className="font-bold text-sky-700 text-[12.5px] group-hover:underline">
-                                    {rec.purchaseOrderCode}
-                                  </div>
-                                  <div className="text-[11px] text-slate-400 mt-0.5">
+                                  <div className="text-[10.5px] text-slate-400 pl-4 mt-0.5">
                                     Đơn mua hàng PO
                                   </div>
                                 </td>
 
-                                {/* Cột 3: Biên bản QC (BỎ TẤT CẢ ICON TRƯỚC MÃ THEO YÊU CẦU) */}
+                                {/* Cột 2: Biên bản QC (BỎ TẤT CẢ ICON TRƯỚC MÃ THEO YÊU CẦU) */}
                                 <td style={{ padding: '9px 12px', verticalAlign: 'top' }}>
                                   <div className="font-bold text-amber-800 text-[12.5px]">
                                     {rec.code}
@@ -538,16 +558,22 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
                                     <span className="text-slate-300">•</span>
                                     <span className="text-slate-600 font-medium">{rec.inspectorName}</span>
                                   </div>
-                                  <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                                    <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
-                                      {rec.qcResult}
+                                </td>
+
+                                {/* Cột 3: Tách trạng thái "Lỗi một phần" thành một cột riêng */}
+                                <td style={{ padding: '9px 12px', verticalAlign: 'top', textAlign: 'center' }}>
+                                  <div>
+                                    <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                                      {rec.qcResult || 'Lỗi một phần'}
                                     </span>
-                                    {currentStep === 2 && rec.resolution?.actionLabel && (
-                                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                  </div>
+                                  {currentStep === 2 && rec.resolution?.actionLabel && (
+                                    <div className="mt-1">
+                                      <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
                                         {rec.resolution.actionLabel}
                                       </span>
-                                    )}
-                                  </div>
+                                    </div>
+                                  )}
                                 </td>
 
                                 {/* Cột 4: Tổng thiệt hại */}
@@ -601,9 +627,17 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
           <div className="space-y-4 text-xs">
             {/* Thẻ tóm tắt đơn mua & Nhà cung cấp */}
             <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1.5">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-medium">Nhà cung cấp:</span>
-                <span className="font-bold text-slate-900 text-[12.5px]">{selectedRecord.supplierName}</span>
+              <div className="flex justify-between items-start">
+                <span className="text-slate-500 font-medium shrink-0 mr-2">Nhà cung cấp:</span>
+                <div className="text-right">
+                  <div className="font-bold text-slate-900 text-[12.5px]">{selectedRecord.supplierName}</div>
+                  {selectedRecord.supplierAddress && (
+                    <div className="text-[11px] text-slate-500 flex items-center justify-end gap-1 mt-0.5 font-normal">
+                      <GeoAlt size={10} className="text-slate-400 shrink-0" />
+                      <span>{selectedRecord.supplierAddress}</span>
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-medium">Đơn mua hàng (PO):</span>

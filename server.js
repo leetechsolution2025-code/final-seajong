@@ -29335,6 +29335,9 @@ app.get('/api/purchase/defective-goods', async (req, res) => {
     const poById = new Map(allPOs.map((p) => [p.id, p]));
     const poByCode = new Map(allPOs.filter((p) => p.code).map((p) => [p.code, p]));
 
+    // 2b. Lấy danh sách suppliers để tra cứu địa chỉ & SĐT kể cả khi PO không gắn supplierId
+    const allSuppliers = await prisma.supplier.findMany();
+
     const resultList = [];
 
     for (const ins of iqcInspections) {
@@ -29407,9 +29410,22 @@ app.get('/api/purchase/defective-goods', async (req, res) => {
       });
 
       const supplierName = matchedPO?.supplier?.name || meta.supplierName || 'Nhà cung cấp';
-      const supplierPhone = matchedPO?.supplier?.dienThoai || '';
-      const supplierAddress = matchedPO?.supplier?.diaChi || '';
-      const supplierId = matchedPO?.supplierId || matchedPO?.supplier?.id || null;
+      let supplierPhone = matchedPO?.supplier?.phone || matchedPO?.supplier?.dienThoai || '';
+      let supplierAddress = matchedPO?.supplier?.address || matchedPO?.supplier?.diaChi || '';
+      let supplierId = matchedPO?.supplierId || matchedPO?.supplier?.id || null;
+
+      if (!supplierAddress || !supplierPhone) {
+        const found = allSuppliers.find(
+          (s) =>
+            (s.name && supplierName && s.name.trim().toLowerCase() === supplierName.trim().toLowerCase()) ||
+            (s.name && supplierName && (s.name.toLowerCase().includes(supplierName.toLowerCase()) || supplierName.toLowerCase().includes(s.name.toLowerCase())))
+        );
+        if (found) {
+          if (!supplierAddress) supplierAddress = found.address || '';
+          if (!supplierPhone) supplierPhone = found.phone || '';
+          if (!supplierId) supplierId = found.id;
+        }
+      }
 
       const resolution = meta.resolution || {
         status: 'PENDING',
