@@ -7,6 +7,7 @@ import {
   BoxSeam,
   CashCoin,
   ArrowRepeat,
+  ArrowCounterclockwise,
   Printer,
   ChevronRight,
   ShieldExclamation,
@@ -332,25 +333,23 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
           {/* BẢNG DỮ LIỆU CHÍNH */}
           <div className="flex-1 min-h-0 overflow-hidden relative">
             <FullWidthTable loading={loading} loadingText="Đang tải danh sách hàng lỗi từ QC...">
-              <table className="w-full text-left border-collapse" style={{ minWidth: '980px' }}>
+              <table className="w-full text-left border-collapse" style={{ minWidth: '960px' }}>
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 text-[11.5px] font-bold uppercase tracking-wider sticky top-0 z-10 select-none shadow-sm">
                   <tr>
-                    <th style={{ padding: '8px 12px', width: '160px' }}>Biên bản QC / Thời gian</th>
-                    <th style={{ padding: '8px 12px', width: '220px' }}>Đơn mua hàng / Nhà cung cấp</th>
-                    <th style={{ padding: '8px 12px' }}>Mặt hàng & Quy cách lỗi</th>
-                    <th style={{ padding: '8px 12px', width: '130px', textAlign: 'right' }}>Giá trị thiệt hại</th>
-                    {currentStep === 1 ? (
-                      <th style={{ padding: '8px 12px', width: '190px' }}>Hiện trạng / Lý do lỗi</th>
-                    ) : (
-                      <th style={{ padding: '8px 12px', width: '200px' }}>Phương án xử lý đã chốt</th>
+                    <th style={{ padding: '9px 12px', width: '170px' }}>Biên bản QC / Thời gian</th>
+                    <th style={{ padding: '9px 12px', width: '150px' }}>Đơn mua hàng (PO)</th>
+                    <th style={{ padding: '9px 12px', width: '180px' }}>Nhà cung cấp</th>
+                    <th style={{ padding: '9px 12px' }}>Mặt hàng & Quy cách lỗi</th>
+                    <th style={{ padding: '9px 12px', width: '160px', textAlign: 'right' }}>Giá trị thiệt hại</th>
+                    {currentStep === 2 && (
+                      <th style={{ padding: '9px 12px', width: '200px' }}>Phương án đã chốt</th>
                     )}
-                    <th style={{ padding: '8px 12px', width: '120px', textAlign: 'center' }}>Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white text-xs text-slate-700">
                   {pagedRecords.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-16 text-center text-slate-400">
+                      <td colSpan={currentStep === 1 ? 5 : 6} className="py-16 text-center text-slate-400">
                         <BoxSeam className="w-9 h-9 mx-auto mb-2 text-slate-300 stroke-1" />
                         <p className="text-sm font-medium">
                           {currentStep === 1
@@ -363,11 +362,13 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
                     pagedRecords.map((rec) => (
                       <tr
                         key={rec.id}
-                        className="hover:bg-amber-50/40 transition-colors"
+                        onClick={() => handleOpenResolve(rec)}
+                        className="hover:bg-amber-50/50 cursor-pointer transition-colors group select-none"
+                        title="Nhấn vào dòng để mở Xử lý hàng lỗi với Nhà cung cấp"
                       >
                         {/* Cột 1: Mã QC & Thời gian */}
-                        <td style={{ padding: '9px 12px', verticalAlign: 'top' }}>
-                          <div className="font-bold text-amber-800 text-[12.5px] flex items-center gap-1.5">
+                        <td style={{ padding: '10px 12px', verticalAlign: 'top' }}>
+                          <div className="font-bold text-amber-800 text-[12.5px] flex items-center gap-1.5 group-hover:text-amber-900">
                             <ShieldExclamation className="text-amber-600 shrink-0" size={14} />
                             <span>{rec.code}</span>
                           </div>
@@ -383,25 +384,32 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
                           </div>
                         </td>
 
-                        {/* Cột 2: Đơn PO & Nhà cung cấp */}
-                        <td style={{ padding: '9px 12px', verticalAlign: 'top' }}>
-                          <div className="font-bold text-sky-800 text-[12.5px] flex items-center gap-1">
+                        {/* Cột 2: Đơn mua hàng PO */}
+                        <td style={{ padding: '10px 12px', verticalAlign: 'top' }}>
+                          <div className="font-bold text-sky-700 text-[12.5px] group-hover:underline">
+                            {rec.purchaseOrderCode}
+                          </div>
+                          <div className="text-[11px] text-slate-400 mt-1">
+                            Đơn mua hàng PO
+                          </div>
+                        </td>
+
+                        {/* Cột 3: Nhà cung cấp */}
+                        <td style={{ padding: '10px 12px', verticalAlign: 'top' }}>
+                          <div className="font-bold text-slate-900 text-[12.5px] flex items-center gap-1.5">
                             <Building className="text-sky-600 shrink-0" size={13} />
                             <span>{rec.supplierName}</span>
                           </div>
-                          <div className="text-[11px] font-semibold text-slate-700 mt-1">
-                            PO: <span className="text-sky-700 underline underline-offset-2">{rec.purchaseOrderCode}</span>
-                          </div>
                           {rec.supplierPhone && (
-                            <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1">
+                            <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
                               <Telephone size={10} className="text-slate-400" />
                               <span>{rec.supplierPhone}</span>
                             </div>
                           )}
                         </td>
 
-                        {/* Cột 3: Danh sách mặt hàng lỗi */}
-                        <td style={{ padding: '9px 12px', verticalAlign: 'top' }}>
+                        {/* Cột 4: Danh sách mặt hàng lỗi */}
+                        <td style={{ padding: '10px 12px', verticalAlign: 'top' }}>
                           <div className="space-y-1.5">
                             {rec.defectiveItems.map((item, idx) => (
                               <div
@@ -410,7 +418,7 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
                               >
                                 <div className="flex items-center justify-between font-semibold text-slate-900">
                                   <span>{item.productName} {item.model ? `(${item.model})` : ''}</span>
-                                  <span className="font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">
+                                  <span className="font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200 text-[11px]">
                                     Lỗi: {item.failQuantity} {item.unit}
                                   </span>
                                 </div>
@@ -422,7 +430,7 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
                                 </div>
                                 {item.comment && (
                                   <div className="text-[10.5px] text-amber-800 italic mt-1 bg-amber-50/60 p-1 rounded">
-                                    Lỗi: {item.comment}
+                                    Lý do lỗi: {item.comment}
                                   </div>
                                 )}
                               </div>
@@ -430,8 +438,8 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
                           </div>
                         </td>
 
-                        {/* Cột 4: Giá trị thiệt hại */}
-                        <td style={{ padding: '9px 12px', verticalAlign: 'top', textAlign: 'right' }}>
+                        {/* Cột 5: Giá trị thiệt hại */}
+                        <td style={{ padding: '10px 12px', verticalAlign: 'top', textAlign: 'right' }}>
                           <div className="font-bold text-red-600 text-[13px]">
                             {rec.totalFailedAmount > 0 ? formatCurrency(rec.totalFailedAmount) : 'Chưa có giá'}
                           </div>
@@ -440,20 +448,9 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
                           </div>
                         </td>
 
-                        {/* Cột 5: Bước 1 (Ghi chú QC) hoặc Bước 2 (Phương án đã chốt) */}
-                        {currentStep === 1 ? (
-                          <td style={{ padding: '9px 12px', verticalAlign: 'top' }}>
-                            <div className="text-[11px] text-slate-600 line-clamp-3 bg-slate-50 p-2 rounded border border-slate-100">
-                              {rec.notes || 'Biên bản phát hiện sản phẩm không đạt tiêu chuẩn kỹ thuật khi nhận hàng tại cửa kho.'}
-                            </div>
-                            <div className="mt-1.5 flex items-center gap-1.5">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                <HourglassSplit size={10} /> Chờ Mua hàng xử lý
-                              </span>
-                            </div>
-                          </td>
-                        ) : (
-                          <td style={{ padding: '9px 12px', verticalAlign: 'top' }}>
+                        {/* Cột 6: Chỉ hiển thị ở Bước 2 (Phương án đã chốt) */}
+                        {currentStep === 2 && (
+                          <td style={{ padding: '10px 12px', verticalAlign: 'top' }}>
                             {(() => {
                               const action = rec.resolution?.action;
                               let badgeColor = 'bg-slate-100 text-slate-700 border-slate-200';
@@ -487,38 +484,6 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
                             })()}
                           </td>
                         )}
-
-                        {/* Cột 6: Thao tác */}
-                        <td style={{ padding: '9px 12px', verticalAlign: 'top', textAlign: 'center' }}>
-                          {currentStep === 1 ? (
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              className="w-full text-[11px] font-bold shadow-sm"
-                              onClick={() => handleOpenResolve(rec)}
-                            >
-                              Xử lý với NCC
-                            </Button>
-                          ) : (
-                            <div className="flex flex-col gap-1">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="w-full text-[10.5px] font-semibold text-sky-700 border-sky-300"
-                                onClick={() => handleOpenResolve(rec)}
-                              >
-                                Chỉnh sửa
-                              </Button>
-                              <button
-                                type="button"
-                                className="text-[10.5px] text-slate-400 hover:text-red-600 underline text-center mt-0.5"
-                                onClick={() => handleReopen(rec)}
-                              >
-                                Hoàn tác
-                              </button>
-                            </div>
-                          )}
-                        </td>
                       </tr>
                     ))
                   )}
@@ -699,6 +664,23 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
                 placeholder="Tên nhân viên mua hàng..."
               />
             </div>
+
+            {/* Nếu đã chốt phương án trước đó, hỗ trợ hoàn tác về Chờ xử lý */}
+            {selectedRecord.status === 'RESOLVED' && (
+              <div className="pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors"
+                  onClick={async () => {
+                    await handleReopen(selectedRecord);
+                    setShowResolveOffcanvas(false);
+                  }}
+                >
+                  <ArrowCounterclockwise size={13} />
+                  Hoàn tác về Chờ xử lý với NCC
+                </button>
+              </div>
+            )}
           </div>
         )}
       </Offcanvas>
