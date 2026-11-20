@@ -10,7 +10,7 @@ import {
   ArrowCounterclockwise,
   Printer,
   ChevronRight,
-  ShieldExclamation,
+  ChevronDown,
   CalendarCheck,
   FileEarmarkText,
   Building,
@@ -172,12 +172,84 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
     });
   }, [records, currentStep, supplierFilter, actionFilter, searchTerm]);
 
-  // Phân trang
-  const totalPages = Math.ceil(filteredRecords.length / pageSize) || 1;
-  const pagedRecords = useMemo(() => {
+  // Nhóm các thông tin thuộc cùng nhà cung cấp lại thành nhóm
+  interface SupplierGroup {
+    supplierKey: string;
+    supplierName: string;
+    supplierPhone: string;
+    records: DefectiveGoodsRecord[];
+    totalDamage: number;
+    totalFailedQty: number;
+    uniquePOCodes: string[];
+  }
+
+  const supplierGroups = useMemo<SupplierGroup[]>(() => {
+    const map = new Map<string, SupplierGroup>();
+
+    filteredRecords.forEach((rec) => {
+      const key = rec.supplierName?.trim() || 'Chưa rõ nhà cung cấp';
+      if (!map.has(key)) {
+        map.set(key, {
+          supplierKey: key,
+          supplierName: rec.supplierName || 'Chưa rõ nhà cung cấp',
+          supplierPhone: rec.supplierPhone || '',
+          records: [],
+          totalDamage: 0,
+          totalFailedQty: 0,
+          uniquePOCodes: [],
+        });
+      }
+      const grp = map.get(key)!;
+      grp.records.push(rec);
+      grp.totalDamage += rec.totalFailedAmount || 0;
+      grp.totalFailedQty += rec.totalFailedQty || 0;
+      if (rec.purchaseOrderCode && !grp.uniquePOCodes.includes(rec.purchaseOrderCode)) {
+        grp.uniquePOCodes.push(rec.purchaseOrderCode);
+      }
+    });
+
+    return Array.from(map.values());
+  }, [filteredRecords]);
+
+  // Trạng thái ẩn / hiện của các nhóm nhà cung cấp (mặc định mở rộng để thấy nội dung)
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (supplierGroups.length > 0) {
+      setExpandedGroups((prev) => {
+        const next = { ...prev };
+        supplierGroups.forEach((g) => {
+          if (next[g.supplierKey] === undefined) {
+            next[g.supplierKey] = true;
+          }
+        });
+        return next;
+      });
+    }
+  }, [supplierGroups]);
+
+  const toggleGroup = (key: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  const toggleAllGroups = (expand: boolean) => {
+    const next: Record<string, boolean> = {};
+    supplierGroups.forEach((g) => {
+      next[g.supplierKey] = expand;
+    });
+    setExpandedGroups(next);
+  };
+
+  // Phân trang theo danh sách nhóm nhà cung cấp
+  const totalPages = Math.ceil(supplierGroups.length / pageSize) || 1;
+  const pagedGroups = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return filteredRecords.slice(start, start + pageSize);
-  }, [filteredRecords, currentPage, pageSize]);
+    return supplierGroups.slice(start, start + pageSize);
+  }, [supplierGroups, currentPage, pageSize]);
 
   // Mở Offcanvas xử lý
   const handleOpenResolve = (rec: DefectiveGoodsRecord) => {
@@ -319,6 +391,21 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
+                  onClick={() => {
+                    const allExpanded = supplierGroups.every((g) => expandedGroups[g.supplierKey]);
+                    toggleAllGroups(!allExpanded);
+                  }}
+                  title="Ẩn / Hiện tất cả nhà cung cấp"
+                >
+                  <span className="text-xs font-semibold">
+                    {supplierGroups.length > 0 && supplierGroups.every((g) => expandedGroups[g.supplierKey])
+                      ? 'Thu gọn tất cả'
+                      : 'Mở rộng tất cả'}
+                  </span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={fetchData}
                   disabled={loading}
                   title="Tải lại dữ liệu"
@@ -333,23 +420,19 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
           {/* BẢNG DỮ LIỆU CHÍNH */}
           <div className="flex-1 min-h-0 overflow-hidden relative">
             <FullWidthTable loading={loading} loadingText="Đang tải danh sách hàng lỗi từ QC...">
-              <table className="w-full text-left border-collapse" style={{ minWidth: '960px' }}>
+              <table className="w-full text-left border-collapse" style={{ minWidth: '850px' }}>
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 text-[11.5px] font-bold uppercase tracking-wider sticky top-0 z-10 select-none shadow-sm">
                   <tr>
-                    <th style={{ padding: '9px 12px', width: '170px' }}>Biên bản QC / Thời gian</th>
-                    <th style={{ padding: '9px 12px', width: '150px' }}>Đơn mua hàng (PO)</th>
-                    <th style={{ padding: '9px 12px', width: '180px' }}>Nhà cung cấp</th>
-                    <th style={{ padding: '9px 12px' }}>Mặt hàng & Quy cách lỗi</th>
-                    <th style={{ padding: '9px 12px', width: '160px', textAlign: 'right' }}>Giá trị thiệt hại</th>
-                    {currentStep === 2 && (
-                      <th style={{ padding: '9px 12px', width: '200px' }}>Phương án đã chốt</th>
-                    )}
+                    <th style={{ padding: '9px 12px', width: '28%' }}>Tên nhà cung cấp</th>
+                    <th style={{ padding: '9px 12px', width: '24%' }}>Đơn mua hàng</th>
+                    <th style={{ padding: '9px 12px', width: '26%' }}>Biên bản QC</th>
+                    <th style={{ padding: '9px 12px', width: '22%', textAlign: 'right' }}>Tổng thiệt hại</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white text-xs text-slate-700">
-                  {pagedRecords.length === 0 ? (
+                  {pagedGroups.length === 0 ? (
                     <tr>
-                      <td colSpan={currentStep === 1 ? 5 : 6} className="py-16 text-center text-slate-400">
+                      <td colSpan={4} className="py-16 text-center text-slate-400">
                         <BoxSeam className="w-9 h-9 mx-auto mb-2 text-slate-300 stroke-1" />
                         <p className="text-sm font-medium">
                           {currentStep === 1
@@ -359,133 +442,128 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
                       </td>
                     </tr>
                   ) : (
-                    pagedRecords.map((rec) => (
-                      <tr
-                        key={rec.id}
-                        onClick={() => handleOpenResolve(rec)}
-                        className="hover:bg-amber-50/50 cursor-pointer transition-colors group select-none"
-                        title="Nhấn vào dòng để mở Xử lý hàng lỗi với Nhà cung cấp"
-                      >
-                        {/* Cột 1: Mã QC & Thời gian */}
-                        <td style={{ padding: '10px 12px', verticalAlign: 'top' }}>
-                          <div className="font-bold text-amber-800 text-[12.5px] flex items-center gap-1.5 group-hover:text-amber-900">
-                            <ShieldExclamation className="text-amber-600 shrink-0" size={14} />
-                            <span>{rec.code}</span>
-                          </div>
-                          <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
-                            <span>{formatEpochToVNDate(rec.executionTime)}</span>
-                            <span className="text-slate-300">•</span>
-                            <span className="text-slate-600 font-medium">{rec.inspectorName}</span>
-                          </div>
-                          <div className="mt-1">
-                            <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
-                              {rec.qcResult}
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* Cột 2: Đơn mua hàng PO */}
-                        <td style={{ padding: '10px 12px', verticalAlign: 'top' }}>
-                          <div className="font-bold text-sky-700 text-[12.5px] group-hover:underline">
-                            {rec.purchaseOrderCode}
-                          </div>
-                          <div className="text-[11px] text-slate-400 mt-1">
-                            Đơn mua hàng PO
-                          </div>
-                        </td>
-
-                        {/* Cột 3: Nhà cung cấp */}
-                        <td style={{ padding: '10px 12px', verticalAlign: 'top' }}>
-                          <div className="font-bold text-slate-900 text-[12.5px] flex items-center gap-1.5">
-                            <Building className="text-sky-600 shrink-0" size={13} />
-                            <span>{rec.supplierName}</span>
-                          </div>
-                          {rec.supplierPhone && (
-                            <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
-                              <Telephone size={10} className="text-slate-400" />
-                              <span>{rec.supplierPhone}</span>
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Cột 4: Danh sách mặt hàng lỗi */}
-                        <td style={{ padding: '10px 12px', verticalAlign: 'top' }}>
-                          <div className="space-y-1.5">
-                            {rec.defectiveItems.map((item, idx) => (
-                              <div
-                                key={idx}
-                                className="bg-slate-50/80 p-2 rounded border border-slate-200/80 text-[11.5px]"
-                              >
-                                <div className="flex items-center justify-between font-semibold text-slate-900">
-                                  <span>{item.productName} {item.model ? `(${item.model})` : ''}</span>
-                                  <span className="font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200 text-[11px]">
-                                    Lỗi: {item.failQuantity} {item.unit}
-                                  </span>
-                                </div>
-                                <div className="text-[10.5px] text-slate-500 mt-0.5 flex items-center justify-between">
-                                  <span>Tổng nhận: {item.quantity} • Đạt: {item.passQuantity}</span>
-                                  {item.unitPrice > 0 && (
-                                    <span>Giá nhập: {formatCurrency(item.unitPrice)}</span>
-                                  )}
-                                </div>
-                                {item.comment && (
-                                  <div className="text-[10.5px] text-amber-800 italic mt-1 bg-amber-50/60 p-1 rounded">
-                                    Lý do lỗi: {item.comment}
-                                  </div>
-                                )}
+                    pagedGroups.map((group) => {
+                      const isExpanded = expandedGroups[group.supplierKey] ?? true;
+                      return (
+                        <React.Fragment key={group.supplierKey}>
+                          {/* ── DÒNG TIÊU ĐỀ NHÓM NHÀ CUNG CẤP (ẨN / HIỆN ĐƯỢC) ── */}
+                          <tr
+                            onClick={() => toggleGroup(group.supplierKey)}
+                            className="bg-slate-100/90 hover:bg-slate-200/70 cursor-pointer select-none transition-colors border-y border-slate-200"
+                            title="Nhấn để ẩn/hiện danh sách biên bản của nhà cung cấp này"
+                          >
+                            {/* Cột 1: Tên nhà cung cấp */}
+                            <td style={{ padding: '8px 12px' }}>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  className="p-1 rounded hover:bg-slate-300/60 text-slate-600 transition-colors"
+                                  onClick={(e) => toggleGroup(group.supplierKey, e)}
+                                >
+                                  {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                </button>
+                                <span className="font-bold text-slate-900 text-[13px]">{group.supplierName}</span>
+                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                                  {group.records.length} biên bản
+                                </span>
                               </div>
+                            </td>
+
+                            {/* Cột 2: Đơn mua hàng (Tóm tắt số đơn) */}
+                            <td style={{ padding: '8px 12px' }}>
+                              <span className="text-slate-600 font-medium text-[12px]">
+                                {group.uniquePOCodes.length} đơn mua (PO)
+                              </span>
+                            </td>
+
+                            {/* Cột 3: Biên bản QC (Tóm tắt) */}
+                            <td style={{ padding: '8px 12px' }}>
+                              <span className="text-slate-500 text-[11.5px]">
+                                {group.records.length} đợt kiểm tra IQC
+                              </span>
+                            </td>
+
+                            {/* Cột 4: Tổng thiệt hại (Tổng của nhóm NCC) */}
+                            <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                              <div className="font-extrabold text-red-600 text-[13px]">
+                                {group.totalDamage > 0 ? formatCurrency(group.totalDamage) : 'Chưa có giá'}
+                              </div>
+                              <div className="text-[10.5px] text-slate-500">
+                                {group.totalFailedQty} sản phẩm lỗi
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* ── CÁC DÒNG BIÊN BẢN CON THUỘC NHÀ CUNG CẤP ── */}
+                          {isExpanded &&
+                            group.records.map((rec) => (
+                              <tr
+                                key={rec.id}
+                                onClick={() => handleOpenResolve(rec)}
+                                className="hover:bg-amber-50/50 cursor-pointer transition-colors bg-white border-b border-slate-100 group select-none"
+                                title="Nhấn vào dòng để mở chi tiết & Xử lý hàng lỗi với NCC"
+                              >
+                                {/* Cột 1: Thụt lề và liên hệ */}
+                                <td style={{ padding: '9px 12px', paddingLeft: '34px', verticalAlign: 'top' }}>
+                                  <div className="flex items-center gap-1.5 text-slate-400 text-[11.5px]">
+                                    <span className="text-slate-300 font-mono">└─</span>
+                                    {rec.supplierPhone ? (
+                                      <span className="text-slate-600 text-[11px] flex items-center gap-1 font-medium">
+                                        <Telephone size={10} className="text-slate-400" />
+                                        {rec.supplierPhone}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-400 text-[11px] italic">Chi tiết biên bản</span>
+                                    )}
+                                  </div>
+                                </td>
+
+                                {/* Cột 2: Đơn mua hàng PO */}
+                                <td style={{ padding: '9px 12px', verticalAlign: 'top' }}>
+                                  <div className="font-bold text-sky-700 text-[12.5px] group-hover:underline">
+                                    {rec.purchaseOrderCode}
+                                  </div>
+                                  <div className="text-[11px] text-slate-400 mt-0.5">
+                                    Đơn mua hàng PO
+                                  </div>
+                                </td>
+
+                                {/* Cột 3: Biên bản QC (BỎ TẤT CẢ ICON TRƯỚC MÃ THEO YÊU CẦU) */}
+                                <td style={{ padding: '9px 12px', verticalAlign: 'top' }}>
+                                  <div className="font-bold text-amber-800 text-[12.5px]">
+                                    {rec.code}
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1">
+                                    <span>{formatEpochToVNDate(rec.executionTime)}</span>
+                                    <span className="text-slate-300">•</span>
+                                    <span className="text-slate-600 font-medium">{rec.inspectorName}</span>
+                                  </div>
+                                  <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                                    <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                                      {rec.qcResult}
+                                    </span>
+                                    {currentStep === 2 && rec.resolution?.actionLabel && (
+                                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                        {rec.resolution.actionLabel}
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+
+                                {/* Cột 4: Tổng thiệt hại */}
+                                <td style={{ padding: '9px 12px', verticalAlign: 'top', textAlign: 'right' }}>
+                                  <div className="font-bold text-red-600 text-[13px]">
+                                    {rec.totalFailedAmount > 0 ? formatCurrency(rec.totalFailedAmount) : 'Chưa có giá'}
+                                  </div>
+                                  <div className="text-[10.5px] text-slate-500 mt-0.5">
+                                    {rec.totalFailedQty} sản phẩm lỗi ({rec.defectiveItems.length} mặt hàng)
+                                  </div>
+                                </td>
+                              </tr>
                             ))}
-                          </div>
-                        </td>
-
-                        {/* Cột 5: Giá trị thiệt hại */}
-                        <td style={{ padding: '10px 12px', verticalAlign: 'top', textAlign: 'right' }}>
-                          <div className="font-bold text-red-600 text-[13px]">
-                            {rec.totalFailedAmount > 0 ? formatCurrency(rec.totalFailedAmount) : 'Chưa có giá'}
-                          </div>
-                          <div className="text-[10.5px] text-slate-500 mt-0.5">
-                            Tổng {rec.totalFailedQty} sản phẩm lỗi
-                          </div>
-                        </td>
-
-                        {/* Cột 6: Chỉ hiển thị ở Bước 2 (Phương án đã chốt) */}
-                        {currentStep === 2 && (
-                          <td style={{ padding: '10px 12px', verticalAlign: 'top' }}>
-                            {(() => {
-                              const action = rec.resolution?.action;
-                              let badgeColor = 'bg-slate-100 text-slate-700 border-slate-200';
-                              if (action === 'DEBT_DEDUCTION') badgeColor = 'bg-blue-50 text-blue-700 border-blue-200';
-                              if (action === 'SUPPLEMENTARY_GOODS') badgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-200';
-                              if (action === 'REFUND') badgeColor = 'bg-amber-50 text-amber-700 border-amber-200';
-                              if (action === 'RETURN_TO_SUPPLIER') badgeColor = 'bg-red-50 text-red-700 border-red-200';
-
-                              return (
-                                <div className="space-y-1">
-                                  <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold border ${badgeColor}`}>
-                                    {rec.resolution?.actionLabel || 'Đã chốt phương án'}
-                                  </span>
-                                  {rec.resolution?.amount && rec.resolution.amount > 0 ? (
-                                    <div className="text-[11px] font-semibold text-slate-800">
-                                      Số tiền: <span className="text-emerald-700">{formatCurrency(rec.resolution.amount)}</span>
-                                    </div>
-                                  ) : null}
-                                  {rec.resolution?.commitmentDate && (
-                                    <div className="text-[10.5px] text-slate-500">
-                                      Hạn cam kết: {formatEpochToVNDate(rec.resolution.commitmentDate)}
-                                    </div>
-                                  )}
-                                  {rec.resolution?.note && (
-                                    <div className="text-[10.5px] text-slate-600 italic line-clamp-2">
-                                      &quot;{rec.resolution.note}&quot;
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })()}
-                          </td>
-                        )}
-                      </tr>
-                    ))
+                        </React.Fragment>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -543,14 +621,47 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Danh sách mặt hàng lỗi tóm tắt */}
-            <div className="space-y-1">
-              <label className="font-bold text-slate-700">Mặt hàng lỗi cần làm việc:</label>
-              <div className="max-h-28 overflow-y-auto space-y-1 p-1 bg-white border border-slate-200 rounded">
+            {/* Danh sách mặt hàng lỗi chi tiết */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-800 text-xs">Mặt hàng & Quy cách lỗi chi tiết:</label>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {selectedRecord.defectiveItems.length} mặt hàng
+                </span>
+              </div>
+              <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1">
                 {selectedRecord.defectiveItems.map((item, idx) => (
-                  <div key={idx} className="flex justify-between items-center text-[11px] p-1 bg-slate-50 rounded">
-                    <span className="font-medium text-slate-800 truncate mr-2">{item.productName}</span>
-                    <span className="font-bold text-red-600 shrink-0">Lỗi: {item.failQuantity} {item.unit}</span>
+                  <div key={idx} className="p-2 bg-slate-50 border border-slate-200 rounded text-[11.5px] space-y-1">
+                    <div className="flex items-start justify-between gap-1.5">
+                      <span className="font-bold text-slate-900 leading-tight">
+                        {item.productName}{' '}
+                        {item.model ? <span className="text-slate-500 font-normal">({item.model})</span> : ''}
+                      </span>
+                      <span className="shrink-0 font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded text-[11px]">
+                        Lỗi: {item.failQuantity} {item.unit}
+                      </span>
+                    </div>
+                    <div className="text-[10.5px] text-slate-500 flex justify-between pt-1 border-t border-slate-200/60">
+                      <span>
+                        Tổng nhận: <strong className="text-slate-700">{item.quantity}</strong> • Đạt:{' '}
+                        <strong className="text-emerald-700">{item.passQuantity}</strong>
+                      </span>
+                      {item.unitPrice > 0 && (
+                        <span>
+                          Đơn giá: <strong className="text-slate-700">{formatCurrency(item.unitPrice)}</strong>
+                        </span>
+                      )}
+                    </div>
+                    {item.failedAmount > 0 && (
+                      <div className="text-[10.5px] text-right font-semibold text-red-600">
+                        Thiệt hại: {formatCurrency(item.failedAmount)}
+                      </div>
+                    )}
+                    {item.comment && (
+                      <div className="text-[10.5px] text-amber-800 italic bg-amber-50/70 p-1.5 rounded border border-amber-200/60">
+                        Lý do lỗi từ QC: {item.comment}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
