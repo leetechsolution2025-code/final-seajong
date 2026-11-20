@@ -284,6 +284,7 @@ const DEPT_SIDEBAR_CONFIGS: Record<string, { deptName: string; sections: NavSect
   purchase: {
     deptName: 'Mua hàng',
     sections: [
+      { id: 'defective-goods', label: 'Danh sách hàng lỗi', icon: 'bi-exclamation-triangle', flat: true },
       { id: 'suppliers', label: 'Nhà cung cấp và vận chuyển', icon: 'bi-truck', flat: true },
     ],
   },

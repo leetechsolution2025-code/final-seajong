@@ -29304,6 +29304,325 @@ app.delete('/api/qa/inspections/:id', async (req, res) => {
   }
 });
 
+// ============================================================================
+// BỘ PHẬN MUA HÀNG: XỬ LÝ HÀNG LỖI TỪ NHÀ CUNG CẤP (IQC DEFECTS RESOLUTION)
+// ============================================================================
+
+app.get('/api/purchase/defective-goods', async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim().toLowerCase();
+    const statusFilter = String(req.query.status || 'all').trim(); // all | PENDING | RESOLVED
+    const supplierFilter = String(req.query.supplier || 'all').trim();
+
+    // 1. Lấy tất cả các biên bản kiểm tra IQC (đầu vào từ NCC)
+    const iqcInspections = await prisma.qualityInspection.findMany({
+      where: {
+        type: 'IQC',
+      },
+      orderBy: { executionTime: 'desc' },
+      include: {
+        inventoryItem: true,
+      },
+    });
+
+    // 2. Tra cứu danh sách PurchaseOrder để liên kết đơn giá và nhà cung cấp
+    const allPOs = await prisma.purchaseOrder.findMany({
+      include: {
+        supplier: true,
+        items: true,
+      },
+    });
+    const poById = new Map(allPOs.map((p) => [p.id, p]));
+    const poByCode = new Map(allPOs.filter((p) => p.code).map((p) => [p.code, p]));
+
+    const resultList = [];
+
+    for (const ins of iqcInspections) {
+      let meta = {};
+      if (ins.metadata) {
+        try {
+          meta = typeof ins.metadata === 'string' ? JSON.parse(ins.metadata) : ins.metadata;
+        } catch {}
+      }
+
+      const rawItems = Array.isArray(meta?.items) ? meta.items : [];
+      // Lọc các item có số lượng lỗi > 0 hoặc nếu phiếu IQC kết luận không đạt/lỗi một phần
+      let failedItems = rawItems.filter((it) => {
+        const f = Number(it.failQuantity || it.soLuongLoi || it.failedQty || 0);
+        return f > 0;
+      });
+
+      // Nếu phiếu IQC có result != 'Đạt' mà failedItems trống, tạo 1 item đại diện
+      if (failedItems.length === 0 && ins.result && ins.result !== 'Đạt') {
+        const failQty = Number(meta.failedQuantity || meta.failQuantity || 1);
+        failedItems = [
+          {
+            productName: ins.productName || 'Vật tư / Thành phẩm',
+            model: meta.model || '',
+            quantity: Number(meta.quantity || 1),
+            passQuantity: Number(meta.passedQuantity || 0),
+            failQuantity: failQty,
+            comment: ins.notes || 'Không đạt kiểm định IQC',
+          },
+        ];
+      }
+
+      if (failedItems.length === 0) continue; // Bỏ qua nếu đạt 100% không có lỗi
+
+      // Xác định PO tương ứng
+      const poCode = meta.purchaseOrderCode || meta.poNumber || (ins.code.match(/DH-\d+-\d+/i) ? ins.code.match(/DH-\d+-\d+/i)[0] : '');
+      const poId = meta.purchaseOrderId || '';
+      const matchedPO = poById.get(poId) || (poCode ? poByCode.get(poCode) : null);
+
+      // Tra cứu đơn giá từng mặt hàng từ PurchaseOrderItem
+      const poItems = matchedPO?.items || [];
+      let totalFailedQty = 0;
+      let totalFailedAmount = 0;
+
+      const defectiveItems = failedItems.map((fi) => {
+        const fQty = Number(fi.failQuantity || fi.soLuongLoi || 1);
+        totalFailedQty += fQty;
+
+        // Tìm đơn giá trong PO
+        const matchedPoItem = poItems.find(
+          (pi) =>
+            pi.tenHang?.toLowerCase() === (fi.productName || '').toLowerCase() ||
+            (pi.ghiChu && pi.ghiChu.toLowerCase().includes((fi.productName || '').toLowerCase()))
+        );
+        const unitPrice = Number(matchedPoItem?.donGia || fi.unitPrice || 0);
+        const itemFailedAmount = fQty * unitPrice;
+        totalFailedAmount += itemFailedAmount;
+
+        return {
+          productName: fi.productName || 'Vật tư / Linh kiện',
+          model: fi.model || '',
+          quantity: Number(fi.quantity || fi.sampleQuantity || fQty),
+          passQuantity: Number(fi.passQuantity || 0),
+          failQuantity: fQty,
+          unit: fi.unit || 'cái',
+          unitPrice,
+          failedAmount: itemFailedAmount,
+          comment: fi.comment || fi.defectDesc || '',
+        };
+      });
+
+      const supplierName = matchedPO?.supplier?.name || meta.supplierName || 'Nhà cung cấp';
+      const supplierPhone = matchedPO?.supplier?.dienThoai || '';
+      const supplierAddress = matchedPO?.supplier?.diaChi || '';
+      const supplierId = matchedPO?.supplierId || matchedPO?.supplier?.id || null;
+
+      const resolution = meta.resolution || {
+        status: 'PENDING',
+        action: null,
+        actionLabel: 'Chờ xử lý',
+      };
+
+      const record = {
+        id: ins.id,
+        code: ins.code,
+        qcResult: ins.result || 'Lỗi một phần',
+        executionTime: ins.executionTime || ins.createdAt,
+        inspectorName: ins.inspectorName || 'Bộ phận QA/QC',
+        purchaseOrderId: matchedPO?.id || poId,
+        purchaseOrderCode: matchedPO?.code || poCode || 'Đơn mua hàng ngoài',
+        supplierId,
+        supplierName,
+        supplierPhone,
+        supplierAddress,
+        status: resolution.status || 'PENDING', // PENDING hoặc RESOLVED
+        totalFailedQty,
+        totalFailedAmount,
+        defectiveItems,
+        resolution,
+        notes: ins.notes || '',
+      };
+
+      // Áp dụng bộ lọc
+      if (statusFilter !== 'all' && record.status !== statusFilter) continue;
+      if (supplierFilter !== 'all' && supplierName.toLowerCase() !== supplierFilter.toLowerCase()) continue;
+      if (q) {
+        const match =
+          record.code.toLowerCase().includes(q) ||
+          record.purchaseOrderCode.toLowerCase().includes(q) ||
+          record.supplierName.toLowerCase().includes(q) ||
+          defectiveItems.some((di) => di.productName.toLowerCase().includes(q));
+        if (!match) continue;
+      }
+
+      resultList.push(record);
+    }
+
+    res.json({
+      success: true,
+      total: resultList.length,
+      pendingCount: resultList.filter((r) => r.status === 'PENDING').length,
+      resolvedCount: resultList.filter((r) => r.status === 'RESOLVED').length,
+      items: resultList,
+    });
+  } catch (err) {
+    console.error('Lỗi GET /api/purchase/defective-goods:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/purchase/defective-goods/:id/resolve', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action, amount, note, commitmentDate, resolvedBy } = req.body || {};
+
+    const ins = await prisma.qualityInspection.findFirst({
+      where: { OR: [{ id }, { code: id }] },
+    });
+    if (!ins) {
+      return res.status(404).json({ error: 'Không tìm thấy biên bản kiểm tra chất lượng' });
+    }
+
+    let meta = {};
+    if (ins.metadata) {
+      try {
+        meta = typeof ins.metadata === 'string' ? JSON.parse(ins.metadata) : ins.metadata;
+      } catch {}
+    }
+
+    const actionLabels = {
+      DEBT_DEDUCTION: 'Cấn trừ công nợ',
+      SUPPLEMENTARY_GOODS: 'NCC gửi bù hàng',
+      REFUND: 'NCC hoàn lại tiền',
+      RETURN_TO_SUPPLIER: 'Xuất trả lại hàng NCC',
+    };
+
+    const actionLabel = actionLabels[action] || 'Đã xử lý';
+    const deductAmount = Math.abs(Number(amount) || 0);
+
+    // Xác định PO và NCC
+    const poCode = meta.purchaseOrderCode || meta.poNumber || '';
+    const po = poCode ? await prisma.purchaseOrder.findFirst({
+      where: { code: poCode },
+      include: { supplier: true },
+    }) : null;
+    const supplierId = po?.supplierId || null;
+    const supplierName = po?.supplier?.name || meta.supplierName || 'Nhà cung cấp';
+
+    // 1. Nếu chọn "Cấn trừ công nợ": Tạo bản ghi Debt loại PAYABLE và đồng bộ kế toán ngay
+    if (action === 'DEBT_DEDUCTION' && deductAmount > 0) {
+      const refId = `NCC-DED-${ins.code}`;
+      await prisma.debt.create({
+        data: {
+          type: 'PAYABLE',
+          supplierId,
+          partnerName: supplierName,
+          amount: 0,
+          paidAmount: deductAmount,
+          dueDate: new Date(),
+          status: 'PAID',
+          description: `Cấn trừ công nợ do hàng lỗi theo biên bản ${ins.code}${poCode ? ` (Đơn PO: ${poCode})` : ''}`,
+          referenceId: refId,
+        },
+      });
+
+      try {
+        const { syncPrismaFinanceToAccountingTables } = await import(`./services/prismaFinanceSyncService.js?t=${Date.now()}`);
+        await syncPrismaFinanceToAccountingTables();
+      } catch (syncErr) {
+        console.warn('⚠️ Lỗi đồng bộ cấn trừ công nợ NCC:', syncErr.message);
+      }
+    }
+
+    // 2. Cập nhật resolution vào metadata của QualityInspection
+    meta.resolution = {
+      status: 'RESOLVED',
+      action,
+      actionLabel,
+      amount: deductAmount,
+      note: note || '',
+      commitmentDate: commitmentDate || null,
+      resolvedAt: new Date().toISOString(),
+      resolvedBy: resolvedBy || 'Phòng Mua hàng',
+    };
+
+    await prisma.qualityInspection.update({
+      where: { id: ins.id },
+      data: {
+        metadata: JSON.stringify(meta),
+      },
+    });
+
+    // 3. Gửi thông báo liên phòng ban
+    try {
+      await sendCrossDeptNotification({
+        title: `✅ Đã chốt phương án xử lý hàng lỗi NCC: ${ins.code}`,
+        content: `Mua hàng đã làm việc với ${supplierName}: Phương án **${actionLabel}**${deductAmount > 0 ? ` (Số tiền: ${deductAmount.toLocaleString('vi-VN')} đ)` : ''}. Ghi chú: ${note || 'Đã thống nhất thỏa thuận'}.`,
+        type: 'info',
+        priority: 'high',
+        sourceDept: 'purchase',
+        targetDept: 'finance',
+        senderName: resolvedBy || 'Phòng Mua hàng',
+        link: '/purchase',
+        entityType: 'QUALITY_INSPECTION',
+        entityId: ins.id,
+      });
+    } catch {}
+
+    res.json({ success: true, message: 'Đã cập nhật phương án xử lý thành công', resolution: meta.resolution });
+  } catch (err) {
+    console.error('Lỗi POST /api/purchase/defective-goods/:id/resolve:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/purchase/defective-goods/:id/reopen', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const ins = await prisma.qualityInspection.findFirst({
+      where: { OR: [{ id }, { code: id }] },
+    });
+    if (!ins) {
+      return res.status(404).json({ error: 'Không tìm thấy biên bản kiểm tra chất lượng' });
+    }
+
+    let meta = {};
+    if (ins.metadata) {
+      try {
+        meta = typeof ins.metadata === 'string' ? JSON.parse(ins.metadata) : ins.metadata;
+      } catch {}
+    }
+
+    const prevAction = meta.resolution?.action;
+    meta.resolution = {
+      status: 'PENDING',
+      action: null,
+      actionLabel: 'Chờ xử lý',
+      reopenedAt: new Date().toISOString(),
+    };
+
+    await prisma.qualityInspection.update({
+      where: { id: ins.id },
+      data: {
+        metadata: JSON.stringify(meta),
+      },
+    });
+
+    // Nếu trước đó có cấn trừ công nợ, xóa bản ghi Debt tương ứng và đồng bộ lại
+    if (prevAction === 'DEBT_DEDUCTION') {
+      const refId = `NCC-DED-${ins.code}`;
+      await prisma.debt.deleteMany({
+        where: { referenceId: refId },
+      });
+      try {
+        const { syncPrismaFinanceToAccountingTables } = await import(`./services/prismaFinanceSyncService.js?t=${Date.now()}`);
+        await syncPrismaFinanceToAccountingTables();
+      } catch (syncErr) {
+        console.warn('⚠️ Lỗi hoàn tác cấn trừ công nợ NCC:', syncErr.message);
+      }
+    }
+
+    res.json({ success: true, message: 'Đã hoàn tác về trạng thái chờ xử lý' });
+  } catch (err) {
+    console.error('Lỗi POST /api/purchase/defective-goods/:id/reopen:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // =========================================================================
 // ── BỘ PHẬN MUA HÀNG: PURCHASE REQUESTS, PURCHASING, SUPPLIERS, CARRIERS ──
 // =========================================================================

@@ -68,6 +68,7 @@ import { QaStandardsPage } from '../../pages/qa/QaStandardsPage';
 import { QaDefectsSummaryPage } from '../../pages/qa/QaDefectsSummaryPage';
 import { PurchaseOverviewPage } from '../../pages/purchase/PurchaseOverviewPage';
 import { PurchaseSuppliersPage } from '../../pages/purchase/PurchaseSuppliersPage';
+import { PurchaseDefectiveGoodsPage } from '../../pages/purchase/PurchaseDefectiveGoodsPage';
 import { DataManagementPage } from '../../pages/departments/bom/DataManagementPage';
 import { MeetingNotebookPage } from '../../pages/common/MeetingNotebookPage';
 import { InternalDocumentLibraryPage } from '../../pages/common/InternalDocumentLibraryPage';
@@ -284,6 +285,9 @@ export const DashboardView: React.FC = () => {
     activeDeptCode === 'mua-hang' ||
     activeDeptCode === 'purchasing'
   ) {
+    if (activeMenuKey === 'defective-goods' || activeMenuKey === 'purchase-defects') {
+      return <PurchaseDefectiveGoodsPage />;
+    }
     if (activeMenuKey === 'suppliers' || activeMenuKey === 'carriers') {
       return <PurchaseSuppliersPage />;
     }
@@ -293,6 +297,10 @@ export const DashboardView: React.FC = () => {
     if (activeMenuKey === 'overview' || !activeMenuKey) {
       return <PurchaseOverviewPage />;
     }
+  }
+
+  if (activeMenuKey === 'defective-goods' || activeMenuKey === 'purchase-defects') {
+    return <PurchaseDefectiveGoodsPage />;
   }
 
   if (activeMenuKey === 'suppliers' || activeMenuKey === 'carriers') {
