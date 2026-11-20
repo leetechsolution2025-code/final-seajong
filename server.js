@@ -29338,6 +29338,19 @@ app.get('/api/purchase/defective-goods', async (req, res) => {
     // 2b. Lấy danh sách suppliers để tra cứu địa chỉ & SĐT kể cả khi PO không gắn supplierId
     const allSuppliers = await prisma.supplier.findMany();
 
+    // 2c. Tra cứu danh mục kho để lấy đơn giá nhập thực tế từ DB nếu PO chưa có đơn giá
+    const allInventoryItems = await prisma.inventoryItem.findMany({
+      select: {
+        id: true,
+        code: true,
+        tenHang: true,
+        giaNhap: true,
+      },
+    });
+    const invById = new Map(allInventoryItems.map((inv) => [inv.id, inv]));
+    const invByCode = new Map(allInventoryItems.filter((inv) => inv.code).map((inv) => [inv.code.toLowerCase(), inv]));
+    const invByName = new Map(allInventoryItems.filter((inv) => inv.tenHang).map((inv) => [inv.tenHang.toLowerCase().trim(), inv]));
+
     const resultList = [];
 
     for (const ins of iqcInspections) {
@@ -29386,13 +29399,19 @@ app.get('/api/purchase/defective-goods', async (req, res) => {
         const fQty = Number(fi.failQuantity || fi.soLuongLoi || 1);
         totalFailedQty += fQty;
 
-        // Tìm đơn giá trong PO
+        // Tìm đơn giá trong PO, nếu PO không có thì tra cứu từ InventoryItem
         const matchedPoItem = poItems.find(
           (pi) =>
             pi.tenHang?.toLowerCase() === (fi.productName || '').toLowerCase() ||
             (pi.ghiChu && pi.ghiChu.toLowerCase().includes((fi.productName || '').toLowerCase()))
         );
-        const unitPrice = Number(matchedPoItem?.donGia || fi.unitPrice || 0);
+        const matchedInv =
+          (fi.inventoryItemId ? invById.get(fi.inventoryItemId) : null) ||
+          (fi.model ? invByCode.get(fi.model.toLowerCase()) : null) ||
+          (fi.productCode ? invByCode.get(fi.productCode.toLowerCase()) : null) ||
+          (fi.productName ? invByName.get(fi.productName.toLowerCase().trim()) : null);
+
+        const unitPrice = Number(matchedPoItem?.donGia || fi.unitPrice || matchedInv?.giaNhap || 0);
         const itemFailedAmount = fQty * unitPrice;
         totalFailedAmount += itemFailedAmount;
 
