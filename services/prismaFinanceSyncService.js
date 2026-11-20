@@ -840,12 +840,28 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
         let unallocatedPaid = totalPaid;
         const entries = g.invoices.map((inv, idx) => {
           const invVal = Math.round(Number(inv.amount) || 0);
-          const allocPaid = Math.min(invVal, Math.max(0, unallocatedPaid));
-          unallocatedPaid = Math.max(0, unallocatedPaid - allocPaid);
-          const invRemain = Math.max(0, invVal - allocPaid);
           const refCode = inv.referenceId || `${code}-D${idx + 1}`;
           const descClean = (inv.description || '').split('\n\n[PAYMENT_LOGS]')[0].trim();
           const entryItems = orderItemsByCode.get(refCode) || orderItemsByOrderId.get(refCode) || [];
+
+          // Gán các khoản giảm trừ do hàng trả lại vào đúng đơn hàng tương ứng nếu có ghi chú mã đơn
+          const directReturnPayments = paymentRecords.filter((pr) => {
+            if (!pr.isReturn) return false;
+            const prText = `${pr.title || ''} ${pr.note || ''}`;
+            const m = prText.match(/Đơn:\s*([A-Z0-9_-]+)/i);
+            if (m && m[1]) {
+              return m[1].toUpperCase() === refCode.toUpperCase();
+            }
+            return idx === 0;
+          });
+
+          // Các khoản thanh toán thông thường (phiếu thu) nếu không gắn đơn thì đưa vào đơn đầu tiên
+          const normalPayments = paymentRecords.filter((pr) => !pr.isReturn && idx === 0);
+          const entryPayments = [...directReturnPayments, ...normalPayments];
+
+          const allocPaid = Math.min(invVal, Math.max(0, unallocatedPaid));
+          unallocatedPaid = Math.max(0, unallocatedPaid - allocPaid);
+          const invRemain = Math.max(0, invVal - allocPaid);
 
           return {
             id: inv.id || `ENT-REC-${idx + 1}`,
@@ -860,7 +876,7 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
             status: invRemain <= 0 ? 'completed' : allocPaid > 0 ? 'partial' : 'ontime',
             statusLabel: invRemain <= 0 ? 'Đã thu đủ' : allocPaid > 0 ? 'Thu một phần' : 'Chờ thanh toán',
             items: entryItems,
-            payments: idx === 0 ? paymentRecords : [],
+            payments: entryPayments,
           };
         });
 

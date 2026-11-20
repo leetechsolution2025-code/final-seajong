@@ -18173,6 +18173,14 @@ app.post('/api/production/defects', async (req, res) => {
           performedBy: defect.reporterName || 'Hệ thống'
         }
       });
+
+      // Đồng bộ ngay lập tức vào bảng công nợ kế toán (debt_receivables) và Sổ cái
+      try {
+        const { syncPrismaFinanceToAccountingTables } = await import(`./services/prismaFinanceSyncService.js?t=${Date.now()}`);
+        await syncPrismaFinanceToAccountingTables();
+      } catch (syncErr) {
+        console.warn('⚠️ Lỗi đồng bộ kế toán công nợ sau khi cấn trừ hàng trả lại:', syncErr.message);
+      }
     }
 
     try {
@@ -18203,8 +18211,25 @@ app.delete('/api/production/defects', async (req, res) => {
   try {
     const ids = req.body?.ids || (req.body?.id ? [req.body.id] : []);
     if (Array.isArray(ids) && ids.length > 0) {
+      const toDelete = await prisma.defectRecord.findMany({
+        where: { id: { in: ids } },
+        select: { code: true }
+      });
+      const codes = toDelete.map((d) => d.code).filter(Boolean);
+
       await prisma.defectActivity.deleteMany({ where: { defectId: { in: ids } } });
       await prisma.defectRecord.deleteMany({ where: { id: { in: ids } } });
+
+      if (codes.length > 0) {
+        await prisma.debt.deleteMany({ where: { referenceId: { in: codes } } });
+      }
+
+      try {
+        const { syncPrismaFinanceToAccountingTables } = await import(`./services/prismaFinanceSyncService.js?t=${Date.now()}`);
+        await syncPrismaFinanceToAccountingTables();
+      } catch (syncErr) {
+        console.warn('⚠️ Lỗi đồng bộ kế toán công nợ sau khi xóa hồ sơ hàng trả lại:', syncErr.message);
+      }
     }
     res.json({ success: true, count: ids.length, message: 'Đã xoá các hồ sơ thành công' });
   } catch (err) {
@@ -18470,8 +18495,24 @@ app.get('/api/production/defects/:id', async (req, res) => {
 app.delete('/api/production/defects/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const defect = await prisma.defectRecord.findUnique({
+      where: { id },
+      select: { code: true }
+    });
     await prisma.defectActivity.deleteMany({ where: { defectId: id } });
     await prisma.defectRecord.delete({ where: { id } });
+
+    if (defect?.code) {
+      await prisma.debt.deleteMany({ where: { referenceId: defect.code } });
+    }
+
+    try {
+      const { syncPrismaFinanceToAccountingTables } = await import(`./services/prismaFinanceSyncService.js?t=${Date.now()}`);
+      await syncPrismaFinanceToAccountingTables();
+    } catch (syncErr) {
+      console.warn('⚠️ Lỗi đồng bộ kế toán công nợ sau khi xóa hồ sơ hàng trả lại:', syncErr.message);
+    }
+
     res.json({ success: true });
   } catch (err) {
     console.error('Lỗi DELETE /api/production/defects/:id:', err);
