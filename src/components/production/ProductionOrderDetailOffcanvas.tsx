@@ -15,6 +15,8 @@ import {
   ExclamationTriangle,
   InfoCircleFill,
   FileEarmarkText,
+  ClockHistory,
+  HourglassSplit,
 } from 'react-bootstrap-icons';
 
 interface OrderDetailProps {
@@ -108,7 +110,7 @@ export function ProductionOrderDetailOffcanvas({
     }
   };
 
-  const handleUpdateStatus = async (newStatus: 'running' | 'completed') => {
+  const handleUpdateStatus = async (newStatus: 'running' | 'completed' | 'qc_checking') => {
     if (!effectiveOrderId) return;
     if (!isProdAdmin) {
       toastError(
@@ -140,7 +142,9 @@ export function ProductionOrderDetailOffcanvas({
   };
 
   const isMaterialIssued = data?.order ? data.order.isMaterialIssued !== false : true;
-  const canComplete = isProdAdmin && isMaterialIssued;
+  const isQcChecking = data?.order?.trangThai === 'qc_checking';
+  const isCompleted = data?.order?.trangThai === 'completed';
+  const canComplete = isProdAdmin && isMaterialIssued && !isQcChecking && !isCompleted;
 
   return (
     <Offcanvas
@@ -152,27 +156,39 @@ export function ProductionOrderDetailOffcanvas({
       description={
         data?.order ? (
           <div className="space-y-1">
-            <div className="text-[12px] text-slate-500">
-              {data.order.trangThai === 'completed'
-                ? 'Trạng thái: Đã hoàn thành'
-                : data.order.trangThai === 'running'
-                ? 'Trạng thái: Đang thực hiện'
-                : 'Trạng thái: Chờ xử lý'}
+            <div className="text-[12px] font-medium">
+              {isCompleted ? (
+                <span className="text-emerald-600 font-semibold">Trạng thái: Đã hoàn thành</span>
+              ) : isQcChecking ? (
+                <span className="text-purple-600 font-semibold">Trạng thái: Đang kiểm tra</span>
+              ) : !isMaterialIssued ? (
+                <span className="text-amber-600 font-semibold">Trạng thái: Chưa cấp vật tư</span>
+              ) : (
+                <span className="text-sky-600 font-semibold">Trạng thái: Đang sản xuất</span>
+              )}
             </div>
-            {data.order.trangThai !== 'completed' && !isMaterialIssued && (
+            {!isMaterialIssued && !isCompleted && (
               <div
                 className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200"
                 title={
                   data.order.materialTicketCode
                     ? `Lệnh cấp phát vật tư ${data.order.materialTicketCode} chưa ở trạng thái Đã cấp phát`
-                    : 'Vật tư chưa được cấp phát'
+                    : 'Vật tư chưa được xuất kho cấp phát'
                 }
               >
                 <ExclamationTriangle size={12} className="shrink-0 text-amber-600" />
                 <span>
-                  Chưa cấp phát vật tư
-                  {data.order.materialTicketCode ? ` (${data.order.materialTicketCode})` : ''}
+                  Chưa cấp vật tư
+                  {data.order.materialTicketCode ? ` (${data.order.materialTicketCode})` : ''} - Cần xuất kho vật tư trước
                 </span>
+              </div>
+            )}
+            {isQcChecking && (
+              <div
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200"
+              >
+                <ClockHistory size={12} className="shrink-0 text-purple-600" />
+                <span>Đã chuyển thông tin sang bộ phận QC kiểm tra thành phẩm</span>
               </div>
             )}
           </div>
@@ -194,30 +210,32 @@ export function ProductionOrderDetailOffcanvas({
             </Button>
 
             <div className="flex items-center gap-2">
-              {data.order.trangThai !== 'completed' ? (
-                <>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    leftIcon={<Check2Circle size={15} />}
-                    onClick={() => handleUpdateStatus('completed')}
-                    isLoading={saving}
-                    disabled={!canComplete}
-                    title={
-                      !isProdAdmin
-                        ? 'Chỉ Quản đốc xưởng sản xuất, Trưởng bộ phận, Trưởng phòng mới có quyền báo cáo hoàn thành lệnh sản xuất'
-                        : !isMaterialIssued
-                        ? `Lệnh cấp phát vật tư (${data.order.materialTicketCode || ''}) chưa ở trạng thái Đã cấp phát. Không thể hoàn thành lệnh sản xuất.`
-                        : undefined
-                    }
-                  >
-                    Hoàn thành
-                  </Button>
-                </>
-              ) : (
+              {isCompleted ? (
                 <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
                   <CheckAll size={14} /> Đã khép lại
                 </span>
+              ) : isQcChecking ? (
+                <span className="inline-flex items-center gap-1 text-xs font-bold text-purple-600 bg-purple-50 px-2.5 py-1 rounded-md border border-purple-200">
+                  <HourglassSplit size={14} /> Đang kiểm tra QC
+                </span>
+              ) : (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  leftIcon={<Check2Circle size={15} />}
+                  onClick={() => handleUpdateStatus('qc_checking')}
+                  isLoading={saving}
+                  disabled={!canComplete}
+                  title={
+                    !isProdAdmin
+                      ? 'Chỉ Quản đốc xưởng sản xuất, Trưởng bộ phận, Trưởng phòng mới có quyền báo cáo hoàn thành lệnh sản xuất'
+                      : !isMaterialIssued
+                      ? `Lệnh cấp phát vật tư (${data.order.materialTicketCode || ''}) chưa ở trạng thái Đã cấp phát. Cần bộ phận kho xuất kho cấp phát vật tư trước khi sản xuất.`
+                      : 'Báo cáo hoàn thành sản xuất và chuyển sang bộ phận QC kiểm tra'
+                  }
+                >
+                  Hoàn thành
+                </Button>
               )}
               <Button variant="secondary" size="sm" onClick={handleClose}>
                 Đóng

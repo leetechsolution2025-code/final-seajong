@@ -204,6 +204,44 @@ function _runSyncAllSubledgersToJournal(db) {
       db.serialize(() => {
         db.run('PRAGMA foreign_keys = OFF');
 
+        // Đảm bảo bảng Sổ nhật ký chung luôn tồn tại trước khi thao tác
+        db.run(`
+          CREATE TABLE IF NOT EXISTS accounting_journal_entries (
+            id TEXT PRIMARY KEY,
+            entry_number TEXT UNIQUE NOT NULL,
+            entry_date TEXT NOT NULL,
+            document_date TEXT,
+            reference_code TEXT,
+            source_module TEXT NOT NULL DEFAULT 'MANUAL',
+            source_label TEXT,
+            description TEXT NOT NULL,
+            total_amount REAL NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'posted',
+            status_label TEXT NOT NULL DEFAULT 'Đã ghi sổ',
+            created_by TEXT,
+            posted_by TEXT,
+            created_at TEXT DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT DEFAULT (datetime('now', 'localtime'))
+          )
+        `);
+        db.run(`
+          CREATE TABLE IF NOT EXISTS accounting_journal_lines (
+            id TEXT PRIMARY KEY,
+            entry_id TEXT NOT NULL,
+            line_number INTEGER NOT NULL DEFAULT 1,
+            account_id TEXT NOT NULL,
+            account_code TEXT NOT NULL,
+            account_name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            amount REAL NOT NULL DEFAULT 0,
+            description TEXT,
+            partner TEXT,
+            partner_type TEXT,
+            created_at TEXT DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY(entry_id) REFERENCES accounting_journal_entries(id) ON DELETE CASCADE
+          )
+        `);
+
         // 1. Xóa sạch toàn bộ các bút toán JE-% tự sinh cũ (trừ các bút toán MANUAL do người dùng tự lập)
         db.run(`
           DELETE FROM accounting_journal_lines

@@ -224,8 +224,11 @@ export const FinanceOverviewView: React.FC<FinanceOverviewViewProps> = ({
       if (n.type === 'outflow') {
         const po = n.paymentOrder;
         if (!po) return false;
+        // Đơn mua hàng phê duyệt chỉ ghi nhận công nợ NCC, không hiển thị vào danh sách lệnh chi tiền
+        const refType = String((po as any).refType || (po as any).ref_type || '').toLowerCase();
+        if (refType === 'procurement' || refType === 'purchase_order_deposit') return false;
         // Chỉ hiển thị các nội dung đã được giám đốc phê duyệt, đợi chi tiền
-        if (po.status === 'submitted_director' || po.status === 'pending_director') return false;
+        if (po.status === 'submitted_director' || po.status === 'pending_director' || po.status === 'rejected') return false;
         if (!po.approvedBy || po.approvedBy.trim() === '') return false;
       }
       return true;

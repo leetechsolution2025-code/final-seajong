@@ -275,7 +275,7 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
     if (!selectedRecord) return;
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/purchase/defective-goods/${selectedRecord.id}/resolve`, {
+      const res = await fetch(`/api/purchase/defective-goods/${encodeURIComponent(selectedRecord.id)}/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -307,7 +307,7 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
       return;
     }
     try {
-      const res = await fetch(`/api/purchase/defective-goods/${rec.id}/reopen`, {
+      const res = await fetch(`/api/purchase/defective-goods/${encodeURIComponent(rec.id)}/reopen`, {
         method: 'POST',
       });
       if (res.ok) {

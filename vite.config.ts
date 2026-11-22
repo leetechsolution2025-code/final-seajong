@@ -2140,8 +2140,6 @@ function autoBackendPlugin(): Plugin {
 
             const result = await Promise.all(
               orders.map(async (order) => {
-                const isCompleted = order.ngayHoanThanhSanXuat !== null
-                const isRunning = order.trangThai === 'in_production'
                 let materialTicket: any =
                   (order.logisticsTickets || []).find((t) => t.type === 'MATERIAL_PICKING' || t.code?.startsWith('MP-') || t.code?.startsWith('CP-')) || null
                 let materialExportCode = materialTicket ? materialTicket.code : null
@@ -2161,8 +2159,9 @@ function autoBackendPlugin(): Plugin {
                     materialTicket = foundTicket
                   }
                 }
+                let sm: any = null
                 if (!materialExportCode && order.code) {
-                  const sm = await vitePrisma.stockMovement.findFirst({
+                  sm = await vitePrisma.stockMovement.findFirst({
                     where: {
                       type: 'xuat',
                       OR: [
@@ -2174,6 +2173,14 @@ function autoBackendPlugin(): Plugin {
                   })
                   if (sm?.soChungTu) materialExportCode = sm.soChungTu
                 }
+
+                const isMaterialIssued = materialTicket
+                  ? ((materialTicket.status as any) === 'COMPLETED' || (materialTicket.status as any) === 'da_cap_phat' || Boolean(sm))
+                  : true
+
+                const isCompleted = order.ngayHoanThanhSanXuat !== null && order.trangThai === 'completed'
+                const isQcChecking = order.trangThai === 'qc_checking' || order.trangThai === 'pending_qc'
+                const orderStatus = isCompleted ? 'completed' : isQcChecking ? 'qc_checking' : (!isMaterialIssued ? 'not_issued' : 'running')
 
                 const isInternal = !order.code || order.code.startsWith('LSX')
                 const displayName = isInternal
@@ -2194,8 +2201,9 @@ function autoBackendPlugin(): Plugin {
                   ngayDat: order.ngayDat,
                   ngayHoanThanh: order.ngayHoanThanhSanXuat || deadline || null,
                   progress: isCompleted ? 100 : 0,
-                  status: isCompleted ? 'completed' : isRunning ? 'running' : 'pending',
+                  status: orderStatus,
                   trangThai: order.trangThai,
+                  isMaterialIssued,
                   materialTicketCode: materialExportCode,
                   materialTicketStatus: materialTicket ? materialTicket.status : null,
                   customerName: order.customer?.name || null,
@@ -2215,6 +2223,360 @@ function autoBackendPlugin(): Plugin {
             res.statusCode = 500
             res.setHeader('Content-Type', 'application/json; charset=utf-8')
             res.end(JSON.stringify([]))
+            return
+          }
+        }
+
+        // ── MIDDLEWARE CHI TIẾT & CẬP NHẬT LỆNH SẢN XUẤT (/api/production/orders/*) ──
+        if (url.startsWith('/api/production/orders/')) {
+          const sendJson = (status: number, payload: any) => {
+            res.statusCode = status
+            res.setHeader('Content-Type', 'application/json; charset=utf-8')
+            res.end(JSON.stringify(payload))
+          }
+          const readJsonBody = async () => {
+            let rawBody = ''
+            await new Promise<void>((resolve) => {
+              req.on('data', (chunk) => {
+                rawBody += chunk
+              })
+              req.on('end', () => resolve())
+            })
+            return rawBody ? JSON.parse(rawBody) : {}
+          }
+
+          try {
+            const parsedUrl = new URL(url, 'http://localhost')
+            const orderId = decodeURIComponent(parsedUrl.pathname.replace('/api/production/orders/', ''))
+            const codeCandidates = [
+              orderId,
+              orderId.replace('LSX', 'DBH'),
+              orderId.replace('LSX', 'DHBL'),
+              orderId.replace('LSX', 'DH'),
+            ]
+
+            let order = await vitePrisma.saleOrder.findUnique({
+              where: { id: orderId },
+              include: {
+                saleOrderItems: {
+                  include: { inventoryItem: true },
+                },
+                customer: { select: { name: true, address: true } },
+              },
+            })
+
+            if (!order) {
+              for (const candidate of codeCandidates) {
+                order = await vitePrisma.saleOrder.findUnique({
+                  where: { code: candidate },
+                  include: {
+                    saleOrderItems: {
+                      include: { inventoryItem: true },
+                    },
+                    customer: { select: { name: true, address: true } },
+                  },
+                })
+                if (order) break
+              }
+            }
+
+            if (!order) {
+              sendJson(404, { error: 'Không tìm thấy lệnh sản xuất' })
+              return
+            }
+
+            // 1. GET /api/production/orders/:id
+            if (req.method === 'GET') {
+              const prodTask = await vitePrisma.task.findFirst({
+                where: {
+                  deptCode: 'production',
+                  OR: [
+                    { title: { contains: order.code || '' } },
+                    { description: { contains: order.code || '' } },
+                    ...(order.id ? [{ description: { contains: order.id } }] : []),
+                  ],
+                },
+                orderBy: { createdAt: 'desc' },
+              })
+
+              const prodTargets = new Map<string, number>()
+              if (prodTask && prodTask.actualResult) {
+                try {
+                  const parsed = JSON.parse(prodTask.actualResult)
+                  for (const pt of parsed) {
+                    const qty = Number(pt.soLuong ?? pt.missingQty ?? pt.qty)
+                    if (!isNaN(qty)) {
+                      if (pt.tenHang) prodTargets.set(pt.tenHang, qty)
+                      if (pt.id) prodTargets.set(pt.id, qty)
+                    }
+                  }
+                } catch (_) { }
+              } else if (prodTask && prodTask.description) {
+                const lines = prodTask.description.split('\n')
+                for (const line of lines) {
+                  if (line.startsWith('- ')) {
+                    const parts = line.substring(2).split(': ')
+                    if (parts.length === 2) {
+                      const tenHang = parts[0].trim()
+                      const qtyStr = parts[1].trim().split(' ')[0]
+                      const qty = parseFloat(qtyStr)
+                      if (!isNaN(qty)) prodTargets.set(tenHang, qty)
+                    }
+                  }
+                }
+              }
+
+              const hasProdTargets = prodTargets.size > 0
+              const items: any[] = []
+              const materialMap = new Map<string, any>()
+
+              for (const orderItem of (order.saleOrderItems || [])) {
+                if (hasProdTargets && !prodTargets.has(orderItem.id) && !prodTargets.has(orderItem.tenHang)) {
+                  continue
+                }
+                const targetQty = hasProdTargets
+                  ? (prodTargets.get(orderItem.id) ?? prodTargets.get(orderItem.tenHang) ?? orderItem.soLuong ?? 1)
+                  : (orderItem.soLuong || 1)
+
+                let parsedGhiChu: any = {}
+                let rawGhiChuText: string | null = null
+                if (typeof orderItem.ghiChu === 'string' && orderItem.ghiChu.trim()) {
+                  try {
+                    const parsed = JSON.parse(orderItem.ghiChu)
+                    if (parsed && typeof parsed === 'object') {
+                      parsedGhiChu = parsed
+                    } else {
+                      rawGhiChuText = orderItem.ghiChu.trim()
+                    }
+                  } catch (_) {
+                    rawGhiChuText = orderItem.ghiChu.trim()
+                  }
+                } else if (orderItem.ghiChu && typeof orderItem.ghiChu === 'object') {
+                  parsedGhiChu = orderItem.ghiChu
+                }
+
+                const lookupBomId = orderItem.dinhMucId || parsedGhiChu.dinhMucId || null
+                const lookupBomCode = parsedGhiChu.bomCode || parsedGhiChu.dinhMucCode || null
+                let bom: any = null
+
+                if (lookupBomId) {
+                  bom = await vitePrisma.dinhMuc.findUnique({
+                    where: { id: lookupBomId },
+                    include: {
+                      vatTu: {
+                        include: {
+                          inventoryItem: true,
+                          category: true,
+                        },
+                      },
+                    },
+                  })
+                }
+                if (!bom && lookupBomCode) {
+                  bom = await vitePrisma.dinhMuc.findFirst({
+                    where: { code: lookupBomCode },
+                    include: {
+                      vatTu: {
+                        include: {
+                          inventoryItem: true,
+                          category: true,
+                        },
+                      },
+                    },
+                  })
+                }
+                if (!bom) {
+                  const invItem = await vitePrisma.inventoryItem.findFirst({
+                    where: {
+                      OR: [
+                        ...(orderItem.inventoryItemId ? [{ id: orderItem.inventoryItemId }] : []),
+                        { tenHang: orderItem.tenHang },
+                      ],
+                    },
+                    include: {
+                      dinhMucs: {
+                        include: {
+                          vatTu: {
+                            include: {
+                              inventoryItem: true,
+                              category: true,
+                            },
+                          },
+                        },
+                      },
+                    },
+                  })
+                  bom = invItem?.dinhMucs?.[0] || null
+                }
+
+                const itemMaterials: any[] = []
+                if (bom && Array.isArray(bom.vatTu)) {
+                  for (const vt of bom.vatTu) {
+                    const matId = vt.inventoryItem?.id || vt.id
+                    const totalQty = Number(vt.soLuong || 0) * Number(targetQty || 1)
+                    itemMaterials.push({
+                      id: matId,
+                      tenVatTu: vt.inventoryItem?.tenHang || vt.tenVatTu,
+                      code: vt.inventoryItem?.code || '-',
+                      soLuong: totalQty,
+                      donViTinh: vt.inventoryItem?.donVi || vt.donViTinh || 'cái',
+                      ghiChu: vt.ghiChu,
+                    })
+                    if (materialMap.has(matId)) {
+                      materialMap.get(matId).soLuong += totalQty
+                    } else {
+                      materialMap.set(matId, {
+                        id: matId,
+                        tenVatTu: vt.inventoryItem?.tenHang || vt.tenVatTu,
+                        code: vt.inventoryItem?.code || '-',
+                        soLuong: totalQty,
+                        donViTinh: vt.inventoryItem?.donVi || vt.donViTinh || 'cái',
+                        donGia: vt.inventoryItem?.giaNhap || 0,
+                        ghiChu: vt.ghiChu,
+                      })
+                    }
+                  }
+                }
+
+                const resolvedBomCode = bom?.code || lookupBomCode || null
+                const resolvedBomTen = bom?.tenDinhMuc || parsedGhiChu.dinhMucTen || null
+                const resolvedGhiChu =
+                  parsedGhiChu.dinhMucGhiChu ||
+                  parsedGhiChu.bomGhiChu ||
+                  parsedGhiChu.note ||
+                  parsedGhiChu.ghiChu ||
+                  rawGhiChuText ||
+                  null
+
+                items.push({
+                  id: orderItem.id,
+                  tenHang: orderItem.tenHang,
+                  soLuong: targetQty,
+                  soLuongDat: orderItem.soLuong,
+                  donVi: orderItem.donViTinh || orderItem.inventoryItem?.donVi || 'Bộ',
+                  donGia: orderItem.donGia,
+                  bomFound: Boolean(bom || resolvedBomCode),
+                  bomCode: resolvedBomCode,
+                  bomTen: resolvedBomTen,
+                  dinhMucGhiChu: resolvedGhiChu,
+                  materials: itemMaterials,
+                })
+              }
+
+              const materialTicket = await vitePrisma.logisticsTicket.findFirst({
+                where: {
+                  OR: [
+                    { saleOrderId: order.id },
+                    ...(order.code ? [{ saleOrder: { code: order.code } }] : []),
+                    ...(order.code ? [{ code: { contains: order.code } }] : []),
+                  ],
+                  type: { in: ['MATERIAL_PICKING', 'WARRANTY_MATERIAL'] },
+                },
+                select: { id: true, code: true, status: true, type: true },
+              })
+
+              const isMaterialIssued = materialTicket
+                ? ((materialTicket.status as any) === 'COMPLETED' || (materialTicket.status as any) === 'da_cap_phat')
+                : (materialMap.size === 0)
+
+              const isCompleted = order.trangThai === 'approved' || order.trangThai === 'shipped' || order.trangThai === 'completed'
+              const isQcChecking = order.trangThai === 'qc_checking' || order.trangThai === 'pending_qc'
+              const prodStatus = isCompleted ? 'completed' : isQcChecking ? 'qc_checking' : (!isMaterialIssued ? 'not_issued' : 'running')
+
+              const orderCode = order.code
+                ? order.code.replace('DBH', 'LSX').replace('DHBL', 'LSX').replace('DH', 'LSX')
+                : order.id
+
+              sendJson(200, {
+                order: {
+                  id: orderCode,
+                  saleOrderCode: order.code,
+                  trangThai: prodStatus,
+                  rawTrangThai: order.trangThai,
+                  ngayDat: order.ngayDat,
+                  ngayHoanThanh: order.ngayHoanThanhSanXuat || order.ngayGiao,
+                  ngayYeuCauQC: order.ngayYeuCauQC || order.ngayGiao,
+                  tongTien: order.tongTien,
+                  customerName: order.customer?.name || null,
+                  customerAddress: order.diaChiGiaoHang || order.customer?.address || null,
+                  materialTicketCode: materialTicket ? materialTicket.code : null,
+                  materialTicketStatus: materialTicket ? materialTicket.status : null,
+                  isMaterialIssued,
+                },
+                items,
+                materials: Array.from(materialMap.values()),
+              })
+              return
+            }
+
+            // 2. PATCH /api/production/orders/:id
+            if (req.method === 'PATCH') {
+              const body = await readJsonBody()
+              const { trangThai, ngayYeuCauQC } = body || {}
+
+              if (ngayYeuCauQC !== undefined && !trangThai) {
+                await vitePrisma.saleOrder.update({
+                  where: { id: order.id },
+                  data: { ngayYeuCauQC: ngayYeuCauQC ? new Date(ngayYeuCauQC) : null },
+                })
+                sendJson(200, { success: true, ngayYeuCauQC })
+                return
+              }
+
+              let newTrangThai = order.trangThai
+              if (trangThai === 'running') newTrangThai = 'in_production'
+              else if (trangThai === 'qc_checking' || trangThai === 'completed') newTrangThai = 'qc_checking'
+
+              await vitePrisma.$transaction(async (tx: any) => {
+                await tx.saleOrder.update({
+                  where: { id: order.id },
+                  data: {
+                    trangThai: newTrangThai,
+                    ...(trangThai === 'qc_checking' || trangThai === 'completed' ? { ngayHoanThanhSanXuat: new Date() } : {}),
+                  },
+                })
+
+                if (trangThai === 'qc_checking' || trangThai === 'completed') {
+                  const taskTitle = `Lệnh sản xuất cho đơn hàng ${order.code || order.id}`
+                  await tx.task.updateMany({
+                    where: { title: taskTitle, status: { not: 'done' } },
+                    data: { status: 'done', completedAt: new Date() },
+                  })
+
+                  const fallbackItems = (order.saleOrderItems || []).map((i: any) => i.tenHang)
+                  const fallbackQty = (order.saleOrderItems || []).reduce((acc: number, i: any) => acc + (i.soLuong || 0), 0)
+                  const productNameDesc = fallbackItems.length > 0
+                    ? fallbackItems.join(', ')
+                    : `Thành phẩm lệnh sản xuất ${order.code || order.id}`
+
+                  const qcCode = `QC-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(10 + Math.random() * 90)}`
+                  await tx.qualityInspection.create({
+                    data: {
+                      code: qcCode,
+                      type: 'OQC',
+                      status: 'Chưa thực hiện',
+                      productName: productNameDesc,
+                      requesterName: 'Bộ phận sản xuất',
+                      requesterDept: 'Sản xuất',
+                      executionTime: new Date(),
+                      notes: `Yêu cầu kiểm soát chất lượng thành phẩm theo lệnh sản xuất ${order.code || order.id}`,
+                      metadata: JSON.stringify({
+                        productionOrder: order.code,
+                        totalQuantity: fallbackQty,
+                        batch: 'LOT-' + new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+                        assemblyTeam: 'Tổ lắp ráp - Ca ngày',
+                      }),
+                    },
+                  })
+                }
+              })
+
+              sendJson(200, { success: true, trangThai: newTrangThai })
+              return
+            }
+          } catch (err: any) {
+            console.error('Lỗi Vite middleware /api/production/orders/:id:', err)
+            sendJson(500, { error: err?.message || 'Lỗi xử lý lệnh sản xuất' })
             return
           }
         }
@@ -2710,6 +3072,356 @@ function autoBackendPlugin(): Plugin {
           } catch (err: any) {
             console.error('Lỗi Vite middleware /api/hr/insurance:', err)
             sendJson(500, { error: err?.message || 'Lỗi xử lý bảo hiểm' })
+            return
+          }
+        }
+
+        // ── MIDDLEWARE QUẢN LÝ HÀNG LỖI MUA HÀNG & NCC (/api/purchase/defective-goods/*) ──
+        if (url.startsWith('/api/purchase/defective-goods')) {
+          const sendJson = (status: number, payload: any) => {
+            res.statusCode = status
+            res.setHeader('Content-Type', 'application/json; charset=utf-8')
+            res.end(JSON.stringify(payload))
+          }
+          const readJsonBody = async () => {
+            let rawBody = ''
+            await new Promise<void>((resolve) => {
+              req.on('data', (chunk) => {
+                rawBody += chunk
+              })
+              req.on('end', () => resolve())
+            })
+            return rawBody ? JSON.parse(rawBody) : {}
+          }
+
+          try {
+            const parsedUrl = new URL(url, 'http://localhost')
+            const pathname = parsedUrl.pathname
+
+            // 1. GET /api/purchase/defective-goods
+            if (req.method === 'GET' && (pathname === '/api/purchase/defective-goods' || pathname === '/api/purchase/defective-goods/')) {
+              const statusFilter = parsedUrl.searchParams.get('status') || 'all'
+              const supplierFilter = parsedUrl.searchParams.get('supplier') || 'all'
+              const q = (parsedUrl.searchParams.get('q') || '').trim().toLowerCase()
+
+              const iqcInspections = await vitePrisma.qualityInspection.findMany({
+                where: { type: 'IQC' },
+                orderBy: { createdAt: 'desc' },
+              })
+
+              const allPOs = await vitePrisma.purchaseOrder.findMany({
+                include: {
+                  supplier: true,
+                  items: true,
+                },
+              })
+              const poById = new Map(allPOs.map((p: any) => [p.id, p]))
+              const poByCode = new Map(allPOs.filter((p: any) => p.code).map((p: any) => [p.code, p]))
+
+              const allSuppliers = await vitePrisma.supplier.findMany()
+
+              const allInventoryItems = await vitePrisma.inventoryItem.findMany({
+                select: {
+                  id: true,
+                  code: true,
+                  tenHang: true,
+                  giaNhap: true,
+                },
+              })
+              const invById = new Map(allInventoryItems.map((inv: any) => [inv.id, inv]))
+              const invByCode = new Map(allInventoryItems.filter((inv: any) => inv.code).map((inv: any) => [inv.code.toLowerCase(), inv]))
+              const invByName = new Map(allInventoryItems.filter((inv: any) => inv.tenHang).map((inv: any) => [inv.tenHang.toLowerCase().trim(), inv]))
+
+              const resultList: any[] = []
+
+              for (const ins of iqcInspections) {
+                let meta: any = {}
+                if (ins.metadata) {
+                  try {
+                    meta = typeof ins.metadata === 'string' ? JSON.parse(ins.metadata) : ins.metadata
+                  } catch {}
+                }
+
+                const rawItems = Array.isArray(meta?.items) ? meta.items : []
+                let failedItems = rawItems.filter((it: any) => {
+                  const f = Number(it.failQuantity || it.soLuongLoi || it.failedQty || 0)
+                  return f > 0
+                })
+
+                if (failedItems.length === 0 && ins.result && ins.result !== 'Đạt') {
+                  const failQty = Number(meta.failedQuantity || meta.failQuantity || 1)
+                  failedItems = [
+                    {
+                      productName: ins.productName || 'Vật tư / Thành phẩm',
+                      model: meta.model || '',
+                      quantity: Number(meta.quantity || 1),
+                      passQuantity: Number(meta.passedQuantity || 0),
+                      failQuantity: failQty,
+                      comment: ins.notes || 'Không đạt kiểm định IQC',
+                    },
+                  ]
+                }
+
+                if (failedItems.length === 0) continue
+
+                const poCode = meta.purchaseOrderCode || meta.poNumber || (ins.code.match(/DH-\d+-\d+/i) ? (ins.code.match(/DH-\d+-\d+/i) as any)[0] : '')
+                const poId = meta.purchaseOrderId || ''
+                const matchedPO = poById.get(poId) || (poCode ? poByCode.get(poCode) : null)
+
+                const poItems = (matchedPO as any)?.items || []
+                let totalFailedQty = 0
+                let totalFailedAmount = 0
+
+                const defectiveItems = failedItems.map((fi: any) => {
+                  const fQty = Number(fi.failQuantity || fi.soLuongLoi || 1)
+                  totalFailedQty += fQty
+
+                  const matchedPoItem = poItems.find(
+                    (pi: any) =>
+                      pi.tenHang?.toLowerCase() === (fi.productName || '').toLowerCase() ||
+                      (pi.ghiChu && pi.ghiChu.toLowerCase().includes((fi.productName || '').toLowerCase()))
+                  )
+                  const matchedInv =
+                    (fi.inventoryItemId ? invById.get(fi.inventoryItemId) : null) ||
+                    (fi.model ? invByCode.get(fi.model.toLowerCase()) : null) ||
+                    (fi.productCode ? invByCode.get(fi.productCode.toLowerCase()) : null) ||
+                    (fi.productName ? invByName.get(fi.productName.toLowerCase().trim()) : null)
+
+                  const unitPrice = Number(matchedPoItem?.donGia || fi.unitPrice || (matchedInv as any)?.giaNhap || 0)
+                  const itemFailedAmount = fQty * unitPrice
+                  totalFailedAmount += itemFailedAmount
+
+                  return {
+                    productName: fi.productName || 'Vật tư / Linh kiện',
+                    model: fi.model || '',
+                    quantity: Number(fi.quantity || fi.sampleQuantity || fQty),
+                    passQuantity: Number(fi.passQuantity || 0),
+                    failQuantity: fQty,
+                    unit: fi.unit || 'cái',
+                    unitPrice,
+                    failedAmount: itemFailedAmount,
+                    comment: fi.comment || fi.defectDesc || '',
+                  }
+                })
+
+                const supplierName = (matchedPO as any)?.supplier?.name || meta.supplierName || 'Nhà cung cấp'
+                let supplierPhone = (matchedPO as any)?.supplier?.phone || (matchedPO as any)?.supplier?.dienThoai || ''
+                let supplierAddress = (matchedPO as any)?.supplier?.address || (matchedPO as any)?.supplier?.diaChi || ''
+                let supplierId = (matchedPO as any)?.supplierId || (matchedPO as any)?.supplier?.id || null
+
+                if (!supplierAddress || !supplierPhone) {
+                  const found = allSuppliers.find(
+                    (s: any) =>
+                      (s.name && supplierName && s.name.trim().toLowerCase() === supplierName.trim().toLowerCase()) ||
+                      (s.name && supplierName && (s.name.toLowerCase().includes(supplierName.toLowerCase()) || supplierName.toLowerCase().includes(s.name.toLowerCase())))
+                  )
+                  if (found) {
+                    if (!supplierAddress) supplierAddress = found.address || ''
+                    if (!supplierPhone) supplierPhone = found.phone || ''
+                    if (!supplierId) supplierId = found.id
+                  }
+                }
+
+                const resolution = meta.resolution || {
+                  status: 'PENDING',
+                  action: null,
+                  actionLabel: 'Chờ xử lý',
+                }
+
+                const record = {
+                  id: ins.id,
+                  code: ins.code,
+                  qcResult: ins.result || 'Lỗi một phần',
+                  executionTime: ins.executionTime || ins.createdAt,
+                  inspectorName: ins.inspectorName || 'Bộ phận QA/QC',
+                  purchaseOrderId: (matchedPO as any)?.id || poId,
+                  purchaseOrderCode: (matchedPO as any)?.code || poCode || 'Đơn mua hàng ngoài',
+                  supplierId,
+                  supplierName,
+                  supplierPhone,
+                  supplierAddress,
+                  status: resolution.status || 'PENDING',
+                  totalFailedQty,
+                  totalFailedAmount,
+                  defectiveItems,
+                  resolution,
+                  notes: ins.notes || '',
+                }
+
+                if (statusFilter !== 'all' && record.status !== statusFilter) continue
+                if (supplierFilter !== 'all' && supplierName.toLowerCase() !== supplierFilter.toLowerCase()) continue
+                if (q) {
+                  const match =
+                    record.code.toLowerCase().includes(q) ||
+                    record.purchaseOrderCode.toLowerCase().includes(q) ||
+                    record.supplierName.toLowerCase().includes(q) ||
+                    defectiveItems.some((di: any) => di.productName.toLowerCase().includes(q))
+                  if (!match) continue
+                }
+
+                resultList.push(record)
+              }
+
+              sendJson(200, {
+                success: true,
+                total: resultList.length,
+                pendingCount: resultList.filter((r) => r.status === 'PENDING').length,
+                resolvedCount: resultList.filter((r) => r.status === 'RESOLVED').length,
+                items: resultList,
+              })
+              return
+            }
+
+            // 2. POST /api/purchase/defective-goods/:id/resolve
+            if (req.method === 'POST' && pathname.endsWith('/resolve')) {
+              const id = decodeURIComponent(pathname.replace('/api/purchase/defective-goods/', '').replace('/resolve', ''))
+              const body = await readJsonBody()
+              const { action, amount, note, commitmentDate, resolvedBy } = body || {}
+
+              const ins = await vitePrisma.qualityInspection.findFirst({
+                where: { OR: [{ id }, { code: id }] },
+              })
+              if (!ins) {
+                sendJson(404, { error: 'Không tìm thấy biên bản kiểm tra chất lượng' })
+                return
+              }
+
+              let meta: any = {}
+              if (ins.metadata) {
+                try {
+                  meta = typeof ins.metadata === 'string' ? JSON.parse(ins.metadata) : ins.metadata
+                } catch {}
+              }
+
+              const actionLabels: Record<string, string> = {
+                DEBT_DEDUCTION: 'Cấn trừ công nợ',
+                SUPPLEMENTARY_GOODS: 'NCC gửi bù hàng',
+                REFUND: 'NCC hoàn lại tiền',
+                RETURN_TO_SUPPLIER: 'Xuất trả lại hàng NCC',
+              }
+
+              const actionLabel = actionLabels[action] || 'Đã xử lý'
+              const deductAmount = Math.abs(Number(amount) || 0)
+
+              const poCode = meta.purchaseOrderCode || meta.poNumber || ''
+              const po = poCode
+                ? await vitePrisma.purchaseOrder.findFirst({
+                    where: { code: poCode },
+                    include: { supplier: true },
+                  })
+                : null
+              const supplierId = (po as any)?.supplierId || null
+              const supplierName = (po as any)?.supplier?.name || meta.supplierName || 'Nhà cung cấp'
+
+              // Nếu chọn "Cấn trừ công nợ": Tạo bản ghi Debt loại PAYABLE và đồng bộ kế toán
+              if (action === 'DEBT_DEDUCTION' && deductAmount > 0) {
+                const refId = `NCC-DED-${ins.code}`
+                await vitePrisma.debt.create({
+                  data: {
+                    type: 'PAYABLE',
+                    supplierId,
+                    partnerName: supplierName,
+                    amount: 0,
+                    paidAmount: deductAmount,
+                    dueDate: new Date(),
+                    status: 'PAID',
+                    description: `Cấn trừ công nợ do hàng lỗi theo biên bản ${ins.code}${poCode ? ` (Đơn PO: ${poCode})` : ''}`,
+                    referenceId: refId,
+                  },
+                })
+
+                try {
+                  const syncModuleUrl = `${pathToFileURL(path.join(__dirname, 'services', 'prismaFinanceSyncService.js')).href}?t=${Date.now()}`
+                  const { syncPrismaFinanceToAccountingTables } = await import(syncModuleUrl)
+                  if (typeof syncPrismaFinanceToAccountingTables === 'function') {
+                    await syncPrismaFinanceToAccountingTables()
+                  }
+                } catch (syncErr: any) {
+                  console.warn('⚠️ Lỗi đồng bộ cấn trừ công nợ NCC:', syncErr?.message)
+                }
+              }
+
+              meta.resolution = {
+                status: 'RESOLVED',
+                action,
+                actionLabel,
+                amount: deductAmount,
+                note: note || '',
+                commitmentDate: commitmentDate || null,
+                resolvedAt: new Date().toISOString(),
+                resolvedBy: resolvedBy || 'Phòng Mua hàng',
+              }
+
+              await vitePrisma.qualityInspection.update({
+                where: { id: ins.id },
+                data: {
+                  metadata: JSON.stringify(meta),
+                },
+              })
+
+              sendJson(200, {
+                success: true,
+                message: 'Đã cập nhật phương án xử lý thành công',
+                resolution: meta.resolution,
+              })
+              return
+            }
+
+            // 3. POST /api/purchase/defective-goods/:id/reopen
+            if (req.method === 'POST' && pathname.endsWith('/reopen')) {
+              const id = decodeURIComponent(pathname.replace('/api/purchase/defective-goods/', '').replace('/reopen', ''))
+              const ins = await vitePrisma.qualityInspection.findFirst({
+                where: { OR: [{ id }, { code: id }] },
+              })
+              if (!ins) {
+                sendJson(404, { error: 'Không tìm thấy biên bản kiểm tra chất lượng' })
+                return
+              }
+
+              let meta: any = {}
+              if (ins.metadata) {
+                try {
+                  meta = typeof ins.metadata === 'string' ? JSON.parse(ins.metadata) : ins.metadata
+                } catch {}
+              }
+
+              const prevAction = meta.resolution?.action
+              meta.resolution = {
+                status: 'PENDING',
+                action: null,
+                actionLabel: 'Chờ xử lý',
+                reopenedAt: new Date().toISOString(),
+              }
+
+              await vitePrisma.qualityInspection.update({
+                where: { id: ins.id },
+                data: {
+                  metadata: JSON.stringify(meta),
+                },
+              })
+
+              if (prevAction === 'DEBT_DEDUCTION') {
+                const refId = `NCC-DED-${ins.code}`
+                await vitePrisma.debt.deleteMany({
+                  where: { referenceId: refId },
+                })
+                try {
+                  const syncModuleUrl = `${pathToFileURL(path.join(__dirname, 'services', 'prismaFinanceSyncService.js')).href}?t=${Date.now()}`
+                  const { syncPrismaFinanceToAccountingTables } = await import(syncModuleUrl)
+                  if (typeof syncPrismaFinanceToAccountingTables === 'function') {
+                    await syncPrismaFinanceToAccountingTables()
+                  }
+                } catch (syncErr: any) {
+                  console.warn('⚠️ Lỗi hoàn tác cấn trừ công nợ NCC:', syncErr?.message)
+                }
+              }
+
+              sendJson(200, { success: true, message: 'Đã hoàn tác về trạng thái chờ xử lý' })
+              return
+            }
+          } catch (err: any) {
+            console.error('Lỗi Vite middleware /api/purchase/defective-goods:', err)
+            sendJson(500, { error: err?.message || 'Lỗi server khi xử lý hàng lỗi' })
             return
           }
         }

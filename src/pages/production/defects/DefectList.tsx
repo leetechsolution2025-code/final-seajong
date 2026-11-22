@@ -30,7 +30,7 @@ export const getStatusBadge = (status: DefectStatus | string) => {
     case 'WAITING_INVENTORY':
       return (
         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/80">
-          Chờ kho vật tư
+          Chờ vật tư
         </span>
       );
     case 'WAITING_QC':

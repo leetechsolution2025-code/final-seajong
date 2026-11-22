@@ -1592,41 +1592,48 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
           ]
         );
 
-        // Đồng bộ vào Lệnh chi tiền (payment_orders) để hiển thị trên Thông báo dòng tiền & Theo dõi dòng tiền
-        await dbRun(
-          db,
-          `INSERT OR REPLACE INTO payment_orders (
-            id, order_code, ref_type, ref_id, ref_code, title,
-            beneficiary_name, beneficiary_code, department,
-            amount, amount_in_words, payment_method, bank_name, bank_account, bank_branch,
-            purpose, due_date, approved_by, approved_date, approval_note,
-            status, status_label, executed_by, executed_date, voucher_id, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, 'Lê Công Vụ (Giám đốc)', ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-          [
-            `PO-${exp.id}`,
-            orderCode,
-            String(exp.referenceType || '').toUpperCase() === 'PERSONAL_REQUEST' ? 'advance' : 'procurement',
-            exp.referenceId || exp.id,
-            exp.referenceId || code,
-            title,
-            exp.nguoiChiTra || 'Đối tác thụ hưởng',
-            exp.referenceId || 'NCC',
-            exp.referenceType === 'PURCHASE_ORDER' ? 'Phòng Mua hàng' : 'Phòng Nhân sự',
-            amt,
-            `${amt.toLocaleString('vi-VN')} đồng`,
-            isCash ? 'cash' : 'bank_transfer',
-            isCash ? 'Quỹ tiền mặt' : 'Chuyển khoản Ngân hàng',
-            title,
-            vnDate,
-            vnDate,
-            exp.ghiChu || 'Đã phê duyệt lệnh chi',
-            isPaid ? 'completed' : 'pending',
-            isPaid ? 'Đã chi tiền' : 'Chờ chi tiền',
-            isPaid ? 'Kế toán thanh toán' : null,
-            isPaid ? vnDate : null,
-            isPaid ? code : null,
-          ]
-        );
+        // Đồng bộ vào Lệnh chi tiền (payment_orders):
+        // Đơn mua hàng (PURCHASE_ORDER) chưa chi tiền KHÔNG tự động tạo lệnh chi — chỉ ghi nhận công nợ NCC.
+        // Khi muốn thanh toán NCC, kế toán tạo Yêu cầu chi tiền (payable_payment) trình Giám đốc phê duyệt.
+        const isPurchaseOrderPending =
+          String(exp.referenceType || '').toUpperCase() === 'PURCHASE_ORDER' && !isPaid;
+
+        if (!isPurchaseOrderPending) {
+          await dbRun(
+            db,
+            `INSERT OR REPLACE INTO payment_orders (
+              id, order_code, ref_type, ref_id, ref_code, title,
+              beneficiary_name, beneficiary_code, department,
+              amount, amount_in_words, payment_method, bank_name, bank_account, bank_branch,
+              purpose, due_date, approved_by, approved_date, approval_note,
+              status, status_label, executed_by, executed_date, voucher_id, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, 'Lê Công Vụ (Giám đốc)', ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+            [
+              `PO-${exp.id}`,
+              orderCode,
+              String(exp.referenceType || '').toUpperCase() === 'PERSONAL_REQUEST' ? 'advance' : 'procurement',
+              exp.referenceId || exp.id,
+              exp.referenceId || code,
+              title,
+              exp.nguoiChiTra || 'Đối tác thụ hưởng',
+              exp.referenceId || 'NCC',
+              exp.referenceType === 'PURCHASE_ORDER' ? 'Phòng Mua hàng' : 'Phòng Nhân sự',
+              amt,
+              `${amt.toLocaleString('vi-VN')} đồng`,
+              isCash ? 'cash' : 'bank_transfer',
+              isCash ? 'Quỹ tiền mặt' : 'Chuyển khoản Ngân hàng',
+              title,
+              vnDate,
+              vnDate,
+              exp.ghiChu || 'Đã phê duyệt lệnh chi',
+              isPaid ? 'completed' : 'pending',
+              isPaid ? 'Đã chi tiền' : 'Chờ chi tiền',
+              isPaid ? 'Kế toán thanh toán' : null,
+              isPaid ? vnDate : null,
+              isPaid ? code : null,
+            ]
+          );
+        }
 
         if (isPaid) {
           await dbRun(

@@ -426,15 +426,20 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
         if (!res.ok) return;
         const detail = await res.json();
 
-        // Tự động tìm và gán ticketId nếu đơn có logisticsTickets
-        if (detail.logisticsTickets && Array.isArray(detail.logisticsTickets) && detail.logisticsTickets.length > 0) {
-          const targetTicket = detail.logisticsTickets.find((t: any) => t.status !== "COMPLETED") || detail.logisticsTickets[0];
+        // Tự động tìm và gán ticketId nếu đơn có logisticsTickets (không ghi đè nếu đã truyền sẵn initialTicketId)
+        if (!initialTicketId && detail.logisticsTickets && Array.isArray(detail.logisticsTickets) && detail.logisticsTickets.length > 0) {
+          const targetTicket = detail.logisticsTickets.find((t: any) => t.type === "BATCH_PACKING" && t.status !== "COMPLETED")
+            || detail.logisticsTickets.find((t: any) => t.status !== "COMPLETED")
+            || detail.logisticsTickets[0];
           if (targetTicket) {
             setCurrentTicketId(targetTicket.id);
           }
         }
 
-        const isLsx = Boolean(detail.isProductionOrder || detail.code?.startsWith('LSX-') || so.code?.startsWith('LSX-'));
+        const isLsx =
+          initialMode !== "so" &&
+          !initialTicketId &&
+          Boolean(detail.isProductionOrder || detail.code?.startsWith('LSX-') || so.code?.startsWith('LSX-'));
         if (isLsx && detail.logisticsItems && detail.logisticsItems.length > 0) {
           setMode("wo");
           setLoaiXuatKho("Xuất sản xuất");
@@ -566,51 +571,131 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
 
   const loadItemsFromWorkOrder = async (wo: WorkOrderOption) => {
     try {
-      let materials: any[] = [];
-      const res = await fetch(`/api/production/orders/${wo.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        materials = data.materials || [];
-      }
+      let rawLines: Array<{
+        inventoryItemId?: string | null;
+        tenHang: string;
+        donVi?: string | null;
+        soLuong: number;
+        soLuongYC: number;
+        donGia: number;
+        code?: string | null;
+        ghiChu?: string;
+        viTriHang?: string;
+        viTriCot?: string;
+        viTriTang?: string;
+      }> = [];
 
-      // Fallback: nếu chưa có materials từ production orders, thử lấy từ sales orders
-      if (materials.length === 0) {
+      // 1. Ưu tiên lấy chính xác danh sách vật tư từ LogisticsTicket (phiếu cấp phát / gom vật tư MP-...)
+      const ticketLookupId =
+        currentTicketId ||
+        initialTicketId ||
+        (wo.id?.startsWith("MP-") || wo.id?.startsWith("CP-") ? wo.id : undefined) ||
+        (wo.code?.startsWith("MP-") || wo.code?.startsWith("CP-") ? wo.code : undefined);
+
+      if (ticketLookupId) {
         try {
-          const sRes = await fetch(`/api/plan-finance/sales/${wo.id}`);
-          if (sRes.ok) {
-            const sData = await sRes.json();
-            if (sData.logisticsItems && sData.logisticsItems.length > 0) {
-              materials = sData.logisticsItems.map((m: any) => ({
-                tenVatTu: m.tenHang,
-                soLuong: m.soLuong,
-                code: m.code,
-                donGia: 0,
-                ghiChu: m.ghiChu,
-              }));
+          const tRes = await fetch(`/api/logistics/tickets/${encodeURIComponent(ticketLookupId)}`);
+          if (tRes.ok) {
+            const ticketData = await tRes.json();
+            if (ticketData?.id && !currentTicketId) {
+              setCurrentTicketId(ticketData.id);
+            }
+            if (Array.isArray(ticketData?.items) && ticketData.items.length > 0) {
+              rawLines = ticketData.items.map((it: any) => {
+                const inv = it.inventoryItem;
+                const reqQty = Number(it.requestedQty || 0);
+                const pickedQty = Number(it.pickedQty || 0);
+                const qty = pickedQty > 0 ? pickedQty : (reqQty > 0 ? reqQty : 1);
+                return {
+                  inventoryItemId: it.inventoryItemId || inv?.id || null,
+                  tenHang: inv?.tenHang || "Vật tư",
+                  donVi: inv?.donVi || "cái",
+                  soLuongYC: reqQty > 0 ? reqQty : qty,
+                  soLuong: qty,
+                  donGia: Number(inv?.giaNhap || 0),
+                  code: inv?.code || null,
+                  ghiChu: "",
+                  viTriHang: inv?.viTriHang || "",
+                  viTriCot: inv?.viTriCot || "",
+                  viTriTang: inv?.viTriTang || "",
+                };
+              });
             }
           }
         } catch (_) { }
       }
 
-      if (materials.length === 0) {
+      // 2. Nếu không có từ ticket -> lấy từ Production Orders API
+      if (rawLines.length === 0) {
+        let materials: any[] = [];
+        const res = await fetch(`/api/production/orders/${encodeURIComponent(wo.id)}`);
+        if (res.ok) {
+          const data = await res.json();
+          materials = data.materials || [];
+        }
+
+        // 3. Fallback: thử lấy từ Sales Order API
+        if (materials.length === 0) {
+          const fallbackSoId = initialSoId || wo.id;
+          try {
+            const sRes = await fetch(`/api/plan-finance/sales/${encodeURIComponent(fallbackSoId)}`);
+            if (sRes.ok) {
+              const sData = await sRes.json();
+              if (sData.logisticsItems && sData.logisticsItems.length > 0) {
+                materials = sData.logisticsItems.map((m: any) => ({
+                  inventoryItemId: m.id || null,
+                  tenVatTu: m.tenHang,
+                  donVi: m.donVi || "cái",
+                  soLuong: m.soLuong,
+                  code: m.code,
+                  donGia: 0,
+                  ghiChu: m.ghiChu,
+                }));
+              }
+            }
+          } catch (_) { }
+        }
+
+        if (materials.length > 0) {
+          rawLines = materials.map((mat: any) => ({
+            inventoryItemId: mat.inventoryItemId || mat.id || null,
+            tenHang: mat.tenVatTu || mat.tenHang,
+            donVi: mat.donVi || "cái",
+            soLuongYC: Number(mat.soLuong || 1),
+            soLuong: Number(mat.soLuong || 1),
+            donGia: Number(mat.donGia || 0),
+            code: mat.code || null,
+            ghiChu: mat.ghiChu || "",
+          }));
+        }
+      }
+
+      if (rawLines.length === 0) {
         setLines([emptyLine()]);
         return;
       }
 
-      const rawLines = materials.map((mat: any) => ({
-        tenHang: mat.tenVatTu,
-        soLuong: mat.soLuong,
-        donGia: mat.donGia || 0,
-        code: mat.code,
-        ghiChu: mat.ghiChu,
-      }));
-
-      const newLines: StockLine[] = rawLines.map((raw: any) => {
+      const newLines: StockLine[] = rawLines.map((raw) => {
         const l = emptyLine();
+        if (raw.inventoryItemId) {
+          l.item = {
+            id: raw.inventoryItemId,
+            code: raw.code ?? null,
+            tenHang: raw.tenHang,
+            donVi: raw.donVi ?? "cái",
+            giaNhap: raw.donGia || 0,
+            viTriHang: raw.viTriHang || "",
+            viTriCot: raw.viTriCot || "",
+            viTriTang: raw.viTriTang || "",
+          };
+        }
         l.itemSearch = raw.tenHang;
-        l.soLuongYC = raw.soLuong;
+        l.soLuongYC = raw.soLuongYC;
         l.soLuong = raw.soLuong;
         l.donGia = raw.donGia || 0;
+        l.viTriHang = raw.viTriHang || "";
+        l.viTriCot = raw.viTriCot || "";
+        l.viTriTang = raw.viTriTang || "";
         l.ghiChu = raw.ghiChu || "";
         return l;
       });
@@ -628,21 +713,27 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
           }
         } catch (e) { /* ignore */ }
       }
-      const kvpWh = whList.find((w: any) => w.code === "KVP" || w.name.toLowerCase().includes("vật tư"));
-      let currentWhId: string | undefined = kvpWh?.id || fromWarehouseId;
+      const kvpWh = whList.find((w: any) => w.code === "KVP" || w.name.toLowerCase().includes("vật tư") || w.name.toLowerCase().includes("sản xuất"));
+      const currentWhId: string | undefined = kvpWh?.id || fromWarehouseId;
       if (kvpWh) {
         setFromWarehouseId(kvpWh.id);
       }
 
       if (currentWhId) {
-        rawLines.forEach((raw: any, idx: number) => {
-          if (!raw.tenHang) return;
+        rawLines.forEach((raw, idx) => {
+          const searchKey = raw.code || raw.tenHang;
+          if (!searchKey) return;
           const warehouseParam = `&warehouseId=${currentWhId}`;
-          fetch(`/api/plan-finance/inventory/search?q=${encodeURIComponent(raw.tenHang)}&limit=5${warehouseParam}`)
+          fetch(`/api/plan-finance/inventory/search?q=${encodeURIComponent(searchKey)}&limit=5${warehouseParam}`)
             .then(r => r.json())
             .then((searchData) => {
               if (!Array.isArray(searchData) || !searchData.length) return;
-              const found = searchData.find((d: any) => d.tenHang.toLowerCase() === raw.tenHang.toLowerCase()) ?? searchData[0];
+              const found =
+                searchData.find((d: any) =>
+                  (raw.inventoryItemId && d.id === raw.inventoryItemId) ||
+                  (raw.code && d.code === raw.code) ||
+                  d.tenHang.toLowerCase() === raw.tenHang.toLowerCase()
+                ) ?? searchData[0];
               setLines(prev => prev.map((l, i) => {
                 if (i !== idx) return l;
                 return {
@@ -650,12 +741,14 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
                   item: {
                     id: found.id, code: found.code, tenHang: found.tenHang,
                     donVi: found.donVi, giaNhap: found.giaNhap,
+                    soLuongTon: found.soLuongTon,
+                    viTriHang: found.viTriHang, viTriCot: found.viTriCot, viTriTang: found.viTriTang,
                   },
                   itemSearch: found.tenHang,
                   donGia: found.giaNhap || raw.donGia || 0,
-                  viTriHang: found.viTriHang ?? "",
-                  viTriCot: found.viTriCot ?? "",
-                  viTriTang: found.viTriTang ?? "",
+                  viTriHang: found.viTriHang ?? l.viTriHang,
+                  viTriCot: found.viTriCot ?? l.viTriCot,
+                  viTriTang: found.viTriTang ?? l.viTriTang,
                   soLuongTon: found.soLuongTon ?? 0,
                 };
               }));
@@ -942,8 +1035,8 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
           soChungTu: soChungTu || undefined,
           lyDo: [loaiXuatKho, lyDo, ghiChu ? `Ghi chú: ${ghiChu}` : ""].filter(Boolean).join(" - ") || undefined,
           nguoiThucHien: nguoiThucHien || undefined,
-          salesOrderId: selectedSo?.id || initialSoId || undefined,
-          workOrderId: selectedWo?.id || initialWoId || undefined,
+          salesOrderId: mode === "so" ? (selectedSo?.id || initialSoId || undefined) : undefined,
+          workOrderId: mode === "wo" ? (selectedWo?.id || initialWoId || undefined) : undefined,
           ticketId: currentTicketId || selectedDefect?.logisticsTickets?.[0]?.id || initialTicketId,
           lines: validLines.map(l => ({
             inventoryItemId: l.item!.id,
@@ -1009,6 +1102,15 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
   };
 
   const locked = success;
+  const isSourceLocked =
+    locked ||
+    Boolean(
+      (initialMode && initialMode !== "manual") ||
+      initialSoId ||
+      initialWoId ||
+      initialDefectId ||
+      initialTicketId
+    );
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
@@ -1199,8 +1301,8 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
               { val: "wo" as const, label: "Theo lệnh sản xuất", icon: "bi-gear" },
               { val: "defect" as const, label: "Theo hồ sơ lỗi", icon: "bi-tools" },
             ]).map(m => (
-              <button key={m.val} onClick={() => {
-                if (locked) return;
+              <button key={m.val} type="button" disabled={isSourceLocked} onClick={() => {
+                if (isSourceLocked) return;
                 setMode(m.val);
                 if (m.val === "so") setLoaiXuatKho("Xuất bán hàng");
                 else if (m.val === "wo") setLoaiXuatKho("Xuất sản xuất");
@@ -1208,10 +1310,11 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
               }} style={{
                 display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center",
                 padding: "6px 14px", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600,
-                cursor: locked ? "not-allowed" : "pointer", transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                cursor: isSourceLocked ? "not-allowed" : "pointer", transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
                 background: mode === m.val ? "var(--card)" : "transparent",
                 color: mode === m.val ? "var(--foreground)" : "var(--muted-foreground)",
                 boxShadow: mode === m.val ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
+                opacity: isSourceLocked && mode !== m.val ? 0.5 : 1,
                 whiteSpace: "nowrap"
               }}>
                 <i className={`bi ${m.icon}`} style={{ fontSize: 14, opacity: mode === m.val ? 1 : 0.7 }} />
@@ -1231,8 +1334,8 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
                 <div style={{ position: "relative", width: 280 }}>
                   <Select
                     value={selectedSo?.id ?? ""}
-                    onChange={e => !locked && onSelectSo(e.target.value)}
-                    disabled={locked}
+                    onChange={e => !isSourceLocked && onSelectSo(e.target.value)}
+                    disabled={isSourceLocked}
                     options={[
                       { value: "", label: "Chọn đơn bán hàng" },
                       ...(saleOrders.length === 0
@@ -1269,8 +1372,8 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
               <div style={{ position: "relative", width: 320 }}>
                 <Select
                   value={selectedWo?.id ?? ""}
-                  onChange={e => !locked && onSelectWo(e.target.value)}
-                  disabled={locked}
+                  onChange={e => !isSourceLocked && onSelectWo(e.target.value)}
+                  disabled={isSourceLocked}
                   options={[
                     { value: "", label: "Chọn lệnh sản xuất" },
                     ...(workOrders.length === 0
@@ -1311,8 +1414,8 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
                 <div style={{ position: "relative", width: 260 }}>
                   <Select
                     value={selectedDefect?.id ?? ""}
-                    onChange={e => !locked && onSelectDefect(e.target.value)}
-                    disabled={locked}
+                    onChange={e => !isSourceLocked && onSelectDefect(e.target.value)}
+                    disabled={isSourceLocked}
                     options={[
                       { value: "", label: "Chọn hồ sơ lỗi" },
                       ...(defects.length === 0

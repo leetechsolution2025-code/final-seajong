@@ -5043,7 +5043,7 @@ router.delete('/api/finance/payment-orders/:id', (req, res) => {
 // CHỈ HIỂN THỊ CÁC NỘI DUNG ĐÃ ĐƯỢC GIÁM ĐỐC PHÊ DUYỆT, ĐỢI CHI TIỀN (Lệnh chi đã duyệt & Công nợ chưa thu đủ)
 router.get('/api/finance/cashflow-notices', (req, res) => {
   db.all(
-    "SELECT * FROM payment_orders WHERE status != 'completed' AND status != 'cancelled' AND (approved_by IS NOT NULL AND approved_by != '') AND status != 'submitted_director' AND status != 'pending_director' ORDER BY CASE WHEN ref_type IN ('purchase_order_deposit', 'payable_payment', 'advance_supplier', 'advance_payment', 'advance') THEN 0 ELSE 1 END, created_at DESC, rowid DESC",
+    "SELECT * FROM payment_orders WHERE status != 'completed' AND status != 'cancelled' AND status != 'rejected' AND (approved_by IS NOT NULL AND approved_by != '') AND status != 'submitted_director' AND status != 'pending_director' AND (ref_type IS NULL OR ref_type NOT IN ('procurement', 'purchase_order_deposit')) ORDER BY CASE WHEN ref_type IN ('payable_payment', 'advance_supplier', 'advance_payment', 'advance') THEN 0 ELSE 1 END, created_at DESC, rowid DESC",
     [],
     (poErr, poRows) => {
       const notices = [];

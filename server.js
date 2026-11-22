@@ -8522,7 +8522,7 @@ app.get('/api/sales/orders', async (req, res) => {
       return {
         ...o,
         ghiChu: cleanedNote,
-        nguoiPhuTrachName: o.nguoiPhuTrach || 'Phạm Quang Việt',
+        nguoiPhuTrachName: o.nguoiPhuTrach || 'Phòng Kinh doanh',
         customer: o.customer ? {
           ...o.customer,
           outstandingDebt,
@@ -8559,7 +8559,7 @@ app.post('/api/sales/orders', async (req, res) => {
         daThanhToan: Number(body.daThanhToan) || 0,
         trangThai: body.trangThai || 'pending',
         ghiChu: body.ghiChu || '',
-        nguoiPhuTrach: body.nguoiPhuTrach || 'Phạm Quang Việt',
+        nguoiPhuTrach: body.nguoiPhuTrach || body.createdByName || 'Phòng Kinh doanh',
       },
       include: {
         customer: true,
@@ -9265,7 +9265,7 @@ app.post('/api/plan-finance/quotations', async (req, res) => {
           keToanDuyet: 'pending',
           trangThaiKho: insufficientItems.length > 0 ? 'out_of_stock' : 'in_stock',
           ghiChu: body.ghiChu || '',
-          nguoiPhuTrach: 'Phạm Quang Việt',
+          nguoiPhuTrach: body.nguoiPhuTrach || body.createdByName || 'Phòng Kinh doanh',
           saleOrderItems: {
             create: resolvedItems.map(it => ({
               inventoryItemId: it.inventoryItemId,
@@ -9877,7 +9877,7 @@ app.get('/api/plan-finance/sales/:id', async (req, res) => {
       isProductionOrder: isLsxOrder,
       editedAt: parseOrderEditedAt(order.ghiChu),
       ghiChu: cleanGhiChu(order.ghiChu),
-      nguoiPhuTrachName: order.nguoiPhuTrach || 'Phạm Quang Việt',
+      nguoiPhuTrachName: order.nguoiPhuTrach || 'Phòng Kinh doanh',
       items: orderItems,
       logisticsItems,
       productionItemIds,
@@ -10832,19 +10832,52 @@ app.get('/api/logistics/inventory/:id/holds', async (req, res) => {
       coveredStocks.set(stock.id, holdInStock);
     }
 
-    // 2. Nếu stock có soLuongGiu > holdInStock, tìm từ saleOrderItems
+    // 2. Nếu stock có soLuongGiu > holdInStock, tìm chính xác đơn hàng tương ứng từ saleOrderItems
     for (const stock of item.stocks || []) {
       const stockGiu = stock.soLuongGiu || 0;
       let currentHold = coveredStocks.get(stock.id) || 0;
       let remainingHold = stockGiu - currentHold;
 
       if (remainingHold > 0) {
-        // Tìm saleOrderItems của item này
-        for (const soi of item.saleOrderItems || []) {
+        const stockUpdatedMs = stock.updatedAt ? new Date(stock.updatedAt).getTime() : 0;
+
+        // Sắp xếp ứng viên theo độ khớp chính xác nhất với thời điểm giữ chỗ stock.updatedAt:
+        // (1) Khớp trực tiếp theo timestamp (chênh <= 15 giây so với lúc tạo đơn)
+        // (2) Đơn đang mở (chưa completed/exported) được tạo trước/bằng thời điểm giữ chỗ
+        // (3) Không gán nhầm cho đơn hàng tạo SAU thời điểm giữ chỗ
+        const candidates = (item.saleOrderItems || [])
+          .filter((soi) => {
+            const order = soi.saleOrder;
+            if (!order) return false;
+            if (order.trangThai === 'cancelled' || coveredOrders.has(order.id)) return false;
+            if (stockUpdatedMs > 0 && order.createdAt) {
+              const ordMs = new Date(order.createdAt).getTime();
+              if (ordMs > stockUpdatedMs + 60000) return false;
+            }
+            return true;
+          })
+          .sort((a, b) => {
+            const aMs = a.saleOrder?.createdAt ? new Date(a.saleOrder.createdAt).getTime() : 0;
+            const bMs = b.saleOrder?.createdAt ? new Date(b.saleOrder.createdAt).getTime() : 0;
+            const aExact = stockUpdatedMs > 0 && Math.abs(aMs - stockUpdatedMs) <= 15000 ? 1 : 0;
+            const bExact = stockUpdatedMs > 0 && Math.abs(bMs - stockUpdatedMs) <= 15000 ? 1 : 0;
+            if (aExact !== bExact) return bExact - aExact;
+
+            const aActive = a.saleOrder?.trangThai !== 'completed' && a.saleOrder?.trangThaiKho !== 'exported' ? 1 : 0;
+            const bActive = b.saleOrder?.trangThai !== 'completed' && b.saleOrder?.trangThaiKho !== 'exported' ? 1 : 0;
+            if (aActive !== bActive) return bActive - aActive;
+
+            const aQtyExact = Number(a.soLuong) === remainingHold ? 1 : 0;
+            const bQtyExact = Number(b.soLuong) === remainingHold ? 1 : 0;
+            if (aQtyExact !== bQtyExact) return bQtyExact - aQtyExact;
+
+            return bMs - aMs;
+          });
+
+        for (const soi of candidates) {
           if (remainingHold <= 0) break;
           const order = soi.saleOrder;
-          if (!order) continue;
-          if (order.trangThai === 'cancelled' || coveredOrders.has(order.id)) continue;
+          if (!order || coveredOrders.has(order.id)) continue;
 
           const qtyToAssign = Math.min(remainingHold, soi.soLuong || remainingHold);
           coveredOrders.add(order.id);
@@ -12847,14 +12880,80 @@ async function filterTicketsForLogisticsUser(tickets, userCtx) {
   });
 }
 
+function computeLogisticsItemStockForTicket(item, ticket) {
+  const stocks = item.inventoryItem?.stocks || [];
+  if (stocks.length === 0) {
+    const qty = Math.max(0, Number(item.inventoryItem?.soLuong) || 0);
+    return { totalStock: qty, totalHeld: 0, freeStock: qty, heldForThisItem: 0, thucTon: qty };
+  }
+  const totalStock = stocks.reduce((acc, s) => acc + Math.max(0, Number(s.soLuong) || 0), 0);
+  const totalHeld = stocks.reduce((acc, s) => acc + Math.max(0, Number(s.soLuongGiu) || 0), 0);
+  const freeStock = Math.max(0, totalStock - totalHeld);
+
+  // 1. Ưu tiên InventoryReservation định danh đúng ticketItemId này (không lấy hàng giữ của đơn khác)
+  const itemReservations = Array.isArray(item.reservations) ? item.reservations : [];
+  if (itemReservations.length > 0) {
+    const heldForThisItem = itemReservations.reduce((acc, r) => acc + Math.max(0, Number(r.reservedQty) || 0), 0);
+    return {
+      totalStock,
+      totalHeld,
+      freeStock,
+      heldForThisItem,
+      thucTon: Math.min(totalStock, freeStock + heldForThisItem),
+    };
+  }
+
+  // 2. Loại trừ toàn bộ reservation đã định danh cho các ticketItem khác
+  const allStockReservations = stocks.flatMap((s) => (Array.isArray(s.reservations) ? s.reservations : []));
+  const explicitlyReservedByOthers = allStockReservations
+    .filter((r) => r.ticketItemId && r.ticketItemId !== item.id)
+    .reduce((acc, r) => acc + Math.max(0, Number(r.reservedQty) || 0), 0);
+
+  // 3. Với soLuongGiu chưa gắn reservation: chỉ tính là giữ cho đơn này nếu kho đó có tồn thực > 0
+  //    và được giữ tại/sau thời điểm tạo đơn (tránh lấy nhầm hàng đã giữ cho đơn cũ/đơn khác)
+  const orderCreatedAtMs = ticket?.saleOrder?.createdAt
+    ? new Date(ticket.saleOrder.createdAt).getTime()
+    : (ticket?.createdAt ? new Date(ticket.createdAt).getTime() : 0);
+
+  let eligibleUnlinkedHold = 0;
+  for (const s of stocks) {
+    const sQty = Math.max(0, Number(s.soLuong) || 0);
+    const sHeld = Math.max(0, Number(s.soLuongGiu) || 0);
+    if (sQty <= 0 || sHeld <= 0) continue;
+    const sExplicitOthers = (Array.isArray(s.reservations) ? s.reservations : [])
+      .filter((r) => r.ticketItemId && r.ticketItemId !== item.id)
+      .reduce((acc, r) => acc + Math.max(0, Number(r.reservedQty) || 0), 0);
+    const unlinkedHold = Math.max(0, sHeld - sExplicitOthers);
+    if (unlinkedHold <= 0) continue;
+
+    const sUpdatedMs = s.updatedAt ? new Date(s.updatedAt).getTime() : 0;
+    if (!orderCreatedAtMs || sUpdatedMs >= orderCreatedAtMs - 60000) {
+      eligibleUnlinkedHold += Math.min(sQty, unlinkedHold);
+    }
+  }
+
+  const heldForThisItem = Math.min(
+    Math.max(0, totalHeld - explicitlyReservedByOthers),
+    eligibleUnlinkedHold,
+    Math.max(0, Number(item.requestedQty) || 0)
+  );
+  return {
+    totalStock,
+    totalHeld,
+    freeStock,
+    heldForThisItem,
+    thucTon: Math.min(totalStock, freeStock + heldForThisItem),
+  };
+}
+
 // ── GET /api/logistics/material-picking ──────────────────────────────────────
 app.get('/api/logistics/material-picking', async (req, res) => {
   try {
     const userCtx = await resolveLogisticsUserContext(req);
     const step = String(req.query.step || '1').trim();
     const statusFilter = step === '2'
-      ? { in: ['COMPLETED'] }
-      : { in: ['PENDING', 'PICKING', 'PACKED'] };
+      ? { in: ['PACKED', 'COMPLETED'] }
+      : { in: ['PENDING', 'PICKING'] };
 
     const rawTickets = await prisma.logisticsTicket.findMany({
       where: {
@@ -12868,6 +12967,7 @@ app.get('/api/logistics/material-picking', async (req, res) => {
           select: {
             code: true,
             ngayGiao: true,
+            createdAt: true,
             diaChiGiaoHang: true,
             ghiChu: true,
             customer: { select: { name: true, address: true } }
@@ -12876,8 +12976,15 @@ app.get('/api/logistics/material-picking', async (req, res) => {
         defectRecord: { select: { code: true } },
         items: {
           include: {
+            reservations: { select: { id: true, ticketItemId: true, reservedQty: true } },
             inventoryItem: {
-              include: { stocks: true }
+              include: {
+                stocks: {
+                  include: {
+                    reservations: { select: { id: true, ticketItemId: true, reservedQty: true } }
+                  }
+                }
+              }
             }
           }
         },
@@ -12898,16 +13005,13 @@ app.get('/api/logistics/material-picking', async (req, res) => {
         const key = `${ngayGiaoStr}_${rawKey}`;
 
         let viTriStr = null;
-        let thucTon = 0;
         if (item.inventoryItem?.stocks && item.inventoryItem.stocks.length > 0) {
           const stock = item.inventoryItem.stocks.find(s => s.viTriHang || s.viTriCot || s.viTriTang);
           if (stock) {
             viTriStr = [stock.viTriTang && `Tầng ${stock.viTriTang}`, stock.viTriCot && `Cột ${stock.viTriCot}`, stock.viTriHang && `Hàng ${stock.viTriHang}`].filter(Boolean).join(" - ");
           }
-          thucTon = item.inventoryItem.stocks.reduce((acc, s) => acc + Math.max(0, (s.soLuong || 0) - (s.soLuongGiu || 0)), 0);
-        } else if (item.inventoryItem?.soLuong) {
-          thucTon = item.inventoryItem.soLuong;
         }
+        const stockInfo = computeLogisticsItemStockForTicket(item, ticket);
 
         if (!batchMap.has(key)) {
           batchMap.set(key, {
@@ -12922,7 +13026,8 @@ app.get('/api/logistics/material-picking', async (req, res) => {
             viTriKho: viTriStr,
             tongSoLuong: 0,
             tongDaNhat: 0,
-            thucTon: userCtx.isManager ? thucTon : undefined,
+            _heldAcc: 0,
+            thucTon: userCtx.isManager ? stockInfo.thucTon : undefined,
             ngayGiao: ticket.saleOrder?.ngayGiao || (ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString('vi-VN') : undefined),
             orders: []
           });
@@ -12931,6 +13036,10 @@ app.get('/api/logistics/material-picking', async (req, res) => {
         const batchItem = batchMap.get(key);
         batchItem.tongSoLuong += (item.requestedQty || 0);
         batchItem.tongDaNhat += (item.pickedQty || 0);
+        batchItem._heldAcc = (batchItem._heldAcc || 0) + stockInfo.heldForThisItem;
+        if (userCtx.isManager) {
+          batchItem.thucTon = Math.min(stockInfo.totalStock, stockInfo.freeStock + Math.min(stockInfo.totalHeld, batchItem._heldAcc));
+        }
 
         let custName = ticket.saleOrder?.customer?.name;
         let custAddress = ticket.saleOrder?.diaChiGiaoHang || ticket.saleOrder?.customer?.address || null;
@@ -12951,7 +13060,7 @@ app.get('/api/logistics/material-picking', async (req, res) => {
           customerAddress: custAddress || undefined,
           soLuongTrongDon: item.requestedQty || 0,
           daNhatTrongDon: item.pickedQty || 0,
-          thucTon: userCtx.isManager ? thucTon : undefined,
+          thucTon: stockInfo.thucTon,
           ngayGiao: ticket.saleOrder?.ngayGiao || (ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString('vi-VN') : undefined),
           createdAt: ticket.createdAt,
           assignedTo: ticket.assignedTo?.fullName,
@@ -13021,8 +13130,7 @@ app.post('/api/logistics/material-picking', async (req, res) => {
         await prisma.logisticsTicket.update({
           where: { id: tId },
           data: {
-            status: allFullyPicked ? "COMPLETED" : "PICKING",
-            ...(allFullyPicked ? { completedAt: new Date() } : {})
+            status: allFullyPicked ? "PACKED" : "PICKING",
           }
         });
       }
@@ -13032,6 +13140,28 @@ app.post('/api/logistics/material-picking', async (req, res) => {
   } catch (error) {
     console.error('Error POST /api/logistics/material-picking:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ── GET /api/logistics/tickets/:id ──────────────────────────────────────────
+app.get('/api/logistics/tickets/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const ticket = await prisma.logisticsTicket.findFirst({
+      where: { OR: [{ id }, { code: id }] },
+      include: {
+        items: {
+          include: { inventoryItem: true }
+        },
+        saleOrder: {
+          include: { customer: true }
+        }
+      }
+    });
+    if (!ticket) return res.status(404).json({ error: 'Không tìm thấy lệnh kho' });
+    res.json(ticket);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -13096,8 +13226,8 @@ app.get('/api/logistics/batch-packing', async (req, res) => {
     const userCtx = await resolveLogisticsUserContext(req);
     const step = String(req.query.step || '1').trim();
     const statusFilter = step === '2'
-      ? { in: ['COMPLETED'] }
-      : { in: ['PENDING', 'PICKING', 'PACKED'] };
+      ? { in: ['PACKED', 'COMPLETED'] }
+      : { in: ['PENDING', 'PICKING'] };
 
     const rawTickets = await prisma.logisticsTicket.findMany({
       where: {
@@ -13111,6 +13241,7 @@ app.get('/api/logistics/batch-packing', async (req, res) => {
           select: {
             code: true,
             ngayGiao: true,
+            createdAt: true,
             diaChiGiaoHang: true,
             ghiChu: true,
             customer: { select: { name: true, address: true } }
@@ -13118,11 +13249,13 @@ app.get('/api/logistics/batch-packing', async (req, res) => {
         },
         items: {
           include: {
+            reservations: { select: { id: true, ticketItemId: true, reservedQty: true } },
             inventoryItem: {
               include: {
                 stocks: {
                   include: {
-                    warehouse: { select: { code: true } }
+                    warehouse: { select: { code: true } },
+                    reservations: { select: { id: true, ticketItemId: true, reservedQty: true } }
                   }
                 }
               }
@@ -13147,16 +13280,13 @@ app.get('/api/logistics/batch-packing', async (req, res) => {
         const key = `${ngayGiaoStr}_${rawKey}`;
 
         let viTriStr = null;
-        let thucTon = 0;
         if (item.inventoryItem?.stocks && item.inventoryItem.stocks.length > 0) {
           const stock = item.inventoryItem.stocks.find(s => s.viTriHang || s.viTriCot || s.viTriTang);
           if (stock) {
             viTriStr = [stock.viTriTang && `Tầng ${stock.viTriTang}`, stock.viTriCot && `Cột ${stock.viTriCot}`, stock.viTriHang && `Hàng ${stock.viTriHang}`].filter(Boolean).join(" - ");
           }
-          thucTon = item.inventoryItem.stocks.reduce((acc, s) => acc + Math.max(0, (s.soLuong || 0) - (s.soLuongGiu || 0)), 0);
-        } else if (item.inventoryItem?.soLuong) {
-          thucTon = item.inventoryItem.soLuong;
         }
+        const stockInfo = computeLogisticsItemStockForTicket(item, ticket);
 
         if (!batchMap.has(key)) {
           batchMap.set(key, {
@@ -13171,7 +13301,8 @@ app.get('/api/logistics/batch-packing', async (req, res) => {
             viTriKho: viTriStr,
             tongSoLuong: 0,
             tongDaNhat: 0,
-            thucTon: userCtx.isManager ? thucTon : undefined,
+            _heldAcc: 0,
+            thucTon: userCtx.isManager ? stockInfo.thucTon : undefined,
             ngayGiao: ticket.saleOrder?.ngayGiao || (ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString('vi-VN') : undefined),
             orders: []
           });
@@ -13180,6 +13311,10 @@ app.get('/api/logistics/batch-packing', async (req, res) => {
         const batchItem = batchMap.get(key);
         batchItem.tongSoLuong += (item.requestedQty || 0);
         batchItem.tongDaNhat += (item.pickedQty || 0);
+        batchItem._heldAcc = (batchItem._heldAcc || 0) + stockInfo.heldForThisItem;
+        if (userCtx.isManager) {
+          batchItem.thucTon = Math.min(stockInfo.totalStock, stockInfo.freeStock + Math.min(stockInfo.totalHeld, batchItem._heldAcc));
+        }
 
         let custName = ticket.saleOrder?.customer?.name;
         let custAddress = ticket.saleOrder?.diaChiGiaoHang || ticket.saleOrder?.customer?.address || null;
@@ -13200,7 +13335,7 @@ app.get('/api/logistics/batch-packing', async (req, res) => {
           customerAddress: custAddress || undefined,
           soLuongTrongDon: item.requestedQty || 0,
           daNhatTrongDon: item.pickedQty || 0,
-          thucTon: userCtx.isManager ? thucTon : undefined,
+          thucTon: stockInfo.thucTon,
           ngayGiao: ticket.saleOrder?.ngayGiao || (ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString('vi-VN') : undefined),
           createdAt: ticket.createdAt,
           assignedTo: ticket.assignedTo?.fullName,
@@ -13270,8 +13405,7 @@ app.post('/api/logistics/batch-packing', async (req, res) => {
         await prisma.logisticsTicket.update({
           where: { id: tId },
           data: {
-            status: allFullyPicked ? "COMPLETED" : "PICKING",
-            ...(allFullyPicked ? { completedAt: new Date() } : {})
+            status: allFullyPicked ? "PACKED" : "PICKING"
           }
         });
       }
@@ -14349,8 +14483,6 @@ app.get('/api/production/dashboard/recent-orders', async (req, res) => {
     });
 
     let result = await Promise.all(orders.map(async (order) => {
-      const isCompleted = order.ngayHoanThanhSanXuat !== null;
-      const isRunning = order.trangThai === 'in_production';
       let materialTicket = (order.logisticsTickets || []).find(t => t.type === 'MATERIAL_PICKING' || t.code?.startsWith('MP-') || t.code?.startsWith('CP-')) || null;
       let materialExportCode = materialTicket ? materialTicket.code : null;
       if (!materialExportCode && order.id) {
@@ -14369,8 +14501,9 @@ app.get('/api/production/dashboard/recent-orders', async (req, res) => {
           materialTicket = foundTicket;
         }
       }
-      if (!materialExportCode && order.code) {
-        const sm = await prisma.stockMovement.findFirst({
+      let sm = null;
+      if (order.code) {
+        sm = await prisma.stockMovement.findFirst({
           where: {
             type: 'xuat',
             OR: [
@@ -14380,8 +14513,16 @@ app.get('/api/production/dashboard/recent-orders', async (req, res) => {
           },
           select: { soChungTu: true }
         });
-        if (sm?.soChungTu) materialExportCode = sm.soChungTu;
+        if (!materialExportCode && sm?.soChungTu) materialExportCode = sm.soChungTu;
       }
+
+      const isMaterialIssued = materialTicket
+        ? (materialTicket.status === 'COMPLETED' || materialTicket.status === 'da_cap_phat' || Boolean(sm))
+        : true;
+
+      const isCompleted = order.ngayHoanThanhSanXuat !== null && order.trangThai === 'completed';
+      const isQcChecking = order.trangThai === 'qc_checking' || order.trangThai === 'pending_qc';
+      const orderStatus = isCompleted ? 'completed' : isQcChecking ? 'qc_checking' : (!isMaterialIssued ? 'not_issued' : 'running');
 
       let custName = order.customer?.name || null;
       let custAddress = order.diaChiGiaoHang || order.customer?.address || null;
@@ -14458,8 +14599,9 @@ app.get('/api/production/dashboard/recent-orders', async (req, res) => {
         ngayDat: order.ngayDat,
         ngayHoanThanh: order.ngayHoanThanhSanXuat || deadline || null,
         progress: isCompleted ? 100 : 0,
-        status: isCompleted ? 'completed' : (isRunning ? 'running' : 'pending'),
+        status: orderStatus,
         trangThai: order.trangThai,
+        isMaterialIssued,
         materialTicketCode: materialExportCode,
         materialTicketStatus: materialTicket ? materialTicket.status : null,
         customerName: custName,
@@ -14583,14 +14725,42 @@ app.get('/api/production/orders/:id', async (req, res) => {
         : orderItem.soLuong;
 
       let parsedGhiChu = {};
-      try {
-        parsedGhiChu = typeof orderItem.ghiChu === 'string' ? JSON.parse(orderItem.ghiChu) : (orderItem.ghiChu || {});
-      } catch (_) { }
+      let rawGhiChuText = null;
+      if (typeof orderItem.ghiChu === 'string' && orderItem.ghiChu.trim()) {
+        try {
+          const parsed = JSON.parse(orderItem.ghiChu);
+          if (parsed && typeof parsed === 'object') {
+            parsedGhiChu = parsed;
+          } else {
+            rawGhiChuText = orderItem.ghiChu.trim();
+          }
+        } catch (_) {
+          rawGhiChuText = orderItem.ghiChu.trim();
+        }
+      } else if (orderItem.ghiChu && typeof orderItem.ghiChu === 'object') {
+        parsedGhiChu = orderItem.ghiChu;
+      }
 
+      const lookupBomId = orderItem.dinhMucId || parsedGhiChu.dinhMucId || null;
+      const lookupBomCode = parsedGhiChu.bomCode || parsedGhiChu.dinhMucCode || null;
       let bom = null;
-      if (orderItem.dinhMucId) {
+      if (lookupBomId) {
         bom = await prisma.dinhMuc.findUnique({
-          where: { id: orderItem.dinhMucId },
+          where: { id: lookupBomId },
+          include: {
+            vatTu: {
+              include: {
+                inventoryItem: true,
+                category: true,
+              },
+            },
+          },
+        });
+      }
+
+      if (!bom && lookupBomCode) {
+        bom = await prisma.dinhMuc.findFirst({
+          where: { code: lookupBomCode },
           include: {
             vatTu: {
               include: {
@@ -14604,7 +14774,12 @@ app.get('/api/production/orders/:id', async (req, res) => {
 
       if (!bom) {
         const invItem = await prisma.inventoryItem.findFirst({
-          where: { tenHang: orderItem.tenHang },
+          where: {
+            OR: [
+              ...(orderItem.inventoryItemId ? [{ id: orderItem.inventoryItemId }] : []),
+              { tenHang: orderItem.tenHang },
+            ],
+          },
           include: {
             dinhMucs: {
               include: {
@@ -14653,17 +14828,28 @@ app.get('/api/production/orders/:id', async (req, res) => {
         }
       }
 
+      const resolvedBomCode = bom?.code || lookupBomCode || null;
+      const resolvedBomTen = bom?.tenDinhMuc || parsedGhiChu.dinhMucTen || null;
+      const resolvedGhiChu =
+        bom?.ghiChu ||
+        parsedGhiChu.dinhMucGhiChu ||
+        parsedGhiChu.bomGhiChu ||
+        parsedGhiChu.note ||
+        parsedGhiChu.ghiChu ||
+        rawGhiChuText ||
+        null;
+
       items.push({
         id: orderItem.id,
         tenHang: orderItem.tenHang,
         soLuong: targetQty,
         soLuongDat: orderItem.soLuong,
-        donVi: orderItem.donViTinh || orderItem.inventoryItem?.donVi || 'cái',
+        donVi: orderItem.donViTinh || orderItem.inventoryItem?.donVi || 'Bộ',
         donGia: orderItem.donGia,
-        bomFound: !!bom,
-        bomCode: bom ? bom.code : null,
-        bomTen: bom ? bom.tenDinhMuc : null,
-        dinhMucGhiChu: bom?.ghiChu || parsedGhiChu.dinhMucGhiChu || parsedGhiChu.bomGhiChu || parsedGhiChu.note || null,
+        bomFound: Boolean(bom || resolvedBomCode),
+        bomCode: resolvedBomCode,
+        bomTen: resolvedBomTen,
+        dinhMucGhiChu: resolvedGhiChu,
         materials: itemMaterials,
       });
     }
@@ -14681,15 +14867,15 @@ app.get('/api/production/orders/:id', async (req, res) => {
     });
 
     const isMaterialIssued = materialTicket
-      ? (materialTicket.status === 'COMPLETED' || materialTicket.status === 'PICKED' || materialTicket.status === 'PACKED' || materialTicket.status === 'da_cap_phat')
+      ? (materialTicket.status === 'COMPLETED' || materialTicket.status === 'da_cap_phat')
       : (materialMap.size === 0);
 
     const isCompleted =
-      order.ngayHoanThanhSanXuat !== null ||
       order.trangThai === 'approved' ||
       order.trangThai === 'shipped' ||
       order.trangThai === 'completed';
-    const isRunning = order.trangThai === 'in_production';
+    const isQcChecking = order.trangThai === 'qc_checking' || order.trangThai === 'pending_qc';
+    const prodStatus = isCompleted ? 'completed' : isQcChecking ? 'qc_checking' : (!isMaterialIssued ? 'not_issued' : 'running');
 
     const orderCode = order.code
       ? order.code.replace('DBH', 'LSX').replace('DHBL', 'LSX').replace('DH', 'LSX')
@@ -14699,7 +14885,8 @@ app.get('/api/production/orders/:id', async (req, res) => {
       order: {
         id: orderCode,
         saleOrderCode: order.code,
-        trangThai: isCompleted ? 'completed' : isRunning ? 'running' : 'pending',
+        trangThai: prodStatus,
+        rawTrangThai: order.trangThai,
         ngayDat: order.ngayDat,
         ngayHoanThanh: order.ngayHoanThanhSanXuat || order.ngayGiao,
         ngayYeuCauQC: order.ngayYeuCauQC || order.ngayGiao,
@@ -14759,18 +14946,21 @@ app.patch('/api/production/orders/:id', async (req, res) => {
 
     let newTrangThai = order.trangThai;
     if (trangThai === 'running') newTrangThai = 'in_production';
-    else if (trangThai === 'completed') newTrangThai = 'active'; // Giữ Đang thực hiện cho tới khi Nhập kho xong -> Hoàn thành
+    else if (trangThai === 'qc_checking' || trangThai === 'completed') newTrangThai = 'qc_checking';
+
+    let createdQcCode = null;
+    let createdProductNameDesc = '';
 
     await prisma.$transaction(async (tx) => {
       await tx.saleOrder.update({
         where: { id: order.id },
         data: {
           trangThai: newTrangThai,
-          ...(trangThai === 'completed' ? { ngayHoanThanhSanXuat: new Date() } : {}),
+          ...(trangThai === 'qc_checking' || trangThai === 'completed' ? { ngayHoanThanhSanXuat: new Date() } : {}),
         },
       });
 
-      if (trangThai === 'completed') {
+      if (trangThai === 'qc_checking' || trangThai === 'completed') {
         const taskTitle = `Lệnh sản xuất cho đơn hàng ${order.code || order.id}`;
         await tx.task.updateMany({
           where: { title: taskTitle, status: { not: 'done' } },
@@ -14802,8 +14992,31 @@ app.patch('/api/production/orders/:id', async (req, res) => {
             })
           }
         });
+
+        createdQcCode = qcCode;
+        createdProductNameDesc = productNameDesc;
       }
     });
+
+    // Gửi thông báo liên phòng ban sang bộ phận QC SAU KHI transaction SQLite đã commit để tránh deadlock
+    if (createdQcCode) {
+      try {
+        await sendCrossDeptNotification({
+          title: `📋 Yêu cầu QC kiểm tra thành phẩm: ${order.code || order.id}`,
+          content: `Xưởng sản xuất đã hoàn thành sản phẩm theo lệnh ${order.code || order.id} (${createdProductNameDesc}). Kính mời bộ phận QA/QC kiểm tra chất lượng theo biên bản ${createdQcCode}.`,
+          type: 'info',
+          priority: 'high',
+          sourceDept: 'production',
+          targetDept: 'qc',
+          senderName: 'Xưởng sản xuất',
+          link: '/qc',
+          entityType: 'QUALITY_INSPECTION',
+          entityId: createdQcCode,
+        });
+      } catch (notifErr) {
+        console.warn('[PATCH /api/production/orders/:id] Lỗi gửi thông báo QC:', notifErr?.message || notifErr);
+      }
+    }
 
     res.json({ success: true, trangThai: newTrangThai });
   } catch (err) {
@@ -15905,10 +16118,8 @@ app.patch('/api/approval-documents/:id/status', async (req, res) => {
     }
 
     if (status === 'approved' && String(updated.entityType || '').toLowerCase() === 'purchase_order') {
+      // Khi phê duyệt đơn mua hàng chỉ cập nhật vào công nợ NCC, KHÔNG tự động tạo lệnh chi tiền
       await recordPurchaseOrderDebtOnApprove(updated);
-      if (approveDeposit === true) {
-        await createDepositPaymentOrderOnApprove(updated, approverName, note);
-      }
     }
 
     if (status === 'approved' && (String(updated.entityType || '').toUpperCase() === 'PRODUCTION_REQUEST' || String(updated.entityCode || '').startsWith('LSX-'))) {
@@ -18530,20 +18741,48 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
 
     const oldStatus = defect.status;
 
-    await prisma.$transaction(async (tx) => {
-      // ── XÁC ĐỊNH HỒ SƠ CÓ CẦN QUA BỘ PHẬN ĐẢM BẢO CHẤT LƯỢNG (QA / QC) ──
-      const shouldNotifyQc =
-        requireQc === true ||
-        nextStatus === 'WAITING_QC' ||
-        (action && (
-          action.startsWith('QUYẾT ĐỊNH:') ||
-          action.includes('CHUYỂN QC') ||
-          action.includes('QC') ||
-          action === 'HOÀN THÀNH & CHUYỂN QC' ||
-          (action === 'HOÀN THÀNH' && nextStatus !== 'COMPLETED')
-        ));
+    let createdQcCode = null;
+    let shouldNotifyQcFlag = false;
+    let sentToWarehouseFlag = false;
+    const resolutionLabel = action ? action.replace('QUYẾT ĐỊNH: ', '').replace(' & CHUYỂN QC', '') : (defect.repairPlan || 'Xử lý kỹ thuật');
 
-      const finalStatus = shouldNotifyQc ? 'WAITING_QC' : (nextStatus || oldStatus);
+    await prisma.$transaction(async (tx) => {
+      // ── XÁC ĐỊNH PHƯƠNG ÁN & PHÂN LUỒNG CHUẨN ──
+      const baseAction = String(action || '').replace(' & CHUYỂN QC', '').trim();
+      const isRepairWithMaterial = baseAction === 'QUYẾT ĐỊNH: THAY LINH KIỆN';
+      const isDisassemble = baseAction === 'QUYẾT ĐỊNH: PHÂN RÃ THU HỒI VẬT TƯ LINH KIỆN';
+      const isCancelReplace = baseAction === 'QUYẾT ĐỊNH: HUỶ BỎ THAY THẾ BẰNG HÀNG HOÁ MỚI';
+      const isReturnToStock = baseAction === 'QUYẾT ĐỊNH: NHẬP LẠI KHO';
+      const isOnSiteRepair = baseAction === 'QUYẾT ĐỊNH: SỬA CHỮA TẠI CHỖ';
+
+      // Chỉ chuyển QC khi:
+      // - Nhập lại kho + có chọn chuyển qua QC (requireQc === true)
+      // - Sửa chữa tại chỗ + có chọn chuyển qua QC (requireQc === true)
+      // - Không chuyển QC cho Phân rã lấy vật tư, Huỷ bỏ, hoặc Thay linh kiện (đang chờ vật tư)
+      const shouldNotifyQc =
+        !isRepairWithMaterial &&
+        !isDisassemble &&
+        !isCancelReplace &&
+        (
+          requireQc === true ||
+          (requireQc !== false && (
+            nextStatus === 'WAITING_QC' ||
+            (action && (
+              action.includes('CHUYỂN QC') ||
+              action === 'HOÀN THÀNH & CHUYỂN QC'
+            ))
+          ))
+        );
+      shouldNotifyQcFlag = shouldNotifyQc;
+
+      const isDecisionConfirm = Boolean(action && action.startsWith('QUYẾT ĐỊNH:'));
+      // Thay linh kiện (sửa chữa cần vật tư) -> Chờ vật tư (WAITING_INVENTORY)
+      // Các phương án quyết định khác (Nhập lại kho có/không QC, Phân rã lấy vật tư, Huỷ bỏ, Sửa chữa tại chỗ) -> Đã xử lý (COMPLETED)
+      const finalStatus = isRepairWithMaterial
+        ? 'WAITING_INVENTORY'
+        : isDecisionConfirm
+        ? 'COMPLETED'
+        : (shouldNotifyQc ? 'WAITING_QC' : (nextStatus || oldStatus));
 
       await tx.defectRecord.update({
         where: { id },
@@ -18558,9 +18797,13 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
         data: {
           defectId: id,
           action: shouldNotifyQc
-            ? 'HOÀN THÀNH (CHUYỂN QC KIỂM ĐỊNH CHẤT LƯỢNG)'
-            : (action || 'CẬP NHẬT'),
-          description: note || (shouldNotifyQc ? 'Kỹ thuật viên hoàn tất xử lý và chuyển hồ sơ sang bộ phận QA/QC kiểm định chất lượng (OQC).' : 'Cập nhật tiến độ xử lý lỗi.'),
+            ? `${baseAction || 'HOÀN THÀNH'} (CHUYỂN QC KIỂM ĐỊNH)`
+            : (baseAction || 'CẬP NHẬT'),
+          description: note || (shouldNotifyQc
+            ? 'Kỹ thuật viên hoàn tất xử lý và chuyển hồ sơ sang bộ phận QA/QC kiểm định chất lượng (OQC).'
+            : isRepairWithMaterial
+            ? 'Đã tạo lệnh sản xuất sửa chữa & yêu cầu cấp phát vật tư, trạng thái Chờ vật tư.'
+            : 'Đã xử lý và cập nhật trạng thái hoàn tất.'),
           oldStatus,
           newStatus: finalStatus,
           performedBy: performedBy || 'Hệ thống'
@@ -18576,7 +18819,70 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
       });
       const defaultAssignee = storekeeperUser?.userId || 'system';
 
-      if (action === 'QUYẾT ĐỊNH: THAY LINH KIỆN') {
+      if (isRepairWithMaterial) {
+        // Sửa chữa cần thay linh kiện -> Tạo Lệnh sản xuất + Phiếu yêu cầu vật tư cho Kho vận, trạng thái Chờ vật tư
+        const bomList = Array.isArray(bomUpdates) ? bomUpdates : [];
+        const validBomItems = bomList.filter((it) => Number(it.quantity) > 0);
+        const bomSummaryText = validBomItems
+          .map((it) => `- ${it.name || it.code || 'Vật tư'}: ${it.quantity} ${it.unit || 'cái'}`)
+          .join('\n');
+
+        // 1. Tạo Lệnh sản xuất sửa chữa cho bộ phận Sản xuất
+        await tx.task.create({
+          data: {
+            title: `Lệnh sản xuất sửa chữa hàng lỗi (${defect.code})`,
+            description: `Sửa chữa sản phẩm ${defect.productName || ''} (SL: ${defect.quantity || 1}) cho hồ sơ ${defect.code}.\nVật tư cần cấp phát:\n${bomSummaryText || '(Theo định mức BOM)'}\nGhi chú: ${note || ''}`,
+            status: 'pending',
+            priority: 'high',
+            creatorId: 'system',
+            assigneeId: 'production-team',
+            deptCode: 'production',
+            actualResult: JSON.stringify(validBomItems),
+          }
+        });
+
+        // 2. Tạo phiếu yêu cầu vật tư (WARRANTY_MATERIAL) cho bộ phận Kho vận để gom & xuất vật tư
+        const resolvedTicketItems = [];
+        for (const it of validBomItems) {
+          let invId = it.inventoryItemId || null;
+          if (!invId && (it.code || it.name)) {
+            const foundInv = await tx.inventoryItem.findFirst({
+              where: {
+                OR: [
+                  ...(it.code ? [{ code: String(it.code) }] : []),
+                  ...(it.name ? [{ tenHang: String(it.name) }] : []),
+                ]
+              },
+              select: { id: true }
+            });
+            invId = foundInv?.id || null;
+          }
+          if (invId) {
+            resolvedTicketItems.push({
+              inventoryItemId: invId,
+              requestedQty: Number(it.quantity) || 1,
+              pickedQty: 0,
+            });
+          }
+        }
+
+        if (resolvedTicketItems.length > 0) {
+          const nowDate = new Date();
+          const dStr = `${nowDate.getFullYear()}${String(nowDate.getMonth() + 1).padStart(2, '0')}${String(nowDate.getDate()).padStart(2, '0')}`;
+          const mpCode = `MP-${dStr}-ERR-${Math.floor(100 + Math.random() * 900)}`;
+          await tx.logisticsTicket.create({
+            data: {
+              code: mpCode,
+              type: 'WARRANTY_MATERIAL',
+              status: 'PENDING',
+              defectRecordId: id,
+              items: {
+                create: resolvedTicketItems,
+              },
+            },
+          });
+        }
+
         await tx.approvalRequest.create({
           data: {
             entityType: 'DEFECT_MATERIAL_EXPORT',
@@ -18590,7 +18896,8 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
             note
           }
         });
-      } else if (action === 'QUYẾT ĐỊNH: PHÂN RÃ THU HỒI VẬT TƯ LINH KIỆN') {
+        sentToWarehouseFlag = true;
+      } else if (isDisassemble) {
         const actualResultItems = (bomUpdates || []).map((it) => ({
           tenHang: it.name || 'Vật tư',
           soLuong: parseInt(it.quantity, 10) || 1,
@@ -18615,7 +18922,8 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
             actualResult: JSON.stringify(actualResultItems)
           }
         });
-      } else if (action === 'QUYẾT ĐỊNH: HUỶ BỎ THAY THẾ BẰNG HÀNG HOÁ MỚI') {
+        sentToWarehouseFlag = true;
+      } else if (baseAction === 'QUYẾT ĐỊNH: HUỶ BỎ THAY THẾ BẰNG HÀNG HOÁ MỚI') {
         const qty = defect.quantity || 1;
         // Chỉ tạo lệnh nhập kho nếu không qua QC. Nếu qua QC, kho chỉ nhập khi QC đã kết luận!
         if (!shouldNotifyQc) {
@@ -18644,6 +18952,7 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
               actualResult: JSON.stringify(actualResultItems)
             }
           });
+          sentToWarehouseFlag = true;
         }
         await tx.approvalRequest.create({
           data: {
@@ -18662,7 +18971,7 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
             note
           }
         });
-      } else if (action === 'QUYẾT ĐỊNH: NHẬP LẠI KHO') {
+      } else if (baseAction === 'QUYẾT ĐỊNH: NHẬP LẠI KHO') {
         // Chỉ tạo lệnh kho trực tiếp nếu không qua QC. Nếu qua QC, kho chỉ nhập khi QC đã kết luận!
         if (!shouldNotifyQc) {
           const qty = Number(returnQty) > 0 ? Number(returnQty) : (Number(defect.quantity) > 0 ? Number(defect.quantity) : 1);
@@ -18691,6 +19000,7 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
               actualResult: JSON.stringify(actualResultItems)
             }
           });
+          sentToWarehouseFlag = true;
         }
       }
 
@@ -18706,6 +19016,7 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
         });
 
         const qcCode = existingQc?.code || `QC-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(10 + Math.random() * 90)}`;
+        createdQcCode = qcCode;
         const resolutionName = action ? action.replace('QUYẾT ĐỊNH: ', '') : (defect.repairPlan || 'Xử lý kỹ thuật');
         const qcNotes = `Kiểm tra đánh giá chất lượng cho hồ sơ ${defect.code} (${resolutionName}). Nội dung xử lý: ${note || defect.repairPlan || ''}`;
         const qcMeta = JSON.stringify({
@@ -18788,6 +19099,43 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
         }
       }
     });
+
+    // Gửi thông báo liên phòng ban SAU KHI transaction SQLite đã commit (tránh deadlock)
+    if (shouldNotifyQcFlag && createdQcCode) {
+      try {
+        await sendCrossDeptNotification({
+          title: `🔍 Yêu cầu QC kiểm tra hồ sơ lỗi: ${defect.code}`,
+          content: `Bộ phận Sản xuất đã xử lý hồ sơ **${defect.code}** (${defect.productName}, phương án: ${resolutionLabel}) và chuyển sang bộ phận QA/QC kiểm định theo phiếu **${createdQcCode}**.`,
+          type: 'info',
+          priority: 'high',
+          sourceDept: 'production',
+          targetDept: 'qc',
+          senderName: performedBy || 'Bộ phận sản xuất',
+          link: '/qc',
+          entityType: 'QUALITY_INSPECTION',
+          entityId: createdQcCode,
+        });
+      } catch (notifErr) {
+        console.warn('[POST /api/production/defects/:id/process] Lỗi gửi thông báo QC:', notifErr?.message || notifErr);
+      }
+    } else if (sentToWarehouseFlag) {
+      try {
+        await sendCrossDeptNotification({
+          title: `📦 Yêu cầu nhập kho từ xử lý lỗi: ${defect.code}`,
+          content: `Bộ phận Sản xuất đã xử lý hồ sơ **${defect.code}** (${defect.productName}, phương án: ${resolutionLabel}) và chuyển thẳng yêu cầu nhập kho sang bộ phận Kho vận.`,
+          type: 'info',
+          priority: 'high',
+          sourceDept: 'production',
+          targetDept: 'logistics',
+          senderName: performedBy || 'Bộ phận sản xuất',
+          link: '/logistics',
+          entityType: 'DEFECT_RECORD',
+          entityId: defect.code,
+        });
+      } catch (notifErr) {
+        console.warn('[POST /api/production/defects/:id/process] Lỗi gửi thông báo Kho:', notifErr?.message || notifErr);
+      }
+    }
 
     res.json({ success: true });
   } catch (err) {
@@ -25899,8 +26247,10 @@ app.post('/api/plan-finance/stock-movements/batch-xuat', async (req, res) => {
         });
         createdMovements.push(mov);
 
-        // Giảm tồn kho theo kho
+        // Giảm tồn kho theo kho (và giải phóng số lượng giữ chỗ tương ứng nếu có)
         if (fromWarehouseId) {
+          const currentGiu = currentStock ? (currentStock.soLuongGiu || 0) : 0;
+          const nextGiu = Math.max(0, currentGiu - qty);
           await tx.inventoryStock.upsert({
             where: {
               inventoryItemId_warehouseId: {
@@ -25915,6 +26265,7 @@ app.post('/api/plan-finance/stock-movements/batch-xuat', async (req, res) => {
             },
             update: {
               soLuong: { decrement: qty },
+              ...(currentGiu > 0 ? { soLuongGiu: nextGiu } : {}),
             },
           });
         }
@@ -25930,24 +26281,88 @@ app.post('/api/plan-finance/stock-movements/batch-xuat', async (req, res) => {
 
       // Tự động cập nhật trạng thái phiếu kho / lệnh cấp phát / đơn hàng
       const targetTicketId = ticketId;
+      let targetTicket = null;
       if (targetTicketId) {
         try {
-          await tx.logisticsTicket.update({
+          targetTicket = await tx.logisticsTicket.update({
             where: { id: targetTicketId },
-            data: { status: 'COMPLETED', completedAt: new Date() }
+            data: { status: 'COMPLETED', completedAt: new Date() },
+            select: { id: true, code: true, type: true, saleOrderId: true }
           });
         } catch (_) { }
       }
 
-      if (salesOrderId) {
+      const isMaterialExport = Boolean(
+        workOrderId ||
+        targetTicket?.type === 'MATERIAL_PICKING' ||
+        targetTicket?.type === 'WARRANTY_MATERIAL'
+      );
+
+      if (isMaterialExport) {
+        // Xuất kho vật tư phục vụ sản xuất / bảo hành:
+        // CHỈ hoàn tất phiếu cấp phát vật tư, TUYỆT ĐỐI KHÔNG hoàn tất phiếu xuất kho thành phẩm (PK-...) hay chuyển đơn bán hàng sang 'completed' / 'exported'
         try {
-          // Hoàn thành mọi phiếu kho vận liên kết của đơn bán hàng
+          const woStr = workOrderId ? String(workOrderId) : '';
+          const woCandidates = woStr
+            ? Array.from(new Set([
+                woStr,
+                woStr.replace('LSX', 'DBH'),
+                woStr.replace('LSX', 'DHBL'),
+                woStr.replace('LSX', 'DH'),
+              ]))
+            : [];
+
+          const ticketOrConditions = [];
+          if (targetTicket?.saleOrderId) {
+            ticketOrConditions.push({ saleOrderId: targetTicket.saleOrderId });
+          }
+          if (woStr) {
+            ticketOrConditions.push({ saleOrderId: woStr });
+            ticketOrConditions.push({ code: woStr });
+            for (const c of woCandidates) {
+              ticketOrConditions.push({ saleOrder: { code: c } });
+            }
+          }
+
+          if (ticketOrConditions.length > 0) {
+            await tx.logisticsTicket.updateMany({
+              where: {
+                OR: ticketOrConditions,
+                type: { in: ['MATERIAL_PICKING', 'WARRANTY_MATERIAL'] }
+              },
+              data: { status: 'COMPLETED', completedAt: new Date() }
+            });
+          }
+
+          // Chuyển Lệnh sản xuất (SaleOrder) sang đang sản xuất lắp ráp (không chuyển completed/exported)
+          const soOrConditions = [];
+          if (targetTicket?.saleOrderId) {
+            soOrConditions.push({ id: targetTicket.saleOrderId });
+          }
+          for (const c of woCandidates) {
+            soOrConditions.push({ id: c });
+            soOrConditions.push({ code: c });
+          }
+
+          if (soOrConditions.length > 0) {
+            await tx.saleOrder.updateMany({
+              where: { OR: soOrConditions },
+              data: {
+                trangThai: 'in_production'
+              }
+            });
+          }
+        } catch (woErr) {
+          console.warn('[batch-xuat] Lỗi cập nhật lệnh sản xuất:', woErr.message);
+        }
+      } else if (salesOrderId) {
+        // Xuất kho thành phẩm theo đơn bán hàng -> mới hoàn thành đơn hàng và các phiếu đóng gói xuất kho
+        try {
           await tx.logisticsTicket.updateMany({
             where: { saleOrderId: salesOrderId },
             data: { status: 'COMPLETED', completedAt: new Date() }
           });
 
-          // Tự động chuyển Đơn bán hàng sang Hoàn thành (completed) và đã xuất kho
           await tx.saleOrder.updateMany({
             where: {
               OR: [
@@ -25962,38 +26377,6 @@ app.post('/api/plan-finance/stock-movements/batch-xuat', async (req, res) => {
           });
         } catch (soErr) {
           console.warn('[batch-xuat] Lỗi cập nhật đơn bán hàng:', soErr.message);
-        }
-      }
-
-      if (workOrderId) {
-        try {
-          // Đánh dấu hoàn tất phiếu cấp phát vật tư theo Lệnh sản xuất
-          await tx.logisticsTicket.updateMany({
-            where: {
-              OR: [
-                { saleOrderId: workOrderId },
-                { saleOrder: { code: workOrderId } },
-                { code: workOrderId }
-              ],
-              type: { in: ['MATERIAL_PICKING', 'WARRANTY_MATERIAL'] }
-            },
-            data: { status: 'COMPLETED', completedAt: new Date() }
-          });
-
-          // Lệnh sản xuất chuyển sang đang sản xuất lắp ráp
-          await tx.saleOrder.updateMany({
-            where: {
-              OR: [
-                { id: String(workOrderId) },
-                { code: String(workOrderId) }
-              ]
-            },
-            data: {
-              trangThai: 'in_production'
-            }
-          });
-        } catch (woErr) {
-          console.warn('[batch-xuat] Lỗi cập nhật lệnh sản xuất:', woErr.message);
         }
       }
     });

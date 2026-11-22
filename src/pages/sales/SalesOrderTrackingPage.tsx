@@ -3369,20 +3369,13 @@ export const SalesOrderTrackingPage: React.FC = () => {
           defaultSource="RETURN"
         />
 
-        {/* ── Offcanvas & Modal Chi Tiết / Xử Lý Hồ Sơ Lỗi & Hàng Trả Về ── */}
+        {/* ── Offcanvas Chi Tiết Hàng Trả Về (Chế độ xem Phòng Kinh doanh) ── */}
         <DefectSummaryOffcanvas
           defectId={selectedDefect?.id || null}
           defect={selectedDefect}
+          viewMode="sales"
           onClose={() => setSelectedDefect(null)}
           onRefresh={fetchDefects}
-          onOpenProcess={(id) => {
-            const targetId = id || selectedDefect?.id || null;
-            if (targetId) {
-              setProcessingDefectId(targetId);
-              setShowDefectProcessModal(true);
-              setSelectedDefect(null);
-            }
-          }}
         />
 
         <DefectProcessModal

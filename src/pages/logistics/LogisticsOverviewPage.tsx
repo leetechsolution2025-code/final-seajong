@@ -401,6 +401,7 @@ export const LogisticsOverviewPage: React.FC = () => {
         let ghiChu: string | null = null;
 
         let hasMaterialCompleted = false;
+        let hasMaterialPacked = false;
         let hasPackingPacked = false;
         let allExported = totalTickets > 0;
 
@@ -425,13 +426,22 @@ export const LogisticsOverviewPage: React.FC = () => {
             }
           } else {
             allExported = false;
-            if (tStatus === 'packed' && it.ticketType === 'BATCH_PACKING') {
-              hasPackingPacked = true;
+              if (tStatus === 'packed' || tStatus === 'picked') {
+                if (
+                  it.ticketType === 'MATERIAL_ALLOCATION' ||
+                  it.ticketType === 'MATERIAL_PICKING' ||
+                  it.type === 'material-export'
+                ) {
+                  hasMaterialPacked = true;
+                }
+                if (it.ticketType === 'BATCH_PACKING') {
+                  hasPackingPacked = true;
+                }
+              }
             }
-          }
-          const time = new Date(it.ngayGiao || it.requestedDate || it.createdAt || 0).getTime();
-          if (time > latestDate) latestDate = time;
-        });
+            const time = new Date(it.ngayGiao || it.requestedDate || it.createdAt || 0).getTime();
+            if (time > latestDate) latestDate = time;
+          });
 
         const isGroupImport =
           allGroupItems.length > 0 &&
@@ -547,6 +557,12 @@ export const LogisticsOverviewPage: React.FC = () => {
             } else if (hasMaterialCompleted) {
               groupStatusText = 'Đã xuất vật tư';
               groupStatusBadgeClass = 'bg-amber-400 text-slate-900';
+            } else if (hasMaterialPacked && hasPackingPacked) {
+              groupStatusText = 'Đã gom đủ VT & Đơn hàng';
+              groupStatusBadgeClass = 'bg-sky-500 text-white';
+            } else if (hasMaterialPacked) {
+              groupStatusText = 'Đã gom đủ vật tư';
+              groupStatusBadgeClass = 'bg-sky-500 text-white';
             } else if (hasPackingPacked) {
               groupStatusText = 'Đã gom đủ hàng';
               groupStatusBadgeClass = 'bg-amber-400 text-slate-900';
@@ -1086,7 +1102,7 @@ export const LogisticsOverviewPage: React.FC = () => {
         type: selectedOrder.type === 'material-import' ? 'INBOUND' : 'OUTBOUND',
         warehouseName:
           selectedOrder.ticketType === 'MATERIAL_PICKING' ||
-          selectedOrder.type === 'material-export'
+            selectedOrder.type === 'material-export'
             ? 'Kho Vật Tư Phụ Kiện (KVP)'
             : 'Kho Chính Seajong',
         note: selectedOrder.typeLabel,
@@ -1112,8 +1128,8 @@ export const LogisticsOverviewPage: React.FC = () => {
         isReturn
           ? 'return'
           : selectedOrder.typeLabel?.toLowerCase().includes('vật tư')
-          ? 'po'
-          : 'production'
+            ? 'po'
+            : 'production'
       );
       setNhapKhoSoBienBanQC(selectedOrder.code?.startsWith('QC-') ? selectedOrder.code : '');
       setNhapKhoPurchaseOrderId(selectedOrder.purchaseOrderId || null);
@@ -1135,9 +1151,9 @@ export const LogisticsOverviewPage: React.FC = () => {
       setXuatKhoOrderType('defect');
       setXuatKhoDefectId(
         selectedOrder.defectRecordId ||
-          selectedOrder.saleOrderCode ||
-          selectedOrder.code ||
-          selectedOrder.id
+        selectedOrder.saleOrderCode ||
+        selectedOrder.code ||
+        selectedOrder.id
       );
       setXuatKhoTicketId(
         selectedOrder.type === 'logistics-ticket' ? selectedOrder.id : undefined
@@ -1147,28 +1163,34 @@ export const LogisticsOverviewPage: React.FC = () => {
       return;
     }
 
-    const isProduction = Boolean(
-      selectedOrder.code?.startsWith('LSX-') ||
-      selectedOrder.typeLabel?.includes('sản xuất') ||
-      selectedOrder.ticketType === 'MATERIAL_PICKING' ||
-      selectedOrder.hasProduction ||
-      orderDetails.some((it: any) => it.isMaterial)
-    );
+    const isBatchPacking = selectedOrder.ticketType === 'BATCH_PACKING';
+
+    const isProduction =
+      !isBatchPacking &&
+      Boolean(
+        selectedOrder.code?.startsWith('LSX-') ||
+        selectedOrder.typeLabel?.includes('sản xuất') ||
+        selectedOrder.ticketType === 'MATERIAL_PICKING' ||
+        selectedOrder.hasProduction ||
+        orderDetails.some((it: any) => it.isMaterial)
+      );
 
     if (isProduction) {
       setXuatKhoOrderType('wo');
-      setXuatKhoWoId(
+      const resolvedWoId =
+        (selectedOrder.code?.startsWith('LSX-') ? selectedOrder.code : null) ||
+        (selectedOrder.saleOrderCode
+          ? selectedOrder.saleOrderCode
+            .replace('DBH', 'LSX')
+            .replace('DHBL', 'LSX')
+            .replace('DH', 'LSX')
+          : null) ||
         selectedOrder.code ||
-          (selectedOrder.saleOrderCode
-            ? selectedOrder.saleOrderCode
-                .replace('DBH', 'LSX')
-                .replace('DHBL', 'LSX')
-                .replace('DH', 'LSX')
-            : selectedOrder.id)
-      );
+        selectedOrder.id;
+      setXuatKhoWoId(resolvedWoId);
       setXuatKhoSoId(
         selectedOrder.saleOrderId ||
-          (selectedOrder.type === 'sale-order' ? selectedOrder.id : undefined)
+        (selectedOrder.type === 'sale-order' ? selectedOrder.id : undefined)
       );
       setXuatKhoTicketId(
         selectedOrder.type === 'logistics-ticket' ? selectedOrder.id : undefined
@@ -1188,20 +1210,20 @@ export const LogisticsOverviewPage: React.FC = () => {
     setXuatKhoOrderType(isSo ? 'so' : 'wo');
     setXuatKhoSoId(
       selectedOrder.saleOrderId ||
-        (selectedOrder.type === 'sale-order' ? selectedOrder.id : undefined)
+      (selectedOrder.type === 'sale-order' ? selectedOrder.id : undefined)
     );
     setXuatKhoWoId(
       selectedOrder.saleOrderCode
         ? selectedOrder.saleOrderCode
-            .replace('DBH', 'LSX')
-            .replace('DHBL', 'LSX')
-            .replace('DH', 'LSX')
+          .replace('DBH', 'LSX')
+          .replace('DHBL', 'LSX')
+          .replace('DH', 'LSX')
         : selectedOrder.type === 'sale-order' && selectedOrder.code
-        ? selectedOrder.code
+          ? selectedOrder.code
             .replace('DBH', 'LSX')
             .replace('DHBL', 'LSX')
             .replace('DH', 'LSX')
-        : selectedOrder.id
+          : selectedOrder.id
     );
     setXuatKhoTicketId(
       selectedOrder.type === 'logistics-ticket' ? selectedOrder.id : undefined
@@ -1504,7 +1526,7 @@ export const LogisticsOverviewPage: React.FC = () => {
                               {groupStatusText}
                             </span>
 
-                            {needsProduction && (
+                            {needsProduction && currentStep !== 3 && (
                               <span
                                 className="inline-flex items-center justify-center gap-1 px-1.5 md:px-2 py-0.5 rounded-full text-[10.5px] font-semibold"
                                 style={{
@@ -1697,17 +1719,16 @@ export const LogisticsOverviewPage: React.FC = () => {
                                   statusText = row.typeLabel?.includes('hàng lỗi')
                                     ? 'Đã nhập hàng lỗi'
                                     : 'Đã nhập kho';
-                                } else if (
-                                  row.ticketType === 'WARRANTY_MATERIAL' ||
-                                  row.ticketType === 'MATERIAL_PICKING'
-                                ) {
+                                } else if (row.ticketType === 'MATERIAL_PICKING') {
+                                  statusText = 'Đã xuất vật tư';
+                                } else if (row.ticketType === 'WARRANTY_MATERIAL') {
                                   statusText = 'Đã cấp phát';
                                 } else {
                                   statusText = 'Đã xuất kho';
                                 }
-                              } else if (lowerStatus === 'packed') {
-                                statusTextClass = 'text-emerald-600';
-                                statusText = 'Đã gom đủ hàng';
+                              } else if (lowerStatus === 'packed' || lowerStatus === 'picked') {
+                                statusTextClass = 'text-emerald-600 font-semibold';
+                                statusText = row.ticketType === 'BATCH_PACKING' ? 'Đã đủ hàng' : 'Đã gom đủ hàng';
                               }
 
                               return (
@@ -1998,7 +2019,9 @@ export const LogisticsOverviewPage: React.FC = () => {
                         orderDetails.every((it: any) => (Number(it.pickedQty) || 0) >= (Number(it.qty ?? it.requestedQty) || 1)));
 
                     if (isPicking && !isPacked) {
-                      return 'Chưa gom đủ vật tư';
+                      return selectedOrder.ticketType === 'BATCH_PACKING'
+                        ? 'Chưa gom đủ hàng'
+                        : 'Chưa gom đủ vật tư';
                     }
                     return 'Xuất kho';
                   })()}

@@ -1795,6 +1795,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
             sortOrder: idx
           })),
           customerId: finalCustomerId || null,
+          nguoiPhuTrach: (user as any)?.fullName || user?.name || undefined,
           type
         };
 

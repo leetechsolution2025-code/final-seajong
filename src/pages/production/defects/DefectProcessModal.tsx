@@ -129,9 +129,26 @@ export function DefectProcessModal({ defectId, onClose, onRefresh }: DefectProce
       });
 
       if (res.ok) {
-        toast.success('Thành công', 'Đã lưu quyết định xử lý!');
-        mutate();
+        const isDecision = Boolean(action && action.startsWith('QUYẾT ĐỊNH:'));
+        const isMaterialRepair = Boolean(action && action.includes('THAY LINH KIỆN'));
+        toast.success(
+          'Thành công',
+          isMaterialRepair
+            ? 'Đã tạo lệnh sản xuất sửa chữa & yêu cầu cấp phát vật tư (Chờ vật tư)!'
+            : isDecision
+            ? requireQc && (resolution === 'Nhập lại kho' || resolution === 'Sửa chữa tại chỗ')
+              ? 'Đã chuyển thông tin sang phòng QA/QC kiểm tra và cập nhật trạng thái Đã xử lý!'
+              : resolution === 'Huỷ bỏ thay thế bằng hàng hoá mới'
+              ? 'Đã xác nhận huỷ bỏ và chuyển trạng thái Đã xử lý!'
+              : 'Đã chuyển yêu cầu nhập kho cho bộ phận Kho vận và cập nhật trạng thái Đã xử lý!'
+            : 'Đã lưu quyết định xử lý!'
+        );
         if (onRefresh) onRefresh();
+        if (isDecision || nextStatus === 'COMPLETED' || nextStatus === 'WAITING_INVENTORY') {
+          onClose();
+        } else {
+          mutate();
+        }
       } else {
         toast.error('Thất bại', 'Có lỗi xảy ra trong quá trình xử lý!');
       }
@@ -1131,7 +1148,7 @@ export function DefectProcessModal({ defectId, onClose, onRefresh }: DefectProce
             isLoading={isSubmitting}
             onClick={() => {
               setShowOffcanvas(false);
-              const nextStatus = 'WAITING_INVENTORY';
+              const nextStatus = resolution === 'Thay linh kiện' ? 'WAITING_INVENTORY' : 'COMPLETED';
               const bomPayload = defect?.bomItems
                 ?.filter((item: any) => selectedBomItemIds.has(item.id))
                 .map((item: any) => ({
@@ -1224,17 +1241,9 @@ export function DefectProcessModal({ defectId, onClose, onRefresh }: DefectProce
         loading={isSubmitting}
         onConfirm={() => {
           setShowConfirm(false);
-          const nextStatus =
-            resolution === 'Thay linh kiện' ||
-            resolution === 'Huỷ bỏ thay thế bằng hàng hoá mới' ||
-            resolution === 'Nhập lại kho'
-              ? 'WAITING_INVENTORY'
-              : resolution === 'Sửa chữa tại chỗ'
-              ? (requireQc ? 'WAITING_QC' : 'COMPLETED')
-              : 'PROCESSING';
           handleProcess(
-            `QUYẾT ĐỊNH: ${resolution.toUpperCase()}${requireQc && resolution === 'Sửa chữa tại chỗ' ? ' & CHUYỂN QC' : ''}`,
-            nextStatus,
+            `QUYẾT ĐỊNH: ${resolution.toUpperCase()}${requireQc ? ' & CHUYỂN QC' : ''}`,
+            'COMPLETED',
             undefined,
             returnQty
           );

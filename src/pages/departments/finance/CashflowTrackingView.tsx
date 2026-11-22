@@ -2643,19 +2643,19 @@ export const CashflowTrackingView: React.FC<CashflowTrackingViewProps> = ({
                       variant="outline"
                       size="sm"
                       onClick={handleSubmitOrderToDirector}
-                      leftIcon={<Send size={13} className="text-blue-600" />}
-                      title="Gửi trình Ban Giám đốc phê duyệt"
+                      title="Trình Ban Giám đốc phê duyệt"
+                      className="!p-0 !w-8 !h-8 inline-flex items-center justify-center"
                     >
-                      Trình GĐ
+                      <Send size={14} className="text-blue-600" />
                     </Button>
                     <Button
                       variant="danger"
                       size="sm"
                       onClick={() => setShowSingleOrderDeleteConfirm(true)}
-                      leftIcon={<Trash size={13} />}
                       title="Xoá đơn hàng khỏi hệ thống"
+                      className="!p-0 !w-8 !h-8 inline-flex items-center justify-center"
                     >
-                      Xoá
+                      <Trash size={14} />
                     </Button>
                   </>
                 )}

@@ -1093,8 +1093,11 @@ export function LogisticsBatchPacking({ currentStep = 1, onStepChange }: Logisti
                     {/* Danh sách hàng hoá của đơn (khi mở) */}
                     {!isCollapsed && order.items.map(it => {
                       const currentInputQty = pickedQuantities[it.ticketItemId] !== undefined ? pickedQuantities[it.ticketItemId] : it.daNhat;
+                      const availableStock = it.thucTon !== undefined ? Math.max(0, Number(it.thucTon) || 0) : it.soLuongYeuCau;
+                      const maxPickableQty = Math.min(it.soLuongYeuCau, availableStock);
+                      const isShortageStock = it.soLuongYeuCau > availableStock;
                       const isPicked = currentInputQty > 0;
-                      const isFullyPicked = currentInputQty >= it.soLuongYeuCau;
+                      const isFullyPicked = !isShortageStock && currentInputQty >= it.soLuongYeuCau;
                       const isEdited = pickedQuantities[it.ticketItemId] !== undefined;
 
                       return (
@@ -1108,8 +1111,8 @@ export function LogisticsBatchPacking({ currentStep = 1, onStepChange }: Logisti
                           <td 
                             className="text-center py-2.5 px-2.5 align-middle"
                             onClick={() => {
-                              if (currentStep !== 2) {
-                                handleToggleOrderItemPick(it.ticketItemId, it.soLuongYeuCau);
+                              if (currentStep !== 2 && maxPickableQty > 0) {
+                                handleToggleOrderItemPick(it.ticketItemId, maxPickableQty);
                               }
                             }}
                           >
@@ -1117,14 +1120,24 @@ export function LogisticsBatchPacking({ currentStep = 1, onStepChange }: Logisti
                               <span className="inline-block w-1.5 h-1.5 rounded-full bg-slate-300 mx-auto" />
                             ) : (
                               <div 
-                                className={`w-3.5 h-3.5 mx-auto rounded-[3px] border flex items-center justify-center cursor-pointer transition-all ${
-                                  isFullyPicked 
-                                    ? "bg-emerald-600 border-emerald-600 text-white shadow-xs" 
+                                className={`w-3.5 h-3.5 mx-auto rounded-[3px] border flex items-center justify-center transition-all ${
+                                  maxPickableQty <= 0
+                                    ? "border-slate-200 bg-slate-100 text-transparent cursor-not-allowed opacity-60"
+                                    : isFullyPicked 
+                                    ? "bg-emerald-600 border-emerald-600 text-white shadow-xs cursor-pointer" 
                                     : isPicked 
-                                    ? "bg-amber-500 border-amber-500 text-white shadow-xs" 
-                                    : "border-slate-300 hover:border-blue-400 bg-white text-transparent"
+                                    ? "bg-amber-500 border-amber-500 text-white shadow-xs cursor-pointer" 
+                                    : "border-slate-300 hover:border-blue-400 bg-white text-transparent cursor-pointer"
                                 }`}
-                                title={isFullyPicked ? "Bỏ chọn nhặt" : "Nhặt đủ số lượng"}
+                                title={
+                                  maxPickableQty <= 0
+                                    ? "Hết tồn khả dụng trong kho"
+                                    : currentInputQty >= maxPickableQty
+                                    ? "Bỏ chọn nhặt"
+                                    : isShortageStock
+                                    ? `Nhặt tối đa theo tồn khả dụng (${maxPickableQty}/${it.soLuongYeuCau})`
+                                    : "Nhặt đủ số lượng"
+                                }
                               >
                                 <i className="bi bi-check text-[10px] font-bold" />
                               </div>
@@ -1173,7 +1186,7 @@ export function LogisticsBatchPacking({ currentStep = 1, onStepChange }: Logisti
                                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                                         <i className="bi bi-check-circle-fill text-[10px]" /> Đủ hàng ({currentInputQty}/{it.soLuongYeuCau})
                                       </span>
-                                    ) : isPicked ? (
+                                    ) : isShortageStock || isPicked ? (
                                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
                                         <i className="bi bi-exclamation-triangle-fill text-[10px]" /> Thiếu hàng ({currentInputQty}/{it.soLuongYeuCau})
                                       </span>
@@ -1191,7 +1204,7 @@ export function LogisticsBatchPacking({ currentStep = 1, onStepChange }: Logisti
                                     {isManager && (
                                       <>
                                         <span className="text-slate-300 mx-1.5">|</span>
-                                        <b className="font-mono font-bold text-emerald-600" title="Số lượng thực tồn kho">{it.thucTon ?? 0}</b>
+                                        <b className={`font-mono font-bold ${isShortageStock ? "text-rose-600" : "text-emerald-600"}`} title="Số lượng tồn khả dụng">{it.thucTon ?? 0}</b>
                                       </>
                                     )}
                                   </span>
@@ -1213,14 +1226,14 @@ export function LogisticsBatchPacking({ currentStep = 1, onStepChange }: Logisti
                                             : "border-slate-300 bg-white text-slate-700"
                                         } ${isEdited ? "ring-1 ring-amber-300" : ""}`}
                                         value={currentInputQty > 0 ? currentInputQty : ""}
-                                        onChange={e => handleOrderItemQuantityChange(it.ticketItemId, e.target.value, it.soLuongYeuCau)}
+                                        onChange={e => handleOrderItemQuantityChange(it.ticketItemId, e.target.value, maxPickableQty)}
                                         onBlur={resetMobileViewportZoom}
                                         onKeyDown={e => {
                                           if (e.key === "Enter") e.currentTarget.blur();
                                         }}
                                         onClick={e => e.stopPropagation()}
                                         min={0}
-                                        max={it.soLuongYeuCau}
+                                        max={maxPickableQty}
                                       />
                                     )}
                                   </span>
@@ -1237,7 +1250,7 @@ export function LogisticsBatchPacking({ currentStep = 1, onStepChange }: Logisti
                             {isManager && (
                               <>
                                 <span className="text-slate-300 mx-1.5">/</span>
-                                <span className="inline-block min-w-[28px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-mono font-bold text-xs" title="Số lượng thực tồn kho">
+                                <span className={`inline-block min-w-[28px] px-2 py-0.5 rounded font-mono font-bold text-xs ${isShortageStock ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-700"}`} title="Số lượng tồn khả dụng">
                                   {it.thucTon ?? 0}
                                 </span>
                               </>
@@ -1261,9 +1274,9 @@ export function LogisticsBatchPacking({ currentStep = 1, onStepChange }: Logisti
                                     : "border-slate-300 bg-white text-slate-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                 } ${isEdited ? "ring-2 ring-amber-300" : ""}`}
                                 value={currentInputQty > 0 || isEdited ? currentInputQty : 0}
-                                onChange={e => handleOrderItemQuantityChange(it.ticketItemId, e.target.value, it.soLuongYeuCau)}
+                                onChange={e => handleOrderItemQuantityChange(it.ticketItemId, e.target.value, maxPickableQty)}
                                 min={0}
-                                max={it.soLuongYeuCau}
+                                max={maxPickableQty}
                               />
                             )}
                           </td>
@@ -1274,7 +1287,7 @@ export function LogisticsBatchPacking({ currentStep = 1, onStepChange }: Logisti
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                                 <i className="bi bi-check-circle-fill text-[11px]" /> Đủ hàng ({currentInputQty}/{it.soLuongYeuCau})
                               </span>
-                            ) : isPicked ? (
+                            ) : isShortageStock || isPicked ? (
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
                                 <i className="bi bi-exclamation-triangle-fill text-[11px]" /> Thiếu hàng ({currentInputQty}/{it.soLuongYeuCau})
                               </span>

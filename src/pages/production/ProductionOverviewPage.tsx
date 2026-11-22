@@ -24,14 +24,24 @@ import {
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string; dot: string }> = {
     running: {
-      label: 'Đang thực hiện',
+      label: 'Đang sản xuất',
       cls: 'bg-emerald-50 text-emerald-700 border-emerald-200',
       dot: 'bg-emerald-500',
     },
-    pending: {
-      label: 'Chưa thực hiện',
-      cls: 'bg-amber-50 text-amber-700 border-amber-200',
+    not_issued: {
+      label: 'Chưa cấp vật tư',
+      cls: 'bg-amber-50 text-amber-800 border-amber-200',
       dot: 'bg-amber-500',
+    },
+    qc_checking: {
+      label: 'Đang kiểm tra',
+      cls: 'bg-purple-50 text-purple-700 border-purple-200',
+      dot: 'bg-purple-500',
+    },
+    pending: {
+      label: 'Chờ xử lý',
+      cls: 'bg-slate-100 text-slate-700 border-slate-200',
+      dot: 'bg-slate-400',
     },
     stopped: {
       label: 'Tạm dừng',
@@ -39,7 +49,7 @@ function StatusBadge({ status }: { status: string }) {
       dot: 'bg-rose-500',
     },
     completed: {
-      label: 'Đã thực hiện',
+      label: 'Đã hoàn thành',
       cls: 'bg-sky-50 text-sky-700 border-sky-200',
       dot: 'bg-sky-500',
     },
@@ -190,18 +200,20 @@ export function ProductionOverviewPage() {
             filters={
               currentStep === 1
                 ? [
-                    {
-                      id: 'prod-order-status',
-                      value: filterStatus,
-                      onChange: setFilterStatus,
-                      minWidth: '170px',
-                      options: [
-                        { label: 'Tất cả trạng thái', value: '' },
-                        { label: 'Chưa thực hiện', value: 'pending' },
-                        { label: 'Đang thực hiện', value: 'running' },
-                      ],
-                    },
-                  ]
+                  {
+                    id: 'prod-order-status',
+                    value: filterStatus,
+                    onChange: setFilterStatus,
+                    minWidth: '170px',
+                    options: [
+                      { label: 'Tất cả trạng thái', value: '' },
+                      { label: 'Chưa cấp vật tư', value: 'not_issued' },
+                      { label: 'Đang sản xuất', value: 'running' },
+                      { label: 'Đang kiểm tra', value: 'qc_checking' },
+                      { label: 'Chờ xử lý', value: 'pending' },
+                    ],
+                  },
+                ]
                 : []
             }
             customFilters={
@@ -275,7 +287,7 @@ export function ProductionOverviewPage() {
                 icon: <CalendarEvent size={15} style={{ color: '#0284c7' }} />,
                 onClick: () => setIsEventCalendarOpen(true),
               },
-              { id: 'div-1', label: '', divider: true, onClick: () => {} },
+              { id: 'div-1', label: '', divider: true, onClick: () => { } },
               {
                 id: 'refresh',
                 label: 'Làm mới dữ liệu',
@@ -380,9 +392,8 @@ export function ProductionOverviewPage() {
                             )}
                             <span>•</span>
                             <span
-                              className={`font-bold font-mono ${
-                                progress === 100 ? 'text-emerald-600' : 'text-sky-700'
-                              }`}
+                              className={`font-bold font-mono ${progress === 100 ? 'text-emerald-600' : 'text-sky-700'
+                                }`}
                             >
                               {progress}%
                             </span>
@@ -410,16 +421,14 @@ export function ProductionOverviewPage() {
                           <div className="flex items-center gap-2.5">
                             <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden border border-slate-200/60">
                               <div
-                                className={`h-full rounded-full transition-all duration-300 ${
-                                  progress === 100 ? 'bg-emerald-500' : 'bg-sky-600'
-                                }`}
+                                className={`h-full rounded-full transition-all duration-300 ${progress === 100 ? 'bg-emerald-500' : 'bg-sky-600'
+                                  }`}
                                 style={{ width: `${progress}%` }}
                               />
                             </div>
                             <span
-                              className={`text-xs font-bold font-mono min-w-[34px] text-right ${
-                                progress === 100 ? 'text-emerald-600' : 'text-slate-700'
-                              }`}
+                              className={`text-xs font-bold font-mono min-w-[34px] text-right ${progress === 100 ? 'text-emerald-600' : 'text-slate-700'
+                                }`}
                             >
                               {progress}%
                             </span>

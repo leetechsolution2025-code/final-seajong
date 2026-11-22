@@ -3262,7 +3262,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                 <th style={{ padding: '7px 12px' }}>Khách hàng</th>
                 <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right' }}>Số tiền gốc</th>
                 <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right' }}>Đã thanh toán</th>
-                <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center' }}>Hạn thanh toán</th>
+                <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center' }}>Ngày thực hiện</th>
                 <th style={{ padding: '7px 12px', textAlign: 'right' }}>Còn lại</th>
                 <th style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></th>
               </tr>
@@ -3274,7 +3274,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                 <th style={{ padding: '7px 12px' }}>Nhà cung cấp / Đơn vị vận chuyển</th>
                 <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right' }}>Tổng tiền đơn</th>
                 <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'right' }}>Đã thanh toán</th>
-                <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center' }}>Hạn thanh toán</th>
+                <th className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center' }}>Ngày thực hiện</th>
                 <th style={{ padding: '7px 12px', textAlign: 'right' }}>Còn lại</th>
                 <th style={{ padding: '7px 8px', textAlign: 'center', width: '50px' }}></th>
               </tr>
@@ -4104,9 +4104,9 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                               {formatNumberGroup(item.paidAmount)}
                             </td>
 
-                            {/* Cột 4: Hạn thanh toán */}
-                            <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center', fontSize: '0.75rem', color: '#475569', fontWeight: 500 }}>
-                              {item.dueDate || 'Theo tiến độ HĐ'}
+                            {/* Cột 4: Ngày thực hiện (chỉ hiển thị ở các dòng có hoạt động thanh toán/giảm trừ) */}
+                            <td className="hidden sm:table-cell" style={{ padding: '7px 12px', textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8', fontWeight: 500 }}>
+                              —
                             </td>
 
                             {/* Cột 5: Còn lại */}
@@ -4455,8 +4455,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                     );
                                   });
                                   const returnDeductionsTotal = returnDeductions.reduce((sum: number, r: any) => sum + (Number(r.amount) || 0), 0);
-                                  const entryDisplayPaid = returnDeductionsTotal > 0 ? returnDeductionsTotal : (entry.paidAmount || 0);
-                                  const entryDisplayRemaining = Math.max(0, (entry.contractValue || (entry as any).amount || 0) - entryDisplayPaid);
+                                  const rawEntryPaid = Number(entry.paidAmount) || 0;
+                                  const entryCashPaid = Math.max(0, rawEntryPaid - returnDeductionsTotal);
+                                  const entryTotalReduced = Math.max(rawEntryPaid, returnDeductionsTotal);
+                                  const entryDisplayRemaining = Math.max(0, (entry.contractValue || (entry as any).amount || 0) - entryTotalReduced);
                                   const isStageDone = entryDisplayRemaining <= 0;
 
                                   return (
@@ -4489,9 +4491,13 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                               <span style={{ fontSize: '0.6875rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#dcfce7', color: '#15803d', fontWeight: 700 }}>
                                                 Đã thu đủ
                                               </span>
-                                            ) : entryDisplayPaid > 0 ? (
+                                            ) : returnDeductionsTotal > 0 ? (
                                               <span style={{ fontSize: '0.6875rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#fef3c7', color: '#b45309', fontWeight: 700 }}>
-                                                {returnDeductionsTotal > 0 ? 'Giảm trừ một phần' : 'Thu một phần'}
+                                                Có hàng trả về
+                                              </span>
+                                            ) : entryCashPaid > 0 ? (
+                                              <span style={{ fontSize: '0.6875rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#dcfce7', color: '#15803d', fontWeight: 700 }}>
+                                                Thu một phần
                                               </span>
                                             ) : null}
                                           </div>
@@ -4500,22 +4506,22 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                           </div>
                                         </td>
 
-                                        {/* Cột Số tiền gốc: font thường không đậm */}
+                                        {/* Cột Số tiền gốc */}
                                         <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 600, color: '#334155', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
                                           {formatNumberGroup(entry.contractValue || (entry as any).amount || 0)}
                                         </td>
 
-                                        {/* Cột Đã thanh toán / Giảm trừ: font thường không đậm */}
-                                        <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: entryDisplayPaid > 0 ? (returnDeductionsTotal > 0 ? '#d97706' : '#059669') : '#94a3b8', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                          {formatNumberGroup(entryDisplayPaid)}
+                                        {/* Cột Đã thanh toán: Không hiển thị số tiền giảm trừ hàng trả về trên dòng đơn hàng */}
+                                        <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: entryCashPaid > 0 ? '#059669' : '#94a3b8', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                          {entryCashPaid > 0 ? formatNumberGroup(entryCashPaid) : '—'}
                                         </td>
 
-                                        {/* Cột Hạn thanh toán: font thường không đậm */}
-                                        <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'center', fontWeight: 500, color: '#475569', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                          {entry.dueDate || item.dueDate || 'Theo tiến độ'}
+                                        {/* Cột Ngày thực hiện: chỉ hiển thị ở dòng có hoạt động thanh toán */}
+                                        <td className="hidden sm:table-cell" style={{ padding: '8px 14px', textAlign: 'center', fontWeight: 500, color: '#94a3b8', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                                          —
                                         </td>
 
-                                        {/* Cột Còn lại: font thường không đậm */}
+                                        {/* Cột Còn lại */}
                                         <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: entryDisplayRemaining > 0 ? '#dc2626' : '#059669', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
                                           {formatNumberGroup(entryDisplayRemaining)}
                                         </td>
@@ -4527,6 +4533,9 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
 
                                       {/* CHỈ CÁC CHỨNG TỪ GIẢM TRỪ CÔNG NỢ DO TRẢ LẠI HÀNG ĐƯỢC ĐẶT TRONG ĐƠN HÀNG NÀY */}
                                       {returnDeductions.map((pay: any, pIdx: number) => {
+                                        const returnExecDate = pay.date
+                                          ? (String(pay.date).includes(' ') ? String(pay.date).split(' ').pop() : String(pay.date))
+                                          : '—';
                                         return (
                                           <tr
                                             key={pay.id || `return-${pIdx}`}
@@ -4546,7 +4555,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                               });
                                               setSubEntryDetailOpen(true);
                                             }}
-                                            title="Nhấn để xem chi tiết & đối soát giảm trừ công nợ"
+                                            title="Nhấn để xem chi tiết & đối soát giảm trừ hàng trả về"
                                             style={{
                                               backgroundColor: '#f1f5f9',
                                               borderBottom: pIdx === returnDeductions.length - 1 ? '1px solid #e2e8f0' : '1px dashed #e2e8f0',
@@ -4554,7 +4563,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                               cursor: 'pointer',
                                             }}
                                           >
-                                            {/* Cột Khách hàng: Thụt lề với ký hiệu nhánh ↳ và badge Giảm trừ công nợ */}
+                                            {/* Cột Khách hàng: Thụt lề với ký hiệu nhánh ↳ và badge Hàng trả về */}
                                             <td style={{ padding: '6px 14px 6px 56px' }}>
                                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                                 <span style={{ color: '#d97706', fontWeight: 800 }}>↳</span>
@@ -4569,13 +4578,9 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                                     fontWeight: 700,
                                                   }}
                                                 >
-                                                  Giảm trừ công nợ
+                                                  Giảm trừ hàng trả về
                                                 </span>
                                                 <span style={{ fontWeight: 700, color: '#0f172a' }}>{pay.code || pay.receiptCode}</span>
-                                                <span style={{ color: '#cbd5e1' }}>|</span>
-                                                <span style={{ color: '#64748b', fontSize: '0.7188rem' }}>
-                                                  {pay.time || '08:30'} • {pay.date}
-                                                </span>
                                                 <span style={{ color: '#b45309', fontSize: '0.7188rem', fontStyle: 'italic' }}>
                                                   ({pay.method || 'Cấn trừ hàng trả lại'})
                                                 </span>
@@ -4590,14 +4595,14 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                               —
                                             </td>
 
-                                            {/* Đã giảm trừ */}
-                                            <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 700, color: '#d97706' }}>
+                                            {/* Số tiền giảm trừ hàng trả về */}
+                                            <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'right', fontWeight: 700, color: '#d97706', whiteSpace: 'nowrap' }}>
                                               -{formatNumberGroup(pay.amount)}
                                             </td>
 
-                                            {/* Trạng thái */}
-                                            <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'center', color: '#d97706', fontWeight: 600, fontSize: '0.75rem' }}>
-                                              Đã giảm trừ
+                                            {/* Ngày thực hiện */}
+                                            <td className="hidden sm:table-cell" style={{ padding: '6px 14px', textAlign: 'center', color: '#475569', fontWeight: 600, fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                                              {returnExecDate}
                                             </td>
 
                                             {/* Còn lại */}
@@ -4756,19 +4761,21 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                         {payAmt >= 0 ? '+' : '-'}{formatNumberGroup(Math.abs(payAmt))}
                                       </td>
 
-                                      {/* Cột Hạn thanh toán / Trạng thái */}
+                                      {/* Cột Ngày thực hiện */}
                                       <td
                                         className="hidden sm:table-cell"
                                         style={{
                                           padding: '8px 14px',
                                           textAlign: 'center',
-                                          color: isRecon ? '#6d28d9' : '#059669',
+                                          color: '#475569',
                                           fontWeight: 600,
                                           fontSize: '0.8125rem',
                                           whiteSpace: 'nowrap',
                                         }}
                                       >
-                                        {isRecon ? 'Đối soát' : 'Đã thu'}
+                                        {pay.date
+                                          ? (String(pay.date).includes(' ') ? String(pay.date).split(' ').pop() : String(pay.date))
+                                          : '—'}
                                       </td>
 
                                       {/* Cột Còn lại */}
