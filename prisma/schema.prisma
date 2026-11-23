@@ -3437,3 +3437,31 @@ model RouteWaypoint {
 
   @@index([tripId])
 }
+
+model SupplierSupplementaryItem {
+  id                  String    @id @default(cuid())
+  supplierId          String
+  supplierName        String
+  qualityInspectionId String
+  inspectionCode      String
+  sourcePoId          String?
+  sourcePoCode        String?
+  sourcePoDate        DateTime?
+  inventoryItemId     String?
+  productCode         String?
+  productName         String
+  unit                String?
+  quantity            Float     @default(1) // Tổng số lượng NCC phải gửi bù
+  fulfilledQuantity   Float     @default(0) // Tổng số lượng đã đưa vào đơn mua hàng bù
+  receivedQuantity    Float     @default(0) // Tổng số lượng thực nhận đã về kho
+  commitmentDate      DateTime?
+  receivedAt          DateTime? // Thời gian nhận hàng bù gần nhất
+  fulfillmentHistory  String?   // JSON: [{ poId, poCode, qty, attachedAt, receivedAt }]
+  note                String?
+  status              String    @default("PENDING") // PENDING | PARTIAL | COMPLETED | CANCELLED
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([supplierId, status])
+  @@index([qualityInspectionId])
+}

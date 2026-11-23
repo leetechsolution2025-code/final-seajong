@@ -1161,6 +1161,7 @@ export const PurchaseOverviewPage: React.FC = () => {
               donVi: it.donVi,
               soLuong: it.soLuong,
               donGiaDK: it.donGia,
+              ghiChu: it.ghiChu ?? null,
               inventoryItemId: it.inventoryItemId,
               inventoryItem: it.inventoryItem ?? null,
             }));
@@ -1180,6 +1181,7 @@ export const PurchaseOverviewPage: React.FC = () => {
               donVi: it.donVi,
               soLuong: it.soLuong,
               donGiaDK: it.donGia,
+              ghiChu: it.ghiChu ?? null,
               inventoryItemId: it.inventoryItemId,
               inventoryItem: it.inventoryItem ?? null,
             }));
@@ -1769,7 +1771,7 @@ function PurchaseOrderDetailOffcanvas({
         setDetail(updated);
         onChanged?.();
         loadOrderDetail(order.id);
-        if (status === 'received') {
+        if (status === 'received' || status === 'ordered') {
           onClose();
         }
       }
@@ -1829,15 +1831,16 @@ function PurchaseOrderDetailOffcanvas({
                 variant="secondary"
                 size="sm"
                 leftIcon={<Printer size={14} />}
-                onClick={() =>
+                onClick={() => {
                   onPrintOrder?.(
                     order.id,
                     activeOrder.code,
                     activeOrder.supplierId || '',
                     supplier?.name || 'Nhà cung cấp',
                     items
-                  )
-                }
+                  );
+                  onClose();
+                }}
               >
                 In đơn
               </Button>

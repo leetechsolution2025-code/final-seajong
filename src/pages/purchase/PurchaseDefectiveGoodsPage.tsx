@@ -26,6 +26,7 @@ import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
 import { useAuth } from '../../context/AuthContext';
+import { TaoDonMuaHangTrucTiepModal } from '../../components/plan-finance/mua_hang/TaoDonMuaHangTrucTiepModal';
 import type { ModernStepItem } from '../../types';
 
 const formatCurrency = (val: number | null | undefined) =>
@@ -43,6 +44,7 @@ const formatEpochToVNDate = (val: any) => {
 };
 
 interface DefectiveItem {
+  inventoryItemId?: string | null;
   productName: string;
   model: string;
   quantity: number;
@@ -54,6 +56,27 @@ interface DefectiveItem {
   comment: string;
 }
 
+interface SupplementaryProgressItem {
+  id: string;
+  productName: string;
+  unit: string | null;
+  quantity: number;
+  fulfilledQuantity: number;
+  receivedQuantity: number;
+  remainingQuantity: number;
+  receivedAt?: string | null;
+  status: string;
+  fulfillmentHistory?: Array<{
+    poId: string;
+    poCode: string;
+    qty: number;
+    attachedAt: string;
+    receivedAt?: string | null;
+  }>;
+}
+
+type ResolveActionType = 'DEBT_DEDUCTION' | 'SUPPLEMENTARY_GOODS' | 'REFUND' | 'REPLACEMENT_ORDER';
+
 interface DefectiveGoodsRecord {
   id: string;
   code: string;
@@ -62,6 +85,7 @@ interface DefectiveGoodsRecord {
   inspectorName: string;
   purchaseOrderId: string;
   purchaseOrderCode: string;
+  purchaseOrderDate?: string | null;
   supplierId: string | null;
   supplierName: string;
   supplierPhone: string;
@@ -70,15 +94,21 @@ interface DefectiveGoodsRecord {
   totalFailedQty: number;
   totalFailedAmount: number;
   defectiveItems: DefectiveItem[];
+  supplementaryItems?: SupplementaryProgressItem[];
   resolution?: {
     status: 'PENDING' | 'RESOLVED';
-    action: 'DEBT_DEDUCTION' | 'SUPPLEMENTARY_GOODS' | 'REFUND' | 'RETURN_TO_SUPPLIER' | null;
+    action: ResolveActionType | 'RETURN_TO_SUPPLIER' | null;
     actionLabel: string;
     amount?: number;
     note?: string;
     commitmentDate?: string | null;
     resolvedAt?: string;
     resolvedBy?: string;
+    refundCode?: string;
+    refundStatus?: 'PENDING' | 'RECEIVED';
+    refundReceivedAt?: string;
+    replacementPoId?: string | null;
+    replacementPoCode?: string | null;
   };
   notes: string;
 }
@@ -101,10 +131,11 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
   // Offcanvas xử lý với NCC
   const [selectedRecord, setSelectedRecord] = useState<DefectiveGoodsRecord | null>(null);
   const [showResolveOffcanvas, setShowResolveOffcanvas] = useState<boolean>(false);
+  const [showReplacementPoModal, setShowReplacementPoModal] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Form State
-  const [resolveAction, setResolveAction] = useState<'DEBT_DEDUCTION' | 'SUPPLEMENTARY_GOODS' | 'REFUND' | 'RETURN_TO_SUPPLIER'>('DEBT_DEDUCTION');
+  const [resolveAction, setResolveAction] = useState<ResolveActionType>('DEBT_DEDUCTION');
   const [resolveAmount, setResolveAmount] = useState<number>(0);
   const [resolveCommitmentDate, setResolveCommitmentDate] = useState<string>('');
   const [resolveNote, setResolveNote] = useState<string>('');
@@ -262,7 +293,8 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
   // Mở Offcanvas xử lý
   const handleOpenResolve = (rec: DefectiveGoodsRecord) => {
     setSelectedRecord(rec);
-    setResolveAction(rec.resolution?.action || 'DEBT_DEDUCTION');
+    const prevAct = rec.resolution?.action === 'RETURN_TO_SUPPLIER' ? 'REPLACEMENT_ORDER' : rec.resolution?.action;
+    setResolveAction((prevAct as ResolveActionType) || 'DEBT_DEDUCTION');
     setResolveAmount(rec.resolution?.amount !== undefined ? rec.resolution.amount : rec.totalFailedAmount);
     setResolveCommitmentDate(rec.resolution?.commitmentDate ? rec.resolution.commitmentDate.slice(0, 10) : '');
     setResolveNote(rec.resolution?.note || '');
@@ -273,6 +305,12 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
   // Xác nhận xử lý với NCC
   const handleConfirmResolve = async () => {
     if (!selectedRecord) return;
+    // Phương án 4 ("Gửi bù hàng lỗi"): mở ngay modal tạo đơn mua hàng bù 0đ
+    if (resolveAction === 'REPLACEMENT_ORDER') {
+      setShowResolveOffcanvas(false);
+      setShowReplacementPoModal(true);
+      return;
+    }
     setIsSubmitting(true);
     try {
       const res = await fetch(`/api/purchase/defective-goods/${encodeURIComponent(selectedRecord.id)}/resolve`, {
@@ -298,6 +336,31 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
       alert(`Lỗi kết nối: ${err.message}`);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Hoàn tất Phương án 4 sau khi tạo đơn mua hàng bù 0đ
+  const handleReplacementPoCreated = async (createdOrder?: { id: string; code: string | null }) => {
+    if (!selectedRecord) return;
+    try {
+      await fetch(`/api/purchase/defective-goods/${encodeURIComponent(selectedRecord.id)}/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'REPLACEMENT_ORDER',
+          amount: 0,
+          commitmentDate: resolveCommitmentDate,
+          note: resolveNote || `Đã lập đơn bù hàng lỗi ${createdOrder?.code || ''}`,
+          resolvedBy: resolvedByName,
+          replacementPoId: createdOrder?.id || null,
+          replacementPoCode: createdOrder?.code || null,
+        }),
+      });
+    } catch (err) {
+      console.error('Lỗi cập nhật biên bản sau khi tạo đơn bù hàng lỗi:', err);
+    } finally {
+      setShowReplacementPoModal(false);
+      await fetchData();
     }
   };
 
@@ -385,9 +448,9 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
                       options: [
                         { label: 'Tất cả phương án', value: 'all' },
                         { label: 'Cấn trừ công nợ (TK 331)', value: 'DEBT_DEDUCTION' },
-                        { label: 'NCC gửi bù hàng mới', value: 'SUPPLEMENTARY_GOODS' },
+                        { label: 'NCC gửi bù hàng đợt sau', value: 'SUPPLEMENTARY_GOODS' },
                         { label: 'NCC hoàn lại tiền', value: 'REFUND' },
-                        { label: 'Xuất trả lại hàng NCC', value: 'RETURN_TO_SUPPLIER' },
+                        { label: 'Gửi bù hàng lỗi', value: 'REPLACEMENT_ORDER' },
                       ],
                       minWidth: '190px',
                     },
@@ -568,10 +631,31 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
                                     </span>
                                   </div>
                                   {currentStep === 2 && rec.resolution?.actionLabel && (
-                                    <div className="mt-1">
+                                    <div className="mt-1 space-y-0.5">
                                       <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
                                         {rec.resolution.actionLabel}
                                       </span>
+                                      {rec.resolution.action === 'REPLACEMENT_ORDER' && rec.resolution.replacementPoCode && (
+                                        <div className="text-[10px] font-semibold text-amber-700">
+                                          Đơn bù: {rec.resolution.replacementPoCode}
+                                        </div>
+                                      )}
+                                      {rec.resolution.action === 'REFUND' && (
+                                        <div className={`text-[10px] font-semibold ${rec.resolution.refundStatus === 'RECEIVED' ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                          {rec.resolution.refundStatus === 'RECEIVED' ? '✓ Đã nhận tiền hoàn' : '⏳ Chờ KT xác nhận'}
+                                        </div>
+                                      )}
+                                      {rec.resolution.action === 'SUPPLEMENTARY_GOODS' && rec.supplementaryItems && rec.supplementaryItems.length > 0 && (() => {
+                                        const totalNeed = rec.supplementaryItems.reduce((s, x) => s + (x.quantity || 0), 0);
+                                        const totalFulfilled = rec.supplementaryItems.reduce((s, x) => s + (x.fulfilledQuantity || 0), 0);
+                                        const latestRec = rec.supplementaryItems.find((x) => x.receivedAt)?.receivedAt;
+                                        return (
+                                          <div className="text-[10px] font-semibold text-slate-600">
+                                            Đã ghép bù: {totalFulfilled}/{totalNeed}
+                                            {latestRec ? ` • Nhận: ${formatEpochToVNDate(latestRec)}` : ''}
+                                          </div>
+                                        );
+                                      })()}
                                     </div>
                                   )}
                                 </td>
@@ -717,17 +801,17 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
                   {
                     value: 'SUPPLEMENTARY_GOODS',
                     label: 'Nhà cung cấp gửi bù hàng đợt sau',
-                    sub: 'Kho sẽ mở lệnh chờ nhận bù hàng mới đạt chuẩn',
+                    sub: 'Lưu vào DB để tự động ghép vào đơn mua hàng sau (giá 0 ₫)',
                   },
                   {
                     value: 'REFUND',
                     label: 'Nhà cung cấp hoàn lại tiền mặt / chuyển khoản',
-                    sub: 'Kế toán ghi nhận thu tiền hoàn trả về tài khoản',
+                    sub: 'Tạo thông báo chờ thu tiền hoàn để Kế toán xác nhận vào quỹ/NH',
                   },
                   {
-                    value: 'RETURN_TO_SUPPLIER',
-                    label: 'Xuất trả lại toàn bộ hàng lỗi cho NCC',
-                    sub: 'Kho xuất hàng từ Kho lỗi (KHO-LOI) trả về NCC',
+                    value: 'REPLACEMENT_ORDER',
+                    label: 'Gửi bù hàng lỗi',
+                    sub: 'Mở ngay form tạo đơn mua hàng bù giá 0 ₫ cho NCC (không cần duyệt)',
                   },
                 ].map((opt) => (
                   <label
@@ -829,6 +913,28 @@ export const PurchaseDefectiveGoodsPage: React.FC = () => {
           </div>
         )}
       </Offcanvas>
+
+      {/* Modal tạo ngay Đơn bù hàng lỗi 0 ₫ (Phương án 4) */}
+      {showReplacementPoModal && selectedRecord && (
+        <TaoDonMuaHangTrucTiepModal
+          onClose={() => setShowReplacementPoModal(false)}
+          onSaved={handleReplacementPoCreated}
+          initialSupplierId={selectedRecord.supplierId}
+          initialNgayNhan={resolveCommitmentDate}
+          initialGhiChu={`Đơn bù hàng lỗi của đơn mua hàng ${selectedRecord.purchaseOrderCode}, ngày ${formatEpochToVNDate(selectedRecord.purchaseOrderDate || selectedRecord.executionTime)}`}
+          initialItems={selectedRecord.defectiveItems.map((it) => ({
+            inventoryItemId: it.inventoryItemId || null,
+            code: it.model || null,
+            tenHang: it.productName,
+            donVi: it.unit || 'cái',
+            soLuong: it.failQuantity,
+            donGiaDK: 0,
+            ghiChu: `Hàng gửi bù lỗi theo biên bản ${selectedRecord.code}`,
+            isReplacement: true,
+          }))}
+          isReplacementPo={true}
+        />
+      )}
     </div>
   );
 };

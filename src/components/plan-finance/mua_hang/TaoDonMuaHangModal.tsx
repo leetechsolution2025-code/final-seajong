@@ -48,6 +48,8 @@ interface ReqItem {
   ghiChu?: string | null;
   ngayGiao?: string | null;
   isAdded?: boolean;
+  isSupplementary?: boolean;
+  supplementaryItemId?: string;
   inventoryItem: {
     code: string | null;
     tenHang: string;
@@ -140,7 +142,73 @@ export default function TaoDonMuaHangModal({
   const [supplierInputs, setSupplierInputs] = React.useState<Record<string, string>>({});
   const [defaultInvItems, setDefaultInvItems] = React.useState<InventorySearchResult[]>([]);
   const [rowInvItems, setRowInvItems] = React.useState<Record<string, InventorySearchResult[]>>({});
+  const [pendingSuppForSup, setPendingSuppForSup] = React.useState<Array<{
+    id: string;
+    inspectionCode: string;
+    sourcePoCode: string | null;
+    inventoryItemId: string | null;
+    productCode: string | null;
+    productName: string;
+    unit: string | null;
+    remainingQuantity: number;
+  }>>([]);
   const invSearchTimers = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  // Tải danh sách hàng NCC cần gửi bù (Phương án 2) theo NCC đang chọn
+  React.useEffect(() => {
+    if (!activeSupId || editOrderId) {
+      setPendingSuppForSup([]);
+      return;
+    }
+    fetch(`/api/purchase/supplementary-items?supplierId=${encodeURIComponent(activeSupId)}&status=PENDING,PARTIAL`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setPendingSuppForSup(Array.isArray(d?.items) ? d.items : []))
+      .catch(() => setPendingSuppForSup([]));
+  }, [activeSupId, editOrderId]);
+
+  const handleAttachSupplementaryToActiveSup = () => {
+    if (!activeSupId || pendingSuppForSup.length === 0) return;
+    const existingSuppIds = new Set(modalItems.map((m) => m.supplementaryItemId).filter(Boolean));
+    const toAdd = pendingSuppForSup.filter((s) => !existingSuppIds.has(s.id) && s.remainingQuantity > 0);
+    if (toAdd.length === 0) return;
+    const newReqItems: ReqItem[] = [];
+    const newAssigns: Assignment[] = [];
+    toAdd.forEach((s) => {
+      const rowId = `supp-${s.id}-${Date.now()}`;
+      newReqItems.push({
+        id: rowId,
+        tenHang: s.productName,
+        donVi: s.unit || "cái",
+        soLuong: s.remainingQuantity,
+        donGiaDK: 0,
+        inventoryItemId: s.inventoryItemId,
+        ghiChu: `Hàng gửi bù lỗi (${s.inspectionCode}${s.sourcePoCode ? ` - PO gốc: ${s.sourcePoCode}` : ""})`,
+        isAdded: true,
+        isSupplementary: true,
+        supplementaryItemId: s.id,
+        inventoryItem: s.inventoryItemId
+          ? {
+              code: s.productCode,
+              tenHang: s.productName,
+              donVi: s.unit,
+              categoryId: null,
+              thongSoKyThuat: null,
+              imageUrl: null,
+              giaNhap: 0,
+            }
+          : null,
+      });
+      newAssigns.push({
+        itemId: rowId,
+        supplierId: activeSupId,
+        donGia: 0,
+        ngayGiao: today,
+        skip: false,
+      });
+    });
+    setModalItems((prev) => [...prev, ...newReqItems]);
+    setAssignments((prev) => [...prev, ...newAssigns]);
+  };
 
   // Preload default inventory items for quick adding
   React.useEffect(() => {
@@ -400,6 +468,9 @@ export default function TaoDonMuaHangModal({
               donVi: it?.donVi,
               soLuong: it?.soLuong,
               inventoryItemId: it?.inventoryItemId,
+              ghiChu: it?.ghiChu ?? null,
+              isSupplementary: Boolean(it?.isSupplementary),
+              supplementaryItemId: it?.supplementaryItemId,
             };
           });
         const res = await fetch(`/api/plan-finance/purchase-requests/${reqId}/create-orders`, {
@@ -545,6 +616,18 @@ export default function TaoDonMuaHangModal({
                 >
                   Thêm hàng hoá
                 </Button>
+
+                {!editOrderId && pendingSuppForSup.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={submitting}
+                    onClick={handleAttachSupplementaryToActiveSup}
+                    title="Tự động thêm các mặt hàng NCC cần gửi bù (giá 0 ₫)"
+                  >
+                    + Hàng gửi bù ({pendingSuppForSup.length})
+                  </Button>
+                )}
 
                 <div style={{ minWidth: 220, maxWidth: 300 }}>
                   {editOrderId ? (

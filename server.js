@@ -11354,12 +11354,39 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
       }
     });
 
+    const inboundSoCodesToFetch = new Set();
+    const inboundDefectCodesToFetch = new Set();
+    qcProdOrderMap.forEach((poVal) => {
+      const s = String(poVal || '').trim();
+      if (!s) return;
+      inboundSoCodesToFetch.add(s);
+      if (s.startsWith('LSX-')) {
+        inboundSoCodesToFetch.add(s.replace('LSX-', 'DBH-'));
+        inboundSoCodesToFetch.add(s.replace('LSX-', 'DHBL-'));
+      }
+      if (s.startsWith('ERR-') || s.startsWith('WR-')) {
+        inboundDefectCodesToFetch.add(s);
+      }
+    });
+
     filteredInboundTasks.forEach(t => {
       try {
-        const textPoMatch = `${t.title || ''} ${t.description || ''} ${t.actualResult || ''}`.match(/(DH-\d{6,8}-\d+)/i);
+        const combinedText = `${t.title || ''} ${t.description || ''} ${t.actualResult || ''}`;
+        const textPoMatch = combinedText.match(/(DH-\d{6,8}-\d+)/i);
         if (textPoMatch) {
           poCodesToFetch.push(textPoMatch[1].toUpperCase());
         }
+        const soMatches = combinedText.match(/((?:DBH|DHBL|LSX)-\d{6,8}-\d+)/gi) || [];
+        soMatches.forEach((m) => {
+          const up = m.toUpperCase();
+          inboundSoCodesToFetch.add(up);
+          if (up.startsWith('LSX-')) {
+            inboundSoCodesToFetch.add(up.replace('LSX-', 'DBH-'));
+            inboundSoCodesToFetch.add(up.replace('LSX-', 'DHBL-'));
+          }
+        });
+        const errMatches = combinedText.match(/((?:ERR|WR)-\d{6,8}-\d+)/gi) || [];
+        errMatches.forEach((m) => inboundDefectCodesToFetch.add(m.toUpperCase()));
         if (t.actualResult) {
           const parsed = JSON.parse(t.actualResult);
           if (Array.isArray(parsed)) {
@@ -11370,6 +11397,48 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
           }
         }
       } catch (_) { }
+    });
+
+    const [inboundSaleOrders, inboundDefects] = await Promise.all([
+      inboundSoCodesToFetch.size > 0
+        ? prisma.saleOrder.findMany({
+            where: { code: { in: Array.from(inboundSoCodesToFetch) } },
+            select: {
+              id: true,
+              code: true,
+              diaChiGiaoHang: true,
+              ghiChu: true,
+              customer: { select: { name: true, address: true, dienThoai: true } },
+            },
+          })
+        : [],
+      inboundDefectCodesToFetch.size > 0
+        ? prisma.defectRecord.findMany({
+            where: { code: { in: Array.from(inboundDefectCodesToFetch) } },
+            select: {
+              id: true,
+              code: true,
+              orderNumber: true,
+              customerName: true,
+              customerAddress: true,
+              description: true,
+              repairPlan: true,
+            },
+          })
+        : [],
+    ]);
+
+    const inboundSoByCodeMap = new Map();
+    inboundSaleOrders.forEach((so) => {
+      if (so.code) {
+        inboundSoByCodeMap.set(so.code.toUpperCase(), so);
+        if (so.code.startsWith('DBH-')) inboundSoByCodeMap.set(so.code.replace('DBH-', 'LSX-').toUpperCase(), so);
+        if (so.code.startsWith('DHBL-')) inboundSoByCodeMap.set(so.code.replace('DHBL-', 'LSX-').toUpperCase(), so);
+      }
+    });
+    const inboundDefectByCodeMap = new Map();
+    inboundDefects.forEach((df) => {
+      if (df.code) inboundDefectByCodeMap.set(df.code.toUpperCase(), df);
     });
 
     const pos = (poIdsToFetch.length > 0 || poCodesToFetch.length > 0) ? await prisma.purchaseOrder.findMany({
@@ -11655,6 +11724,42 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
           typeLabel = 'Nhập kho thành phẩm';
         }
 
+        // Trích xuất thông tin Đơn hàng, Khách hàng, Địa chỉ & Lý do nhập kho cho lệnh nhập kho
+        const combinedInboundText = `${t.title || ''} ${t.description || ''}`;
+        const inlineSoMatch = combinedInboundText.match(/((?:DBH|DHBL|LSX)-\d{6,8}-\d+)/i);
+        const inlineErrMatch = combinedInboundText.match(/((?:ERR|WR)-\d{6,8}-\d+)/i);
+        const defectRef =
+          (inlineErrMatch && inboundDefectByCodeMap.get(inlineErrMatch[1].toUpperCase())) ||
+          (prodOrder && inboundDefectByCodeMap.get(String(prodOrder).toUpperCase())) ||
+          (parsedItems[0]?.defectCode && inboundDefectByCodeMap.get(String(parsedItems[0].defectCode).toUpperCase())) ||
+          null;
+        const candidateSoCode =
+          (prodOrder && !String(prodOrder).startsWith('ERR-') ? String(prodOrder) : null) ||
+          (inlineSoMatch ? inlineSoMatch[1].toUpperCase() : null) ||
+          defectRef?.orderNumber ||
+          null;
+        const matchedSo = candidateSoCode ? inboundSoByCodeMap.get(String(candidateSoCode).toUpperCase()) : null;
+
+        let resolvedCustomerName = supplierName || matchedSo?.customer?.name || defectRef?.customerName || null;
+        let resolvedCustomerAddress = matchedSo?.diaChiGiaoHang || matchedSo?.customer?.address || defectRef?.customerAddress || null;
+        if (!resolvedCustomerName && matchedSo?.ghiChu) {
+          const guest = typeof parseGuestInfo === 'function' ? parseGuestInfo(matchedSo.ghiChu) : null;
+          if (guest?.name) {
+            resolvedCustomerName = guest.name;
+            resolvedCustomerAddress = resolvedCustomerAddress || guest.address || null;
+          }
+        }
+
+        const resolvedSaleOrderCode = matchedSo?.code || candidateSoCode || null;
+        const noteLineMatch = t.description?.match(/Ghi chú:\s*([^\n\r]+)/i)?.[1]?.trim() || null;
+        const firstDescLine = (t.description || '').split('\n').map((l) => l.trim()).filter(Boolean)[0] || null;
+        const importReason =
+          noteLineMatch ||
+          defectRef?.repairPlan ||
+          firstDescLine ||
+          t.title ||
+          typeLabel;
+
         return {
           id: t.id,
           title: t.title,
@@ -11663,12 +11768,16 @@ app.get('/api/logistics/overview-orders', async (req, res) => {
           purchaseOrderId,
           purchaseOrderCode,
           shippingFee,
-          saleOrderCode: null,
+          saleOrderCode: resolvedSaleOrderCode,
+          defectCode: defectRef?.code || (inlineErrMatch ? inlineErrMatch[1].toUpperCase() : null),
           type: 'material-import',
           typeLabel,
-          customer: supplierName,
+          customer: resolvedCustomerName,
+          customerAddress: resolvedCustomerAddress,
           supplierName,
           isPurchaseOrder,
+          importReason,
+          description: t.description || null,
           tongTien: null,
           trangThai: t.status,
           assigneeName: (t.assigneeId && userMap.get(t.assigneeId)) || null,
@@ -14881,6 +14990,34 @@ app.get('/api/production/orders/:id', async (req, res) => {
       ? order.code.replace('DBH', 'LSX').replace('DHBL', 'LSX').replace('DH', 'LSX')
       : order.id;
 
+    const rawRelatedDefects = await prisma.defectRecord.findMany({
+      where: {
+        OR: [
+          ...(order.code ? [{ orderNumber: order.code }] : []),
+          { orderNumber: orderCode },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        activities: { orderBy: { createdAt: 'desc' } },
+      },
+    }).catch(() => []);
+
+    const relatedDefects = rawRelatedDefects.map((d) => {
+      const decAct = (d.activities || []).find((a) => String(a.action || '').includes('QUYẾT ĐỊNH:'));
+      let resolvedMethod = null;
+      if (decAct) {
+        const actStr = String(decAct.action || '');
+        if (actStr.includes('THAY LINH KIỆN')) resolvedMethod = 'Thay linh kiện';
+        else if (actStr.includes('PHÂN RÃ')) resolvedMethod = 'Phân rã thu hồi vật tư linh kiện';
+        else if (actStr.includes('HUỶ BỎ')) resolvedMethod = 'Huỷ bỏ thay thế bằng hàng hoá mới';
+        else if (actStr.includes('NHẬP LẠI KHO')) resolvedMethod = 'Nhập lại kho';
+        else if (actStr.includes('SỬA CHỮA')) resolvedMethod = 'Sửa chữa tại chỗ';
+        else resolvedMethod = actStr.replace('QUYẾT ĐỊNH:', '').trim();
+      }
+      return { ...d, resolution: resolvedMethod };
+    });
+
     res.json({
       order: {
         id: orderCode,
@@ -14899,6 +15036,7 @@ app.get('/api/production/orders/:id', async (req, res) => {
       },
       items,
       materials: Array.from(materialMap.values()),
+      defects: relatedDefects,
     });
   } catch (err) {
     console.error('[GET /api/production/orders/:id]', err);
@@ -17468,6 +17606,65 @@ app.patch('/api/finance/payment-notifications/:id', async (req, res) => {
         }
       }
 
+      if (status === 'verified' && !up.saleOrderId && String(up.code || '').startsWith('HT-NCC-')) {
+        // Phương án 3: Kế toán xác nhận đã thực nhận tiền hoàn trả hàng lỗi từ NCC
+        // Hạch toán đúng chuẩn TT 200/133: Nợ 1111 (tiền mặt) hoặc 1121 (chuyển khoản) / Có 1388 (Thu hồi tiền hoàn trả hàng lỗi NCC)
+        const debitAccCode = up.paymentMethod === 'cash' ? '1111' : '1121';
+        const creditAccCode = '1388';
+        const [debitAcc, creditAcc] = await Promise.all([
+          tx.account.findFirst({ where: { code: debitAccCode } }),
+          tx.account.findFirst({ where: { code: creditAccCode } }),
+        ]);
+        const existingJe = await tx.journalEntry.findFirst({
+          where: { referenceCode: up.code },
+        });
+        if (!existingJe && debitAcc && creditAcc && up.amount > 0) {
+          await tx.journalEntry.create({
+            data: {
+              entryNumber: `JE-${up.code}`,
+              date: new Date(),
+              description: up.note || `Thu hồi tiền hoàn trả hàng lỗi NCC theo ${up.code}`,
+              referenceCode: up.code,
+              status: 'POSTED',
+              lines: {
+                create: [
+                  {
+                    accountId: debitAcc.id,
+                    debit: up.amount,
+                    credit: 0,
+                    description: up.note || `Thu tiền hoàn trả hàng lỗi NCC (${up.code})`,
+                  },
+                  {
+                    accountId: creditAcc.id,
+                    debit: 0,
+                    credit: up.amount,
+                    description: up.note || `Thu hồi khoản phải thu khác - hoàn tiền hàng lỗi NCC (${up.code})`,
+                  },
+                ],
+              },
+            },
+          });
+        }
+
+        // Cập nhật trạng thái đã nhận tiền hoàn trên QualityInspection tương ứng
+        const insCode = String(up.code).replace(/^HT-NCC-/, '');
+        const linkedIns = await tx.qualityInspection.findFirst({ where: { code: insCode } });
+        if (linkedIns) {
+          let insMeta = {};
+          try {
+            insMeta = typeof linkedIns.metadata === 'string' ? JSON.parse(linkedIns.metadata) : linkedIns.metadata || {};
+          } catch {}
+          if (insMeta.resolution) {
+            insMeta.resolution.refundStatus = 'RECEIVED';
+            insMeta.resolution.refundReceivedAt = new Date().toISOString();
+            await tx.qualityInspection.update({
+              where: { id: linkedIns.id },
+              data: { metadata: JSON.stringify(insMeta) },
+            });
+          }
+        }
+      }
+
       return up;
     });
 
@@ -18300,15 +18497,37 @@ app.post('/api/production/defects', async (req, res) => {
     const refundAmount = parseFloat(body.refundAmount) || 0;
     let customerId = body.customerId || null;
     const customerCode = body.customerCode || null;
-    const customerName = body.customerName || null;
+    let customerName = body.customerName || null;
 
     if (customerId || customerCode) {
       const lookupKey = String(customerId || customerCode).trim();
       const foundCustomer = await prisma.customer.findFirst({
         where: { OR: [{ id: lookupKey }, { code: lookupKey }] },
-        select: { id: true }
+        select: { id: true, name: true }
       });
-      if (foundCustomer) customerId = foundCustomer.id;
+      if (foundCustomer) {
+        customerId = foundCustomer.id;
+        if (!customerName && foundCustomer.name) customerName = foundCustomer.name;
+      }
+    }
+
+    // Fallback tìm customerId qua mã đơn hàng hoặc tên khách hàng nếu chưa có
+    if (!customerId && body.orderNumber) {
+      const foundOrder = await prisma.saleOrder.findFirst({
+        where: { code: String(body.orderNumber).trim() },
+        select: { customerId: true, customer: { select: { id: true, name: true } } }
+      });
+      if (foundOrder?.customerId) {
+        customerId = foundOrder.customerId;
+        if (!customerName && foundOrder.customer?.name) customerName = foundOrder.customer.name;
+      }
+    }
+    if (!customerId && customerName) {
+      const foundByName = await prisma.customer.findFirst({
+        where: { name: String(customerName).trim() },
+        select: { id: true, name: true }
+      });
+      if (foundByName) customerId = foundByName.id;
     }
 
     const itemsPayload =
@@ -18387,8 +18606,13 @@ app.post('/api/production/defects', async (req, res) => {
 
       // Đồng bộ ngay lập tức vào bảng công nợ kế toán (debt_receivables) và Sổ cái
       try {
-        const { syncPrismaFinanceToAccountingTables } = await import(`./services/prismaFinanceSyncService.js?t=${Date.now()}`);
-        await syncPrismaFinanceToAccountingTables();
+        const dbPath = path.join(__dirname, 'prisma', 'dev.db');
+        const sqliteConn = new sqlite3.Database(dbPath);
+        try {
+          await syncPrismaFinanceToAccountingTables(sqliteConn);
+        } finally {
+          sqliteConn.close();
+        }
       } catch (syncErr) {
         console.warn('⚠️ Lỗi đồng bộ kế toán công nợ sau khi cấn trừ hàng trả lại:', syncErr.message);
       }
@@ -18436,8 +18660,13 @@ app.delete('/api/production/defects', async (req, res) => {
       }
 
       try {
-        const { syncPrismaFinanceToAccountingTables } = await import(`./services/prismaFinanceSyncService.js?t=${Date.now()}`);
-        await syncPrismaFinanceToAccountingTables();
+        const dbPath = path.join(__dirname, 'prisma', 'dev.db');
+        const sqliteConn = new sqlite3.Database(dbPath);
+        try {
+          await syncPrismaFinanceToAccountingTables(sqliteConn);
+        } finally {
+          sqliteConn.close();
+        }
       } catch (syncErr) {
         console.warn('⚠️ Lỗi đồng bộ kế toán công nợ sau khi xóa hồ sơ hàng trả lại:', syncErr.message);
       }
@@ -18615,20 +18844,24 @@ app.get('/api/production/defects/:id', async (req, res) => {
       })
     ]);
 
-    const decisionActivity = defect.activities?.find((a) => a.action?.startsWith('QUYẾT ĐỊNH:'));
-    let resolution = 'Sửa chữa tại chỗ';
+    const decisionActivity = defect.activities?.find((a) => String(a.action || '').includes('QUYẾT ĐỊNH:'));
+    let resolution = null;
     if (decisionActivity) {
-      if (decisionActivity.action.includes('THAY LINH KIỆN')) resolution = 'Thay linh kiện';
-      else if (decisionActivity.action.includes('PHÂN RÃ')) resolution = 'Phân rã thu hồi vật tư linh kiện';
-      else if (decisionActivity.action.includes('HUỶ BỎ')) resolution = 'Huỷ bỏ thay thế bằng hàng hoá mới';
-      else if (decisionActivity.action.includes('NHẬP LẠI KHO')) resolution = 'Nhập lại kho';
-      else if (decisionActivity.action.includes('SỬA CHỮA')) resolution = 'Sửa chữa tại chỗ';
+      const actStr = String(decisionActivity.action || '');
+      if (actStr.includes('THAY LINH KIỆN')) resolution = 'Thay linh kiện';
+      else if (actStr.includes('PHÂN RÃ')) resolution = 'Phân rã thu hồi vật tư linh kiện';
+      else if (actStr.includes('HUỶ BỎ')) resolution = 'Huỷ bỏ thay thế bằng hàng hoá mới';
+      else if (actStr.includes('NHẬP LẠI KHO')) resolution = 'Nhập lại kho';
+      else if (actStr.includes('SỬA CHỮA')) resolution = 'Sửa chữa tại chỗ';
+      else resolution = actStr.replace('QUYẾT ĐỊNH:', '').trim();
     } else if (approval?.entityType === 'DEFECT_MATERIAL_EXPORT') {
       resolution = 'Thay linh kiện';
     } else if (approval?.entityType === 'DEFECT_PRODUCT_EXPORT') {
       resolution = 'Huỷ bỏ thay thế bằng hàng hoá mới';
     } else if (task) {
       resolution = 'Phân rã thu hồi vật tư linh kiện';
+    } else if (defect.status === 'COMPLETED' && defect.repairPlan) {
+      resolution = defect.repairPlan;
     }
 
     const rawSelectedKeys = [];
@@ -18718,8 +18951,13 @@ app.delete('/api/production/defects/:id', async (req, res) => {
     }
 
     try {
-      const { syncPrismaFinanceToAccountingTables } = await import(`./services/prismaFinanceSyncService.js?t=${Date.now()}`);
-      await syncPrismaFinanceToAccountingTables();
+      const dbPath = path.join(__dirname, 'prisma', 'dev.db');
+      const sqliteConn = new sqlite3.Database(dbPath);
+      try {
+        await syncPrismaFinanceToAccountingTables(sqliteConn);
+      } finally {
+        sqliteConn.close();
+      }
     } catch (syncErr) {
       console.warn('⚠️ Lỗi đồng bộ kế toán công nợ sau khi xóa hồ sơ hàng trả lại:', syncErr.message);
     }
@@ -18810,14 +19048,8 @@ app.post('/api/production/defects/:id/process', async (req, res) => {
         }
       });
 
-      const storekeeperUser = await tx.employee.findFirst({
-        where: {
-          departmentCode: { in: ['logistics', 'warehouse', 'kho'] },
-          userId: { not: null }
-        },
-        select: { userId: true }
-      });
-      const defaultAssignee = storekeeperUser?.userId || 'system';
+      // Không tự động gán cứng lệnh kho cho nhân viên đầu tiên (để Quản lý kho chủ động giao việc)
+      const defaultAssignee = 'logistics-team';
 
       if (isRepairWithMaterial) {
         // Sửa chữa cần thay linh kiện -> Tạo Lệnh sản xuất + Phiếu yêu cầu vật tư cho Kho vận, trạng thái Chờ vật tư
@@ -29324,15 +29556,8 @@ app.patch('/api/qa/inspections/:id', async (req, res) => {
 
       // ── TỰ ĐỘNG CHUYỂN THÔNG TIN SANG BỘ PHẬN KHO KHI QC KẾT LUẬN ──
       // Chỉ khi QC kết luận mới chuyển cho bộ phận kho để nhập kho.
-      // Nếu có cả hàng đạt và không đạt: tạo 2 lệnh nhập kho độc lập (KTP & KHO-LOI)
-      const storekeeperUser = await tx.employee.findFirst({
-        where: {
-          departmentCode: { in: ['logistics', 'warehouse', 'kho'] },
-          userId: { not: null },
-        },
-        select: { userId: true },
-      });
-      const defaultWarehouseAssignee = storekeeperUser?.userId || 'system';
+      // Không tự động gán cứng cho nhân viên đầu tiên — để Quản lý kho chủ động phân công giao việc
+      const defaultWarehouseAssignee = 'logistics-team';
 
       const totalSampleQty = Number(
         newMeta.quantity ||
@@ -29799,12 +30024,13 @@ app.get('/api/purchase/defective-goods', async (req, res) => {
         totalFailedAmount += itemFailedAmount;
 
         return {
+          inventoryItemId: matchedPoItem?.inventoryItemId || matchedInv?.id || fi.inventoryItemId || null,
           productName: fi.productName || 'Vật tư / Linh kiện',
-          model: fi.model || '',
+          model: fi.model || matchedInv?.code || '',
           quantity: Number(fi.quantity || fi.sampleQuantity || fQty),
           passQuantity: Number(fi.passQuantity || 0),
           failQuantity: fQty,
-          unit: fi.unit || 'cái',
+          unit: fi.unit || matchedPoItem?.donVi || matchedInv?.donVi || 'cái',
           unitPrice,
           failedAmount: itemFailedAmount,
           comment: fi.comment || fi.defectDesc || '',
@@ -29843,6 +30069,7 @@ app.get('/api/purchase/defective-goods', async (req, res) => {
         inspectorName: ins.inspectorName || 'Bộ phận QA/QC',
         purchaseOrderId: matchedPO?.id || poId,
         purchaseOrderCode: matchedPO?.code || poCode || 'Đơn mua hàng ngoài',
+        purchaseOrderDate: matchedPO?.ngayDat || matchedPO?.createdAt || null,
         supplierId,
         supplierName,
         supplierPhone,
@@ -29870,6 +30097,41 @@ app.get('/api/purchase/defective-goods', async (req, res) => {
       resultList.push(record);
     }
 
+    // Đính kèm tiến độ hàng gửi bù (SupplierSupplementaryItem) cho từng biên bản
+    try {
+      await ensureSupplierSupplementaryTable();
+      const insIds = resultList.map((r) => r.id);
+      if (insIds.length > 0) {
+        const placeholders = insIds.map(() => '?').join(',');
+        const suppRows = await prisma.$queryRawUnsafe(
+          `SELECT * FROM "SupplierSupplementaryItem" WHERE "qualityInspectionId" IN (${placeholders}) AND "status" != 'CANCELLED' ORDER BY "createdAt" ASC`,
+          ...insIds
+        );
+        const byIns = new Map();
+        suppRows.forEach((s) => {
+          let history = [];
+          try {
+            history = s.fulfillmentHistory ? JSON.parse(s.fulfillmentHistory) : [];
+          } catch {}
+          const arr = byIns.get(s.qualityInspectionId) || [];
+          arr.push({
+            ...s,
+            quantity: Number(s.quantity) || 0,
+            fulfilledQuantity: Number(s.fulfilledQuantity) || 0,
+            receivedQuantity: Number(s.receivedQuantity) || 0,
+            remainingQuantity: Math.max(0, (Number(s.quantity) || 0) - (Number(s.fulfilledQuantity) || 0)),
+            fulfillmentHistory: history,
+          });
+          byIns.set(s.qualityInspectionId, arr);
+        });
+        resultList.forEach((r) => {
+          r.supplementaryItems = byIns.get(r.id) || [];
+        });
+      }
+    } catch (suppErr) {
+      console.warn('⚠️ Lỗi đọc SupplierSupplementaryItem:', suppErr.message);
+    }
+
     res.json({
       success: true,
       total: resultList.length,
@@ -29883,10 +30145,320 @@ app.get('/api/purchase/defective-goods', async (req, res) => {
   }
 });
 
+let __supplierSuppTableEnsured = false;
+async function ensureSupplierSupplementaryTable() {
+  if (__supplierSuppTableEnsured) return;
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "SupplierSupplementaryItem" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "supplierId" TEXT NOT NULL,
+      "supplierName" TEXT NOT NULL,
+      "qualityInspectionId" TEXT NOT NULL,
+      "inspectionCode" TEXT NOT NULL,
+      "sourcePoId" TEXT,
+      "sourcePoCode" TEXT,
+      "sourcePoDate" DATETIME,
+      "inventoryItemId" TEXT,
+      "productCode" TEXT,
+      "productName" TEXT NOT NULL,
+      "unit" TEXT,
+      "quantity" REAL NOT NULL DEFAULT 1,
+      "fulfilledQuantity" REAL NOT NULL DEFAULT 0,
+      "receivedQuantity" REAL NOT NULL DEFAULT 0,
+      "commitmentDate" DATETIME,
+      "receivedAt" DATETIME,
+      "fulfillmentHistory" TEXT,
+      "note" TEXT,
+      "status" TEXT NOT NULL DEFAULT 'PENDING',
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "SupplierSupplementaryItem_supplierId_status_idx" ON "SupplierSupplementaryItem"("supplierId", "status");`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "SupplierSupplementaryItem_qualityInspectionId_idx" ON "SupplierSupplementaryItem"("qualityInspectionId");`
+  );
+  __supplierSuppTableEnsured = true;
+}
+
+async function insertSupplierSupplementaryItem(data) {
+  const newId = `supp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const nowIso = new Date().toISOString();
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "SupplierSupplementaryItem" (
+      "id", "supplierId", "supplierName", "qualityInspectionId", "inspectionCode",
+      "sourcePoId", "sourcePoCode", "sourcePoDate", "inventoryItemId", "productCode",
+      "productName", "unit", "quantity", "fulfilledQuantity", "receivedQuantity",
+      "commitmentDate", "receivedAt", "fulfillmentHistory", "note", "status", "createdAt", "updatedAt"
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    newId,
+    data.supplierId,
+    data.supplierName,
+    data.qualityInspectionId,
+    data.inspectionCode,
+    data.sourcePoId || null,
+    data.sourcePoCode || null,
+    data.sourcePoDate ? new Date(data.sourcePoDate).toISOString() : null,
+    data.inventoryItemId || null,
+    data.productCode || null,
+    data.productName,
+    data.unit || 'cái',
+    Number(data.quantity) || 1,
+    Number(data.fulfilledQuantity) || 0,
+    Number(data.receivedQuantity) || 0,
+    data.commitmentDate ? new Date(data.commitmentDate).toISOString() : null,
+    data.receivedAt ? new Date(data.receivedAt).toISOString() : null,
+    data.fulfillmentHistory || null,
+    data.note || null,
+    data.status || 'PENDING',
+    nowIso,
+    nowIso
+  );
+  return { id: newId };
+}
+
+async function attachSupplementaryItemsToPo(poId, poCode, attachedList) {
+  if (!Array.isArray(attachedList) || attachedList.length === 0) return;
+  await ensureSupplierSupplementaryTable();
+  const nowIso = new Date().toISOString();
+  for (const att of attachedList) {
+    if (!att?.supplementaryItemId || !(Number(att.qty) > 0)) continue;
+    const found = await prisma.$queryRawUnsafe(
+      `SELECT * FROM "SupplierSupplementaryItem" WHERE "id" = ? LIMIT 1`,
+      att.supplementaryItemId
+    );
+    const row = found?.[0];
+    if (!row || row.status === 'CANCELLED') continue;
+    const addQty = Math.min(Number(att.qty), Math.max(0, (Number(row.quantity) || 0) - (Number(row.fulfilledQuantity) || 0)));
+    if (addQty <= 0) continue;
+    let history = [];
+    try {
+      history = row.fulfillmentHistory ? JSON.parse(row.fulfillmentHistory) : [];
+    } catch {}
+    history.push({ poId, poCode, qty: addQty, attachedAt: nowIso, receivedAt: null });
+    const newFulfilled = (Number(row.fulfilledQuantity) || 0) + addQty;
+    const newStatus = newFulfilled >= (Number(row.quantity) || 0) ? 'COMPLETED' : 'PARTIAL';
+    await prisma.$executeRawUnsafe(
+      `UPDATE "SupplierSupplementaryItem" SET "fulfilledQuantity" = ?, "fulfillmentHistory" = ?, "status" = ?, "updatedAt" = ? WHERE "id" = ?`,
+      newFulfilled,
+      JSON.stringify(history),
+      newStatus,
+      nowIso,
+      row.id
+    );
+  }
+}
+
+async function markSupplementaryItemsReceivedForPo(poId, poCode) {
+  await ensureSupplierSupplementaryTable();
+  const rows = await prisma.$queryRawUnsafe(
+    `SELECT * FROM "SupplierSupplementaryItem" WHERE "status" IN ('PARTIAL', 'COMPLETED')`
+  );
+  const nowIso = new Date().toISOString();
+  for (const row of rows) {
+    if (!row.fulfillmentHistory) continue;
+    let history = [];
+    try {
+      history = JSON.parse(row.fulfillmentHistory);
+    } catch {
+      continue;
+    }
+    let changed = false;
+    let newlyReceived = 0;
+    for (const h of history) {
+      if ((h.poId === poId || (poCode && h.poCode === poCode)) && !h.receivedAt) {
+        h.receivedAt = nowIso;
+        newlyReceived += Number(h.qty) || 0;
+        changed = true;
+      }
+    }
+    if (changed) {
+      await prisma.$executeRawUnsafe(
+        `UPDATE "SupplierSupplementaryItem" SET "receivedQuantity" = ?, "receivedAt" = ?, "fulfillmentHistory" = ?, "updatedAt" = ? WHERE "id" = ?`,
+        (Number(row.receivedQuantity) || 0) + newlyReceived,
+        nowIso,
+        JSON.stringify(history),
+        nowIso,
+        row.id
+      );
+    }
+  }
+}
+
+async function rollbackSupplementaryItemsForPo(poId, poCode) {
+  await ensureSupplierSupplementaryTable();
+  const rows = await prisma.$queryRawUnsafe(
+    `SELECT * FROM "SupplierSupplementaryItem" WHERE "status" IN ('PARTIAL', 'COMPLETED')`
+  );
+  const nowIso = new Date().toISOString();
+  for (const row of rows) {
+    if (!row.fulfillmentHistory) continue;
+    let history = [];
+    try {
+      history = JSON.parse(row.fulfillmentHistory);
+    } catch {
+      continue;
+    }
+    const kept = [];
+    let removedQty = 0;
+    for (const h of history) {
+      if ((h.poId === poId || (poCode && h.poCode === poCode)) && !h.receivedAt) {
+        removedQty += Number(h.qty) || 0;
+      } else {
+        kept.push(h);
+      }
+    }
+    if (removedQty > 0) {
+      const newFulfilled = Math.max(0, (Number(row.fulfilledQuantity) || 0) - removedQty);
+      const newStatus = newFulfilled <= 0 ? 'PENDING' : newFulfilled >= (Number(row.quantity) || 0) ? 'COMPLETED' : 'PARTIAL';
+      await prisma.$executeRawUnsafe(
+        `UPDATE "SupplierSupplementaryItem" SET "fulfilledQuantity" = ?, "fulfillmentHistory" = ?, "status" = ?, "updatedAt" = ? WHERE "id" = ?`,
+        newFulfilled,
+        JSON.stringify(kept),
+        newStatus,
+        nowIso,
+        row.id
+      );
+    }
+  }
+}
+
+let __legacySuppBackfilled = false;
+async function syncLegacySupplementaryItemsFromQI() {
+  if (__legacySuppBackfilled) return;
+  await ensureSupplierSupplementaryTable();
+  const qis = await prisma.qualityInspection.findMany({
+    where: { metadata: { contains: 'SUPPLEMENTARY_GOODS' } },
+  });
+  for (const ins of qis) {
+    let meta = {};
+    try {
+      meta = typeof ins.metadata === 'string' ? JSON.parse(ins.metadata) : ins.metadata || {};
+    } catch {
+      continue;
+    }
+    if (meta.resolution?.action !== 'SUPPLEMENTARY_GOODS') continue;
+    const countRows = await prisma.$queryRawUnsafe(
+      `SELECT COUNT(*) as cnt FROM "SupplierSupplementaryItem" WHERE "qualityInspectionId" = ?`,
+      ins.id
+    );
+    if (Number(countRows?.[0]?.cnt || 0) > 0) continue;
+
+    const poCode = meta.purchaseOrderCode || meta.poNumber || (ins.code.match(/DH-\d+-\d+/i) ? ins.code.match(/DH-\d+-\d+/i)[0] : '');
+    const po = poCode
+      ? await prisma.purchaseOrder.findFirst({ where: { code: poCode }, include: { supplier: true, items: true } })
+      : null;
+    let supplierId = po?.supplierId || null;
+    const supplierName = po?.supplier?.name || meta.supplierName || 'Nhà cung cấp';
+    if (!supplierId && supplierName) {
+      const foundSupp = await prisma.supplier.findFirst({ where: { name: supplierName }, select: { id: true } });
+      if (foundSupp) supplierId = foundSupp.id;
+    }
+    const rawItems = Array.isArray(meta.items) ? meta.items : [];
+    let failedItems = rawItems.filter((it) => Number(it.failQuantity || it.soLuongLoi || 0) > 0);
+    if (failedItems.length === 0) {
+      failedItems = [{
+        productName: ins.productName || 'Vật tư / Linh kiện',
+        model: meta.model || '',
+        failQuantity: Number(meta.failedQuantity || meta.failQuantity || 1),
+        unit: 'cái',
+      }];
+    }
+    const poItems = po?.items || [];
+    for (const fi of failedItems) {
+      const fQty = Number(fi.failQuantity || fi.soLuongLoi || 1);
+      if (fQty <= 0) continue;
+      const matchedPoItem = poItems.find((pi) => pi.tenHang?.toLowerCase() === (fi.productName || '').toLowerCase());
+      let invId = matchedPoItem?.inventoryItemId || fi.inventoryItemId || null;
+      if (!invId && (fi.model || fi.productName)) {
+        const foundInv = await prisma.inventoryItem.findFirst({
+          where: {
+            OR: [
+              ...(fi.model ? [{ code: fi.model }] : []),
+              ...(fi.productName ? [{ tenHang: fi.productName }] : []),
+            ],
+          },
+          select: { id: true },
+        });
+        if (foundInv) invId = foundInv.id;
+      }
+      await insertSupplierSupplementaryItem({
+        supplierId: supplierId || `SUP-NAME-${supplierName}`,
+        supplierName,
+        qualityInspectionId: ins.id,
+        inspectionCode: ins.code,
+        sourcePoId: po?.id || meta.purchaseOrderId || null,
+        sourcePoCode: po?.code || poCode || null,
+        sourcePoDate: po?.ngayDat || po?.createdAt || null,
+        inventoryItemId: invId,
+        productCode: fi.model || fi.productCode || null,
+        productName: fi.productName || 'Vật tư / Linh kiện',
+        unit: fi.unit || matchedPoItem?.donVi || 'cái',
+        quantity: fQty,
+        fulfilledQuantity: 0,
+        receivedQuantity: 0,
+        commitmentDate: meta.resolution?.commitmentDate || null,
+        note: meta.resolution?.note || fi.comment || null,
+        status: 'PENDING',
+      });
+    }
+  }
+  __legacySuppBackfilled = true;
+}
+
+// GET /api/purchase/supplementary-items?supplierId=...&status=PENDING,PARTIAL
+app.get('/api/purchase/supplementary-items', async (req, res) => {
+  try {
+    await ensureSupplierSupplementaryTable();
+    await syncLegacySupplementaryItemsFromQI();
+    const { supplierId, supplierName, status } = req.query;
+    const statusList = status
+      ? String(status).split(',').map((s) => s.trim()).filter(Boolean)
+      : ['PENDING', 'PARTIAL'];
+
+    const statusPlaceholders = statusList.map(() => '?').join(',');
+    const params = [...statusList];
+    let sql = `SELECT * FROM "SupplierSupplementaryItem" WHERE "status" IN (${statusPlaceholders})`;
+    if (supplierId && supplierName) {
+      sql += ` AND ("supplierId" = ? OR "supplierName" = ?)`;
+      params.push(String(supplierId), String(supplierName));
+    } else if (supplierId) {
+      sql += ` AND "supplierId" = ?`;
+      params.push(String(supplierId));
+    } else if (supplierName) {
+      sql += ` AND "supplierName" = ?`;
+      params.push(String(supplierName));
+    }
+    sql += ` ORDER BY "createdAt" ASC`;
+
+    const rows = await prisma.$queryRawUnsafe(sql, ...params);
+    const items = rows
+      .map((r) => {
+        let history = [];
+        try {
+          history = r.fulfillmentHistory ? JSON.parse(r.fulfillmentHistory) : [];
+        } catch {}
+        const quantity = Number(r.quantity) || 0;
+        const fulfilledQuantity = Number(r.fulfilledQuantity) || 0;
+        const receivedQuantity = Number(r.receivedQuantity) || 0;
+        const remainingQuantity = Math.max(0, quantity - fulfilledQuantity);
+        return { ...r, quantity, fulfilledQuantity, receivedQuantity, remainingQuantity, fulfillmentHistory: history };
+      })
+      .filter((r) => (statusList.includes('COMPLETED') ? true : r.remainingQuantity > 0));
+
+    res.json({ success: true, items });
+  } catch (err) {
+    console.error('Lỗi GET /api/purchase/supplementary-items:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/purchase/defective-goods/:id/resolve', async (req, res) => {
   try {
     const { id } = req.params;
-    const { action, amount, note, commitmentDate, resolvedBy } = req.body || {};
+    const { action, amount, note, commitmentDate, resolvedBy, replacementPoId, replacementPoCode } = req.body || {};
 
     const ins = await prisma.qualityInspection.findFirst({
       where: { OR: [{ id }, { code: id }] },
@@ -29902,28 +30474,39 @@ app.post('/api/purchase/defective-goods/:id/resolve', async (req, res) => {
       } catch {}
     }
 
+    const normalizedAction = action === 'RETURN_TO_SUPPLIER' ? 'REPLACEMENT_ORDER' : action;
     const actionLabels = {
       DEBT_DEDUCTION: 'Cấn trừ công nợ',
-      SUPPLEMENTARY_GOODS: 'NCC gửi bù hàng',
+      SUPPLEMENTARY_GOODS: 'NCC gửi bù hàng đợt sau',
       REFUND: 'NCC hoàn lại tiền',
-      RETURN_TO_SUPPLIER: 'Xuất trả lại hàng NCC',
+      REPLACEMENT_ORDER: 'Gửi bù hàng lỗi',
     };
 
-    const actionLabel = actionLabels[action] || 'Đã xử lý';
+    const actionLabel = actionLabels[normalizedAction] || 'Đã xử lý';
     const deductAmount = Math.abs(Number(amount) || 0);
 
     // Xác định PO và NCC
-    const poCode = meta.purchaseOrderCode || meta.poNumber || '';
+    const poCode = meta.purchaseOrderCode || meta.poNumber || (ins.code.match(/DH-\d+-\d+/i) ? ins.code.match(/DH-\d+-\d+/i)[0] : '');
     const po = poCode ? await prisma.purchaseOrder.findFirst({
       where: { code: poCode },
-      include: { supplier: true },
+      include: { supplier: true, items: true },
     }) : null;
-    const supplierId = po?.supplierId || null;
+    let supplierId = po?.supplierId || null;
     const supplierName = po?.supplier?.name || meta.supplierName || 'Nhà cung cấp';
+    if (!supplierId && supplierName) {
+      const foundSupp = await prisma.supplier.findFirst({
+        where: { name: supplierName },
+        select: { id: true },
+      });
+      if (foundSupp) supplierId = foundSupp.id;
+    }
 
-    // 1. Nếu chọn "Cấn trừ công nợ": Tạo bản ghi Debt loại PAYABLE và đồng bộ kế toán ngay
-    if (action === 'DEBT_DEDUCTION' && deductAmount > 0) {
+    let extraResolutionMeta = {};
+
+    // 1. Phương án 1: "Cấn trừ công nợ" -> Tạo Debt PAYABLE và đồng bộ kế toán ngay
+    if (normalizedAction === 'DEBT_DEDUCTION' && deductAmount > 0) {
       const refId = `NCC-DED-${ins.code}`;
+      await prisma.debt.deleteMany({ where: { referenceId: refId } });
       await prisma.debt.create({
         data: {
           type: 'PAYABLE',
@@ -29939,23 +30522,133 @@ app.post('/api/purchase/defective-goods/:id/resolve', async (req, res) => {
       });
 
       try {
-        const { syncPrismaFinanceToAccountingTables } = await import(`./services/prismaFinanceSyncService.js?t=${Date.now()}`);
-        await syncPrismaFinanceToAccountingTables();
+        const dbPath = path.join(__dirname, 'prisma', 'dev.db');
+        const sqliteConn = new sqlite3.Database(dbPath);
+        try {
+          await syncPrismaFinanceToAccountingTables(sqliteConn);
+        } finally {
+          sqliteConn.close();
+        }
       } catch (syncErr) {
         console.warn('⚠️ Lỗi đồng bộ cấn trừ công nợ NCC:', syncErr.message);
       }
     }
 
-    // 2. Cập nhật resolution vào metadata của QualityInspection
+    // 2. Phương án 2: "NCC gửi bù hàng đợt sau" -> Lưu danh sách hàng cần bù vào bảng SupplierSupplementaryItem
+    if (normalizedAction === 'SUPPLEMENTARY_GOODS') {
+      await ensureSupplierSupplementaryTable();
+      // Xóa các bản ghi PENDING cũ của biên bản này (nếu cập nhật lại)
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM "SupplierSupplementaryItem" WHERE "qualityInspectionId" = ? AND "fulfilledQuantity" = 0`,
+        ins.id
+      );
+
+      const rawItems = Array.isArray(meta.items) ? meta.items : [];
+      let failedItems = rawItems.filter((it) => Number(it.failQuantity || it.soLuongLoi || 0) > 0);
+      if (failedItems.length === 0) {
+        failedItems = [{
+          productName: ins.productName || 'Vật tư / Linh kiện',
+          model: meta.model || '',
+          failQuantity: Number(meta.failedQuantity || meta.failQuantity || 1),
+          unit: 'cái',
+        }];
+      }
+
+      const poItems = po?.items || [];
+      const createdSuppIds = [];
+      for (const fi of failedItems) {
+        const fQty = Number(fi.failQuantity || fi.soLuongLoi || 1);
+        if (fQty <= 0) continue;
+        const matchedPoItem = poItems.find(
+          (pi) => pi.tenHang?.toLowerCase() === (fi.productName || '').toLowerCase()
+        );
+        let invId = matchedPoItem?.inventoryItemId || fi.inventoryItemId || null;
+        if (!invId && (fi.model || fi.productName)) {
+          const foundInv = await prisma.inventoryItem.findFirst({
+            where: {
+              OR: [
+                ...(fi.model ? [{ code: fi.model }] : []),
+                ...(fi.productName ? [{ tenHang: fi.productName }] : []),
+              ],
+            },
+            select: { id: true },
+          });
+          if (foundInv) invId = foundInv.id;
+        }
+        const createdSupp = await insertSupplierSupplementaryItem({
+          supplierId: supplierId || `SUP-NAME-${supplierName}`,
+          supplierName,
+          qualityInspectionId: ins.id,
+          inspectionCode: ins.code,
+          sourcePoId: po?.id || meta.purchaseOrderId || null,
+          sourcePoCode: po?.code || poCode || null,
+          sourcePoDate: po?.ngayDat || po?.createdAt || null,
+          inventoryItemId: invId,
+          productCode: fi.model || fi.productCode || null,
+          productName: fi.productName || 'Vật tư / Linh kiện',
+          unit: fi.unit || matchedPoItem?.donVi || 'cái',
+          quantity: fQty,
+          fulfilledQuantity: 0,
+          receivedQuantity: 0,
+          commitmentDate: commitmentDate || null,
+          note: note || fi.comment || null,
+          status: 'PENDING',
+        });
+        createdSuppIds.push(createdSupp.id);
+      }
+      extraResolutionMeta = { supplementaryItemIds: createdSuppIds };
+    }
+
+    // 3. Phương án 3: "NCC hoàn lại tiền" -> Tạo PaymentNotification (chờ Kế toán xác nhận thực nhận tiền)
+    if (normalizedAction === 'REFUND' && deductAmount > 0) {
+      const refundCode = `HT-NCC-${ins.code}`;
+      const refundNote = `NCC hoàn tiền hàng lỗi theo biên bản ${ins.code}${poCode ? ` (PO: ${poCode})` : ''} — ${supplierName}${commitmentDate ? ` | Hạn cam kết: ${commitmentDate}` : ''}${note ? ` | ${note}` : ''}`;
+      const existingNotif = await prisma.paymentNotification.findUnique({ where: { code: refundCode } });
+      let refundNotif;
+      if (existingNotif && existingNotif.status === 'pending') {
+        refundNotif = await prisma.paymentNotification.update({
+          where: { id: existingNotif.id },
+          data: { amount: deductAmount, note: refundNote },
+        });
+      } else if (!existingNotif) {
+        refundNotif = await prisma.paymentNotification.create({
+          data: {
+            code: refundCode,
+            amount: deductAmount,
+            paymentMethod: 'transfer',
+            note: refundNote,
+            status: 'pending',
+          },
+        });
+      } else {
+        refundNotif = existingNotif;
+      }
+      extraResolutionMeta = {
+        refundCode,
+        refundNotificationId: refundNotif.id,
+        refundStatus: refundNotif.status === 'verified' ? 'RECEIVED' : 'PENDING',
+      };
+    }
+
+    // 4. Phương án 4: "Gửi bù hàng lỗi" -> Lưu liên kết đơn mua hàng bù 0đ vừa tạo
+    if (normalizedAction === 'REPLACEMENT_ORDER') {
+      extraResolutionMeta = {
+        replacementPoId: replacementPoId || null,
+        replacementPoCode: replacementPoCode || null,
+      };
+    }
+
+    // Cập nhật resolution vào metadata của QualityInspection
     meta.resolution = {
       status: 'RESOLVED',
-      action,
+      action: normalizedAction,
       actionLabel,
       amount: deductAmount,
       note: note || '',
       commitmentDate: commitmentDate || null,
       resolvedAt: new Date().toISOString(),
       resolvedBy: resolvedBy || 'Phòng Mua hàng',
+      ...extraResolutionMeta,
     };
 
     await prisma.qualityInspection.update({
@@ -29965,17 +30658,17 @@ app.post('/api/purchase/defective-goods/:id/resolve', async (req, res) => {
       },
     });
 
-    // 3. Gửi thông báo liên phòng ban
+    // Gửi thông báo liên phòng ban
     try {
       await sendCrossDeptNotification({
         title: `✅ Đã chốt phương án xử lý hàng lỗi NCC: ${ins.code}`,
-        content: `Mua hàng đã làm việc với ${supplierName}: Phương án **${actionLabel}**${deductAmount > 0 ? ` (Số tiền: ${deductAmount.toLocaleString('vi-VN')} đ)` : ''}. Ghi chú: ${note || 'Đã thống nhất thỏa thuận'}.`,
+        content: `Mua hàng đã làm việc với ${supplierName}: Phương án **${actionLabel}**${deductAmount > 0 ? ` (Số tiền: ${deductAmount.toLocaleString('vi-VN')} đ)` : ''}${replacementPoCode ? ` (Đơn bù: ${replacementPoCode})` : ''}. Ghi chú: ${note || 'Đã thống nhất thỏa thuận'}.`,
         type: 'info',
         priority: 'high',
         sourceDept: 'purchase',
-        targetDept: 'finance',
+        targetDept: normalizedAction === 'REFUND' || normalizedAction === 'DEBT_DEDUCTION' ? 'finance' : 'logistics',
         senderName: resolvedBy || 'Phòng Mua hàng',
-        link: '/purchase',
+        link: normalizedAction === 'REFUND' ? '/finance/cashflow' : '/purchase',
         entityType: 'QUALITY_INSPECTION',
         entityId: ins.id,
       });
@@ -30006,6 +30699,38 @@ app.post('/api/purchase/defective-goods/:id/reopen', async (req, res) => {
     }
 
     const prevAction = meta.resolution?.action;
+
+    // Kiểm tra điều kiện hoàn tác an toàn cho từng phương án
+    if (prevAction === 'SUPPLEMENTARY_GOODS') {
+      await ensureSupplierSupplementaryTable();
+      const attachedRows = await prisma.$queryRawUnsafe(
+        `SELECT "id" FROM "SupplierSupplementaryItem" WHERE "qualityInspectionId" = ? AND "fulfilledQuantity" > 0`,
+        ins.id
+      );
+      if (attachedRows.length > 0) {
+        return res.status(400).json({
+          error: 'Không thể hoàn tác vì một phần/toàn bộ hàng gửi bù đã được đưa vào đơn mua hàng.',
+        });
+      }
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM "SupplierSupplementaryItem" WHERE "qualityInspectionId" = ?`,
+        ins.id
+      );
+    }
+
+    if (prevAction === 'REFUND') {
+      const refundCode = `HT-NCC-${ins.code}`;
+      const existingNotif = await prisma.paymentNotification.findUnique({ where: { code: refundCode } });
+      if (existingNotif?.status === 'verified') {
+        return res.status(400).json({
+          error: 'Không thể hoàn tác vì Kế toán đã xác nhận nhận tiền hoàn trả vào quỹ/ngân hàng.',
+        });
+      }
+      if (existingNotif) {
+        await prisma.paymentNotification.delete({ where: { id: existingNotif.id } });
+      }
+    }
+
     meta.resolution = {
       status: 'PENDING',
       action: null,
@@ -30027,8 +30752,13 @@ app.post('/api/purchase/defective-goods/:id/reopen', async (req, res) => {
         where: { referenceId: refId },
       });
       try {
-        const { syncPrismaFinanceToAccountingTables } = await import(`./services/prismaFinanceSyncService.js?t=${Date.now()}`);
-        await syncPrismaFinanceToAccountingTables();
+        const dbPath = path.join(__dirname, 'prisma', 'dev.db');
+        const sqliteConn = new sqlite3.Database(dbPath);
+        try {
+          await syncPrismaFinanceToAccountingTables(sqliteConn);
+        } finally {
+          sqliteConn.close();
+        }
       } catch (syncErr) {
         console.warn('⚠️ Lỗi hoàn tác cấn trừ công nợ NCC:', syncErr.message);
       }
@@ -30395,7 +31125,8 @@ app.post('/api/plan-finance/purchase-requests/:id/create-orders', async (req, re
           invItem?.giaNhap && invItem.giaNhap > 0
             ? invItem.giaNhap
             : item?.donGiaDK || 0;
-        const donGia = a.donGia !== undefined && a.donGia > 0 ? a.donGia : defaultGiaNhap;
+        const isZeroPriceSupp = Boolean(a.isSupplementary || a.isReplacement || a.supplementaryItemId);
+        const donGia = isZeroPriceSupp ? 0 : (a.donGia !== undefined && a.donGia > 0 ? a.donGia : defaultGiaNhap);
 
         let dinhMucId = null;
         if (invItem?.dinhMucs?.length > 0) {
@@ -30420,9 +31151,9 @@ app.post('/api/plan-finance/purchase-requests/:id/create-orders', async (req, re
           donVi: a.donVi !== undefined ? a.donVi : item?.donVi || invItem?.donVi || null,
           soLuong,
           donGia,
-          thanhTien: soLuong * donGia,
+          thanhTien: isZeroPriceSupp ? 0 : soLuong * donGia,
           dinhMucId,
-          ghiChu: item?.ghiChu || null,
+          ghiChu: a.ghiChu || item?.ghiChu || null,
           sortOrder: idx,
           ngayGiao: a.ngayGiao ? new Date(a.ngayGiao) : null,
         });
@@ -30483,6 +31214,15 @@ app.post('/api/plan-finance/purchase-requests/:id/create-orders', async (req, re
             },
           });
         }
+      }
+
+      const attachedSuppList = group
+        .filter((a) => a.supplementaryItemId && Number(a.soLuong) > 0)
+        .map((a) => ({ supplementaryItemId: a.supplementaryItemId, qty: Number(a.soLuong) }));
+      if (attachedSuppList.length > 0) {
+        await attachSupplementaryItemsToPo(order.id, code, attachedSuppList).catch((e) =>
+          console.warn('⚠️ Lỗi cập nhật SupplierSupplementaryItem khi tạo PO từ PR:', e.message)
+        );
       }
 
       createdOrders.push({ id: order.id, code, supplierName, soMatHang: group.length, tongTien });
@@ -30654,7 +31394,7 @@ app.get('/api/plan-finance/purchasing', async (req, res) => {
 // 10. POST /api/plan-finance/purchasing
 app.post('/api/plan-finance/purchasing', async (req, res) => {
   try {
-    const { code, supplierId, ngayDat, ngayNhan, trangThai, tongTien, daThanhToan, ghiChu, items } = req.body || {};
+    const { code, supplierId, ngayDat, ngayNhan, trangThai, tongTien, daThanhToan, ghiChu, items, isReplacementPo } = req.body || {};
 
     let finalCode = code;
     if (finalCode) {
@@ -30674,11 +31414,14 @@ app.post('/api/plan-finance/purchasing', async (req, res) => {
       }
     }
 
+    const resolvedStatus = isReplacementPo ? 'ordered' : (trangThai ?? 'draft');
+    const resolvedTongTien = isReplacementPo ? 0 : parseFloat(tongTien ?? 0);
+
     const item = await prisma.purchaseOrder.create({
       data: {
         code: finalCode,
-        trangThai: trangThai ?? 'draft',
-        tongTien: parseFloat(tongTien ?? 0),
+        trangThai: resolvedStatus,
+        tongTien: resolvedTongTien,
         daThanhToan: parseFloat(daThanhToan ?? 0),
         ghiChu: ghiChu || null,
         ...(supplierId && { supplierId }),
@@ -30703,13 +31446,15 @@ app.post('/api/plan-finance/purchasing', async (req, res) => {
                     dinhMucId = stdBom.id;
                   }
                 }
+                const isZeroPriceItem = Boolean(isReplacementPo || i.isSupplementary || i.isReplacement || i.supplementaryItemId);
                 const defaultGiaNhap = invItem?.giaNhap && invItem.giaNhap > 0 ? invItem.giaNhap : 0;
-                const donGia = parseFloat(i.donGia) > 0 ? parseFloat(i.donGia) : defaultGiaNhap;
+                const donGia = isZeroPriceItem ? 0 : (parseFloat(i.donGia) > 0 ? parseFloat(i.donGia) : defaultGiaNhap);
                 const soLuong = parseFloat(i.soLuong) || 1;
-                const thanhTien =
-                  parseFloat(i.thanhTien) > 0 && parseFloat(i.donGia) > 0
+                const thanhTien = isZeroPriceItem
+                  ? 0
+                  : (parseFloat(i.thanhTien) > 0 && parseFloat(i.donGia) > 0
                     ? parseFloat(i.thanhTien)
-                    : soLuong * donGia;
+                    : soLuong * donGia);
 
                 return {
                   inventoryItemId: i.inventoryItemId || null,
@@ -30731,11 +31476,25 @@ app.post('/api/plan-finance/purchasing', async (req, res) => {
             loai: 'create',
             ngay: new Date(),
             nguoiThucHien: 'Lê Công Vụ',
-            ketQua: `Đơn mua hàng ${finalCode || ''} đã được khởi tạo.`,
+            ketQua: isReplacementPo
+              ? `Đơn bù hàng lỗi ${finalCode || ''} (0 ₫) đã được khởi tạo và tự động chuyển trạng thái Đã đặt hàng (không cần duyệt).`
+              : `Đơn mua hàng ${finalCode || ''} đã được khởi tạo.`,
           },
         },
       },
     });
+
+    // Cập nhật tiến độ các mặt hàng gửi bù (Phương án 2) nếu có đính kèm vào đơn PO này
+    if (Array.isArray(items) && items.length > 0) {
+      const attachedSuppList = items
+        .filter((i) => i.supplementaryItemId && Number(i.soLuong) > 0)
+        .map((i) => ({ supplementaryItemId: i.supplementaryItemId, qty: Number(i.soLuong) }));
+      if (attachedSuppList.length > 0) {
+        await attachSupplementaryItemsToPo(item.id, item.code, attachedSuppList).catch((e) =>
+          console.warn('⚠️ Lỗi cập nhật SupplierSupplementaryItem khi tạo PO trực tiếp:', e.message)
+        );
+      }
+    }
 
     res.status(201).json(item);
   } catch (error) {
@@ -30787,6 +31546,12 @@ app.get('/api/plan-finance/purchasing/:id', async (req, res) => {
           }
         } catch (_) {}
       }
+    }
+
+    if (po && (po.trangThai === 'received' || po.trangThai === 'completed')) {
+      await markSupplementaryItemsReceivedForPo(po.id, po.code).catch((e) =>
+        console.warn('⚠️ Lỗi cập nhật thời gian nhận hàng bù:', e.message)
+      );
     }
 
     res.json(po);
@@ -31021,6 +31786,12 @@ app.patch('/api/plan-finance/purchasing/:id', async (req, res) => {
       }
     }
 
+    if (po && (po.trangThai === 'received' || po.trangThai === 'completed')) {
+      await markSupplementaryItemsReceivedForPo(po.id, po.code).catch((e) =>
+        console.warn('⚠️ Lỗi cập nhật thời gian nhận hàng bù:', e.message)
+      );
+    }
+
     res.json(po);
   } catch (error) {
     console.error('Error PATCH /api/plan-finance/purchasing/:id:', error);
@@ -31136,6 +31907,10 @@ app.put('/api/plan-finance/purchasing/:id', async (req, res) => {
 app.delete('/api/plan-finance/purchasing/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const poToDelete = await prisma.purchaseOrder.findUnique({ where: { id }, select: { code: true } });
+    await rollbackSupplementaryItemsForPo(id, poToDelete?.code).catch((e) =>
+      console.warn('⚠️ Lỗi hoàn tác hàng gửi bù khi xóa PO:', e.message)
+    );
     await prisma.$transaction(async (tx) => {
       const poItems = await tx.purchaseOrderItem.findMany({
         where: { purchaseOrderId: id },

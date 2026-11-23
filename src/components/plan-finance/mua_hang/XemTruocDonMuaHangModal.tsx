@@ -15,6 +15,10 @@ interface ReqItem {
   tenHang: string;
   donVi: string | null;
   soLuong: number;
+  ghiChu?: string | null;
+  isSupplementary?: boolean;
+  isReplacement?: boolean;
+  supplementaryItemId?: string;
   inventoryItemId: string | null;
   inventoryItem: { code: string | null; tenHang: string; donVi: string | null; categoryId: string | null; thongSoKyThuat: string | null; imageUrl: string | null } | null;
 }
@@ -231,6 +235,7 @@ export default function XemTruocDonMuaHangModal({
   const [nguoiNhan, setNguoiNhan] = React.useState("");
   const [sdtNhan, setSdtNhan] = React.useState("");
   const [ghiChu, setGhiChu] = React.useState("");
+  const [failedImages, setFailedImages] = React.useState<Record<string, boolean>>({});
   const [translatedGhiChu, setTranslatedGhiChu] = React.useState("");
   const addressRef = React.useRef<HTMLTextAreaElement>(null);
 
@@ -297,13 +302,17 @@ export default function XemTruocDonMuaHangModal({
         tenHang: string;
         donVi: string | null;
         soLuong: number;
+        ghiChu?: string | null;
+        isSupplementary?: boolean;
+        isReplacement?: boolean;
         inventoryItemId: string | null;
         inventoryItem: any;
       };
     }> = {};
 
     rawList.forEach(x => {
-      const key = x.item!.tenHang;
+      const isSupp = Boolean(x.item?.isSupplementary || x.item?.isReplacement);
+      const key = isSupp ? `__supp_${x.item!.id}` : x.item!.tenHang;
       if (!groups[key]) {
         groups[key] = {
           itemId: x.itemId,
@@ -316,6 +325,9 @@ export default function XemTruocDonMuaHangModal({
             tenHang: x.item!.tenHang,
             donVi: x.item!.donVi,
             soLuong: 0,
+            ghiChu: x.item!.ghiChu ?? null,
+            isSupplementary: x.item!.isSupplementary,
+            isReplacement: x.item!.isReplacement,
             inventoryItemId: x.item!.inventoryItemId,
             inventoryItem: x.item!.inventoryItem
           }
@@ -352,6 +364,10 @@ export default function XemTruocDonMuaHangModal({
         donVi: it?.donVi,
         soLuong: it?.soLuong,
         inventoryItemId: it?.inventoryItemId,
+        ghiChu: it?.ghiChu ?? null,
+        isSupplementary: Boolean(it?.isSupplementary),
+        isReplacement: Boolean(it?.isReplacement),
+        supplementaryItemId: it?.supplementaryItemId,
       };
     });
     const res = await fetch(`/api/plan-finance/purchase-requests/${reqId}/create-orders`, {
@@ -776,8 +792,13 @@ export default function XemTruocDonMuaHangModal({
                 <td style={{ ...bodyCell, ...rowBorder, textAlign: "center", color: "#64748b" }}>{idx + 1}</td>
                 {showImage && (
                   <td style={{ ...bodyCell, ...rowBorder, textAlign: "center", padding: "4px 8px" }}>
-                    {x.item?.inventoryItem?.imageUrl ? (
-                      <img src={x.item.inventoryItem.imageUrl} style={{ width: 36, height: 36, objectFit: "contain", borderRadius: 4, display: "block", margin: "0 auto" }} alt="" />
+                    {x.item?.inventoryItem?.imageUrl && !failedImages[x.itemId] ? (
+                      <img
+                        src={x.item.inventoryItem.imageUrl}
+                        style={{ width: 36, height: 36, objectFit: "contain", borderRadius: 4, display: "block", margin: "0 auto" }}
+                        alt=""
+                        onError={() => setFailedImages((prev) => ({ ...prev, [x.itemId]: true }))}
+                      />
                     ) : <span style={{ color: "#cbd5e1", fontSize: 10 }}>—</span>}
                   </td>
                 )}
@@ -785,6 +806,26 @@ export default function XemTruocDonMuaHangModal({
                   <p style={{ margin: 0, fontWeight: 600 }}>{translateProduct(x.item!.tenHang, lang)}</p>
 
                   {x.ngayGiao && <p style={{ margin: "1px 0 0", fontSize: 10.5, color: "#64748b" }}>{t.ngayGiao} {fmtDate(x.ngayGiao)}</p>}
+                  {x.item?.ghiChu && (() => {
+                    const noteText = String(x.item.ghiChu).trim();
+                    const isSuppNote =
+                      Boolean(x.item.isSupplementary || x.item.isReplacement) ||
+                      noteText.toLowerCase().includes("gửi bù") ||
+                      noteText.toLowerCase().includes("bù lỗi");
+                    return (
+                      <p
+                        style={{
+                          margin: "2px 0 0",
+                          fontSize: 10.5,
+                          fontStyle: "italic",
+                          fontWeight: isSuppNote ? 600 : 400,
+                          color: isSuppNote ? "#b45309" : "#475569",
+                        }}
+                      >
+                        {translateProduct(noteText, lang)}
+                      </p>
+                    );
+                  })()}
                 </td>
                 <td style={{ ...bodyCell, ...rowBorder, textAlign: "center" }}>{translateProduct(x.item!.donVi ?? "—", lang)}</td>
                 <td style={{ ...bodyCell, ...rowBorder, textAlign: "center", fontWeight: 700 }}>{x.item!.soLuong.toLocaleString()}</td>

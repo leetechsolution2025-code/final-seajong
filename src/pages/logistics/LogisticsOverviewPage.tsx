@@ -2043,6 +2043,58 @@ export const LogisticsOverviewPage: React.FC = () => {
               </span>
             </div>
 
+            {/* Thông tin đơn hàng, khách hàng, địa chỉ & lý do nhập kho */}
+            {(() => {
+              const refOrderCode =
+                selectedOrder.saleOrderCode ||
+                selectedOrder.productionOrder ||
+                selectedOrder.purchaseOrderCode ||
+                null;
+              const partnerName = selectedOrder.customer || selectedOrder.supplierName || null;
+              const partnerAddress = selectedOrder.customerAddress || null;
+              const importReasonText =
+                selectedOrder.type === 'material-import'
+                  ? (selectedOrder.importReason || selectedOrder.description || selectedOrder.title || selectedOrder.typeLabel)
+                  : null;
+
+              if (!refOrderCode && !partnerName && !partnerAddress && !importReasonText) {
+                return null;
+              }
+
+              return (
+                <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2 text-xs">
+                  {refOrderCode && (
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-500 font-medium">
+                        {selectedOrder.isPurchaseOrder ? 'Đơn mua hàng:' : 'Đơn hàng:'}
+                      </span>
+                      <span className="font-mono font-bold text-slate-800">{refOrderCode}</span>
+                    </div>
+                  )}
+                  {partnerName && (
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-slate-500 font-medium shrink-0">
+                        {selectedOrder.isPurchaseOrder ? 'Nhà cung cấp:' : 'Khách hàng:'}
+                      </span>
+                      <span className="font-semibold text-slate-800 text-right">{partnerName}</span>
+                    </div>
+                  )}
+                  {partnerAddress && (
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-slate-500 font-medium shrink-0">Địa chỉ:</span>
+                      <span className="text-slate-600 text-right">{partnerAddress}</span>
+                    </div>
+                  )}
+                  {importReasonText && (
+                    <div className="pt-2 border-t border-slate-100">
+                      <div className="text-slate-500 font-medium mb-0.5">Lý do nhập kho:</div>
+                      <div className="text-slate-800 font-medium leading-relaxed">{importReasonText}</div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             <div className="flex items-center justify-between">
               <h6 className="font-bold text-slate-900 flex items-center gap-2 text-xs uppercase tracking-wider">
                 <i className="bi bi-box-seam text-sky-600" />
@@ -2223,6 +2275,8 @@ export const LogisticsOverviewPage: React.FC = () => {
                             orderDetails.some((it: any) => it.isMaterial)
                           )
                             ? 'Đã gom / Cần xuất'
+                            : selectedOrder.type === 'material-import'
+                            ? 'SL cần nhập'
                             : 'SL cần xuất'}
                         </th>
                       </tr>

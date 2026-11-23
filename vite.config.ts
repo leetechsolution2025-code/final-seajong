@@ -2487,6 +2487,34 @@ function autoBackendPlugin(): Plugin {
                 ? order.code.replace('DBH', 'LSX').replace('DHBL', 'LSX').replace('DH', 'LSX')
                 : order.id
 
+              const rawRelatedDefects = await vitePrisma.defectRecord.findMany({
+                where: {
+                  OR: [
+                    ...(order.code ? [{ orderNumber: order.code }] : []),
+                    { orderNumber: orderCode },
+                  ],
+                },
+                orderBy: { createdAt: 'desc' },
+                include: {
+                  activities: { orderBy: { createdAt: 'desc' } },
+                },
+              }).catch(() => [])
+
+              const relatedDefects = (rawRelatedDefects as any[]).map((d) => {
+                const decAct = (d.activities || []).find((a: any) => String(a.action || '').includes('QUYẾT ĐỊNH:'))
+                let resolvedMethod: string | null = null
+                if (decAct) {
+                  const actStr = String(decAct.action || '')
+                  if (actStr.includes('THAY LINH KIỆN')) resolvedMethod = 'Thay linh kiện'
+                  else if (actStr.includes('PHÂN RÃ')) resolvedMethod = 'Phân rã thu hồi vật tư linh kiện'
+                  else if (actStr.includes('HUỶ BỎ')) resolvedMethod = 'Huỷ bỏ thay thế bằng hàng hoá mới'
+                  else if (actStr.includes('NHẬP LẠI KHO')) resolvedMethod = 'Nhập lại kho'
+                  else if (actStr.includes('SỬA CHỮA')) resolvedMethod = 'Sửa chữa tại chỗ'
+                  else resolvedMethod = actStr.replace('QUYẾT ĐỊNH:', '').trim()
+                }
+                return { ...d, resolution: resolvedMethod }
+              })
+
               sendJson(200, {
                 order: {
                   id: orderCode,
@@ -2505,6 +2533,7 @@ function autoBackendPlugin(): Plugin {
                 },
                 items,
                 materials: Array.from(materialMap.values()),
+                defects: relatedDefects,
               })
               return
             }
@@ -3076,355 +3105,7 @@ function autoBackendPlugin(): Plugin {
           }
         }
 
-        // ── MIDDLEWARE QUẢN LÝ HÀNG LỖI MUA HÀNG & NCC (/api/purchase/defective-goods/*) ──
-        if (url.startsWith('/api/purchase/defective-goods')) {
-          const sendJson = (status: number, payload: any) => {
-            res.statusCode = status
-            res.setHeader('Content-Type', 'application/json; charset=utf-8')
-            res.end(JSON.stringify(payload))
-          }
-          const readJsonBody = async () => {
-            let rawBody = ''
-            await new Promise<void>((resolve) => {
-              req.on('data', (chunk) => {
-                rawBody += chunk
-              })
-              req.on('end', () => resolve())
-            })
-            return rawBody ? JSON.parse(rawBody) : {}
-          }
-
-          try {
-            const parsedUrl = new URL(url, 'http://localhost')
-            const pathname = parsedUrl.pathname
-
-            // 1. GET /api/purchase/defective-goods
-            if (req.method === 'GET' && (pathname === '/api/purchase/defective-goods' || pathname === '/api/purchase/defective-goods/')) {
-              const statusFilter = parsedUrl.searchParams.get('status') || 'all'
-              const supplierFilter = parsedUrl.searchParams.get('supplier') || 'all'
-              const q = (parsedUrl.searchParams.get('q') || '').trim().toLowerCase()
-
-              const iqcInspections = await vitePrisma.qualityInspection.findMany({
-                where: { type: 'IQC' },
-                orderBy: { createdAt: 'desc' },
-              })
-
-              const allPOs = await vitePrisma.purchaseOrder.findMany({
-                include: {
-                  supplier: true,
-                  items: true,
-                },
-              })
-              const poById = new Map(allPOs.map((p: any) => [p.id, p]))
-              const poByCode = new Map(allPOs.filter((p: any) => p.code).map((p: any) => [p.code, p]))
-
-              const allSuppliers = await vitePrisma.supplier.findMany()
-
-              const allInventoryItems = await vitePrisma.inventoryItem.findMany({
-                select: {
-                  id: true,
-                  code: true,
-                  tenHang: true,
-                  giaNhap: true,
-                },
-              })
-              const invById = new Map(allInventoryItems.map((inv: any) => [inv.id, inv]))
-              const invByCode = new Map(allInventoryItems.filter((inv: any) => inv.code).map((inv: any) => [inv.code.toLowerCase(), inv]))
-              const invByName = new Map(allInventoryItems.filter((inv: any) => inv.tenHang).map((inv: any) => [inv.tenHang.toLowerCase().trim(), inv]))
-
-              const resultList: any[] = []
-
-              for (const ins of iqcInspections) {
-                let meta: any = {}
-                if (ins.metadata) {
-                  try {
-                    meta = typeof ins.metadata === 'string' ? JSON.parse(ins.metadata) : ins.metadata
-                  } catch {}
-                }
-
-                const rawItems = Array.isArray(meta?.items) ? meta.items : []
-                let failedItems = rawItems.filter((it: any) => {
-                  const f = Number(it.failQuantity || it.soLuongLoi || it.failedQty || 0)
-                  return f > 0
-                })
-
-                if (failedItems.length === 0 && ins.result && ins.result !== 'Đạt') {
-                  const failQty = Number(meta.failedQuantity || meta.failQuantity || 1)
-                  failedItems = [
-                    {
-                      productName: ins.productName || 'Vật tư / Thành phẩm',
-                      model: meta.model || '',
-                      quantity: Number(meta.quantity || 1),
-                      passQuantity: Number(meta.passedQuantity || 0),
-                      failQuantity: failQty,
-                      comment: ins.notes || 'Không đạt kiểm định IQC',
-                    },
-                  ]
-                }
-
-                if (failedItems.length === 0) continue
-
-                const poCode = meta.purchaseOrderCode || meta.poNumber || (ins.code.match(/DH-\d+-\d+/i) ? (ins.code.match(/DH-\d+-\d+/i) as any)[0] : '')
-                const poId = meta.purchaseOrderId || ''
-                const matchedPO = poById.get(poId) || (poCode ? poByCode.get(poCode) : null)
-
-                const poItems = (matchedPO as any)?.items || []
-                let totalFailedQty = 0
-                let totalFailedAmount = 0
-
-                const defectiveItems = failedItems.map((fi: any) => {
-                  const fQty = Number(fi.failQuantity || fi.soLuongLoi || 1)
-                  totalFailedQty += fQty
-
-                  const matchedPoItem = poItems.find(
-                    (pi: any) =>
-                      pi.tenHang?.toLowerCase() === (fi.productName || '').toLowerCase() ||
-                      (pi.ghiChu && pi.ghiChu.toLowerCase().includes((fi.productName || '').toLowerCase()))
-                  )
-                  const matchedInv =
-                    (fi.inventoryItemId ? invById.get(fi.inventoryItemId) : null) ||
-                    (fi.model ? invByCode.get(fi.model.toLowerCase()) : null) ||
-                    (fi.productCode ? invByCode.get(fi.productCode.toLowerCase()) : null) ||
-                    (fi.productName ? invByName.get(fi.productName.toLowerCase().trim()) : null)
-
-                  const unitPrice = Number(matchedPoItem?.donGia || fi.unitPrice || (matchedInv as any)?.giaNhap || 0)
-                  const itemFailedAmount = fQty * unitPrice
-                  totalFailedAmount += itemFailedAmount
-
-                  return {
-                    productName: fi.productName || 'Vật tư / Linh kiện',
-                    model: fi.model || '',
-                    quantity: Number(fi.quantity || fi.sampleQuantity || fQty),
-                    passQuantity: Number(fi.passQuantity || 0),
-                    failQuantity: fQty,
-                    unit: fi.unit || 'cái',
-                    unitPrice,
-                    failedAmount: itemFailedAmount,
-                    comment: fi.comment || fi.defectDesc || '',
-                  }
-                })
-
-                const supplierName = (matchedPO as any)?.supplier?.name || meta.supplierName || 'Nhà cung cấp'
-                let supplierPhone = (matchedPO as any)?.supplier?.phone || (matchedPO as any)?.supplier?.dienThoai || ''
-                let supplierAddress = (matchedPO as any)?.supplier?.address || (matchedPO as any)?.supplier?.diaChi || ''
-                let supplierId = (matchedPO as any)?.supplierId || (matchedPO as any)?.supplier?.id || null
-
-                if (!supplierAddress || !supplierPhone) {
-                  const found = allSuppliers.find(
-                    (s: any) =>
-                      (s.name && supplierName && s.name.trim().toLowerCase() === supplierName.trim().toLowerCase()) ||
-                      (s.name && supplierName && (s.name.toLowerCase().includes(supplierName.toLowerCase()) || supplierName.toLowerCase().includes(s.name.toLowerCase())))
-                  )
-                  if (found) {
-                    if (!supplierAddress) supplierAddress = found.address || ''
-                    if (!supplierPhone) supplierPhone = found.phone || ''
-                    if (!supplierId) supplierId = found.id
-                  }
-                }
-
-                const resolution = meta.resolution || {
-                  status: 'PENDING',
-                  action: null,
-                  actionLabel: 'Chờ xử lý',
-                }
-
-                const record = {
-                  id: ins.id,
-                  code: ins.code,
-                  qcResult: ins.result || 'Lỗi một phần',
-                  executionTime: ins.executionTime || ins.createdAt,
-                  inspectorName: ins.inspectorName || 'Bộ phận QA/QC',
-                  purchaseOrderId: (matchedPO as any)?.id || poId,
-                  purchaseOrderCode: (matchedPO as any)?.code || poCode || 'Đơn mua hàng ngoài',
-                  supplierId,
-                  supplierName,
-                  supplierPhone,
-                  supplierAddress,
-                  status: resolution.status || 'PENDING',
-                  totalFailedQty,
-                  totalFailedAmount,
-                  defectiveItems,
-                  resolution,
-                  notes: ins.notes || '',
-                }
-
-                if (statusFilter !== 'all' && record.status !== statusFilter) continue
-                if (supplierFilter !== 'all' && supplierName.toLowerCase() !== supplierFilter.toLowerCase()) continue
-                if (q) {
-                  const match =
-                    record.code.toLowerCase().includes(q) ||
-                    record.purchaseOrderCode.toLowerCase().includes(q) ||
-                    record.supplierName.toLowerCase().includes(q) ||
-                    defectiveItems.some((di: any) => di.productName.toLowerCase().includes(q))
-                  if (!match) continue
-                }
-
-                resultList.push(record)
-              }
-
-              sendJson(200, {
-                success: true,
-                total: resultList.length,
-                pendingCount: resultList.filter((r) => r.status === 'PENDING').length,
-                resolvedCount: resultList.filter((r) => r.status === 'RESOLVED').length,
-                items: resultList,
-              })
-              return
-            }
-
-            // 2. POST /api/purchase/defective-goods/:id/resolve
-            if (req.method === 'POST' && pathname.endsWith('/resolve')) {
-              const id = decodeURIComponent(pathname.replace('/api/purchase/defective-goods/', '').replace('/resolve', ''))
-              const body = await readJsonBody()
-              const { action, amount, note, commitmentDate, resolvedBy } = body || {}
-
-              const ins = await vitePrisma.qualityInspection.findFirst({
-                where: { OR: [{ id }, { code: id }] },
-              })
-              if (!ins) {
-                sendJson(404, { error: 'Không tìm thấy biên bản kiểm tra chất lượng' })
-                return
-              }
-
-              let meta: any = {}
-              if (ins.metadata) {
-                try {
-                  meta = typeof ins.metadata === 'string' ? JSON.parse(ins.metadata) : ins.metadata
-                } catch {}
-              }
-
-              const actionLabels: Record<string, string> = {
-                DEBT_DEDUCTION: 'Cấn trừ công nợ',
-                SUPPLEMENTARY_GOODS: 'NCC gửi bù hàng',
-                REFUND: 'NCC hoàn lại tiền',
-                RETURN_TO_SUPPLIER: 'Xuất trả lại hàng NCC',
-              }
-
-              const actionLabel = actionLabels[action] || 'Đã xử lý'
-              const deductAmount = Math.abs(Number(amount) || 0)
-
-              const poCode = meta.purchaseOrderCode || meta.poNumber || ''
-              const po = poCode
-                ? await vitePrisma.purchaseOrder.findFirst({
-                    where: { code: poCode },
-                    include: { supplier: true },
-                  })
-                : null
-              const supplierId = (po as any)?.supplierId || null
-              const supplierName = (po as any)?.supplier?.name || meta.supplierName || 'Nhà cung cấp'
-
-              // Nếu chọn "Cấn trừ công nợ": Tạo bản ghi Debt loại PAYABLE và đồng bộ kế toán
-              if (action === 'DEBT_DEDUCTION' && deductAmount > 0) {
-                const refId = `NCC-DED-${ins.code}`
-                await vitePrisma.debt.create({
-                  data: {
-                    type: 'PAYABLE',
-                    supplierId,
-                    partnerName: supplierName,
-                    amount: 0,
-                    paidAmount: deductAmount,
-                    dueDate: new Date(),
-                    status: 'PAID',
-                    description: `Cấn trừ công nợ do hàng lỗi theo biên bản ${ins.code}${poCode ? ` (Đơn PO: ${poCode})` : ''}`,
-                    referenceId: refId,
-                  },
-                })
-
-                try {
-                  const syncModuleUrl = `${pathToFileURL(path.join(__dirname, 'services', 'prismaFinanceSyncService.js')).href}?t=${Date.now()}`
-                  const { syncPrismaFinanceToAccountingTables } = await import(syncModuleUrl)
-                  if (typeof syncPrismaFinanceToAccountingTables === 'function') {
-                    await syncPrismaFinanceToAccountingTables()
-                  }
-                } catch (syncErr: any) {
-                  console.warn('⚠️ Lỗi đồng bộ cấn trừ công nợ NCC:', syncErr?.message)
-                }
-              }
-
-              meta.resolution = {
-                status: 'RESOLVED',
-                action,
-                actionLabel,
-                amount: deductAmount,
-                note: note || '',
-                commitmentDate: commitmentDate || null,
-                resolvedAt: new Date().toISOString(),
-                resolvedBy: resolvedBy || 'Phòng Mua hàng',
-              }
-
-              await vitePrisma.qualityInspection.update({
-                where: { id: ins.id },
-                data: {
-                  metadata: JSON.stringify(meta),
-                },
-              })
-
-              sendJson(200, {
-                success: true,
-                message: 'Đã cập nhật phương án xử lý thành công',
-                resolution: meta.resolution,
-              })
-              return
-            }
-
-            // 3. POST /api/purchase/defective-goods/:id/reopen
-            if (req.method === 'POST' && pathname.endsWith('/reopen')) {
-              const id = decodeURIComponent(pathname.replace('/api/purchase/defective-goods/', '').replace('/reopen', ''))
-              const ins = await vitePrisma.qualityInspection.findFirst({
-                where: { OR: [{ id }, { code: id }] },
-              })
-              if (!ins) {
-                sendJson(404, { error: 'Không tìm thấy biên bản kiểm tra chất lượng' })
-                return
-              }
-
-              let meta: any = {}
-              if (ins.metadata) {
-                try {
-                  meta = typeof ins.metadata === 'string' ? JSON.parse(ins.metadata) : ins.metadata
-                } catch {}
-              }
-
-              const prevAction = meta.resolution?.action
-              meta.resolution = {
-                status: 'PENDING',
-                action: null,
-                actionLabel: 'Chờ xử lý',
-                reopenedAt: new Date().toISOString(),
-              }
-
-              await vitePrisma.qualityInspection.update({
-                where: { id: ins.id },
-                data: {
-                  metadata: JSON.stringify(meta),
-                },
-              })
-
-              if (prevAction === 'DEBT_DEDUCTION') {
-                const refId = `NCC-DED-${ins.code}`
-                await vitePrisma.debt.deleteMany({
-                  where: { referenceId: refId },
-                })
-                try {
-                  const syncModuleUrl = `${pathToFileURL(path.join(__dirname, 'services', 'prismaFinanceSyncService.js')).href}?t=${Date.now()}`
-                  const { syncPrismaFinanceToAccountingTables } = await import(syncModuleUrl)
-                  if (typeof syncPrismaFinanceToAccountingTables === 'function') {
-                    await syncPrismaFinanceToAccountingTables()
-                  }
-                } catch (syncErr: any) {
-                  console.warn('⚠️ Lỗi hoàn tác cấn trừ công nợ NCC:', syncErr?.message)
-                }
-              }
-
-              sendJson(200, { success: true, message: 'Đã hoàn tác về trạng thái chờ xử lý' })
-              return
-            }
-          } catch (err: any) {
-            console.error('Lỗi Vite middleware /api/purchase/defective-goods:', err)
-            sendJson(500, { error: err?.message || 'Lỗi server khi xử lý hàng lỗi' })
-            return
-          }
-        }
+        // /api/purchase/defective-goods/* được xử lý trực tiếp bởi server.js qua getEmbeddedExpressApp()
 
         if (url.startsWith('/api') || url.startsWith('/uploads')) {
           try {

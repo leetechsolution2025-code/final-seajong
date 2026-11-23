@@ -1669,7 +1669,7 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
 
               {/* LEDGER TABLE */}
               <div style={{ flex: '1 1 0%', overflow: 'auto', minHeight: 0, border: '1px solid #e2e8f0', borderRadius: '8px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8rem' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8rem', tableLayout: 'fixed' }}>
                   <thead style={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#f8fafc' }}>
                     <tr style={{ borderBottom: '1px solid #cbd5e1', fontSize: '0.72rem', textTransform: 'uppercase', color: '#475569', fontWeight: 800 }}>
                       <th style={{ padding: '8px 10px', width: '135px', textAlign: 'left', verticalAlign: 'middle' }}>Thời gian</th>
@@ -1767,9 +1767,9 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                   <span style={{ textDecoration: 'underline', textDecorationColor: '#93c5fd' }}>{tx.ref}</span>
                                 </div>
                               </td>
-                              <td style={{ padding: '8px 10px', verticalAlign: 'middle' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              <td style={{ padding: '8px 10px', verticalAlign: 'middle', maxWidth: 0 }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap', minWidth: 0 }}>
                                     <span
                                       style={{
                                         display: 'inline-block',
@@ -1778,6 +1778,8 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                         fontSize: '0.675rem',
                                         fontWeight: 700,
                                         width: 'fit-content',
+                                        flexShrink: 0,
+                                        whiteSpace: 'nowrap',
                                         backgroundColor: '#eff6ff',
                                         color: '#1d4ed8',
                                         border: '1px solid #bfdbfe',
@@ -1785,7 +1787,13 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                     >
                                       {stripParentheses(tx.type)}
                                     </span>
-                                    <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8rem' }}>{cleanedNote}</span>
+                                    <span
+                                      className="truncate"
+                                      title={cleanedNote}
+                                      style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8rem', minWidth: 0 }}
+                                    >
+                                      {cleanedNote}
+                                    </span>
                                     {itemsCount > 0 && (
                                       <span
                                         style={{
@@ -1793,6 +1801,8 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                           borderRadius: '4px',
                                           fontSize: '0.675rem',
                                           fontWeight: 600,
+                                          flexShrink: 0,
+                                          whiteSpace: 'nowrap',
                                           backgroundColor: '#f1f5f9',
                                           color: '#0369a1',
                                           border: '1px solid #bae6fd',
@@ -1897,9 +1907,9 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                   <span>{tx.ref}</span>
                                 </button>
                               </td>
-                              <td style={{ padding: '8px 10px', paddingLeft: '24px', verticalAlign: 'middle' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              <td style={{ padding: '8px 10px', paddingLeft: '24px', verticalAlign: 'middle', maxWidth: 0 }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap', minWidth: 0 }}>
                                     {(() => {
                                       const isReturnDeduction = tx.isReturn || tx.type === 'Giảm trừ nợ' || String(tx.type || '').includes('Giảm trừ');
                                       return (
@@ -1911,6 +1921,8 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                             fontSize: '0.675rem',
                                             fontWeight: 700,
                                             width: 'fit-content',
+                                            flexShrink: 0,
+                                            whiteSpace: 'nowrap',
                                             backgroundColor: isReturnDeduction ? '#fef3c7' : '#dcfce7',
                                             color: isReturnDeduction ? '#b45309' : '#15803d',
                                             border: `1px solid ${isReturnDeduction ? '#fde68a' : '#86efac'}`,
@@ -1920,7 +1932,13 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                         </span>
                                       );
                                     })()}
-                                    <span style={{ color: (tx.isReturn || String(tx.type || '').includes('Giảm trừ')) ? '#b45309' : '#166534', fontSize: '0.78rem', fontWeight: 600 }}>{cleanedNote}</span>
+                                    <span
+                                      className="truncate"
+                                      title={cleanedNote}
+                                      style={{ color: (tx.isReturn || String(tx.type || '').includes('Giảm trừ')) ? '#b45309' : '#166534', fontSize: '0.78rem', fontWeight: 600, minWidth: 0 }}
+                                    >
+                                      {cleanedNote}
+                                    </span>
                                     {itemsCount > 0 && isReturnDeduction && (
                                       <span
                                         style={{
@@ -1928,6 +1946,8 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                           borderRadius: '4px',
                                           fontSize: '0.675rem',
                                           fontWeight: 600,
+                                          flexShrink: 0,
+                                          whiteSpace: 'nowrap',
                                           backgroundColor: '#fffbeb',
                                           color: '#b45309',
                                           border: '1px solid #fde68a',
@@ -2023,8 +2043,8 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                               </span>
                             )}
                           </td>
-                          <td style={{ padding: '8px 10px', verticalAlign: 'middle' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <td style={{ padding: '8px 10px', verticalAlign: 'middle', maxWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'nowrap', minWidth: 0 }}>
                               {(() => {
                                 const isReturnDeduction = tx.isReturn || tx.type === 'Giảm trừ nợ' || String(tx.type || '').includes('Giảm trừ');
                                 return (
@@ -2036,6 +2056,8 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                       fontSize: '0.675rem',
                                       fontWeight: 700,
                                       width: 'fit-content',
+                                      flexShrink: 0,
+                                      whiteSpace: 'nowrap',
                                       backgroundColor: isOpening ? '#f1f5f9' : isMain ? '#eff6ff' : isReturnDeduction ? '#fef3c7' : isReceipt ? '#ecfdf5' : '#fef2f2',
                                       color: isOpening ? '#475569' : isMain ? '#1d4ed8' : isReturnDeduction ? '#b45309' : isReceipt ? '#059669' : '#dc2626',
                                       border: `1px solid ${isOpening ? '#cbd5e1' : isMain ? '#bfdbfe' : isReturnDeduction ? '#fde68a' : isReceipt ? '#a7f3d0' : '#fecaca'}`,
@@ -2045,7 +2067,13 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                   </span>
                                 );
                               })()}
-                              <span style={{ color: '#334155', fontSize: '0.78rem', fontWeight: 500 }}>{cleanedNote}</span>
+                              <span
+                                className="truncate"
+                                title={cleanedNote}
+                                style={{ color: '#334155', fontSize: '0.78rem', fontWeight: 500, minWidth: 0 }}
+                              >
+                                {cleanedNote}
+                              </span>
                               {itemsCount > 0 && (isMain || isReturnDeduction) && (
                                 <span
                                   style={{
@@ -2053,6 +2081,8 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                                     borderRadius: '4px',
                                     fontSize: '0.675rem',
                                     fontWeight: 600,
+                                    flexShrink: 0,
+                                    whiteSpace: 'nowrap',
                                     backgroundColor: isMain ? '#eff6ff' : '#fffbeb',
                                     color: isMain ? '#0369a1' : '#b45309',
                                     border: `1px solid ${isMain ? '#bae6fd' : '#fde68a'}`,
