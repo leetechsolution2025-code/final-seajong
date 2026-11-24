@@ -127,17 +127,21 @@ CLIENT_NAME="Công ty Cổ phần Seajong Faucet Việt Nam"
 ENV_EOF
 fi
 
+echo "-> Tạm dừng PM2 an toàn trước khi cập nhật Prisma & sao lưu DB..."
+pm2 stop "${APP_NAME}" >/dev/null 2>&1 || true
+sleep 2
+if [ -f "prisma/dev.db" ]; then
+    sqlite3 prisma/dev.db "PRAGMA busy_timeout=10000; PRAGMA wal_checkpoint(TRUNCATE);" >/dev/null 2>&1 || true
+fi
+
 echo "-> Đang kiểm tra và cài đặt dependencies (npm install --omit=dev)..."
 npm install --omit=dev --prefer-offline
 
-echo "-> Đang khởi tạo Prisma Client & cập nhật cấu trúc bảng mới (nếu có)..."
+echo "-> Đang khởi tạo Prisma Client..."
 npx prisma generate
-npx prisma db push --skip-generate >/dev/null 2>&1 || true
 
 # Nếu có file SQL đồng bộ các bảng được chọn từ Local thì nạp vào DB trên VPS
 if [ -f "scripts/sync_selected_tables.sql" ]; then
-    echo "-> Tạm dừng PM2 để tránh khoá SQLite (database is locked) khi nạp dữ liệu..."
-    pm2 stop "${APP_NAME}" >/dev/null 2>&1 || true
     echo "-> Đang đồng bộ dữ liệu các bảng được chọn từ Local vào prisma/dev.db trên VPS..."
     node scripts/sync_custom_tables.cjs import
     rm -f scripts/sync_selected_tables.sql
@@ -147,6 +151,10 @@ echo "-> Đảm bảo quyền thư mục uploads và scripts..."
 mkdir -p uploads public/uploads backups
 chmod -R 755 uploads public/uploads
 chmod +x scripts/*.sh 2>/dev/null || true
+
+if [ -x "scripts/backup_db.sh" ] && [ -f "prisma/dev.db" ]; then
+    bash scripts/backup_db.sh || echo "⚠️ Bỏ qua bước backup tự động trước khi khởi động."
+fi
 
 echo "-> Kiểm tra cấu hình Nginx cho tên miền ${DOMAIN} (Port nội bộ: ${PORT})..."
 if [ ! -f "${NGINX_CONF}" ]; then

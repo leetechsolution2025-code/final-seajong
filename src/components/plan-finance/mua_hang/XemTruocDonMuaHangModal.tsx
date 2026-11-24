@@ -229,7 +229,7 @@ export default function XemTruocDonMuaHangModal({
   const [hinhThucTT, setHinhThucTT] = React.useState("Chuyển khoản");
   const [hinhThucGH, setHinhThucGH] = React.useState("Giao hàng tận nơi");
   const [phuongTien, setPhuongTien] = React.useState("Xe tải");
-  const [thueVAT, setThueVAT] = React.useState(10);
+  const [thueVAT, setThueVAT] = React.useState(0);
   const [datCocPct, setDatCocPct] = React.useState(0);
   const [diaDiemGiaoHang, setDiaDiemGiaoHang] = React.useState("");
   const [nguoiNhan, setNguoiNhan] = React.useState("");

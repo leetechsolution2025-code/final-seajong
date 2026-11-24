@@ -34,23 +34,71 @@ const app = express();
 const PORT = process.env.PORT || 3005;
 const JWT_SECRET = process.env.JWT_SECRET || 'seajong_default_secret_key_2026';
 
-// Khởi tạo PrismaClient với cơ chế Auto-Heal (tự động phục hồi kết nối nếu SQLite gặp lỗi gián đoạn hoặc stale socket)
+// Khởi tạo PrismaClient với cơ chế Auto-Heal an toàn (serialized reconnect + WAL + busy_timeout)
+async function configurePrismaSqlitePragmas(client) {
+  try {
+    await client.$executeRawUnsafe('PRAGMA journal_mode = WAL;');
+    await client.$executeRawUnsafe('PRAGMA synchronous = FULL;');
+    await client.$executeRawUnsafe('PRAGMA busy_timeout = 30000;');
+  } catch (e) {
+    console.warn('⚠️ Không thể cấu hình SQLite PRAGMA cho Prisma:', e?.message);
+  }
+}
+
 if (!globalThis.__seajongRawPrisma) {
   globalThis.__seajongRawPrisma = new PrismaClient();
+  configurePrismaSqlitePragmas(globalThis.__seajongRawPrisma);
 }
 let rawPrisma = globalThis.__seajongRawPrisma;
+let __prismaReconnectPromise = null;
+
 const isSqliteReconnectError = (err) => {
   const msg = String(err?.message || '');
-  const code = String(err?.code || '');
   return (
-    code === 'P2010' ||
-    msg.includes('malformed') ||
+    msg.includes('Response from the Engine was empty') ||
+    msg.includes('Engine is not yet connected') ||
     msg.includes('disk I/O error') ||
-    msg.includes('5898') ||
-    msg.includes('QueryError') ||
-    msg.includes('ConnectorError')
+    msg.includes('5898')
   );
 };
+
+async function reconnectPrismaSafely() {
+  if (__prismaReconnectPromise) return __prismaReconnectPromise;
+  __prismaReconnectPromise = (async () => {
+    console.warn('⚠️ [Prisma Auto-Heal] Engine SQLite bị gián đoạn, đang kết nối lại an toàn...');
+    const oldClient = rawPrisma;
+    const freshClient = new PrismaClient();
+    await configurePrismaSqlitePragmas(freshClient);
+    rawPrisma = freshClient;
+    globalThis.__seajongRawPrisma = freshClient;
+    try { await oldClient.$disconnect(); } catch {}
+    return freshClient;
+  })().finally(() => {
+    __prismaReconnectPromise = null;
+  });
+  return __prismaReconnectPromise;
+}
+
+// Graceful shutdown khi PM2 restart/stop để SQLite không bị ngắt đột ngột giữa giao dịch
+if (!globalThis.__seajongShutdownHookRegistered) {
+  globalThis.__seajongShutdownHookRegistered = true;
+  const gracefulShutdown = async (signal) => {
+    console.log(`🛑 Nhận tín hiệu ${signal}, đang đóng kết nối SQLite an toàn...`);
+    try {
+      await rawPrisma.$executeRawUnsafe('PRAGMA wal_checkpoint(PASSIVE);').catch(() => {});
+      await rawPrisma.$disconnect().catch(() => {});
+    } catch {}
+    try {
+      if (sqliteDb && typeof sqliteDb.close === 'function') {
+        await new Promise((resolve) => sqliteDb.close(() => resolve()));
+      }
+    } catch {}
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+}
+
 const prisma = new Proxy({}, {
   get(_target, prop) {
     if (
@@ -67,10 +115,7 @@ const prisma = new Proxy({}, {
           return await rawPrisma[prop](...args);
         } catch (err) {
           if (isSqliteReconnectError(err)) {
-            console.warn('⚠️ [Prisma Auto-Heal] Phát hiện kết nối SQLite lỗi, đang tự động kết nối lại PrismaClient...');
-            try { await rawPrisma.$disconnect(); } catch { }
-            rawPrisma = new PrismaClient();
-            globalThis.__seajongRawPrisma = rawPrisma;
+            await reconnectPrismaSafely();
             return await rawPrisma[prop](...args);
           }
           throw err;
@@ -91,10 +136,7 @@ const prisma = new Proxy({}, {
                 return await mVal.apply(mTarget, args);
               } catch (err) {
                 if (isSqliteReconnectError(err)) {
-                  console.warn('⚠️ [Prisma Auto-Heal] Phát hiện kết nối SQLite lỗi, đang tự động kết nối lại PrismaClient...');
-                  try { await rawPrisma.$disconnect(); } catch { }
-                  rawPrisma = new PrismaClient();
-                  globalThis.__seajongRawPrisma = rawPrisma;
+                  await reconnectPrismaSafely();
                   return await rawPrisma[prop][mProp](...args);
                 }
                 throw err;
@@ -661,6 +703,103 @@ function expandPermissionsFromDeptAccess(rawPerms, rawDeptAccess) {
   return Array.from(permSet);
 }
 
+async function hasUserCustomPassword(userId) {
+  if (!userId) return false;
+  try {
+    await prisma.$executeRawUnsafe(
+      `CREATE TABLE IF NOT EXISTS user_password_overrides (
+        user_id TEXT PRIMARY KEY,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`
+    );
+    const rows = await prisma.$queryRawUnsafe(
+      `SELECT user_id FROM user_password_overrides WHERE user_id = ? LIMIT 1`,
+      String(userId)
+    );
+    return Array.isArray(rows) && rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function markUserCustomPassword(userId) {
+  if (!userId) return;
+  await prisma.$executeRawUnsafe(
+    `CREATE TABLE IF NOT EXISTS user_password_overrides (
+      user_id TEXT PRIMARY KEY,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`
+  );
+  await prisma.$executeRawUnsafe(
+    `INSERT OR REPLACE INTO user_password_overrides (user_id, updated_at) VALUES (?, CURRENT_TIMESTAMP)`,
+    String(userId)
+  );
+}
+
+app.post('/api/auth/change-password', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+    const token = bearerToken || req.cookies?.token || '';
+    if (!token) {
+      return res.status(401).json({ success: false, message: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch {
+      return res.status(401).json({ success: false, message: 'Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.' });
+    }
+
+    const userId = decoded?.id || decoded?.userId;
+    if (!userId || userId === 'guest-customer') {
+      return res.status(400).json({ success: false, message: 'Tài khoản này không hỗ trợ đổi mật khẩu.' });
+    }
+
+    const currentPassword = String(req.body?.currentPassword || '');
+    const newPassword = String(req.body?.newPassword || '');
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Vui lòng nhập đầy đủ mật khẩu hiện tại và mật khẩu mới.' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'Mật khẩu mới phải có tối thiểu 6 ký tự.' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy thông tin tài khoản.' });
+    }
+
+    const customSet = await hasUserCustomPassword(user.id);
+    let isCurrentMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isCurrentMatch && !customSet) {
+      const isDealer = user.role === 'DEALER';
+      if (isDealer && (currentPassword === '123456' || currentPassword === '12345')) {
+        isCurrentMatch = true;
+      } else if (!isDealer && (currentPassword === 'Pass@123' || currentPassword === 'Admin@123')) {
+        isCurrentMatch = true;
+      }
+    }
+
+    if (!isCurrentMatch) {
+      return res.status(400).json({ success: false, message: 'Mật khẩu hiện tại không chính xác.' });
+    }
+
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { password: hashedNewPassword },
+    });
+    await markUserCustomPassword(user.id);
+
+    return res.json({ success: true, message: 'Đã cập nhật mật khẩu mới thành công.' });
+  } catch (err) {
+    console.error('Lỗi POST /api/auth/change-password:', err);
+    return res.status(500).json({ success: false, message: 'Không thể cập nhật mật khẩu. Vui lòng thử lại.' });
+  }
+});
+
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password, loginType } = req.body;
@@ -812,8 +951,9 @@ app.post('/api/auth/login', async (req, res) => {
         });
       }
 
+      const hasCustomStaffPass = await hasUserCustomPassword(user.id);
       let isStaffPassMatch = await bcrypt.compare(password, user.password);
-      if (!isStaffPassMatch && (password === 'Pass@123' || password === 'Admin@123')) {
+      if (!isStaffPassMatch && !hasCustomStaffPass && (password === 'Pass@123' || password === 'Admin@123')) {
         isStaffPassMatch = true;
       }
       if (!isStaffPassMatch) {
@@ -935,8 +1075,9 @@ app.post('/api/auth/login', async (req, res) => {
         });
       }
 
+      const hasCustomDealerPass = await hasUserCustomPassword(user.id);
       let isDealerPassMatch = await bcrypt.compare(password, user.password);
-      if (!isDealerPassMatch && (password === '123456' || password === '12345')) {
+      if (!isDealerPassMatch && !hasCustomDealerPass && (password === '123456' || password === '12345')) {
         isDealerPassMatch = true;
       }
       if (!isDealerPassMatch) {
@@ -2319,6 +2460,7 @@ app.delete('/api/dealer/orders/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Chỉ có thể xoá đơn hàng ở trạng thái bản nháp' });
     }
 
+    await releaseSaleOrderHeldInventory(id);
     await prisma.saleOrderItem.deleteMany({ where: { saleOrderId: id } });
     await prisma.saleOrder.delete({ where: { id } });
 
@@ -7899,21 +8041,32 @@ app.get('/api/plan-finance/customers/:id', async (req, res) => {
     });
     if (!customer) return res.status(404).json({ error: 'Không tìm thấy khách hàng' });
 
+    const excludeCodes = [req.query.excludeOrderCode, req.query.excludeOrderId]
+      .map((v) => String(v || '').trim())
+      .filter((v) => v && !v.includes('Tự động'));
+
     const customerDebts = await prisma.debt.findMany({
       where: {
         customerId: id,
         type: { in: ['RECEIVABLE', 'phai-thu'] },
       },
-      select: { amount: true, paidAmount: true },
+      select: { amount: true, paidAmount: true, referenceId: true },
     });
     const calculatedDebt = customerDebts.reduce(
       (sum, d) => sum + ((d.amount || 0) - (d.paidAmount || 0)),
       0
     );
+    const previousDebt =
+      excludeCodes.length > 0
+        ? customerDebts
+            .filter((d) => !excludeCodes.includes(String(d.referenceId || '').trim()))
+            .reduce((sum, d) => sum + ((d.amount || 0) - (d.paidAmount || 0)), 0)
+        : calculatedDebt;
 
     res.json({
       ...customer,
       outstandingDebt: calculatedDebt > 0 ? calculatedDebt : (customer.name?.includes('Lâm') ? 7635000 : (customer.doanhSoCamKet || 0)),
+      previousDebt: Math.round(previousDebt || 0),
       creditLimit: customer.hanMucCongNo || 0,
     });
   } catch (err) {
@@ -9907,6 +10060,128 @@ app.get('/api/plan-finance/sales/:id', async (req, res) => {
   }
 });
 
+// Helper: Giải phóng toàn bộ hàng hoá đang giữ (InventoryReservation + InventoryStock.soLuongGiu) của một đơn bán hàng
+async function releaseSaleOrderHeldInventory(saleOrderId) {
+  if (!saleOrderId) return { releasedQty: 0 };
+  const order = await prisma.saleOrder.findUnique({
+    where: { id: saleOrderId },
+    include: {
+      saleOrderItems: true,
+      logisticsTickets: {
+        include: {
+          items: {
+            include: {
+              reservations: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!order) return { releasedQty: 0 };
+
+  let totalReleased = 0;
+  const releasedByItemId = new Map();
+
+  // 1. Giải phóng tất cả các InventoryReservation gắn với phiếu kho (LogisticsTicket) của đơn hàng này
+  const reservationIdsToDelete = [];
+  for (const ticket of order.logisticsTickets || []) {
+    for (const tItem of ticket.items || []) {
+      for (const resv of tItem.reservations || []) {
+        const qty = Number(resv.reservedQty) || 0;
+        reservationIdsToDelete.push(resv.id);
+        if (qty > 0 && resv.inventoryStockId) {
+          const curStock = await prisma.inventoryStock.findUnique({
+            where: { id: resv.inventoryStockId },
+            select: { id: true, inventoryItemId: true, soLuongGiu: true },
+          });
+          if (curStock) {
+            const actualRelease = Math.min(Number(curStock.soLuongGiu) || 0, qty);
+            if (actualRelease > 0) {
+              await prisma.inventoryStock.update({
+                where: { id: curStock.id },
+                data: { soLuongGiu: Math.max(0, (Number(curStock.soLuongGiu) || 0) - actualRelease) },
+              });
+              totalReleased += actualRelease;
+              if (curStock.inventoryItemId) {
+                releasedByItemId.set(
+                  curStock.inventoryItemId,
+                  (releasedByItemId.get(curStock.inventoryItemId) || 0) + actualRelease
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  if (reservationIdsToDelete.length > 0) {
+    await prisma.inventoryReservation.deleteMany({
+      where: { id: { in: reservationIdsToDelete } },
+    });
+  }
+
+  // 2. Giải phóng phần soLuongGiu trực tiếp khi tạo đơn (nếu đơn chưa bị từ chối / chưa huỷ / chưa hoàn thành xuất kho)
+  const closedStatuses = new Set([
+    'completed',
+    'hoàn thành',
+    'hoàn tất',
+    'done',
+    'cancelled',
+    'huỷ bỏ',
+    'hủy bỏ',
+    'da_huy',
+    'rejected',
+  ]);
+  const orderStatusLower = String(order.trangThai || '').trim().toLowerCase();
+  const alreadyReleasedByStatus =
+    order.keToanDuyet === 'rejected' || closedStatuses.has(orderStatusLower);
+
+  if (!alreadyReleasedByStatus) {
+    // Kiểm tra xem đơn đã có phiếu xuất kho hoàn tất hay chưa để tránh giải phóng trùng
+    const exportedMovement = order.code
+      ? await prisma.stockMovement.findFirst({
+          where: {
+            type: { in: ['xuat', 'OUT', 'export'] },
+            OR: [
+              { soChungTu: { contains: order.code } },
+              { lyDo: { contains: order.code } },
+            ],
+          },
+          select: { id: true },
+        })
+      : null;
+
+    if (!exportedMovement) {
+      for (const item of order.saleOrderItems || []) {
+        if (!item.inventoryItemId) continue;
+        const alreadyRel = releasedByItemId.get(item.inventoryItemId) || 0;
+        let remainingToRelease = Math.max(0, (Number(item.soLuong) || 0) - alreadyRel);
+        if (remainingToRelease <= 0) continue;
+
+        const stocks = await prisma.inventoryStock.findMany({
+          where: { inventoryItemId: item.inventoryItemId, soLuongGiu: { gt: 0 } },
+          orderBy: { soLuongGiu: 'desc' },
+        });
+        for (const stock of stocks) {
+          if (remainingToRelease <= 0) break;
+          const release = Math.min(Number(stock.soLuongGiu) || 0, remainingToRelease);
+          if (release > 0) {
+            await prisma.inventoryStock.update({
+              where: { id: stock.id },
+              data: { soLuongGiu: Math.max(0, (Number(stock.soLuongGiu) || 0) - release) },
+            });
+            remainingToRelease -= release;
+            totalReleased += release;
+          }
+        }
+      }
+    }
+  }
+
+  return { releasedQty: totalReleased };
+}
+
 app.delete('/api/plan-finance/sales/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -9914,8 +10189,97 @@ app.delete('/api/plan-finance/sales/:id', async (req, res) => {
       where: { OR: [{ id }, { code: id }] }
     });
     if (!existing) return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
+
+    const completedStatuses = new Set(['completed', 'hoàn thành', 'hoàn tất', 'done']);
+    const isCompletedOrder = completedStatuses.has(String(existing.trangThai || '').trim().toLowerCase());
+
+    if (isCompletedOrder) {
+      // Nhánh 1: Đơn đã hoàn thành -> Chỉ xoá thông tin đơn hàng, giữ nguyên toàn bộ công nợ, sổ kho, sản xuất & thu tiền
+      await prisma.paymentNotification.updateMany({
+        where: { saleOrderId: existing.id },
+        data: { saleOrderId: null },
+      });
+      await prisma.saleOrder.delete({ where: { id: existing.id } });
+      return res.json({
+        success: true,
+        isCompletedOrder: true,
+        releasedQty: 0,
+        message: 'Đã xoá thông tin đơn hàng đã hoàn thành (giữ nguyên công nợ, kho và chứng từ liên quan)',
+      });
+    }
+
+    // Nhánh 2: Đơn chưa hoàn thành -> Giải phóng tồn kho đang giữ, dọn lệnh kho/sản xuất đang chờ & công nợ liên quan
+    const { releasedQty } = await releaseSaleOrderHeldInventory(existing.id);
+
+    // 2a. Xoá các lệnh kho / lệnh sản xuất đang chờ (Task chưa hoàn thành) gắn với mã đơn hàng
+    if (existing.code) {
+      await prisma.task.deleteMany({
+        where: {
+          status: { notIn: ['completed', 'done', 'Hoàn thành'] },
+          OR: [
+            { title: { contains: existing.code } },
+            { description: { contains: existing.code } },
+          ],
+        },
+      }).catch((e) => console.warn('⚠️ Lỗi dọn Task khi xoá đơn hàng:', e.message));
+    }
+
+    // 2b. Xoá thông báo thanh toán chưa duyệt; giữ nguyên (gỡ saleOrderId) nếu đã duyệt để không làm lệch quỹ
+    await prisma.paymentNotification.deleteMany({
+      where: { saleOrderId: existing.id, status: { not: 'verified' } },
+    });
+    await prisma.paymentNotification.updateMany({
+      where: { saleOrderId: existing.id, status: 'verified' },
+      data: { saleOrderId: null },
+    });
+
+    // 2c. Xoá công nợ (Debt) & bút toán Sổ cái (JournalEntry) phát sinh từ đơn hàng chưa hoàn thành này
+    const refKeys = [existing.id, existing.code].filter(Boolean);
+    let deletedDebtCount = 0;
+    if (refKeys.length > 0) {
+      const delDebt = await prisma.debt.deleteMany({
+        where: { referenceId: { in: refKeys } },
+      });
+      deletedDebtCount = delDebt.count || 0;
+
+      const linkedJEs = await prisma.journalEntry.findMany({
+        where: { referenceCode: { in: refKeys } },
+        select: { id: true },
+      });
+      if (linkedJEs.length > 0) {
+        const jeIds = linkedJEs.map((j) => j.id);
+        await prisma.journalLine.deleteMany({ where: { journalEntryId: { in: jeIds } } });
+        await prisma.journalEntry.deleteMany({ where: { id: { in: jeIds } } });
+      }
+    }
+
+    // 2d. Xoá đơn hàng (tự cascade SaleOrderItem, SaleOrderComment, LogisticsTicket, LogisticsTicketItem, InventoryReservation)
     await prisma.saleOrder.delete({ where: { id: existing.id } });
-    res.json({ success: true, message: 'Đã xoá đơn hàng thành công' });
+
+    // 2e. Đồng bộ lại bảng công nợ kế toán nếu có xoá Debt
+    if (deletedDebtCount > 0) {
+      try {
+        const dbPath = path.join(__dirname, 'prisma', 'dev.db');
+        const sqliteConn = new sqlite3.Database(dbPath);
+        try {
+          await syncPrismaFinanceToAccountingTables(sqliteConn);
+        } finally {
+          sqliteConn.close();
+        }
+      } catch (syncErr) {
+        console.warn('⚠️ Lỗi đồng bộ công nợ sau khi xoá đơn hàng:', syncErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      isCompletedOrder: false,
+      releasedQty,
+      deletedDebtCount,
+      message: releasedQty > 0
+        ? `Đã xoá đơn hàng, giải phóng ${releasedQty} sản phẩm đang giữ về tồn kho và dọn các lệnh/công nợ liên quan`
+        : 'Đã xoá đơn hàng và các lệnh/công nợ liên quan thành công',
+    });
   } catch (err) {
     console.error('Lỗi DELETE /api/plan-finance/sales/:id:', err);
     res.status(500).json({ error: err.message });
@@ -10076,27 +10440,15 @@ const handleUpdateSaleOrder = async (req, res) => {
       },
     });
 
-    if (body.keToanDuyet === 'rejected' && existing.keToanDuyet !== 'rejected') {
-      // Giải phóng tồn kho giữ chỗ (soLuongGiu) khi kế toán từ chối duyệt
-      for (const item of existing.saleOrderItems || []) {
-        if (!item.inventoryItemId) continue;
-        let remainingToRelease = Number(item.soLuong) || 0;
-        const stocks = await prisma.inventoryStock.findMany({
-          where: { inventoryItemId: item.inventoryItemId, soLuongGiu: { gt: 0 } },
-          orderBy: { soLuongGiu: 'desc' }
-        });
-        for (const stock of stocks) {
-          if (remainingToRelease <= 0) break;
-          const release = Math.min(stock.soLuongGiu || 0, remainingToRelease);
-          if (release > 0) {
-            await prisma.inventoryStock.update({
-              where: { id: stock.id },
-              data: { soLuongGiu: { decrement: release } }
-            });
-            remainingToRelease -= release;
-          }
-        }
-      }
+    const cancelStatuses = new Set(['cancelled', 'huỷ bỏ', 'hủy bỏ', 'da_huy']);
+    const isNowCancelled =
+      body.trangThai &&
+      cancelStatuses.has(String(body.trangThai).trim().toLowerCase()) &&
+      !cancelStatuses.has(String(existing.trangThai || '').trim().toLowerCase());
+
+    if ((body.keToanDuyet === 'rejected' && existing.keToanDuyet !== 'rejected') || isNowCancelled) {
+      // Giải phóng tồn kho giữ chỗ (soLuongGiu) khi kế toán từ chối duyệt hoặc huỷ đơn
+      await releaseSaleOrderHeldInventory(existing.id);
     }
 
     if (body.daThanhToan !== undefined) {
@@ -17612,8 +17964,8 @@ app.patch('/api/finance/payment-notifications/:id', async (req, res) => {
         const debitAccCode = up.paymentMethod === 'cash' ? '1111' : '1121';
         const creditAccCode = '1388';
         const [debitAcc, creditAcc] = await Promise.all([
-          tx.account.findFirst({ where: { code: debitAccCode } }),
-          tx.account.findFirst({ where: { code: creditAccCode } }),
+          tx.accountingAccount.findFirst({ where: { code: debitAccCode } }),
+          tx.accountingAccount.findFirst({ where: { code: creditAccCode } }),
         ]);
         const existingJe = await tx.journalEntry.findFirst({
           where: { referenceCode: up.code },
@@ -17621,23 +17973,23 @@ app.patch('/api/finance/payment-notifications/:id', async (req, res) => {
         if (!existingJe && debitAcc && creditAcc && up.amount > 0) {
           await tx.journalEntry.create({
             data: {
-              entryNumber: `JE-${up.code}`,
-              date: new Date(),
+              entryDate: new Date(),
               description: up.note || `Thu hồi tiền hoàn trả hàng lỗi NCC theo ${up.code}`,
               referenceCode: up.code,
-              status: 'POSTED',
+              sourceModule: 'MANUAL',
+              totalAmount: up.amount,
               lines: {
                 create: [
                   {
                     accountId: debitAcc.id,
-                    debit: up.amount,
-                    credit: 0,
+                    type: 'DEBIT',
+                    amount: up.amount,
                     description: up.note || `Thu tiền hoàn trả hàng lỗi NCC (${up.code})`,
                   },
                   {
                     accountId: creditAcc.id,
-                    debit: 0,
-                    credit: up.amount,
+                    type: 'CREDIT',
+                    amount: up.amount,
                     description: up.note || `Thu hồi khoản phải thu khác - hoàn tiền hàng lỗi NCC (${up.code})`,
                   },
                 ],
@@ -25511,6 +25863,9 @@ async function executeLogisticsRetentionCleanup({
     if (eligibleSalesOrders.length === 0) return 0;
     const soIds = eligibleSalesOrders.map((o) => o.id);
 
+    for (const soId of soIds) {
+      await releaseSaleOrderHeldInventory(soId).catch(() => {});
+    }
     const linkedTickets = await prisma.logisticsTicket.findMany({
       where: { saleOrderId: { in: soIds } },
       select: { id: true },

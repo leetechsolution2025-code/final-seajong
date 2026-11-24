@@ -127,9 +127,9 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
     createdDb = true;
   }
   try {
-    await dbRun(db, 'PRAGMA busy_timeout = 10000');
+    await dbRun(db, 'PRAGMA busy_timeout = 30000');
     await dbRun(db, 'PRAGMA journal_mode = WAL');
-    await dbRun(db, 'PRAGMA synchronous = NORMAL');
+    await dbRun(db, 'PRAGMA synchronous = FULL');
     await dbRun(db, 'PRAGMA foreign_keys = OFF');
     // 1. Kiểm tra xem bảng Prisma có dữ liệu thực tế không
     const [
@@ -745,9 +745,9 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
 
       let recIndex = 1;
       for (const g of recGroups.values()) {
-        const remain = Math.max(0, Math.round(g.totalContract - g.totalPaid));
         const totalContract = Math.round(g.totalContract);
         const totalPaid = Math.round(g.totalPaid);
+        const remain = totalContract - totalPaid;
         if (totalContract === 0 && remain === 0 && totalPaid === 0 && g.payments.length === 0) continue;
 
         const id = `SYNC-REC-${String(recIndex).padStart(3, '0')}`;
@@ -787,7 +787,7 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
               desc.includes('trả trước') ||
               desc.includes('trả tiền trước') ||
               desc.includes('đặt cọc'));
-          const cleanTitle =
+          const rawCleanTitle =
             logInfo?.note ||
             descClean ||
             (isReconciliation
@@ -796,7 +796,15 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
                 ? `Giảm trừ công nợ do trả lại hàng theo ${ref}`
                 : isAdvance
                   ? `Khách hàng trả tiền trước (Ứng trước) - ${g.customerName}`
-                  : `Thu nợ khách hàng ${g.customerName}`);
+                  : `Thu nợ khách hàng - ${g.customerName}`);
+          const cleanTitle =
+            !isReconciliation &&
+            !isReturn &&
+            /^Thu\s+tiền\s+khách\s+hàng\s*[-–—]\s*(Công\s+nợ\s+(tự\s+động\s+)?phát\s+sinh\s+từ\s+đơn(\s+(bán\s+)?hàng)?|Xuất\s+bán\s+hàng\s+theo\s+đơn(\s+hàng)?)\s+[A-Z0-9-]+$/i.test(
+              String(rawCleanTitle).trim()
+            )
+              ? `Thu nợ khách hàng - ${g.customerName}`
+              : rawCleanTitle;
           const pPaid = Math.round(Number(p.paidAmount) || 0);
 
           return {
@@ -1063,7 +1071,7 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
       for (const g of payGroups.values()) {
         const totalAmount = Math.round(g.totalAmount);
         const totalPaid = Math.round(g.totalPaid);
-        const remain = Math.max(0, totalAmount - totalPaid);
+        const remain = totalAmount - totalPaid;
         if (totalAmount === 0 && remain === 0 && totalPaid === 0 && g.payments.length === 0) continue;
 
         const id = `SYNC-PAY-${String(payIndex).padStart(3, '0')}`;
@@ -1403,7 +1411,7 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
             if (entries.some((e) => e.code === vchCode)) continue;
 
             const newPaid = Number(target.paid_amount || 0) + payAmt;
-            const newRemain = Math.max(0, Number(target.total_amount || 0) - newPaid);
+            const newRemain = Number(target.total_amount || 0) - newPaid;
             const isComp = newRemain <= 0;
 
             entries.push(newEntry);
@@ -1505,7 +1513,7 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
             if (entries.some((e) => e.code === vchCode)) continue;
 
             const newPaid = Number(target.paid_amount || 0) + payAmt;
-            const newRemain = Math.max(0, Number(target.total_amount || 0) - newPaid);
+            const newRemain = Number(target.total_amount || 0) - newPaid;
             const isComp = newRemain <= 0;
 
             entries.push(newEntry);

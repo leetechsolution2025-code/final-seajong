@@ -8,11 +8,11 @@ import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { TrangThaiTonKhoBadge } from "@/components/plan-finance/dung_chung/TrangThaiTonKhoBadge";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { genDocCode } from "@/lib/genDocCode";
-import { 
-  Button, 
-  Avatar, 
-  FullWidthTable, 
-  Offcanvas, 
+import {
+  Button,
+  Avatar,
+  FullWidthTable,
+  Offcanvas,
   ConfirmDialog,
   Input,
   Select,
@@ -154,13 +154,14 @@ const SLabel = ({ children }: { children: React.ReactNode }) => (
   </p>
 );
 
-function OrderPrintPreviewModal({ open, onClose, customer, custInfo, items, info }: {
+function OrderPrintPreviewModal({ open, onClose, customer, custInfo, items, info, orderId }: {
   open: boolean;
   onClose: () => void;
   customer: CustomerRow | null;
   custInfo: any;
   items: OrderItem[];
   info: any;
+  orderId?: string;
 }) {
   const { user } = useAuth();
   const toast = useToast();
@@ -179,6 +180,8 @@ function OrderPrintPreviewModal({ open, onClose, customer, custInfo, items, info
   const [localDiaChiGiao, setLocalDiaChiGiao] = React.useState(info?.diaChiGiaoHang || customer?.address || custInfo?.address || "");
   const [localLegalRep, setLocalLegalRep] = React.useState("");
   const [localGhiChu, setLocalGhiChu] = React.useState(info?.ghiChu || "");
+  const [localVat, setLocalVat] = React.useState<number>(Number(info?.thue || 0));
+  const [localCongNoCu, setLocalCongNoCu] = React.useState<number>(0);
 
   React.useEffect(() => {
     if (!open) return;
@@ -190,7 +193,36 @@ function OrderPrintPreviewModal({ open, onClose, customer, custInfo, items, info
     setLocalDienThoai(info?.sdtNguoiNhan || customer?.dienThoai || custInfo?.dienThoai || "");
     setLocalDiaChiGiao(info?.diaChiGiaoHang || customer?.address || custInfo?.address || "");
     setLocalGhiChu(info?.ghiChu || "");
+    setLocalVat(Number(info?.thue || 0));
   }, [open, info, customer, custInfo]);
+
+  // Tự động lấy công nợ cũ thực tế của khách hàng (loại trừ đơn hiện tại nếu đã phát sinh công nợ)
+  React.useEffect(() => {
+    if (!open) return;
+    const targetCustomerId = custInfo?.id || customer?.id || "";
+    if (!targetCustomerId) {
+      setLocalCongNoCu(0);
+      return;
+    }
+    const params = new URLSearchParams();
+    if (info?.soPhieu && !String(info.soPhieu).includes("Tự động")) {
+      params.set("excludeOrderCode", String(info.soPhieu));
+    }
+    if (orderId) {
+      params.set("excludeOrderId", String(orderId));
+    }
+    const qs = params.toString();
+    fetch(`/api/plan-finance/customers/${encodeURIComponent(targetCustomerId)}${qs ? `?${qs}` : ""}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data && data.previousDebt !== undefined) {
+          setLocalCongNoCu(Math.round(Number(data.previousDebt) || 0));
+        } else {
+          setLocalCongNoCu(0);
+        }
+      })
+      .catch(() => setLocalCongNoCu(0));
+  }, [open, custInfo?.id, customer?.id, info?.soPhieu, orderId]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -210,11 +242,14 @@ function OrderPrintPreviewModal({ open, onClose, customer, custInfo, items, info
   const tamTinh = items.reduce((s, it) => s + thanhTien(it), 0);
   const ckTien = tamTinh * (info?.chietKhauTong || 0) / 100;
   const truocThue = tamTinh - ckTien;
-  const thueTien = truocThue * (info?.thue || 0) / 100;
+  const vatPct = Number.isFinite(localVat) ? Math.max(0, localVat) : 0;
+  const thueTien = Math.round(truocThue * vatPct / 100);
   const chiPhiKhac = Number(info?.chiPhiKhac || 0);
-  const tongCong = truocThue + thueTien + chiPhiKhac;
+  const tongCongDonHang = truocThue + thueTien + chiPhiKhac;
+  const congNoCu = Number.isFinite(localCongNoCu) ? Math.round(localCongNoCu) : 0;
+  const tongCong = tongCongDonHang + congNoCu;
   const daThanhToan = Number(info?.daThanhToan || 0);
-  const conLai = Math.max(0, tongCong - daThanhToan);
+  const conLai = tongCong - daThanhToan;
 
   const fmtDate = (iso: string) => {
     if (!iso) return "—";
@@ -449,6 +484,38 @@ function OrderPrintPreviewModal({ open, onClose, customer, custInfo, items, info
         />
       </div>
 
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 8 }}>
+        <div>
+          <SLabel>Thuế VAT (%)</SLabel>
+          <Input
+            type="number"
+            min={0}
+            max={100}
+            step="any"
+            value={localVat}
+            onChange={e => {
+              const val = parseFloat(e.target.value);
+              setLocalVat(Number.isFinite(val) ? Math.max(0, val) : 0);
+            }}
+            placeholder="0"
+          />
+        </div>
+        <div>
+          <SLabel>Công nợ cũ (đ)</SLabel>
+          <Input
+            value={localCongNoCu === 0 ? "0" : localCongNoCu.toLocaleString("vi-VN")}
+            onChange={e => {
+              const raw = e.target.value.trim();
+              const isNeg = raw.startsWith("-");
+              const digits = raw.replace(/\D/g, "");
+              const num = digits ? Number(digits) : 0;
+              setLocalCongNoCu(isNeg ? -num : num);
+            }}
+            placeholder="0"
+          />
+        </div>
+      </div>
+
       <div>
         <SLabel>Người đại diện ký tên</SLabel>
         <Input
@@ -647,8 +714,9 @@ function OrderPrintPreviewModal({ open, onClose, customer, custInfo, items, info
             {[
               ["Tổng tiền hàng (đ):", fmt(tamTinh)],
               [`Chiết khấu (${info?.chietKhauTong || 0}%):`, fmt(ckTien)],
-              [`Thuế VAT (${info?.thue || 0}%):`, fmt(thueTien)],
+              [`Thuế VAT (${vatPct}%):`, fmt(thueTien)],
               ...(chiPhiKhac > 0 ? [["Chi phí khác (đ):", fmt(chiPhiKhac)]] : []),
+              ["Công nợ cũ (đ):", fmt(congNoCu)],
             ].map(([l, v]) => (
               <div key={l} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: "1px solid #e5e7eb" }}>
                 <span>{l}</span>
@@ -672,7 +740,7 @@ function OrderPrintPreviewModal({ open, onClose, customer, custInfo, items, info
               </>
             )}
             <div style={{ fontSize: 11, fontStyle: "italic", textAlign: "right", marginTop: 4 }}>
-              ({numberToVNWords(tongCong)})
+              ({tongCong < 0 ? `Âm ${numberToVNWords(Math.abs(tongCong))}` : numberToVNWords(tongCong)})
             </div>
           </div>
         </div>
@@ -1081,7 +1149,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
     try {
       const res = await fetch(`/api/production/bom/${formItem.dinhMucId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete BOM");
-      
+
       const newDinhMucs = (formItem.dinhMucs || []).filter((d: any) => d.id !== formItem.dinhMucId);
       const standardDm = newDinhMucs.length > 0 ? newDinhMucs[0] : null;
       const nextDonGia = standardDm
@@ -1127,15 +1195,15 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
   const proposedDonGia = React.useMemo(() => {
     if (!originalBomData || !hasBomChanged) return formItem.donGia;
     const origCost = originalBomData.vatTu?.reduce((acc: number, vt: any) => acc + getGiaNhap(vt) * (vt.soLuong || 0), 0) || 0;
-    
+
     // If origCost is 0, fallback to a 30% margin
     const ratio = origCost > 0 ? (initialDonGiaRef.current / origCost) : 1.3;
-    
+
     // If initialDonGiaRef.current was 0 for some reason, and we have a cost, just use cost * 1.3
     if (initialDonGiaRef.current === 0 && totalBomCost > 0) {
       return Math.round(totalBomCost * 1.3);
     }
-    
+
     return Math.round(totalBomCost * ratio);
   }, [hasBomChanged, totalBomCost, originalBomData, formItem.donGia]);
 
@@ -1377,7 +1445,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
       }
 
       const created = await res.json();
-      
+
       const res2 = await fetch(`/api/production/bom/${created.id}`);
       const freshData = res2.ok ? await res2.json() : created;
       if (!freshData.giaBan && nextPrice > 0) {
@@ -1427,12 +1495,12 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
           return row;
         })
       );
-      
+
       setBomDetailData(freshData);
       setOriginalBomData(JSON.parse(JSON.stringify(freshData)));
       setNewBomDescription("");
       initialDonGiaRef.current = nextPrice;
-      
+
       toast.success("Lưu thành công", "Đã tạo định mức mới: " + (freshData.code || created.code));
       setShowBomDetail(false);
     } catch (e) {
@@ -1475,9 +1543,9 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
               if (!whCode) {
                 whCode = "KHO-CHINH";
               }
-              const khoTenStr = relevantStocks.length > 0 ? relevantStocks[0].warehouse?.name : 
+              const khoTenStr = relevantStocks.length > 0 ? relevantStocks[0].warehouse?.name :
                 (whCode === "KVP" ? "Kho sản xuất và lắp ráp" : "Kho thương mại");
-              
+
               return { ...item, thucTon, soLuong, whCode, khoTenStr, relevantStocks };
             }).filter((item: any) => item.whCode === "KHO-CHINH" || item.whCode === "KVP");
             setSuggest(filtered);
@@ -1624,13 +1692,13 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
   const isOutOfStock = items.some(it => {
     const mainOutOfStock = it.soLuongTon !== null && it.soLuongTon !== undefined && it.soLuong > (it.soLuongTon as number);
     if (!mainOutOfStock) return false;
-    
+
     // Main item is out of stock. Check if materials are sufficient to produce.
     const matCheck = checkMaterialShortage(it);
     if (matCheck.hasBOM && !matCheck.hasShortage) {
       return false; // NOT out of stock, materials are sufficient!
     }
-    
+
     return true; // Out of stock and insufficient materials
   });
 
@@ -1710,10 +1778,10 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
         activeEditOrder?.id ||
         activeEditOrder?.code ||
         (!isQuotation &&
-        info.soPhieu &&
-        info.soPhieu.trim() !== "DBH-Tự động tạo" &&
-        info.soPhieu.trim() !== "BG-Tự động tạo" &&
-        info.soPhieu.trim() !== "Đang tải..."
+          info.soPhieu &&
+          info.soPhieu.trim() !== "DBH-Tự động tạo" &&
+          info.soPhieu.trim() !== "BG-Tự động tạo" &&
+          info.soPhieu.trim() !== "Đang tải..."
           ? info.soPhieu.trim()
           : null);
 
@@ -1739,9 +1807,9 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
             soLuong: it.soLuong,
             donGia: it.donGia,
             thanhTien: thanhTien(it),
-            ghiChu: JSON.stringify({ 
-              code: it.code || "", 
-              khoTen: it.khoTen || "", 
+            ghiChu: JSON.stringify({
+              code: it.code || "",
+              khoTen: it.khoTen || "",
               brandType: it.brandType || "",
               dinhMucId: it.dinhMucId || "",
               bomCode: (it.dinhMucs && Array.isArray(it.dinhMucs) ? it.dinhMucs.find((d: any) => d.id === it.dinhMucId)?.code : "") || "",
@@ -1784,11 +1852,11 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
             soLuong: it.soLuong,
             donGia: it.donGia,
             thanhTien: thanhTien(it),
-            ghiChu: JSON.stringify({ 
-              code: it.code || "", 
-              khoTen: it.khoTen || "", 
+            ghiChu: JSON.stringify({
+              code: it.code || "",
+              khoTen: it.khoTen || "",
               brandType: it.brandType || "",
-              dinhMucId: it.dinhMucId || "", 
+              dinhMucId: it.dinhMucId || "",
               bomCode: (it.dinhMucs && Array.isArray(it.dinhMucs) ? it.dinhMucs.find((d: any) => d.id === it.dinhMucId)?.code : "") || "",
               dinhMucTen: it.dinhMucTen || (it.dinhMucs && Array.isArray(it.dinhMucs) ? it.dinhMucs.find((d: any) => d.id === it.dinhMucId)?.tenDinhMuc : "") || ""
             }),
@@ -2991,8 +3059,8 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                             {showBomMenu && (
                               <ul className="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-1 show" style={{ position: "absolute", top: "100%", right: 0, zIndex: 1050, display: "block", background: "#ffffff", boxShadow: "0 4px 16px rgba(0,0,0,0.15)", border: "1px solid #e2e8f0", minWidth: 160, margin: 0, padding: 4, listStyle: "none" }}>
                                 <li>
-                                  <button 
-                                    className="dropdown-item py-1.5 px-3 rounded-2" 
+                                  <button
+                                    className="dropdown-item py-1.5 px-3 rounded-2"
                                     onClick={() => { setShowBomDetail(true); setShowBomMenu(false); }}
                                     style={{ width: "100%", textAlign: "left", background: "none", border: "none", padding: "6px 12px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, borderRadius: 4, color: "#0f172a" }}
                                   >
@@ -3000,8 +3068,8 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                                   </button>
                                 </li>
                                 <li>
-                                  <button 
-                                    className="dropdown-item py-1.5 px-3 rounded-2 text-danger" 
+                                  <button
+                                    className="dropdown-item py-1.5 px-3 rounded-2 text-danger"
                                     disabled={isStandardBom}
                                     onClick={() => { setConfirmDeleteBom(true); setShowBomMenu(false); }}
                                     style={{ width: "100%", textAlign: "left", background: "none", border: "none", padding: "6px 12px", fontSize: 13, cursor: isStandardBom ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 8, color: "#dc2626", borderRadius: 4, opacity: isStandardBom ? 0.5 : 1 }}
@@ -3138,18 +3206,18 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                   </div>
 
                   <div className="order-modal-form-actions" style={{ display: "flex", gap: 6 }}>
-                    <Button 
+                    <Button
                       variant="primary"
                       size="sm"
                       disabled={isOrderReadOnly}
-                      onClick={addRow} 
+                      onClick={addRow}
                       leftIcon={<i className={formItem.id === -1 ? "bi bi-plus-lg" : "bi bi-check2"} />}
                       style={{ height: 34, padding: "0 14px", fontWeight: 700, fontSize: 13, borderRadius: 6, border: "none" }}
                     >
                       {formItem.id === -1 ? "Thêm" : "Cập nhật"}
                     </Button>
                     {formItem.id !== -1 && !isOrderReadOnly && (
-                      <Button 
+                      <Button
                         variant="outline"
                         size="sm"
                         onClick={() => setFormItem({ id: -1, ten: "", khoTen: "", brandType: "", dvt: "cái", soLuong: 1, donGia: 0, ckPct: 0, soLuongTon: null, trangThaiKho: null, inventoryId: null, imageUrl: null, code: null, dinhMucs: [], dinhMucId: null, dinhMucTen: null, source: "", loiNhuanKyVong: 0, phuongPhapTinhLoiNhuan: "revenue", baseGiaBan: 0 })}
@@ -3430,124 +3498,226 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                   </div>
                 </div>
 
-                <FullWidthTable 
+                <FullWidthTable
                   className="border border-slate-200 rounded-lg overflow-hidden shadow-xs"
                   style={{ background: "#ffffff" }}
                   emptyText="Chưa có sản phẩm nào"
                 >
-              <table className="order-modal-table order-modal-desktop-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, background: "#ffffff" }}>
-                <thead>
-                  <tr style={{ background: "#f8fafc", textAlign: "left", borderBottom: "1px solid #e2e8f0" }}>
-                    <th style={{ padding: 10, width: 40, color: "#64748b" }}>#</th>
-                    <th style={{ padding: 10, color: "#475569" }}>Tên sản phẩm - Dịch vụ</th>
-                    <th style={{ padding: 10, width: 90, textAlign: "center", color: "#475569" }}>Đơn vị tính</th>
-                    <th style={{ padding: 10, width: 90, textAlign: "center", color: "#475569" }}>Số lượng</th>
-                    <th style={{ padding: 10, width: 110, textAlign: "center", color: "#475569" }}>Chiết khấu (%)</th>
-                    <th style={{ padding: 10, width: 130, textAlign: "right", color: "#475569" }}>Đơn giá (đ)</th>
-                    <th style={{ padding: 10, width: 130, textAlign: "right", color: "#475569" }}>Thành tiền (đ)</th>
-                    <th style={{ padding: 10, width: 40 }} />
-                  </tr>
-                </thead>
-              <tbody>
-                {items.length === 0 ? (
-                  <tr><td colSpan={8} style={{ padding: 20, textAlign: "center", color: "var(--muted-foreground)" }}>Chưa có sản phẩm nào</td></tr>
-                ) : items.map((originalIt, idx) => {
-                  const it = formItem.id === originalIt.id ? (formItem as any) : originalIt;
-                  const isMainShortOfStock = it.soLuongTon !== null && it.soLuongTon !== undefined && it.soLuong > (it.soLuongTon as number);
-                  const activeDinhMuc = (it.dinhMucs || []).find((dm: any) => dm.id === it.dinhMucId) || (it.dinhMucs && it.dinhMucs.length > 0 ? it.dinhMucs[0] : null);
-                  const hasBOM = !!activeDinhMuc;
-                  const isExpanded = !!expandedBOMRows[it.id];
-                  return (
-                    <React.Fragment key={it.id}>
-                      <tr 
-                        onClick={() => { if (!isOrderReadOnly) setFormItem({ ...it, brandType: it.brandType || resolveProductBrandType(it) }); }}
-                        style={{ borderBottom: "1px solid var(--border)", cursor: isOrderReadOnly ? "default" : "pointer", background: formItem.id === it.id ? "rgba(0,0,0,0.03)" : "transparent" }}
-                      >
-                        <td style={{ padding: 10, color: "var(--muted-foreground)" }}>{idx + 1}</td>
-                        <td style={{ padding: "6px 10px" }}>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              {activeDinhMuc && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setExpandedBOMRows(prev => ({ ...prev, [it.id]: !prev[it.id] }));
-                                  }}
-                                  style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "var(--primary)", display: "flex" }}
-                                  title={isExpanded ? "Ẩn vật tư" : "Hiện vật tư"}
-                                >
-                                  <i className={`bi bi-chevron-${isExpanded ? 'up' : 'down'}`} style={{ fontSize: 12, strokeWidth: 2 }}></i>
-                                </button>
-                              )}
-                              <span style={{ fontWeight: 500, color: "var(--foreground)" }}>{it.ten}</span>
-                              {it.ten.trim() && it.soLuongTon !== null && it.soLuongTon !== undefined && (() => {
-                                const ton = it.soLuongTon as number;
-                                const isOutOfFinishedGood = ton === 0 || it.soLuong > ton;
-                                if (!isOutOfFinishedGood) return null;
-
-                                const matCheck = checkMaterialShortage(it);
-
-                                return (
-                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
-                                    {ton === 0 ? (
-                                      <span
-                                        title="Hết hàng thành phẩm"
-                                        style={{
-                                          color: "#ef4444",
-                                          background: "rgba(239, 68, 68, 0.1)",
-                                          width: 22,
-                                          height: 22,
-                                          borderRadius: "50%",
-                                          display: "inline-flex",
-                                          alignItems: "center",
-                                          justifyContent: "center",
-                                          flexShrink: 0,
+                  <table className="order-modal-table order-modal-desktop-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, background: "#ffffff" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc", textAlign: "left", borderBottom: "1px solid #e2e8f0" }}>
+                        <th style={{ padding: 10, width: 40, color: "#64748b" }}>#</th>
+                        <th style={{ padding: 10, color: "#475569" }}>Tên sản phẩm - Dịch vụ</th>
+                        <th style={{ padding: 10, width: 90, textAlign: "center", color: "#475569" }}>Đơn vị tính</th>
+                        <th style={{ padding: 10, width: 90, textAlign: "center", color: "#475569" }}>Số lượng</th>
+                        <th style={{ padding: 10, width: 110, textAlign: "center", color: "#475569" }}>Chiết khấu (%)</th>
+                        <th style={{ padding: 10, width: 130, textAlign: "right", color: "#475569" }}>Đơn giá (đ)</th>
+                        <th style={{ padding: 10, width: 130, textAlign: "right", color: "#475569" }}>Thành tiền (đ)</th>
+                        <th style={{ padding: 10, width: 40 }} />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.length === 0 ? (
+                        <tr><td colSpan={8} style={{ padding: 20, textAlign: "center", color: "var(--muted-foreground)" }}>Chưa có sản phẩm nào</td></tr>
+                      ) : items.map((originalIt, idx) => {
+                        const it = formItem.id === originalIt.id ? (formItem as any) : originalIt;
+                        const isMainShortOfStock = it.soLuongTon !== null && it.soLuongTon !== undefined && it.soLuong > (it.soLuongTon as number);
+                        const activeDinhMuc = (it.dinhMucs || []).find((dm: any) => dm.id === it.dinhMucId) || (it.dinhMucs && it.dinhMucs.length > 0 ? it.dinhMucs[0] : null);
+                        const hasBOM = !!activeDinhMuc;
+                        const isExpanded = !!expandedBOMRows[it.id];
+                        return (
+                          <React.Fragment key={it.id}>
+                            <tr
+                              onClick={() => { if (!isOrderReadOnly) setFormItem({ ...it, brandType: it.brandType || resolveProductBrandType(it) }); }}
+                              style={{ borderBottom: "1px solid var(--border)", cursor: isOrderReadOnly ? "default" : "pointer", background: formItem.id === it.id ? "rgba(0,0,0,0.03)" : "transparent" }}
+                            >
+                              <td style={{ padding: 10, color: "var(--muted-foreground)" }}>{idx + 1}</td>
+                              <td style={{ padding: "6px 10px" }}>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                    {activeDinhMuc && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setExpandedBOMRows(prev => ({ ...prev, [it.id]: !prev[it.id] }));
                                         }}
+                                        style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "var(--primary)", display: "flex" }}
+                                        title={isExpanded ? "Ẩn vật tư" : "Hiện vật tư"}
                                       >
-                                        <i className="bi bi-x-circle-fill" style={{ fontSize: 13 }} />
-                                      </span>
-                                    ) : (
-                                      <span
-                                        title={`Thiếu hàng (thực tồn: ${ton})`}
-                                        style={{
-                                          color: "#f97316",
-                                          background: "rgba(249, 115, 22, 0.1)",
-                                          width: 22,
-                                          height: 22,
-                                          borderRadius: "50%",
-                                          display: "inline-flex",
-                                          alignItems: "center",
-                                          justifyContent: "center",
-                                          flexShrink: 0,
-                                        }}
-                                      >
-                                        <i className="bi bi-exclamation-triangle-fill" style={{ fontSize: 13 }} />
-                                      </span>
+                                        <i className={`bi bi-chevron-${isExpanded ? 'up' : 'down'}`} style={{ fontSize: 12, strokeWidth: 2 }}></i>
+                                      </button>
                                     )}
+                                    <span style={{ fontWeight: 500, color: "var(--foreground)" }}>{it.ten}</span>
+                                    {it.ten.trim() && it.soLuongTon !== null && it.soLuongTon !== undefined && (() => {
+                                      const ton = it.soLuongTon as number;
+                                      const isOutOfFinishedGood = ton === 0 || it.soLuong > ton;
+                                      if (!isOutOfFinishedGood) return null;
 
-                                    {matCheck.hasBOM && (
-                                      matCheck.hasShortage ? (
+                                      const matCheck = checkMaterialShortage(it);
+
+                                      return (
+                                        <div style={{ display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+                                          {ton === 0 ? (
+                                            <span
+                                              title="Hết hàng thành phẩm"
+                                              style={{
+                                                color: "#ef4444",
+                                                background: "rgba(239, 68, 68, 0.1)",
+                                                width: 22,
+                                                height: 22,
+                                                borderRadius: "50%",
+                                                display: "inline-flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                flexShrink: 0,
+                                              }}
+                                            >
+                                              <i className="bi bi-x-circle-fill" style={{ fontSize: 13 }} />
+                                            </span>
+                                          ) : (
+                                            <span
+                                              title={`Thiếu hàng (thực tồn: ${ton})`}
+                                              style={{
+                                                color: "#f97316",
+                                                background: "rgba(249, 115, 22, 0.1)",
+                                                width: 22,
+                                                height: 22,
+                                                borderRadius: "50%",
+                                                display: "inline-flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                flexShrink: 0,
+                                              }}
+                                            >
+                                              <i className="bi bi-exclamation-triangle-fill" style={{ fontSize: 13 }} />
+                                            </span>
+                                          )}
+
+                                          {matCheck.hasBOM && (
+                                            matCheck.hasShortage ? (
+                                              <span
+                                                title={`Không đủ vật tư sản xuất (${matCheck.missingCount} loại vật tư thiếu)`}
+                                                style={{
+                                                  color: "#dc2626",
+                                                  background: "rgba(220, 38, 38, 0.1)",
+                                                  border: "1px solid rgba(220, 38, 38, 0.25)",
+                                                  width: 22,
+                                                  height: 22,
+                                                  borderRadius: "50%",
+                                                  display: "inline-flex",
+                                                  alignItems: "center",
+                                                  justifyContent: "center",
+                                                  flexShrink: 0,
+                                                }}
+                                              >
+                                                <i className="bi bi-exclamation-octagon-fill" style={{ fontSize: 12 }} />
+                                              </span>
+                                            ) : (
+                                              <span
+                                                title="Đủ vật tư để sản xuất"
+                                                style={{
+                                                  color: "#059669",
+                                                  background: "rgba(5, 150, 105, 0.1)",
+                                                  border: "1px solid rgba(5, 150, 105, 0.25)",
+                                                  width: 22,
+                                                  height: 22,
+                                                  borderRadius: "50%",
+                                                  display: "inline-flex",
+                                                  alignItems: "center",
+                                                  justifyContent: "center",
+                                                  flexShrink: 0,
+                                                }}
+                                              >
+                                                <i className="bi bi-check-circle-fill" style={{ fontSize: 12 }} />
+                                              </span>
+                                            )
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
+                                  </div>
+                                  {(() => {
+                                    const moTaDinhMuc = it.dinhMucTen || activeDinhMuc?.tenDinhMuc;
+                                    const dmCode = activeDinhMuc?.code || it.bomCode;
+                                    if (!moTaDinhMuc && !dmCode) return null;
+                                    return (
+                                      <div style={{
+                                        fontSize: 11.5,
+                                        color: "var(--muted-foreground)",
+                                        paddingLeft: activeDinhMuc ? 18 : 0,
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: 2,
+                                        lineHeight: 1.3,
+                                        marginTop: 2
+                                      }}>
+                                        {dmCode && (
+                                          <div style={{ display: "flex" }}>
+                                            <span style={{
+                                              fontFamily: "monospace",
+                                              fontSize: 10,
+                                              fontWeight: 600,
+                                              color: "#2563eb",
+                                              background: "rgba(37, 99, 235, 0.08)",
+                                              padding: "1px 6px",
+                                              borderRadius: 4,
+                                              whiteSpace: "nowrap",
+                                              display: "inline-block"
+                                            }}>
+                                              {dmCode}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {moTaDinhMuc && <span style={{ fontStyle: "italic", wordBreak: "break-word" }}>{moTaDinhMuc}</span>}
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+                              </td>
+                              <td style={{ padding: 6, textAlign: "center" }}>{it.dvt}</td>
+                              <td style={{ padding: 6, textAlign: "center" }}>{it.soLuong}</td>
+                              <td style={{ padding: 6, textAlign: "center" }}>{it.ckPct}</td>
+                              <td style={{ padding: 6, textAlign: "right" }}>{fmt(it.donGia)}</td>
+                              <td style={{ padding: 6, textAlign: "right", fontWeight: 600 }}>{fmt(thanhTien(it))} đ</td>
+                              <td style={{ padding: 6 }}>
+                                {!isOrderReadOnly && (
+                                  <button onClick={(e) => { e.stopPropagation(); removeRow(it.id); }} style={{ padding: 4, background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}>
+                                    <i className="bi bi-trash" />
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                            {hasBOM && isExpanded && (
+                              <tr style={{ background: "rgba(59,130,246,0.03)", borderBottom: "1px solid var(--border)" }}>
+                                <td colSpan={8} style={{ padding: "10px 10px 10px 40px" }}>
+                                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                                    <div style={{ fontSize: 12, color: "var(--muted-foreground)", fontWeight: 600 }}>Định mức vật tư ({activeDinhMuc.tenDinhMuc})</div>
+                                    {(() => {
+                                      const matCheck = checkMaterialShortage(it);
+                                      if (matCheck.hasShortage) {
+                                        return (
+                                          <span
+                                            title={`Không đủ vật tư (${matCheck.missingCount} loại thiếu)`}
+                                            style={{
+                                              color: "#dc2626",
+                                              background: "rgba(220, 38, 38, 0.1)",
+                                              border: "1px solid rgba(220, 38, 38, 0.25)",
+                                              width: 22,
+                                              height: 22,
+                                              borderRadius: "50%",
+                                              display: "inline-flex",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                            }}
+                                          >
+                                            <i className="bi bi-exclamation-triangle-fill" style={{ fontSize: 11.5 }} />
+                                          </span>
+                                        );
+                                      }
+                                      return (
                                         <span
-                                          title={`Không đủ vật tư sản xuất (${matCheck.missingCount} loại vật tư thiếu)`}
-                                          style={{
-                                            color: "#dc2626",
-                                            background: "rgba(220, 38, 38, 0.1)",
-                                            border: "1px solid rgba(220, 38, 38, 0.25)",
-                                            width: 22,
-                                            height: 22,
-                                            borderRadius: "50%",
-                                            display: "inline-flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            flexShrink: 0,
-                                          }}
-                                        >
-                                          <i className="bi bi-exclamation-octagon-fill" style={{ fontSize: 12 }} />
-                                        </span>
-                                      ) : (
-                                        <span
-                                          title="Đủ vật tư để sản xuất"
+                                          title="Đủ vật tư sản xuất"
                                           style={{
                                             color: "#059669",
                                             background: "rgba(5, 150, 105, 0.1)",
@@ -3558,188 +3728,86 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                                             display: "inline-flex",
                                             alignItems: "center",
                                             justifyContent: "center",
-                                            flexShrink: 0,
                                           }}
                                         >
-                                          <i className="bi bi-check-circle-fill" style={{ fontSize: 12 }} />
+                                          <i className="bi bi-check-circle-fill" style={{ fontSize: 11.5 }} />
                                         </span>
-                                      )
-                                    )}
+                                      );
+                                    })()}
                                   </div>
-                                );
-                              })()}
-                            </div>
-                            {(() => {
-                              const moTaDinhMuc = it.dinhMucTen || activeDinhMuc?.tenDinhMuc;
-                              const dmCode = activeDinhMuc?.code || it.bomCode;
-                              if (!moTaDinhMuc && !dmCode) return null;
-                              return (
-                                <div style={{ 
-                                  fontSize: 11.5, 
-                                  color: "var(--muted-foreground)", 
-                                  paddingLeft: activeDinhMuc ? 18 : 0,
-                                  display: "flex",
-                                  flexDirection: "column",
-                                  gap: 2,
-                                  lineHeight: 1.3,
-                                  marginTop: 2
-                                }}>
-                                  {dmCode && (
-                                    <div style={{ display: "flex" }}>
-                                      <span style={{
-                                        fontFamily: "monospace",
-                                        fontSize: 10,
-                                        fontWeight: 600,
-                                        color: "#2563eb",
-                                        background: "rgba(37, 99, 235, 0.08)",
-                                        padding: "1px 6px",
-                                        borderRadius: 4,
-                                        whiteSpace: "nowrap",
-                                        display: "inline-block"
-                                      }}>
-                                        {dmCode}
-                                      </span>
-                                    </div>
-                                  )}
-                                  {moTaDinhMuc && <span style={{ fontStyle: "italic", wordBreak: "break-word" }}>{moTaDinhMuc}</span>}
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        </td>
-                        <td style={{ padding: 6, textAlign: "center" }}>{it.dvt}</td>
-                        <td style={{ padding: 6, textAlign: "center" }}>{it.soLuong}</td>
-                        <td style={{ padding: 6, textAlign: "center" }}>{it.ckPct}</td>
-                        <td style={{ padding: 6, textAlign: "right" }}>{fmt(it.donGia)}</td>
-                        <td style={{ padding: 6, textAlign: "right", fontWeight: 600 }}>{fmt(thanhTien(it))} đ</td>
-                        <td style={{ padding: 6 }}>
-                          {!isOrderReadOnly && (
-                            <button onClick={(e) => { e.stopPropagation(); removeRow(it.id); }} style={{ padding: 4, background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}>
-                              <i className="bi bi-trash" />
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                      {hasBOM && isExpanded && (
-                        <tr style={{ background: "rgba(59,130,246,0.03)", borderBottom: "1px solid var(--border)" }}>
-                          <td colSpan={8} style={{ padding: "10px 10px 10px 40px" }}>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                              <div style={{ fontSize: 12, color: "var(--muted-foreground)", fontWeight: 600 }}>Định mức vật tư ({activeDinhMuc.tenDinhMuc})</div>
-                              {(() => {
-                                const matCheck = checkMaterialShortage(it);
-                                if (matCheck.hasShortage) {
-                                  return (
-                                    <span
-                                      title={`Không đủ vật tư (${matCheck.missingCount} loại thiếu)`}
-                                      style={{
-                                        color: "#dc2626",
-                                        background: "rgba(220, 38, 38, 0.1)",
-                                        border: "1px solid rgba(220, 38, 38, 0.25)",
-                                        width: 22,
-                                        height: 22,
-                                        borderRadius: "50%",
-                                        display: "inline-flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                      }}
-                                    >
-                                      <i className="bi bi-exclamation-triangle-fill" style={{ fontSize: 11.5 }} />
-                                    </span>
-                                  );
-                                }
-                                return (
-                                  <span
-                                    title="Đủ vật tư sản xuất"
-                                    style={{
-                                      color: "#059669",
-                                      background: "rgba(5, 150, 105, 0.1)",
-                                      border: "1px solid rgba(5, 150, 105, 0.25)",
-                                      width: 22,
-                                      height: 22,
-                                      borderRadius: "50%",
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      justifyContent: "center",
-                                    }}
-                                  >
-                                    <i className="bi bi-check-circle-fill" style={{ fontSize: 11.5 }} />
-                                  </span>
-                                );
-                              })()}
-                            </div>
-                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                              <thead>
-                                <tr style={{ background: "var(--muted)", textAlign: "left", color: "var(--muted-foreground)" }}>
-                                  <th style={{ padding: "6px 10px" }}>Mã VT</th>
-                                  <th style={{ padding: "6px 10px" }}>Tên vật tư</th>
-                                  <th style={{ padding: "6px 10px", textAlign: "center" }}>ĐVT</th>
-                                  <th style={{ padding: "6px 10px", textAlign: "right" }}>SL / 1 SP</th>
-                                  <th style={{ padding: "6px 10px", textAlign: "right" }}>Tổng SL cần</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {activeDinhMuc.vatTu && activeDinhMuc.vatTu.length > 0 ? activeDinhMuc.vatTu.map((vt: any, vtIdx: number) => {
-                                  const vtStocks = vt.stocks || vt.inventoryItem?.stocks || vt.material?.stocks || [];
-                                  const vtRelevantStocks = vtStocks.filter((s: any) => {
-                                    const c = s.warehouse?.code?.toUpperCase()?.trim();
-                                    return c === "KHO-CHINH" || c === "KVP" || c === "KHO_CHINH";
-                                  });
-                                  const vtSoLuong = vtRelevantStocks.reduce((acc: number, s: any) => acc + (s.soLuong || 0), 0);
-                                  const vtSoLuongGiu = vtRelevantStocks.reduce((acc: number, s: any) => acc + (s.soLuongGiu || 0), 0);
-                                  const vtThucTon = Math.max(0, vtSoLuong - vtSoLuongGiu);
-                                  const needed = vt.soLuong * it.soLuong;
-                                  const isVTOOS = vtThucTon < needed;
-                                  const vtName = vt.material?.tenHang || vt.inventoryItem?.tenHang || vt.tenVatTu;
+                                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                                    <thead>
+                                      <tr style={{ background: "var(--muted)", textAlign: "left", color: "var(--muted-foreground)" }}>
+                                        <th style={{ padding: "6px 10px" }}>Mã VT</th>
+                                        <th style={{ padding: "6px 10px" }}>Tên vật tư</th>
+                                        <th style={{ padding: "6px 10px", textAlign: "center" }}>ĐVT</th>
+                                        <th style={{ padding: "6px 10px", textAlign: "right" }}>SL / 1 SP</th>
+                                        <th style={{ padding: "6px 10px", textAlign: "right" }}>Tổng SL cần</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {activeDinhMuc.vatTu && activeDinhMuc.vatTu.length > 0 ? activeDinhMuc.vatTu.map((vt: any, vtIdx: number) => {
+                                        const vtStocks = vt.stocks || vt.inventoryItem?.stocks || vt.material?.stocks || [];
+                                        const vtRelevantStocks = vtStocks.filter((s: any) => {
+                                          const c = s.warehouse?.code?.toUpperCase()?.trim();
+                                          return c === "KHO-CHINH" || c === "KVP" || c === "KHO_CHINH";
+                                        });
+                                        const vtSoLuong = vtRelevantStocks.reduce((acc: number, s: any) => acc + (s.soLuong || 0), 0);
+                                        const vtSoLuongGiu = vtRelevantStocks.reduce((acc: number, s: any) => acc + (s.soLuongGiu || 0), 0);
+                                        const vtThucTon = Math.max(0, vtSoLuong - vtSoLuongGiu);
+                                        const needed = vt.soLuong * it.soLuong;
+                                        const isVTOOS = vtThucTon < needed;
+                                        const vtName = vt.material?.tenHang || vt.inventoryItem?.tenHang || vt.tenVatTu;
 
-                                  return (
-                                    <tr key={vt.id || vtIdx} style={{ borderBottom: "1px solid var(--border)" }}>
-                                      <td style={{ padding: "6px 10px", fontFamily: "monospace" }}>{vt.material?.code || vt.inventoryItem?.code || vt.maVatTu || "-"}</td>
-                                      <td style={{ padding: "6px 10px", fontWeight: 500, color: "var(--foreground)" }}>
-                                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                          {vtName}
-                                          {isVTOOS && (
-                                            <span
-                                              title={`Thiếu ${needed - vtThucTon} (thực tồn: ${vtThucTon})`}
-                                              style={{
-                                                color: "#f97316",
-                                                background: "rgba(249, 115, 22, 0.1)",
-                                                width: 20,
-                                                height: 20,
-                                                borderRadius: "50%",
-                                                display: "inline-flex",
-                                                alignItems: "center",
-                                                justifyContent: "center",
-                                                flexShrink: 0,
-                                              }}
-                                            >
-                                              <i className="bi bi-exclamation-triangle-fill" style={{ fontSize: 11.5 }} />
-                                            </span>
-                                          )}
-                                        </div>
-                                      </td>
-                                      <td style={{ padding: "6px 10px", textAlign: "center" }}>{vt.donViTinh || "-"}</td>
-                                      <td style={{ padding: "6px 10px", textAlign: "right" }}>{vt.soLuong}</td>
-                                      <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--primary)" }}>{needed}</td>
-                                    </tr>
-                                  );
-                                }) : (
-                                  <tr>
-                                    <td colSpan={5} style={{ padding: "10px", textAlign: "center", color: "var(--muted-foreground)" }}>
-                                      Định mức này chưa có chi tiết vật tư
-                                    </td>
-                                  </tr>
-                                )}
-                              </tbody>
-                            </table>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </FullWidthTable>
+                                        return (
+                                          <tr key={vt.id || vtIdx} style={{ borderBottom: "1px solid var(--border)" }}>
+                                            <td style={{ padding: "6px 10px", fontFamily: "monospace" }}>{vt.material?.code || vt.inventoryItem?.code || vt.maVatTu || "-"}</td>
+                                            <td style={{ padding: "6px 10px", fontWeight: 500, color: "var(--foreground)" }}>
+                                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                                {vtName}
+                                                {isVTOOS && (
+                                                  <span
+                                                    title={`Thiếu ${needed - vtThucTon} (thực tồn: ${vtThucTon})`}
+                                                    style={{
+                                                      color: "#f97316",
+                                                      background: "rgba(249, 115, 22, 0.1)",
+                                                      width: 20,
+                                                      height: 20,
+                                                      borderRadius: "50%",
+                                                      display: "inline-flex",
+                                                      alignItems: "center",
+                                                      justifyContent: "center",
+                                                      flexShrink: 0,
+                                                    }}
+                                                  >
+                                                    <i className="bi bi-exclamation-triangle-fill" style={{ fontSize: 11.5 }} />
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </td>
+                                            <td style={{ padding: "6px 10px", textAlign: "center" }}>{vt.donViTinh || "-"}</td>
+                                            <td style={{ padding: "6px 10px", textAlign: "right" }}>{vt.soLuong}</td>
+                                            <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--primary)" }}>{needed}</td>
+                                          </tr>
+                                        );
+                                      }) : (
+                                        <tr>
+                                          <td colSpan={5} style={{ padding: "10px", textAlign: "center", color: "var(--muted-foreground)" }}>
+                                            Định mức này chưa có chi tiết vật tư
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </FullWidthTable>
               </div>
 
               {/* Mobile Slide 2: Selected Items List */}
@@ -4042,11 +4110,11 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
                       style={{ height: 34, fontSize: 14, fontWeight: 700 }}
                     />
                   </div>
-                  
+
                   <div className="order-modal-paid-toggle-wrap" style={{ display: "flex", alignItems: "center", marginLeft: 4 }}>
-                    <Toggle 
+                    <Toggle
                       disabled={isOrderReadOnly}
-                      checked={info.isChuyenKhoan} 
+                      checked={info.isChuyenKhoan}
                       onChange={(val) => {
                         if (isOrderReadOnly) return;
                         setInfo(f => ({ ...f, isChuyenKhoan: val }));
@@ -4881,6 +4949,7 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
         custInfo={custInfo}
         items={items}
         info={info}
+        orderId={activeEditOrder?.id}
       />
     </div>
   );

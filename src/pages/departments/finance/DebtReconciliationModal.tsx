@@ -193,7 +193,12 @@ export function cleanTransactionNote(
   }
 
   // 5. Chuẩn hóa các từ viết tắt giao dịch ngân hàng / kế toán
-  cleaned = cleaned.replace(/\bck\b/gi, 'chuyển khoản');
+  // Phân biệt "CK" = Chiết khấu (trong giảm trừ / chiết khấu sản phẩm, đơn hàng) với "CK" = Chuyển khoản
+  cleaned = cleaned.replace(/\bck\s+(sản phẩm|đơn|hàng|thương mại|thanh toán)/gi, 'Chiết khấu $1');
+  cleaned = cleaned.replace(/\bck\s*([-+]?\d+\s*%)/gi, 'Chiết khấu $1');
+  if (!txType?.includes('Giảm trừ')) {
+    cleaned = cleaned.replace(/\bck\b/gi, 'chuyển khoản');
+  }
   cleaned = cleaned.replace(/(\d+)\s*tr\b/gi, '$1 triệu đồng');
   cleaned = cleaned.replace(/(\d+)\s*k\b/gi, '$1.000 đồng');
   cleaned = cleaned.replace(/\bnhân tiền\b/gi, 'nhận tiền');
@@ -204,6 +209,14 @@ export function cleanTransactionNote(
 
   // Xóa gạch nối lẻ loi ở đầu hoặc cuối
   cleaned = cleaned.replace(/^\s*[-–—:]+\s*/, '').replace(/\s*[-–—:]+\s*$/, '').trim();
+
+  // Chuẩn hóa diễn giải tự sinh cũ trên Phiếu thu: "Thu tiền khách hàng - Xuất bán hàng theo đơn hàng DBH-..." -> "Thu nợ khách hàng"
+  if (
+    (txType?.includes('Phiếu thu') || txType?.includes('receipt')) &&
+    /^Thu\s+tiền\s+khách\s+hàng\s*[-–—]\s*Xuất\s+bán\s+hàng\s+theo\s+đơn(\s+hàng)?\s+[A-Z0-9-]+$/i.test(cleaned)
+  ) {
+    return 'Thu nợ khách hàng';
+  }
 
   // 7. Nếu sau khi làm sạch chuỗi quá ngắn hoặc chỉ còn chữ 'chuyển khoản' hoặc vô nghĩa:
   if (!cleaned || cleaned.toLowerCase() === 'chuyển khoản' || cleaned.length < 3) {
@@ -458,6 +471,8 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
 
   // Trạng thái mở modal PrintPreview in biên bản đối chiếu
   const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false);
+  // Thứ tự sắp xếp giao dịch trên biên bản in: 'asc' (Cũ → Mới, Đầu kỳ ở trên) | 'desc' (Mới → Cũ, Đầu kỳ ở dưới)
+  const [printSortOrder, setPrintSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // Chế độ xem: 'timeline' (Theo trình tự thời gian) | 'by_stage' (Nhóm các phiếu thu của từng đợt nợ)
   const [viewMode, setViewMode] = useState<'timeline' | 'by_stage'>('timeline');
@@ -974,11 +989,22 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
       String(tx.type || '').includes('Giảm trừ') ||
       String(tx.ref || '').startsWith('ERR-');
 
-    const rawItems = (Array.isArray(tx.rawEntry?.items) && tx.rawEntry.items.length > 0 ? tx.rawEntry.items : null) ||
-                     (Array.isArray(tx.rawPayment?.items) && tx.rawPayment.items.length > 0 ? tx.rawPayment.items : null) ||
-                     orderItemsMap[tx.ref] ||
-                     orderItemsMap[tx.code] ||
-                     [];
+    const isMainOrder =
+      !tx.isStagePayment &&
+      !isReturn &&
+      (String(tx.type || '').includes('Bán hàng') || String(tx.type || '').includes('Mua hàng'));
+
+    const rawItems = isMainOrder
+      ? (Array.isArray(tx.rawEntry?.items) && tx.rawEntry.items.length > 0 ? tx.rawEntry.items : null) ||
+        orderItemsMap[tx.ref] ||
+        orderItemsMap[tx.code] ||
+        []
+      : isReturn
+        ? (Array.isArray(tx.rawPayment?.items) && tx.rawPayment.items.length > 0 ? tx.rawPayment.items : null) ||
+          orderItemsMap[tx.ref] ||
+          orderItemsMap[tx.code] ||
+          []
+        : [];
 
     const entryData = tx.rawEntry || {
       id: tx.stageId || tx.id,
@@ -1107,6 +1133,16 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
     // Mặc định: theo thời gian, mới nhất lên trên
     return [...filteredTimelineTransactions].reverse();
   }, [viewMode, filteredStageTransactions, filteredTimelineTransactions, collapsedStages]);
+
+  // Danh sách giao dịch cho bản in biên bản (tách riêng dòng đầu kỳ, sắp xếp theo lựa chọn printSortOrder)
+  const printTransactions = useMemo(() => {
+    const baseList =
+      viewMode === 'by_stage'
+        ? filteredStageTransactions.filter((tx: any) => !(tx.isStagePayment && collapsedStages[tx.stageCode]))
+        : filteredTimelineTransactions;
+    const bodyList = baseList.filter((tx: any) => tx.id !== 'OPENING_BALANCE');
+    return printSortOrder === 'asc' ? bodyList : [...bodyList].reverse();
+  }, [viewMode, filteredStageTransactions, filteredTimelineTransactions, collapsedStages, printSortOrder]);
 
   useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(allDisplayTransactions.length / pageSize));
@@ -2192,6 +2228,77 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                     onChange={(e) => setDocDate(e.target.value)}
                     placeholder="Ví dụ: 23 tháng 10 năm 2026"
                   />
+                  <div>
+                    <label
+                      style={{
+                        display: 'block',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: 'var(--text-secondary, #475569)',
+                        marginBottom: '6px',
+                      }}
+                    >
+                      Thứ tự sắp xếp giao dịch
+                    </label>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '4px',
+                        padding: '3px',
+                        backgroundColor: 'var(--bg-surface-2, #f1f5f9)',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border-default, #e2e8f0)',
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setPrintSortOrder('asc')}
+                        style={{
+                          padding: '6px 8px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          fontSize: '0.73rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          textAlign: 'center',
+                          lineHeight: 1.25,
+                          backgroundColor: printSortOrder === 'asc' ? '#ffffff' : 'transparent',
+                          color: printSortOrder === 'asc' ? '#1d4ed8' : '#64748b',
+                          boxShadow: printSortOrder === 'asc' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        Cũ → Mới
+                        <div style={{ fontSize: '0.65rem', fontWeight: 500, opacity: 0.8 }}>
+                          Đầu kỳ trên
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPrintSortOrder('desc')}
+                        style={{
+                          padding: '6px 8px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          fontSize: '0.73rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          textAlign: 'center',
+                          lineHeight: 1.25,
+                          backgroundColor: printSortOrder === 'desc' ? '#ffffff' : 'transparent',
+                          color: printSortOrder === 'desc' ? '#1d4ed8' : '#64748b',
+                          boxShadow: printSortOrder === 'desc' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        Mới → Cũ
+                        <div style={{ fontSize: '0.65rem', fontWeight: 500, opacity: 0.8 }}>
+                          Đầu kỳ dưới
+                        </div>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -2561,42 +2668,55 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                     </tr>
                   </thead>
                   <tbody>
-                    {/* Dòng Dư nợ đầu kỳ */}
-                    <tr style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#fafafa' }}>
-                      <td style={{ border: 'none', padding: '6px 4px', textAlign: 'center', color: '#64748b' }}>-</td>
-                      <td style={{ border: 'none', padding: '6px 8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.74rem' }}>
-                          <span style={{ color: '#475569', fontWeight: 600 }}>
-                            {startDate ? new Date(startDate).toLocaleDateString('vi-VN') : '---'}
-                          </span>
-                          <span style={{ color: '#cbd5e1' }}>•</span>
-                          <span style={{ color: '#003087', fontWeight: 700 }}>DK</span>
-                        </div>
-                        <div style={{ color: '#475569', marginTop: '2px', fontSize: '0.74rem', fontStyle: 'italic' }}>
-                          {transactions.timelineTransactions.find((t: any) => t.id === 'OPENING_BALANCE')?.note || 'Số dư nợ chuyển sang từ đầu kỳ'}
-                        </div>
-                      </td>
-                      <td style={{ border: 'none', padding: '6px 6px', textAlign: 'right', color: '#94a3b8' }}>-</td>
-                      <td style={{ border: 'none', padding: '6px 6px', textAlign: 'right', color: '#94a3b8' }}>-</td>
-                      <td style={{ border: 'none', padding: '6px 6px', textAlign: 'right', fontWeight: 600, color: '#0f172a' }}>
-                        {formatCurrency(totals.openingBalance)}
-                      </td>
-                    </tr>
+                    {/* Dòng Dư nợ đầu kỳ (hiển thị ở đầu bảng khi sắp xếp Cũ → Mới) */}
+                    {printSortOrder === 'asc' && (
+                      <tr style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#fafafa' }}>
+                        <td style={{ border: 'none', padding: '6px 4px', textAlign: 'center', color: '#64748b' }}>-</td>
+                        <td style={{ border: 'none', padding: '6px 8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.74rem' }}>
+                            <span style={{ color: '#475569', fontWeight: 600 }}>
+                              {startDate ? new Date(startDate).toLocaleDateString('vi-VN') : '---'}
+                            </span>
+                            <span style={{ color: '#cbd5e1' }}>•</span>
+                            <span style={{ color: '#003087', fontWeight: 700 }}>DK</span>
+                          </div>
+                          <div style={{ color: '#475569', marginTop: '2px', fontSize: '0.74rem', fontStyle: 'italic' }}>
+                            {transactions.timelineTransactions.find((t: any) => t.id === 'OPENING_BALANCE')?.note || 'Số dư nợ chuyển sang từ đầu kỳ'}
+                          </div>
+                        </td>
+                        <td style={{ border: 'none', padding: '6px 6px', textAlign: 'right', color: '#94a3b8' }}>-</td>
+                        <td style={{ border: 'none', padding: '6px 6px', textAlign: 'right', color: '#94a3b8' }}>-</td>
+                        <td style={{ border: 'none', padding: '6px 6px', textAlign: 'right', fontWeight: 600, color: '#0f172a' }}>
+                          {formatCurrency(totals.openingBalance)}
+                        </td>
+                      </tr>
+                    )}
 
                     {/* Danh sách giao dịch phát sinh */}
-                    {allDisplayTransactions
-                      .filter((tx: any) => tx.id !== 'OPENING_BALANCE')
-                      .map((tx: any, idx: number) => {
+                    {printTransactions.map((tx: any, idx: number) => {
                         const cleanNote = cleanTransactionNote(tx.note, partnerDisplayName, debt.customerPhone || debt.phone, tx.type);
                         const cleanType = stripParentheses(tx.type);
                         const refCode = tx.ref || tx.code || '---';
                         const displayDate = tx.date ? new Date(tx.date).toLocaleDateString('vi-VN') : '---';
-                        const itemsList =
-                          (Array.isArray(tx.rawEntry?.items) && tx.rawEntry.items.length > 0 ? tx.rawEntry.items : null) ||
-                          (Array.isArray(tx.rawPayment?.items) && tx.rawPayment.items.length > 0 ? tx.rawPayment.items : null) ||
-                          orderItemsMap[refCode] ||
-                          orderItemsMap[tx.ref] ||
-                          [];
+                        const isMainOrder =
+                          !tx.isStagePayment &&
+                          (String(tx.type || '').includes('Bán hàng') || String(tx.type || '').includes('Mua hàng'));
+                        const isReturnTx =
+                          Boolean(tx.isReturn) ||
+                          tx.type === 'Giảm trừ nợ' ||
+                          String(tx.type || '').includes('Giảm trừ') ||
+                          String(refCode).startsWith('ERR-');
+                        const itemsList = isMainOrder
+                          ? (Array.isArray(tx.rawEntry?.items) && tx.rawEntry.items.length > 0 ? tx.rawEntry.items : null) ||
+                            orderItemsMap[refCode] ||
+                            orderItemsMap[tx.ref] ||
+                            []
+                          : isReturnTx
+                            ? (Array.isArray(tx.rawPayment?.items) && tx.rawPayment.items.length > 0 ? tx.rawPayment.items : null) ||
+                              orderItemsMap[refCode] ||
+                              orderItemsMap[tx.ref] ||
+                              []
+                            : [];
 
                         return (
                           <React.Fragment key={tx.id || idx}>
@@ -2801,6 +2921,30 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                           </React.Fragment>
                         );
                       })}
+
+                    {/* Dòng Dư nợ đầu kỳ (hiển thị ở cuối bảng khi sắp xếp Mới → Cũ) */}
+                    {printSortOrder === 'desc' && (
+                      <tr style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#fafafa' }}>
+                        <td style={{ border: 'none', padding: '6px 4px', textAlign: 'center', color: '#64748b' }}>-</td>
+                        <td style={{ border: 'none', padding: '6px 8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.74rem' }}>
+                            <span style={{ color: '#475569', fontWeight: 600 }}>
+                              {startDate ? new Date(startDate).toLocaleDateString('vi-VN') : '---'}
+                            </span>
+                            <span style={{ color: '#cbd5e1' }}>•</span>
+                            <span style={{ color: '#003087', fontWeight: 700 }}>DK</span>
+                          </div>
+                          <div style={{ color: '#475569', marginTop: '2px', fontSize: '0.74rem', fontStyle: 'italic' }}>
+                            {transactions.timelineTransactions.find((t: any) => t.id === 'OPENING_BALANCE')?.note || 'Số dư nợ chuyển sang từ đầu kỳ'}
+                          </div>
+                        </td>
+                        <td style={{ border: 'none', padding: '6px 6px', textAlign: 'right', color: '#94a3b8' }}>-</td>
+                        <td style={{ border: 'none', padding: '6px 6px', textAlign: 'right', color: '#94a3b8' }}>-</td>
+                        <td style={{ border: 'none', padding: '6px 6px', textAlign: 'right', fontWeight: 600, color: '#0f172a' }}>
+                          {formatCurrency(totals.openingBalance)}
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                   <tfoot>
                     <tr style={{ fontWeight: 800, backgroundColor: '#f8fafc', borderTop: '1.5px solid #0f172a', borderBottom: '2px solid #0f172a' }}>

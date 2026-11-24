@@ -296,11 +296,15 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
     morningEnd: string;
     afternoonStart: string;
     afternoonEnd: string;
+    checkInEarlyLimitMinutes: number;
+    checkOutLateLimitMinutes: number;
   }>({
     morningStart: '08:00',
     morningEnd: '12:00',
     afternoonStart: '13:30',
     afternoonEnd: '17:30',
+    checkInEarlyLimitMinutes: 60,
+    checkOutLateLimitMinutes: 120,
   });
 
   // State lưu toàn bộ dữ liệu nội quy lao động và nghỉ lễ từ DB
@@ -361,6 +365,8 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
           morningEnd: currentShift.morningEnd || '12:00',
           afternoonStart: currentShift.afternoonStart || '13:30',
           afternoonEnd: currentShift.afternoonEnd || '17:30',
+          checkInEarlyLimitMinutes: Math.max(0, Number(currentShift.checkInEarlyLimitMinutes ?? 60)),
+          checkOutLateLimitMinutes: Math.max(0, Number(currentShift.checkOutLateLimitMinutes ?? 120)),
         });
         setRulesShiftId((prev) =>
           prev && loadedLaborRules!.shifts.some((s) => s.id === prev) ? prev : currentShift.id
@@ -406,21 +412,92 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
     return h * 60 + m;
   };
 
-  // Tính toán thời gian thực theo đồng hồ
+  const formatMinutesToHHMM = (totalMins: number): string => {
+    const clamped = Math.max(0, Math.min(23 * 60 + 59, Math.round(totalMins)));
+    const hh = String(Math.floor(clamped / 60)).padStart(2, '0');
+    const mm = String(clamped % 60).padStart(2, '0');
+    return `${hh}:${mm}`;
+  };
+
+  // Bản đồ các ngày nghỉ lễ được hưởng nguyên lương từ Nội quy lao động
+  const paidHolidaysByDate = useMemo(() => {
+    const map = new Map<string, string>();
+    const rawPeriods =
+      holidayRulesData && Array.isArray(holidayRulesData.periods) && holidayRulesData.periods.length > 0
+        ? [...holidayRulesData.periods]
+        : [...DEFAULT_HOLIDAY_RULES_DATA.periods];
+    const hasVanHoa = rawPeriods.some(
+      (p: any) => p && (p.code === 'NGAY_VAN_HOA_VN' || String(p.name || '').includes('Ngày Văn hoá Việt Nam')),
+    );
+    if (!hasVanHoa) {
+      const vh = DEFAULT_HOLIDAY_PERIODS_2026.find((p) => p.code === 'NGAY_VAN_HOA_VN');
+      if (vh) rawPeriods.push(vh);
+    }
+
+    for (const p of rawPeriods) {
+      if (!p) continue;
+      const days = Array.isArray(p.days) ? p.days : [];
+      const hasPaidSun = days.some(
+        (d: any) => d?.isPaid && d?.date && new Date(`${d.date}T00:00:00`).getDay() === 0,
+      );
+      const hasWeekdayComp = days.some(
+        (d: any) => d?.isCompensation && d?.date && new Date(`${d.date}T00:00:00`).getDay() !== 0,
+      );
+      if (days.length > 0) {
+        for (const d of days) {
+          if (!d?.date) continue;
+          const isSun = new Date(`${d.date}T00:00:00`).getDay() === 0;
+          const isPaid =
+            (Boolean(d.isPaid) && !(isSun && hasWeekdayComp)) ||
+            (Boolean(d.isCompensation) && !isSun && hasPaidSun);
+          if (isPaid) {
+            map.set(d.date, d.name || p.name || 'Nghỉ Lễ / Tết');
+          }
+        }
+      } else if (p.startDate && p.endDate && Number(p.totalPaidDays ?? 1) > 0) {
+        const s = new Date(`${p.startDate}T00:00:00`);
+        const e = new Date(`${p.endDate}T00:00:00`);
+        if (!isNaN(s.getTime()) && !isNaN(e.getTime()) && e >= s) {
+          const cur = new Date(s);
+          while (cur <= e) {
+            const ymd = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+            if (cur.getDay() !== 0 || p.startDate === p.endDate) {
+              map.set(ymd, p.name || 'Nghỉ Lễ / Tết');
+            }
+            cur.setDate(cur.getDate() + 1);
+          }
+        }
+      }
+    }
+    return map;
+  }, [holidayRulesData]);
+
+  // Tính toán thời gian thực theo đồng hồ & khung giờ Nội quy lao động
   const nowForShift = new Date();
   const currentTotalMinutes = nowForShift.getHours() * 60 + nowForShift.getMinutes();
+  const todayShiftDateStr = `${nowForShift.getFullYear()}-${String(nowForShift.getMonth() + 1).padStart(2, '0')}-${String(nowForShift.getDate()).padStart(2, '0')}`;
+  const todayHolidayName = paidHolidaysByDate.get(todayShiftDateStr) || null;
+  const isTodayHoliday = Boolean(todayHolidayName);
 
-  // Ca sáng kết thúc khi hết ca sáng:
-  // Mốc hết ca sáng tính theo giờ tan ca morningEnd cộng thêm thời gian quẹt thẻ ra ca 30 phút, tối thiểu 12:00 trưa
-  const morningEndMinutes = parseTimeToMinutes(shiftHours.morningEnd, 11 * 60 + 30);
-  const morningCloseMinutes = Math.max(morningEndMinutes + 30, 12 * 60);
-  const isMorningEnded = currentTotalMinutes >= morningCloseMinutes;
+  const morningStartMinutes = parseTimeToMinutes(shiftHours.morningStart, 8 * 60);
+  const morningEndMinutes = parseTimeToMinutes(shiftHours.morningEnd, 12 * 60);
+  const afternoonStartMinutes = parseTimeToMinutes(shiftHours.afternoonStart, 13 * 60 + 30);
+  const afternoonEndMinutes = parseTimeToMinutes(shiftHours.afternoonEnd, 17 * 60 + 30);
+  const checkInEarlyLimit = Math.max(0, Number(shiftHours.checkInEarlyLimitMinutes ?? 60));
+  const checkOutLateLimit = Math.max(0, Number(shiftHours.checkOutLateLimitMinutes ?? 120));
 
-  // Ca chiều bắt đầu khi đến giờ ca chiều:
-  // Cho phép mở nút ca chiều trước giờ làm việc 30 phút, tối thiểu sau khi kết thúc ca sáng
-  const afternoonStartMinutes = parseTimeToMinutes(shiftHours.afternoonStart, 13 * 60);
-  const afternoonOpenMinutes = Math.max(morningCloseMinutes, afternoonStartMinutes - 30);
-  const isAfternoonReady = currentTotalMinutes >= afternoonOpenMinutes;
+  // Khung giờ mở/đóng theo Nội quy lao động:
+  // - Ca sáng: Mở từ (morningStart - checkInEarlyLimit); Hết vào ca lúc morningEnd; Hết ra ca lúc min(afternoonStart, morningEnd + checkOutLateLimit)
+  const morningOpenMinutes = Math.max(0, morningStartMinutes - checkInEarlyLimit);
+  const morningCloseMinutes = Math.min(afternoonStartMinutes, morningEndMinutes + checkOutLateLimit);
+  // - Ca chiều: Mở từ max(morningEnd, afternoonStart - checkInEarlyLimit); Hết vào ca lúc afternoonEnd; Hết ra ca lúc min(23:59, afternoonEnd + checkOutLateLimit)
+  const afternoonOpenMinutes = Math.max(morningEndMinutes, afternoonStartMinutes - checkInEarlyLimit);
+  const afternoonCloseMinutes = Math.min(23 * 60 + 59, afternoonEndMinutes + checkOutLateLimit);
+
+  const morningOpenStr = formatMinutesToHHMM(morningOpenMinutes);
+  const morningCloseStr = formatMinutesToHHMM(morningCloseMinutes);
+  const afternoonOpenStr = formatMinutesToHHMM(afternoonOpenMinutes);
+  const afternoonCloseStr = formatMinutesToHHMM(afternoonCloseMinutes);
 
   // Giờ chốt đăng ký ăn trưa và ăn tối từ Nội quy lao động Seajong
   const lunchDeadlineStr = laborRulesData?.lunchRule?.lunchDeadlineMorning || '09:00';
@@ -547,9 +624,15 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       todayLeaveInfo.leaveSession === 'all_day'
   );
 
-  // Kiểm tra ngày Chủ nhật & trạng thái đăng ký làm thêm giờ (Tăng ca Chủ nhật)
-  // QUY TẮC BẮT BUỘC: Ngày Chủ nhật khoá các nút chấm công lại, chỉ mở cho các tài khoản đăng ký làm thêm giờ được phê duyệt
+  // Kiểm tra ngày Chủ nhật / Ngày Lễ & trạng thái đăng ký làm thêm giờ (Tăng ca)
+  // QUY TẮC BẮT BUỘC:
+  // - Ngày Chủ nhật và Ngày Lễ khoá các nút chấm công, chỉ mở cho tài khoản có đơn làm thêm giờ được phê duyệt theo đúng ca (Sáng / Chiều / Cả ngày).
+  // - Ngoài khung giờ cho phép vào sớm / ra muộn theo Nội quy lao động, khoá các nút chấm công; chỉ mở khoá tương ứng khi có đơn làm thêm giờ đã được phê duyệt.
   const isTodaySunday = nowForShift.getDay() === 0;
+  const isTodayOffDay = isTodaySunday || isTodayHoliday;
+  const offDayShortLabel = isTodayHoliday ? 'Nghỉ lễ' : 'Nghỉ Chủ nhật';
+  const offDayFullLabel = isTodayHoliday ? `Ngày lễ (${todayHolidayName})` : 'Ngày Chủ nhật';
+
   const todayOvertimeInfo = useMemo(() => {
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -572,11 +655,23 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
         todayOvertimeInfo.otSession === 'afternoon')
   );
   const isTodayAnyOtApproved = isTodayMorningOtApproved || isTodayAfternoonOtApproved;
-  const isSundayMorningLocked = isTodaySunday && !isTodayMorningOtApproved;
-  const isSundayAfternoonLocked = isTodaySunday && !isTodayAfternoonOtApproved;
-  const isSundayMealLocked = isTodaySunday && !isTodayAnyOtApproved;
+  const isSundayMorningLocked = isTodayOffDay && !isTodayMorningOtApproved;
+  const isSundayAfternoonLocked = isTodayOffDay && !isTodayAfternoonOtApproved;
+  const isSundayMealLocked = isTodayOffDay && !isTodayAnyOtApproved;
   const isLunchLocked = isLunchDeadlinePassed || isSundayMealLocked;
   const isDinnerLocked = isDinnerDeadlinePassed || isSundayMealLocked;
+
+  // Kiểm tra giới hạn khung giờ theo Nội quy lao động (chỉ mở ngoài giờ khi có đơn tăng ca tương ứng đã duyệt)
+  const isMorningTooEarly = !isTodayMorningOtApproved && currentTotalMinutes < morningOpenMinutes;
+  const isMorningInClosed = !isTodayMorningOtApproved && currentTotalMinutes > morningEndMinutes;
+  const isMorningOutClosed = !isTodayMorningOtApproved && currentTotalMinutes > morningCloseMinutes;
+  const isMorningEnded = isMorningOutClosed;
+
+  const isAfternoonTooEarly = !isTodayAfternoonOtApproved && currentTotalMinutes < afternoonOpenMinutes;
+  const isAfternoonInClosed = !isTodayAfternoonOtApproved && currentTotalMinutes > afternoonEndMinutes;
+  const isAfternoonOutClosed = !isTodayAfternoonOtApproved && currentTotalMinutes > afternoonCloseMinutes;
+  const isAfternoonEnded = isAfternoonOutClosed;
+  const isAfternoonReady = !isAfternoonTooEarly && !isAfternoonOutClosed;
 
   // Trạng thái nhân sự tự động của nhân viên: 'working' (Đang làm việc) | 'temporary_leave' (Tạm nghỉ) | 'resigned' (Đã nghỉ)
   const isHrResigned = Boolean(
@@ -602,11 +697,41 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
 
   const isEmployeeInactive = isHrResigned || isHrTempLeave;
 
-  // Khoá nút bấm chấm công khi đã quẹt xong ca, hoặc đang nghỉ phép ca đó, hoặc Chủ nhật chưa duyệt làm thêm giờ, hoặc chưa đáp ứng kết nối mạng, hoặc chưa đến giờ / hết giờ ca
-  const isMorningInLocked = isEmployeeInactive || hasMorningIn || isMorningEnded || !isNetworkReadyForCheckIn || isTodayMorningLeave || isSundayMorningLocked;
-  const isMorningCheckOutLocked = isEmployeeInactive || hasMorningOut || isMorningEnded || !hasMorningIn || !isNetworkReadyForCheckIn || isTodayMorningLeave || isSundayMorningLocked;
-  const isAfternoonInLocked = isEmployeeInactive || hasAfternoonIn || !isAfternoonReady || !isNetworkReadyForCheckIn || isTodayAfternoonLeave || isSundayAfternoonLocked;
-  const isAfternoonCheckOutLocked = isEmployeeInactive || hasAfternoonOut || !isAfternoonReady || !hasAfternoonIn || !isNetworkReadyForCheckIn || isTodayAfternoonLeave || isSundayAfternoonLocked;
+  // Khoá nút bấm chấm công khi đã quẹt xong ca, đang nghỉ phép, Chủ nhật/Ngày lễ chưa duyệt tăng ca, chưa đủ mạng/GPS, hoặc ngoài khung giờ Nội quy lao động (chưa có đơn tăng ca tương ứng)
+  const isMorningInLocked =
+    isEmployeeInactive ||
+    hasMorningIn ||
+    isMorningTooEarly ||
+    isMorningInClosed ||
+    !isNetworkReadyForCheckIn ||
+    isTodayMorningLeave ||
+    isSundayMorningLocked;
+  const isMorningCheckOutLocked =
+    isEmployeeInactive ||
+    hasMorningOut ||
+    isMorningTooEarly ||
+    isMorningOutClosed ||
+    !hasMorningIn ||
+    !isNetworkReadyForCheckIn ||
+    isTodayMorningLeave ||
+    isSundayMorningLocked;
+  const isAfternoonInLocked =
+    isEmployeeInactive ||
+    hasAfternoonIn ||
+    isAfternoonTooEarly ||
+    isAfternoonInClosed ||
+    !isNetworkReadyForCheckIn ||
+    isTodayAfternoonLeave ||
+    isSundayAfternoonLocked;
+  const isAfternoonCheckOutLocked =
+    isEmployeeInactive ||
+    hasAfternoonOut ||
+    isAfternoonTooEarly ||
+    isAfternoonOutClosed ||
+    !hasAfternoonIn ||
+    !isNetworkReadyForCheckIn ||
+    isTodayAfternoonLeave ||
+    isSundayAfternoonLocked;
 
   // Chức năng chấm công ngoài văn phòng hoặc công trình dự án
   const [isOutsideWork, setIsOutsideWork] = useState<boolean>(false);
@@ -1693,10 +1818,10 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
     if (isSundayMorningLocked) {
       onShowToast(
         'warning',
-        'Ngày Chủ nhật khoá chấm công',
+        `${offDayFullLabel} khoá chấm công`,
         todayOvertimeInfo?.status === 'pending'
-          ? 'Đơn đăng ký làm thêm giờ Chủ nhật của bạn đang chờ phê duyệt. Nút chấm công sẽ mở sau khi được duyệt.'
-          : 'Ngày Chủ nhật hệ thống khoá các nút chấm công, chỉ mở cho các tài khoản đăng ký làm thêm giờ được phê duyệt.'
+          ? `Đơn đăng ký làm thêm giờ của bạn đang chờ phê duyệt. Nút chấm công ca sáng sẽ mở sau khi được duyệt.`
+          : `${offDayFullLabel} hệ thống khoá các nút chấm công, chỉ mở cho tài khoản có đơn làm thêm giờ ca sáng được phê duyệt.`
       );
       return;
     }
@@ -1712,8 +1837,12 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       onShowToast('warning', 'Chưa đủ điều kiện chấm công', networkLockReason || 'Vui lòng kết nối mạng nội bộ công ty hoặc bật định vị GPS hợp lệ để chấm công.');
       return;
     }
-    if (isMorningEnded) {
-      onShowToast('warning', 'Đã hết ca sáng', 'Ca làm việc buổi sáng đã kết thúc, nút chấm công ca sáng đã khoá');
+    if (isMorningTooEarly) {
+      onShowToast('warning', 'Chưa đến giờ mở ca sáng', `Theo Nội quy lao động, ca sáng mở chấm công vào từ ${morningOpenStr} (sớm tối đa ${checkInEarlyLimit} phút). Ngoài khung giờ quy định chỉ mở khi có đơn làm thêm giờ ca sáng được phê duyệt.`);
+      return;
+    }
+    if (isMorningInClosed) {
+      onShowToast('warning', 'Đã hết giờ vào ca sáng', `Đã qua giờ kết thúc ca sáng (${shiftHours.morningEnd}). Nút vào ca sáng đã khoá, chỉ mở khi có đơn làm thêm giờ ca sáng được phê duyệt.`);
       return;
     }
     const timeNow = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
@@ -1737,8 +1866,8 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
     if (isSundayMorningLocked) {
       onShowToast(
         'warning',
-        'Ngày Chủ nhật khoá chấm công',
-        'Ngày Chủ nhật hệ thống khoá các nút chấm công, chỉ mở cho các tài khoản đăng ký làm thêm giờ được phê duyệt.'
+        `${offDayFullLabel} khoá chấm công`,
+        `${offDayFullLabel} hệ thống khoá các nút chấm công, chỉ mở cho tài khoản có đơn làm thêm giờ ca sáng được phê duyệt.`
       );
       return;
     }
@@ -1754,8 +1883,12 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       onShowToast('warning', 'Chưa đủ điều kiện chấm công', networkLockReason || 'Vui lòng kết nối mạng nội bộ công ty hoặc bật định vị GPS hợp lệ để chấm công.');
       return;
     }
-    if (isMorningEnded) {
-      onShowToast('warning', 'Đã hết ca sáng', 'Thời gian quẹt thẻ ra ca sáng đã kết thúc, nút chấm công ca sáng đã khoá');
+    if (isMorningTooEarly) {
+      onShowToast('warning', 'Chưa đến giờ mở ca sáng', `Ca sáng mở chấm công từ ${morningOpenStr}.`);
+      return;
+    }
+    if (isMorningOutClosed) {
+      onShowToast('warning', 'Quá giờ ra ca sáng', `Đã qua thời hạn chấm ra ca sáng (${morningCloseStr}). Chỉ mở khoá khi có đơn làm thêm giờ ca sáng được phê duyệt.`);
       return;
     }
     if (!todayMorningIn || todayMorningIn === '--:--') {
@@ -1804,10 +1937,10 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
     if (isSundayAfternoonLocked) {
       onShowToast(
         'warning',
-        'Ngày Chủ nhật khoá chấm công',
+        `${offDayFullLabel} khoá chấm công`,
         todayOvertimeInfo?.status === 'pending'
-          ? 'Đơn đăng ký làm thêm giờ Chủ nhật của bạn đang chờ phê duyệt. Nút chấm công sẽ mở sau khi được duyệt.'
-          : 'Ngày Chủ nhật hệ thống khoá các nút chấm công, chỉ mở cho các tài khoản đăng ký làm thêm giờ được phê duyệt.'
+          ? 'Đơn đăng ký làm thêm giờ của bạn đang chờ phê duyệt. Nút chấm công ca chiều sẽ mở sau khi được duyệt.'
+          : `${offDayFullLabel} hệ thống khoá các nút chấm công, chỉ mở cho tài khoản có đơn làm thêm giờ ca chiều được phê duyệt.`
       );
       return;
     }
@@ -1823,8 +1956,12 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       onShowToast('warning', 'Chưa đủ điều kiện chấm công', networkLockReason || 'Vui lòng kết nối mạng nội bộ công ty hoặc bật định vị GPS hợp lệ để chấm công.');
       return;
     }
-    if (!isAfternoonReady) {
-      onShowToast('warning', 'Đang khoá', 'Hiện tại ca chiều đang khoá, nút chấm công ca chiều chưa mở');
+    if (isAfternoonTooEarly) {
+      onShowToast('warning', 'Chưa đến giờ mở ca chiều', `Theo Nội quy lao động, ca chiều mở chấm công từ ${afternoonOpenStr}. Ngoài khung giờ chỉ mở khi có đơn làm thêm giờ ca chiều được phê duyệt.`);
+      return;
+    }
+    if (isAfternoonInClosed) {
+      onShowToast('warning', 'Đã hết giờ vào ca chiều', `Đã qua giờ tan ca chiều (${shiftHours.afternoonEnd}). Nút vào ca chiều đã khoá, chỉ mở khi có đơn làm thêm giờ ca chiều được phê duyệt.`);
       return;
     }
     const timeNow = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
@@ -1848,8 +1985,8 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
     if (isSundayAfternoonLocked) {
       onShowToast(
         'warning',
-        'Ngày Chủ nhật khoá chấm công',
-        'Ngày Chủ nhật hệ thống khoá các nút chấm công, chỉ mở cho các tài khoản đăng ký làm thêm giờ được phê duyệt.'
+        `${offDayFullLabel} khoá chấm công`,
+        `${offDayFullLabel} hệ thống khoá các nút chấm công, chỉ mở cho tài khoản có đơn làm thêm giờ ca chiều được phê duyệt.`
       );
       return;
     }
@@ -1865,8 +2002,12 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
       onShowToast('warning', 'Chưa đủ điều kiện chấm công', networkLockReason || 'Vui lòng kết nối mạng nội bộ công ty hoặc bật định vị GPS hợp lệ để chấm công.');
       return;
     }
-    if (!isAfternoonReady) {
-      onShowToast('warning', 'Đang khoá', 'Hiện tại ca chiều đang khoá, nút chấm công ca chiều chưa mở');
+    if (isAfternoonTooEarly) {
+      onShowToast('warning', 'Chưa đến giờ mở ca chiều', `Ca chiều mở chấm công từ ${afternoonOpenStr}.`);
+      return;
+    }
+    if (isAfternoonOutClosed) {
+      onShowToast('warning', 'Quá giờ ra ca chiều', `Theo Nội quy lao động, thời hạn chấm ra muộn ca chiều kết thúc lúc ${afternoonCloseStr} (tối đa ${checkOutLateLimit} phút sau giờ tan ca). Chỉ mở khoá khi có đơn làm thêm giờ ca chiều được phê duyệt.`);
       return;
     }
     if (!todayAfternoonIn || todayAfternoonIn === '--:--') {
@@ -2248,59 +2389,6 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
     return dayOfWeekStr || '';
   };
 
-  // Bản đồ các ngày nghỉ lễ được hưởng nguyên lương từ Nội quy lao động
-  const paidHolidaysByDate = useMemo(() => {
-    const map = new Map<string, string>();
-    const rawPeriods =
-      holidayRulesData && Array.isArray(holidayRulesData.periods) && holidayRulesData.periods.length > 0
-        ? [...holidayRulesData.periods]
-        : [...DEFAULT_HOLIDAY_RULES_DATA.periods];
-    const hasVanHoa = rawPeriods.some(
-      (p: any) => p && (p.code === 'NGAY_VAN_HOA_VN' || String(p.name || '').includes('Ngày Văn hoá Việt Nam')),
-    );
-    if (!hasVanHoa) {
-      const vh = DEFAULT_HOLIDAY_PERIODS_2026.find((p) => p.code === 'NGAY_VAN_HOA_VN');
-      if (vh) rawPeriods.push(vh);
-    }
-
-    for (const p of rawPeriods) {
-      if (!p) continue;
-      const days = Array.isArray(p.days) ? p.days : [];
-      const hasPaidSun = days.some(
-        (d: any) => d?.isPaid && d?.date && new Date(`${d.date}T00:00:00`).getDay() === 0,
-      );
-      const hasWeekdayComp = days.some(
-        (d: any) => d?.isCompensation && d?.date && new Date(`${d.date}T00:00:00`).getDay() !== 0,
-      );
-      if (days.length > 0) {
-        for (const d of days) {
-          if (!d?.date) continue;
-          const isSun = new Date(`${d.date}T00:00:00`).getDay() === 0;
-          const isPaid =
-            (Boolean(d.isPaid) && !(isSun && hasWeekdayComp)) ||
-            (Boolean(d.isCompensation) && !isSun && hasPaidSun);
-          if (isPaid) {
-            map.set(d.date, d.name || p.name || 'Nghỉ Lễ / Tết');
-          }
-        }
-      } else if (p.startDate && p.endDate && Number(p.totalPaidDays ?? 1) > 0) {
-        const s = new Date(`${p.startDate}T00:00:00`);
-        const e = new Date(`${p.endDate}T00:00:00`);
-        if (!isNaN(s.getTime()) && !isNaN(e.getTime()) && e >= s) {
-          const cur = new Date(s);
-          while (cur <= e) {
-            const ymd = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
-            if (cur.getDay() !== 0 || p.startDate === p.endDate) {
-              map.set(ymd, p.name || 'Nghỉ Lễ / Tết');
-            }
-            cur.setDate(cur.getDate() + 1);
-          }
-        }
-      }
-    }
-    return map;
-  }, [holidayRulesData]);
-
   // Danh sách đầy đủ các ngày trong tháng (hiển thị theo thứ tự từ ngày cuối tháng về ngày 1)
   const fullMonthRecords = useMemo(() => {
     const now = new Date();
@@ -2572,35 +2660,37 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
               <div
                 style={{
                   backgroundColor: '#ffffff',
-                  border: isMorningEnded || isSundayMorningLocked ? '1px solid #e2e8f0' : '1px solid #cbd5e1',
+                  border: isMorningEnded || isMorningTooEarly || isSundayMorningLocked ? '1px solid #e2e8f0' : '1px solid #cbd5e1',
                   borderRadius: '8px',
                   padding: '8px',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '6px',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
-                  opacity: isMorningEnded || isSundayMorningLocked ? 0.9 : 1,
+                  opacity: isMorningEnded || isMorningTooEarly || isSundayMorningLocked ? 0.9 : 1,
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: isMorningEnded || isSundayMorningLocked ? '#64748b' : '#16a34a', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: isMorningEnded || isMorningTooEarly || isSundayMorningLocked ? '#64748b' : '#16a34a', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <Sun size={13} /> CA SÁNG
                   </span>
                   <span
                     title={
                       isSundayMorningLocked
-                        ? 'Ngày Chủ nhật khoá chấm công - Chỉ mở cho tài khoản có đăng ký làm thêm giờ được phê duyệt'
-                        : isMorningEnded
-                          ? 'Đã hết ca sáng'
-                          : (!isNetworkReadyForCheckIn ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công') : '0.5 công')
+                        ? `${offDayFullLabel} khoá chấm công - Chỉ mở cho tài khoản có đăng ký làm thêm giờ ca sáng được phê duyệt`
+                        : isMorningTooEarly
+                          ? `Chưa đến giờ mở ca sáng (${morningOpenStr}) - Chỉ mở sớm khi có đơn làm thêm giờ ca sáng được phê duyệt`
+                          : isMorningEnded
+                            ? `Đã quá giờ chấm ra ca sáng (${morningCloseStr}) - Chỉ mở khi có đơn làm thêm giờ ca sáng được phê duyệt`
+                            : (!isNetworkReadyForCheckIn ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công') : '0.5 công')
                     }
                     style={{
                       fontSize: '0.6875rem',
                       fontWeight: 700,
-                      color: isSundayMorningLocked || isMorningEnded ? '#dc2626' : (!isNetworkReadyForCheckIn ? '#b45309' : '#16a34a'),
-                      backgroundColor: isSundayMorningLocked || isMorningEnded ? '#fef2f2' : (!isNetworkReadyForCheckIn ? '#fef3c7' : '#f0fdf4'),
-                      border: isSundayMorningLocked || isMorningEnded ? '1px solid #fecaca' : (!isNetworkReadyForCheckIn ? '1px solid #fde68a' : '1px solid #bbf7d0'),
-                      padding: (isSundayMorningLocked || isMorningEnded || !isNetworkReadyForCheckIn) && isMobileScreen ? '2px 5px' : '1px 6px',
+                      color: isSundayMorningLocked || isMorningEnded ? '#dc2626' : (isMorningTooEarly || !isNetworkReadyForCheckIn ? '#b45309' : '#16a34a'),
+                      backgroundColor: isSundayMorningLocked || isMorningEnded ? '#fef2f2' : (isMorningTooEarly || !isNetworkReadyForCheckIn ? '#fef3c7' : '#f0fdf4'),
+                      border: isSundayMorningLocked || isMorningEnded ? '1px solid #fecaca' : (isMorningTooEarly || !isNetworkReadyForCheckIn ? '1px solid #fde68a' : '1px solid #bbf7d0'),
+                      padding: (isSundayMorningLocked || isMorningEnded || isMorningTooEarly || !isNetworkReadyForCheckIn) && isMobileScreen ? '2px 5px' : '1px 6px',
                       borderRadius: '4px',
                       display: 'flex',
                       alignItems: 'center',
@@ -2612,14 +2702,21 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                       <>
                         <LockFill size={10} />
                         <span className="timekeeping-lock-text" style={{ display: isMobileScreen ? 'none' : 'inline' }}>
-                          {todayOvertimeInfo?.status === 'pending' ? 'Chờ duyệt tăng ca' : 'Nghỉ Chủ nhật'}
+                          {todayOvertimeInfo?.status === 'pending' ? 'Chờ duyệt tăng ca' : offDayShortLabel}
+                        </span>
+                      </>
+                    ) : isMorningTooEarly ? (
+                      <>
+                        <LockFill size={10} />
+                        <span className="timekeeping-lock-text" style={{ display: isMobileScreen ? 'none' : 'inline' }}>
+                          Mở từ {morningOpenStr}
                         </span>
                       </>
                     ) : isMorningEnded ? (
                       <>
                         <LockFill size={10} />
                         <span className="timekeeping-lock-text" style={{ display: isMobileScreen ? 'none' : 'inline' }}>
-                          Đã hết ca sáng
+                          Hết ca ({morningCloseStr})
                         </span>
                       </>
                     ) : !isNetworkReadyForCheckIn ? (
@@ -2629,8 +2726,8 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                           {authMode === 'gps' && locationRangeCheck && !locationRangeCheck.isInside ? 'Ngoài bán kính' : 'Chưa đủ mạng'}
                         </span>
                       </>
-                    ) : isTodaySunday && isTodayMorningOtApproved ? (
-                      'Tăng ca CN (0.5)'
+                    ) : isTodayMorningOtApproved ? (
+                      'Tăng ca sáng'
                     ) : (
                       '0.5 công'
                     )}
@@ -2646,12 +2743,14 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                     hasMorningIn
                       ? `Đã chấm công vào ca sáng (${todayMorningIn}) - Nút đã khoá tránh bấm trùng lặp`
                       : isSundayMorningLocked
-                        ? 'Ngày Chủ nhật khoá chấm công - Chỉ mở cho tài khoản có đăng ký làm thêm giờ được phê duyệt'
-                        : (isMorningEnded
-                          ? 'Đã hết ca sáng - Nút chấm công đã khoá'
-                          : (!isNetworkReadyForCheckIn
-                            ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công - Nút đã khoá')
-                            : (isOutside ? 'Bắt đầu làm việc' : 'Chấm công vào ca sáng')))
+                        ? `${offDayFullLabel} khoá chấm công - Chỉ mở cho tài khoản có đăng ký làm thêm giờ ca sáng được phê duyệt`
+                        : isMorningTooEarly
+                          ? `Chưa đến giờ mở ca sáng (${morningOpenStr}) - Chỉ mở khi có đơn làm thêm giờ ca sáng được duyệt`
+                          : isMorningInClosed
+                            ? `Đã qua giờ kết thúc ca sáng (${shiftHours.morningEnd}) - Nút vào ca đã khoá`
+                            : (!isNetworkReadyForCheckIn
+                              ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công - Nút đã khoá')
+                              : (isOutside ? 'Bắt đầu làm việc' : 'Chấm công vào ca sáng'))
                   }
                   style={{
                     width: '100%',
@@ -2678,12 +2777,14 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                     {hasMorningIn
                       ? `Giờ vào: ${todayMorningIn}`
                       : isSundayMorningLocked
-                        ? (todayOvertimeInfo?.status === 'pending' ? 'Chờ duyệt tăng ca CN' : 'Chưa duyệt tăng ca')
-                        : (isMorningEnded
-                          ? 'Đã hết ca sáng'
-                          : (!isNetworkReadyForCheckIn
-                            ? networkLockSubtext
-                            : (isOutside ? 'Bấm bắt đầu' : 'Bấm vào ca')))}
+                        ? (todayOvertimeInfo?.status === 'pending' ? 'Chờ duyệt tăng ca' : offDayShortLabel)
+                        : isMorningTooEarly
+                          ? `Mở từ ${morningOpenStr}`
+                          : isMorningInClosed
+                            ? 'Hết giờ vào ca'
+                            : (!isNetworkReadyForCheckIn
+                              ? networkLockSubtext
+                              : (isOutside ? 'Bấm bắt đầu' : 'Bấm vào ca'))}
                   </span>
                 </button>
 
@@ -2696,14 +2797,16 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                     hasMorningOut
                       ? `Đã chấm công ra ca sáng (${todayMorningOut}) - Nút đã khoá tránh bấm trùng lặp`
                       : isSundayMorningLocked
-                        ? 'Ngày Chủ nhật khoá chấm công - Chỉ mở cho tài khoản có đăng ký làm thêm giờ được phê duyệt'
-                        : (!hasMorningIn
-                          ? (isOutside ? 'Chưa bấm bắt đầu - Khoá nút kết thúc' : 'Chưa bấm giờ vào ca sáng - Khoá nút bấm giờ ra')
-                          : (isMorningEnded
-                            ? 'Đã hết ca sáng - Nút chấm công đã khoá'
-                            : (!isNetworkReadyForCheckIn
-                              ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công - Nút đã khoá')
-                              : (isOutside ? 'Kết thúc ca sáng' : 'Chấm công ra ca sáng'))))
+                        ? `${offDayFullLabel} khoá chấm công - Chỉ mở cho tài khoản có đăng ký làm thêm giờ ca sáng được phê duyệt`
+                        : isMorningTooEarly
+                          ? `Chưa đến giờ mở ca sáng (${morningOpenStr})`
+                          : (!hasMorningIn
+                            ? (isOutside ? 'Chưa bấm bắt đầu - Khoá nút kết thúc' : 'Chưa bấm giờ vào ca sáng - Khoá nút bấm giờ ra')
+                            : (isMorningOutClosed
+                              ? `Đã quá giờ ra ca sáng (${morningCloseStr}) - Chỉ mở khi có đơn làm thêm giờ ca sáng được duyệt`
+                              : (!isNetworkReadyForCheckIn
+                                ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công - Nút đã khoá')
+                                : (isOutside ? 'Kết thúc ca sáng' : 'Chấm công ra ca sáng'))))
                   }
                   style={{
                     width: '100%',
@@ -2736,14 +2839,16 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                     {hasMorningOut
                       ? (todayMorningEarlyMinutes > 0 ? `Giờ ra: ${todayMorningOut} (Sớm ${todayMorningEarlyMinutes}p)` : `Giờ ra: ${todayMorningOut}`)
                       : isSundayMorningLocked
-                        ? (todayOvertimeInfo?.status === 'pending' ? 'Chờ duyệt tăng ca CN' : 'Nghỉ Chủ nhật')
-                        : (!hasMorningIn
-                          ? (isOutside ? 'Chưa bấm bắt đầu' : 'Chưa bấm giờ vào')
-                          : (isMorningEnded
-                            ? 'Đã hết ca sáng'
-                            : (!isNetworkReadyForCheckIn
-                              ? networkLockSubtext
-                              : (isOutside ? 'Bấm kết thúc' : 'Bấm ra ca nửa công'))))}
+                        ? (todayOvertimeInfo?.status === 'pending' ? 'Chờ duyệt tăng ca' : offDayShortLabel)
+                        : isMorningTooEarly
+                          ? `Mở từ ${morningOpenStr}`
+                          : (!hasMorningIn
+                            ? (isOutside ? 'Chưa bấm bắt đầu' : 'Chưa bấm giờ vào')
+                            : (isMorningOutClosed
+                              ? `Quá giờ (${morningCloseStr})`
+                              : (!isNetworkReadyForCheckIn
+                                ? networkLockSubtext
+                                : (isOutside ? 'Bấm kết thúc' : 'Bấm ra ca nửa công'))))}
                   </span>
                 </button>
               </div>
@@ -2769,17 +2874,19 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                   <span
                     title={
                       isSundayAfternoonLocked
-                        ? 'Ngày Chủ nhật khoá chấm công - Chỉ mở cho tài khoản có đăng ký làm thêm giờ được phê duyệt'
-                        : !isAfternoonReady
-                          ? 'Đang khoá'
-                          : (!isNetworkReadyForCheckIn ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công') : '0.5 công')
+                        ? `${offDayFullLabel} khoá chấm công - Chỉ mở cho tài khoản có đăng ký làm thêm giờ ca chiều được phê duyệt`
+                        : isAfternoonTooEarly
+                          ? `Chưa đến giờ mở ca chiều (${afternoonOpenStr}) - Chỉ mở sớm khi có đơn làm thêm giờ ca chiều được phê duyệt`
+                          : isAfternoonEnded
+                            ? `Đã quá giờ chấm ra muộn ca chiều (${afternoonCloseStr}) - Chỉ mở khi có đơn làm thêm giờ ca chiều được phê duyệt`
+                            : (!isNetworkReadyForCheckIn ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công') : '0.5 công')
                     }
                     style={{
                       fontSize: '0.6875rem',
                       fontWeight: 700,
-                      color: isSundayAfternoonLocked ? '#dc2626' : (!isAfternoonReady ? '#d97706' : (!isNetworkReadyForCheckIn ? '#b45309' : '#2563eb')),
-                      backgroundColor: isSundayAfternoonLocked ? '#fef2f2' : (!isAfternoonReady ? '#fffbeb' : (!isNetworkReadyForCheckIn ? '#fef3c7' : '#eff6ff')),
-                      border: isSundayAfternoonLocked ? '1px solid #fecaca' : (!isAfternoonReady ? '1px solid #fde68a' : (!isNetworkReadyForCheckIn ? '1px solid #fde68a' : '1px solid #bfdbfe')),
+                      color: isSundayAfternoonLocked || isAfternoonEnded ? '#dc2626' : (isAfternoonTooEarly ? '#d97706' : (!isNetworkReadyForCheckIn ? '#b45309' : '#2563eb')),
+                      backgroundColor: isSundayAfternoonLocked || isAfternoonEnded ? '#fef2f2' : (isAfternoonTooEarly ? '#fffbeb' : (!isNetworkReadyForCheckIn ? '#fef3c7' : '#eff6ff')),
+                      border: isSundayAfternoonLocked || isAfternoonEnded ? '1px solid #fecaca' : (isAfternoonTooEarly ? '1px solid #fde68a' : (!isNetworkReadyForCheckIn ? '1px solid #fde68a' : '1px solid #bfdbfe')),
                       padding: (isSundayAfternoonLocked || !isAfternoonReady || !isNetworkReadyForCheckIn) && isMobileScreen ? '2px 5px' : '1px 6px',
                       borderRadius: '4px',
                       display: 'flex',
@@ -2792,14 +2899,21 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                       <>
                         <LockFill size={10} />
                         <span className="timekeeping-lock-text" style={{ display: isMobileScreen ? 'none' : 'inline' }}>
-                          {todayOvertimeInfo?.status === 'pending' ? 'Chờ duyệt tăng ca' : 'Nghỉ Chủ nhật'}
+                          {todayOvertimeInfo?.status === 'pending' ? 'Chờ duyệt tăng ca' : offDayShortLabel}
                         </span>
                       </>
-                    ) : !isAfternoonReady ? (
+                    ) : isAfternoonTooEarly ? (
                       <>
                         <LockFill size={10} />
                         <span className="timekeeping-lock-text" style={{ display: isMobileScreen ? 'none' : 'inline' }}>
-                          Đang khoá
+                          Mở từ {afternoonOpenStr}
+                        </span>
+                      </>
+                    ) : isAfternoonEnded ? (
+                      <>
+                        <LockFill size={10} />
+                        <span className="timekeeping-lock-text" style={{ display: isMobileScreen ? 'none' : 'inline' }}>
+                          Hết ca ({afternoonCloseStr})
                         </span>
                       </>
                     ) : !isNetworkReadyForCheckIn ? (
@@ -2809,8 +2923,8 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                           {authMode === 'gps' && locationRangeCheck && !locationRangeCheck.isInside ? 'Ngoài bán kính' : 'Chưa đủ mạng'}
                         </span>
                       </>
-                    ) : isTodaySunday && isTodayAfternoonOtApproved ? (
-                      'Tăng ca CN (0.5)'
+                    ) : isTodayAfternoonOtApproved ? (
+                      'Tăng ca chiều'
                     ) : (
                       '0.5 công'
                     )}
@@ -2826,12 +2940,14 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                     hasAfternoonIn
                       ? `Đã chấm công vào ca chiều (${todayAfternoonIn}) - Nút đã khoá tránh bấm trùng lặp`
                       : isSundayAfternoonLocked
-                        ? 'Ngày Chủ nhật khoá chấm công - Chỉ mở cho tài khoản có đăng ký làm thêm giờ được phê duyệt'
-                        : (!isAfternoonReady
-                          ? 'Đang khoá - Nút chấm công tạm khoá'
-                          : (!isNetworkReadyForCheckIn
-                            ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công - Nút đã khoá')
-                            : (isOutside ? 'Bắt đầu làm việc ca chiều' : 'Chấm công vào ca chiều')))
+                        ? `${offDayFullLabel} khoá chấm công - Chỉ mở cho tài khoản có đăng ký làm thêm giờ ca chiều được phê duyệt`
+                        : isAfternoonTooEarly
+                          ? `Chưa đến giờ mở ca chiều (${afternoonOpenStr}) - Chỉ mở khi có đơn làm thêm giờ ca chiều được duyệt`
+                          : isAfternoonInClosed
+                            ? `Đã qua giờ tan ca chiều (${shiftHours.afternoonEnd}) - Nút vào ca đã khoá`
+                            : (!isNetworkReadyForCheckIn
+                              ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công - Nút đã khoá')
+                              : (isOutside ? 'Bắt đầu làm việc ca chiều' : 'Chấm công vào ca chiều'))
                   }
                   style={{
                     width: '100%',
@@ -2858,12 +2974,14 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                     {hasAfternoonIn
                       ? `Giờ vào: ${todayAfternoonIn}`
                       : isSundayAfternoonLocked
-                        ? (todayOvertimeInfo?.status === 'pending' ? 'Chờ duyệt tăng ca CN' : 'Chưa duyệt tăng ca')
-                        : (!isAfternoonReady
-                          ? 'Đang khoá'
-                          : (!isNetworkReadyForCheckIn
-                            ? networkLockSubtext
-                            : (isOutside ? 'Bấm bắt đầu' : 'Bấm vào ca')))}
+                        ? (todayOvertimeInfo?.status === 'pending' ? 'Chờ duyệt tăng ca' : offDayShortLabel)
+                        : isAfternoonTooEarly
+                          ? `Mở từ ${afternoonOpenStr}`
+                          : isAfternoonInClosed
+                            ? 'Hết giờ vào ca'
+                            : (!isNetworkReadyForCheckIn
+                              ? networkLockSubtext
+                              : (isOutside ? 'Bấm bắt đầu' : 'Bấm vào ca'))}
                   </span>
                 </button>
 
@@ -2876,14 +2994,16 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                     hasAfternoonOut
                       ? `Đã chấm công ra ca chiều (${todayAfternoonOut}) - Nút đã khoá tránh bấm trùng lặp`
                       : isSundayAfternoonLocked
-                        ? 'Ngày Chủ nhật khoá chấm công - Chỉ mở cho tài khoản có đăng ký làm thêm giờ được phê duyệt'
-                        : (!isAfternoonReady
-                          ? 'Đang khoá - Nút chấm công tạm khoá'
-                          : (!hasAfternoonIn
-                            ? (isOutside ? 'Chưa bấm bắt đầu - Khoá nút kết thúc' : 'Chưa bấm giờ vào ca chiều - Khoá nút bấm giờ ra')
-                            : (!isNetworkReadyForCheckIn
-                              ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công - Nút đã khoá')
-                              : (isOutside ? 'Kết thúc ca chiều' : 'Chấm công ra ca chiều'))))
+                        ? `${offDayFullLabel} khoá chấm công - Chỉ mở cho tài khoản có đăng ký làm thêm giờ ca chiều được phê duyệt`
+                        : isAfternoonTooEarly
+                          ? `Chưa đến giờ mở ca chiều (${afternoonOpenStr})`
+                          : isAfternoonOutClosed
+                            ? `Đã quá giờ ra ca chiều (${afternoonCloseStr}) - Chỉ mở khi có đơn làm thêm giờ ca chiều được duyệt`
+                            : (!hasAfternoonIn
+                              ? (isOutside ? 'Chưa bấm bắt đầu - Khoá nút kết thúc' : 'Chưa bấm giờ vào ca chiều - Khoá nút bấm giờ ra')
+                              : (!isNetworkReadyForCheckIn
+                                ? (networkLockReason || 'Chưa đáp ứng điều kiện chấm công - Nút đã khoá')
+                                : (isOutside ? 'Kết thúc ca chiều' : 'Chấm công ra ca chiều')))
                   }
                   style={{
                     width: '100%',
@@ -2916,14 +3036,16 @@ export const MyTimekeepingView: React.FC<MyTimekeepingViewProps> = ({
                     {hasAfternoonOut
                       ? (todayAfternoonEarlyMinutes > 0 ? `Giờ ra: ${todayAfternoonOut} (Sớm ${todayAfternoonEarlyMinutes}p)` : `Giờ ra: ${todayAfternoonOut}`)
                       : isSundayAfternoonLocked
-                        ? (todayOvertimeInfo?.status === 'pending' ? 'Chờ duyệt tăng ca CN' : 'Nghỉ Chủ nhật')
-                        : (!isAfternoonReady
-                          ? 'Đang khoá'
-                          : (!hasAfternoonIn
-                            ? (isOutside ? 'Chưa bấm bắt đầu' : 'Chưa bấm giờ vào')
-                            : (!isNetworkReadyForCheckIn
-                              ? networkLockSubtext
-                              : (isOutside ? 'Bấm kết thúc' : 'Bấm ra ca tan làm'))))}
+                        ? (todayOvertimeInfo?.status === 'pending' ? 'Chờ duyệt tăng ca' : offDayShortLabel)
+                        : isAfternoonTooEarly
+                          ? `Mở từ ${afternoonOpenStr}`
+                          : isAfternoonOutClosed
+                            ? `Quá giờ (${afternoonCloseStr})`
+                            : (!hasAfternoonIn
+                              ? (isOutside ? 'Chưa bấm bắt đầu' : 'Chưa bấm giờ vào')
+                              : (!isNetworkReadyForCheckIn
+                                ? networkLockSubtext
+                                : (isOutside ? 'Bấm kết thúc' : 'Bấm ra ca tan làm')))}
                   </span>
                 </button>
               </div>

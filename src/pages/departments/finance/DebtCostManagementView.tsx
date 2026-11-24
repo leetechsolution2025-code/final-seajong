@@ -2356,7 +2356,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     setPaymentPayerAddress(item.customerAddress || 'Hà Nội');
     setPaymentAccountantName(getLoggedInUserName(activeUser) || 'Kế toán thanh toán');
     setPaymentOriginalDocsCount('01 Giấy báo Có ngân hàng');
-    setPaymentNote(activeStage ? `Thu tiền khách hàng - ${activeStage.title}` : `Thu nợ khách hàng - ${item.customerName}`);
+    setPaymentNote(`Thu nợ khách hàng - ${item.customerName}`);
     setPrintReceiptChecked(true);
     setLinkedOrderInput(activeStage ? `${item.customerName} - ${activeStage.title}` : (item.projectName || 'Dư nợ đầu kỳ'));
     setPaymentOffcanvasOpen(true);
@@ -2454,7 +2454,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
       payerName: paymentPayerName || currentItem.customerName,
       customerAddress: paymentPayerAddress || currentItem.customerAddress || '',
       amount: paidNum,
-      reason: paymentNote || `Thu tiền khách hàng - ${targetStage?.title || currentItem.customerName}`,
+      reason: paymentNote || `Thu nợ khách hàng - ${currentItem.customerName}`,
       contractCode: currentItem.code,
       stageTitle: targetStage?.title,
       paymentMethod: paymentMethod,
@@ -4613,13 +4613,26 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                           </span>
                                         </div>
                                         <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '2px', fontWeight: 500 }}>
-                                          {pay.title ||
-                                            pay.note ||
-                                            (isRecon
-                                              ? `Chứng từ đối soát công nợ ${payCode}`
-                                              : isReturn
-                                                ? `Giảm trừ công nợ do trả lại hàng theo ${payCode}`
-                                                : `Thu tiền khách hàng theo phiếu ${payCode}`)}
+                                          {(() => {
+                                            const rawDesc =
+                                              pay.title ||
+                                              pay.note ||
+                                              (isRecon
+                                                ? `Chứng từ đối soát công nợ ${payCode}`
+                                                : isReturn
+                                                  ? `Giảm trừ công nợ do trả lại hàng theo ${payCode}`
+                                                  : `Thu nợ khách hàng - ${item.customerName}`);
+                                            if (
+                                              !isRecon &&
+                                              !isReturn &&
+                                              /^Thu\s+tiền\s+khách\s+hàng\s*[-–—]\s*(Công\s+nợ\s+(tự\s+động\s+)?phát\s+sinh\s+từ\s+đơn(\s+(bán\s+)?hàng)?|Xuất\s+bán\s+hàng\s+theo\s+đơn(\s+hàng)?)\s+[A-Z0-9-]+$/i.test(
+                                                String(rawDesc).trim()
+                                              )
+                                            ) {
+                                              return `Thu nợ khách hàng - ${item.customerName}`;
+                                            }
+                                            return rawDesc;
+                                          })()}
                                         </div>
                                       </td>
 
@@ -4681,12 +4694,24 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                                               customerName: item.customerName,
                                               customerAddress: pay.payerAddress || item.customerAddress || '',
                                               amount: pay.amount,
-                                              reason:
-                                                pay.title ||
-                                                pay.note ||
-                                                (isReturn
-                                                  ? `Giảm trừ công nợ do trả lại hàng theo ${payCode}`
-                                                  : `Thu tiền khách hàng theo phiếu ${payCode}`),
+                                              reason: (() => {
+                                                const rawReason =
+                                                  pay.title ||
+                                                  pay.note ||
+                                                  (isReturn
+                                                    ? `Giảm trừ công nợ do trả lại hàng theo ${payCode}`
+                                                    : `Thu nợ khách hàng - ${item.customerName}`);
+                                                if (
+                                                  !isRecon &&
+                                                  !isReturn &&
+                                                  /^Thu\s+tiền\s+khách\s+hàng\s*[-–—]\s*(Công\s+nợ\s+(tự\s+động\s+)?phát\s+sinh\s+từ\s+đơn(\s+(bán\s+)?hàng)?|Xuất\s+bán\s+hàng\s+theo\s+đơn(\s+hàng)?)\s+[A-Z0-9-]+$/i.test(
+                                                    String(rawReason).trim()
+                                                  )
+                                                ) {
+                                                  return `Thu nợ khách hàng - ${item.customerName}`;
+                                                }
+                                                return rawReason;
+                                              })(),
                                               contractCode: item.code,
                                               stageTitle: pay.parentEntryTitle || item.customerName,
                                               paymentMethod: pay.method || (isReturn ? 'Cấn trừ hàng trả lại' : 'Chuyển khoản'),
@@ -6590,7 +6615,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                         setSelectedStageForPayment(found);
                         const remAmt = found.remainingAmount !== undefined ? found.remainingAmount : (found.contractValue - (found.paidAmount || 0));
                         setPaymentAmountInput(String(remAmt));
-                        setPaymentNote(`Thu tiền khách hàng - ${found.title}`);
+                        setPaymentNote(`Thu nợ khách hàng - ${selectedReceivableForPayment.customerName}`);
                         setLinkedOrderInput(`${selectedReceivableForPayment.customerName} - ${found.title}`);
                       }
                     }}

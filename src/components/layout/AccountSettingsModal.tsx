@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
-import { 
-  X, 
-  User, 
-  ShieldCheck, 
-  Sliders, 
-  Save, 
-  Key, 
-  Check, 
-  Eye, 
-  EyeOff, 
-  Building2, 
-  Mail, 
-  Phone, 
+import {
+  X,
+  User,
+  ShieldCheck,
+  Sliders,
+  Save,
+  Key,
+  Check,
+  Eye,
+  EyeOff,
+  Building2,
+  Mail,
+  Phone,
   BadgeCheck,
   Bell,
   Volume2
@@ -37,6 +37,8 @@ export const AccountSettingsModal: React.FC<AccountSettingsModalProps> = ({
   const [confirmPw, setConfirmPw] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [errorStatus, setErrorStatus] = useState<string | null>(null);
+  const [isUpdatingPw, setIsUpdatingPw] = useState(false);
 
   // Preference switches
   const [enableSound, setEnableSound] = useState(true);
@@ -47,34 +49,68 @@ export const AccountSettingsModal: React.FC<AccountSettingsModalProps> = ({
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorStatus(null);
     setSaveStatus('Đã cập nhật thông tin cá nhân thành công!');
     setTimeout(() => setSaveStatus(null), 3000);
   };
 
-  const handleUpdatePassword = (e: React.FormEvent) => {
+  const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPw !== confirmPw) {
-      alert('Mật khẩu xác nhận không khớp!');
+    setErrorStatus(null);
+    setSaveStatus(null);
+
+    if (newPw.length < 6) {
+      setErrorStatus('Mật khẩu mới phải có tối thiểu 6 ký tự.');
       return;
     }
-    setSaveStatus('Đã thay đổi mật khẩu tài khoản thành công!');
-    setCurrentPw('');
-    setNewPw('');
-    setConfirmPw('');
-    setTimeout(() => setSaveStatus(null), 3000);
+    if (newPw !== confirmPw) {
+      setErrorStatus('Mật khẩu xác nhận không khớp!');
+      return;
+    }
+
+    setIsUpdatingPw(true);
+    try {
+      const token = sessionStorage.getItem('seajong_token') || localStorage.getItem('seajong_token') || '';
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          currentPassword: currentPw,
+          newPassword: newPw,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        setErrorStatus(data?.message || 'Không thể cập nhật mật khẩu. Vui lòng thử lại.');
+        return;
+      }
+
+      setSaveStatus(data.message || 'Đã thay đổi mật khẩu tài khoản thành công!');
+      setCurrentPw('');
+      setNewPw('');
+      setConfirmPw('');
+      setTimeout(() => setSaveStatus(null), 4000);
+    } catch {
+      setErrorStatus('Lỗi kết nối máy chủ. Vui lòng thử lại sau.');
+    } finally {
+      setIsUpdatingPw(false);
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div 
+      <div
         className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity animate-fade-in"
         onClick={onClose}
       />
 
       {/* Modal Dialog */}
       <div className="relative bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden z-10 animate-scale-up">
-        
+
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
           <div className="flex items-center gap-3">
@@ -87,8 +123,8 @@ export const AccountSettingsModal: React.FC<AccountSettingsModalProps> = ({
                 {user?.role === 'CUSTOMER'
                   ? `Cổng thông tin Khách hàng • ${user?.customer?.code ? `Mã KH: ${user.customer.code}` : 'Khách hàng thân thiết'}`
                   : user?.role === 'DEALER' || user?.customer
-                  ? `Hệ thống Đại lý & NPP • ${user?.customer?.code ? `Mã: ${user.customer.code}` : 'Đại lý chính thức'}`
-                  : `${user?.employee?.departmentName || 'Hệ thống Seajong'} • ${user?.employee?.position || user?.role}`}
+                    ? `Hệ thống Đại lý & NPP • ${user?.customer?.code ? `Mã: ${user.customer.code}` : 'Đại lý chính thức'}`
+                    : `${user?.employee?.departmentName || 'Hệ thống Seajong'} • ${user?.employee?.position || user?.role}`}
               </p>
             </div>
           </div>
@@ -107,11 +143,10 @@ export const AccountSettingsModal: React.FC<AccountSettingsModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('profile')}
-            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${
-              activeTab === 'profile'
+            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${activeTab === 'profile'
                 ? 'border-pink-600 text-pink-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
+              }`}
           >
             <User className="w-3.5 h-3.5" />
             <span>Hồ sơ cá nhân</span>
@@ -120,11 +155,10 @@ export const AccountSettingsModal: React.FC<AccountSettingsModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('security')}
-            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${
-              activeTab === 'security'
+            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${activeTab === 'security'
                 ? 'border-pink-600 text-pink-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
+              }`}
           >
             <Key className="w-3.5 h-3.5" />
             <span>Đổi mật khẩu</span>
@@ -133,11 +167,10 @@ export const AccountSettingsModal: React.FC<AccountSettingsModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('preferences')}
-            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${
-              activeTab === 'preferences'
+            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${activeTab === 'preferences'
                 ? 'border-pink-600 text-pink-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
+              }`}
           >
             <Sliders className="w-3.5 h-3.5" />
             <span>Tùy chọn</span>
@@ -151,10 +184,16 @@ export const AccountSettingsModal: React.FC<AccountSettingsModalProps> = ({
             <span>{saveStatus}</span>
           </div>
         )}
+        {errorStatus && (
+          <div className="m-4 mb-0 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium flex items-center gap-2">
+            <X className="w-4 h-4 text-red-600 shrink-0" />
+            <span>{errorStatus}</span>
+          </div>
+        )}
 
         {/* Tab Content */}
         <div className="p-4 sm:p-6 max-h-[60vh] overflow-y-auto">
-          
+
           {/* ── Tab 1: Profile ── */}
           {activeTab === 'profile' && (
             <form onSubmit={handleSaveProfile} className="space-y-4">
@@ -306,17 +345,14 @@ export const AccountSettingsModal: React.FC<AccountSettingsModalProps> = ({
                 </div>
               </div>
 
-              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-amber-800 leading-relaxed">
-                Mẹo: Mật khẩu mặc định của tất cả các tài khoản demo trong hệ thống là <span className="font-mono font-bold">Pass@123</span> (hoặc <span className="font-mono font-bold">Admin@123</span> cho admin).
-              </div>
-
               <div className="pt-3 border-t border-slate-100 flex justify-end">
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-pink-600/20 transition-all cursor-pointer"
+                  disabled={isUpdatingPw}
+                  className="px-4 py-2 bg-pink-600 hover:bg-pink-700 disabled:opacity-60 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-pink-600/20 transition-all cursor-pointer"
                 >
                   <Key className="w-4 h-4" />
-                  <span>Cập nhật mật khẩu</span>
+                  <span>{isUpdatingPw ? 'Đang cập nhật...' : 'Cập nhật mật khẩu'}</span>
                 </button>
               </div>
             </form>

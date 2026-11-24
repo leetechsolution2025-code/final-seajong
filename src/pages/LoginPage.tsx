@@ -36,8 +36,8 @@ const AUDIENCE_OPTIONS: {
     label: 'Nhân viên',
     shortLabel: 'Nhân viên',
     inputLabel: 'Email công việc hoặc Mã nhân viên',
-    inputPlaceholder: 'VD: admin@seajong.com hoặc mã nhân viên',
-    defaultEmail: 'admin@seajong.com',
+    inputPlaceholder: 'Nhập email công việc hoặc mã nhân viên...',
+    defaultEmail: '',
     defaultPass: 'Pass@123',
   },
   {
@@ -45,8 +45,8 @@ const AUDIENCE_OPTIONS: {
     label: 'Đại lý',
     shortLabel: 'Đại lý',
     inputLabel: 'Số điện thoại, Mã đại lý hoặc Email',
-    inputPlaceholder: 'VD: KH0010, 0961764999 hoặc mã đại lý',
-    defaultEmail: 'KH0010',
+    inputPlaceholder: 'Nhập số điện thoại, mã đại lý hoặc email...',
+    defaultEmail: '',
     defaultPass: '123456',
   },
   {
@@ -62,7 +62,7 @@ const AUDIENCE_OPTIONS: {
 
 export const LoginPage: React.FC = () => {
   const [loginType, setLoginType] = useState<LoginAudienceType>('staff');
-  const [email, setEmail] = useState('admin@seajong.com');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('Pass@123');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
