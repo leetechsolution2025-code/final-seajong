@@ -898,7 +898,7 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
             code: refCode,
             title: descClean || (refCode === 'Dư nợ đầu kỳ' ? 'Dư nợ đầu kỳ chuyển sang' : `Đơn bán hàng ${refCode}`),
             date: formatEpochToVNDate(inv.createdAt || inv.dueDate),
-            time: '08:30',
+            time: formatEpochToVNTime(inv.createdAt || inv.dueDate, '08:30'),
             contractValue: invVal,
             paidAmount: allocPaid,
             remainingAmount: invRemain,

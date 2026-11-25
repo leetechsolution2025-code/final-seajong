@@ -168,6 +168,7 @@ export function cleanTransactionNote(
   cleaned = cleaned.replace(/Công nợ tự động phát sinh từ đơn bán hàng\s+/gi, 'Xuất bán hàng theo đơn hàng ');
   cleaned = cleaned.replace(/Phát sinh công nợ từ đơn hàng\s+/gi, 'Xuất bán hàng theo đơn hàng ');
   cleaned = cleaned.replace(/Công nợ phát sinh từ đơn hàng\s+/gi, 'Xuất bán hàng theo đơn hàng ');
+  cleaned = cleaned.replace(/Công nợ đơn hàng\s+/gi, 'Xuất bán hàng theo đơn hàng ');
 
   // Mua hàng (Phải trả - TK 331)
   cleaned = cleaned.replace(/Công nợ từ đơn mua hàng\s+/gi, 'Nhập mua hàng theo đơn mua hàng ');
@@ -300,7 +301,8 @@ export function isReturnDeductionEntry(entry?: any): boolean {
 
 // ─── ĐỌC SỐ TIỀN THÀNH CHỮ TIẾNG VIỆT ─────────────────────────────────
 export function docSoTien(soTien: number): string {
-  if (!Number.isFinite(soTien) || isNaN(soTien) || soTien <= 0) return 'Không đồng';
+  if (!Number.isFinite(soTien) || isNaN(soTien) || soTien === 0) return 'Không đồng';
+  const isNegative = soTien < 0;
   const target = Math.round(Math.round(Math.abs(soTien)) / 1000) * 1000;
   if (target === 0) return 'Không đồng';
   const chuSo = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
@@ -319,7 +321,7 @@ export function docSoTien(soTien: number): string {
       res += chuSo[chuc] + ' mươi ';
     } else if (chuc === 1) {
       res += 'mười ';
-    } else if (chuc === 0 && dvi > 0 && !isFirst) {
+    } else if (chuc === 0 && dvi > 0 && (tram > 0 || !isFirst)) {
       res += 'lẻ ';
     }
 
@@ -354,10 +356,12 @@ export function docSoTien(soTien: number): string {
     }
   }
 
-  text = text.trim();
+  text = text.trim().replace(/\s+/g, ' ');
   if (text) {
+    if (isNegative) {
+      return `Âm ${text} đồng chẵn.`;
+    }
     text = text.charAt(0).toUpperCase() + text.slice(1);
-    text = text.replace(/\s+/g, ' ');
     return text + ' đồng chẵn.';
   }
   return 'Không đồng';
@@ -2706,13 +2710,9 @@ export const DebtReconciliationModal: React.FC<DebtReconciliationModalProps> = (
                           tx.type === 'Giảm trừ nợ' ||
                           String(tx.type || '').includes('Giảm trừ') ||
                           String(refCode).startsWith('ERR-');
-                        const itemsList = isMainOrder
-                          ? (Array.isArray(tx.rawEntry?.items) && tx.rawEntry.items.length > 0 ? tx.rawEntry.items : null) ||
-                            orderItemsMap[refCode] ||
-                            orderItemsMap[tx.ref] ||
-                            []
-                          : isReturnTx
-                            ? (Array.isArray(tx.rawPayment?.items) && tx.rawPayment.items.length > 0 ? tx.rawPayment.items : null) ||
+                        const itemsList =
+                          isMainOrder && !isReturnTx
+                            ? (Array.isArray(tx.rawEntry?.items) && tx.rawEntry.items.length > 0 ? tx.rawEntry.items : null) ||
                               orderItemsMap[refCode] ||
                               orderItemsMap[tx.ref] ||
                               []
