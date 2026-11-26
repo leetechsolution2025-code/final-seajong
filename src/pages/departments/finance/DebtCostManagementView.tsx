@@ -16,7 +16,6 @@ import {
   ChevronRight,
   ClockHistory,
   PlusCircleFill,
-  Calendar3,
   Bank,
   ShieldCheck,
   Receipt,
@@ -43,6 +42,7 @@ import { Button } from '../../../components/common/Button';
 import { Modal } from '../../../components/common/Modal';
 import { Offcanvas } from '../../../components/common/Offcanvas';
 import { Input } from '../../../components/common/Input';
+import { DatePicker } from '../../../components/common/DatePicker';
 import { Select } from '../../../components/common/Select';
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog';
 import { EmployeeSelect } from '../../../components/common/EmployeeSelect';
@@ -56,6 +56,45 @@ import { DebtCostReportPrintModal } from './DebtCostReportPrintModal';
 import { DebtSubEntryDetailOffcanvas, formatDebtDetailTitle } from './DebtSubEntryDetailOffcanvas';
 import type { TickerItem } from '../../../components/layout/DynamicTicker';
 import { useAuth } from '../../../context/AuthContext';
+
+// Chuyển đổi chuỗi ngày giờ kiểu VN ("HH:mm DD/MM/YYYY" hoặc "DD/MM/YYYY") sang ISO cho DatePicker
+const toIsoForDatePicker = (raw?: string): string => {
+  if (!raw || !raw.trim()) return '';
+  const trimmed = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed;
+  // "HH:mm DD/MM/YYYY" hoặc "HH:mm:ss DD/MM/YYYY"
+  const timeFirst = trimmed.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s+(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (timeFirst) {
+    const [, hh, mi, ss = '00', dd, mm, yyyy] = timeFirst;
+    return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}T${hh.padStart(2, '0')}:${mi.padStart(2, '0')}:${ss.padStart(2, '0')}`;
+  }
+  // "DD/MM/YYYY HH:mm"
+  const dateFirst = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (dateFirst) {
+    const [, dd, mm, yyyy, hh, mi, ss = '00'] = dateFirst;
+    return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}T${hh.padStart(2, '0')}:${mi.padStart(2, '0')}:${ss.padStart(2, '0')}`;
+  }
+  // "DD/MM/YYYY"
+  const dateOnly = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dateOnly) {
+    const [, dd, mm, yyyy] = dateOnly;
+    return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+  }
+  return trimmed;
+};
+
+// Chuyển đổi ISO từ DatePicker về định dạng hiển thị VN ("HH:mm DD/MM/YYYY" hoặc "DD/MM/YYYY")
+const fromIsoDatePicker = (iso: string, includeTime: boolean): string => {
+  if (!iso || !iso.trim()) return '';
+  const m = iso.trim().match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
+  if (!m) return iso.trim();
+  const [, yyyy, mm, dd, hh, mi] = m;
+  if (!includeTime) return `${dd}/${mm}/${yyyy}`;
+  const now = new Date();
+  const h = hh ?? String(now.getHours()).padStart(2, '0');
+  const min = mi ?? String(now.getMinutes()).padStart(2, '0');
+  return `${h}:${min} ${dd}/${mm}/${yyyy}`;
+};
 
 // Hàm tính toán và xác định trạng thái tuổi nợ khách hàng theo cấu hình
 export const calculateReceivableAgingStatus = (
@@ -1111,20 +1150,6 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     }
   };
 
-  const [dbCustomers, setDbCustomers] = useState<Array<{ id: string; code: string; name: string; address?: string; phone?: string }>>([]);
-
-  const fetchDbCustomers = async () => {
-    try {
-      const res = await fetch('/api/customers');
-      if (res.ok) {
-        const data = await res.json();
-        setDbCustomers(Array.isArray(data) ? data : []);
-      }
-    } catch (err) {
-      console.error('Lỗi tải danh sách khách hàng từ DB:', err);
-    }
-  };
-
   const fetchPayables = async () => {
     try {
       const res = await fetch('/api/debts/payables');
@@ -1202,7 +1227,6 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
   const handleSyncAll = () => {
     fetchReceivables();
     fetchPayables();
-    fetchDbCustomers();
     fetchLoans();
     fetchExpenses();
     fetchDbFixedAssets();
@@ -1373,6 +1397,10 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
   const [formAmount, setFormAmount] = useState('');
   const [formDueDate, setFormDueDate] = useState('');
   const [formNotes, setFormNotes] = useState('');
+  const [formOpeningBalance, setFormOpeningBalance] = useState('');
+  const [originalOpeningBalance, setOriginalOpeningBalance] = useState(0);
+  const [formOpeningDate, setFormOpeningDate] = useState('');
+  const [formOpeningNote, setFormOpeningNote] = useState('Dư nợ đầu kỳ kết chuyển');
 
   // Các trường mở rộng chuẩn quản trị nợ vay ngân hàng (Bước 3)
   const [formContractCode, setFormContractCode] = useState('');
@@ -1510,6 +1538,36 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
       setFormDueDate(editingItem.dueDate || editingItem.maturityDate || editingItem.spendDate || '');
       setFormNotes(editingItem.notes || '');
 
+      // Điền thông tin điều chỉnh dư nợ đầu kỳ nếu là bước 1 (Phải thu) hoặc bước 2 (Phải trả)
+      if (currentStep === 1 || currentStep === 2) {
+        if (currentStep === 2) {
+          setFormPartnerType(
+            editingItem.partnerType === 'transporter' || String(editingItem.code || '').startsWith('CNVC')
+              ? 'transporter'
+              : 'supplier'
+          );
+        }
+        const now = new Date();
+        const todayStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+        const entriesList = Array.isArray(editingItem.entries) ? editingItem.entries : [];
+        const openingEntry = entriesList.find((e: any) => {
+          const codeStr = String(e.code || '').toLowerCase();
+          const titleStr = String(e.title || '').toLowerCase();
+          return (
+            codeStr.includes('dư nợ') ||
+            codeStr.includes('đầu kỳ') ||
+            codeStr === 'dk' ||
+            titleStr.includes('dư nợ đầu kỳ') ||
+            titleStr.includes('nợ cũ')
+          );
+        });
+        const opAmt = Math.round(Number(openingEntry?.totalAmount ?? openingEntry?.contractValue ?? 0));
+        setOriginalOpeningBalance(opAmt);
+        setFormOpeningBalance(opAmt > 0 ? String(opAmt) : '0');
+        setFormOpeningDate(openingEntry?.date || todayStr);
+        setFormOpeningNote(openingEntry?.title || 'Dư nợ đầu kỳ kết chuyển');
+      }
+
       // Điền các trường nợ vay nếu là bước 3
       if (currentStep === 3) {
         setFormContractCode(editingItem.contractCode || '');
@@ -1544,6 +1602,12 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
       setFormCode('');
       setFormName('');
       setFormAddress('');
+      const nowInit = new Date();
+      const todayInit = `${String(nowInit.getDate()).padStart(2, '0')}/${String(nowInit.getMonth() + 1).padStart(2, '0')}/${nowInit.getFullYear()}`;
+      setFormOpeningBalance('');
+      setOriginalOpeningBalance(0);
+      setFormOpeningDate(todayInit);
+      setFormOpeningNote('Dư nợ đầu kỳ kết chuyển');
       setFormProjectOrPo('');
       setFormAmount('');
       setFormDueDate(new Date().toLocaleDateString('vi-VN'));
@@ -2321,24 +2385,13 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
 
   // ── CÁC HÀM XỬ LÝ CHỨC NĂNG DROPLIST BƯỚC 1: CÔNG NỢ PHẢI THU ──
 
-  // 1. Mở Offcanvas Ghi nhận thanh toán thu nợ (chỉ lấy các đợt thanh toán còn công nợ)
-  const handleOpenPaymentModal = (item: ReceivableItem, stage?: DebtEntryItem) => {
+  // 1. Mở Offcanvas Ghi nhận thanh toán thu nợ (trích nợ theo tổng công nợ khách hàng)
+  const handleOpenPaymentModal = (item: ReceivableItem, _stage?: DebtEntryItem) => {
     setIsAdvancePayment(false);
     setSelectedReceivableForPayment(item);
+    setSelectedStageForPayment(null);
 
-    // Xác định đợt thanh toán đích: chỉ lấy các đợt còn công nợ (> 0)
-    const unpaidStages = (item.entries || []).filter(
-      (e) => !e.code?.startsWith('PT-') && ((e.remainingAmount ?? (e.contractValue - (e.paidAmount || 0))) > 0)
-    );
-    const activeStage =
-      (stage && unpaidStages.some((s) => s.id === stage.id) ? stage : null) ||
-      unpaidStages[0] ||
-      null;
-    setSelectedStageForPayment(activeStage);
-
-    const defaultAmt = activeStage
-      ? (activeStage.remainingAmount ?? (activeStage.contractValue - (activeStage.paidAmount || 0)))
-      : item.remainingAmount;
+    const defaultAmt = Math.max(0, Math.round(Number(item.remainingAmount) || 0));
     setPaymentAmountInput(String(defaultAmt));
     setPaymentMethod('Chuyển khoản');
     setPaymentDebitAccount('1121');
@@ -2358,7 +2411,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     setPaymentOriginalDocsCount('01 Giấy báo Có ngân hàng');
     setPaymentNote(`Thu nợ khách hàng - ${item.customerName}`);
     setPrintReceiptChecked(true);
-    setLinkedOrderInput(activeStage ? `${item.customerName} - ${activeStage.title}` : (item.projectName || 'Dư nợ đầu kỳ'));
+    setLinkedOrderInput(item.projectName || `Tổng công nợ - ${item.customerName}`);
     setPaymentOffcanvasOpen(true);
   };
 
@@ -2585,30 +2638,18 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
   };
 
   // ── CÁC HÀM XỬ LÝ CHỨC NĂNG DROPLIST BƯỚC 2: CÔNG NỢ PHẢI TRẢ ──
-  // 1. Mở Offcanvas Tạo yêu cầu chi tiền thanh toán nhà cung cấp
-  const handleOpenPayablePaymentModal = (item: PayableItem, initialEntryId?: string) => {
+  // 1. Mở Offcanvas Tạo yêu cầu chi tiền thanh toán nhà cung cấp (trích trừ nợ theo tổng nợ)
+  const handleOpenPayablePaymentModal = (item: PayableItem, _initialEntryId?: string) => {
     const itemRemaining = Number(item.remainingAmount !== undefined ? item.remainingAmount : (item.totalAmount - (item.paidAmount || 0))) || 0;
-    if (itemRemaining <= 0 && !initialEntryId) {
+    if (itemRemaining <= 0) {
       if (onShowToast) onShowToast('info', 'Đã thanh toán đủ', 'Khoản nợ phải trả này đã được tất toán, không còn số dư cần thanh toán.');
       return;
     }
     setIsSupplierAdvancePayment(false);
     setSelectedPayableForPayment(item);
 
-    // Tìm PO con còn nợ nếu có
-    const pendingEntry = initialEntryId
-      ? item.entries?.find((e) => e.id === initialEntryId)
-      : item.entries?.find((e) => {
-        const rem = e.remainingAmount !== undefined ? e.remainingAmount : (e.totalAmount - (e.paidAmount || 0));
-        return rem > 0;
-      });
-
-    const targetAmount = pendingEntry
-      ? (pendingEntry.remainingAmount !== undefined ? pendingEntry.remainingAmount : (pendingEntry.totalAmount - (pendingEntry.paidAmount || 0)))
-      : item.remainingAmount;
-
-    setSelectedPayableEntryId(pendingEntry?.id || '');
-    setPaymentAmountInput(String(targetAmount));
+    setSelectedPayableEntryId('');
+    setPaymentAmountInput(String(Math.max(0, Math.round(itemRemaining))));
     setPaymentMethod('Chuyển khoản');
 
     const now = new Date();
@@ -2632,8 +2673,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     setPayableReceiverName(item.supplierName);
     setPayableReceiverAddress(item.supplierAddress || 'Hà Nội');
 
-    const docCode = pendingEntry?.code || item.poCode || item.code;
-    setPaymentNote(`Yêu cầu chi tiền thanh toán cho ${item.supplierName} theo ${docCode}`);
+    setPaymentNote(`Yêu cầu chi tiền thanh toán công nợ cho ${item.supplierName}`);
     setPayableOriginalDocsCount('01 Giấy báo Nợ ngân hàng / UNC & 01 Hóa đơn GTGT');
     setIsPrintPayableVoucherChecked(false);
     setPaymentModalOpen(true);
@@ -2738,6 +2778,7 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
             supplierName: suppName,
             entryId: selectedPayableEntryId,
             reqCode: reqCode,
+            requestDate: payablePaymentDate,
             amount: paidNum,
             paymentMethod,
             destBank: payableDestBank,
@@ -2848,71 +2889,77 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
     const amountNum = Number(formAmount.replace(/\D/g, '')) || 0;
     try {
       if (currentStep === 1) {
+        const openingBalNum = Math.max(0, Number(String(formOpeningBalance || '').replace(/\D/g, '')) || 0);
+        const openingDiff = editingItem ? openingBalNum - originalOpeningBalance : 0;
+        const nextContractVal = editingItem
+          ? Math.max(0, (Number(editingItem.contractValue) || 0) + openingDiff)
+          : openingBalNum || amountNum;
         const payload = {
-          code: formCode || `HD-2026-${Math.floor(100 + Math.random() * 900)}`,
-          customerId: formCustomerId || null,
+          code: formCode || `CNPT-${Math.floor(100 + Math.random() * 900)}`,
+          customerId: formCustomerId || editingItem?.customerId || null,
           customerName: formName || 'Khách hàng mới',
-          customerAddress: formAddress || 'Hà Nội, Việt Nam',
-          projectName: formProjectOrPo || 'Hợp đồng kinh tế',
-          contractValue: amountNum,
+          customerAddress: formAddress || '',
+          projectName: formProjectOrPo || editingItem?.projectName || 'Công nợ phải thu khách hàng',
+          contractValue: nextContractVal,
           paidAmount: editingItem ? editingItem.paidAmount : 0,
-          remainingAmount: editingItem ? Math.max(0, amountNum - (editingItem.paidAmount || 0)) : amountNum,
-          dueDate: formDueDate || '15/11/2026',
-          status: 'ontime',
-          statusLabel: 'Trong hạn thanh toán',
-          managerName: 'Phòng Dự Án',
+          remainingAmount: editingItem ? Math.max(0, nextContractVal - (editingItem.paidAmount || 0)) : nextContractVal,
+          dueDate: formDueDate || '',
+          status: editingItem?.status || 'ontime',
+          statusLabel: editingItem?.statusLabel || 'Trong hạn thanh toán',
+          managerName: editingItem?.managerName || 'Phòng Tài chính - Kế toán',
           notes: formNotes,
+          adjustOpeningBalance: true,
+          openingBalance: openingBalNum,
+          openingDate: formOpeningDate,
+          openingNote: formOpeningNote || 'Dư nợ đầu kỳ kết chuyển',
         };
 
-        if (editingItem) {
-          const res = await fetch('/api/debts/receivables', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...editingItem, ...payload }),
-          });
-          if (res.ok) fetchReceivables();
-        } else {
-          const res = await fetch('/api/debts/receivables', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-          if (res.ok) fetchReceivables();
+        const res = await fetch('/api/debts/receivables', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(editingItem ? { ...editingItem, ...payload } : payload),
+        });
+        if (res.ok) {
+          await fetchReceivables();
         }
       } else if (currentStep === 2) {
         const isTransporter = formPartnerType === 'transporter';
+        const openingBalNum = Math.max(0, Number(String(formOpeningBalance || '').replace(/\D/g, '')) || 0);
+        const openingDiff = editingItem ? openingBalNum - originalOpeningBalance : 0;
+        const nextTotalVal = editingItem
+          ? Math.max(0, (Number(editingItem.totalAmount) || 0) + openingDiff)
+          : openingBalNum || amountNum;
         const payload: any = {
           code: formCode || (isTransporter ? `CNVC-${Math.floor(100 + Math.random() * 900)}` : `CNTR-${Math.floor(100 + Math.random() * 900)}`),
           partnerType: formPartnerType,
           supplierName: formName || (isTransporter ? 'Đơn vị vận chuyển mới' : 'Nhà cung cấp mới'),
           supplierAddress: formAddress || 'Việt Nam',
-          poCode: formProjectOrPo || (isTransporter ? `VC-${Math.floor(100 + Math.random() * 900)}` : `PO-${Math.floor(100 + Math.random() * 900)}`),
-          totalAmount: amountNum,
+          poCode: formProjectOrPo || editingItem?.poCode || (isTransporter ? `VC-${Math.floor(100 + Math.random() * 900)}` : `PO-${Math.floor(100 + Math.random() * 900)}`),
+          totalAmount: nextTotalVal,
           paidAmount: editingItem ? editingItem.paidAmount : 0,
-          remainingAmount: editingItem ? Math.max(0, amountNum - (editingItem.paidAmount || 0)) : amountNum,
-          dueDate: formDueDate || '28/11/2026',
+          remainingAmount: editingItem ? Math.max(0, nextTotalVal - (editingItem.paidAmount || 0)) : nextTotalVal,
+          dueDate: formDueDate || '',
           status: editingItem?.status || 'pending',
           statusLabel: editingItem?.statusLabel || 'Chờ thanh toán',
-          accountant: 'Kế toán thanh toán',
+          accountant: editingItem?.accountant || 'Kế toán thanh toán',
           notes: formNotes,
+          adjustOpeningBalance: true,
+          openingBalance: openingBalNum,
+          openingDate: formOpeningDate,
+          openingNote: formOpeningNote || 'Dư nợ đầu kỳ kết chuyển',
         };
 
-        if (editingItem) {
-          const res = await fetch('/api/debts/payables', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...editingItem, ...payload }),
-          });
-          if (res.ok) fetchPayables();
-          else setPayables((prev) => prev.map((p) => (p.id === editingItem.id ? { ...p, ...payload } : p)));
+        const res = await fetch('/api/debts/payables', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(editingItem ? { ...editingItem, ...payload } : payload),
+        });
+        if (res.ok) {
+          await fetchPayables();
+        } else if (editingItem) {
+          setPayables((prev) => prev.map((p) => (p.id === editingItem.id ? { ...p, ...payload } : p)));
         } else {
-          const res = await fetch('/api/debts/payables', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-          if (res.ok) fetchPayables();
-          else setPayables((prev) => [{ id: `PAY-${Date.now()}`, ...payload, entries: [] }, ...prev]);
+          setPayables((prev) => [{ id: `PAY-${Date.now()}`, ...payload, entries: [] }, ...prev]);
         }
       } else if (currentStep === 3) {
         const rateValNum = Number(formInterestRateVal) || 7.5;
@@ -6045,38 +6092,180 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
           ) : (
             <>
               {currentStep === 1 ? (
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.7813rem', fontWeight: 700, marginBottom: '3px' }}>
-                    Khách hàng từ cơ sở dữ liệu:
-                  </label>
-                  <select
-                    className="form-input"
-                    value={formCustomerId}
-                    onChange={(e) => {
-                      const selId = e.target.value;
-                      setFormCustomerId(selId);
-                      const found = dbCustomers.find((c) => c.id === selId);
-                      if (found) {
-                        setFormName(found.name);
-                        if (found.address) setFormAddress(found.address);
-                      }
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {/* Tóm tắt công nợ hiện tại khi chỉnh sửa */}
+                  {editingItem && (
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(3, 1fr)',
+                        gap: '8px',
+                        padding: '10px',
+                        borderRadius: '8px',
+                        backgroundColor: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                          TỔNG NỢ
+                        </div>
+                        <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>
+                          {formatNumberGroup(editingItem.contractValue)}đ
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                          ĐÃ THANH TOÁN
+                        </div>
+                        <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#059669', marginTop: '2px' }}>
+                          {formatNumberGroup(editingItem.paidAmount)}đ
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                          CÒN PHẢI THU
+                        </div>
+                        <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#dc2626', marginTop: '2px' }}>
+                          {formatNumberGroup(editingItem.remainingAmount)}đ
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Thông tin khách hàng */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7813rem', fontWeight: 700, marginBottom: '3px', color: '#334155' }}>
+                      Tên khách hàng:
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="Tên khách hàng chi tiết..."
+                      value={formName}
+                      onChange={(e) => setFormName(e.target.value)}
+                      style={{ marginBottom: 0 }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7813rem', fontWeight: 700, marginBottom: '3px', color: '#334155' }}>
+                      Địa chỉ khách hàng:
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="Nhập địa chỉ..."
+                      value={formAddress}
+                      onChange={(e) => setFormAddress(e.target.value)}
+                      style={{ marginBottom: 0 }}
+                    />
+                  </div>
+
+                  {/* Khối Điều chỉnh dư nợ đầu kỳ */}
+                  <div
+                    style={{
+                      padding: '12px',
+                      borderRadius: '8px',
+                      backgroundColor: '#f0f9ff',
+                      border: '1px solid #bae6fd',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px',
                     }}
-                    style={{ width: '100%', marginBottom: '6px' }}
                   >
-                    <option value="">-- Chọn khách hàng trong CSDL ({dbCustomers.length} khách hàng) --</option>
-                    {dbCustomers.map((cust) => (
-                      <option key={cust.id} value={cust.id}>
-                        {cust.code ? `[${cust.code}] ` : ''}{cust.name}
-                      </option>
-                    ))}
-                  </select>
-                  <Input
-                    type="text"
-                    placeholder="Tên khách hàng chi tiết..."
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    style={{ marginBottom: 0 }}
-                  />
+                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                      Điều chỉnh dư nợ đầu kỳ
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                        Số dư nợ đầu kỳ (VNĐ):
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="0"
+                        value={formatMoneyInput(formOpeningBalance)}
+                        onChange={(e) => setFormOpeningBalance(e.target.value.replace(/\D/g, ''))}
+                        rightIcon={<span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#64748b' }}>đ</span>}
+                        style={{ marginBottom: 0, fontWeight: 700, fontSize: '0.9375rem', color: '#0f172a', backgroundColor: '#ffffff' }}
+                      />
+                      <div style={{ fontSize: '0.7188rem', color: '#64748b', fontStyle: 'italic', marginTop: '4px', lineHeight: 1.3 }}>
+                        Bằng chữ: {convertNumberToVietnameseWords(Number(formOpeningBalance.replace(/\D/g, '')) || 0)}
+                      </div>
+                      {editingItem && (Number(formOpeningBalance.replace(/\D/g, '')) || 0) !== originalOpeningBalance && (
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1', marginTop: '6px' }}>
+                          Còn phải thu sau điều chỉnh:{' '}
+                          <span style={{ color: '#dc2626' }}>
+                            {formatNumberGroup(
+                              Math.max(
+                                0,
+                                (Number(editingItem.remainingAmount) || 0) +
+                                  ((Number(formOpeningBalance.replace(/\D/g, '')) || 0) - originalOpeningBalance)
+                              )
+                            )}đ
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                          Ngày chốt dư nợ:
+                        </label>
+                        <DatePicker
+                          value={toIsoForDatePicker(formOpeningDate)}
+                          onChange={(iso) => {
+                            const formatted = fromIsoDatePicker(iso, false);
+                            if (formatted) setFormOpeningDate(formatted);
+                          }}
+                          placeholder="Chọn ngày..."
+                          style={{ width: '100%' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                          Hạn thanh toán:
+                        </label>
+                        <DatePicker
+                          value={toIsoForDatePicker(formDueDate)}
+                          onChange={(iso) => {
+                            const formatted = fromIsoDatePicker(iso, false);
+                            if (formatted) setFormDueDate(formatted);
+                          }}
+                          placeholder="Chọn hạn..."
+                          style={{ width: '100%' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                        Diễn giải dư nợ đầu kỳ:
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="Dư nợ đầu kỳ kết chuyển"
+                        value={formOpeningNote}
+                        onChange={(e) => setFormOpeningNote(e.target.value)}
+                        style={{ marginBottom: 0, backgroundColor: '#ffffff' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7813rem', fontWeight: 700, marginBottom: '3px', color: '#334155' }}>
+                      Ghi chú thêm:
+                    </label>
+                    <textarea
+                      className="form-input"
+                      rows={2}
+                      placeholder="Nhập ghi chú công nợ..."
+                      value={formNotes}
+                      onChange={(e) => setFormNotes(e.target.value)}
+                      style={{ width: '100%', resize: 'vertical' }}
+                    />
+                  </div>
                 </div>
               ) : currentStep === 4 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -6290,7 +6479,48 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                   </div>
                 </div>
               ) : (
-                <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {/* Tóm tắt công nợ phải trả hiện tại khi chỉnh sửa */}
+                  {currentStep === 2 && editingItem && (
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(3, 1fr)',
+                        gap: '8px',
+                        padding: '10px',
+                        borderRadius: '8px',
+                        backgroundColor: '#fffbeb',
+                        border: '1px solid #fde68a',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#92400e', textTransform: 'uppercase' }}>
+                          TỔNG ĐƠN
+                        </div>
+                        <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>
+                          {formatNumberGroup(editingItem.totalAmount)}đ
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#92400e', textTransform: 'uppercase' }}>
+                          ĐÃ CHI TRẢ
+                        </div>
+                        <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#059669', marginTop: '2px' }}>
+                          {formatNumberGroup(editingItem.paidAmount)}đ
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#92400e', textTransform: 'uppercase' }}>
+                          CÒN PHẢI TRẢ
+                        </div>
+                        <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#dc2626', marginTop: '2px' }}>
+                          {formatNumberGroup(editingItem.remainingAmount)}đ
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {currentStep === 2 && (
                     <div>
                       <label style={{ display: 'block', fontSize: '0.7813rem', fontWeight: 700, marginBottom: '6px' }}>
@@ -6342,21 +6572,15 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                   )}
 
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.7813rem', fontWeight: 700, marginBottom: '3px' }}>
-                      {currentStep === 2
-                        ? formPartnerType === 'transporter'
-                          ? 'Tên đơn vị vận chuyển:'
-                          : 'Tên nhà cung cấp:'
-                        : 'Nội dung khoản chi:'}
+                    <label style={{ display: 'block', fontSize: '0.7813rem', fontWeight: 700, marginBottom: '3px', color: '#334155' }}>
+                      {formPartnerType === 'transporter' ? 'Tên đơn vị vận chuyển:' : 'Tên nhà cung cấp:'}
                     </label>
                     <Input
                       type="text"
                       placeholder={
-                        currentStep === 2
-                          ? formPartnerType === 'transporter'
-                            ? 'Ví dụ: Viettel Post, GHTK, Vận tải Á Châu...'
-                            : 'Ví dụ: Nhà cung cấp thiết bị vệ sinh, phụ kiện sen vòi...'
-                          : 'Nhập tên chi tiết...'
+                        formPartnerType === 'transporter'
+                          ? 'Ví dụ: Viettel Post, GHTK, Vận tải Á Châu...'
+                          : 'Ví dụ: Nhà cung cấp thiết bị vệ sinh, phụ kiện sen vòi...'
                       }
                       value={formName}
                       onChange={(e) => setFormName(e.target.value)}
@@ -6364,95 +6588,129 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                     />
                   </div>
 
-                  {(currentStep === 1 || currentStep === 2) && (
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.7813rem', fontWeight: 700, marginBottom: '3px' }}>
-                        {currentStep === 1
-                          ? 'Địa chỉ khách hàng:'
-                          : formPartnerType === 'transporter'
-                            ? 'Địa chỉ bến bãi / HUB ĐVVC:'
-                            : 'Địa chỉ nhà cung cấp:'}
-                      </label>
-                      <Input
-                        type="text"
-                        placeholder={
-                          currentStep === 2 && formPartnerType === 'transporter'
-                            ? 'Bến bãi trung chuyển hoặc địa chỉ văn phòng ĐVVC...'
-                            : 'Nhập địa chỉ...'
-                        }
-                        value={formAddress}
-                        onChange={(e) => setFormAddress(e.target.value)}
-                        style={{ marginBottom: 0 }}
-                      />
-                    </div>
-                  )}
-
-                  {(currentStep === 1 || currentStep === 2) && (
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.7813rem', fontWeight: 700, marginBottom: '3px' }}>
-                        {currentStep === 1
-                          ? 'Dự án / Hạng mục:'
-                          : formPartnerType === 'transporter'
-                            ? 'Mã vận đơn / Hợp đồng vận chuyển:'
-                            : 'Mã đơn mua hàng (PO):'}
-                      </label>
-                      <Input
-                        type="text"
-                        placeholder={
-                          currentStep === 1
-                            ? 'Tên dự án hoặc gói thầu...'
-                            : formPartnerType === 'transporter'
-                              ? 'Ví dụ: VC-2026-018...'
-                              : 'Ví dụ: PO-ANCUONG-01...'
-                        }
-                        value={formProjectOrPo}
-                        onChange={(e) => setFormProjectOrPo(e.target.value)}
-                        style={{ marginBottom: 0 }}
-                      />
-                    </div>
-                  )}
-
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.7813rem', fontWeight: 700, marginBottom: '3px' }}>
-                      Số tiền:
+                    <label style={{ display: 'block', fontSize: '0.7813rem', fontWeight: 700, marginBottom: '3px', color: '#334155' }}>
+                      {formPartnerType === 'transporter' ? 'Địa chỉ bến bãi / HUB ĐVVC:' : 'Địa chỉ nhà cung cấp:'}
                     </label>
                     <Input
                       type="text"
-                      placeholder="Nhập số tiền VNĐ"
-                      value={formAmount ? formatNumberGroup(formAmount) : ''}
-                      onChange={(e) => setFormAmount(e.target.value.replace(/\D/g, ''))}
-                      rightIcon={<span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#64748b' }}>đ</span>}
+                      placeholder={
+                        formPartnerType === 'transporter'
+                          ? 'Bến bãi trung chuyển hoặc địa chỉ văn phòng ĐVVC...'
+                          : 'Nhập địa chỉ...'
+                      }
+                      value={formAddress}
+                      onChange={(e) => setFormAddress(e.target.value)}
                       style={{ marginBottom: 0 }}
                     />
                   </div>
 
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.7813rem', fontWeight: 700, marginBottom: '3px' }}>
-                      Thời hạn ngày tháng:
-                    </label>
-                    <Input
-                      type="text"
-                      placeholder="ngày/tháng/năm"
-                      value={formDueDate}
-                      onChange={(e) => setFormDueDate(e.target.value)}
-                      style={{ marginBottom: 0 }}
-                    />
+                  {/* Khối Điều chỉnh dư nợ đầu kỳ phải trả */}
+                  <div
+                    style={{
+                      padding: '12px',
+                      borderRadius: '8px',
+                      backgroundColor: '#f0f9ff',
+                      border: '1px solid #bae6fd',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px',
+                    }}
+                  >
+                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                      Điều chỉnh dư nợ đầu kỳ
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                        Số dư nợ đầu kỳ (VNĐ):
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="0"
+                        value={formatMoneyInput(formOpeningBalance)}
+                        onChange={(e) => setFormOpeningBalance(e.target.value.replace(/\D/g, ''))}
+                        rightIcon={<span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#64748b' }}>đ</span>}
+                        style={{ marginBottom: 0, fontWeight: 700, fontSize: '0.9375rem', color: '#0f172a', backgroundColor: '#ffffff' }}
+                      />
+                      <div style={{ fontSize: '0.7188rem', color: '#64748b', fontStyle: 'italic', marginTop: '4px', lineHeight: 1.3 }}>
+                        Bằng chữ: {convertNumberToVietnameseWords(Number(formOpeningBalance.replace(/\D/g, '')) || 0)}
+                      </div>
+                      {editingItem && (Number(formOpeningBalance.replace(/\D/g, '')) || 0) !== originalOpeningBalance && (
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1', marginTop: '6px' }}>
+                          Còn phải trả sau điều chỉnh:{' '}
+                          <span style={{ color: '#dc2626' }}>
+                            {formatNumberGroup(
+                              Math.max(
+                                0,
+                                (Number(editingItem.remainingAmount) || 0) +
+                                  ((Number(formOpeningBalance.replace(/\D/g, '')) || 0) - originalOpeningBalance)
+                              )
+                            )}đ
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                          Ngày chốt dư nợ:
+                        </label>
+                        <DatePicker
+                          value={toIsoForDatePicker(formOpeningDate)}
+                          onChange={(iso) => {
+                            const formatted = fromIsoDatePicker(iso, false);
+                            if (formatted) setFormOpeningDate(formatted);
+                          }}
+                          placeholder="Chọn ngày..."
+                          style={{ width: '100%' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                          Hạn thanh toán:
+                        </label>
+                        <DatePicker
+                          value={toIsoForDatePicker(formDueDate)}
+                          onChange={(iso) => {
+                            const formatted = fromIsoDatePicker(iso, false);
+                            if (formatted) setFormDueDate(formatted);
+                          }}
+                          placeholder="Chọn hạn..."
+                          style={{ width: '100%' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                        Diễn giải dư nợ đầu kỳ:
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="Dư nợ đầu kỳ kết chuyển"
+                        value={formOpeningNote}
+                        onChange={(e) => setFormOpeningNote(e.target.value)}
+                        style={{ marginBottom: 0, backgroundColor: '#ffffff' }}
+                      />
+                    </div>
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.7813rem', fontWeight: 700, marginBottom: '3px' }}>
+                    <label style={{ display: 'block', fontSize: '0.7813rem', fontWeight: 700, marginBottom: '3px', color: '#334155' }}>
                       Ghi chú thêm:
                     </label>
                     <textarea
                       className="form-input"
-                      rows={3}
+                      rows={2}
                       placeholder="Nhập ghi chú hoặc điều kiện thanh toán..."
                       value={formNotes}
                       onChange={(e) => setFormNotes(e.target.value)}
                       style={{ width: '100%', resize: 'vertical' }}
                     />
                   </div>
-                </>
+                </div>
               )}
             </>
           )}
@@ -6576,12 +6834,11 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <PlusCircleFill size={14} style={{ color: '#059669' }} />
               <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                {isAdvancePayment ? '1. NỘI DUNG ỨNG TRƯỚC & SỐ TIỀN THU' : '1. ĐƠN HÀNG / KHOẢN NỢ & SỐ TIỀN THU'}
+                {isAdvancePayment ? '1. NỘI DUNG ỨNG TRƯỚC & SỐ TIỀN THU' : '1. THÔNG TIN THU NỢ & SỐ TIỀN THU'}
               </span>
             </div>
 
-            {/* Chọn đơn hàng / khoản nợ thanh toán áp dụng */}
-            {isAdvancePayment ? (
+            {isAdvancePayment && (
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
                   Loại nghiệp vụ
@@ -6600,55 +6857,6 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                   Khách hàng ứng trước tiền mua hàng (Ghi Có TK 131 - Chưa có đơn hàng)
                 </div>
               </div>
-            ) : (
-              selectedReceivableForPayment.entries && selectedReceivableForPayment.entries.length > 0 && (
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                    Đơn hàng / Khoản nợ áp dụng <span style={{ color: '#dc2626' }}>*</span>
-                  </label>
-                  <select
-                    className="form-select"
-                    value={selectedStageForPayment?.id || ''}
-                    onChange={(e) => {
-                      const found = selectedReceivableForPayment?.entries.find((s) => s.id === e.target.value);
-                      if (found) {
-                        setSelectedStageForPayment(found);
-                        const remAmt = found.remainingAmount !== undefined ? found.remainingAmount : (found.contractValue - (found.paidAmount || 0));
-                        setPaymentAmountInput(String(remAmt));
-                        setPaymentNote(`Thu nợ khách hàng - ${selectedReceivableForPayment.customerName}`);
-                        setLinkedOrderInput(`${selectedReceivableForPayment.customerName} - ${found.title}`);
-                      }
-                    }}
-                    style={{
-                      width: '100%',
-                      height: '38px',
-                      fontSize: '0.7813rem',
-                      borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
-                      padding: '0 8px',
-                      fontWeight: 600,
-                      color: '#0f172a',
-                      backgroundColor: '#ffffff',
-                    }}
-                  >
-                    {selectedReceivableForPayment.entries
-                      .filter((s) => {
-                        if (s.code?.startsWith('PT-')) return false;
-                        const rem = s.remainingAmount !== undefined ? s.remainingAmount : (s.contractValue - (s.paidAmount || 0));
-                        return rem > 0;
-                      })
-                      .map((s) => {
-                        const cleanTitle = s.title.replace(/\s*\([^)]*\)/g, '').trim();
-                        const rem = s.remainingAmount !== undefined ? s.remainingAmount : (s.contractValue - (s.paidAmount || 0));
-                        return (
-                          <option key={s.id} value={s.id}>
-                            {cleanTitle} (Còn nợ: {formatNumberGroup(rem)}đ)
-                          </option>
-                        );
-                      })}
-                  </select>
-                </div>
-              )
             )}
 
             {/* Số tiền thu VND */}
@@ -6674,15 +6882,21 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
                   Ngày hạch toán / lập phiếu
                 </label>
-                <div style={{ position: 'relative' }}>
-                  <Input
-                    type="text"
-                    value={paymentDate}
-                    onChange={(e) => setPaymentDate(e.target.value)}
-                    style={{ marginBottom: 0, fontSize: '0.7813rem', paddingRight: '28px' }}
-                  />
-                  <Calendar3 size={13} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
-                </div>
+                <DatePicker
+                  showTime
+                  value={toIsoForDatePicker(paymentDate)}
+                  onChange={(iso) => {
+                    const formatted = fromIsoDatePicker(iso, true);
+                    if (formatted) setPaymentDate(formatted);
+                    const ymdMatch = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                    if (ymdMatch) {
+                      const nextYmd = `${ymdMatch[1]}${ymdMatch[2]}${ymdMatch[3]}`;
+                      setReceiptCodeInput((prev) => prev.replace(/^(PT-)\d{8}(-)/, `$1${nextYmd}$2`));
+                    }
+                  }}
+                  placeholder="Chọn ngày giờ..."
+                  style={{ width: '100%' }}
+                />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
@@ -7284,12 +7498,11 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <PlusCircleFill size={14} style={{ color: '#0284c7' }} />
               <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#0284c7', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                {isSupplierAdvancePayment ? '1. NỘI DUNG ỨNG TRƯỚC & SỐ TIỀN CHI' : '1. ĐƠN MUA HÀNG (PO) & SỐ TIỀN CHI'}
+                {isSupplierAdvancePayment ? '1. NỘI DUNG ỨNG TRƯỚC & SỐ TIỀN CHI' : '1. THÔNG TIN CHI TRẢ & SỐ TIỀN CHI'}
               </span>
             </div>
 
-            {/* Chọn đơn hàng PO / Vận đơn thanh toán áp dụng */}
-            {isSupplierAdvancePayment ? (
+            {isSupplierAdvancePayment && (
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
                   Loại nghiệp vụ chi
@@ -7308,61 +7521,6 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                   Ứng trước tiền mua hàng cho nhà cung cấp (Ghi Nợ TK 331 - Chưa có đơn mua hàng)
                 </div>
               </div>
-            ) : (
-              selectedPayableForPayment.entries && selectedPayableForPayment.entries.length > 0 && (
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                    Đơn mua hàng / Vận đơn thanh toán <span style={{ color: '#dc2626' }}>*</span>
-                  </label>
-                  <select
-                    className="form-select"
-                    value={selectedPayableEntryId}
-                    onChange={(e) => {
-                      const eId = e.target.value;
-                      setSelectedPayableEntryId(eId);
-                      if (!eId) {
-                        setPaymentAmountInput(String(selectedPayableForPayment.remainingAmount));
-                        setPaymentNote(`Thanh toán công nợ tổng cho ${selectedPayableForPayment.supplierName}`);
-                      } else {
-                        const found = selectedPayableForPayment.entries?.find((s) => s.id === eId);
-                        if (found) {
-                          const remAmt = found.remainingAmount !== undefined ? found.remainingAmount : (found.totalAmount - (found.paidAmount || 0));
-                          setPaymentAmountInput(String(remAmt));
-                          setPaymentNote(`Thanh toán tiền hàng PO ${found.code} - ${found.title}`);
-                        }
-                      }
-                    }}
-                    style={{
-                      width: '100%',
-                      height: '38px',
-                      fontSize: '0.7813rem',
-                      borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
-                      padding: '0 8px',
-                      fontWeight: 600,
-                      color: '#0f172a',
-                      backgroundColor: '#ffffff',
-                    }}
-                  >
-                    <option value="">-- Toàn bộ công nợ nhà cung cấp (Tổng nợ) --</option>
-                    {selectedPayableForPayment.entries
-                      .filter((s) => {
-                        if (s.code?.startsWith('PC-') || s.code?.startsWith('PT-')) return false;
-                        const rem = s.remainingAmount !== undefined ? s.remainingAmount : (s.totalAmount - (s.paidAmount || 0));
-                        return rem > 0;
-                      })
-                      .map((s) => {
-                        const cleanTitle = s.title.replace(/\s*\([^)]*\)/g, '').trim();
-                        const rem = s.remainingAmount !== undefined ? s.remainingAmount : (s.totalAmount - (s.paidAmount || 0));
-                        return (
-                          <option key={s.id} value={s.id}>
-                            {s.code}: {cleanTitle} (Nợ: {formatNumberGroup(rem)}đ)
-                          </option>
-                        );
-                      })}
-                  </select>
-                </div>
-              )
             )}
 
             {/* Số tiền chi VND */}
@@ -7441,15 +7599,20 @@ export const DebtCostManagementView: React.FC<DebtCostManagementViewProps> = ({
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
                   Ngày đề xuất yêu cầu
                 </label>
-                <div style={{ position: 'relative' }}>
-                  <Input
-                    type="text"
-                    value={payablePaymentDate}
-                    onChange={(e) => setPayablePaymentDate(e.target.value)}
-                    style={{ marginBottom: 0, fontSize: '0.7813rem', paddingRight: '28px' }}
-                  />
-                  <Calendar3 size={13} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
-                </div>
+                <DatePicker
+                  value={toIsoForDatePicker(payablePaymentDate)}
+                  onChange={(iso) => {
+                    const formatted = fromIsoDatePicker(iso, false);
+                    if (formatted) setPayablePaymentDate(formatted);
+                    const ymdMatch = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                    if (ymdMatch) {
+                      const nextYmd = `${ymdMatch[1]}${ymdMatch[2]}${ymdMatch[3]}`;
+                      setPayableVoucherCode((prev) => prev.replace(/^((?:YCCHI|YCU)-)\d{8}(-)/, `$1${nextYmd}$2`));
+                    }
+                  }}
+                  placeholder="Chọn ngày..."
+                  style={{ width: '100%' }}
+                />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>

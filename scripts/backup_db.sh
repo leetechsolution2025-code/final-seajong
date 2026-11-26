@@ -11,6 +11,7 @@ APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 DB_PATH="${APP_DIR}/prisma/dev.db"
 BACKUP_DIR="${APP_DIR}/backups"
 KEEP_DAYS="${KEEP_DAYS:-14}"
+KEEP_MAX_FILES="${KEEP_MAX_FILES:-10}"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 BACKUP_FILE="${BACKUP_DIR}/dev_${TIMESTAMP}.db"
 
@@ -31,8 +32,11 @@ if [ "${INTEGRITY}" != "ok" ]; then
   exit 1
 fi
 
-# Dọn các bản backup cũ hơn KEEP_DAYS ngày
+# Dọn các bản backup cũ hơn KEEP_DAYS ngày và chỉ giữ tối đa KEEP_MAX_FILES bản mới nhất để tránh đầy ổ đĩa
 find "${BACKUP_DIR}" -name "dev_*.db" -type f -mtime +"${KEEP_DAYS}" -delete
+ls -1t "${BACKUP_DIR}"/dev_*.db 2>/dev/null | tail -n +$((KEEP_MAX_FILES + 1)) | while IFS= read -r old_backup; do
+  [ -n "${old_backup}" ] && rm -f "${old_backup}"
+done
 
 SIZE="$(du -h "${BACKUP_FILE}" | awk '{print $1}')"
 echo "[OK] Sao lưu thành công: ${BACKUP_FILE} (${SIZE}) | integrity_check: ok"

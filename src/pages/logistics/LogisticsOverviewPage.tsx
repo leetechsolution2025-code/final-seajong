@@ -95,6 +95,47 @@ interface GroupedOrder {
   needsProduction: boolean;
 }
 
+const formatOrderNoteDisplay = (raw?: string | null): { editedLabel: string | null; noteText: string | null } => {
+  if (!raw) return { editedLabel: null, noteText: null };
+  let text = String(raw).trim();
+  if (!text) return { editedLabel: null, noteText: null };
+
+  // Bỏ qua chuỗi JSON kỹ thuật lưu metadata định mức
+  if (text.startsWith('{') && text.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(text);
+      const clean = parsed?.dinhMucTen || parsed?.note || parsed?.ghiChu || '';
+      return { editedLabel: null, noteText: clean ? String(clean).trim() : null };
+    } catch {}
+  }
+
+  let editedLabel: string | null = null;
+  const editMatch = text.match(/\[OrderEditedAt:([^\]]+)\]/i);
+  if (editMatch && editMatch[1]) {
+    const dt = new Date(editMatch[1].trim());
+    if (!isNaN(dt.getTime())) {
+      const hh = String(dt.getHours()).padStart(2, '0');
+      const mm = String(dt.getMinutes()).padStart(2, '0');
+      const dd = String(dt.getDate()).padStart(2, '0');
+      const mo = String(dt.getMonth() + 1).padStart(2, '0');
+      const yyyy = dt.getFullYear();
+      editedLabel = `Đơn đã chỉnh sửa lúc ${hh}:${mm} ngày ${dd}/${mo}/${yyyy}`;
+    }
+  }
+
+  text = text
+    .replace(/\[OrderEditedAt:[^\]]*\]\s*/gi, '')
+    .replace(/\[GuestInfo:[^\]]*\]\s*/gi, '')
+    .replace(/\[RECONCILIATION_LOGS\][\s\S]*$/i, '')
+    .replace(/^\s*Note\s*:\s*/i, '')
+    .trim();
+
+  return {
+    editedLabel,
+    noteText: text || null,
+  };
+};
+
 export const LogisticsOverviewPage: React.FC = () => {
   const { data: session } = useSession();
   const isThuKho = isLogisticsAdmin(session?.user);
@@ -1621,12 +1662,26 @@ export const LogisticsOverviewPage: React.FC = () => {
                             </>
                           )}
 
-                          {ghiChu && (
-                            <div className="mt-0.5 text-rose-600 text-[11px] flex items-center gap-1 font-medium">
-                              <i className="bi bi-exclamation-triangle-fill" />
-                              <span>{ghiChu}</span>
-                            </div>
-                          )}
+                          {(() => {
+                            const { editedLabel, noteText } = formatOrderNoteDisplay(ghiChu);
+                            if (!editedLabel && !noteText) return null;
+                            return (
+                              <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px]">
+                                {noteText && (
+                                  <span className="text-rose-600 flex items-center gap-1 font-medium">
+                                    <i className="bi bi-exclamation-triangle-fill" />
+                                    <span>Ghi chú: {noteText}</span>
+                                  </span>
+                                )}
+                                {editedLabel && (
+                                  <span className="text-amber-700 bg-amber-50 border border-amber-200/80 px-1.5 py-0.2 rounded inline-flex items-center gap-1 font-medium">
+                                    <i className="bi bi-pencil-square text-[10px]" />
+                                    <span>{editedLabel}</span>
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       );
 
@@ -2296,12 +2351,16 @@ export const LogisticsOverviewPage: React.FC = () => {
                                 </span>
                               )}
                             </div>
-                            {row.ghiChu && (
-                              <div className="text-slate-500 text-[11px] mt-0.5 italic flex items-center gap-1">
-                                <i className="bi bi-diagram-3 text-sky-600" />
-                                <span>{row.ghiChu}</span>
-                              </div>
-                            )}
+                            {(() => {
+                              const { noteText } = formatOrderNoteDisplay(row.ghiChu);
+                              if (!noteText) return null;
+                              return (
+                                <div className="text-slate-500 text-[11px] mt-0.5 italic flex items-center gap-1">
+                                  <i className="bi bi-diagram-3 text-sky-600" />
+                                  <span>{noteText}</span>
+                                </div>
+                              );
+                            })()}
                             {row.bomCode && (
                               <div className="flex items-center flex-wrap gap-1 mt-1">
                                 <span className="px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200 text-[10px] font-semibold">

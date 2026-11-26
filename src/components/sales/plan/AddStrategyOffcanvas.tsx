@@ -51,7 +51,7 @@ export function AddStrategyOffcanvas({
       title={initialData ? "Cập nhật chiến lược" : "Thêm chiến lược hành động"}
       description="Chi tiết kế hoạch triển khai"
       icon={<Lightbulb size={22} />}
-      width="420px"
+      width="400px"
       confirmText={initialData ? "Cập nhật" : "Tiếp tục"}
       cancelText="Hủy"
       onConfirm={handleSave}

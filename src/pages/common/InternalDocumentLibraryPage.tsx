@@ -1358,12 +1358,10 @@ export const InternalDocumentLibraryPage: React.FC<InternalDocumentLibraryPagePr
       {previewDoc &&
         createPortal(
           <div
-            className="fixed inset-0 z-[1550] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 md:p-5"
-            onClick={() => setPreviewDoc(null)}
+            className="fixed inset-0 z-[1550] bg-white w-screen h-screen flex flex-col overflow-hidden"
           >
             <div
-              className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
+              className="w-full h-full flex flex-col overflow-hidden"
             >
               {/* Thanh tiêu đề trình đọc văn bản */}
               <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-200 bg-slate-50/80 shrink-0">

@@ -290,10 +290,12 @@ export function isPaymentEntry(entry?: any): boolean {
 export function isReturnDeductionEntry(entry?: any): boolean {
   if (!entry) return false;
   if (entry.type === 'return_deduction' || entry.isReturn || entry.isReturnDeduction) return true;
-  const c = String(entry.code || '').toUpperCase().trim();
+  const c = String(entry.code || entry.receiptCode || entry.paymentCode || '').toUpperCase().trim();
   const t = String(entry.title || '').toLowerCase().trim();
   const n = String(entry.note || entry.notes || '').toLowerCase().trim();
   if (c.startsWith('ERR-') || c.startsWith('TL-') || c.startsWith('GTR-')) return true;
+  // Các chứng từ phiếu thu / phiếu chi / UNC chính thức luôn là thanh toán, không gắn nhầm thành Giảm trừ nợ vì ghi chú có chữ "giảm trừ"
+  if (c.startsWith('PT-') || c.startsWith('PC-') || c.startsWith('UNC-')) return false;
   if (t.includes('trả lại') || t.includes('giảm trừ') || t.includes('hàng lỗi')) return true;
   if (n.includes('trả lại') || n.includes('giảm trừ') || n.includes('hàng lỗi')) return true;
   return false;

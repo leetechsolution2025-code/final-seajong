@@ -1480,7 +1480,7 @@ export const HrOverviewPage: React.FC = () => {
             title="Chi tiết yêu cầu & Phê duyệt"
             description={selectedRequest ? `Mã phiếu: ${selectedRequest.code}` : ''}
             icon={<ClockHistory size={18} />}
-            width="lg"
+            width="400px"
             footer={
               selectedRequest ? (
                 <div className="flex items-center justify-between w-full gap-2">
@@ -1583,7 +1583,7 @@ export const HrOverviewPage: React.FC = () => {
               selectedContractEmp ? `${selectedContractEmp.fullName} (${selectedContractEmp.code})` : ''
             }
             icon={<FileEarmarkText size={18} />}
-            width="lg"
+            width="400px"
             footer={
               <div className="flex items-center justify-between w-full">
                 <Button

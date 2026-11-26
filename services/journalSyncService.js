@@ -5,35 +5,36 @@
  */
 
 export function normalizeDate(d, codeHint = '') {
-  // Ưu tiên trích xuất ngày thực tế từ mã chứng từ nếu có dạng YYYYMMDD (ví dụ PT-20261104-166 -> 2026-11-04)
+  // Ưu tiên ngày hạch toán tường minh mà người dùng chọn / lưu trên chứng từ trước
+  if (d) {
+    const str = String(d).trim();
+    // Hỗ trợ "HH:mm DD/MM/YYYY", "DD/MM/YYYY HH:mm", "DD/MM/YYYY"
+    const vnMatch = str.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (vnMatch) {
+      const day = vnMatch[1].padStart(2, '0');
+      const month = vnMatch[2].padStart(2, '0');
+      const year = vnMatch[3];
+      return `${year}-${month}-${day}`;
+    }
+    // Hỗ trợ "YYYY-MM-DD" hoặc "YYYY-MM-DDTHH:mm:ss"
+    const isoMatch = str.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (isoMatch) {
+      return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
+    }
+    const dmyDash = str.match(/(\d{1,2})-(\d{1,2})-(\d{4})/);
+    if (dmyDash) {
+      return `${dmyDash[3]}-${dmyDash[2].padStart(2, '0')}-${dmyDash[1].padStart(2, '0')}`;
+    }
+  }
+
+  // Fallback: trích xuất ngày từ mã chứng từ nếu không có ngày tường minh (ví dụ PT-20261104-166 -> 2026-11-04)
   const codeMatch = String(codeHint || '').match(/202\d[01]\d[0-3]\d/);
   if (codeMatch) {
     const raw = codeMatch[0];
     return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
   }
 
-  if (!d) return new Date().toISOString().slice(0, 10);
-  const str = String(d).trim();
-  if (str.includes('/')) {
-    const parts = str.split('/');
-    if (parts.length === 3) {
-      const day = parts[0].padStart(2, '0');
-      const month = parts[1].padStart(2, '0');
-      const year = parts[2];
-      return `${year}-${month}-${day}`;
-    }
-  }
-  if (str.includes('-')) {
-    const parts = str.split(' ')[0].split('-');
-    if (parts.length === 3) {
-      if (parts[0].length === 4) {
-        return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-      } else {
-        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-      }
-    }
-  }
-  return str.substring(0, 10);
+  return new Date().toISOString().slice(0, 10);
 }
 
 let _journalSyncPromise = null;
@@ -75,6 +76,7 @@ function _runSyncAllSubledgersToJournal(db) {
         loanDrawdowns,
         materialTickets,
         qcInspections,
+        receiptVoucherRows,
       ] = await Promise.all([
         dbAllAsync('SELECT * FROM debt_receivables'),
         dbAllAsync('SELECT * FROM debt_payables'),
@@ -199,7 +201,13 @@ function _runSyncAllSubledgersToJournal(db) {
            WHERE q.type = 'OQC'
              AND q.status IN ('Đã hoàn thành', 'approved', 'COMPLETED', 'Đạt')`
         ),
+        dbAllAsync(
+          `SELECT voucher_code FROM financial_vouchers WHERE status = 'completed' AND voucher_type IN ('receipt', 'PT')`
+        ),
       ]);
+      const recordedReceiptVoucherCodes = new Set(
+        (receiptVoucherRows || []).map((r) => String(r.voucher_code || '').trim()).filter(Boolean)
+      );
 
       db.serialize(() => {
         db.run('PRAGMA foreign_keys = OFF');
@@ -354,7 +362,7 @@ function _runSyncAllSubledgersToJournal(db) {
                   if (dbhMatch && existingOrderPrepaymentCodes.has(dbhMatch)) return;
 
                   const pDate = normalizeDate(p.date || ent.date, pCode);
-                  if (!isRecon && !isCustomerAdvance && pDate < '2026-11-11') return;
+                  if (!isRecon && !isCustomerAdvance && !recordedReceiptVoucherCodes.has(pCode) && pDate < '2026-11-11') return;
 
                   const rawAmt = Math.round(Number(p.amount ?? p.paidAmount) || 0);
                   const absAmt = Math.abs(rawAmt);

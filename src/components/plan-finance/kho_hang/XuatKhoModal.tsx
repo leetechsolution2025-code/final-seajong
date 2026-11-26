@@ -98,6 +98,7 @@ interface StockLine {
     giaBan?: number | null;
     imageUrl?: string | null;
   };
+  lockedFromOrder?: boolean;
 }
 
 interface XuatKhoModalProps {
@@ -285,7 +286,8 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
             const soSt = String(o.trangThai || "").toLowerCase().trim();
             const matTicketSt = String(o.materialTicketStatus || "").toUpperCase().trim();
             if (excludedWoStatuses.has(st) || excludedWoStatuses.has(soSt)) return false;
-            if (matTicketSt === "COMPLETED" || matTicketSt === "CANCELLED") return false;
+            // Chỉ hiển thị lệnh sản xuất có lệnh xuất/cấp phát vật tư đang hiệu lực
+            if (!matTicketSt || matTicketSt === "COMPLETED" || matTicketSt === "CANCELLED") return false;
             return true;
           });
           if (initialWoId && !filtered.some((o: any) => o.id === initialWoId || o.code === initialWoId)) {
@@ -517,6 +519,7 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
             imageUrl: raw.inventoryItem.imageUrl ?? null,
           };
         }
+        l.lockedFromOrder = true;
         return l;
       });
 
@@ -697,6 +700,7 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
         l.viTriCot = raw.viTriCot || "";
         l.viTriTang = raw.viTriTang || "";
         l.ghiChu = raw.ghiChu || "";
+        l.lockedFromOrder = true;
         return l;
       });
 
@@ -828,6 +832,7 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
         l.viTriHang = raw.viTriHang;
         l.viTriCot = raw.viTriCot;
         l.viTriTang = raw.viTriTang;
+        l.lockedFromOrder = true;
         return l;
       });
 
@@ -1102,8 +1107,10 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
   };
 
   const locked = success;
+  const hasSelectedCommand = Boolean(selectedSo || selectedWo || selectedDefect);
   const isSourceLocked =
     locked ||
+    hasSelectedCommand ||
     Boolean(
       (initialMode && initialMode !== "manual") ||
       initialSoId ||
@@ -1526,8 +1533,8 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
                 <Select
                   label="Loại xuất kho"
                   value={loaiXuatKho}
-                  onChange={e => !locked && setLoaiXuatKho(e.target.value)}
-                  disabled={locked}
+                  onChange={e => !locked && !hasSelectedCommand && setLoaiXuatKho(e.target.value)}
+                  disabled={locked || hasSelectedCommand}
                 >
                   <option value="Xuất bán hàng">Xuất bán hàng</option>
                   <option value="Xuất sản xuất">Xuất sản xuất</option>
@@ -1543,8 +1550,8 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
                   label="Kho xuất"
                   required
                   value={fromWarehouseId}
-                  onChange={e => !locked && setFromWarehouseId(e.target.value)}
-                  disabled={locked}
+                  onChange={e => !locked && !(hasSelectedCommand && Boolean(fromWarehouseId)) && setFromWarehouseId(e.target.value)}
+                  disabled={locked || (hasSelectedCommand && Boolean(fromWarehouseId))}
                 >
                   <option value="">Chọn kho</option>
                   {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -1715,8 +1722,8 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
                   onSelectItem={item => selectItem(line.id, item)}
                   onUpdate={(key, val) => updateLine(line.id, key, val)}
                   onRemove={() => removeLine(line.id)}
-                  canRemove={lines.length > 1}
-                  locked={locked}
+                  canRemove={!line.lockedFromOrder && lines.length > 1}
+                  locked={locked || Boolean(line.lockedFromOrder)}
                 />
               ))}
               <div className="xk-add-line-wrapper" style={{ padding: "8px 10px", borderTop: "1px dashed var(--border)" }}>

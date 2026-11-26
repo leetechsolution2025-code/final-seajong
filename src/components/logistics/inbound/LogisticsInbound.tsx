@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { TableToolbar } from "@/components/common/TableToolbar";
 import { FullWidthTable } from "@/components/common/FullWidthTable";
 import { Pagination } from "@/components/common/Pagination";
@@ -11,23 +11,9 @@ import { NhapKhoModal } from "@/components/plan-finance/kho_hang/NhapKhoModal";
 import { XuatKhoModal } from "@/components/plan-finance/kho_hang/XuatKhoModal";
 import { KiemKhoModal } from "@/components/plan-finance/kho_hang/KiemKhoModal";
 import { LuanChuyenKhoModal } from "@/components/plan-finance/kho_hang/LuanChuyenKhoModal";
-import { ConfirmDialogModal } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useSession } from "next-auth/react";
 import { canExecuteInOut } from "@/lib/logistics-permissions";
-import { exportStandardReportExcel } from "@/utils/excelExport";
-
-interface Warehouse {
-  id: string;
-  name: string;
-}
-
-interface Category {
-  id: string;
-  name: string;
-  level?: number;
-  isHeader?: boolean;
-}
 
 interface InventoryItem {
   id: string;
@@ -59,88 +45,12 @@ export function LogisticsInbound({ onStatsChange }: { onStatsChange?: (stats: an
   const [filterCategory, setFilterCategory] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
 
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [filteredCount, setFilteredCount] = useState(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [isExporting, setIsExporting] = useState(false);
-  const [isClearingHold, setIsClearingHold] = useState(false);
-  const [showClearHoldModal, setShowClearHoldModal] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
-
-  const handleConfirmClearHold = async () => {
-    if (isClearingHold) return;
-    const hasSelection = selectedIds.length > 0;
-
-    setIsClearingHold(true);
-    try {
-      const params = new URLSearchParams();
-      if (filterWarehouse) params.append("warehouseId", filterWarehouse);
-
-      const res = await fetch(`/api/logistics/inventory/clear-holds?${params}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(hasSelection ? { itemIds: selectedIds } : {}),
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        setShowClearHoldModal(false);
-        toast.success(
-          "Huỷ đã giữ thành công",
-          `Đã chuyển toàn bộ hàng giữ của ${data.updatedCount || 0} kho/mặt hàng về thực tồn.`
-        );
-        fetchItems();
-      } else {
-        toast.error("Không thể huỷ giữ", data.error || "Không thể huỷ giữ hàng hoá");
-      }
-    } catch (err) {
-      console.error("Error clearing hold:", err);
-      toast.error("Lỗi", "Đã xảy ra lỗi khi huỷ giữ hàng hoá");
-    } finally {
-      setIsClearingHold(false);
-    }
-  };
-
-  // Load warehouses once on mount
-  useEffect(() => {
-    fetch("/api/logistics/warehouses?limit=100")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data && Array.isArray(data.items)) {
-          setWarehouses(data.items);
-        } else if (Array.isArray(data)) {
-          setWarehouses(data);
-        } else {
-          setWarehouses([]);
-        }
-      })
-      .catch((err) => console.error("Error fetching warehouses:", err));
-  }, []);
-
-  // Fetch categories dynamically when filterWarehouse changes
-  const fetchCategories = async () => {
-    try {
-      const url = filterWarehouse
-        ? `/api/logistics/categories?warehouseId=${filterWarehouse}`
-        : "/api/logistics/categories";
-      const res = await fetch(url);
-      const data = await res.json();
-      setCategories(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error("Fetch categories error:", error);
-    }
-  };
-
-  useEffect(() => {
-    fetchCategories();
-  }, [filterWarehouse]);
 
   // Reset page when filters change
   useEffect(() => {
@@ -161,7 +71,6 @@ export function LogisticsInbound({ onStatsChange }: { onStatsChange?: (stats: an
       const res = await fetch(`/api/logistics/inventory?${params}`);
       const data = await res.json();
       setItems(data.items || []);
-      setTotalPages(data.totalPages || 1);
       setFilteredCount(data.total || 0);
       if (data.stats && onStatsChange) {
         onStatsChange(data.stats);
@@ -177,165 +86,13 @@ export function LogisticsInbound({ onStatsChange }: { onStatsChange?: (stats: an
     fetchItems();
   }, [search, filterCategory, filterWarehouse, page]);
 
-  const handleDownloadTemplate = async () => {
-    try {
-      const XLSX = await import("xlsx");
-      const templateData = [
-        {
-          "STT": 1,
-          "Mã hàng": "SKU-001",
-          "Tên vật tư, hàng hoá": "Vòi rửa bát nóng lạnh SUS 304",
-          "Đơn vị tính": "Bộ",
-          "Số lượng": 100,
-          "Giá nhập": 350000,
-          "Ghi chú": "Mẫu nhập liệu",
-        },
-      ];
-      const ws = XLSX.utils.json_to_sheet(templateData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Mau_Nhap_Kho");
-      XLSX.writeFile(wb, "Mau_Nhap_Lieu_Kho_Hang.xlsx");
-    } catch (e) {
-      console.error(e);
-      alert("Không thể tải file mẫu");
+  const handleOpenInOutModal = (modal: "nhap" | "xuat" | "luan-chuyen") => {
+    if (!isThuKho) {
+      toast.error("Không có quyền", "Chỉ tài khoản Thủ kho hoặc Quản trị viên mới có quyền thực hiện nghiệp vụ này.");
+      return;
     }
+    setActiveModal(modal);
   };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      toast.info("Đang xử lý file", `Đã tiếp nhận file: ${file.name}`);
-      e.target.value = "";
-    }
-  };
-
-  const handleExportExcel = async () => {
-    if (isExporting) return;
-    setIsExporting(true);
-    try {
-      const params = new URLSearchParams();
-      if (search) params.append("search", search);
-      if (filterCategory) params.append("categoryId", filterCategory);
-      if (filterWarehouse) params.append("warehouseId", filterWarehouse);
-      params.append("limit", "999999");
-
-      const res = await fetch(`/api/logistics/inventory?${params}`);
-      const data = await res.json();
-
-      const exportItems = data.items || [];
-      if (!exportItems.length) {
-        alert("Không có dữ liệu để xuất");
-        return;
-      }
-
-      let totTonKho = 0;
-      let totDaGiu = 0;
-      let totThucTon = 0;
-
-      const dataRows = exportItems.map((item: any, index: number) => {
-        const soLuong = item.soLuong || 0;
-        const daGiu = item.soLuongGiu ?? item.daGiu ?? 0;
-        const thucTon = item.thucTon ?? Math.max(0, soLuong - daGiu);
-        totTonKho += soLuong;
-        totDaGiu += daGiu;
-        totThucTon += thucTon;
-
-        return [
-          index + 1,
-          item.code || "",
-          item.tenHang || "",
-          item.categoryName || item.category?.name || "Thiết bị & Phụ kiện",
-          item.donVi || "cái",
-          item.giaNhap || 0,
-          item.giaBan || 0,
-          soLuong,
-          daGiu,
-          thucTon,
-          item.trangThai === "con-hang" ? "Còn hàng" : item.trangThai === "sap-het" ? "Sắp hết" : "Hết hàng",
-        ];
-      });
-
-      const today = new Date();
-      const dateFormatted = `${String(today.getDate()).padStart(2, "0")}/${String(today.getMonth() + 1).padStart(2, "0")}/${today.getFullYear()}`;
-      const selectedWh = warehouses.find((w) => w.id === filterWarehouse);
-
-      exportStandardReportExcel({
-        fileName: `Danh_Sach_Hang_Hoa_Trong_Kho_${today.toISOString().split("T")[0]}`,
-        sheetName: "Kho_Hang",
-        formCode: "Mẫu số 01-VT",
-        title: "BẢNG KÊ DANH MỤC HÀNG HÓA VẬT TƯ TRONG KHO",
-        subtitle: `Thời điểm kết xuất: Ngày ${dateFormatted}`,
-        extraInfo: [
-          `Kho hàng áp dụng: ${selectedWh ? selectedWh.name : "Tất cả kho hàng"}`,
-          "Đơn vị tính giá trị: Đồng Việt Nam (VNĐ)",
-        ],
-        headers: [
-          ["STT", "Mã hàng", "Tên vật tư, hàng hoá", "Danh mục", "ĐVT", "Giá nhập (đ)", "Giá bán (đ)", "Tồn kho", "Đã giữ", "Thực tồn", "Trạng thái"],
-        ],
-        columnsWidths: [6, 14, 36, 22, 10, 14, 14, 14, 12, 14, 14],
-        data: dataRows,
-        totalsRow: [
-          "TỔNG CỘNG", "", "", "", "", "", "", totTonKho, totDaGiu, totThucTon, "",
-        ],
-        signatures: ["Người lập biểu", "Thủ kho", "Kế toán kho", "Giám đốc"],
-      });
-    } catch (error) {
-      console.error("Export error:", error);
-      alert("Lỗi khi xuất file Excel");
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const menuItems = [
-    {
-      id: "nhap",
-      label: "Nhập hàng",
-      icon: <i className="bi bi-arrow-down-left-square" style={{ color: "#3b82f6", fontSize: 15 }} />,
-      disabled: !isThuKho,
-      onClick: () => {
-        if (!isThuKho) {
-          toast.error("Không có quyền", "Chỉ tài khoản Thủ kho hoặc Quản trị viên mới có quyền thực hiện nghiệp vụ này.");
-          return;
-        }
-        setActiveModal("nhap");
-      },
-    },
-    {
-      id: "xuat",
-      label: "Xuất hàng",
-      icon: <i className="bi bi-arrow-up-right-square" style={{ color: "#ef4444", fontSize: 15 }} />,
-      disabled: !isThuKho,
-      onClick: () => {
-        if (!isThuKho) {
-          toast.error("Không có quyền", "Chỉ tài khoản Thủ kho hoặc Quản trị viên mới có quyền thực hiện nghiệp vụ này.");
-          return;
-        }
-        setActiveModal("xuat");
-      },
-    },
-    {
-      id: "luan-chuyen",
-      label: "Luân chuyển",
-      icon: <i className="bi bi-arrow-left-right" style={{ color: "#f59e0b", fontSize: 15 }} />,
-      disabled: !isThuKho,
-      onClick: () => {
-        if (!isThuKho) {
-          toast.error("Không có quyền", "Chỉ tài khoản Thủ kho hoặc Quản trị viên mới có quyền thực hiện nghiệp vụ này.");
-          return;
-        }
-        setActiveModal("luan-chuyen");
-      },
-    },
-    {
-      id: "kiem",
-      label: "Kiểm kho",
-      icon: <i className="bi bi-clipboard2-check" style={{ color: "#8b5cf6", fontSize: 15 }} />,
-      onClick: () => {
-        setActiveModal("kiem");
-      },
-    },
-  ];
 
   const filteredItems = items.filter((item) => {
     if (!filterStatus) return true;
@@ -374,68 +131,52 @@ export function LogisticsInbound({ onStatsChange }: { onStatsChange?: (stats: an
           },
         ]}
         actionsAfterSearch={
-          <div className="hidden md:flex items-center gap-1.5">
-            {/* Tải excel mẫu */}
+          <div className="flex items-center gap-1.5 flex-wrap">
             <button
               type="button"
-              title="Tải file Excel mẫu"
-              onClick={handleDownloadTemplate}
-              className="w-8 h-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center text-emerald-600 transition-colors cursor-pointer"
+              title="Nhập kho"
+              onClick={() => handleOpenInOutModal("nhap")}
+              disabled={!isThuKho}
+              className="h-8 px-2.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
-              <i className="bi bi-file-earmark-arrow-down text-sm" />
+              <i className="bi bi-arrow-down-left-square text-xs" />
+              <span>Nhập</span>
             </button>
 
-            {/* Nhập excel */}
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept=".xlsx,.xls"
-              style={{ display: "none" }}
-            />
             <button
               type="button"
-              title="Nhập dữ liệu (Import Excel)"
-              onClick={() => fileInputRef.current?.click()}
-              className="w-8 h-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center text-blue-600 transition-colors cursor-pointer"
+              title="Xuất kho"
+              onClick={() => handleOpenInOutModal("xuat")}
+              disabled={!isThuKho}
+              className="h-8 px-2.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
-              <i className="bi bi-file-earmark-plus text-sm" />
+              <i className="bi bi-arrow-up-right-square text-xs" />
+              <span>Xuất</span>
             </button>
 
-            {/* Xuất excel */}
             <button
               type="button"
-              title="Xuất dữ liệu (Export Excel)"
-              onClick={handleExportExcel}
-              disabled={isExporting}
-              className="w-8 h-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center text-purple-600 transition-colors cursor-pointer disabled:opacity-50"
+              title="Kiểm kho"
+              onClick={() => setActiveModal("kiem")}
+              className="h-8 px-2.5 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
             >
-              {isExporting ? (
-                <span className="inline-block w-3.5 h-3.5 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <i className="bi bi-file-earmark-arrow-up text-sm" />
-              )}
+              <i className="bi bi-clipboard2-check text-xs" />
+              <span>Kiểm</span>
             </button>
 
-            {/* Huỷ đã giữ */}
             <button
               type="button"
-              title="Huỷ hàng đang giữ (Chuyển về thực tồn)"
-              onClick={() => setShowClearHoldModal(true)}
-              disabled={isClearingHold}
-              className="h-8 px-2.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+              title="Luân chuyển kho"
+              onClick={() => handleOpenInOutModal("luan-chuyen")}
+              disabled={!isThuKho}
+              className="h-8 px-2.5 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
-              {isClearingHold ? (
-                <span className="inline-block w-3.5 h-3.5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <i className="bi bi-arrow-counterclockwise text-xs" />
-              )}
-              <span>Huỷ đã giữ</span>
+              <i className="bi bi-arrow-left-right text-xs" />
+              <span>Chuyển</span>
             </button>
           </div>
         }
-        showMenu={true}
-        menuItems={menuItems}
+        showMenu={false}
       />
 
       {/* ── FullWidthTable chuẩn Enterprise ── */}
@@ -607,26 +348,6 @@ export function LogisticsInbound({ onStatsChange }: { onStatsChange?: (stats: an
           }}
         />
       )}
-
-      <ConfirmDialogModal
-        open={showClearHoldModal}
-        title="Xác nhận huỷ đã giữ"
-        message={
-          selectedIds.length > 0
-            ? `Bạn có chắc chắn muốn huỷ số lượng đang giữ cho ${selectedIds.length} mặt hàng đã chọn và chuyển về thực tồn không?`
-            : filterWarehouse
-              ? "Bạn có chắc chắn muốn huỷ toàn bộ số lượng hàng hoá đang giữ trong kho đã chọn và chuyển về thực tồn không?"
-              : "Bạn có chắc chắn muốn huỷ toàn bộ số lượng hàng hoá đang giữ của tất cả các kho và chuyển về thực tồn không?"
-        }
-        variant="warning"
-        confirmLabel="Đồng ý"
-        cancelLabel="Huỷ"
-        loading={isClearingHold}
-        onConfirm={handleConfirmClearHold}
-        onCancel={() => {
-          if (!isClearingHold) setShowClearHoldModal(false);
-        }}
-      />
     </div>
   );
 }

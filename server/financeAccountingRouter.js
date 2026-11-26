@@ -830,9 +830,9 @@ router.post('/api/debts/aging-config', (req, res) => {
   );
 });
 
-// Thêm / Cập nhật công nợ phải thu - Lưu liên kết customer_id với bảng customers
-router.post('/api/debts/receivables', (req, res) => {
-  const b = req.body;
+// Thêm / Cập nhật công nợ phải thu - Lưu liên kết customer_id và hỗ trợ điều chỉnh Dư nợ đầu kỳ bền vững trong bảng Debt
+router.post('/api/debts/receivables', async (req, res) => {
+  const b = req.body || {};
   const id = b.id || `REC-${Date.now()}`;
   const code = b.code || `HD-${Date.now().toString().slice(-6)}`;
   const entriesJson = JSON.stringify(b.entries || []);
@@ -840,28 +840,193 @@ router.post('/api/debts/receivables', (req, res) => {
   const paid = Number(b.paidAmount) || 0;
   const remain = Number(b.remainingAmount !== undefined ? b.remainingAmount : contractVal - paid);
   const custId = b.customerId || b.customer_id || null;
+  const custName = String(b.customerName || '').trim();
 
-  const sql = `
-    INSERT OR REPLACE INTO debt_receivables (
-      id, code, customer_id, customer_name, customer_address, project_name,
-      contract_value, paid_amount, remaining_amount, due_date,
-      status, status_label, manager_name, notes, entries_json, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-  `;
-  const params = [
-    id, code, custId, b.customerName, b.customerAddress || '', b.projectName || '',
-    contractVal, paid, remain, b.dueDate || '',
-    b.status || (remain <= 0 ? 'completed' : 'ontime'),
-    b.statusLabel || (remain <= 0 ? 'Đã thu đủ' : 'Trong hạn thanh toán'),
-    b.managerName || '', b.notes || '', entriesJson
-  ];
+  try {
+    // Nếu có yêu cầu điều chỉnh Dư nợ đầu kỳ, cập nhật trực tiếp bảng Prisma "Debt" rồi đồng bộ lại
+    if (b.adjustOpeningBalance) {
+      const openingBal = Math.max(0, Math.round(Number(b.openingBalance) || 0));
+      const parsedOpDate = parseAccountingDateTime(b.openingDate);
+      const opNoteBase = String(b.openingNote || 'Dư nợ đầu kỳ kết chuyển').trim();
+      const nowEpoch = Date.now();
+      const cleanFirstPart = custName.split('–')[0].split(' - ')[0].trim().toLowerCase();
 
-  db.run(sql, params, function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ success: true, id, message: 'Đã lưu công nợ phải thu thành công' });
-    syncAllSubledgersToJournal(db).catch((e) => console.warn('Lỗi auto-sync journal sau khi lưu phải thu:', e.message));
-  });
+      const existingOp = await new Promise((resolve) => {
+        db.get(
+          `SELECT * FROM "Debt"
+           WHERE "type" IN ('RECEIVABLE', 'phai-thu')
+             AND (LOWER(COALESCE("referenceId", '')) LIKE '%dư nợ%' OR LOWER(COALESCE("referenceId", '')) LIKE '%đầu kỳ%')
+             AND (
+               (? IS NOT NULL AND ? != '' AND "customerId" = ?)
+               OR LOWER(TRIM(COALESCE("partnerName", ''))) = LOWER(?)
+               OR (? != '' AND LOWER(TRIM(COALESCE("partnerName", ''))) = ?)
+             )
+           ORDER BY "createdAt" ASC
+           LIMIT 1`,
+          [custId, custId, custId, custName, cleanFirstPart, cleanFirstPart],
+          (err, row) => resolve(err ? null : row)
+        );
+      });
+
+      if (existingOp) {
+        const oldDesc = String(existingOp.description || '');
+        const logsIdx = oldDesc.indexOf('[PAYMENT_LOGS]:');
+        const preservedLogs = logsIdx >= 0 ? `\n\n${oldDesc.slice(logsIdx)}` : '';
+        const nextDesc = `${opNoteBase}${preservedLogs}`;
+        const existingPaid = Number(existingOp.paidAmount) || 0;
+        const nextStatus =
+          openingBal <= existingPaid ? 'PAID' : existingPaid > 0 ? 'PARTIAL' : 'UNPAID';
+
+        await new Promise((resolve, reject) => {
+          db.run(
+            `UPDATE "Debt"
+             SET "amount" = ?, "description" = ?, "dueDate" = ?, "createdAt" = ?, "status" = ?, "updatedAt" = ?
+             WHERE "id" = ?`,
+            [openingBal, nextDesc, parsedOpDate.epochMs, parsedOpDate.epochMs, nextStatus, nowEpoch, existingOp.id],
+            (err) => (err ? reject(err) : resolve())
+          );
+        });
+      } else if (openingBal > 0) {
+        const newOpId = `debt-op-${Date.now()}`;
+        await new Promise((resolve, reject) => {
+          db.run(
+            `INSERT INTO "Debt" (
+              "id", "type", "customerId", "partnerName", "amount", "paidAmount",
+              "dueDate", "status", "description", "referenceId", "createdAt", "updatedAt"
+            ) VALUES (?, 'RECEIVABLE', ?, ?, ?, 0, ?, 'UNPAID', ?, 'Dư nợ đầu kỳ', ?, ?)`,
+            [
+              newOpId,
+              custId,
+              custName || 'Khách hàng',
+              openingBal,
+              parsedOpDate.epochMs,
+              opNoteBase,
+              parsedOpDate.epochMs,
+              nowEpoch,
+            ],
+            (err) => (err ? reject(err) : resolve())
+          );
+        });
+      }
+
+      await syncPrismaFinanceToAccountingTables(db);
+
+      // Cập nhật thêm các trường thông tin phụ (địa chỉ, hạn thanh toán, ghi chú) trên dòng debt_receivables sau sync
+      await new Promise((resolve) => {
+        db.run(
+          `UPDATE debt_receivables
+           SET customer_address = COALESCE(NULLIF(?, ''), customer_address),
+               due_date = COALESCE(NULLIF(?, ''), due_date),
+               notes = ?,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE (customer_id IS NOT NULL AND customer_id = ?) OR LOWER(TRIM(customer_name)) = LOWER(?) OR id = ?`,
+          [b.customerAddress || '', b.dueDate || '', b.notes || '', custId, custName, id],
+          () => resolve()
+        );
+      });
+
+      res.json({ success: true, id, message: 'Đã cập nhật công nợ & điều chỉnh dư nợ đầu kỳ thành công' });
+      syncAllSubledgersToJournal(db).catch((e) => console.warn('Lỗi auto-sync journal sau khi lưu phải thu:', e.message));
+      return;
+    }
+
+    const sql = `
+      INSERT OR REPLACE INTO debt_receivables (
+        id, code, customer_id, customer_name, customer_address, project_name,
+        contract_value, paid_amount, remaining_amount, due_date,
+        status, status_label, manager_name, notes, entries_json, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `;
+    const params = [
+      id, code, custId, custName, b.customerAddress || '', b.projectName || '',
+      contractVal, paid, remain, b.dueDate || '',
+      b.status || (remain <= 0 ? 'completed' : 'ontime'),
+      b.statusLabel || (remain <= 0 ? 'Đã thu đủ' : 'Trong hạn thanh toán'),
+      b.managerName || '', b.notes || '', entriesJson
+    ];
+
+    db.run(sql, params, function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true, id, message: 'Đã lưu công nợ phải thu thành công' });
+      syncAllSubledgersToJournal(db).catch((e) => console.warn('Lỗi auto-sync journal sau khi lưu phải thu:', e.message));
+    });
+  } catch (err) {
+    console.error('Lỗi POST /api/debts/receivables:', err);
+    res.status(500).json({ error: err.message || 'Lỗi lưu công nợ phải thu' });
+  }
 });
+
+// Helper phân tích chuỗi ngày giờ hạch toán VN ("HH:mm DD/MM/YYYY", "DD/MM/YYYY", "YYYY-MM-DD...")
+// trả về { dateStr: 'DD/MM/YYYY', timeStr: 'HH:mm', epochMs: number } theo múi giờ Việt Nam (+07:00)
+function parseAccountingDateTime(raw) {
+  const now = new Date();
+  const vnNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+  const fallbackHH = String(vnNow.getUTCHours()).padStart(2, '0');
+  const fallbackMI = String(vnNow.getUTCMinutes()).padStart(2, '0');
+  const fallbackDD = String(vnNow.getUTCDate()).padStart(2, '0');
+  const fallbackMM = String(vnNow.getUTCMonth() + 1).padStart(2, '0');
+  const fallbackYYYY = vnNow.getUTCFullYear();
+
+  if (!raw || typeof raw !== 'string' || !raw.trim()) {
+    return {
+      dateStr: `${fallbackDD}/${fallbackMM}/${fallbackYYYY}`,
+      timeStr: `${fallbackHH}:${fallbackMI}`,
+      epochMs: now.getTime(),
+    };
+  }
+
+  const trimmed = raw.trim();
+  let dd;
+  let mm;
+  let yyyy;
+  let hh = Number(fallbackHH);
+  let mi = Number(fallbackMI);
+
+  const timeFirst = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s+(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const dateFirst = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::\d{2})?)?$/);
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s](\d{1,2}):(\d{2})(?::\d{2})?)?/);
+
+  if (timeFirst) {
+    hh = Number(timeFirst[1]);
+    mi = Number(timeFirst[2]);
+    dd = Number(timeFirst[3]);
+    mm = Number(timeFirst[4]);
+    yyyy = Number(timeFirst[5]);
+  } else if (dateFirst) {
+    dd = Number(dateFirst[1]);
+    mm = Number(dateFirst[2]);
+    yyyy = Number(dateFirst[3]);
+    if (dateFirst[4] !== undefined) hh = Number(dateFirst[4]);
+    if (dateFirst[5] !== undefined) mi = Number(dateFirst[5]);
+  } else if (isoMatch) {
+    yyyy = Number(isoMatch[1]);
+    mm = Number(isoMatch[2]);
+    dd = Number(isoMatch[3]);
+    if (isoMatch[4] !== undefined) hh = Number(isoMatch[4]);
+    if (isoMatch[5] !== undefined) mi = Number(isoMatch[5]);
+  } else {
+    return {
+      dateStr: `${fallbackDD}/${fallbackMM}/${fallbackYYYY}`,
+      timeStr: `${fallbackHH}:${fallbackMI}`,
+      epochMs: now.getTime(),
+    };
+  }
+
+  const epochMs = Date.UTC(yyyy, mm - 1, dd, hh - 7, mi, 0);
+  if (Number.isNaN(epochMs)) {
+    return {
+      dateStr: `${fallbackDD}/${fallbackMM}/${fallbackYYYY}`,
+      timeStr: `${fallbackHH}:${fallbackMI}`,
+      epochMs: now.getTime(),
+    };
+  }
+
+  return {
+    dateStr: `${String(dd).padStart(2, '0')}/${String(mm).padStart(2, '0')}/${yyyy}`,
+    timeStr: `${String(hh).padStart(2, '0')}:${String(mi).padStart(2, '0')}`,
+    epochMs,
+  };
+}
 
 // Ghi nhận thanh toán thu nợ khách hàng (nhóm vào đợt thanh toán tương ứng)
 router.post('/api/debts/receivables/:id/payments', (req, res) => {
@@ -889,7 +1054,9 @@ router.post('/api/debts/receivables/:id/payments', (req, res) => {
   const payAmt = Number(amount) || 0;
   const actualMethod = paymentMethod || method || 'Chuyển khoản';
   const actualNote = paymentNote || note || '';
-  const actualDate = paymentDate || date || new Date().toLocaleDateString('vi-VN');
+  const parsedPayDate = parseAccountingDateTime(paymentDate || date);
+  const actualDate = parsedPayDate.dateStr;
+  const actualTime = parsedPayDate.timeStr;
   const isBank = actualMethod.toLowerCase().includes('khoản') || actualMethod.toLowerCase().includes('ngân hàng');
   const actualDebit = debitAccount || (isBank ? '1121' : '1111');
   const actualCredit = creditAccount || '131';
@@ -937,7 +1104,7 @@ router.post('/api/debts/receivables/:id/payments', (req, res) => {
           ? `Khách hàng trả tiền trước (Ứng trước) - ${row.customer_name || ''}`
           : `Thu tiền khách hàng theo phiếu ${resolvedVCode}`),
       date: actualDate,
-      time: '08:30',
+      time: actualTime,
       amount: payAmt,
       method: actualMethod,
       note: actualNote,
@@ -962,7 +1129,7 @@ router.post('/api/debts/receivables/:id/payments', (req, res) => {
           ? `Khách hàng trả tiền trước / Ứng trước (${resolvedVCode})`
           : `Đợt thu tiền (${resolvedVCode})`,
         date: actualDate,
-        time: '08:30',
+        time: actualTime,
         contractValue: 0,
         paidAmount: 0,
         remainingAmount: 0,
@@ -1004,6 +1171,7 @@ router.post('/api/debts/receivables/:id/payments', (req, res) => {
 
     // Lưu đồng thời vào bảng Prisma Debt để đồng bộ bền vững khi syncPrismaFinanceToAccountingTables chạy
     const nowEpoch = Date.now();
+    const recordEpoch = parsedPayDate.epochMs;
     db.run(
       `INSERT OR REPLACE INTO "Debt" (
         "id", "type", "customerId", "partnerName", "amount", "paidAmount",
@@ -1014,10 +1182,10 @@ router.post('/api/debts/receivables/:id/payments', (req, res) => {
         row.customer_id || null,
         row.customer_name || payerName || 'Khách hàng',
         payAmt,
-        nowEpoch,
+        recordEpoch,
         payRecord.title,
         resolvedVCode,
-        nowEpoch,
+        recordEpoch,
         nowEpoch,
       ],
       () => {}
@@ -1087,6 +1255,23 @@ router.post('/api/debts/receivables/:id/payments', (req, res) => {
             if (vErr) console.warn('Lỗi ghi financial_vouchers từ thu nợ:', vErr.message);
           }
         );
+
+        // Đồng bộ tăng số dư quỹ tiền mặt (TK 1111) hoặc ngân hàng (TK 1121) tương ứng với phiếu thu
+        if (payAmt > 0 && (actualDebit === '1111' || actualDebit === '1121')) {
+          if (actualDebit === '1111') {
+            db.run(
+              "UPDATE cash_and_bank_assets SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT id FROM cash_and_bank_assets WHERE type = 'cash' ORDER BY balance DESC LIMIT 1)",
+              [payAmt],
+              () => {}
+            );
+          } else {
+            db.run(
+              "UPDATE cash_and_bank_assets SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT id FROM cash_and_bank_assets WHERE type = 'bank' ORDER BY balance DESC LIMIT 1)",
+              [payAmt],
+              () => {}
+            );
+          }
+        }
 
         res.json({
           id,
@@ -1427,9 +1612,9 @@ router.get('/api/debts/payables', (req, res) => {
   });
 });
 
-// Thêm / Cập nhật công nợ phải trả
-router.post('/api/debts/payables', (req, res) => {
-  const b = req.body;
+// Thêm / Cập nhật công nợ phải trả - Hỗ trợ điều chỉnh Dư nợ đầu kỳ bền vững trong bảng Debt và đồng bộ sổ kế toán
+router.post('/api/debts/payables', async (req, res) => {
+  const b = req.body || {};
   const id = b.id || `AP-${Date.now()}`;
   const code = b.code || (b.partnerType === 'transporter' ? `CNVC-${Date.now().toString().slice(-4)}` : `PO-${Date.now().toString().slice(-6)}`);
   const entriesJson = JSON.stringify(b.entries || []);
@@ -1437,26 +1622,129 @@ router.post('/api/debts/payables', (req, res) => {
   const paid = Number(b.paidAmount) || 0;
   const remain = Number(b.remainingAmount !== undefined ? b.remainingAmount : totalVal - paid);
   const partnerType = b.partnerType || (b.code?.startsWith('CNVC') || b.poCode?.startsWith('VC') ? 'transporter' : 'supplier');
+  const suppName = String(b.supplierName || '').trim();
 
-  const sql = `
-    INSERT OR REPLACE INTO debt_payables (
-      id, code, supplier_name, supplier_address, po_code,
-      total_amount, paid_amount, remaining_amount, due_date,
-      status, status_label, accountant, notes, partner_type, entries_json, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-  `;
-  const params = [
-    id, code, b.supplierName, b.supplierAddress || '', b.poCode || '',
-    totalVal, paid, remain, b.dueDate || '',
-    b.status || (remain <= 0 ? 'completed' : 'pending'),
-    b.statusLabel || (remain <= 0 ? 'Đã hoàn tất' : 'Chờ thanh toán'),
-    b.accountant || '', b.notes || '', partnerType, entriesJson
-  ];
+  try {
+    if (b.adjustOpeningBalance) {
+      const openingBal = Math.max(0, Math.round(Number(b.openingBalance) || 0));
+      const parsedOpDate = parseAccountingDateTime(b.openingDate);
+      const opNoteBase = String(b.openingNote || 'Dư nợ đầu kỳ kết chuyển').trim();
+      const nowEpoch = Date.now();
+      const cleanFirstPart = suppName.split('–')[0].split(' - ')[0].trim().toLowerCase();
 
-  db.run(sql, params, function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ success: true, id, message: 'Đã lưu công nợ phải trả thành công' });
-  });
+      const existingOp = await new Promise((resolve) => {
+        db.get(
+          `SELECT * FROM "Debt"
+           WHERE "type" IN ('PAYABLE', 'phai-tra')
+             AND (LOWER(COALESCE("referenceId", '')) LIKE '%dư nợ%' OR LOWER(COALESCE("referenceId", '')) LIKE '%đầu kỳ%')
+             AND (
+               LOWER(TRIM(COALESCE("partnerName", ''))) = LOWER(?)
+               OR (? != '' AND LOWER(TRIM(COALESCE("partnerName", ''))) = ?)
+             )
+           ORDER BY "createdAt" ASC
+           LIMIT 1`,
+          [suppName, cleanFirstPart, cleanFirstPart],
+          (err, row) => resolve(err ? null : row)
+        );
+      });
+
+      if (existingOp) {
+        const oldDesc = String(existingOp.description || '');
+        const logsIdx = oldDesc.indexOf('[PAYMENT_LOGS]:');
+        const preservedLogs = logsIdx >= 0 ? `\n\n${oldDesc.slice(logsIdx)}` : '';
+        const nextDesc = `${opNoteBase}${preservedLogs}`;
+        const existingPaid = Number(existingOp.paidAmount) || 0;
+        const nextStatus =
+          openingBal <= existingPaid ? 'PAID' : existingPaid > 0 ? 'PARTIAL' : 'UNPAID';
+
+        await new Promise((resolve, reject) => {
+          db.run(
+            `UPDATE "Debt"
+             SET "amount" = ?, "description" = ?, "dueDate" = ?, "createdAt" = ?, "status" = ?, "updatedAt" = ?
+             WHERE "id" = ?`,
+            [openingBal, nextDesc, parsedOpDate.epochMs, parsedOpDate.epochMs, nextStatus, nowEpoch, existingOp.id],
+            (err) => (err ? reject(err) : resolve())
+          );
+        });
+      } else if (openingBal > 0) {
+        const matchedPartner = await new Promise((resolve) => {
+          const tbl = partnerType === 'transporter' ? '"Carrier"' : '"Supplier"';
+          db.get(
+            `SELECT "id" FROM ${tbl} WHERE LOWER(TRIM("name")) = LOWER(?) LIMIT 1`,
+            [suppName],
+            (err, row) => resolve(err ? null : row)
+          );
+        });
+        const newOpId = `debt-pay-op-${Date.now()}`;
+        const supplierIdVal = partnerType === 'transporter' ? null : (matchedPartner?.id || null);
+        const carrierIdVal = partnerType === 'transporter' ? (matchedPartner?.id || null) : null;
+        await new Promise((resolve, reject) => {
+          db.run(
+            `INSERT INTO "Debt" (
+              "id", "type", "supplierId", "carrierId", "partnerName", "amount", "paidAmount",
+              "dueDate", "status", "description", "referenceId", "createdAt", "updatedAt"
+            ) VALUES (?, 'PAYABLE', ?, ?, ?, ?, 0, ?, 'UNPAID', ?, 'Dư nợ đầu kỳ', ?, ?)`,
+            [
+              newOpId,
+              supplierIdVal,
+              carrierIdVal,
+              suppName || 'Nhà cung cấp',
+              openingBal,
+              parsedOpDate.epochMs,
+              opNoteBase,
+              parsedOpDate.epochMs,
+              nowEpoch,
+            ],
+            (err) => (err ? reject(err) : resolve())
+          );
+        });
+      }
+
+      await syncPrismaFinanceToAccountingTables(db);
+
+      await new Promise((resolve) => {
+        db.run(
+          `UPDATE debt_payables
+           SET supplier_address = COALESCE(NULLIF(?, ''), supplier_address),
+               due_date = COALESCE(NULLIF(?, ''), due_date),
+               notes = ?,
+               partner_type = ?,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE LOWER(TRIM(supplier_name)) = LOWER(?) OR id = ?`,
+          [b.supplierAddress || '', b.dueDate || '', b.notes || '', partnerType, suppName, id],
+          () => resolve()
+        );
+      });
+
+      res.json({ success: true, id, message: 'Đã cập nhật công nợ phải trả & điều chỉnh dư nợ đầu kỳ thành công' });
+      syncAllSubledgersToJournal(db).catch((e) => console.warn('Lỗi auto-sync journal sau khi lưu phải trả:', e.message));
+      return;
+    }
+
+    const sql = `
+      INSERT OR REPLACE INTO debt_payables (
+        id, code, supplier_name, supplier_address, po_code,
+        total_amount, paid_amount, remaining_amount, due_date,
+        status, status_label, accountant, notes, partner_type, entries_json, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `;
+    const params = [
+      id, code, suppName, b.supplierAddress || '', b.poCode || '',
+      totalVal, paid, remain, b.dueDate || '',
+      b.status || (remain <= 0 ? 'completed' : 'pending'),
+      b.statusLabel || (remain <= 0 ? 'Đã hoàn tất' : 'Chờ thanh toán'),
+      b.accountant || '', b.notes || '', partnerType, entriesJson
+    ];
+
+    db.run(sql, params, function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true, id, message: 'Đã lưu công nợ phải trả thành công' });
+      syncAllSubledgersToJournal(db).catch((e) => console.warn('Lỗi auto-sync journal sau khi lưu phải trả:', e.message));
+    });
+  } catch (err) {
+    console.error('Lỗi POST /api/debts/payables:', err);
+    res.status(500).json({ error: err.message || 'Lỗi lưu công nợ phải trả' });
+  }
 });
 
 // Ghi nhận thanh toán trả nợ nhà cung cấp
@@ -4288,7 +4576,7 @@ router.post('/api/finance/payment-orders', (req, res) => {
           b.refType?.includes('advance') ? 'Đề xuất tạm ứng NCC' : 'Yêu cầu chi tiền',
           b.department || 'Phòng Tài chính – Kế toán',
           b.submitter || 'Kế toán thanh toán',
-          nowStr,
+          b.dueDate || nowStr,
           amountVal,
           `${amountVal.toLocaleString('vi-VN')} đ`,
           docSummary,
@@ -4307,7 +4595,7 @@ router.post('/api/finance/payment-orders', (req, res) => {
 // 3. Kế toán xác nhận thực hiện chi tiền (giải ngân)
 router.patch('/api/finance/payment-orders/:id/execute', async (req, res) => {
   const { id } = req.params;
-  const { executedBy, paymentMethod, bankAccount, note } = req.body || {};
+  const { executedBy, paymentMethod, bankAccount, note, executedDate } = req.body || {};
   const nowStr = new Date().toLocaleDateString('vi-VN');
 
   try {
@@ -4319,6 +4607,11 @@ router.patch('/api/finance/payment-orders/:id/execute', async (req, res) => {
     });
 
     if (!order) return res.status(404).json({ error: 'Không tìm thấy lệnh chi tiền' });
+
+    const parsedExecDate = parseAccountingDateTime(executedDate || order.due_date || nowStr);
+    const effectiveDateStr = parsedExecDate.dateStr;
+    const effectiveTimeStr = parsedExecDate.timeStr;
+    const effectiveEpoch = parsedExecDate.epochMs;
 
     const voucherCode = `PC-${order.order_code}`;
     const voucherId = `vch-${Date.now()}`;
@@ -4334,7 +4627,7 @@ router.patch('/api/finance/payment-orders/:id/execute', async (req, res) => {
              voucher_id = ?,
              updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`,
-        [executedBy || 'Kế toán thanh toán', nowStr, voucherCode, order.id],
+        [executedBy || 'Kế toán thanh toán', effectiveDateStr, voucherCode, order.id],
         (err) => (err ? reject(err) : resolve())
       );
     });
@@ -4407,7 +4700,7 @@ router.patch('/api/finance/payment-orders/:id/execute', async (req, res) => {
         [
           voucherId,
           voucherCode,
-          nowStr,
+          effectiveDateStr,
           resolvedPartnerType,
           order.beneficiary_name,
           order.beneficiary_code,
@@ -4447,7 +4740,7 @@ router.patch('/api/finance/payment-orders/:id/execute', async (req, res) => {
           resolvedExpCatLabel,
           order.amount,
           order.department || 'Ban giám đốc',
-          nowStr,
+          effectiveDateStr,
           order.beneficiary_name,
           'approved',
           'Đã chi tiền',
@@ -4549,8 +4842,8 @@ router.patch('/api/finance/payment-orders/:id/execute', async (req, res) => {
           (isAdvSupplier
             ? `Ứng trước / Đặt cọc cho nhà cung cấp theo Lệnh chi ${order.order_code}`
             : `Chi thanh toán theo Lệnh chi ${order.order_code}`),
-        date: nowStr,
-        time: timeStr,
+        date: effectiveDateStr,
+        time: effectiveTimeStr,
         totalAmount: payAmt,
         paidAmount: payAmt,
         remainingAmount: 0,
@@ -4577,10 +4870,10 @@ router.patch('/api/finance/payment-orders/:id/execute', async (req, res) => {
             `debt-pay-${voucherCode}`,
             order.beneficiary_name || 'Nhà cung cấp',
             payAmt,
-            nowEpoch,
+            effectiveEpoch,
             newPaymentLog.title,
             voucherCode,
-            nowEpoch,
+            effectiveEpoch,
             nowEpoch,
           ],
           () => resolve()

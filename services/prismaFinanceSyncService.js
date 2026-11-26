@@ -652,10 +652,8 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
         const refIdStr = String(d.referenceId || '');
         const isOpeningEntry = refIdStr.toLowerCase().includes('dư nợ') || refIdStr.toLowerCase().includes('đầu kỳ');
         const amt = Number(d.amount) || 0;
-        // Dư nợ đầu kỳ là nợ gốc ban đầu, các lần thanh toán phải được phản ánh qua phiếu thu PT-... cụ thể, tránh cộng trùng
-        const paid = isOpeningEntry ? 0 : (Number(d.paidAmount) || 0);
+        const rawPaid = Number(d.paidAmount) || 0;
         g.totalContract += amt;
-        g.totalPaid += paid;
         if (d.dueDate && (!g.latestDueDate || d.dueDate > g.latestDueDate)) {
           g.latestDueDate = d.dueDate;
         }
@@ -663,31 +661,83 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
         if (amt > 0) {
           g.invoices.push(d);
         }
-        if (
-          (paid > 0 && (amt === 0 || refIdStr.startsWith('PT-'))) ||
-          (paid !== 0 && refIdStr.startsWith('DS-'))
-        ) {
-          g.payments.push(d);
-        } else if (amt > 0 && paid > 0 && refIdStr.startsWith('DBH-')) {
-          const matchedOrder = saleOrderByCode.get(refIdStr);
-          const matchedNotif = (prismaPaymentNotifications || []).find(
-            (pn) =>
-              (matchedOrder && pn.saleOrderId === matchedOrder.id) ||
-              (g.customerId && pn.customerId === g.customerId && Math.round(Number(pn.amount) || 0) === Math.round(paid))
-          );
-          if (matchedNotif && matchedNotif.code) {
-            const ptCode = matchedNotif.code;
-            if (!g.payments.some((existingP) => String(existingP.referenceId || '') === ptCode)) {
+
+        if (isOpeningEntry && rawPaid > 0) {
+          // Với dòng Dư nợ đầu kỳ có ghi nhận thanh toán trực tiếp trong [PAYMENT_LOGS], tách thành phiếu thu thực tế nếu chưa có dòng PT-... độc lập (tránh cộng trùng)
+          let parsedLogs = [];
+          const rawDescStr = String(d.description || '');
+          if (rawDescStr.includes('[PAYMENT_LOGS]:')) {
+            try {
+              const parsed = JSON.parse(rawDescStr.split('[PAYMENT_LOGS]:')[1].trim());
+              if (Array.isArray(parsed)) parsedLogs = parsed;
+            } catch { }
+          }
+
+          if (parsedLogs.length > 0) {
+            parsedLogs.forEach((lg, lgIdx) => {
+              const lgAmt = Number(lg?.amount) || 0;
+              if (lgAmt <= 0) return;
+              const lgRef = String(lg?.ref || '').trim();
+              const alreadyStandalone =
+                lgRef &&
+                prismaDebts.some(
+                  (other) =>
+                    other.id !== d.id &&
+                    String(other.referenceId || '').trim() === lgRef
+                );
+              if (alreadyStandalone) return;
+              g.totalPaid += lgAmt;
               g.payments.push({
-                id: matchedNotif.id,
-                referenceId: ptCode,
-                paidAmount: paid,
+                id: lg.id || `${d.id}-op-pay-${lgIdx}`,
+                referenceId: lgRef || `PT-DK-${lgIdx + 1}`,
+                paidAmount: lgAmt,
                 amount: 0,
-                createdAt: matchedNotif.createdAt || d.createdAt,
-                dueDate: d.dueDate,
-                isAdvance: true,
-                description: `Khách hàng trả tiền trước / đặt cọc đơn hàng ${refIdStr} - ${g.customerName}`,
+                createdAt: lg.date || d.createdAt,
+                dueDate: lg.date || d.dueDate,
+                description: `${lg.note || `Thu nợ khách hàng - ${g.customerName}`}\n\n[PAYMENT_LOGS]: ${JSON.stringify([lg])}`,
               });
+            });
+          } else {
+            g.totalPaid += rawPaid;
+            g.payments.push({
+              id: `${d.id}-op-pay`,
+              referenceId: `PT-DK-${String(d.id || '').slice(-6)}`,
+              paidAmount: rawPaid,
+              amount: 0,
+              createdAt: d.createdAt,
+              dueDate: d.dueDate,
+              description: `Thu nợ khách hàng - ${g.customerName}`,
+            });
+          }
+        } else {
+          const paid = isOpeningEntry ? 0 : rawPaid;
+          g.totalPaid += paid;
+          if (
+            (paid > 0 && (amt === 0 || refIdStr.startsWith('PT-'))) ||
+            (paid !== 0 && refIdStr.startsWith('DS-'))
+          ) {
+            g.payments.push(d);
+          } else if (amt > 0 && paid > 0 && refIdStr.startsWith('DBH-')) {
+            const matchedOrder = saleOrderByCode.get(refIdStr);
+            const matchedNotif = (prismaPaymentNotifications || []).find(
+              (pn) =>
+                (matchedOrder && pn.saleOrderId === matchedOrder.id) ||
+                (g.customerId && pn.customerId === g.customerId && Math.round(Number(pn.amount) || 0) === Math.round(paid))
+            );
+            if (matchedNotif && matchedNotif.code) {
+              const ptCode = matchedNotif.code;
+              if (!g.payments.some((existingP) => String(existingP.referenceId || '') === ptCode)) {
+                g.payments.push({
+                  id: matchedNotif.id,
+                  referenceId: ptCode,
+                  paidAmount: paid,
+                  amount: 0,
+                  createdAt: matchedNotif.createdAt || d.createdAt,
+                  dueDate: d.dueDate,
+                  isAdvance: true,
+                  description: `Khách hàng trả tiền trước / đặt cọc đơn hàng ${refIdStr} - ${g.customerName}`,
+                });
+              }
             }
           }
         }
@@ -773,12 +823,13 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
               if (Array.isArray(logs) && logs.length > 0) logInfo = logs[0];
             } catch { }
           }
+          const isExplicitVoucher =
+            ref.startsWith('PT-') || ref.startsWith('PC-') || ref.startsWith('UNC-');
           const isReturn =
             !isReconciliation &&
             (p.type === 'RETURN' ||
               ref.startsWith('ERR-') ||
-              desc.includes('trả lại') ||
-              desc.includes('hàng lỗi'));
+              (!isExplicitVoucher && (desc.includes('trả lại') || desc.includes('hàng lỗi'))));
           const isAdvance =
             !isReconciliation &&
             !isReturn &&
@@ -2048,33 +2099,69 @@ async function _runSyncPrismaFinanceToAccountingTables(db) {
         const accDep = Math.max(rawAccDep, depFromJournal);
         const resVal = Math.max(0, orig - accDep);
         const depMonths = Number(a.soThangKhauHao) || 36;
-        const monthlyDep = depMonths > 0 ? Math.round(orig / depMonths) : 0;
+
+        const loaiLower = String(a.loai || '').toLowerCase();
+        const resolvedCategory = loaiLower.includes('vận tải') || loaiLower.includes('xe') || loaiLower.includes('ô tô')
+          ? 'vehicle'
+          : loaiLower.includes('văn phòng') || loaiLower.includes('máy tính')
+            ? 'office'
+            : loaiLower.includes('nhà') || loaiLower.includes('xưởng') || loaiLower.includes('vật kiến trúc')
+              ? 'building'
+              : loaiLower.includes('phần mềm') || loaiLower.includes('vô hình') || loaiLower.includes('bản quyền')
+                ? 'intangible'
+                : 'machinery';
+        const resolvedAccountCode = resolvedCategory === 'intangible' ? '213' : '211';
+        const resolvedDepAccountCode = resolvedCategory === 'intangible' ? '2143' : '2141';
+        const resolvedManager =
+          (a.nguoiSuDungId && employeeById.get(a.nguoiSuDungId)?.fullName) ||
+          a.nguoiSuDungId ||
+          'Ban Quản lý';
+        const statusLower = String(a.trangThai || '').toLowerCase();
+        const resolvedStatus = statusLower.includes('bảo dưỡng') || statusLower.includes('sửa')
+          ? 'maintenance'
+          : statusLower.includes('hỏng') || statusLower.includes('ngưng')
+            ? 'broken'
+            : statusLower.includes('thanh lý')
+              ? 'liquidated'
+              : 'active';
+        const resolvedStatusLabel =
+          resolvedStatus === 'maintenance'
+            ? 'Đang bảo dưỡng'
+            : resolvedStatus === 'broken'
+              ? 'Hỏng / Ngưng dùng'
+              : resolvedStatus === 'liquidated'
+                ? 'Đã thanh lý'
+                : 'Đang sử dụng';
 
         await dbRun(
           db,
           `INSERT OR REPLACE INTO fixed_assets (
             id, code, name, category, category_label, original_price, residual_value,
-            accumulated_depreciation, monthly_depreciation, department, manager_name, status, status_label,
+            accumulated_depreciation, department, manager_name, status, status_label,
             serial_number, purchased_date, depreciation_months, depreciation_start_date,
             maintenance_cycle, notes, account_code, depreciation_account_code, updated_at
-          ) VALUES (?, ?, ?, 'machinery', ?, ?, ?, ?, ?, ?, ?, 'active', 'Đang sử dụng', ?, ?, ?, ?, ?, ?, '211', '2141', CURRENT_TIMESTAMP)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
           [
             id,
             assetCode,
             a.tenTaiSan || 'Tài sản cố định',
+            resolvedCategory,
             a.loai || 'Máy móc, thiết bị',
             orig,
             resVal,
             accDep,
-            monthlyDep,
-            a.donVi || 'Bộ phận sản xuất',
-            a.nguoiSuDungId || 'Ban Quản lý',
+            a.donVi || a.viTri || 'Bộ phận sản xuất',
+            resolvedManager,
+            resolvedStatus,
+            resolvedStatusLabel,
             a.serialNumber || a.model || '',
             formatEpochToVNDate(a.ngayMua),
             depMonths,
             formatEpochToVNDate(a.ngayBatDauKhauHao || a.ngayMua),
             a.chuKyBaoDuong ? `${a.chuKyBaoDuong} tháng` : '6 tháng',
             a.ghiChu || '',
+            resolvedAccountCode,
+            resolvedDepAccountCode,
           ]
         );
       }

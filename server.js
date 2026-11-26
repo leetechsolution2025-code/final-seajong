@@ -37,9 +37,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'seajong_default_secret_key_2026';
 // Khởi tạo PrismaClient với cơ chế Auto-Heal an toàn (serialized reconnect + WAL + busy_timeout)
 async function configurePrismaSqlitePragmas(client) {
   try {
-    await client.$executeRawUnsafe('PRAGMA journal_mode = WAL;');
+    // PRAGMA journal_mode và busy_timeout trả về 1 dòng kết quả trong SQLite nên phải dùng $queryRawUnsafe
+    await client.$queryRawUnsafe('PRAGMA journal_mode = WAL;');
+    await client.$queryRawUnsafe('PRAGMA busy_timeout = 30000;');
     await client.$executeRawUnsafe('PRAGMA synchronous = FULL;');
-    await client.$executeRawUnsafe('PRAGMA busy_timeout = 30000;');
   } catch (e) {
     console.warn('⚠️ Không thể cấu hình SQLite PRAGMA cho Prisma:', e?.message);
   }
@@ -12392,7 +12393,8 @@ app.get('/api/logistics/tasks/pending-import', async (_req, res) => {
     );
 
     res.json({ items: enrichedTasks });
-  } catch (_) {
+  } catch (err) {
+    console.error('Lỗi tải danh sách nhiệm vụ:', err?.message || err);
     res.json({ items: [] });
   }
 });
@@ -12449,7 +12451,8 @@ app.get('/api/plan-finance/warehouses', async (_req, res) => {
       soMatHang: w.stocks.length,
       tongSoLuong: w.stocks.reduce((s, st) => s + (st.soLuong || 0), 0),
     })));
-  } catch (_) {
+  } catch (err) {
+    console.error('Lỗi GET /api/plan-finance/warehouses:', err?.message || err);
     res.json([]);
   }
 });
@@ -12457,13 +12460,13 @@ app.get('/api/plan-finance/warehouses', async (_req, res) => {
 app.get('/api/plan-finance/sales-active', async (req, res) => {
   try {
     const includeId = req.query.includeId ? String(req.query.includeId) : undefined;
-    const [contracts, saleOrders, retailInvoices] = await Promise.all([
-      prisma.contract.findMany({
-        where: includeId ? { OR: [{ trangThai: 'active' }, { id: includeId }] } : { trangThai: 'active' },
-        orderBy: { createdAt: 'desc' },
-        take: 100,
-        select: { id: true, code: true, trangThai: true, giaTriHopDong: true, customer: { select: { name: true, address: true } } },
-      }),
+    const [contracts, saleOrders, retailInvoices, exportTasks] = await Promise.all([
+      includeId
+        ? prisma.contract.findMany({
+            where: { id: includeId },
+            select: { id: true, code: true, trangThai: true, giaTriHopDong: true, customer: { select: { name: true, address: true } } },
+          })
+        : Promise.resolve([]),
       prisma.saleOrder.findMany({
         where: includeId ? {
           OR: [
@@ -12492,27 +12495,36 @@ app.get('/api/plan-finance/sales-active', async (req, res) => {
           logisticsTickets: { select: { id: true, type: true, status: true } },
         },
       }),
-      prisma.retailInvoice.findMany({
-        where: includeId ? { OR: [{ trangThai: { in: ['partial'] } }, { id: includeId }] } : { trangThai: { in: ['partial'] } },
-        orderBy: { createdAt: 'desc' },
-        take: 100,
-        select: { id: true, code: true, trangThai: true, tongCong: true, tenKhach: true, diaChi: true },
-      }),
+      includeId
+        ? prisma.retailInvoice.findMany({
+            where: { id: includeId },
+            select: { id: true, code: true, trangThai: true, tongCong: true, tenKhach: true, diaChi: true },
+          })
+        : Promise.resolve([]),
+      prisma.task.findMany({
+        where: {
+          status: { notIn: ['done', 'completed', 'cancelled'] },
+          title: { contains: 'Lệnh xuất kho' },
+        },
+        select: { title: true, description: true },
+      }).catch(() => []),
     ]);
+
+    const exportTaskTexts = (exportTasks || []).map(t => `${t.title || ''} ${t.description || ''}`);
 
     const activeSaleOrders = saleOrders.filter(so => {
       if (includeId && so.id === includeId) return true;
       if (so.trangThaiKho === 'exported') return false;
       const tickets = so.logisticsTickets || [];
       const packingTickets = tickets.filter(t => t.type === 'BATCH_PACKING');
-      if (packingTickets.length > 0) {
-        // Loại bỏ đơn đã hoàn thành (COMPLETED) hoặc chưa thực hiện gom hàng (PENDING)
-        const hasCompleted = packingTickets.every(t => t.status === 'COMPLETED');
-        if (hasCompleted) return false;
-        const hasPendingOnly = packingTickets.every(t => t.status === 'PENDING');
-        if (hasPendingOnly) return false;
-      }
-      return true;
+      const hasActivePackingTicket = packingTickets.some(
+        t => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && t.status !== 'PENDING'
+      );
+      const hasPendingExportTask = so.code
+        ? exportTaskTexts.some(text => text.includes(so.code))
+        : false;
+      // Chỉ hiển thị đơn có lệnh xuất kho đang hiệu lực
+      return hasActivePackingTicket || hasPendingExportTask;
     });
 
     res.json([
@@ -12548,7 +12560,8 @@ app.get('/api/plan-finance/sales-active', async (req, res) => {
         trangThai: inv.trangThai,
       })),
     ]);
-  } catch (_) {
+  } catch (err) {
+    console.error('Lỗi GET /api/plan-finance/sales-active:', err?.message || err);
     res.json([]);
   }
 });
@@ -25880,6 +25893,32 @@ async function executeLogisticsRetentionCleanup({
     return delRes.count;
   }
 
+  // Trường hợp dọn dẹp Đơn mua hàng (PURCHASE_ORDERS)
+  if (type === 'PURCHASE_ORDERS') {
+    const completedStatuses = ['completed', 'cancelled'];
+    const inProgressStatuses = ['draft', 'ordered', 'received', 'disputed', 'paused'];
+    const statusIn = [
+      ...(applyCompleted ? completedStatuses : []),
+      ...(applyInProgress ? inProgressStatuses : []),
+    ];
+    if (statusIn.length === 0) return 0;
+
+    const eligiblePOs = await prisma.purchaseOrder.findMany({
+      where: {
+        trangThai: { in: statusIn },
+        createdAt: { lt: cutoffDate },
+      },
+      select: { id: true },
+    });
+    if (eligiblePOs.length === 0) return 0;
+    const poIds = eligiblePOs.map((o) => o.id);
+
+    await prisma.purchaseOrderActivity.deleteMany({ where: { purchaseOrderId: { in: poIds } } }).catch(() => {});
+    await prisma.purchaseOrderItem.deleteMany({ where: { purchaseOrderId: { in: poIds } } });
+    const delRes = await prisma.purchaseOrder.deleteMany({ where: { id: { in: poIds } } });
+    return delRes.count;
+  }
+
   // Trường hợp dọn dẹp Hồ sơ hàng lỗi trên trang Xử lý hàng lỗi (DEFECT_RECORDS)
   if (type === 'DEFECT_RECORDS') {
     const defectOrConditions = [];
@@ -26201,6 +26240,21 @@ app.get('/api/logistics/completed-cleanup-settings', async (req, res) => {
         eligibleTicketsCount = await prisma.saleOrder.count({
           where: {
             NOT: { code: { startsWith: 'LSX' } },
+            trangThai: { in: statusIn },
+            createdAt: { lt: cutoffDate },
+          },
+        });
+      }
+    } else if (type === 'PURCHASE_ORDERS') {
+      const completedStatuses = ['completed', 'cancelled'];
+      const inProgressStatuses = ['draft', 'ordered', 'received', 'disputed', 'paused'];
+      const statusIn = [
+        ...(applyCompleted ? completedStatuses : []),
+        ...(applyInProgress ? inProgressStatuses : []),
+      ];
+      if (statusIn.length > 0) {
+        eligibleTicketsCount = await prisma.purchaseOrder.count({
+          where: {
             trangThai: { in: statusIn },
             createdAt: { lt: cutoffDate },
           },

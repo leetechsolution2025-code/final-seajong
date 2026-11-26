@@ -3159,6 +3159,21 @@ export default defineConfig({
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom'],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (id.includes('react-bootstrap-icons') || id.includes('lucide-react')) return 'vendor-icons';
+          if (id.includes('apexcharts') || id.includes('react-apexcharts')) return 'vendor-charts';
+          if (id.includes('/xlsx/')) return 'vendor-xlsx';
+          if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('html2pdf')) return 'vendor-pdf';
+          if (id.includes('framer-motion') || id.includes('motion-dom')) return 'vendor-motion';
+          if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('react-router')) return 'vendor-react';
+        },
+      },
+    },
+  },
   server: {
     port: 5175,
     headers: {

@@ -30,6 +30,7 @@ import { Offcanvas } from '@/components/common/Offcanvas';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Button } from '@/components/common/Button';
 import { EventOffcanvas } from '@/components/common/EventOffcanvas';
+import { DataRetentionOffcanvas } from '@/components/common/DataRetentionOffcanvas';
 import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { TaoYeuCauMuaHangModal } from '@/components/plan-finance/mua_hang/TaoYeuCauMuaHangModal';
 import TaoDonMuaHangModal from '@/components/plan-finance/mua_hang/TaoDonMuaHangModal';
@@ -97,6 +98,7 @@ const fmtVnd = (n: number | null | undefined) =>
 export const PurchaseOverviewPage: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isEventCalendarOpen, setIsEventCalendarOpen] = useState(false);
+  const [isCleanupOffcanvasOpen, setIsCleanupOffcanvasOpen] = useState(false);
 
   // ── STEP 1: YÊU CẦU MUA HÀNG ──────────────────────────────────────────────
   const [requests, setRequests] = useState<any[]>([]);
@@ -228,9 +230,9 @@ export const PurchaseOverviewPage: React.FC = () => {
     return filteredRequests.slice(start, start + reqPageSize);
   }, [filteredRequests, reqPage, reqPageSize]);
 
-  // ── LỌC DỮ LIỆU BƯỚC 2 (ĐƠN HÀNG ĐANG HOẠT ĐỘNG) ──
+  // ── LỌC DỮ LIỆU BƯỚC 2 (ĐƠN HÀNG ĐANG HOẠT ĐỘNG — CHƯA HOÀN THÀNH / CHƯA HUỶ) ──
   const activeOrders = useMemo(
-    () => orders.filter((o) => o.trangThai !== 'cancelled'),
+    () => orders.filter((o) => o.trangThai !== 'cancelled' && o.trangThai !== 'completed'),
     [orders]
   );
 
@@ -253,8 +255,22 @@ export const PurchaseOverviewPage: React.FC = () => {
     return filteredOrders.slice(start, start + ordPageSize);
   }, [filteredOrders, ordPage, ordPageSize]);
 
-  // ── LỌC DỮ LIỆU BƯỚC 3 (ĐÃ HUỶ BỎ / TỪ CHỐI) ──
+  // ── LỌC DỮ LIỆU BƯỚC 3 (HOÀN THÀNH & HUỶ BỎ) ──
   const cancelledItems = useMemo(() => {
+    const completedOrds = orders
+      .filter((o) => o.trangThai === 'completed')
+      .map((o) => ({
+        id: o.id,
+        itemType: 'completed_order' as const,
+        code: o.code || o.id,
+        title: `Đơn mua hàng (${o.items?.length || 0} mặt hàng)`,
+        partnerOrDept: o.supplier?.name || 'Chưa chọn nhà cung cấp',
+        date: o.ngayDat || o.createdAt,
+        amount: o.tongTien || 0,
+        status: o.trangThai,
+        raw: o,
+      }));
+
     const cancelledReqs = requests
       .filter((r) => r.trangThai === 'tu-choi' || r.trangThai === 'huy-bo')
       .map((r) => ({
@@ -283,7 +299,7 @@ export const PurchaseOverviewPage: React.FC = () => {
         raw: o,
       }));
 
-    return [...cancelledOrds, ...cancelledReqs].sort(
+    return [...completedOrds, ...cancelledOrds, ...cancelledReqs].sort(
       (a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime()
     );
   }, [requests, orders]);
@@ -334,10 +350,10 @@ export const PurchaseOverviewPage: React.FC = () => {
       {
         num: 3,
         id: 'cancelled',
-        title: 'Đã huỷ bỏ',
-        mobileTitle: 'Đã huỷ',
-        desc: 'Các yêu cầu & đơn mua đã huỷ',
-        icon: <XCircle size={16} />,
+        title: 'Hoàn thành và huỷ bỏ',
+        mobileTitle: 'Xong & Huỷ',
+        desc: 'Đơn hàng hoàn thành, huỷ bỏ & yêu cầu từ chối',
+        icon: <Check2All size={16} />,
         badge: `${cancelledItems.length} mục`,
       },
     ],
@@ -539,6 +555,12 @@ export const PurchaseOverviewPage: React.FC = () => {
                   icon: <Calendar3 size={14} />,
                   onClick: () => setIsEventCalendarOpen(true),
                 },
+                {
+                  id: 'data-retention',
+                  label: 'Thiết lập xoá',
+                  icon: <ClockHistory size={14} />,
+                  onClick: () => setIsCleanupOffcanvasOpen(true),
+                },
               ]}
               onRefresh={fetchRequests}
             />
@@ -724,7 +746,6 @@ export const PurchaseOverviewPage: React.FC = () => {
                     { value: 'ordered', label: 'Đã đặt hàng' },
                     { value: 'received', label: 'Đã nhận hàng' },
                     { value: 'disputed', label: 'Đang khiếu nại' },
-                    { value: 'completed', label: 'Hoàn thành' },
                     { value: 'paused', label: 'Tạm dừng' },
                   ],
                   minWidth: '165px',
@@ -759,6 +780,12 @@ export const PurchaseOverviewPage: React.FC = () => {
                   label: 'Lịch sự kiện',
                   icon: <Calendar3 size={14} />,
                   onClick: () => setIsEventCalendarOpen(true),
+                },
+                {
+                  id: 'data-retention',
+                  label: 'Thiết lập xoá',
+                  icon: <ClockHistory size={14} />,
+                  onClick: () => setIsCleanupOffcanvasOpen(true),
                 },
               ]}
               onRefresh={fetchOrders}
@@ -961,7 +988,7 @@ export const PurchaseOverviewPage: React.FC = () => {
         )}
 
         {/* ════════════════════════════════════════════════════════════════════
-            BƯỚC 3: ĐÃ HUỶ BỎ
+            BƯỚC 3: HOÀN THÀNH VÀ HUỶ BỎ
             ════════════════════════════════════════════════════════════════════ */}
         {currentStep === 3 && (
           <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
@@ -971,7 +998,7 @@ export const PurchaseOverviewPage: React.FC = () => {
                 setCancelSearch(val);
                 setCancelPage(1);
               }}
-              searchPlaceholder="Tìm mã phiếu, đơn hàng hoặc đối tác đã huỷ..."
+              searchPlaceholder="Tìm mã phiếu, đơn hàng hoàn thành hoặc đã huỷ..."
               filters={[
                 {
                   id: 'cancel-type',
@@ -982,10 +1009,11 @@ export const PurchaseOverviewPage: React.FC = () => {
                   },
                   options: [
                     { value: 'all', label: 'Tất cả phân loại' },
+                    { value: 'completed_order', label: 'Đơn mua hàng hoàn thành' },
                     { value: 'order', label: 'Đơn mua hàng đã huỷ' },
                     { value: 'request', label: 'Yêu cầu bị từ chối' },
                   ],
-                  minWidth: '175px',
+                  minWidth: '195px',
                 },
               ]}
               menuItems={[
@@ -994,6 +1022,12 @@ export const PurchaseOverviewPage: React.FC = () => {
                   label: 'Lịch sự kiện',
                   icon: <Calendar3 size={14} />,
                   onClick: () => setIsEventCalendarOpen(true),
+                },
+                {
+                  id: 'data-retention',
+                  label: 'Thiết lập xoá',
+                  icon: <ClockHistory size={14} />,
+                  onClick: () => setIsCleanupOffcanvasOpen(true),
                 },
               ]}
               onRefresh={() => {
@@ -1018,16 +1052,21 @@ export const PurchaseOverviewPage: React.FC = () => {
                   {paginatedCancelled.length === 0 && !reqLoading && !ordLoading ? (
                     <tr>
                       <td colSpan={6} className="py-12 text-center text-slate-400 text-[13px]">
-                        Không có yêu cầu hoặc đơn mua hàng nào đã huỷ.
+                        Không có đơn hàng hoàn thành hoặc chứng từ đã huỷ nào.
                       </td>
                     </tr>
                   ) : null}
-                  {paginatedCancelled.map((it) => (
+                  {paginatedCancelled.map((it) => {
+                    const isCompletedOrder = it.itemType === 'completed_order';
+                    return (
                     <SwipeableTableRow
                       key={`${it.itemType}-${it.id}`}
                       rowId={`pur-cancel-${it.itemType}-${it.id}`}
-                      editLabel="Khôi phục"
-                      onEdit={() => handleRestoreCancelled(it)}
+                      editLabel={isCompletedOrder ? 'Xem chi tiết' : 'Khôi phục'}
+                      onEdit={() => {
+                        if (isCompletedOrder) setSelectedOrder(it.raw);
+                        else handleRestoreCancelled(it);
+                      }}
                       onDelete={async () => {
                         if (it.itemType === 'request') {
                           await fetch(`/api/plan-finance/purchase-requests/${it.id}`, { method: 'DELETE' });
@@ -1051,12 +1090,15 @@ export const PurchaseOverviewPage: React.FC = () => {
                             {it.code}
                           </span>
                           <span
-                            className={`sm:hidden inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border whitespace-nowrap ${it.itemType === 'order'
-                                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                                : 'bg-amber-50 text-amber-700 border-amber-200'
-                              }`}
+                            className={`sm:hidden inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border whitespace-nowrap ${
+                              isCompletedOrder
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : it.itemType === 'order'
+                                  ? 'bg-slate-100 text-slate-600 border-slate-200'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200'
+                            }`}
                           >
-                            {it.itemType === 'order' ? 'Đơn hàng' : 'Yêu cầu'}
+                            {isCompletedOrder ? 'Hoàn thành' : it.itemType === 'order' ? 'Đã huỷ' : 'Yêu cầu'}
                           </span>
                         </div>
                         <div className="sm:hidden text-[11px] text-slate-500 mt-0.5 line-clamp-1">
@@ -1067,12 +1109,19 @@ export const PurchaseOverviewPage: React.FC = () => {
                       </td>
                       <td className="hidden sm:table-cell py-3 px-4 align-middle">
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold border whitespace-nowrap ${it.itemType === 'order'
-                              ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                              : 'bg-amber-50 text-amber-700 border-amber-200'
-                            }`}
+                          className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold border whitespace-nowrap ${
+                            isCompletedOrder
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : it.itemType === 'order'
+                                ? 'bg-slate-100 text-slate-600 border-slate-200'
+                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}
                         >
-                          {it.itemType === 'order' ? 'Đơn mua hàng' : 'Yêu cầu mua hàng'}
+                          {isCompletedOrder
+                            ? 'Hoàn thành'
+                            : it.itemType === 'order'
+                              ? 'Đơn mua đã huỷ'
+                              : 'Yêu cầu bị từ chối'}
                         </span>
                       </td>
                       <td className="hidden sm:table-cell py-3 px-4 align-middle">
@@ -1094,14 +1143,16 @@ export const PurchaseOverviewPage: React.FC = () => {
                         }}
                       >
                         <div className="inline-flex items-center gap-1 sm:gap-1.5">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            leftIcon={<ArrowCounterclockwise size={12} />}
-                            onClick={() => handleRestoreCancelled(it)}
-                          >
-                            <span className="hidden sm:inline">Khôi phục</span>
-                          </Button>
+                          {!isCompletedOrder && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              leftIcon={<ArrowCounterclockwise size={12} />}
+                              onClick={() => handleRestoreCancelled(it)}
+                            >
+                              <span className="hidden sm:inline">Khôi phục</span>
+                            </Button>
+                          )}
                           <Button
                             variant="danger"
                             size="sm"
@@ -1114,7 +1165,8 @@ export const PurchaseOverviewPage: React.FC = () => {
                         </div>
                       </td>
                     </SwipeableTableRow>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </FullWidthTable>
@@ -1128,7 +1180,7 @@ export const PurchaseOverviewPage: React.FC = () => {
                 setCancelPageSize(size);
                 setCancelPage(1);
               }}
-              itemName="chứng từ đã huỷ"
+              itemName="chứng từ"
             />
           </div>
         )}
@@ -1314,6 +1366,19 @@ export const PurchaseOverviewPage: React.FC = () => {
         <EventOffcanvas
           isOpen={isEventCalendarOpen}
           onClose={() => setIsEventCalendarOpen(false)}
+        />
+
+        <DataRetentionOffcanvas
+          isOpen={isCleanupOffcanvasOpen}
+          onClose={() => setIsCleanupOffcanvasOpen(false)}
+          ticketType="PURCHASE_ORDERS"
+          title="Thiết lập thời gian lưu trữ"
+          description="Cấu hình tự động dọn dẹp đơn mua hàng đã hoàn thành hoặc huỷ bỏ quá thời hạn"
+          entityLabel="đơn mua hàng"
+          onCleanedUp={() => {
+            fetchOrders();
+            fetchRequests();
+          }}
         />
       </StepPage>
     </div>

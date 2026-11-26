@@ -866,12 +866,14 @@ export function TaoDonMuaHangTrucTiepModal({
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <SuggestionInput
                                 value={line.itemSearch}
-                                onChange={(val) => onItemSearch(line.id, val)}
+                                onChange={(val) => !isZeroPrice && onItemSearch(line.id, val)}
                                 onSelectSuggestion={(s) => {
+                                  if (isZeroPrice) return;
                                   const found = invPool.find((x) => x.id === s.id);
                                   if (found) selectItem(line.id, found);
                                 }}
-                                suggestions={itemSuggestions}
+                                suggestions={isZeroPrice ? [] : itemSuggestions}
+                                disabled={isZeroPrice}
                                 placeholder="Tìm tên hoặc mã vật tư..."
                                 emptyMessage="Không tìm thấy vật tư"
                               />

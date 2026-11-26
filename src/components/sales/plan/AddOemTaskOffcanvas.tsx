@@ -68,7 +68,7 @@ export function AddOemTaskOffcanvas({
       title={initialData ? "Cập nhật công việc" : "Thêm công việc"}
       description="Các công việc cần thực hiện ngay"
       icon={<ListTask size={22} />}
-      width="440px"
+      width="400px"
       confirmText={initialData ? "Cập nhật" : "Tiếp tục"}
       cancelText="Hủy"
       onConfirm={handleSave}

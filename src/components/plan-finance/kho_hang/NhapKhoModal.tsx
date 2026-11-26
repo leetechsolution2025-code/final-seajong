@@ -45,6 +45,7 @@ interface StockLine {
   ghiChu: string;
   bomCode?: string | null;
   dinhMucTen?: string | null;
+  lockedFromOrder?: boolean;
 }
 
 interface NhapKhoModalProps { 
@@ -420,7 +421,13 @@ export function NhapKhoModal({
         initialPurchaseOrderCode
       )
         .then((resolved) => {
-          setLines(resolved);
+          const lockInit = Boolean(
+            initialTaskId ||
+            initialPurchaseOrderId ||
+            initialPurchaseOrderCode ||
+            (initialMode && initialMode !== "manual")
+          );
+          setLines(resolved.map(r => ({ ...r, lockedFromOrder: lockInit })));
         })
         .finally(() => setResolvingItems(false));
     }
@@ -482,15 +489,46 @@ export function NhapKhoModal({
     if (mode !== "po") return;
     setPoLoading(true);
     setSelectedPO(null);
-    fetch("/api/plan-finance/purchasing?trangThai=received&limit=100")
-      .then(r => r.json())
-      .then(async d => {
-        const list = Array.isArray(d.items) ? d.items : [];
-        setPoList(list);
-        
+    Promise.all([
+      fetch("/api/plan-finance/purchasing?trangThai=received&limit=100").then(r => r.json()).catch(() => ({ items: [] })),
+      fetch("/api/logistics/tasks/pending-import").then(r => r.json()).catch(() => ({ items: [] })),
+    ])
+      .then(async ([d, pendingImportData]) => {
+        const allReceived: POSuggestion[] = Array.isArray(d?.items) ? d.items : [];
+        const pendingTasks: any[] = Array.isArray(pendingImportData?.items) ? pendingImportData.items : [];
+
+        // Chỉ giữ lại các đơn mua hàng thực sự có lệnh nhập kho đang chờ xử lý
+        const allowedPoCodes = new Set<string>();
+        const allowedPoIds = new Set<string>();
+        for (const t of pendingTasks) {
+          const blob = `${t.title || ""} ${t.description || ""} ${t.actualResult || ""}`;
+          const codeMatches = blob.match(/DH-\d{6,8}-\d+/gi);
+          if (codeMatches) codeMatches.forEach((c: string) => allowedPoCodes.add(c.toUpperCase()));
+          try {
+            if (t.actualResult) {
+              const parsed = JSON.parse(t.actualResult);
+              if (Array.isArray(parsed)) {
+                parsed.forEach((it: any) => {
+                  if (it?.purchaseOrderId) allowedPoIds.add(String(it.purchaseOrderId));
+                  if (it?.purchaseOrderCode) allowedPoCodes.add(String(it.purchaseOrderCode).toUpperCase());
+                });
+              }
+            }
+          } catch {}
+        }
+
         const keepLines = !!(initialItems && initialItems.length > 0);
         const targetPoId = initialPurchaseOrderId || (initialItems && initialItems[0]?.purchaseOrderId);
         const targetPoCode = initialPurchaseOrderCode || (initialItems && initialItems[0]?.purchaseOrderCode);
+
+        const list = allReceived.filter((po) => {
+          if (targetPoId && po.id === targetPoId) return true;
+          if (targetPoCode && po.code && po.code.toUpperCase() === String(targetPoCode).toUpperCase()) return true;
+          if (allowedPoIds.has(po.id)) return true;
+          if (po.code && allowedPoCodes.has(po.code.toUpperCase())) return true;
+          return false;
+        });
+        setPoList(list);
 
         // 1. Tìm theo PO ID hoặc Code trực tiếp nếu có
         if (targetPoId) {
@@ -634,6 +672,7 @@ export function NhapKhoModal({
               soLuongThucTe: it.soLuong, // mặc định thực tế = chứng từ
               donGia: it.donGia,
               viTriHang: "", viTriCot: "", viTriTang: "", ghiChu: "",
+              lockedFromOrder: true,
             })));
           } else {
             // Cập nhật donGia nếu lines hiện tại có donGia = 0
@@ -713,7 +752,7 @@ export function NhapKhoModal({
             setSoBienBanQC(taskQcCode);
           }
           const resolved = await resolveRawItemsToStockLines(parsed, taskQcCode);
-          setLines(resolved);
+          setLines(resolved.map(r => ({ ...r, lockedFromOrder: true })));
         }
       } catch (e) {
         console.error("Error parsing task result", e);
@@ -1009,6 +1048,19 @@ export function NhapKhoModal({
         {/* Center/Right wrapper for flex distribution */}
         <div className="nk-top-actions" style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "flex-end", gap: 16 }}>
           {/* Mode toggle */}
+          {(() => {
+            const hasSelectedCommand = Boolean(selectedPO || selectedWO);
+            const isSourceLocked =
+              success ||
+              hasSelectedCommand ||
+              Boolean(
+                (initialMode && initialMode !== "manual") ||
+                initialTaskId ||
+                initialPurchaseOrderId ||
+                initialPurchaseOrderCode
+              );
+            return (
+              <>
           <div className="nk-mode-select" style={{ display: "flex", background: "var(--muted)", padding: 4, borderRadius: 10, gap: 4, border: "1px solid rgba(0,0,0,0.05)" }}>
             {([
               { val: "manual" as const, label: "Nhập thủ công", icon: "bi-pencil" },
@@ -1016,13 +1068,14 @@ export function NhapKhoModal({
               { val: "production" as const, label: "Thành phẩm sản xuất", icon: "bi-box-seam" },
               { val: "return" as const, label: "Hàng trả lại", icon: "bi-arrow-return-left" }
             ]).map(m => (
-              <button key={m.val} onClick={() => setMode(m.val)} style={{
+              <button key={m.val} type="button" disabled={isSourceLocked} onClick={() => !isSourceLocked && setMode(m.val)} style={{
                 display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center",
                 padding: "6px 14px", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600,
-                cursor: "pointer", transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                cursor: isSourceLocked ? "not-allowed" : "pointer", transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
                 background: mode === m.val ? "var(--card)" : "transparent",
                 color: mode === m.val ? "var(--foreground)" : "var(--muted-foreground)",
                 boxShadow: mode === m.val ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
+                opacity: isSourceLocked && mode !== m.val ? 0.5 : 1,
                 whiteSpace: "nowrap"
               }}>
                 <i className={`bi ${m.icon}`} style={{ fontSize: 14, opacity: mode === m.val ? 1 : 0.7 }} />
@@ -1042,11 +1095,12 @@ export function NhapKhoModal({
                 <div className="position-relative" style={{ position: "relative", width: 280 }}>
                   <Select
                     value={selectedPO?.id ?? ""}
-                    onChange={e => onSelectPOById(e.target.value)}
+                    onChange={e => !isSourceLocked && onSelectPOById(e.target.value)}
+                    disabled={isSourceLocked}
                     options={[
                       { value: "", label: "Chọn đơn mua hàng" },
                       ...(poList.length === 0
-                        ? [{ value: "__empty__", label: "Không có đơn hàng", disabled: true }]
+                        ? [{ value: "__empty__", label: "Không có lệnh nhập đơn mua", disabled: true }]
                         : poList.map(po => ({
                             value: po.id,
                             label: `${po.code ?? po.id}${po.supplier?.name ? ` — ${po.supplier.name}` : ""}`,
@@ -1081,7 +1135,8 @@ export function NhapKhoModal({
                 <div className="position-relative" style={{ position: "relative", width: 290 }}>
                   <Select
                     value={selectedWO?.id ?? ""}
-                    onChange={e => onSelectWOById(e.target.value)}
+                    onChange={e => !isSourceLocked && onSelectWOById(e.target.value)}
+                    disabled={isSourceLocked}
                     options={[
                       {
                         value: "",
@@ -1117,6 +1172,9 @@ export function NhapKhoModal({
               )}
             </div>
           )}
+              </>
+            );
+          })()}
 
           <div style={{ width: 1, height: 24, background: "var(--border)", margin: "0 4px" }} className="d-none d-lg-block" />
 
@@ -1273,8 +1331,8 @@ export function NhapKhoModal({
                 <Select
                   label="Loại nhập kho"
                   value={loaiNhapKho}
-                  onChange={e => !success && setLoaiNhapKho(e.target.value)}
-                  disabled={success}
+                  onChange={e => !success && !(selectedPO || selectedWO) && setLoaiNhapKho(e.target.value)}
+                  disabled={success || Boolean(selectedPO || selectedWO)}
                   options={[
                     { value: "Nhập mua hàng", label: "Nhập mua hàng" },
                     { value: "Nhập từ sản xuất", label: "Nhập từ sản xuất" },
@@ -1292,8 +1350,8 @@ export function NhapKhoModal({
                   label="Kho nhập"
                   required
                   value={toWarehouseId}
-                  onChange={e => !success && setToWarehouseId(e.target.value)}
-                  disabled={success}
+                  onChange={e => !success && !(Boolean(selectedPO || selectedWO) && Boolean(toWarehouseId)) && setToWarehouseId(e.target.value)}
+                  disabled={success || (Boolean(selectedPO || selectedWO) && Boolean(toWarehouseId))}
                   options={[
                     { value: "", label: "Chọn kho" },
                     ...warehouses.map(w => ({ value: w.id, label: w.name })),
@@ -1454,8 +1512,8 @@ export function NhapKhoModal({
                 onSelectItem={item => selectItem(line.id, item)}
                 onUpdate={(key, val) => updateLine(line.id, key, val)}
                 onRemove={() => removeLine(line.id)}
-                canRemove={lines.length > 1}
-                locked={success}
+                canRemove={!line.lockedFromOrder && lines.length > 1}
+                locked={success || Boolean(line.lockedFromOrder)}
               />
             ))}
             <div className="nk-add-line-wrapper" style={{ padding: "8px 10px", borderTop: "1px dashed var(--border)" }}>
