@@ -1617,7 +1617,16 @@ export function TaoDonHangModal({ open, onClose, customer, onSaved, type = "agen
 
   const setInfoField = (k: string) => (e: any) => {
     if (isOrderReadOnly) return;
-    setInfo(f => ({ ...f, [k]: e.target.type === "number" ? Number(e.target.value) : e.target.value }));
+    const rawVal = e && typeof e === "object" && "target" in e ? e.target?.value : e;
+    const isNumericField =
+      k === "chietKhauTong" || k === "thue" || k === "chiPhiKhac" || k === "daThanhToan";
+    const nextVal = isNumericField
+      ? (() => {
+          const n = Number(rawVal);
+          return Number.isFinite(n) ? Math.max(0, n) : 0;
+        })()
+      : rawVal;
+    setInfo(f => ({ ...f, [k]: nextVal }));
   };
 
   const addRow = () => {
