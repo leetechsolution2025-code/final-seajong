@@ -1,10 +1,10 @@
 {
-  "scope": "APPROVAL_DOCUMENTS",
+  "scope": "PRODUCTION_ORDERS",
   "enabled": true,
   "retentionDays": 30,
   "applyInProgress": false,
   "applyCompleted": true,
-  "lastRunAt": "2026-11-27T03:42:09.248Z",
-  "lastDeletedCount": 3,
-  "updatedAt": "2026-11-27T03:42:09.248Z"
+  "lastRunAt": "2026-11-28T08:27:22.832Z",
+  "lastDeletedCount": 5,
+  "updatedAt": "2026-11-28T08:27:22.832Z"
 }

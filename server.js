@@ -13355,10 +13355,19 @@ async function filterTicketsForLogisticsUser(tickets, userCtx) {
 }
 
 function computeLogisticsItemStockForTicket(item, ticket) {
-  const stocks = item.inventoryItem?.stocks || [];
-  if (stocks.length === 0) {
+  const allStocks = item.inventoryItem?.stocks || [];
+  // Gom hàng & xuất kho chỉ tính tồn từ các kho hợp lệ (Kho thương mại KHO-CHINH & Kho sản xuất lắp ráp KVP), loại trừ Kho hàng lỗi (KHO-LOI)
+  const stocks = allStocks.filter((s) => {
+    const code = String(s.warehouse?.code || '').toUpperCase();
+    const name = String(s.warehouse?.name || '').toLowerCase();
+    return code !== 'KHO-LOI' && !name.includes('lỗi');
+  });
+  if (allStocks.length === 0) {
     const qty = Math.max(0, Number(item.inventoryItem?.soLuong) || 0);
     return { totalStock: qty, totalHeld: 0, freeStock: qty, heldForThisItem: 0, thucTon: qty };
+  }
+  if (stocks.length === 0) {
+    return { totalStock: 0, totalHeld: 0, freeStock: 0, heldForThisItem: 0, thucTon: 0 };
   }
   const totalStock = stocks.reduce((acc, s) => acc + Math.max(0, Number(s.soLuong) || 0), 0);
   const totalHeld = stocks.reduce((acc, s) => acc + Math.max(0, Number(s.soLuongGiu) || 0), 0);
@@ -13383,27 +13392,29 @@ function computeLogisticsItemStockForTicket(item, ticket) {
     .filter((r) => r.ticketItemId && r.ticketItemId !== item.id)
     .reduce((acc, r) => acc + Math.max(0, Number(r.reservedQty) || 0), 0);
 
-  // 3. Với soLuongGiu chưa gắn reservation: chỉ tính là giữ cho đơn này nếu kho đó có tồn thực > 0
-  //    và được giữ tại/sau thời điểm tạo đơn (tránh lấy nhầm hàng đã giữ cho đơn cũ/đơn khác)
+  // 3. Với soLuongGiu chưa gắn reservation: tính xuyên các kho hợp lệ (trường hợp giữ chỗ ở KHO-CHINH nhưng hàng sản xuất nhập vào KVP)
+  //    chỉ tính là giữ cho đơn này nếu tổng tồn thực > 0 và thời điểm giữ tại/sau lúc tạo đơn
   const orderCreatedAtMs = ticket?.saleOrder?.createdAt
     ? new Date(ticket.saleOrder.createdAt).getTime()
     : (ticket?.createdAt ? new Date(ticket.createdAt).getTime() : 0);
 
   let eligibleUnlinkedHold = 0;
-  for (const s of stocks) {
-    const sQty = Math.max(0, Number(s.soLuong) || 0);
-    const sHeld = Math.max(0, Number(s.soLuongGiu) || 0);
-    if (sQty <= 0 || sHeld <= 0) continue;
-    const sExplicitOthers = (Array.isArray(s.reservations) ? s.reservations : [])
-      .filter((r) => r.ticketItemId && r.ticketItemId !== item.id)
-      .reduce((acc, r) => acc + Math.max(0, Number(r.reservedQty) || 0), 0);
-    const unlinkedHold = Math.max(0, sHeld - sExplicitOthers);
-    if (unlinkedHold <= 0) continue;
+  if (totalStock > 0) {
+    for (const s of stocks) {
+      const sHeld = Math.max(0, Number(s.soLuongGiu) || 0);
+      if (sHeld <= 0) continue;
+      const sExplicitOthers = (Array.isArray(s.reservations) ? s.reservations : [])
+        .filter((r) => r.ticketItemId && r.ticketItemId !== item.id)
+        .reduce((acc, r) => acc + Math.max(0, Number(r.reservedQty) || 0), 0);
+      const unlinkedHold = Math.max(0, sHeld - sExplicitOthers);
+      if (unlinkedHold <= 0) continue;
 
-    const sUpdatedMs = s.updatedAt ? new Date(s.updatedAt).getTime() : 0;
-    if (!orderCreatedAtMs || sUpdatedMs >= orderCreatedAtMs - 60000) {
-      eligibleUnlinkedHold += Math.min(sQty, unlinkedHold);
+      const sUpdatedMs = s.updatedAt ? new Date(s.updatedAt).getTime() : 0;
+      if (!orderCreatedAtMs || sUpdatedMs >= orderCreatedAtMs - 60000) {
+        eligibleUnlinkedHold += unlinkedHold;
+      }
     }
+    eligibleUnlinkedHold = Math.min(totalStock, eligibleUnlinkedHold);
   }
 
   const heldForThisItem = Math.min(
@@ -13728,7 +13739,7 @@ app.get('/api/logistics/batch-packing', async (req, res) => {
               include: {
                 stocks: {
                   include: {
-                    warehouse: { select: { code: true } },
+                    warehouse: { select: { id: true, code: true, name: true } },
                     reservations: { select: { id: true, ticketItemId: true, reservedQty: true } }
                   }
                 }
@@ -13754,10 +13765,28 @@ app.get('/api/logistics/batch-packing', async (req, res) => {
         const key = `${ngayGiaoStr}_${rawKey}`;
 
         let viTriStr = null;
-        if (item.inventoryItem?.stocks && item.inventoryItem.stocks.length > 0) {
-          const stock = item.inventoryItem.stocks.find(s => s.viTriHang || s.viTriCot || s.viTriTang);
-          if (stock) {
-            viTriStr = [stock.viTriTang && `Tầng ${stock.viTriTang}`, stock.viTriCot && `Cột ${stock.viTriCot}`, stock.viTriHang && `Hàng ${stock.viTriHang}`].filter(Boolean).join(" - ");
+        const eligibleStocks = (item.inventoryItem?.stocks || []).filter((s) => {
+          const code = String(s.warehouse?.code || '').toUpperCase();
+          const name = String(s.warehouse?.name || '').toLowerCase();
+          return code !== 'KHO-LOI' && !name.includes('lỗi');
+        });
+        const warehouseStocks = eligibleStocks
+          .map((s) => {
+            const loc = [s.viTriTang && `Tầng ${s.viTriTang}`, s.viTriCot && `Cột ${s.viTriCot}`, s.viTriHang && `Hàng ${s.viTriHang}`].filter(Boolean).join(" - ") || null;
+            return {
+              warehouseId: s.warehouse?.id || s.warehouseId || '',
+              warehouseCode: s.warehouse?.code || '',
+              warehouseName: s.warehouse?.name || (s.warehouse?.code === 'KVP' ? 'Kho sản xuất và lắp ráp' : 'Kho thương mại'),
+              soLuong: Math.max(0, Number(s.soLuong) || 0),
+              viTri: loc,
+            };
+          })
+          .filter((ws) => ws.soLuong > 0 || ws.viTri);
+
+        if (warehouseStocks.length > 0) {
+          const withLoc = warehouseStocks.filter((ws) => ws.viTri);
+          if (withLoc.length > 0) {
+            viTriStr = withLoc.map((ws) => `${ws.warehouseName}: ${ws.viTri}`).join(' | ');
           }
         }
         const stockInfo = computeLogisticsItemStockForTicket(item, ticket);
@@ -13773,6 +13802,7 @@ app.get('/api/logistics/batch-packing', async (req, res) => {
             imageUrl: item.inventoryItem?.imageUrl || null,
             images: [],
             viTriKho: viTriStr,
+            warehouseStocks,
             tongSoLuong: 0,
             tongDaNhat: 0,
             _heldAcc: 0,
@@ -26856,13 +26886,15 @@ app.post('/api/plan-finance/stock-movements/batch-xuat', async (req, res) => {
         }
         if (!itemId) continue;
 
+        const lineWarehouseId = line.fromWarehouseId || fromWarehouseId || null;
+
         let currentStock = null;
-        if (fromWarehouseId) {
+        if (lineWarehouseId) {
           currentStock = await tx.inventoryStock.findUnique({
             where: {
               inventoryItemId_warehouseId: {
                 inventoryItemId: itemId,
-                warehouseId: fromWarehouseId,
+                warehouseId: lineWarehouseId,
               },
             },
           });
@@ -26874,7 +26906,7 @@ app.post('/api/plan-finance/stock-movements/batch-xuat', async (req, res) => {
         const mov = await tx.stockMovement.create({
           data: {
             inventoryItemId: itemId,
-            fromWarehouseId: fromWarehouseId || null,
+            fromWarehouseId: lineWarehouseId,
             type: 'xuat',
             soLuong: qty,
             soLuongCT: line.soLuongYC ? parseFloat(line.soLuongYC) : qty,
@@ -26888,20 +26920,21 @@ app.post('/api/plan-finance/stock-movements/batch-xuat', async (req, res) => {
         });
         createdMovements.push(mov);
 
-        // Giảm tồn kho theo kho (và giải phóng số lượng giữ chỗ tương ứng nếu có)
-        if (fromWarehouseId) {
+        // Giảm tồn kho theo kho của từng dòng (và giải phóng số lượng giữ chỗ tương ứng kể cả khi giữ chỗ nằm ở kho khác như KHO-CHINH)
+        if (lineWarehouseId) {
           const currentGiu = currentStock ? (currentStock.soLuongGiu || 0) : 0;
-          const nextGiu = Math.max(0, currentGiu - qty);
+          const releasedHere = Math.min(currentGiu, qty);
+          const nextGiu = Math.max(0, currentGiu - releasedHere);
           await tx.inventoryStock.upsert({
             where: {
               inventoryItemId_warehouseId: {
                 inventoryItemId: itemId,
-                warehouseId: fromWarehouseId,
+                warehouseId: lineWarehouseId,
               },
             },
             create: {
               inventoryItemId: itemId,
-              warehouseId: fromWarehouseId,
+              warehouseId: lineWarehouseId,
               soLuong: 0,
             },
             update: {
@@ -26909,6 +26942,31 @@ app.post('/api/plan-finance/stock-movements/batch-xuat', async (req, res) => {
               ...(currentGiu > 0 ? { soLuongGiu: nextGiu } : {}),
             },
           });
+
+          // Nếu số lượng giữ chỗ của đơn nằm ở kho khác (ví dụ KHO-CHINH giữ chỗ nhưng xuất từ KVP), giải phóng nốt để tránh giữ chỗ ảo
+          let remainingToRelease = Math.max(0, qty - releasedHere);
+          if (remainingToRelease > 0) {
+            const otherHeldStocks = await tx.inventoryStock.findMany({
+              where: {
+                inventoryItemId: itemId,
+                warehouseId: { not: lineWarehouseId },
+                soLuongGiu: { gt: 0 },
+              },
+              orderBy: { updatedAt: 'desc' },
+            });
+            for (const oStock of otherHeldStocks) {
+              if (remainingToRelease <= 0) break;
+              const oGiu = Number(oStock.soLuongGiu) || 0;
+              const releaseQty = Math.min(oGiu, remainingToRelease);
+              if (releaseQty > 0) {
+                await tx.inventoryStock.update({
+                  where: { id: oStock.id },
+                  data: { soLuongGiu: Math.max(0, oGiu - releaseQty) },
+                });
+                remainingToRelease -= releaseQty;
+              }
+            }
+          }
         }
 
         // Giảm tổng tồn

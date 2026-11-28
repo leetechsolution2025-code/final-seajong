@@ -27,6 +27,14 @@ interface BatchItemOrder {
   assignedTo?: string;
 }
 
+interface BatchWarehouseStock {
+  warehouseId: string;
+  warehouseCode: string;
+  warehouseName: string;
+  soLuong: number;
+  viTri: string | null;
+}
+
 interface BatchItem {
   id: string;
   ticketItemId: string;
@@ -36,6 +44,7 @@ interface BatchItem {
   imageUrl: string | null;
   images?: string[];
   viTriKho: string | null;
+  warehouseStocks?: BatchWarehouseStock[];
   tongSoLuong: number;
   tongDaNhat: number;
   thucTon: number;
@@ -51,6 +60,7 @@ interface OrderGroupItem {
   imageUrl: string | null;
   images?: string[];
   viTriKho: string | null;
+  warehouseStocks?: BatchWarehouseStock[];
   soLuongYeuCau: number;
   thucTon: number;
   daNhat: number;
@@ -627,6 +637,7 @@ export function LogisticsBatchPacking({ currentStep = 1, onStepChange }: Logisti
           imageUrl: batchItem.imageUrl,
           images: batchItem.images,
           viTriKho: batchItem.viTriKho,
+          warehouseStocks: batchItem.warehouseStocks,
           soLuongYeuCau: order.soLuongTrongDon,
           thucTon: batchItem.thucTon || 0,
           daNhat: order.daNhatTrongDon || 0
@@ -1169,7 +1180,23 @@ export function LogisticsBatchPacking({ currentStep = 1, onStepChange }: Logisti
                                       {it.code}
                                     </span>
                                   )}
-                                  {it.viTriKho ? (
+                                  {it.warehouseStocks && it.warehouseStocks.length > 0 ? (
+                                    it.warehouseStocks.map((ws) => (
+                                      <span
+                                        key={ws.warehouseId || ws.warehouseCode}
+                                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border ${
+                                          ws.warehouseCode === "KVP"
+                                            ? "bg-indigo-50 text-indigo-700 border-indigo-100"
+                                            : "bg-blue-50 text-blue-700 border-blue-100"
+                                        }`}
+                                      >
+                                        <i className="bi bi-building text-[10px]" />
+                                        {ws.warehouseName}
+                                        {isManager ? `: ${ws.soLuong}` : ""}
+                                        {ws.viTri ? ` (${ws.viTri})` : ""}
+                                      </span>
+                                    ))
+                                  ) : it.viTriKho ? (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
                                       <i className="bi bi-geo-alt text-[10px]" />
                                       {it.viTriKho}
@@ -1509,7 +1536,23 @@ export function LogisticsBatchPacking({ currentStep = 1, onStepChange }: Logisti
                                 {item.tenHang}
                               </div>
                               <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                                {item.viTriKho ? (
+                                {item.warehouseStocks && item.warehouseStocks.length > 0 ? (
+                                  item.warehouseStocks.map((ws) => (
+                                    <span
+                                      key={ws.warehouseId || ws.warehouseCode}
+                                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border ${
+                                        ws.warehouseCode === "KVP"
+                                          ? "bg-indigo-50 text-indigo-700 border-indigo-100"
+                                          : "bg-blue-50 text-blue-700 border-blue-100"
+                                      }`}
+                                    >
+                                      <i className="bi bi-building text-[10px]" />
+                                      {ws.warehouseName}
+                                      {isManager ? `: ${ws.soLuong}` : ""}
+                                      {ws.viTri ? ` (${ws.viTri})` : ""}
+                                    </span>
+                                  ))
+                                ) : item.viTriKho ? (
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
                                     <i className="bi bi-geo-alt text-[10px]" />
                                     {item.viTriKho}

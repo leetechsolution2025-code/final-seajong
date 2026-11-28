@@ -106,7 +106,7 @@ const formatOrderNoteDisplay = (raw?: string | null): { editedLabel: string | nu
       const parsed = JSON.parse(text);
       const clean = parsed?.dinhMucTen || parsed?.note || parsed?.ghiChu || '';
       return { editedLabel: null, noteText: clean ? String(clean).trim() : null };
-    } catch {}
+    } catch { }
   }
 
   let editedLabel: string | null = null;
@@ -467,22 +467,22 @@ export const LogisticsOverviewPage: React.FC = () => {
             }
           } else {
             allExported = false;
-              if (tStatus === 'packed' || tStatus === 'picked') {
-                if (
-                  it.ticketType === 'MATERIAL_ALLOCATION' ||
-                  it.ticketType === 'MATERIAL_PICKING' ||
-                  it.type === 'material-export'
-                ) {
-                  hasMaterialPacked = true;
-                }
-                if (it.ticketType === 'BATCH_PACKING') {
-                  hasPackingPacked = true;
-                }
+            if (tStatus === 'packed' || tStatus === 'picked') {
+              if (
+                it.ticketType === 'MATERIAL_ALLOCATION' ||
+                it.ticketType === 'MATERIAL_PICKING' ||
+                it.type === 'material-export'
+              ) {
+                hasMaterialPacked = true;
+              }
+              if (it.ticketType === 'BATCH_PACKING') {
+                hasPackingPacked = true;
               }
             }
-            const time = new Date(it.ngayGiao || it.requestedDate || it.createdAt || 0).getTime();
-            if (time > latestDate) latestDate = time;
-          });
+          }
+          const time = new Date(it.ngayGiao || it.requestedDate || it.createdAt || 0).getTime();
+          if (time > latestDate) latestDate = time;
+        });
 
         const isGroupImport =
           allGroupItems.length > 0 &&
@@ -925,35 +925,6 @@ export const LogisticsOverviewPage: React.FC = () => {
   };
 
 
-
-  // Xác nhận gom đủ 100% vật tư để mở khoá xuất kho
-  const handleQuickPack = async () => {
-    if (!selectedOrder) return;
-    try {
-      const targetId = selectedOrder.id || selectedOrder.code || selectedOrder.exportCode;
-      const res = await fetch(`/api/logistics/tickets/${targetId}/quick-pack`, {
-        method: 'POST',
-      });
-      if (res.ok) {
-        showToast('success', 'Đã xác nhận gom đủ 100% vật tư. Nút Xuất kho đã được mở khoá!');
-        setOrderDetails((prev) =>
-          prev.map((it: any) => ({
-            ...it,
-            pickedQty: it.qty ?? it.requestedQty,
-          }))
-        );
-        setSelectedOrder((prev: any) => ({
-          ...prev,
-          trangThai: 'PACKED',
-        }));
-        fetchOverviewOrders(false);
-      } else {
-        showToast('error', 'Không thể hoàn thành gom hàng.');
-      }
-    } catch {
-      showToast('error', 'Lỗi khi cập nhật trạng thái gom hàng.');
-    }
-  };
 
   // Xuất danh sách hàng hoá ra file Excel
   const handleExportInventoryExcel = async () => {
@@ -1916,11 +1887,12 @@ export const LogisticsOverviewPage: React.FC = () => {
                     <span>• {selectedOrder.customer}</span>
                   )}
                 </>
-              ) : selectedOrder.ticketType === 'MATERIAL_PICKING' ||
-                selectedOrder.type === 'material-export' ||
-                selectedOrder.code?.startsWith('LSX-') ||
-                selectedOrder.typeLabel?.includes('sản xuất') ||
-                selectedOrder.hasProduction ? (
+              ) : selectedOrder.ticketType !== 'BATCH_PACKING' &&
+                (selectedOrder.ticketType === 'MATERIAL_PICKING' ||
+                  selectedOrder.type === 'material-export' ||
+                  selectedOrder.code?.startsWith('LSX-') ||
+                  selectedOrder.typeLabel?.includes('sản xuất') ||
+                  selectedOrder.hasProduction) ? (
                 <>
                   <span className="inline-flex items-center px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-medium">
                     <i className="bi bi-gear mr-1 text-amber-600" />
@@ -2282,27 +2254,6 @@ export const LogisticsOverviewPage: React.FC = () => {
                             {selectedOrder.assigneeName || 'Chưa giao việc'}
                           </strong>
                         </div>
-
-                        {!(
-                          selectedOrder.trangThai === 'PACKED' ||
-                          selectedOrder.trangThai === 'COMPLETED' ||
-                          (orderDetails.length > 0 &&
-                            orderDetails.every(
-                              (it: any) =>
-                                (Number(it.pickedQty) || 0) >= (Number(it.qty ?? it.requestedQty) || 1)
-                            ))
-                        ) &&
-                          isThuKho && (
-                            <button
-                              type="button"
-                              className="text-[11px] font-semibold text-sky-700 hover:text-sky-800 hover:underline flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-sky-200 shadow-sm cursor-pointer"
-                              onClick={handleQuickPack}
-                              title="Xác nhận đã gom đủ toàn bộ vật tư theo định mức để mở khoá xuất kho"
-                            >
-                              <i className="bi bi-check2-all text-sky-600" />
-                              <span>Xác nhận gom đủ</span>
-                            </button>
-                          )}
                       </div>
 
                       {/* Nếu chưa giao việc thì hiển thị thanh giao việc cho nhân viên kho */}
@@ -2331,8 +2282,8 @@ export const LogisticsOverviewPage: React.FC = () => {
                           )
                             ? 'Đã gom / Cần xuất'
                             : selectedOrder.type === 'material-import'
-                            ? 'SL cần nhập'
-                            : 'SL cần xuất'}
+                              ? 'SL cần nhập'
+                              : 'SL cần xuất'}
                         </th>
                       </tr>
                     </thead>

@@ -84,6 +84,15 @@ interface StockLine {
   soLuongYC: number;   // yêu cầu / chứng từ
   soLuong: number;   // thực xuất
   soLuongTon?: number;   // tồn kho tại kho xuất (lấy từ search API)
+  fromWarehouseId?: string; // kho xuất riêng cho từng dòng (hỗ trợ xuất từ cả Kho thương mại & Kho sản xuất lắp ráp)
+  warehouseStocks?: Array<{
+    warehouseId: string;
+    warehouseName: string;
+    soLuongTon: number;
+    viTriHang?: string | null;
+    viTriCot?: string | null;
+    viTriTang?: string | null;
+  }>;
   donGia: number;
   viTriHang: string;
   viTriCot: string;
@@ -525,21 +534,70 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
 
       setLines(newLines);
 
-      // Fetch tồn kho song song cho các items có tên
-      if (fromWarehouseId) {
+      // Fetch tồn kho song song trên cả Kho thương mại (KHO-CHINH) và Kho sản xuất lắp ráp (KVP) để tự động chọn kho có sẵn hàng
+      let whList = warehouses;
+      if (whList.length === 0) {
+        try {
+          const r = await fetch("/api/plan-finance/warehouses");
+          const d = await r.json();
+          if (Array.isArray(d)) {
+            whList = d.filter((w: Warehouse) => w.isActive);
+            setWarehouses(whList);
+          }
+        } catch { /* ignore */ }
+      }
+      const eligibleWarehouses = whList.filter((w) => {
+        const c = String(w.code || "").toUpperCase();
+        const n = String(w.name || "").toLowerCase();
+        return c !== "KHO-LOI" && !n.includes("lỗi");
+      });
+      const targetWarehouses = eligibleWarehouses.length > 0
+        ? eligibleWarehouses
+        : (fromWarehouseId ? [{ id: fromWarehouseId, code: null, name: "Kho xuất", isActive: true }] : []);
+
+      if (targetWarehouses.length > 0) {
         rawLines.forEach((raw, idx) => {
           if (!raw.tenHang) return;
-          const warehouseParam = `&warehouseId=${fromWarehouseId}`;
-          fetch(`/api/plan-finance/inventory/search?q=${encodeURIComponent(raw.tenHang)}&limit=5${warehouseParam}`)
-            .then(r => r.json())
-            .then((data: { id: string; tenHang: string; soLuongTon?: number; giaNhap: number; donVi: string | null; code: string | null; viTriHang?: string | null; viTriCot?: string | null; viTriTang?: string | null }[]) => {
-              if (!Array.isArray(data) || !data.length) return;
-              // Match tốt nhất theo tên
-              const found = data.find(d => d.tenHang.toLowerCase() === raw.tenHang.toLowerCase()) ?? data[0];
-              setLines(prev => prev.map((l, i) => {
+          Promise.all(
+            targetWarehouses.map((wh) =>
+              fetch(`/api/plan-finance/inventory/search?q=${encodeURIComponent(raw.tenHang)}&limit=5&warehouseId=${wh.id}`)
+                .then((r) => r.json())
+                .then((data: ItemSuggestion[]) => {
+                  if (!Array.isArray(data) || !data.length) return null;
+                  const found = data.find((d) => d.tenHang.toLowerCase() === raw.tenHang.toLowerCase()) ?? data[0];
+                  return { wh, found };
+                })
+                .catch(() => null)
+            )
+          ).then((results) => {
+            const validResults = results.filter(Boolean) as Array<{ wh: Warehouse; found: ItemSuggestion }>;
+            if (!validResults.length) return;
+
+            const whStocks = validResults.map(({ wh, found }) => ({
+              warehouseId: wh.id,
+              warehouseName: wh.name,
+              soLuongTon: Math.max(0, Number(found.soLuongTon) || 0),
+              viTriHang: found.viTriHang,
+              viTriCot: found.viTriCot,
+              viTriTang: found.viTriTang,
+            }));
+
+            // Ưu tiên kho mặc định hiện tại nếu đủ hàng; nếu không, chọn kho có tồn cao nhất giữa Kho thương mại & Kho sản xuất lắp ráp
+            const preferredMatch = validResults.find(
+              (r) => r.wh.id === fromWarehouseId && (Number(r.found.soLuongTon) || 0) >= raw.soLuong
+            );
+            const best =
+              preferredMatch ||
+              [...validResults].sort((a, b) => (Number(b.found.soLuongTon) || 0) - (Number(a.found.soLuongTon) || 0))[0];
+
+            const found = best.found;
+            setLines((prev) =>
+              prev.map((l, i) => {
                 if (i !== idx) return l;
                 return {
                   ...l,
+                  fromWarehouseId: best.wh.id,
+                  warehouseStocks: whStocks,
                   item: {
                     id: found.id, code: found.code, tenHang: found.tenHang,
                     donVi: found.donVi, giaNhap: found.giaNhap,
@@ -552,9 +610,9 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
                   viTriCot: found.viTriCot ?? "",
                   viTriTang: found.viTriTang ?? "",
                 };
-              }));
-            })
-            .catch(() => { });
+              })
+            );
+          });
         });
       }
     } catch { /* ignore */ }
@@ -948,17 +1006,12 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
   const addLine = () => setLines(ls => [...ls, emptyLine()]);
   const removeLine = (lineId: string) => setLines(ls => ls.length > 1 ? ls.filter(l => l.id !== lineId) : ls);
 
-  // Re-fetch tồn kho cho tất cả item đã chọn khi đổi kho
+  // Re-fetch tồn kho cho các dòng chưa gắn kho riêng khi đổi kho chung
   React.useEffect(() => {
     if (!fromWarehouseId) return;
-    setLines(ls => ls.map(l => {
-      // Reset tồn — sẽ được cập nhật khi search lại
-      return { ...l, soLuongTon: undefined };
-    }));
-    // Fetch tồn mới theo kho vừa chọn
-    const cur = lines.filter(l => l.itemSearch.trim() !== "");
+    const cur = lines.filter(l => l.itemSearch.trim() !== "" && !l.fromWarehouseId);
     if (!cur.length) return;
-    // Fetch từng item theo kho mới
+    setLines(ls => ls.map(l => (!l.fromWarehouseId ? { ...l, soLuongTon: undefined } : l)));
     cur.forEach(l => {
       fetch(`/api/plan-finance/inventory/search?q=${encodeURIComponent(l.itemSearch)}&limit=1&warehouseId=${fromWarehouseId}`)
         .then(r => r.json())
@@ -966,7 +1019,7 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
           if (!Array.isArray(data) || !data.length) return;
           const found = data.find(x => x.tenHang.toLowerCase() === l.itemSearch.toLowerCase()) ?? data[0];
           setLines(prev => prev.map(pl => {
-            if (pl.id !== l.id) return pl;
+            if (pl.id !== l.id || pl.fromWarehouseId) return pl;
             return {
               ...pl,
               soLuongTon: found.soLuongTon,
@@ -1045,6 +1098,7 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
           ticketId: currentTicketId || selectedDefect?.logisticsTickets?.[0]?.id || initialTicketId,
           lines: validLines.map(l => ({
             inventoryItemId: l.item!.id,
+            fromWarehouseId: l.fromWarehouseId || fromWarehouseId || undefined,
             soLuong: l.soLuong,
             soLuongYC: l.soLuongYC,
             donGia: l.donGia || undefined,
@@ -1724,6 +1778,51 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
                   onRemove={() => removeLine(line.id)}
                   canRemove={!line.lockedFromOrder && lines.length > 1}
                   locked={locked || Boolean(line.lockedFromOrder)}
+                  warehouses={warehouses.filter((w) => String(w.code || "").toUpperCase() !== "KHO-LOI" && !String(w.name || "").toLowerCase().includes("lỗi"))}
+                  defaultWarehouseId={fromWarehouseId}
+                  canChangeWarehouse={!locked}
+                  onChangeLineWarehouse={(whId) => {
+                    const cached = line.warehouseStocks?.find((ws) => ws.warehouseId === whId);
+                    if (cached) {
+                      setLines((prev) =>
+                        prev.map((pl) =>
+                          pl.id === line.id
+                            ? {
+                                ...pl,
+                                fromWarehouseId: whId,
+                                soLuongTon: cached.soLuongTon,
+                                viTriHang: cached.viTriHang ?? "",
+                                viTriCot: cached.viTriCot ?? "",
+                                viTriTang: cached.viTriTang ?? "",
+                              }
+                            : pl
+                        )
+                      );
+                    } else if (line.itemSearch.trim()) {
+                      setLines((prev) => prev.map((pl) => (pl.id === line.id ? { ...pl, fromWarehouseId: whId } : pl)));
+                      fetch(`/api/plan-finance/inventory/search?q=${encodeURIComponent(line.itemSearch)}&limit=5&warehouseId=${whId}`)
+                        .then((r) => r.json())
+                        .then((data: ItemSuggestion[]) => {
+                          if (!Array.isArray(data) || !data.length) return;
+                          const found = data.find((d) => d.tenHang.toLowerCase() === line.itemSearch.toLowerCase()) ?? data[0];
+                          setLines((prev) =>
+                            prev.map((pl) =>
+                              pl.id === line.id
+                                ? {
+                                    ...pl,
+                                    fromWarehouseId: whId,
+                                    soLuongTon: found.soLuongTon,
+                                    viTriHang: found.viTriHang ?? "",
+                                    viTriCot: found.viTriCot ?? "",
+                                    viTriTang: found.viTriTang ?? "",
+                                  }
+                                : pl
+                            )
+                          );
+                        })
+                        .catch(() => {});
+                    }
+                  }}
                 />
               ))}
               <div className="xk-add-line-wrapper" style={{ padding: "8px 10px", borderTop: "1px dashed var(--border)" }}>
@@ -1996,7 +2095,7 @@ export function XuatKhoModal({ onClose, onSaved, initialMode, initialSoId, initi
 }
 
 // ── LineRow ───────────────────────────────────────────────────────────────────
-function LineRow({ line, idx, onItemSearch, onSelectItem, onUpdate, onRemove, canRemove, locked }: {
+function LineRow({ line, idx, onItemSearch, onSelectItem, onUpdate, onRemove, canRemove, locked, warehouses = [], defaultWarehouseId = "", canChangeWarehouse = true, onChangeLineWarehouse }: {
   line: StockLine; idx: number;
   onItemSearch: (q: string) => void;
   onSelectItem: (item: ItemSuggestion) => void;
@@ -2004,6 +2103,10 @@ function LineRow({ line, idx, onItemSearch, onSelectItem, onUpdate, onRemove, ca
   onRemove: () => void;
   canRemove: boolean;
   locked?: boolean;
+  warehouses?: Warehouse[];
+  defaultWarehouseId?: string;
+  canChangeWarehouse?: boolean;
+  onChangeLineWarehouse?: (warehouseId: string) => void;
 }) {
   const cellInput: React.CSSProperties = {
     width: "100%", height: 32, padding: "0 8px", fontSize: 12.5,
@@ -2050,6 +2153,35 @@ function LineRow({ line, idx, onItemSearch, onSelectItem, onUpdate, onRemove, ca
             <i className="bi bi-exclamation-circle-fill" title={missingLabel} style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#f43f5e", pointerEvents: "auto", cursor: "help" }} />
           )}
           {hasError && <p style={{ margin: "1px 0 0", fontSize: 10.5, color: "#f43f5e" }}>{line.error}</p>}
+          {warehouses.length > 1 && line.itemSearch.trim() !== "" && (
+            <div style={{ marginTop: 3, display: "flex", alignItems: "center", gap: 6 }}>
+              <select
+                value={line.fromWarehouseId || defaultWarehouseId}
+                disabled={!canChangeWarehouse}
+                onChange={(e) => onChangeLineWarehouse?.(e.target.value)}
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  padding: "2px 6px",
+                  borderRadius: 5,
+                  border: "1px solid var(--border)",
+                  background: "var(--muted)",
+                  color: "var(--foreground)",
+                  cursor: canChangeWarehouse ? "pointer" : "default",
+                  maxWidth: "100%",
+                }}
+              >
+                {warehouses.map((w) => {
+                  const st = line.warehouseStocks?.find((ws) => ws.warehouseId === w.id);
+                  return (
+                    <option key={w.id} value={w.id}>
+                      {w.name}{st !== undefined ? ` (Tồn: ${st.soLuongTon})` : ""}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
           {line.showSugg && line.suggestions.length > 0 && (
             <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, zIndex: 200, background: "var(--card)", borderWidth: 1, borderStyle: "solid", borderColor: "var(--border)", borderRadius: 7, boxShadow: "0 4px 14px rgba(0,0,0,0.12)", maxHeight: 220, overflowY: "auto" }}>
               {line.suggestions.map(s => (
